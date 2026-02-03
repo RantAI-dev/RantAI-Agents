@@ -1,0 +1,231 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import Link from "next/link"
+import {
+  MessageSquare,
+  Users,
+  CheckCircle,
+  Clock,
+  ArrowRight,
+  Zap,
+} from "lucide-react"
+
+interface Stats {
+  totalConversations: number
+  activeConversations: number
+  resolvedToday: number
+  avgResponseTime: string
+  channelStats: {
+    channel: string
+    count: number
+    enabled: boolean
+  }[]
+}
+
+export default function StatisticsPage() {
+  const [stats, setStats] = useState<Stats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const response = await fetch("/api/admin/stats")
+        if (response.ok) {
+          const data = await response.json()
+          setStats(data)
+        }
+      } catch (error) {
+        console.error("Failed to fetch stats:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchStats()
+  }, [])
+
+  return (
+    <>
+      {/* Header */}
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b pl-14 pr-4">
+        <h1 className="text-lg font-semibold">Statistics</h1>
+      </header>
+
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-6">
+        {loading ? (
+          <div className="animate-pulse space-y-6">
+            <div className="h-8 w-48 bg-muted rounded" />
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-32 bg-muted rounded-lg" />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-8">
+            <div>
+              <h2 className="text-2xl font-bold">Overview</h2>
+              <p className="text-muted-foreground mt-1">
+                Customer communication metrics and channel status
+              </p>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Total Conversations
+                  </CardTitle>
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {stats?.totalConversations || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">All time</p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Active Now
+                  </CardTitle>
+                  <Users className="h-4 w-4 text-green-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">
+                    {stats?.activeConversations || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Waiting or in progress
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Resolved Today
+                  </CardTitle>
+                  <CheckCircle className="h-4 w-4 text-blue-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {stats?.resolvedToday || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Conversations closed
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <CardTitle className="text-sm font-medium text-muted-foreground">
+                    Avg Response Time
+                  </CardTitle>
+                  <Clock className="h-4 w-4 text-orange-500" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-orange-600">
+                    {stats?.avgResponseTime || "N/A"}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    First agent response
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Channel Configuration Card */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Communication Channels</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Configure how customers connect with agents
+                    </p>
+                  </div>
+                  <Link
+                    href="/dashboard/settings/channels"
+                    className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Configure
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    { name: "Portal", icon: "🌐", description: "Real-time web chat" },
+                    { name: "Salesforce", icon: "☁️", description: "Service Cloud" },
+                    { name: "WhatsApp", icon: "📱", description: "Business API" },
+                    { name: "Email", icon: "📧", description: "SMTP" },
+                  ].map((channel) => {
+                    const channelStat = stats?.channelStats?.find(
+                      (c) => c.channel === channel.name.toUpperCase()
+                    )
+                    const isEnabled = channelStat?.enabled || false
+                    const isPrimary =
+                      channel.name === "Portal" &&
+                      !stats?.channelStats?.some(
+                        (c) => c.enabled && c.channel !== "PORTAL"
+                      )
+
+                    return (
+                      <div
+                        key={channel.name}
+                        className={`p-4 rounded-lg border ${
+                          isEnabled
+                            ? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950"
+                            : "border-border bg-muted/50"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-2xl">{channel.icon}</span>
+                          <div className="flex items-center gap-2">
+                            {isPrimary && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Zap className="h-3 w-3 mr-1" />
+                                Primary
+                              </Badge>
+                            )}
+                            <Badge
+                              variant={isEnabled ? "default" : "outline"}
+                              className={
+                                isEnabled ? "bg-green-600" : "text-muted-foreground"
+                              }
+                            >
+                              {isEnabled ? "Active" : "Disabled"}
+                            </Badge>
+                          </div>
+                        </div>
+                        <h3 className="font-semibold">{channel.name}</h3>
+                        <p className="text-xs text-muted-foreground">
+                          {channel.description}
+                        </p>
+                        {channelStat && channelStat.count > 0 && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {channelStat.count} conversations
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}

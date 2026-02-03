@@ -6,6 +6,8 @@ import { PanelLeft, PanelLeftClose } from "lucide-react"
 import { IconRail } from "./_components/icon-rail"
 import { AppSidebar } from "./_components/app-sidebar"
 import { Button } from "@/components/ui/button"
+import { FeaturesProvider } from "@/components/providers/features-provider"
+import { ChatSessionsProvider } from "@/hooks/use-chat-sessions"
 
 export default function DashboardLayout({
   children,
@@ -18,33 +20,37 @@ export default function DashboardLayout({
 
   return (
     <SessionProvider>
-      <div className="flex h-screen w-full overflow-hidden">
-        {/* Icon Rail - always visible */}
-        <IconRail />
+      <FeaturesProvider>
+        <ChatSessionsProvider>
+          <div className="flex h-screen w-full overflow-hidden">
+          {/* Icon Rail - always visible */}
+          <IconRail />
 
-        {/* Expandable Content Sidebar */}
-        <Suspense fallback={null}>
-          <AppSidebar isOpen={sidebarOpen} />
-        </Suspense>
+          {/* Expandable Content Sidebar */}
+          <Suspense fallback={null}>
+            <AppSidebar isOpen={sidebarOpen} />
+          </Suspense>
 
-        {/* Main Content */}
-        <main className="relative flex-1 flex flex-col h-full overflow-hidden bg-background">
-          {/* Sidebar Toggle - positioned in the header area */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleSidebar}
-            className="absolute top-3 left-4 z-10 h-8 w-8 text-foreground/60 hover:text-foreground hover:bg-accent"
-          >
-            {sidebarOpen ? (
-              <PanelLeftClose className="h-4 w-4" />
-            ) : (
-              <PanelLeft className="h-4 w-4" />
-            )}
-          </Button>
-          {children}
-        </main>
-      </div>
+          {/* Main Content */}
+          <main className="relative flex-1 flex flex-col h-full overflow-hidden bg-background">
+            {/* Sidebar Toggle - positioned in the header area */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleSidebar}
+              className="absolute top-3 left-4 z-10 h-8 w-8 text-foreground/60 hover:text-foreground hover:bg-accent"
+            >
+              {sidebarOpen ? (
+                <PanelLeftClose className="h-4 w-4" />
+              ) : (
+                <PanelLeft className="h-4 w-4" />
+              )}
+            </Button>
+            {children}
+          </main>
+        </div>
+        </ChatSessionsProvider>
+      </FeaturesProvider>
     </SessionProvider>
   )
 }

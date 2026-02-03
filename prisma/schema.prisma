@@ -123,6 +123,51 @@ model ChannelConfig {
   updatedAt DateTime @updatedAt
 }
 
+// Feature configuration for enabling/disabling application capabilities
+model FeatureConfig {
+  id        String   @id @default(cuid())
+  feature   String   @unique // AGENT, KNOWLEDGE, CHAT
+  enabled   Boolean  @default(true)
+  config    Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// AI Assistant configuration for chat
+model Assistant {
+  id                    String   @id @default(cuid())
+  name                  String
+  description           String?
+  emoji                 String   @default("🤖")
+  systemPrompt          String   @db.Text
+  useKnowledgeBase      Boolean  @default(false)
+  knowledgeBaseGroupIds String[] // Array of KnowledgeBaseGroup IDs
+  isSystemDefault       Boolean  @default(false) // Global default assistant
+  isBuiltIn             Boolean  @default(false) // Non-deletable built-in assistants
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+// User preferences including default assistant selection
+model UserPreference {
+  id                 String   @id @default(cuid())
+  userId             String   @unique // From NextAuth session
+  defaultAssistantId String?  // User's chosen default (overrides system default)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// Category model for document classification
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique // Internal name: "LIFE_INSURANCE", "CUSTOM_CAT"
+  label     String            // Display label: "Life Insurance"
+  color     String            // Hex color: "#3b82f6"
+  isSystem  Boolean  @default(false) // True for default categories (prevent deletion)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 // Knowledge base groups/folders for organizing documents
 model KnowledgeBaseGroup {
   id          String          @id @default(cuid())
@@ -174,4 +219,30 @@ model DocumentChunk {
   createdAt  DateTime               @default(now())
 
   @@index([documentId])
+}
+
+// API Key for embeddable chat widget
+model EmbedApiKey {
+  id             String    @id @default(cuid())
+  name           String    // Human-readable name (e.g., "Company Website")
+  key            String    @unique // Generated API key (e.g., "rantai_live_...")
+  assistantId    String    // Assistant to use for this key
+
+  // Domain security
+  allowedDomains String[]  // e.g., ["example.com", "*.example.com"]
+
+  // Widget customization (JSON)
+  config         Json      @default("{}") // { theme, position, welcomeMessage, avatar, cssClass, launcherButton }
+
+  // Usage tracking
+  requestCount   Int       @default(0)
+  lastUsedAt     DateTime?
+
+  // Management
+  enabled        Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([key])
+  @@index([assistantId])
 }

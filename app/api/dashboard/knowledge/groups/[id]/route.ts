@@ -19,10 +19,14 @@ export async function GET(
       where: { id },
       include: {
         documents: {
-          select: {
-            id: true,
-            title: true,
-            category: true,
+          include: {
+            document: {
+              select: {
+                id: true,
+                title: true,
+                categories: true,
+              },
+            },
           },
         },
       },
@@ -37,7 +41,7 @@ export async function GET(
       name: group.name,
       description: group.description,
       color: group.color,
-      documents: group.documents,
+      documents: group.documents.map((dg) => dg.document),
       createdAt: group.createdAt.toISOString(),
       updatedAt: group.updatedAt.toISOString(),
     })

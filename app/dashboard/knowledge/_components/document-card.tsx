@@ -53,32 +53,36 @@ function getFileTypeIcon(fileType?: string) {
   }
 }
 
+interface Category {
+  id: string
+  name: string
+  label: string
+  color: string
+  isSystem: boolean
+}
+
 interface DocumentCardProps {
   document: Document
   onDelete: (id: string) => void
   onView: (id: string) => void
   onEdit: (id: string) => void
+  categoryMap: Map<string, Category>
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  LIFE_INSURANCE: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  HEALTH_INSURANCE: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  HOME_INSURANCE: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  FAQ: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  POLICY: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  GENERAL: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+// Helper to get category display info with fallback for unknown categories
+function getCategoryDisplay(categoryName: string, categoryMap: Map<string, Category>) {
+  const category = categoryMap.get(categoryName)
+  if (category) {
+    return { label: category.label, color: category.color }
+  }
+  // Fallback for unknown categories
+  return {
+    label: categoryName.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()),
+    color: "#6b7280", // gray
+  }
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  LIFE_INSURANCE: "Life Insurance",
-  HEALTH_INSURANCE: "Health Insurance",
-  HOME_INSURANCE: "Home Insurance",
-  FAQ: "FAQ",
-  POLICY: "Policy",
-  GENERAL: "General",
-}
-
-export function DocumentCard({ document, onDelete, onView, onEdit }: DocumentCardProps) {
+export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }: DocumentCardProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const { Icon: FileIcon, bgColor, iconColor } = getFileTypeIcon(document.fileType)
 
@@ -103,15 +107,18 @@ export function DocumentCard({ document, onDelete, onView, onEdit }: DocumentCar
                 {document.title}
               </CardTitle>
               <div className="flex gap-1 flex-wrap">
-                {document.categories.slice(0, 2).map((cat) => (
-                  <Badge
-                    key={cat}
-                    variant="secondary"
-                    className={CATEGORY_COLORS[cat] || ""}
-                  >
-                    {CATEGORY_LABELS[cat] || cat}
-                  </Badge>
-                ))}
+                {document.categories.slice(0, 2).map((cat) => {
+                  const { label, color } = getCategoryDisplay(cat, categoryMap)
+                  return (
+                    <Badge
+                      key={cat}
+                      variant="secondary"
+                      style={{ backgroundColor: `${color}20`, color: color, borderColor: color }}
+                    >
+                      {label}
+                    </Badge>
+                  )
+                })}
                 {document.categories.length > 2 && (
                   <Badge variant="outline">+{document.categories.length - 2}</Badge>
                 )}

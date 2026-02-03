@@ -34,7 +34,7 @@ async function main() {
       process.exit(1);
     }
     for (const doc of docs) {
-      console.log(`   - ${doc.title} (${doc.category}) - ${doc._count.chunks} chunks`);
+      console.log(`   - ${doc.title} (${doc.categories.join(", ")}) - ${doc._count.chunks} chunks`);
     }
   } catch (error) {
     console.error("Error listing documents:", error);

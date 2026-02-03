@@ -2,76 +2,80 @@
 
 import { useState, useEffect, useCallback } from "react"
 import type { Assistant, AssistantInput } from "@/lib/types/assistant"
-import { DEFAULT_ASSISTANTS, getDefaultAssistant } from "@/lib/assistants/defaults"
 
-const STORAGE_KEY = "horizonlife-assistants"
-const SELECTED_KEY = "horizonlife-selected-assistant"
-const DEFAULT_OVERRIDES_KEY = "horizonlife-assistant-overrides"
-const ASSISTANT_CHANGE_EVENT = "horizonlife-assistant-change"
+const SELECTED_KEY = "rantai-selected-assistant"
+const ASSISTANT_CHANGE_EVENT = "rantai-assistant-change"
 
-// Overrides for default assistants (only stores modified fields)
-type DefaultAssistantOverrides = Record<string, Partial<AssistantInput>>
-
-function parseAssistants(json: string): Assistant[] {
-  try {
-    const data = JSON.parse(json)
-    return data.map((a: Assistant) => ({
-      ...a,
-      createdAt: new Date(a.createdAt),
-    }))
-  } catch {
-    return []
-  }
+// Database assistant type from API
+interface DbAssistant {
+  id: string
+  name: string
+  description: string | null
+  emoji: string
+  systemPrompt: string
+  useKnowledgeBase: boolean
+  knowledgeBaseGroupIds: string[]
+  isSystemDefault: boolean
+  isBuiltIn: boolean
+  createdAt: string
 }
 
-function parseOverrides(json: string): DefaultAssistantOverrides {
-  try {
-    return JSON.parse(json)
-  } catch {
-    return {}
+// Map database assistant to client-side Assistant type
+function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
+  return {
+    id: dbAssistant.id,
+    name: dbAssistant.name,
+    description: dbAssistant.description || "",
+    emoji: dbAssistant.emoji,
+    systemPrompt: dbAssistant.systemPrompt,
+    useKnowledgeBase: dbAssistant.useKnowledgeBase,
+    knowledgeBaseGroupIds: dbAssistant.knowledgeBaseGroupIds,
+    isDefault: dbAssistant.isSystemDefault,
+    isEditable: true, // All assistants are editable
+    createdAt: new Date(dbAssistant.createdAt),
   }
 }
 
 export function useAssistants() {
-  const [customAssistants, setCustomAssistants] = useState<Assistant[]>([])
-  const [defaultOverrides, setDefaultOverrides] = useState<DefaultAssistantOverrides>({})
-  const [selectedAssistantId, setSelectedAssistantId] = useState<string>(
-    getDefaultAssistant().id
-  )
-  const [isLoaded, setIsLoaded] = useState(false)
+  const [assistants, setAssistants] = useState<Assistant[]>([])
+  const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // All assistants = defaults (with overrides applied) + custom
-  const assistants = [
-    ...DEFAULT_ASSISTANTS.map((a) => ({
-      ...a,
-      ...defaultOverrides[a.id],
-    })),
-    ...customAssistants,
-  ]
+  // Fetch assistants from API
+  const fetchAssistants = useCallback(async () => {
+    try {
+      setError(null)
+      const response = await fetch("/api/assistants")
+      if (!response.ok) {
+        throw new Error("Failed to fetch assistants")
+      }
+      const data = await response.json()
+      const mapped = data.map(mapDbAssistant)
+      setAssistants(mapped)
 
-  // Currently selected assistant
-  const selectedAssistant =
-    assistants.find((a) => a.id === selectedAssistantId) || getDefaultAssistant()
+      // Set default selected assistant if none selected
+      if (!selectedAssistantId && mapped.length > 0) {
+        const storedSelected = localStorage.getItem(SELECTED_KEY)
+        if (storedSelected && mapped.some((a: Assistant) => a.id === storedSelected)) {
+          setSelectedAssistantId(storedSelected)
+        } else {
+          const defaultAssistant = mapped.find((a: Assistant) => a.isDefault) || mapped[0]
+          setSelectedAssistantId(defaultAssistant.id)
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch assistants:", err)
+      setError("Failed to load assistants")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [selectedAssistantId])
 
-  // Load from localStorage on mount
+  // Initial fetch
   useEffect(() => {
-    const storedAssistants = localStorage.getItem(STORAGE_KEY)
-    if (storedAssistants) {
-      setCustomAssistants(parseAssistants(storedAssistants))
-    }
-
-    const storedOverrides = localStorage.getItem(DEFAULT_OVERRIDES_KEY)
-    if (storedOverrides) {
-      setDefaultOverrides(parseOverrides(storedOverrides))
-    }
-
-    const storedSelected = localStorage.getItem(SELECTED_KEY)
-    if (storedSelected) {
-      setSelectedAssistantId(storedSelected)
-    }
-
-    setIsLoaded(true)
-  }, [])
+    fetchAssistants()
+  }, [fetchAssistants])
 
   // Listen for assistant changes from other components
   useEffect(() => {
@@ -92,26 +96,15 @@ export function useAssistants() {
     }
   }, [])
 
-  // Save custom assistants to localStorage
+  // Save selected assistant ID to localStorage
   useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(customAssistants))
-    }
-  }, [customAssistants, isLoaded])
-
-  // Save default overrides to localStorage
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem(DEFAULT_OVERRIDES_KEY, JSON.stringify(defaultOverrides))
-    }
-  }, [defaultOverrides, isLoaded])
-
-  // Save selected assistant ID
-  useEffect(() => {
-    if (isLoaded) {
+    if (selectedAssistantId) {
       localStorage.setItem(SELECTED_KEY, selectedAssistantId)
     }
-  }, [selectedAssistantId, isLoaded])
+  }, [selectedAssistantId])
+
+  // Currently selected assistant
+  const selectedAssistant = assistants.find((a) => a.id === selectedAssistantId) || assistants[0]
 
   const selectAssistant = useCallback((id: string) => {
     setSelectedAssistantId(id)
@@ -121,53 +114,91 @@ export function useAssistants() {
     )
   }, [])
 
-  const addAssistant = useCallback((input: AssistantInput): Assistant => {
-    const newAssistant: Assistant = {
-      id: crypto.randomUUID(),
-      ...input,
-      isDefault: false,
-      isEditable: true,
-      createdAt: new Date(),
-    }
-    setCustomAssistants((prev) => [...prev, newAssistant])
-    return newAssistant
-  }, [])
+  const addAssistant = useCallback(
+    async (input: AssistantInput): Promise<Assistant | null> => {
+      try {
+        const response = await fetch("/api/assistants", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+        })
+
+        if (!response.ok) {
+          throw new Error("Failed to create assistant")
+        }
+
+        const data = await response.json()
+        const newAssistant = mapDbAssistant(data)
+        setAssistants((prev) => [...prev, newAssistant])
+        return newAssistant
+      } catch (err) {
+        console.error("Failed to create assistant:", err)
+        setError("Failed to create assistant")
+        return null
+      }
+    },
+    []
+  )
 
   const updateAssistant = useCallback(
-    (id: string, updates: Partial<AssistantInput>) => {
-      // Check if this is a default assistant
-      const isDefaultAssistant = DEFAULT_ASSISTANTS.some((a) => a.id === id)
+    async (id: string, updates: Partial<AssistantInput>): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/assistants/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        })
 
-      if (isDefaultAssistant) {
-        // Store overrides for default assistants
-        setDefaultOverrides((prev) => ({
-          ...prev,
-          [id]: { ...prev[id], ...updates },
-        }))
-      } else {
-        // Update custom assistants
-        setCustomAssistants((prev) =>
-          prev.map((a) => (a.id === id ? { ...a, ...updates } : a))
+        if (!response.ok) {
+          throw new Error("Failed to update assistant")
+        }
+
+        const data = await response.json()
+        const updatedAssistant = mapDbAssistant(data)
+        setAssistants((prev) =>
+          prev.map((a) => (a.id === id ? updatedAssistant : a))
         )
+        return true
+      } catch (err) {
+        console.error("Failed to update assistant:", err)
+        setError("Failed to update assistant")
+        return false
       }
     },
     []
   )
 
   const deleteAssistant = useCallback(
-    (id: string) => {
-      // Can only delete custom assistants
-      const assistant = customAssistants.find((a) => a.id === id)
-      if (!assistant || !assistant.isEditable) return
+    async (id: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/assistants/${id}`, {
+          method: "DELETE",
+        })
 
-      setCustomAssistants((prev) => prev.filter((a) => a.id !== id))
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Failed to delete assistant")
+        }
 
-      // If deleted assistant was selected, switch to default
-      if (selectedAssistantId === id) {
-        setSelectedAssistantId(getDefaultAssistant().id)
+        setAssistants((prev) => prev.filter((a) => a.id !== id))
+
+        // If deleted assistant was selected, switch to default
+        if (selectedAssistantId === id) {
+          const remaining = assistants.filter((a) => a.id !== id)
+          const defaultAssistant = remaining.find((a) => a.isDefault) || remaining[0]
+          if (defaultAssistant) {
+            setSelectedAssistantId(defaultAssistant.id)
+          }
+        }
+
+        return true
+      } catch (err) {
+        console.error("Failed to delete assistant:", err)
+        setError("Failed to delete assistant")
+        return false
       }
     },
-    [customAssistants, selectedAssistantId]
+    [assistants, selectedAssistantId]
   )
 
   const getAssistantById = useCallback(
@@ -177,16 +208,22 @@ export function useAssistants() {
     [assistants]
   )
 
+  const refetch = useCallback(() => {
+    setIsLoading(true)
+    fetchAssistants()
+  }, [fetchAssistants])
+
   return {
     assistants,
-    customAssistants,
     selectedAssistant,
     selectedAssistantId,
-    isLoaded,
+    isLoading,
+    error,
     selectAssistant,
     addAssistant,
     updateAssistant,
     deleteAssistant,
     getAssistantById,
+    refetch,
   }
 }

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RantAI Widget Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      padding: 40px;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      color: #1f2937;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #6b7280;
+      font-size: 16px;
+      margin-bottom: 32px;
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+
+    .info-box {
+      background: #f3f4f6;
+      border-radius: 8px;
+      padding: 16px;
+      font-family: monospace;
+      font-size: 14px;
+      color: #4b5563;
+      word-break: break-all;
+    }
+
+    .instructions {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      border-radius: 0 8px 8px 0;
+      padding: 16px;
+      margin-bottom: 24px;
+    }
+
+    .instructions h3 {
+      color: #1e40af;
+      font-size: 16px;
+      margin-bottom: 8px;
+    }
+
+    .instructions ol {
+      color: #1e40af;
+      margin-left: 20px;
+    }
+
+    .instructions li {
+      margin-bottom: 4px;
+    }
+
+    .footer {
+      text-align: center;
+      color: rgba(255, 255, 255, 0.8);
+      font-size: 14px;
+    }
+
+    .footer a {
+      color: white;
+      text-decoration: underline;
+    }
+
+    #api-key-display {
+      color: #059669;
+      font-weight: 500;
+    }
+
+    .no-key-message {
+      color: #dc2626;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>RantAI Widget Demo</h1>
+      <p class="subtitle">Test your embeddable chat widget</p>
+
+      <div class="instructions">
+        <h3>Getting Started</h3>
+        <ol>
+          <li>Create an API key in your dashboard at Settings → Embed Widget</li>
+          <li>Copy the API key and add it to this URL: <code>?key=YOUR_API_KEY</code></li>
+          <li>The chat widget will appear in the bottom-right corner</li>
+          <li>Click the chat icon to open the widget and start chatting!</li>
+        </ol>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Current API Key</div>
+        <div class="info-box" id="api-key-box">
+          <span id="api-key-display">Loading...</span>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Widget Status</div>
+        <div class="info-box" id="status-box">
+          Initializing...
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>
+        Powered by <a href="https://rantai.dev" target="_blank">RantAI</a>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    // Get API key from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const apiKey = urlParams.get('key');
+
+    const apiKeyDisplay = document.getElementById('api-key-display');
+    const statusBox = document.getElementById('status-box');
+
+    if (apiKey) {
+      // Display masked key
+      const masked = apiKey.slice(0, 16) + '••••••••' + apiKey.slice(-4);
+      apiKeyDisplay.textContent = masked;
+      statusBox.textContent = 'Widget loading...';
+
+      // Dynamically inject the widget script
+      const script = document.createElement('script');
+      script.src = '/widget/rantai-widget.js';
+      script.setAttribute('data-api-key', apiKey);
+      script.async = true;
+
+      script.onload = () => {
+        statusBox.textContent = 'Widget loaded! Click the chat icon in the corner.';
+        statusBox.style.background = '#ecfdf5';
+        statusBox.style.color = '#059669';
+      };
+
+      script.onerror = () => {
+        statusBox.textContent = 'Failed to load widget. Make sure you\'ve built the widget first.';
+        statusBox.style.background = '#fef2f2';
+        statusBox.style.color = '#dc2626';
+      };
+
+      document.body.appendChild(script);
+    } else {
+      apiKeyDisplay.innerHTML = '<span class="no-key-message">No API key provided</span>';
+      statusBox.textContent = 'Add ?key=YOUR_API_KEY to the URL to test the widget.';
+      statusBox.style.background = '#fef3c7';
+      statusBox.style.color = '#92400e';
+    }
+  </script>
+</body>
+</html>

@@ -10,6 +10,7 @@ import { DocumentList } from "./_components/document-list"
 import { UploadDialog } from "./_components/upload-dialog"
 import { DocumentViewer } from "./_components/document-viewer"
 import { DocumentEditDialog } from "./_components/document-edit-dialog"
+import { CategoryDialog, Category } from "./_components/category-dialog"
 import {
   Dialog,
   DialogContent,
@@ -69,15 +70,6 @@ interface KnowledgeBase {
   updatedAt: string
 }
 
-const CATEGORIES = [
-  { value: "LIFE_INSURANCE", label: "Life Insurance" },
-  { value: "HEALTH_INSURANCE", label: "Health Insurance" },
-  { value: "HOME_INSURANCE", label: "Home Insurance" },
-  { value: "FAQ", label: "FAQ" },
-  { value: "POLICY", label: "Policy" },
-  { value: "GENERAL", label: "General" },
-]
-
 const PRESET_COLORS = [
   "#ef4444", "#f97316", "#eab308", "#22c55e",
   "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
@@ -101,6 +93,11 @@ function KnowledgePageContent() {
   const [viewerOpen, setViewerOpen] = useState(false)
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+
+  // Categories state
+  const [categories, setCategories] = useState<Category[]>([])
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null)
 
   // Knowledge Base CRUD dialog state
   const [kbDialogOpen, setKbDialogOpen] = useState(false)
@@ -142,11 +139,24 @@ function KnowledgePageContent() {
     }
   }, [])
 
+  const fetchCategories = useCallback(async () => {
+    try {
+      const response = await fetch("/api/dashboard/knowledge/categories")
+      if (response.ok) {
+        const data = await response.json()
+        setCategories(data.categories)
+      }
+    } catch (error) {
+      console.error("Failed to fetch categories:", error)
+    }
+  }, [])
+
   useEffect(() => {
     setLoading(true)
     fetchDocuments(selectedKBId)
     fetchKnowledgeBases()
-  }, [fetchDocuments, fetchKnowledgeBases, selectedKBId])
+    fetchCategories()
+  }, [fetchDocuments, fetchKnowledgeBases, fetchCategories, selectedKBId])
 
   // Handle action=new-kb from URL
   useEffect(() => {
@@ -288,9 +298,24 @@ function KnowledgePageContent() {
     }
   }
 
+  // Category dialog handlers
+  const handleCreateCategory = () => {
+    setEditingCategory(null)
+    setCategoryDialogOpen(true)
+  }
+
+  const handleCategorySuccess = () => {
+    setCategoryDialogOpen(false)
+    setEditingCategory(null)
+    fetchCategories()
+  }
+
+  // Create category map for quick lookup
+  const categoryMap = new Map(categories.map((cat) => [cat.name, cat]))
+
   // Count documents per category (in current view)
-  const categoryCounts = CATEGORIES.reduce((acc, cat) => {
-    acc[cat.value] = documents.filter((d) => d.categories.includes(cat.value)).length
+  const categoryCounts = categories.reduce((acc, cat) => {
+    acc[cat.name] = documents.filter((d) => d.categories.includes(cat.name)).length
     return acc
   }, {} as Record<string, number>)
 
@@ -351,16 +376,29 @@ function KnowledgePageContent() {
         {/* Category Filters & Search */}
         <div className="border-b p-4">
           <div className="flex gap-2 flex-wrap mb-3">
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <Badge
-                key={cat.value}
-                variant={selectedCategories.includes(cat.value) ? "default" : "outline"}
+                key={cat.name}
+                variant={selectedCategories.includes(cat.name) ? "default" : "outline"}
                 className="cursor-pointer"
-                onClick={() => toggleCategory(cat.value)}
+                style={
+                  selectedCategories.includes(cat.name)
+                    ? { backgroundColor: cat.color, borderColor: cat.color }
+                    : { borderColor: cat.color, color: cat.color }
+                }
+                onClick={() => toggleCategory(cat.name)}
               >
-                {cat.label} ({categoryCounts[cat.value] || 0})
+                {cat.label} ({categoryCounts[cat.name] || 0})
               </Badge>
             ))}
+            <Badge
+              variant="outline"
+              className="cursor-pointer"
+              onClick={handleCreateCategory}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              New
+            </Badge>
             {selectedCategories.length > 0 && (
               <Badge
                 variant="secondary"
@@ -390,6 +428,7 @@ function KnowledgePageContent() {
             onDelete={handleDelete}
             onView={handleView}
             onEdit={handleEdit}
+            categoryMap={categoryMap}
           />
         </div>
       </div>
@@ -401,6 +440,8 @@ function KnowledgePageContent() {
         onSuccess={handleUploadSuccess}
         knowledgeBases={knowledgeBases}
         defaultKBIds={selectedKBId ? [selectedKBId] : []}
+        categories={categories}
+        onCategoriesChange={fetchCategories}
       />
 
       {/* Document Viewer */}
@@ -417,6 +458,16 @@ function KnowledgePageContent() {
         onOpenChange={setEditDialogOpen}
         onSuccess={handleEditSuccess}
         knowledgeBases={knowledgeBases}
+        categories={categories}
+        onCategoriesChange={fetchCategories}
+      />
+
+      {/* Category Create/Edit Dialog */}
+      <CategoryDialog
+        open={categoryDialogOpen}
+        onOpenChange={setCategoryDialogOpen}
+        onSuccess={handleCategorySuccess}
+        editingCategory={editingCategory}
       />
 
       {/* Knowledge Base Create/Edit Dialog */}

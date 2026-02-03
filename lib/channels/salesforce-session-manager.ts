@@ -138,8 +138,8 @@ async function startPolling(managed: ManagedSession): Promise<void> {
 
       if (messages.length > 0) {
         // Update last message timestamp
-        const lastMsg = messages[messages.length - 1]
-        if (lastMsg.timestamp) {
+        const lastMsg = messages[messages.length - 1] as { timestamp?: string }
+        if (lastMsg?.timestamp) {
           managed.lastMessageTimestamp = lastMsg.timestamp
         }
 

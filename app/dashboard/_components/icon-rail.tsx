@@ -7,11 +7,12 @@ import {
   MessageSquare,
   Headphones,
   BookOpen,
-  LayoutDashboard,
+  BarChart3,
   Settings,
   Bell,
   LogOut,
   User,
+  Bot,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -28,28 +29,49 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { useFeaturesContext } from "@/components/providers/features-provider"
 
-const mainNavItems = [
+type FeatureKey = "AGENT" | null
+
+interface NavItem {
+  title: string
+  url: string
+  icon: typeof MessageSquare
+  exact?: boolean
+  feature: FeatureKey
+}
+
+const allNavItems: NavItem[] = [
   {
     title: "Chat",
-    url: "/dashboard/chat",
+    url: "/dashboard",
     icon: MessageSquare,
+    exact: true,
+    feature: null,
+  },
+  {
+    title: "Assistants",
+    url: "/dashboard/assistants",
+    icon: Bot,
+    feature: null,
   },
   {
     title: "Agent",
     url: "/dashboard/agent",
     icon: Headphones,
+    feature: "AGENT",
   },
   {
     title: "Knowledge",
     url: "/dashboard/knowledge",
     icon: BookOpen,
+    feature: null,
   },
   {
-    title: "Dashboard",
-    url: "/dashboard",
-    icon: LayoutDashboard,
-    exact: true,
+    title: "Statistics",
+    url: "/dashboard/statistics",
+    icon: BarChart3,
+    feature: null,
   },
 ]
 
@@ -64,6 +86,14 @@ const bottomNavItems = [
 export function IconRail() {
   const { data: session } = useSession()
   const pathname = usePathname()
+  const { isAgentEnabled } = useFeaturesContext()
+
+  // Filter nav items based on enabled features
+  const mainNavItems = allNavItems.filter((item) => {
+    if (item.feature === null) return true
+    if (item.feature === "AGENT") return isAgentEnabled
+    return true
+  })
 
   const initials = session?.user?.name
     ?.split(" ")

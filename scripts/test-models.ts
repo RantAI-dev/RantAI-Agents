@@ -105,7 +105,7 @@ async function testChatModel(
       model: openrouter(modelId),
       system: SYSTEM_PROMPT,
       prompt: query,
-      maxTokens: 500,
+      maxOutputTokens: 500,
     });
 
     const latency = Date.now() - startTime;

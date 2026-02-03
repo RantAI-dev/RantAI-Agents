@@ -4,12 +4,14 @@ import {
   MessageSquare,
   Headphones,
   BookOpen,
-  LayoutDashboard,
+  BarChart3,
   Settings,
+  Bot,
 } from "lucide-react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { useFeaturesContext } from "@/components/providers/features-provider"
 
 import {
   SidebarGroup,
@@ -19,31 +21,55 @@ import {
   SidebarMenuBadge,
 } from "@/components/ui/sidebar"
 
-const mainItems = [
+type FeatureKey = "AGENT" | null
+
+interface MainItem {
+  title: string
+  url: string
+  icon: typeof MessageSquare
+  description: string
+  badge?: boolean
+  feature: FeatureKey
+  exact?: boolean
+}
+
+const allMainItems: MainItem[] = [
   {
     title: "Chat",
-    url: "/dashboard/chat",
+    url: "/dashboard",
     icon: MessageSquare,
     description: "AI conversations",
+    feature: null,
+    exact: true,
+  },
+  {
+    title: "Assistants",
+    url: "/dashboard/assistants",
+    icon: Bot,
+    description: "Manage AI assistants",
+    feature: null,
   },
   {
     title: "Agent",
     url: "/dashboard/agent",
     icon: Headphones,
     description: "Customer support",
-    badge: true, // Will show queue count
+    badge: true,
+    feature: "AGENT",
   },
   {
     title: "Knowledge",
     url: "/dashboard/knowledge",
     icon: BookOpen,
     description: "RAG documents",
+    feature: null,
   },
   {
-    title: "Dashboard",
-    url: "/dashboard",
-    icon: LayoutDashboard,
+    title: "Statistics",
+    url: "/dashboard/statistics",
+    icon: BarChart3,
     description: "Stats overview",
+    feature: null,
   },
 ]
 
@@ -57,6 +83,14 @@ const secondaryItems = [
 
 export function NavMain() {
   const pathname = usePathname()
+  const { isAgentEnabled } = useFeaturesContext()
+
+  // Filter nav items based on enabled features
+  const mainItems = allMainItems.filter((item) => {
+    if (item.feature === null) return true
+    if (item.feature === "AGENT") return isAgentEnabled
+    return true
+  })
 
   return (
     <>
@@ -66,8 +100,9 @@ export function NavMain() {
         </SidebarGroupLabel>
         <SidebarMenu>
           {mainItems.map((item) => {
-            const isActive = pathname === item.url ||
-              (item.url !== "/dashboard" && pathname.startsWith(item.url))
+            const isActive = item.exact
+              ? pathname === item.url
+              : pathname === item.url || pathname.startsWith(item.url + "/")
 
             return (
               <SidebarMenuItem key={item.title} className="relative group">

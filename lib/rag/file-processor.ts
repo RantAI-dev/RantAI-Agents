@@ -61,9 +61,10 @@ async function processMarkdown(filePath: string): Promise<string> {
  */
 async function processPdf(filePath: string): Promise<string> {
   // Dynamic import to avoid DOM API issues at module load time
-  const pdfParse = (await import("pdf-parse")).default;
+  const { PDFParse } = await import("pdf-parse");
   const dataBuffer = fs.readFileSync(filePath);
-  const pdfData = await pdfParse(dataBuffer);
+  const parser = new PDFParse({ data: dataBuffer });
+  const pdfData = await parser.getText();
   return pdfData.text;
 }
 

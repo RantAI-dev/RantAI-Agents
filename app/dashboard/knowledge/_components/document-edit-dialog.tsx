@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, Check, Folder } from "lucide-react"
+import { Loader2, Check, Folder, Plus } from "lucide-react"
+import { CategoryDialog, Category } from "./category-dialog"
 import { cn } from "@/lib/utils"
 
 interface KnowledgeBase {
@@ -43,16 +44,9 @@ interface DocumentEditDialogProps {
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
   knowledgeBases: KnowledgeBase[]
+  categories: Category[]
+  onCategoriesChange: () => void
 }
-
-const CATEGORIES = [
-  { value: "LIFE_INSURANCE", label: "Life Insurance" },
-  { value: "HEALTH_INSURANCE", label: "Health Insurance" },
-  { value: "HOME_INSURANCE", label: "Home Insurance" },
-  { value: "FAQ", label: "FAQ" },
-  { value: "POLICY", label: "Policy" },
-  { value: "GENERAL", label: "General" },
-]
 
 export function DocumentEditDialog({
   documentId,
@@ -60,15 +54,18 @@ export function DocumentEditDialog({
   onOpenChange,
   onSuccess,
   knowledgeBases,
+  categories: availableCategories,
+  onCategoriesChange,
 }: DocumentEditDialogProps) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [document, setDocument] = useState<DocumentData | null>(null)
   const [title, setTitle] = useState("")
-  const [categories, setCategories] = useState<string[]>([])
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [subcategory, setSubcategory] = useState("")
   const [selectedKBIds, setSelectedKBIds] = useState<string[]>([])
   const [error, setError] = useState("")
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
 
   // Fetch document data when dialog opens
   useEffect(() => {
@@ -80,7 +77,7 @@ export function DocumentEditDialog({
         .then((data) => {
           setDocument(data)
           setTitle(data.title)
-          setCategories(data.categories || [])
+          setSelectedCategories(data.categories || [])
           setSubcategory(data.subcategory || "")
           setSelectedKBIds(data.groups?.map((g: DocumentGroup) => g.id) || [])
         })
@@ -93,11 +90,16 @@ export function DocumentEditDialog({
   }, [open, documentId])
 
   const toggleCategory = (category: string) => {
-    setCategories((prev) =>
+    setSelectedCategories((prev) =>
       prev.includes(category)
         ? prev.filter((c) => c !== category)
         : [...prev, category]
     )
+  }
+
+  const handleCategoryCreated = () => {
+    setCategoryDialogOpen(false)
+    onCategoriesChange()
   }
 
   const toggleKB = (kbId: string) => {
@@ -109,7 +111,7 @@ export function DocumentEditDialog({
   }
 
   const handleSave = async () => {
-    if (!documentId || categories.length === 0) {
+    if (!documentId || selectedCategories.length === 0) {
       setError("At least one category is required")
       return
     }
@@ -123,7 +125,7 @@ export function DocumentEditDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title,
-          categories,
+          categories: selectedCategories,
           subcategory: subcategory || null,
           groupIds: selectedKBIds,
         }),
@@ -173,18 +175,38 @@ export function DocumentEditDialog({
             <div className="space-y-2">
               <Label>Categories (select one or more)</Label>
               <div className="flex gap-2 flex-wrap">
-                {CATEGORIES.map((cat) => (
+                {availableCategories.map((cat) => (
                   <Badge
-                    key={cat.value}
-                    variant={categories.includes(cat.value) ? "default" : "outline"}
+                    key={cat.name}
+                    variant={selectedCategories.includes(cat.name) ? "default" : "outline"}
                     className="cursor-pointer"
-                    onClick={() => toggleCategory(cat.value)}
+                    style={
+                      selectedCategories.includes(cat.name)
+                        ? { backgroundColor: cat.color, borderColor: cat.color }
+                        : { borderColor: cat.color, color: cat.color }
+                    }
+                    onClick={() => toggleCategory(cat.name)}
                   >
                     {cat.label}
                   </Badge>
                 ))}
+                <Badge
+                  variant="outline"
+                  className="cursor-pointer"
+                  onClick={() => setCategoryDialogOpen(true)}
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  New
+                </Badge>
               </div>
             </div>
+
+            {/* Category Dialog */}
+            <CategoryDialog
+              open={categoryDialogOpen}
+              onOpenChange={setCategoryDialogOpen}
+              onSuccess={handleCategoryCreated}
+            />
 
             {/* Subcategory */}
             <div className="space-y-2">
@@ -262,7 +284,7 @@ export function DocumentEditDialog({
           </Button>
           <Button
             onClick={handleSave}
-            disabled={loading || saving || categories.length === 0}
+            disabled={loading || saving || selectedCategories.length === 0}
           >
             {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {saving ? "Saving..." : "Save Changes"}

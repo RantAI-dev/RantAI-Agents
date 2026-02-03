@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Settings, Radio, Info, ChevronRight } from "lucide-react"
+import { Settings, Radio, Info, ChevronRight, ToggleLeft, Code } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const navItems = [
@@ -14,10 +14,22 @@ const navItems = [
     description: "Basic preferences",
   },
   {
+    title: "Features",
+    href: "/dashboard/settings/features",
+    icon: ToggleLeft,
+    description: "Enable/disable capabilities",
+  },
+  {
     title: "Channels",
     href: "/dashboard/settings/channels",
     icon: Radio,
     description: "Channel configuration",
+  },
+  {
+    title: "Embed Widget",
+    href: "/dashboard/settings/embed",
+    icon: Code,
+    description: "Website chat widget",
   },
   {
     title: "About",

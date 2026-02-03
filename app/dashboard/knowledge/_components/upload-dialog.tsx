@@ -15,7 +15,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Upload, FileText, File, Folder, Check, Image, FileType } from "lucide-react"
+import { Loader2, Upload, FileText, File, Folder, Check, Image, FileType, Plus } from "lucide-react"
+import { CategoryDialog, Category } from "./category-dialog"
 import { cn } from "@/lib/utils"
 
 interface KnowledgeBase {
@@ -32,16 +33,9 @@ interface UploadDialogProps {
   onSuccess: () => void
   knowledgeBases?: KnowledgeBase[]
   defaultKBIds?: string[]
+  categories: Category[]
+  onCategoriesChange: () => void
 }
-
-const CATEGORIES = [
-  { value: "LIFE_INSURANCE", label: "Life Insurance" },
-  { value: "HEALTH_INSURANCE", label: "Health Insurance" },
-  { value: "HOME_INSURANCE", label: "Home Insurance" },
-  { value: "FAQ", label: "FAQ" },
-  { value: "POLICY", label: "Policy" },
-  { value: "GENERAL", label: "General" },
-]
 
 // Get icon component based on file extension
 function getFileIcon(fileName: string) {
@@ -57,11 +51,11 @@ function getFileIcon(fileName: string) {
   return { Icon: FileText, color: "text-blue-500" }
 }
 
-export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [], defaultKBIds = [] }: UploadDialogProps) {
+export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [], defaultKBIds = [], categories: availableCategories, onCategoriesChange }: UploadDialogProps) {
   const [loading, setLoading] = useState(false)
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
-  const [categories, setCategories] = useState<string[]>([])
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [subcategory, setSubcategory] = useState("")
   const [selectedKBIds, setSelectedKBIds] = useState<string[]>([])
   const [error, setError] = useState("")
@@ -69,6 +63,7 @@ export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -80,7 +75,7 @@ export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [
   const resetForm = () => {
     setTitle("")
     setContent("")
-    setCategories([])
+    setSelectedCategories([])
     setSubcategory("")
     setSelectedKBIds(defaultKBIds)
     setSelectedFile(null)
@@ -88,11 +83,16 @@ export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [
   }
 
   const toggleCategory = (category: string) => {
-    setCategories((prev) =>
+    setSelectedCategories((prev) =>
       prev.includes(category)
         ? prev.filter((c) => c !== category)
         : [...prev, category]
     )
+  }
+
+  const handleCategoryCreated = () => {
+    setCategoryDialogOpen(false)
+    onCategoriesChange()
   }
 
   const toggleKB = (kbId: string) => {
@@ -143,7 +143,7 @@ export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [
     e.preventDefault()
     setError("")
 
-    if (categories.length === 0) {
+    if (selectedCategories.length === 0) {
       setError("At least one category is required")
       return
     }
@@ -168,7 +168,7 @@ export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [
         const formData = new FormData()
         formData.append("file", selectedFile)
         formData.append("title", title || selectedFile.name.replace(/\.[^/.]+$/, ""))
-        formData.append("categories", JSON.stringify(categories))
+        formData.append("categories", JSON.stringify(selectedCategories))
         if (subcategory) formData.append("subcategory", subcategory)
         if (selectedKBIds.length > 0) formData.append("groupIds", JSON.stringify(selectedKBIds))
         requestBody = formData
@@ -178,7 +178,7 @@ export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [
         requestBody = JSON.stringify({
           title,
           content,
-          categories,
+          categories: selectedCategories,
           subcategory: subcategory || undefined,
           groupIds: selectedKBIds.length > 0 ? selectedKBIds : undefined,
         })
@@ -331,18 +331,38 @@ export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [
           <div className="space-y-2">
             <Label>Categories (select one or more)</Label>
             <div className="flex gap-2 flex-wrap">
-              {CATEGORIES.map((cat) => (
+              {availableCategories.map((cat) => (
                 <Badge
-                  key={cat.value}
-                  variant={categories.includes(cat.value) ? "default" : "outline"}
+                  key={cat.name}
+                  variant={selectedCategories.includes(cat.name) ? "default" : "outline"}
                   className="cursor-pointer"
-                  onClick={() => toggleCategory(cat.value)}
+                  style={
+                    selectedCategories.includes(cat.name)
+                      ? { backgroundColor: cat.color, borderColor: cat.color }
+                      : { borderColor: cat.color, color: cat.color }
+                  }
+                  onClick={() => toggleCategory(cat.name)}
                 >
                   {cat.label}
                 </Badge>
               ))}
+              <Badge
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => setCategoryDialogOpen(true)}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                New
+              </Badge>
             </div>
           </div>
+
+          {/* Category Dialog */}
+          <CategoryDialog
+            open={categoryDialogOpen}
+            onOpenChange={setCategoryDialogOpen}
+            onSuccess={handleCategoryCreated}
+          />
 
           {/* Subcategory */}
           <div className="space-y-2">
@@ -413,7 +433,7 @@ export function UploadDialog({ open, onOpenChange, onSuccess, knowledgeBases = [
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading || categories.length === 0}>
+            <Button type="submit" disabled={loading || selectedCategories.length === 0}>
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {loading ? "Creating..." : "Create Document"}
             </Button>

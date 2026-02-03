@@ -27,7 +27,31 @@ interface ChannelConfig {
   config: Record<string, string>
 }
 
-const channelMeta = {
+interface ChannelField {
+  key: string
+  label: string
+  placeholder: string
+  type?: string
+}
+
+interface ChannelMode {
+  value: string
+  label: string
+  description: string
+}
+
+interface ChannelMetaItem {
+  name: string
+  icon: typeof Globe
+  description: string
+  color: string
+  fields: ChannelField[]
+  hasModes: boolean
+  modes?: ChannelMode[]
+  fieldsByMode?: Record<string, ChannelField[]>
+}
+
+const channelMeta: Record<string, ChannelMetaItem> = {
   PORTAL: {
     name: "Agent Portal",
     icon: Globe,
@@ -282,7 +306,7 @@ export default function ChannelSettingsPage() {
                     <div className="mb-6">
                       <Label className="mb-3 block">Integration Mode</Label>
                       <div className="grid gap-3 md:grid-cols-2">
-                        {meta.modes.map((mode) => (
+                        {meta.modes.map((mode: ChannelMode) => (
                           <button
                             key={mode.value}
                             type="button"
@@ -308,15 +332,15 @@ export default function ChannelSettingsPage() {
                   {/* Dynamic fields based on mode (for Salesforce) or static fields */}
                   {(() => {
                     const currentMode = channel.config.mode || "web-to-case"
-                    const fields = meta.hasModes && meta.fieldsByMode
-                      ? meta.fieldsByMode[currentMode as keyof typeof meta.fieldsByMode] || []
+                    const fields: ChannelField[] = meta.hasModes && meta.fieldsByMode
+                      ? meta.fieldsByMode[currentMode] || []
                       : meta.fields
 
                     if (fields.length === 0) return null
 
                     return (
                       <div className="grid gap-4 md:grid-cols-2">
-                        {fields.map((field) => (
+                        {fields.map((field: ChannelField) => (
                           <div key={field.key} className="space-y-2">
                             <Label htmlFor={`${channel.channel}-${field.key}`}>
                               {field.label}

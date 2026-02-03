@@ -1,6 +1,80 @@
 import type { ChannelHandler, ConversationData, ChannelResult } from "./types"
 
 /**
+ * Salesforce Messaging session type (for session manager compatibility)
+ */
+export interface MessagingSession {
+  conversationId: string
+  accessToken?: string
+  isConnected: boolean
+}
+
+/**
+ * Parsed message from Salesforce Messaging
+ */
+export interface ParsedMessagingMessages {
+  agentJoined?: { name: string }
+  agentMessages: Array<{ text: string; timestamp?: string }>
+  agentLeft?: boolean
+  chatEnded?: boolean
+}
+
+// Active sessions map (for session manager compatibility)
+const activeSessions = new Map<string, MessagingSession>()
+
+/**
+ * Poll for messages from Salesforce Messaging (stub - not implemented)
+ * This would require Salesforce Messaging for In-App and Web REST API integration
+ */
+export async function pollMessages(
+  _config: Record<string, string>,
+  _session: MessagingSession,
+  _lastTimestamp?: string
+): Promise<unknown[]> {
+  console.warn("[Salesforce] pollMessages not implemented - using widget mode")
+  return []
+}
+
+/**
+ * Parse raw messages from Salesforce Messaging API (stub)
+ */
+export function parseMessagingMessages(_messages: unknown[]): ParsedMessagingMessages {
+  return {
+    agentMessages: [],
+  }
+}
+
+/**
+ * Send a message to Salesforce Messaging (stub - not implemented)
+ */
+export async function sendMessage(
+  _config: Record<string, string>,
+  _session: MessagingSession,
+  _message: string
+): Promise<boolean> {
+  console.warn("[Salesforce] sendMessage not implemented - using widget mode")
+  return false
+}
+
+/**
+ * End a Salesforce Messaging conversation (stub - not implemented)
+ */
+export async function endConversation(
+  _config: Record<string, string>,
+  _session: MessagingSession
+): Promise<boolean> {
+  console.warn("[Salesforce] endConversation not implemented - using widget mode")
+  return false
+}
+
+/**
+ * Remove an active session from tracking
+ */
+export function removeActiveSession(conversationId: string): void {
+  activeSessions.delete(conversationId)
+}
+
+/**
  * Salesforce Messaging for In-App and Web channel handler
  *
  * This handler returns configuration for the Salesforce embedded widget
