@@ -1,0 +1,177 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+// Agent model for sales representatives
+model Agent {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  passwordHash  String
+  status        String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  conversations Conversation[]
+}
+
+// Customer model for logged-in customers (nasabah)
+model Customer {
+  id                String    @id @default(cuid())
+  email             String    @unique
+  passwordHash      String
+  firstName         String
+  lastName          String
+  phone             String?
+  preferredLanguage String    @default("en") // "en" or "id"
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  policies          Policy[]
+}
+
+// Policy model - insurance policies owned by customers (only safe data)
+model Policy {
+  id                String    @id @default(cuid())
+  policyNumber      String    @unique
+  customerId        String
+  customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Product info (safe to display)
+  productType       String    // LIFE_INSURANCE, HEALTH_INSURANCE, HOME_INSURANCE
+  productTier       String    // "Gold", "Premium", "Basic", etc.
+  productName       String    // "Term Life Plus", "Health Gold Plan", etc.
+
+  // Coverage info (safe to display)
+  coverageStartDate DateTime
+  coverageEndDate   DateTime?
+  premiumAmount     Decimal
+  premiumFrequency  String    // MONTHLY, QUARTERLY, ANNUAL
+
+  // Payment status (safe to display)
+  paymentStatus     String    @default("CURRENT") // CURRENT, OVERDUE, GRACE_PERIOD
+  lastPaymentDate   DateTime?
+  nextPaymentDate   DateTime?
+
+  // Policy status
+  status            String    @default("ACTIVE") // ACTIVE, PENDING, CANCELLED, EXPIRED
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([customerId])
+}
+
+// Conversation session between customer and AI/agent
+model Conversation {
+  id              String    @id @default(cuid())
+  sessionId       String    @unique
+  status          String    @default("AI_ACTIVE") // AI_ACTIVE, HANDOFF_REQUESTED, WAITING_FOR_AGENT, AGENT_CONNECTED, RESOLVED
+  channel         String    @default("PORTAL") // PORTAL, SALESFORCE, WHATSAPP, EMAIL
+  externalId      String?   // External system ID (Salesforce Case ID, etc.)
+  productInterest String?
+  customerName    String?
+  customerEmail   String?
+  customerPhone   String?
+  agentId         String?
+  agent           Agent?    @relation(fields: [agentId], references: [id])
+  messages        Message[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  handoffAt       DateTime?
+  resolvedAt      DateTime?
+}
+
+// Individual messages in a conversation
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // USER, ASSISTANT, AGENT, SYSTEM
+  content        String
+  metadata       String?      // JSON string for channel-specific data (WhatsApp message ID, etc.)
+  createdAt      DateTime     @default(now())
+  readAt         DateTime?
+}
+
+// Callback requests for when no agents are available
+model CallbackRequest {
+  id              String   @id @default(cuid())
+  customerName    String
+  customerEmail   String
+  customerPhone   String?
+  productInterest String?
+  notes           String?
+  status          String   @default("PENDING") // PENDING, CONTACTED, COMPLETED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Channel configuration for multi-channel agent communication
+model ChannelConfig {
+  id        String   @id @default(cuid())
+  channel   String   @unique // PORTAL, SALESFORCE, WHATSAPP, EMAIL
+  enabled   Boolean  @default(false)
+  isPrimary Boolean  @default(false)
+  config    Json     @default("{}") // Channel-specific configuration
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Knowledge base groups/folders for organizing documents
+model KnowledgeBaseGroup {
+  id          String          @id @default(cuid())
+  name        String
+  description String?
+  color       String?         // Hex color for UI display
+  documents   DocumentGroup[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+// Junction table for many-to-many Document <-> KnowledgeBaseGroup
+model DocumentGroup {
+  id        String             @id @default(cuid())
+  documentId String
+  groupId    String
+  document   Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  group      KnowledgeBaseGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  createdAt  DateTime           @default(now())
+
+  @@unique([documentId, groupId])
+  @@index([documentId])
+  @@index([groupId])
+}
+
+// Knowledge base documents for RAG
+model Document {
+  id          String          @id @default(cuid())
+  title       String
+  content     String
+  categories  String[]        // Array of categories: LIFE_INSURANCE, HEALTH_INSURANCE, HOME_INSURANCE, FAQ, POLICY, GENERAL
+  subcategory String?         // Plan names, specific topics
+  metadata    Json?           // Additional structured data (pricing, features, etc.)
+  groups      DocumentGroup[]
+  chunks      DocumentChunk[]
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+}
+
+// Document chunks with embeddings for vector search
+model DocumentChunk {
+  id         String                 @id @default(cuid())
+  documentId String
+  document   Document               @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content    String                 // The actual text chunk
+  chunkIndex Int                    // Order within the document
+  embedding  Unsupported("vector(1536)")? // OpenAI text-embedding-3-small produces 1536 dimensions
+  metadata   Json?                  // Chunk-level metadata (section headers, etc.)
+  createdAt  DateTime               @default(now())
+
+  @@index([documentId])
+}
