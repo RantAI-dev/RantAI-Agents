@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rantai-agents-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: horizonlife
+      POSTGRES_PASSWORD: horizonlife_secret
+      POSTGRES_DB: horizonlife_insurance
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U horizonlife -d horizonlife_insurance"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
