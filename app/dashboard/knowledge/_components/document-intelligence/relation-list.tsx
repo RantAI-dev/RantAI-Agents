@@ -37,28 +37,27 @@ interface RelationListProps {
   loading?: boolean
 }
 
-// Relation type colors
-const RELATION_TYPE_COLORS: Record<string, string> = {
-  APPLIES_TO: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  CREATED_BY: "bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200",
-  DEPENDS_ON: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  IMPLEMENTS: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-  LOCATED_IN: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200",
-  MENTIONS: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  PART_OF: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  RELATED_TO: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  SUPERSEDES: "bg-lime-100 text-lime-800 dark:bg-lime-900 dark:text-lime-200",
-  WORKS_FOR: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
+// Relation type outline styles (consistent with knowledge badges)
+const RELATION_TYPE_OUTLINE: Record<string, string> = {
+  APPLIES_TO: "border-orange-500 text-orange-700 dark:border-orange-400 dark:text-orange-300",
+  CREATED_BY: "border-pink-500 text-pink-700 dark:border-pink-400 dark:text-pink-300",
+  DEPENDS_ON: "border-red-500 text-red-700 dark:border-red-400 dark:text-red-300",
+  IMPLEMENTS: "border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300",
+  LOCATED_IN: "border-cyan-500 text-cyan-700 dark:border-cyan-400 dark:text-cyan-300",
+  MENTIONS: "border-blue-500 text-blue-700 dark:border-blue-400 dark:text-blue-300",
+  PART_OF: "border-green-500 text-green-700 dark:border-green-400 dark:text-green-300",
+  RELATED_TO: "border-purple-500 text-purple-700 dark:border-purple-400 dark:text-purple-300",
+  SUPERSEDES: "border-lime-500 text-lime-700 dark:border-lime-400 dark:text-lime-300",
+  WORKS_FOR: "border-indigo-500 text-indigo-700 dark:border-indigo-400 dark:text-indigo-300",
 }
 
-// Entity type colors for badges
-const ENTITY_TYPE_COLORS: Record<string, string> = {
-  Person: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  Organization: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  Location: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  Product: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-  Technology: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  Other: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200",
+const ENTITY_TYPE_OUTLINE: Record<string, string> = {
+  Person: "border-blue-500 text-blue-700 dark:border-blue-400 dark:text-blue-300",
+  Organization: "border-red-500 text-red-700 dark:border-red-400 dark:text-red-300",
+  Location: "border-green-500 text-green-700 dark:border-green-400 dark:text-green-300",
+  Product: "border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300",
+  Technology: "border-purple-500 text-purple-700 dark:border-purple-400 dark:text-purple-300",
+  Other: "border-gray-500 text-gray-700 dark:border-gray-400 dark:text-gray-300",
 }
 
 const RelationList = memo<RelationListProps>(({ relations, entities, loading }) => {
@@ -121,7 +120,7 @@ const RelationList = memo<RelationListProps>(({ relations, entities, loading }) 
               <Filter className="h-4 w-4" />
               Filter
               {selectedTypes.length > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                <Badge variant="outline" className="ml-1 h-5 px-1.5">
                   {selectedTypes.length}
                 </Badge>
               )}
@@ -136,10 +135,10 @@ const RelationList = memo<RelationListProps>(({ relations, entities, loading }) 
                 onCheckedChange={() => toggleType(type)}
               >
                 <Badge
-                  variant="secondary"
+                  variant="outline"
                   className={`mr-2 text-xs ${
-                    RELATION_TYPE_COLORS[type] ||
-                    "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+                    RELATION_TYPE_OUTLINE[type] ||
+                    "border-gray-500 text-gray-700 dark:border-gray-400 dark:text-gray-300"
                   }`}
                 >
                   {type}
@@ -175,9 +174,9 @@ const RelationList = memo<RelationListProps>(({ relations, entities, loading }) 
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{sourceEntity.name}</span>
                       <Badge
-                        variant="secondary"
+                        variant="outline"
                         className={`text-xs ${
-                          ENTITY_TYPE_COLORS[sourceEntity.type] || ENTITY_TYPE_COLORS.Other
+                          ENTITY_TYPE_OUTLINE[sourceEntity.type] || ENTITY_TYPE_OUTLINE.Other
                         }`}
                       >
                         {sourceEntity.type}
@@ -189,11 +188,11 @@ const RelationList = memo<RelationListProps>(({ relations, entities, loading }) 
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <ArrowRight className="h-4 w-4" />
                     <Badge
-                      variant="secondary"
-                      className={
-                        RELATION_TYPE_COLORS[relation.relation_type] ||
-                        "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                      }
+                      variant="outline"
+                      className={`text-xs ${
+                        RELATION_TYPE_OUTLINE[relation.relation_type] ||
+                        "border-gray-500 text-gray-700 dark:border-gray-400 dark:text-gray-300"
+                      }`}
                     >
                       {relation.relation_type}
                     </Badge>
@@ -205,9 +204,9 @@ const RelationList = memo<RelationListProps>(({ relations, entities, loading }) 
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-sm">{targetEntity.name}</span>
                       <Badge
-                        variant="secondary"
+                        variant="outline"
                         className={`text-xs ${
-                          ENTITY_TYPE_COLORS[targetEntity.type] || ENTITY_TYPE_COLORS.Other
+                          ENTITY_TYPE_OUTLINE[targetEntity.type] || ENTITY_TYPE_OUTLINE.Other
                         }`}
                       >
                         {targetEntity.type}

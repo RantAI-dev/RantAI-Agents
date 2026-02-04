@@ -28,33 +28,32 @@ interface EntityListProps {
   loading?: boolean
 }
 
-// Entity type colors (Tailwind classes) - vibrant colors for visibility
-const ENTITY_TYPE_COLORS: Record<string, string> = {
-  // Core entity types with distinct, vibrant colors
-  PERSON: "bg-sky-500 text-white dark:bg-sky-500 dark:text-white",
-  Person: "bg-sky-500 text-white dark:bg-sky-500 dark:text-white",
-  ORG: "bg-rose-500 text-white dark:bg-rose-500 dark:text-white",
-  Organization: "bg-rose-500 text-white dark:bg-rose-500 dark:text-white",
-  LOCATION: "bg-emerald-500 text-white dark:bg-emerald-500 dark:text-white",
-  Location: "bg-emerald-500 text-white dark:bg-emerald-500 dark:text-white",
-  PRODUCT: "bg-amber-500 text-white dark:bg-amber-500 dark:text-white",
-  Product: "bg-amber-500 text-white dark:bg-amber-500 dark:text-white",
-  Technology: "bg-violet-500 text-white dark:bg-violet-500 dark:text-white",
-  DATE: "bg-indigo-500 text-white dark:bg-indigo-500 dark:text-white",
-  Date: "bg-indigo-500 text-white dark:bg-indigo-500 dark:text-white",
-  Money: "bg-green-500 text-white dark:bg-green-500 dark:text-white",
-  Email: "bg-pink-500 text-white dark:bg-pink-500 dark:text-white",
-  URL: "bg-teal-500 text-white dark:bg-teal-500 dark:text-white",
-  Phone: "bg-orange-500 text-white dark:bg-orange-500 dark:text-white",
-  EVENT: "bg-lime-500 text-white dark:bg-lime-600 dark:text-white",
-  Event: "bg-lime-500 text-white dark:bg-lime-600 dark:text-white",
-  CONCEPT: "bg-cyan-500 text-white dark:bg-cyan-500 dark:text-white",
-  Concept: "bg-cyan-500 text-white dark:bg-cyan-500 dark:text-white",
-  Document: "bg-fuchsia-500 text-white dark:bg-fuchsia-500 dark:text-white",
-  REGULATION: "bg-purple-600 text-white dark:bg-purple-500 dark:text-white",
-  Regulation: "bg-purple-600 text-white dark:bg-purple-500 dark:text-white",
-  OTHER: "bg-slate-500 text-white dark:bg-slate-500 dark:text-white",
-  Other: "bg-slate-500 text-white dark:bg-slate-500 dark:text-white",
+// Entity type outline styles (consistent with knowledge badges)
+const ENTITY_TYPE_OUTLINE: Record<string, string> = {
+  PERSON: "border-sky-500 text-sky-700 dark:border-sky-400 dark:text-sky-300",
+  Person: "border-sky-500 text-sky-700 dark:border-sky-400 dark:text-sky-300",
+  ORG: "border-rose-500 text-rose-700 dark:border-rose-400 dark:text-rose-300",
+  Organization: "border-rose-500 text-rose-700 dark:border-rose-400 dark:text-rose-300",
+  LOCATION: "border-emerald-500 text-emerald-700 dark:border-emerald-400 dark:text-emerald-300",
+  Location: "border-emerald-500 text-emerald-700 dark:border-emerald-400 dark:text-emerald-300",
+  PRODUCT: "border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300",
+  Product: "border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300",
+  Technology: "border-violet-500 text-violet-700 dark:border-violet-400 dark:text-violet-300",
+  DATE: "border-indigo-500 text-indigo-700 dark:border-indigo-400 dark:text-indigo-300",
+  Date: "border-indigo-500 text-indigo-700 dark:border-indigo-400 dark:text-indigo-300",
+  Money: "border-green-500 text-green-700 dark:border-green-400 dark:text-green-300",
+  Email: "border-pink-500 text-pink-700 dark:border-pink-400 dark:text-pink-300",
+  URL: "border-teal-500 text-teal-700 dark:border-teal-400 dark:text-teal-300",
+  Phone: "border-orange-500 text-orange-700 dark:border-orange-400 dark:text-orange-300",
+  EVENT: "border-lime-500 text-lime-700 dark:border-lime-400 dark:text-lime-300",
+  Event: "border-lime-500 text-lime-700 dark:border-lime-400 dark:text-lime-300",
+  CONCEPT: "border-cyan-500 text-cyan-700 dark:border-cyan-400 dark:text-cyan-300",
+  Concept: "border-cyan-500 text-cyan-700 dark:border-cyan-400 dark:text-cyan-300",
+  Document: "border-fuchsia-500 text-fuchsia-700 dark:border-fuchsia-400 dark:text-fuchsia-300",
+  REGULATION: "border-purple-500 text-purple-700 dark:border-purple-400 dark:text-purple-300",
+  Regulation: "border-purple-500 text-purple-700 dark:border-purple-400 dark:text-purple-300",
+  OTHER: "border-slate-500 text-slate-700 dark:border-slate-400 dark:text-slate-300",
+  Other: "border-slate-500 text-slate-700 dark:border-slate-400 dark:text-slate-300",
 }
 
 const EntityList = memo<EntityListProps>(({ entities, loading }) => {
@@ -119,7 +118,7 @@ const EntityList = memo<EntityListProps>(({ entities, loading }) => {
               <Filter className="h-4 w-4" />
               Filter
               {selectedTypes.length > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5">
+                <Badge variant="outline" className="ml-1 h-5 px-1.5">
                   {selectedTypes.length}
                 </Badge>
               )}
@@ -134,8 +133,8 @@ const EntityList = memo<EntityListProps>(({ entities, loading }) => {
                 onCheckedChange={() => toggleType(type)}
               >
                 <Badge
-                  variant="secondary"
-                  className={`mr-2 ${ENTITY_TYPE_COLORS[type] || ENTITY_TYPE_COLORS.Other}`}
+                  variant="outline"
+                  className={`mr-2 text-xs ${ENTITY_TYPE_OUTLINE[type] || ENTITY_TYPE_OUTLINE.Other}`}
                 >
                   {type}
                 </Badge>
@@ -188,8 +187,8 @@ const EntityList = memo<EntityListProps>(({ entities, loading }) => {
                 <div key={type}>
                   <div className="flex items-center gap-2 mb-2 sticky top-0 bg-background py-1">
                     <Badge
-                      variant="secondary"
-                      className={ENTITY_TYPE_COLORS[type] || ENTITY_TYPE_COLORS.Other}
+                      variant="outline"
+                      className={`text-xs ${ENTITY_TYPE_OUTLINE[type] || ENTITY_TYPE_OUTLINE.Other}`}
                     >
                       {type}
                     </Badge>
@@ -224,9 +223,9 @@ const EntityCard = memo<{ entity: Entity; showType?: boolean }>(
               <span className="font-medium text-sm truncate">{entity.name}</span>
               {showType && (
                 <Badge
-                  variant="secondary"
+                  variant="outline"
                   className={`text-xs ${
-                    ENTITY_TYPE_COLORS[entity.type] || ENTITY_TYPE_COLORS.Other
+                    ENTITY_TYPE_OUTLINE[entity.type] || ENTITY_TYPE_OUTLINE.Other
                   }`}
                 >
                   {entity.type}

@@ -4,13 +4,14 @@ import { useEffect, useState, useCallback, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Plus, Search, MoreHorizontal, Pencil, Trash2, Folder, Loader2 } from "lucide-react"
-import { DocumentList } from "./_components/document-list"
-import { UploadDialog } from "./_components/upload-dialog"
-import { DocumentViewer } from "./_components/document-viewer"
-import { DocumentEditDialog } from "./_components/document-edit-dialog"
-import { CategoryDialog, Category } from "./_components/category-dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Loader2, SlidersHorizontal } from "lucide-react"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Dialog,
   DialogContent,
@@ -19,14 +20,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { DocumentList } from "./_components/document-list"
+import { UploadDialog } from "./_components/upload-dialog"
+import { DocumentViewer } from "./_components/document-viewer"
+import { DocumentEditDialog } from "./_components/document-edit-dialog"
+import { CategoryDialog, Category } from "./_components/category-dialog"
+import { KnowledgeHeader } from "./_components/knowledge-header"
+import { KnowledgeToolbar, type SortOption } from "./_components/knowledge-toolbar"
+import { CategoryFilterRow } from "./_components/category-filter-row"
+import { FiltersPanel } from "./_components/filters-panel"
 import { cn } from "@/lib/utils"
 
 // Wrapper page component with Suspense
@@ -93,6 +95,7 @@ function KnowledgePageContent() {
   const [viewerOpen, setViewerOpen] = useState(false)
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [sortOption, setSortOption] = useState<SortOption>("newest")
 
   // Categories state
   const [categories, setCategories] = useState<Category[]>([])
@@ -228,6 +231,23 @@ function KnowledgePageContent() {
     return matchesSearch && matchesCategory
   })
 
+  // Sort filtered documents
+  const sortedDocuments = [...filteredDocuments].sort((a, b) => {
+    if (sortOption === "newest") {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    }
+    if (sortOption === "oldest") {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    }
+    return a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+  })
+
+  const hasActiveFilters = selectedCategories.length > 0 || searchQuery.trim().length > 0
+  const clearAllFilters = () => {
+    setSelectedCategories([])
+    setSearchQuery("")
+  }
+
   // Knowledge Base CRUD handlers
   const handleCreateKB = () => {
     setEditingKB(null)
@@ -321,114 +341,60 @@ function KnowledgePageContent() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b pl-14 pr-4 bg-background">
-        <div className="flex items-center gap-3">
-          {selectedKB ? (
-            <>
-              <div
-                className="h-6 w-6 rounded flex items-center justify-center shrink-0"
-                style={{ backgroundColor: selectedKB.color || "#3b82f6" }}
-              >
-                <Folder className="h-4 w-4 text-white" />
-              </div>
-              <h1 className="text-lg font-semibold">{selectedKB.name}</h1>
-              <span className="text-sm text-muted-foreground">
-                {documents.length} document{documents.length !== 1 ? "s" : ""}
-              </span>
-            </>
-          ) : (
-            <h1 className="text-lg font-semibold">All Documents</h1>
-          )}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {selectedKB && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <MoreHorizontal className="h-4 w-4" />
+      <KnowledgeHeader
+        selectedKB={selectedKB ?? null}
+        documentCount={documents.length}
+        onAddDocument={() => setUploadDialogOpen(true)}
+        onEditKB={selectedKB ? handleEditKB : undefined}
+        onDeleteKB={selectedKB ? handleDeleteKB : undefined}
+      />
+
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <KnowledgeToolbar
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={clearAllFilters}
+          sortOption={sortOption}
+          onSortChange={setSortOption}
+          filtersPopover={
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" aria-label="Open filters">
+                  <SlidersHorizontal className="h-4 w-4 mr-2" />
+                  Filters
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleEditKB}>
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit Knowledge Base
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleDeleteKB}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Knowledge Base
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-          <Button onClick={() => setUploadDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Document
-          </Button>
-        </div>
-      </header>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="p-0" aria-label="Filter by category">
+                <FiltersPanel
+                  categories={categories}
+                  selectedCategories={selectedCategories}
+                  onToggleCategory={toggleCategory}
+                />
+              </PopoverContent>
+            </Popover>
+          }
+        />
 
-      {/* Content */}
-      <div className="flex flex-col h-full overflow-hidden">
-        {/* Category Filters & Search */}
-        <div className="border-b p-4">
-          <div className="flex gap-2 flex-wrap mb-3">
-            {categories.map((cat) => (
-              <Badge
-                key={cat.name}
-                variant={selectedCategories.includes(cat.name) ? "default" : "outline"}
-                className="cursor-pointer"
-                style={
-                  selectedCategories.includes(cat.name)
-                    ? { backgroundColor: cat.color, borderColor: cat.color }
-                    : { borderColor: cat.color, color: cat.color }
-                }
-                onClick={() => toggleCategory(cat.name)}
-              >
-                {cat.label} ({categoryCounts[cat.name] || 0})
-              </Badge>
-            ))}
-            <Badge
-              variant="outline"
-              className="cursor-pointer"
-              onClick={handleCreateCategory}
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              New
-            </Badge>
-            {selectedCategories.length > 0 && (
-              <Badge
-                variant="secondary"
-                className="cursor-pointer"
-                onClick={() => setSelectedCategories([])}
-              >
-                Clear filters
-              </Badge>
-            )}
-          </div>
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search documents..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-        </div>
+        <CategoryFilterRow
+          categories={categories}
+          categoryCounts={categoryCounts}
+          selectedCategories={selectedCategories}
+          onToggleCategory={toggleCategory}
+          onNewCategory={handleCreateCategory}
+          onClearFilters={() => setSelectedCategories([])}
+        />
 
-        {/* Document List */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-auto p-4" role="region" aria-label="Documents">
           <DocumentList
-            documents={filteredDocuments}
+            documents={sortedDocuments}
             loading={loading}
             onDelete={handleDelete}
             onView={handleView}
             onEdit={handleEdit}
             categoryMap={categoryMap}
+            onAddDocument={() => setUploadDialogOpen(true)}
+            onClearFilters={hasActiveFilters ? clearAllFilters : undefined}
           />
         </div>
       </div>
@@ -519,6 +485,8 @@ function KnowledgePageContent() {
                       kbColor === c ? "ring-2 ring-offset-2 ring-primary" : ""
                     )}
                     style={{ backgroundColor: c }}
+                    aria-label={`Select color ${c}`}
+                    aria-pressed={kbColor === c}
                   />
                 ))}
               </div>
