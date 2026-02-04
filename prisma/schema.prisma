@@ -14,6 +14,7 @@ model Agent {
   name          String
   passwordHash  String
   status        String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE
+  avatarS3Key   String?        // S3 key for avatar image
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   conversations Conversation[]
@@ -136,7 +137,8 @@ model Organization {
   id          String   @id @default(cuid())
   name        String
   slug        String   @unique // URL-friendly identifier
-  logoUrl     String?
+  logoUrl     String?          // External URL for logo (backward compat)
+  logoS3Key   String?          // S3 key for uploaded logo
   plan        String   @default("free") // free, starter, pro, enterprise
 
   // Limits based on plan
@@ -285,8 +287,14 @@ model Document {
   content     String
   categories  String[]        // Array of categories: LIFE_INSURANCE, HEALTH_INSURANCE, HOME_INSURANCE, FAQ, POLICY, GENERAL
   subcategory String?         // Plan names, specific topics
-  metadata    Json?           // Additional structured data (pricing, features, etc.)
+  metadata    Json?           // Additional structured data (legacy: may contain fileData as base64)
   groups      DocumentGroup[]
+
+  // S3 file storage (replaces base64 in metadata)
+  s3Key       String?         // S3 object key for original file
+  fileType    String?         // "pdf", "image", "markdown"
+  fileSize    Int?            // File size in bytes
+  mimeType    String?         // MIME type (e.g., "application/pdf")
 
   // Organization scope (null = global/shared)
   organizationId String?
@@ -297,6 +305,7 @@ model Document {
   updatedAt DateTime @updatedAt
 
   @@index([organizationId])
+  @@index([s3Key])
 }
 
 // API Key for embeddable chat widget
@@ -361,7 +370,34 @@ model DashboardMessage {
   replyTo     String?          // ID of the message being replied to
   editHistory Json?            // Array of { content, assistantResponse, editedAt }
   sources     Json?            // Array of sources for assistant messages
+  attachments FileAttachment[] // File attachments for this message
   createdAt   DateTime         @default(now())
 
   @@index([sessionId])
+}
+
+// File attachments stored in S3
+model FileAttachment {
+  id          String   @id @default(cuid())
+
+  // S3 storage
+  s3Key       String   @unique  // S3 object key
+  s3Bucket    String   @default("rantai-files")
+
+  // File metadata
+  filename    String            // Original filename
+  contentType String            // MIME type
+  size        Int               // File size in bytes
+
+  // Owner
+  uploadedBy  String?           // userId who uploaded
+
+  // Relations (optional - attachment can be orphaned temporarily)
+  messageId   String?
+  message     DashboardMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime @default(now())
+
+  @@index([messageId])
+  @@index([uploadedBy])
 }
