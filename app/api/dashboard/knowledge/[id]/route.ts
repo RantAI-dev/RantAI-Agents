@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext, canEdit, canManage } from "@/lib/organization"
 import { getSurrealClient } from "@/lib/surrealdb"
+import { getPresignedDownloadUrl, deleteFile } from "@/lib/s3"
 
 interface SurrealChunk {
   id: string;
@@ -62,6 +63,19 @@ export async function GET(
     const rawResult = chunkResults[0]
     const chunks = (Array.isArray(rawResult) ? rawResult : (rawResult as { result?: SurrealChunk[] })?.result || []) as SurrealChunk[]
 
+    // Generate presigned URL if document has S3 file
+    let fileUrl: string | undefined
+    if (document.s3Key) {
+      try {
+        fileUrl = await getPresignedDownloadUrl(document.s3Key)
+      } catch (urlError) {
+        console.error("[Knowledge API] Failed to generate presigned URL:", urlError)
+      }
+    }
+
+    // Determine file type from new schema field or legacy metadata
+    const fileType = document.fileType || (document.metadata as { fileType?: string } | null)?.fileType || "markdown"
+
     return NextResponse.json({
       id: document.id,
       title: document.title,
@@ -70,6 +84,13 @@ export async function GET(
       subcategory: document.subcategory,
       groups: document.groups.map((dg) => dg.group),
       metadata: document.metadata,
+      // New S3 fields
+      fileType,
+      fileSize: document.fileSize,
+      mimeType: document.mimeType,
+      s3Key: document.s3Key,
+      fileUrl,
+      // Chunks
       chunks: chunks.map((chunk) => ({
         id: chunk.id,
         content: chunk.content,
@@ -208,7 +229,7 @@ export async function DELETE(
     // First verify the document exists and check organization access
     const existing = await prisma.document.findUnique({
       where: { id },
-      select: { id: true, organizationId: true },
+      select: { id: true, organizationId: true, s3Key: true },
     })
 
     if (!existing) {
@@ -231,6 +252,17 @@ export async function DELETE(
 
     // Clean up all document intelligence data (relations, entities, chunks)
     const cleanupStats = await surrealClient.cleanupDocumentIntelligence(id)
+
+    // Delete S3 file if present
+    if (existing.s3Key) {
+      try {
+        await deleteFile(existing.s3Key)
+        console.log(`[Knowledge API] Deleted S3 file: ${existing.s3Key}`)
+      } catch (s3Error) {
+        console.error(`[Knowledge API] Failed to delete S3 file ${existing.s3Key}:`, s3Error)
+        // Continue with document deletion even if S3 delete fails
+      }
+    }
 
     // Delete document from PostgreSQL (group associations will cascade delete)
     await prisma.document.delete({

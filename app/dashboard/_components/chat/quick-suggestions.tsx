@@ -90,7 +90,7 @@ export const QuickSuggestions = memo<QuickSuggestionsProps>(
               <Button
                 variant="outline"
                 size="sm"
-                className="h-auto py-2 px-3 text-sm font-normal whitespace-normal text-left hover:bg-primary/5 hover:border-primary/30 transition-colors"
+                className="h-auto py-2 px-3 text-sm font-normal whitespace-normal text-left text-foreground hover:bg-primary/5 hover:border-primary/30 transition-colors"
                 onClick={() => onSelect(suggestion)}
               >
                 {suggestion}

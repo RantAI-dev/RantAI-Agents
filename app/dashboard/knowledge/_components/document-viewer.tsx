@@ -23,7 +23,7 @@ interface DocumentViewerProps {
 
 interface DocumentMetadata {
   fileType?: "markdown" | "pdf" | "image"
-  fileData?: string // Base64 for PDFs/images
+  fileData?: string // Base64 for PDFs/images (legacy)
 }
 
 interface DocumentGroup {
@@ -40,6 +40,12 @@ interface DocumentDetail {
   subcategory: string | null
   groups: DocumentGroup[]
   metadata?: DocumentMetadata
+  // New S3 fields
+  fileType?: "markdown" | "pdf" | "image"
+  fileSize?: number
+  mimeType?: string
+  s3Key?: string
+  fileUrl?: string // Presigned URL from S3
   chunks: Array<{
     id: string
     content: string
@@ -93,9 +99,13 @@ export function DocumentViewer({ documentId, open, onOpenChange }: DocumentViewe
     }
   }
 
-  const fileType = document?.metadata?.fileType || "markdown"
+  // Prefer new schema field, fallback to legacy metadata
+  const fileType = document?.fileType || document?.metadata?.fileType || "markdown"
   const isPdf = fileType === "pdf"
   const isImage = fileType === "image"
+  // Check if we have S3 URL or legacy base64
+  const hasS3File = !!document?.fileUrl
+  const hasBase64 = !!document?.metadata?.fileData
 
   // Get file extension for download
   const getFileExtension = () => {
@@ -107,26 +117,38 @@ export function DocumentViewer({ documentId, open, onOpenChange }: DocumentViewe
   const handleDownload = () => {
     if (!document) return
 
-    if ((isPdf || isImage) && document.metadata?.fileData) {
-      // Download PDF/Image from base64
+    const filename = `${document.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}${getFileExtension()}`
+
+    // Prefer S3 URL if available (new storage)
+    if ((isPdf || isImage) && hasS3File && document.fileUrl) {
+      // Download from S3 presigned URL
+      const a = window.document.createElement("a")
+      a.href = document.fileUrl
+      a.download = filename
+      a.target = "_blank" // Open in new tab as fallback
+      window.document.body.appendChild(a)
+      a.click()
+      window.document.body.removeChild(a)
+    } else if ((isPdf || isImage) && hasBase64 && document.metadata?.fileData) {
+      // Legacy: Download PDF/Image from base64
       const byteCharacters = atob(document.metadata.fileData)
       const byteNumbers = new Array(byteCharacters.length)
       for (let i = 0; i < byteCharacters.length; i++) {
         byteNumbers[i] = byteCharacters.charCodeAt(i)
       }
       const byteArray = new Uint8Array(byteNumbers)
-      const mimeType = isPdf ? "application/pdf" : "image/png"
+      const mimeType = document.mimeType || (isPdf ? "application/pdf" : "image/png")
       const blob = new Blob([byteArray], { type: mimeType })
       const url = URL.createObjectURL(blob)
       const a = window.document.createElement("a")
       a.href = url
-      a.download = `${document.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}${getFileExtension()}`
+      a.download = filename
       window.document.body.appendChild(a)
       a.click()
       window.document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } else {
-      // Download Markdown
+      // Download Markdown content
       const blob = new Blob([document.content], { type: "text/markdown" })
       const url = URL.createObjectURL(blob)
       const a = window.document.createElement("a")
@@ -139,9 +161,16 @@ export function DocumentViewer({ documentId, open, onOpenChange }: DocumentViewe
     }
   }
 
-  const getPdfDataUrl = () => {
-    if (!document?.metadata?.fileData) return null
-    return `data:application/pdf;base64,${document.metadata.fileData}`
+  const getPdfViewUrl = () => {
+    // Prefer S3 URL if available
+    if (document?.fileUrl) {
+      return document.fileUrl
+    }
+    // Legacy: Use base64 data URL
+    if (document?.metadata?.fileData) {
+      return `data:application/pdf;base64,${document.metadata.fileData}`
+    }
+    return null
   }
 
   return (
@@ -206,12 +235,20 @@ export function DocumentViewer({ documentId, open, onOpenChange }: DocumentViewe
               </TabsList>
 
               <TabsContent value="preview" className="flex-1 min-h-0 mt-4">
-                {isPdf && document.metadata?.fileData ? (
+                {isPdf && (hasS3File || hasBase64) ? (
                   <div className="h-full border rounded-lg overflow-hidden">
                     <iframe
-                      src={getPdfDataUrl() || ""}
+                      src={getPdfViewUrl() || ""}
                       className="w-full h-full"
                       title={document.title}
+                    />
+                  </div>
+                ) : isImage && (hasS3File || hasBase64) ? (
+                  <div className="h-full border rounded-lg overflow-hidden flex items-center justify-center bg-muted/30">
+                    <img
+                      src={document.fileUrl || (document.metadata?.fileData ? `data:${document.mimeType || 'image/png'};base64,${document.metadata.fileData}` : '')}
+                      alt={document.title}
+                      className="max-w-full max-h-full object-contain"
                     />
                   </div>
                 ) : (

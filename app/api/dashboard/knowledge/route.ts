@@ -12,6 +12,8 @@ import {
 } from "@/lib/rag"
 import { extractEntities, extractEntitiesAndRelations } from "@/lib/document-intelligence"
 import { getSurrealClient } from "@/lib/surrealdb"
+import { uploadFile, S3Paths, validateUpload, getPresignedDownloadUrl } from "@/lib/s3"
+import { processDocumentOCR, isPDFScanned } from "@/lib/ocr"
 import * as path from "path"
 
 // GET - List all documents
@@ -60,12 +62,16 @@ export async function GET(request: Request) {
     const documentsWithCounts = await Promise.all(
       documents.map(async (doc) => {
         const chunkCount = await getDocumentChunkCount(doc.id)
+        // Use new schema field or fallback to metadata for backward compat
+        const fileType = doc.fileType || (doc.metadata as { fileType?: string } | null)?.fileType || "markdown"
         return {
           id: doc.id,
           title: doc.title,
           categories: doc.categories,
           subcategory: doc.subcategory,
-          fileType: (doc.metadata as { fileType?: string } | null)?.fileType || "markdown",
+          fileType,
+          fileSize: doc.fileSize,
+          hasS3File: !!doc.s3Key,
           chunkCount,
           groups: doc.groups.map((dg) => dg.group),
           createdAt: doc.createdAt.toISOString(),
@@ -130,7 +136,10 @@ export async function POST(request: Request) {
     let subcategory: string | undefined
     let groupIds: string[] = []
     let fileType: "markdown" | "pdf" | "image" = "markdown"
-    let fileData: string | undefined // Base64 for PDFs/images
+    let fileBuffer: Buffer | undefined
+    let mimeType: string | undefined
+    let originalFilename: string | undefined
+    let usedOCR = false // Track if OCR was used for processing
 
     if (contentType.includes("multipart/form-data")) {
       // Handle file upload
@@ -153,36 +162,71 @@ export async function POST(request: Request) {
         groupIds = groupIdsStr ? groupIdsStr.split(",").filter(Boolean) : []
       }
 
+      // Check for forceOCR option (form field or query param)
+      const { searchParams } = new URL(request.url)
+      const forceOCRParam = searchParams.get("forceOCR")
+      const forceOCRField = formData.get("forceOCR") as string | null
+      const forceOCR = forceOCRParam === "true" || forceOCRField === "true"
+
+      // Document type hint for better OCR model selection
+      // Options: printed_text, handwritten, table, form, figure, mixed
+      const documentTypeHint = (formData.get("documentType") as string | null) ||
+        searchParams.get("documentType") || undefined
+
       if (!file) {
         return NextResponse.json({ error: "No file provided" }, { status: 400 })
       }
 
-      const fileName = file.name.toLowerCase()
-      const fileBuffer = Buffer.from(await file.arrayBuffer())
+      // Validate file upload
+      const validation = validateUpload("document", file.size, file.type)
+      if (!validation.valid) {
+        return NextResponse.json({ error: validation.error }, { status: 400 })
+      }
+
+      originalFilename = file.name
+      mimeType = file.type
       const detectedType = detectFileType(file.name)
+      fileBuffer = Buffer.from(await file.arrayBuffer())
 
       if (detectedType === "pdf") {
         fileType = "pdf"
-        // Store PDF as base64 for viewing/downloading
-        fileData = fileBuffer.toString("base64")
 
-        // Use unpdf for serverless-compatible text extraction
-        try {
-          const { extractText, getDocumentProxy } = await import("unpdf")
-          const pdf = await getDocumentProxy(new Uint8Array(fileBuffer))
-          const { text } = await extractText(pdf, { mergePages: true })
-          content = text
-        } catch (pdfError) {
-          console.error("PDF parsing error:", pdfError)
-          // Fallback to placeholder
-          content = `[PDF Document: ${title || file.name}]\n\nFailed to extract text from PDF.`
+        // Check if OCR should be used:
+        // 1. forceOCR=true explicitly requests OCR
+        // 2. Auto-detect: PDF is scanned (< 100 chars/page)
+        const isScanned = forceOCR || await isPDFScanned(fileBuffer)
+
+        if (isScanned) {
+          // Use OCR pipeline (forced or auto-detected scanned PDF)
+          const reason = forceOCR ? "forceOCR=true" : "auto-detected scanned"
+          console.log(`[Knowledge API] Using OCR for PDF (${reason}): ${file.name}`)
+          try {
+            const ocrResult = await processDocumentOCR(fileBuffer, "application/pdf", {
+              outputFormat: "markdown",
+              documentType: documentTypeHint as "printed_text" | "handwritten" | "table" | "form" | "figure" | "mixed" | undefined,
+            })
+            content = "combinedText" in ocrResult ? ocrResult.combinedText : ocrResult.text
+            usedOCR = true
+          } catch (ocrError) {
+            console.error("OCR processing error:", ocrError)
+            content = `[PDF Document: ${title || file.name}]\n\nFailed to OCR PDF.`
+          }
+        } else {
+          // Digital PDF - use unpdf for serverless-compatible text extraction
+          try {
+            const { extractText, getDocumentProxy } = await import("unpdf")
+            const pdf = await getDocumentProxy(new Uint8Array(fileBuffer))
+            const { text } = await extractText(pdf, { mergePages: true })
+            content = text
+          } catch (pdfError) {
+            console.error("PDF parsing error:", pdfError)
+            content = `[PDF Document: ${title || file.name}]\n\nFailed to extract text from PDF.`
+          }
         }
       } else if (detectedType === "image") {
         fileType = "image"
-        // Store image as base64 for viewing
-        fileData = fileBuffer.toString("base64")
 
-        // Use vision model to extract description
+        // Use OCR pipeline (Ollama local models with OpenRouter fallback)
         try {
           const ext = path.extname(file.name).toLowerCase()
           const mimeTypes: Record<string, string> = {
@@ -193,52 +237,19 @@ export async function POST(request: Request) {
             ".webp": "image/webp",
             ".heic": "image/heic",
           }
-          const mimeType = mimeTypes[ext] || "image/png"
+          const imgMimeType = mimeTypes[ext] || "image/png"
 
-          const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "openai/gpt-4o-mini",
-              messages: [
-                {
-                  role: "user",
-                  content: [
-                    {
-                      type: "text",
-                      text: `Analyze this image and provide:
-1. A detailed description of what the image shows
-2. Any text visible in the image (OCR)
-3. Key information or data points visible
-
-Format your response as structured text that can be used for search and retrieval. Be thorough but concise.`,
-                    },
-                    {
-                      type: "image_url",
-                      image_url: {
-                        url: `data:${mimeType};base64,${fileData}`,
-                      },
-                    },
-                  ],
-                },
-              ],
-              max_tokens: 1500,
-            }),
+          console.log(`[Knowledge API] Processing image with OCR: ${file.name}`)
+          const ocrResult = await processDocumentOCR(fileBuffer, imgMimeType, {
+            outputFormat: "markdown",
+            documentType: documentTypeHint as "printed_text" | "handwritten" | "table" | "form" | "figure" | "mixed" | undefined,
           })
-
-          if (!response.ok) {
-            throw new Error(`Vision API error: ${response.status}`)
-          }
-
-          const data = await response.json()
-          const description = data.choices[0]?.message?.content || ""
-          content = `[Image: ${file.name}]\n\n${description}`
-        } catch (visionError) {
-          console.error("Vision processing error:", visionError)
-          content = `[Image: ${file.name}]\n\nFailed to process image with vision model.`
+          const text = "combinedText" in ocrResult ? ocrResult.combinedText : ocrResult.text
+          content = `[Image: ${file.name}]\n\n${text}`
+          usedOCR = true
+        } catch (ocrError) {
+          console.error("OCR processing error:", ocrError)
+          content = `[Image: ${file.name}]\n\nFailed to process image with OCR.`
         }
       } else {
         // Markdown or text file
@@ -266,18 +277,47 @@ Format your response as structured text that can be used for search and retrieva
       )
     }
 
-    // Create document with metadata
-    const metadata = fileData
-      ? { fileType, fileData }
-      : { fileType }
+    // Generate document ID first so we can use it for S3 path
+    const documentId = crypto.randomUUID()
 
+    // Upload file to S3 if present (PDF or image)
+    let s3Key: string | undefined
+    let fileSize: number | undefined
+
+    if (fileBuffer && (fileType === "pdf" || fileType === "image")) {
+      try {
+        s3Key = S3Paths.document(
+          orgContext?.organizationId || null,
+          documentId,
+          originalFilename || "file"
+        )
+        const uploadResult = await uploadFile(s3Key, fileBuffer, mimeType || "application/octet-stream", {
+          documentId,
+          fileType,
+          originalFilename: originalFilename || "file",
+        })
+        fileSize = uploadResult.size
+        console.log(`[Knowledge API] Uploaded file to S3: ${s3Key}`)
+      } catch (s3Error) {
+        console.error("[Knowledge API] S3 upload failed:", s3Error)
+        // Continue without S3 - file content is already extracted
+        s3Key = undefined
+      }
+    }
+
+    // Create document with S3 reference (no more base64 in metadata)
     const document = await prisma.document.create({
       data: {
+        id: documentId,
         title,
         content,
         categories,
         subcategory: subcategory || null,
-        metadata: metadata as object,
+        metadata: { fileType } as object, // Only store fileType, no fileData
+        s3Key,
+        fileType,
+        fileSize,
+        mimeType,
         organizationId: orgContext?.organizationId || null,
         createdBy: session.user.id,
         groups: groupIds && groupIds.length > 0 ? {
@@ -450,15 +490,29 @@ Format your response as structured text that can be used for search and retrieva
     // Store chunks with embeddings in SurrealDB
     await storeChunks(document.id, chunks, embeddings)
 
+    // Generate presigned URL if file was uploaded to S3
+    let fileUrl: string | undefined
+    if (s3Key) {
+      try {
+        fileUrl = await getPresignedDownloadUrl(s3Key)
+      } catch (urlError) {
+        console.error("[Knowledge API] Failed to generate presigned URL:", urlError)
+      }
+    }
+
     return NextResponse.json({
       id: document.id,
       title: document.title,
       categories: document.categories,
       groups: document.groups.map((dg) => dg.group),
       fileType,
+      fileSize,
+      s3Key,
+      fileUrl,
       chunkCount: chunks.length,
       entityCount: useEnhanced ? entityCount : undefined,
       enhanced: useEnhanced,
+      usedOCR,
     })
   } catch (error) {
     console.error("Failed to create document:", error)
