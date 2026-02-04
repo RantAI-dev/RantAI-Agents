@@ -33,6 +33,46 @@ services:
       timeout: 5s
       retries: 5
 
+  # S3-compatible object storage (RustFS)
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: rantai-agents-rustfs
+    restart: unless-stopped
+    ports:
+      - "9000:9000"  # S3 API
+      - "9001:9001"  # Web Console
+    volumes:
+      - rustfs_data:/data
+
+  # Ollama for local OCR models
+  # Supports: GLM-OCR, Moondream, MiniCPM-V, Qwen3-VL
+  # Pull models with: docker exec -it rantai-agents-ollama ollama pull glm-ocr
+  ollama:
+    image: ollama/ollama:latest
+    container_name: rantai-agents-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    # GPU support (uncomment if you have NVIDIA GPU)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   postgres_data:
   surrealdb_data:
+  rustfs_data:
+  ollama_data:

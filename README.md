@@ -12,6 +12,7 @@ RantAI Agents is a flexible AI agent platform that enables organizations to buil
 - **RAG Pipeline** - Advanced retrieval-augmented generation with hybrid search and semantic reranking
 - **Knowledge Base Management** - Document ingestion, categorization, and intelligent chunking
 - **Document Intelligence** - Entity extraction and knowledge graph visualization
+- **OCR Pipeline** - Local OCR with Ollama (GLM-OCR, MiniCPM-V) + cloud fallback
 - **Multi-Channel Deployment** - Deploy agents across web, WhatsApp, email, and embeddable widgets
 - **Human-in-the-Loop** - Seamless handoff between AI agents and human operators
 - **Real-Time Communication** - Socket.io powered live interactions
@@ -31,16 +32,76 @@ RantAI Agents is a flexible AI agent platform that enables organizations to buil
 |----------|-------------|
 | **Frontend** | Next.js 16, React 19, Tailwind CSS v4, Radix UI, Zustand |
 | **Backend** | Next.js API Routes, NextAuth.js v5, Socket.io |
-| **AI/LLM** | OpenRouter API, OpenAI Embeddings |
+| **AI/LLM** | OpenRouter API, OpenAI Embeddings, Ollama (Local OCR) |
 | **Databases** | PostgreSQL 16 (Prisma ORM), SurrealDB (Vector Store) |
+| **Storage** | RustFS (S3-compatible object storage) |
 | **Integrations** | Twilio (WhatsApp), Nodemailer (Email), Salesforce CRM |
 
 ## Prerequisites
 
-- Node.js v18+
-- pnpm v10.21.0+
-- Docker & Docker Compose
-- OpenRouter API key
+### Required
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| **Node.js** | v18+ | v20+ recommended |
+| **pnpm** | v10.21.0+ | Package manager |
+| **Docker** | v20+ | With Docker Compose v2 |
+| **OpenRouter API Key** | - | Get at [openrouter.ai/keys](https://openrouter.ai/keys) |
+
+### Hardware Requirements
+
+#### Minimum (Cloud OCR Only)
+- 2 CPU cores
+- 4GB RAM
+- No GPU required (uses OpenRouter for OCR fallback)
+
+#### Recommended (Local OCR)
+
+| Setup | RAM | GPU VRAM | OCR Model |
+|-------|-----|----------|-----------|
+| **CPU-Only** | 8GB+ | None | `moondream` or `qwen3-vl:2b` |
+| **Budget GPU** | 8GB+ | 4-6GB | `glm-ocr` (recommended) |
+| **Mid-Range GPU** | 16GB+ | 8-12GB | `glm-ocr` + `qwen3-vl:8b` |
+| **High-End GPU** | 16GB+ | 16GB+ | `glm-ocr` + `minicpm-v:4.5` (SOTA) |
+
+### System Dependencies (Linux)
+
+For PDF-to-image conversion and image processing, install these system packages:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y \
+  build-essential \
+  libcairo2-dev \
+  libpango1.0-dev \
+  libjpeg-dev \
+  libgif-dev \
+  librsvg2-dev \
+  libvips-dev
+
+# Fedora/RHEL
+sudo dnf install -y \
+  gcc-c++ \
+  cairo-devel \
+  pango-devel \
+  libjpeg-turbo-devel \
+  giflib-devel \
+  librsvg2-devel \
+  vips-devel
+
+# macOS (via Homebrew)
+brew install vips cairo pango
+```
+
+> **Note:** These are required for `sharp` (image processing) and `canvas` (PDF rendering). On macOS and Windows, prebuilt binaries are typically used automatically.
+
+### Optional
+
+| Component | Purpose |
+|-----------|---------|
+| **Twilio Account** | WhatsApp channel integration |
+| **SMTP Server** | Email notifications |
+| **NVIDIA GPU + CUDA** | Faster local OCR processing |
 
 ## Quick Start
 
@@ -133,6 +194,11 @@ Access the application:
 │   │   ├── hybrid-search.ts # Hybrid search
 │   │   ├── smart-chunker.ts # Semantic chunking
 │   │   └── reranker.ts   # Result reranking
+│   ├── ocr/              # OCR pipeline
+│   │   ├── providers/    # Ollama & OpenRouter providers
+│   │   ├── ocr-pipeline.ts # Main orchestrator
+│   │   ├── pdf-converter.ts # PDF to image conversion
+│   │   └── config.ts     # Environment configuration
 │   ├── channels/         # Multi-channel deployment
 │   ├── document-intelligence/ # Entity extraction
 │   ├── assistants/       # AI agent logic
@@ -175,9 +241,99 @@ pnpm rag:test         # Test RAG functionality
 ### Docker
 
 ```bash
-pnpm docker:up        # Start Docker containers
+pnpm docker:up        # Start Docker containers (PostgreSQL, SurrealDB, RustFS, Ollama)
 pnpm docker:down      # Stop containers
 pnpm docker:logs      # View container logs
+```
+
+### OCR Models
+
+```bash
+# Pull OCR models (run after docker:up)
+./scripts/init-ollama-models.sh glm-ocr           # For 4GB+ VRAM
+./scripts/init-ollama-models.sh moondream         # For CPU-only
+./scripts/init-ollama-models.sh glm-ocr minicpm-v:4.5  # For 16GB+ VRAM
+```
+
+## OCR Pipeline
+
+The platform includes a flexible OCR system that automatically processes scanned documents and images using local models via Ollama, with OpenRouter cloud fallback.
+
+### OCR Features
+
+- **Auto-Detection** - Automatically detects scanned PDFs (< 100 chars/page)
+- **Multi-Model Support** - Choose models based on your hardware
+- **Force OCR** - Override auto-detection with `forceOCR=true`
+- **Document Type Hints** - Optimize model selection with `documentType`
+- **Fallback Chain** - Ollama → OpenRouter (cloud) → Error
+
+### Available OCR Models
+
+| Model | Size | VRAM | Best For | Accuracy |
+|-------|------|------|----------|----------|
+| **GLM-OCR** | 0.9B | 2-3GB | Tables, figures, printed text | 94.62% OmniDocBench |
+| **Moondream** | 1.8B | 3-4GB | CPU-friendly, basic OCR | Good |
+| **Qwen3-VL 2B** | 2B | 4GB | Multilingual, CPU-friendly | Good |
+| **Qwen3-VL 8B** | 8B | 6-8GB | Complex layouts | Very Good |
+| **MiniCPM-V 4.5** | 8B | 10-12GB | Handwritten, complex docs | SOTA |
+
+### OCR Setup
+
+```bash
+# 1. Start Ollama service
+docker compose up -d ollama
+
+# 2. Pull models for your hardware
+# CPU-Only:
+docker exec -it rantai-agents-ollama ollama pull moondream
+
+# 4-8GB VRAM:
+docker exec -it rantai-agents-ollama ollama pull glm-ocr
+
+# 16GB+ VRAM:
+docker exec -it rantai-agents-ollama ollama pull glm-ocr
+docker exec -it rantai-agents-ollama ollama pull minicpm-v:4.5
+
+# 3. Configure .env
+OLLAMA_ENDPOINT="http://localhost:11434"
+OCR_MODEL_DEFAULT="glm-ocr"
+OCR_MODEL_HANDWRITTEN="glm-ocr"  # or minicpm-v:4.5 for high VRAM
+OCR_ENABLE_FALLBACK="true"
+```
+
+### OCR API Usage
+
+```bash
+# Auto-detect (scanned PDFs get OCR automatically)
+curl -X POST /api/dashboard/knowledge \
+  -F "file=@document.pdf" \
+  -F "title=My Document" \
+  -F "categories=GENERAL"
+
+# Force OCR on digital PDF
+curl -X POST /api/dashboard/knowledge?forceOCR=true \
+  -F "file=@document.pdf" \
+  -F "title=My Document" \
+  -F "categories=GENERAL"
+
+# With document type hint (better model selection)
+curl -X POST /api/dashboard/knowledge \
+  -F "file=@notes.png" \
+  -F "title=Handwritten Notes" \
+  -F "categories=GENERAL" \
+  -F "documentType=handwritten"
+```
+
+### OCR Response
+
+```json
+{
+  "id": "doc-123",
+  "title": "My Document",
+  "fileType": "pdf",
+  "usedOCR": true,
+  "chunkCount": 5
+}
 ```
 
 ## Architecture
