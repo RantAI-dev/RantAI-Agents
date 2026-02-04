@@ -6,6 +6,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // External packages with native bindings (canvas for PDF-to-image OCR)
+  serverExternalPackages: ["canvas", "pdf-img-convert", "sharp"],
   async headers() {
     return [
       {

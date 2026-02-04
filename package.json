@@ -8,7 +8,8 @@
       "@prisma/client",
       "@prisma/engines",
       "prisma",
-      "esbuild"
+      "esbuild",
+      "canvas"
     ]
   },
   "prisma": {
@@ -33,10 +34,14 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "db:cleanup": "pnpm tsx scripts/cleanup-conversations.ts",
-    "setup": "pnpm docker:up && sleep 5 && pnpm db:push && pnpm db:generate && pnpm db:seed"
+    "setup": "pnpm docker:up && sleep 5 && pnpm db:push && pnpm db:generate && pnpm db:seed",
+    "migrate:s3": "pnpm tsx scripts/migrate-files-to-s3.ts",
+    "migrate:s3:dry-run": "pnpm tsx scripts/migrate-files-to-s3.ts --dry-run"
   },
   "dependencies": {
     "@ai-sdk/react": "3.0.41",
+    "@aws-sdk/client-s3": "^3.982.0",
+    "@aws-sdk/s3-request-presigner": "^3.982.0",
     "@hookform/resolvers": "^3.10.0",
     "@openrouter/ai-sdk-provider": "^2.0.0",
     "@prisma/client": "^5.22.0",
@@ -86,6 +91,7 @@
     "next-themes": "^0.4.6",
     "nodemailer": "^7.0.12",
     "openai": "^6.16.0",
+    "pdf-img-convert": "^2.0.0",
     "prisma": "^5.22.0",
     "react": "19.2.0",
     "react-day-picker": "9.8.0",

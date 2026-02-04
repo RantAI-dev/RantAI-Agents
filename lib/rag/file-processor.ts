@@ -17,6 +17,28 @@ export interface ProcessedFile {
   originalPath: string;
 }
 
+/**
+ * Processing options
+ */
+export interface ProcessingOptions {
+  /**
+   * Use local OCR pipeline (via Ollama) instead of OpenRouter vision model.
+   * Requires Ollama to be running with OCR models pulled.
+   * Set OCR_MODEL_DEFAULT env var to configure the model.
+   */
+  useOCRPipeline?: boolean;
+
+  /**
+   * Document type hint for OCR (helps select the best model)
+   */
+  documentType?: "printed_text" | "handwritten" | "table" | "form" | "figure" | "mixed";
+
+  /**
+   * Output format for OCR
+   */
+  outputFormat?: "plain_text" | "markdown";
+}
+
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"];
 const MARKDOWN_EXTENSIONS = [".md", ".markdown"];
 const PDF_EXTENSIONS = [".pdf"];
@@ -58,12 +80,37 @@ async function processMarkdown(filePath: string): Promise<string> {
 /**
  * Process a PDF file and extract text
  * Uses pdfjs-dist legacy build to avoid worker issues in Next.js
+ *
+ * If useOCRPipeline is enabled, will detect scanned PDFs and process them
+ * with OCR for better text extraction.
  */
-async function processPdf(filePath: string): Promise<string> {
+async function processPdf(
+  filePath: string,
+  options?: ProcessingOptions
+): Promise<string> {
   try {
-    // Use unpdf for serverless-compatible text extraction
-    const { extractText, getDocumentProxy } = await import("unpdf");
     const dataBuffer = fs.readFileSync(filePath);
+
+    // If OCR pipeline is enabled, use it for automatic scanned PDF detection
+    if (options?.useOCRPipeline) {
+      try {
+        const { processDocumentOCR } = await import("@/lib/ocr");
+        const result = await processDocumentOCR(dataBuffer, "application/pdf", {
+          documentType: options.documentType,
+          outputFormat: options.outputFormat || "markdown",
+        });
+
+        // Handle batch result from PDF processing
+        const text = "combinedText" in result ? result.combinedText : result.text;
+        return text;
+      } catch (error) {
+        console.warn("[processPdf] OCR pipeline failed, falling back to unpdf:", error);
+        // Fall through to unpdf
+      }
+    }
+
+    // Default: Use unpdf for serverless-compatible text extraction
+    const { extractText, getDocumentProxy } = await import("unpdf");
     const pdf = await getDocumentProxy(new Uint8Array(dataBuffer));
     const { text } = await extractText(pdf, { mergePages: true });
     return text;
@@ -75,10 +122,15 @@ async function processPdf(filePath: string): Promise<string> {
 
 /**
  * Process an image using vision model to extract description and text
+ *
+ * @param filePath - Path to the image file
+ * @param options - Processing options (useOCRPipeline, documentType, outputFormat)
  */
-async function processImage(filePath: string): Promise<string> {
+async function processImage(
+  filePath: string,
+  options?: ProcessingOptions
+): Promise<string> {
   const imageBuffer = fs.readFileSync(filePath);
-  const base64Image = imageBuffer.toString("base64");
   const ext = path.extname(filePath).toLowerCase();
 
   // Determine MIME type
@@ -91,6 +143,28 @@ async function processImage(filePath: string): Promise<string> {
     ".heic": "image/heic",
   };
   const mimeType = mimeTypes[ext] || "image/png";
+
+  // Use OCR pipeline if requested
+  if (options?.useOCRPipeline) {
+    try {
+      const { processDocumentOCR } = await import("@/lib/ocr");
+      const result = await processDocumentOCR(imageBuffer, mimeType, {
+        documentType: options.documentType,
+        outputFormat: options.outputFormat || "markdown",
+      });
+
+      // Handle both single result and batch result
+      const text = "combinedText" in result ? result.combinedText : result.text;
+      const fileName = path.basename(filePath);
+      return `[Image: ${fileName}]\n\n${text}`;
+    } catch (error) {
+      console.warn("[processImage] OCR pipeline failed, falling back to OpenRouter:", error);
+      // Fall through to OpenRouter
+    }
+  }
+
+  // Default: Use OpenRouter vision model
+  const base64Image = imageBuffer.toString("base64");
 
   const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
@@ -143,8 +217,14 @@ Format your response as structured text that can be used for search and retrieva
 
 /**
  * Process a file based on its type
+ *
+ * @param filePath - Path to the file to process
+ * @param options - Processing options (useOCRPipeline, documentType, outputFormat)
  */
-export async function processFile(filePath: string): Promise<ProcessedFile> {
+export async function processFile(
+  filePath: string,
+  options?: ProcessingOptions
+): Promise<ProcessedFile> {
   if (!fs.existsSync(filePath)) {
     throw new Error(`File not found: ${filePath}`);
   }
@@ -161,10 +241,10 @@ export async function processFile(filePath: string): Promise<ProcessedFile> {
       content = await processMarkdown(filePath);
       break;
     case "pdf":
-      content = await processPdf(filePath);
+      content = await processPdf(filePath, options);
       break;
     case "image":
-      content = await processImage(filePath);
+      content = await processImage(filePath, options);
       break;
   }
 
@@ -177,15 +257,19 @@ export async function processFile(filePath: string): Promise<ProcessedFile> {
 
 /**
  * Process multiple files
+ *
+ * @param filePaths - Array of file paths to process
+ * @param options - Processing options (useOCRPipeline, documentType, outputFormat)
  */
 export async function processFiles(
-  filePaths: string[]
+  filePaths: string[],
+  options?: ProcessingOptions
 ): Promise<ProcessedFile[]> {
   const results: ProcessedFile[] = [];
 
   for (const filePath of filePaths) {
     try {
-      const processed = await processFile(filePath);
+      const processed = await processFile(filePath, options);
       results.push(processed);
     } catch (error) {
       console.error(`Error processing ${filePath}:`, error);
