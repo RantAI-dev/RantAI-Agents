@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="screenBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#18181b" />
+      <stop offset="100%" style="stop-color:#09090b" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="500" rx="12" fill="#27272a" stroke="rgba(255,255,255,0.06)" stroke-width="1" />
+  <rect x="16" y="16" width="768" height="32" rx="6" fill="#3f3f46" />
+  <circle cx="44" cy="32" r="6" fill="#71717a" />
+  <circle cx="68" cy="32" r="6" fill="#71717a" />
+  <circle cx="92" cy="32" r="6" fill="#71717a" />
+  <rect x="320" y="24" width="200" height="12" rx="4" fill="#52525b" />
+  <rect x="16" y="56" width="180" height="428" rx="8" fill="url(#screenBg)" />
+  <rect x="24" y="68" width="164" height="24" rx="4" fill="#3f3f46" />
+  <rect x="24" y="100" width="164" height="12" rx="2" fill="#27272a" />
+  <rect x="24" y="120" width="164" height="12" rx="2" fill="#27272a" />
+  <rect x="24" y="140" width="120" height="12" rx="2" fill="#27272a" />
+  <rect x="208" y="56" width="576" height="428" rx="8" fill="#18181b" />
+  <rect x="224" y="80" width="544" height="36" rx="6" fill="#27272a" />
+  <rect x="240" y="92" width="200" height="12" rx="2" fill="#3f3f46" />
+  <rect x="224" y="128" width="544" height="340" rx="6" fill="#0c0c0e" />
+  <rect x="240" y="148" width="160" height="10" rx="2" fill="#3f3f46" />
+  <rect x="240" y="168" width="400" height="10" rx="2" fill="#27272a" />
+  <rect x="240" y="184" width="380" height="10" rx="2" fill="#27272a" />
+  <rect x="240" y="200" width="340" height="10" rx="2" fill="#27272a" />
+  <rect x="240" y="230" width="120" height="10" rx="2" fill="#3f3f46" />
+  <rect x="240" y="250" width="480" height="10" rx="2" fill="#27272a" />
+  <rect x="240" y="266" width="440" height="10" rx="2" fill="#27272a" />
+  <rect x="224" y="480" width="544" height="36" rx="6" fill="#27272a" />
+</svg>

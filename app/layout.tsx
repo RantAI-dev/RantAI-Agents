@@ -9,10 +9,20 @@ import './globals.css'
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'RantAI Agents | Agent Dashboard',
-  description: 'RantAI Agents - Agent portal for conversation queue, live chat, and knowledge base management.',
+  title: 'RantAI Agents | Enterprise AI Agent Platform',
+  description: 'Build and deploy intelligent AI agents with RAG, multi-channel deployment, and human-in-the-loop workflows. Customer support, knowledge assistants, and domain-specific AI.',
   generator: 'v0.app',
-  keywords: ['agent', 'dashboard', 'conversation', 'support', 'RantAI'],
+  keywords: ['AI agents', 'RAG', 'customer support', 'knowledge base', 'RantAI', 'enterprise', 'chatbot'],
+  openGraph: {
+    title: 'RantAI Agents | Enterprise AI Agent Platform',
+    description: 'Build and deploy intelligent AI agents with RAG, multi-channel deployment, and human-in-the-loop workflows.',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'RantAI Agents | Enterprise AI Agent Platform',
+    description: 'Build and deploy intelligent AI agents with RAG, multi-channel deployment, and human-in-the-loop workflows.',
+  },
   icons: {
     icon: [
       { url: '/logo/favicon-16x16.png', sizes: '16x16', type: 'image/png' },

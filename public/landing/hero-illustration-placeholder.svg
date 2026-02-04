@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 320" fill="none" aria-hidden="true">
+  <defs>
+    <linearGradient id="heroGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:0.4" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:0.1" />
+    </linearGradient>
+    <linearGradient id="heroGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#06b6d4;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:0.1" />
+    </linearGradient>
+  </defs>
+  <rect width="400" height="320" rx="16" fill="url(#heroGrad1)" />
+  <rect x="80" y="60" width="240" height="200" rx="12" fill="url(#heroGrad2)" stroke="rgba(255,255,255,0.08)" stroke-width="1" />
+  <circle cx="200" cy="120" r="24" fill="rgba(99,102,241,0.5)" />
+  <rect x="120" y="160" width="160" height="8" rx="4" fill="rgba(255,255,255,0.12)" />
+  <rect x="120" y="176" width="120" height="8" rx="4" fill="rgba(255,255,255,0.08)" />
+  <rect x="120" y="192" width="140" height="8" rx="4" fill="rgba(255,255,255,0.08)" />
+</svg>
