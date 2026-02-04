@@ -81,7 +81,7 @@ export default function LandingPage() {
           aria-label="Main navigation"
         >
           <Link href="/" className="flex items-center gap-2 shrink-0" aria-label="RantAI Agents home">
-            <Image src="/logo/logo-rantai-bg.png" alt="RantAI" width={32} height={32} className="h-8 w-auto" />
+            <Image src="/logo/logo-rantai-border.png" alt="RantAI" width={32} height={32} className="h-8 w-auto" />
             <span className="font-semibold text-zinc-100">RantAI Agents</span>
           </Link>
           <div className="hidden md:flex items-center gap-6">
@@ -321,7 +321,7 @@ export default function LandingPage() {
         <footer className={cn("border-t border-zinc-800 py-12 px-4 sm:px-6 bg-zinc-900/50")} role="contentinfo">
           <div className={cn(landing.container, "flex flex-col sm:flex-row items-center justify-between gap-6")}>
             <div className="flex items-center gap-2">
-              <Image src="/logo/logo-rantai-bg.png" alt="" width={24} height={24} className="h-6 w-auto opacity-80" />
+              <Image src="/logo/logo-rantai-border.png" alt="" width={24} height={24} className="h-6 w-auto opacity-80" />
               <span className="text-sm font-medium text-zinc-300">RantAI Agents</span>
             </div>
             <nav className="flex flex-wrap items-center justify-center gap-6 text-sm" aria-label="Footer navigation">
