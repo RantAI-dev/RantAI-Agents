@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useSession } from "next-auth/react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,19 +8,27 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Loader2, Save, User, Mail, CheckCircle } from "lucide-react"
+import { AvatarUpload } from "./_components/avatar-upload"
+import { useProfileStore } from "@/hooks/use-profile"
 
 export default function AccountPage() {
   const { data: session, update } = useSession()
+  const { avatarUrl, loading, fetchProfile, setAvatarUrl } = useProfileStore()
   const [name, setName] = useState("")
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Fetch profile on mount
   useEffect(() => {
-    if (session?.user?.name) {
+    fetchProfile()
+  }, [fetchProfile])
+
+  useEffect(() => {
+    if (session?.user?.name && !name) {
       setName(session.user.name)
     }
-  }, [session])
+  }, [session, name])
 
   async function handleSave() {
     if (!name.trim()) {
@@ -54,6 +62,18 @@ export default function AccountPage() {
     }
   }
 
+  const handleAvatarUploadComplete = useCallback((newAvatarUrl: string) => {
+    setAvatarUrl(newAvatarUrl)
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -63,6 +83,24 @@ export default function AccountPage() {
         </p>
       </div>
 
+      {/* Profile Picture Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Profile Picture</CardTitle>
+          <CardDescription>
+            Upload a profile picture to personalize your account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <AvatarUpload
+            currentAvatarUrl={avatarUrl}
+            userName={session?.user?.name || "Agent"}
+            onUploadComplete={handleAvatarUploadComplete}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Personal Information Card */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Personal Information</CardTitle>

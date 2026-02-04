@@ -1,8 +1,9 @@
 "use client"
 
+import { useEffect } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useSession } from "next-auth/react"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Shield, User, Settings } from "lucide-react"
 import Link from "next/link"
@@ -13,6 +14,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
+import { useProfileStore } from "@/hooks/use-profile"
 
 const navItems = [
   {
@@ -37,6 +39,12 @@ export default function AccountLayout({
   const isMobile = useIsMobile()
   const { data: session } = useSession()
   const pathname = usePathname()
+  const { avatarUrl, fetchProfile } = useProfileStore()
+
+  // Fetch profile on mount
+  useEffect(() => {
+    fetchProfile()
+  }, [fetchProfile])
 
   const initials = session?.user?.name
     ?.split(" ")
@@ -51,6 +59,7 @@ export default function AccountLayout({
       <div className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3 mb-3">
           <Avatar className="h-12 w-12 border-2 border-sidebar-border">
+            {avatarUrl && <AvatarImage src={avatarUrl} alt={session?.user?.name || "Agent"} />}
             <AvatarFallback className="bg-sidebar-hover text-sidebar-foreground font-semibold">
               {initials}
             </AvatarFallback>
@@ -137,6 +146,7 @@ export default function AccountLayout({
             <div className="border-b p-4 bg-gradient-to-r from-panel-from to-panel-to">
               <div className="flex items-center gap-3">
                 <Avatar className="h-10 w-10 border-2 border-sidebar-border">
+                  {avatarUrl && <AvatarImage src={avatarUrl} alt={session?.user?.name || "Agent"} />}
                   <AvatarFallback className="bg-sidebar-hover text-sidebar-foreground font-semibold">
                     {initials}
                   </AvatarFallback>

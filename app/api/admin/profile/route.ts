@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getPresignedDownloadUrl } from "@/lib/s3"
 
 // GET - Get current user profile
 export async function GET() {
@@ -17,6 +18,7 @@ export async function GET() {
         name: true,
         email: true,
         status: true,
+        avatarS3Key: true,
         createdAt: true,
       },
     })
@@ -25,7 +27,20 @@ export async function GET() {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 })
     }
 
-    return NextResponse.json(agent)
+    // Generate presigned URL for avatar if exists
+    let avatarUrl: string | null = null
+    if (agent.avatarS3Key) {
+      try {
+        avatarUrl = await getPresignedDownloadUrl(agent.avatarS3Key)
+      } catch (error) {
+        console.warn("Failed to generate avatar URL:", error)
+      }
+    }
+
+    return NextResponse.json({
+      ...agent,
+      avatarUrl,
+    })
   } catch (error) {
     console.error("Failed to get profile:", error)
     return NextResponse.json(
