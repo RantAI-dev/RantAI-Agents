@@ -1,6 +1,33 @@
 import Surreal from "surrealdb";
 
 /**
+ * Escape a SurrealDB record ID for use in queries
+ * Record IDs with special characters (like hyphens in UUIDs) need backtick escaping
+ * e.g., "entity:uuid-with-hyphens" becomes "entity:`uuid-with-hyphens`"
+ */
+function escapeRecordId(recordId: string): string {
+  // Check if it's a table:id format
+  const colonIndex = recordId.indexOf(":");
+  if (colonIndex === -1) {
+    // No table prefix, just escape the whole thing if needed
+    if (/[^a-zA-Z0-9_]/.test(recordId)) {
+      return `\`${recordId}\``;
+    }
+    return recordId;
+  }
+
+  const table = recordId.slice(0, colonIndex);
+  const id = recordId.slice(colonIndex + 1);
+
+  // If the ID contains special characters (like hyphens), escape it with backticks
+  if (/[^a-zA-Z0-9_]/.test(id)) {
+    return `${table}:\`${id}\``;
+  }
+
+  return recordId;
+}
+
+/**
  * SurrealDB Client Configuration
  */
 export interface SurrealDBConfig {
@@ -428,13 +455,16 @@ export class SurrealDBClient {
       await this.ensureFreshAuth();
 
       // Build RELATE query with SET clause if data provided
+      // Escape record IDs to handle UUIDs with hyphens
+      const escapedSourceId = escapeRecordId(sourceId);
+      const escapedTargetId = escapeRecordId(targetId);
       const setClause = data
         ? `SET ${Object.entries(data)
             .map(([key]) => `${key} = $${key}`)
             .join(", ")}`
         : "";
 
-      const sql = `RELATE ${sourceId}->${relationType}->${targetId} ${setClause};`;
+      const sql = `RELATE ${escapedSourceId}->${relationType}->${escapedTargetId} ${setClause};`;
 
       const result = await this.db.query(sql, data || {});
       const relationResult = result as SurrealQueryResult<T>[];
@@ -442,12 +472,14 @@ export class SurrealDBClient {
     } catch (error) {
       if (this.isConnectionError(error) || this.isTokenExpiredError(error)) {
         await this.fullReconnect();
+        const escapedSourceId = escapeRecordId(sourceId);
+        const escapedTargetId = escapeRecordId(targetId);
         const setClause = data
           ? `SET ${Object.entries(data)
               .map(([key]) => `${key} = $${key}`)
               .join(", ")}`
           : "";
-        const sql = `RELATE ${sourceId}->${relationType}->${targetId} ${setClause};`;
+        const sql = `RELATE ${escapedSourceId}->${relationType}->${escapedTargetId} ${setClause};`;
         const result = await this.db.query(sql, data || {});
         const relationResult = result as SurrealQueryResult<T>[];
         return relationResult[0]?.result?.[0] as T;
@@ -502,7 +534,10 @@ export class SurrealDBClient {
               .join(", ")}`
           : "";
 
-        queries.push(`RELATE ${rel.sourceId}->${rel.relationType}->${rel.targetId} ${setClause}`);
+        // Escape record IDs to handle UUIDs with hyphens
+        const escapedSourceId = escapeRecordId(rel.sourceId);
+        const escapedTargetId = escapeRecordId(rel.targetId);
+        queries.push(`RELATE ${escapedSourceId}->${rel.relationType}->${escapedTargetId} ${setClause}`);
       });
 
       // Execute as transaction
