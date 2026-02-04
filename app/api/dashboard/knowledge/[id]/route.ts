@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrganizationContext, canEdit, canManage } from "@/lib/organization"
+import { getSurrealClient } from "@/lib/surrealdb"
+
+interface SurrealChunk {
+  id: string;
+  content: string;
+  chunk_index: number;
+  created_at: string;
+}
 
 // GET - Get a single document with chunks
 export async function GET(
@@ -8,25 +17,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const { id } = await params
+  const orgContext = await getOrganizationContext(request, session.user.id)
 
   try {
     const document = await prisma.document.findUnique({
       where: { id },
       include: {
-        chunks: {
-          orderBy: { chunkIndex: "asc" },
-          select: {
-            id: true,
-            content: true,
-            chunkIndex: true,
-            createdAt: true,
-          },
-        },
         groups: {
           include: {
             group: {
@@ -41,6 +42,26 @@ export async function GET(
       return NextResponse.json({ error: "Document not found" }, { status: 404 })
     }
 
+    // Verify organization access
+    if (document.organizationId) {
+      if (!orgContext || document.organizationId !== orgContext.organizationId) {
+        return NextResponse.json({ error: "Document not found" }, { status: 404 })
+      }
+    } else if (orgContext) {
+      // Document has no org but user is requesting with org context
+      return NextResponse.json({ error: "Document not found" }, { status: 404 })
+    }
+
+    // Fetch chunks from SurrealDB
+    const surrealClient = await getSurrealClient()
+    const chunkResults = await surrealClient.query<SurrealChunk>(
+      `SELECT id, content, chunk_index, created_at FROM document_chunk WHERE document_id = $document_id ORDER BY chunk_index ASC`,
+      { document_id: id }
+    )
+    // SurrealDB JS library returns results directly as arrays, not wrapped in {result: [...]}
+    const rawResult = chunkResults[0]
+    const chunks = (Array.isArray(rawResult) ? rawResult : (rawResult as { result?: SurrealChunk[] })?.result || []) as SurrealChunk[]
+
     return NextResponse.json({
       id: document.id,
       title: document.title,
@@ -49,7 +70,12 @@ export async function GET(
       subcategory: document.subcategory,
       groups: document.groups.map((dg) => dg.group),
       metadata: document.metadata,
-      chunks: document.chunks,
+      chunks: chunks.map((chunk) => ({
+        id: chunk.id,
+        content: chunk.content,
+        chunkIndex: chunk.chunk_index,
+        createdAt: chunk.created_at,
+      })),
       createdAt: document.createdAt.toISOString(),
       updatedAt: document.updatedAt.toISOString(),
     })
@@ -68,13 +94,36 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const { id } = await params
+  const orgContext = await getOrganizationContext(request, session.user.id)
 
   try {
+    // First verify the document exists and check organization access
+    const existing = await prisma.document.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true },
+    })
+
+    if (!existing) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 })
+    }
+
+    // Verify organization access
+    if (existing.organizationId) {
+      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
+        return NextResponse.json({ error: "Document not found" }, { status: 404 })
+      }
+
+      // Check edit permission
+      if (!canEdit(orgContext.membership.role)) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+      }
+    }
+
     const { title, categories, subcategory, groupIds } = await request.json()
 
     // Start a transaction to update document and groups
@@ -142,23 +191,53 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete a document and its chunks
+// DELETE - Delete a document, its chunks, entities, and relations
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const { id } = await params
+  const orgContext = await getOrganizationContext(request, session.user.id)
 
   try {
-    // Delete document (chunks and group associations will cascade delete)
+    // First verify the document exists and check organization access
+    const existing = await prisma.document.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true },
+    })
+
+    if (!existing) {
+      return NextResponse.json({ error: "Document not found" }, { status: 404 })
+    }
+
+    // Verify organization access
+    if (existing.organizationId) {
+      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
+        return NextResponse.json({ error: "Document not found" }, { status: 404 })
+      }
+
+      // Only owner and admin can delete
+      if (!canManage(orgContext.membership.role)) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+      }
+    }
+
+    const surrealClient = await getSurrealClient()
+
+    // Clean up all document intelligence data (relations, entities, chunks)
+    const cleanupStats = await surrealClient.cleanupDocumentIntelligence(id)
+
+    // Delete document from PostgreSQL (group associations will cascade delete)
     await prisma.document.delete({
       where: { id },
     })
+
+    console.log(`Deleted document ${id}: cleaned up relations from ${cleanupStats.deletedRelationTables} tables, entities: ${cleanupStats.entitiesDeleted}, chunks: ${cleanupStats.chunksDeleted}`)
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -1,8 +1,25 @@
 import { searchWithThreshold, SearchResult } from "./vector-store";
+import {
+  HybridSearch,
+  HybridSearchConfig,
+  HybridSearchResult,
+  HybridSearchStats,
+} from "./hybrid-search";
 
 /**
  * RAG Retriever - retrieves relevant context for user queries
+ * Supports both basic vector search and hybrid search (vector + entity)
  */
+
+export interface HybridRetrievalResult {
+  context: string;
+  sources: Array<{
+    documentTitle: string;
+    section: string | null;
+  }>;
+  results: HybridSearchResult[];
+  stats: HybridSearchStats;
+}
 
 export interface RetrievalResult {
   context: string;
@@ -214,5 +231,145 @@ ${result.context}
 ---
 Sources:
 ${sourceList}
+`.trim();
+}
+
+/**
+ * Hybrid retrieval using vector + entity search
+ * Provides better results by combining semantic similarity with knowledge graph traversal
+ */
+export async function hybridRetrieve(
+  query: string,
+  options?: {
+    maxResults?: number;
+    enableEntitySearch?: boolean;
+    vectorWeight?: number;
+    entityWeight?: number;
+    groupIds?: string[];
+    categoryFilter?: string;
+  }
+): Promise<HybridRetrievalResult> {
+  const {
+    maxResults = 5,
+    enableEntitySearch = true,
+    vectorWeight = 0.7,
+    entityWeight = 0.3,
+    groupIds,
+    categoryFilter,
+  } = options || {};
+
+  const searchConfig: HybridSearchConfig = {
+    vectorWeight,
+    entityWeight,
+    enableEntitySearch,
+    finalTopK: maxResults,
+    groupIds,
+    categoryFilter,
+  };
+
+  const hybridSearch = new HybridSearch(searchConfig);
+  const { results, stats } = await hybridSearch.search(query, maxResults);
+
+  if (results.length === 0) {
+    return {
+      context: "",
+      sources: [],
+      results: [],
+      stats,
+    };
+  }
+
+  // Format context for LLM
+  const contextParts: string[] = [];
+
+  for (const result of results) {
+    const source = result.section
+      ? `[${result.documentTitle || "Document"} - ${result.section}]`
+      : `[${result.documentTitle || "Document"}]`;
+
+    contextParts.push(`${source}\n${result.content}`);
+  }
+
+  const context = contextParts.join("\n\n---\n\n");
+
+  // Extract unique sources
+  const sourceMap = new Map<
+    string,
+    { documentTitle: string; section: string | null }
+  >();
+
+  for (const result of results) {
+    const title = result.documentTitle || "Document";
+    const key = `${title}-${result.section || ""}`;
+    if (!sourceMap.has(key)) {
+      sourceMap.set(key, {
+        documentTitle: title,
+        section: result.section || null,
+      });
+    }
+  }
+
+  return {
+    context,
+    sources: Array.from(sourceMap.values()),
+    results,
+    stats,
+  };
+}
+
+/**
+ * Smart hybrid retrieval with auto-detected category
+ */
+export async function smartHybridRetrieve(
+  query: string,
+  options?: {
+    maxResults?: number;
+    enableEntitySearch?: boolean;
+    groupIds?: string[];
+  }
+): Promise<HybridRetrievalResult> {
+  const category = detectQueryCategory(query);
+
+  return hybridRetrieve(query, {
+    ...options,
+    categoryFilter: category,
+  });
+}
+
+/**
+ * Format hybrid retrieval result for inclusion in LLM prompt
+ */
+export function formatHybridContextForPrompt(
+  result: HybridRetrievalResult
+): string {
+  if (!result.context) {
+    return "";
+  }
+
+  const sourceList = result.sources
+    .map((s) => `- ${s.documentTitle}${s.section ? `: ${s.section}` : ""}`)
+    .join("\n");
+
+  // Include entity information if available
+  const entities = result.results
+    .flatMap((r) => r.relatedEntities)
+    .filter((e, i, arr) => arr.findIndex((x) => x.name === e.name) === i)
+    .slice(0, 10);
+
+  const entityInfo =
+    entities.length > 0
+      ? `\nRelated entities: ${entities.map((e) => `${e.name} (${e.type})`).join(", ")}`
+      : "";
+
+  return `
+## Relevant Product Information
+
+The following information was retrieved from our knowledge base to help answer this question:
+
+${result.context}
+
+---
+Sources:
+${sourceList}${entityInfo}
 `.trim();
 }

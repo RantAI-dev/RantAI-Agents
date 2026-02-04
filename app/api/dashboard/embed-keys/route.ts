@@ -1,18 +1,33 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrganizationContext, canManage } from "@/lib/organization"
 import { generateApiKey } from "@/lib/embed"
 import { DEFAULT_WIDGET_CONFIG, type WidgetConfig } from "@/lib/embed/types"
 
 // GET /api/dashboard/embed-keys - List all API keys
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await auth()
-    if (!session?.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Get organization context
+    const orgContext = await getOrganizationContext(req, session.user.id)
+
+    // Only owner and admin can view API keys
+    if (orgContext && !canManage(orgContext.membership.role)) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      )
+    }
+
     const keys = await prisma.embedApiKey.findMany({
+      where: orgContext
+        ? { organizationId: orgContext.organizationId }
+        : { organizationId: null },
       orderBy: { createdAt: "desc" },
     })
 
@@ -54,8 +69,36 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const session = await auth()
-    if (!session?.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Get organization context
+    const orgContext = await getOrganizationContext(req, session.user.id)
+
+    // Only owner and admin can create API keys
+    if (orgContext && !canManage(orgContext.membership.role)) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      )
+    }
+
+    // Check organization limits if creating within an org
+    if (orgContext) {
+      const organization = await prisma.organization.findUnique({
+        where: { id: orgContext.organizationId },
+        include: {
+          _count: { select: { embedKeys: true } },
+        },
+      })
+
+      if (organization && organization._count.embedKeys >= organization.maxApiKeys) {
+        return NextResponse.json(
+          { error: `Organization has reached the maximum of ${organization.maxApiKeys} API keys` },
+          { status: 400 }
+        )
+      }
     }
 
     const body = await req.json()
@@ -68,10 +111,10 @@ export async function POST(req: Request) {
       )
     }
 
-    // Verify assistant exists
+    // Verify assistant exists and is accessible
     const assistant = await prisma.assistant.findUnique({
       where: { id: assistantId },
-      select: { id: true, name: true, emoji: true },
+      select: { id: true, name: true, emoji: true, organizationId: true, isBuiltIn: true },
     })
 
     if (!assistant) {
@@ -79,6 +122,16 @@ export async function POST(req: Request) {
         { error: "Assistant not found" },
         { status: 404 }
       )
+    }
+
+    // Verify assistant is accessible (built-in or same org)
+    if (!assistant.isBuiltIn && assistant.organizationId) {
+      if (!orgContext || assistant.organizationId !== orgContext.organizationId) {
+        return NextResponse.json(
+          { error: "Assistant not found" },
+          { status: 404 }
+        )
+      }
     }
 
     // Generate unique API key
@@ -98,6 +151,8 @@ export async function POST(req: Request) {
         allowedDomains: allowedDomains || [],
         config: mergedConfig as object,
         enabled: true,
+        organizationId: orgContext?.organizationId || null,
+        createdBy: session.user.id,
       },
     })
 
@@ -113,7 +168,11 @@ export async function POST(req: Request) {
       enabled: embedKey.enabled,
       createdAt: embedKey.createdAt.toISOString(),
       updatedAt: embedKey.updatedAt.toISOString(),
-      assistant,
+      assistant: {
+        id: assistant.id,
+        name: assistant.name,
+        emoji: assistant.emoji,
+      },
     })
   } catch (error) {
     console.error("[Embed Keys API] POST error:", error)

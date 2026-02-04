@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrganizationContext, canEdit, canManage } from "@/lib/organization"
 
 // GET - Get a single group with documents
 export async function GET(
@@ -8,11 +9,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const { id } = await params
+  const orgContext = await getOrganizationContext(request, session.user.id)
 
   try {
     const group = await prisma.knowledgeBaseGroup.findUnique({
@@ -33,6 +35,15 @@ export async function GET(
     })
 
     if (!group) {
+      return NextResponse.json({ error: "Group not found" }, { status: 404 })
+    }
+
+    // Verify organization access
+    if (group.organizationId) {
+      if (!orgContext || group.organizationId !== orgContext.organizationId) {
+        return NextResponse.json({ error: "Group not found" }, { status: 404 })
+      }
+    } else if (orgContext) {
       return NextResponse.json({ error: "Group not found" }, { status: 404 })
     }
 
@@ -60,13 +71,36 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const { id } = await params
+  const orgContext = await getOrganizationContext(request, session.user.id)
 
   try {
+    // First verify the group exists and check organization access
+    const existing = await prisma.knowledgeBaseGroup.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true },
+    })
+
+    if (!existing) {
+      return NextResponse.json({ error: "Group not found" }, { status: 404 })
+    }
+
+    // Verify organization access
+    if (existing.organizationId) {
+      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
+        return NextResponse.json({ error: "Group not found" }, { status: 404 })
+      }
+
+      // Check edit permission
+      if (!canEdit(orgContext.membership.role)) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+      }
+    }
+
     const { name, description, color } = await request.json()
 
     const group = await prisma.knowledgeBaseGroup.update({
@@ -99,13 +133,36 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const { id } = await params
+  const orgContext = await getOrganizationContext(request, session.user.id)
 
   try {
+    // First verify the group exists and check organization access
+    const existing = await prisma.knowledgeBaseGroup.findUnique({
+      where: { id },
+      select: { id: true, organizationId: true },
+    })
+
+    if (!existing) {
+      return NextResponse.json({ error: "Group not found" }, { status: 404 })
+    }
+
+    // Verify organization access
+    if (existing.organizationId) {
+      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
+        return NextResponse.json({ error: "Group not found" }, { status: 404 })
+      }
+
+      // Only owner and admin can delete
+      if (!canManage(orgContext.membership.role)) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+      }
+    }
+
     await prisma.knowledgeBaseGroup.delete({
       where: { id },
     })

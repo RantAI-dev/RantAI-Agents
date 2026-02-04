@@ -36,6 +36,7 @@ import { useChatSessions } from "@/hooks/use-chat-sessions"
 import { AssistantEditor } from "@/app/dashboard/_components/chat/assistant-editor"
 import { formatDistanceToNow } from "date-fns"
 import type { Assistant, AssistantInput } from "@/lib/types/assistant"
+import { OrganizationSwitcher } from "./organization-switcher"
 
 interface KnowledgeBase {
   id: string
@@ -426,7 +427,7 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
   return (
     <div className="flex flex-col h-full w-[260px] bg-sidebar border-r border-sidebar-border">
       {/* Header */}
-      <div className="flex items-center p-3 border-b border-sidebar-border">
+      <div className="p-3 border-b border-sidebar-border space-y-3">
         <Link href="/dashboard" className="flex items-center gap-2">
           <img
             src="/logo/logo-rantai.png"
@@ -435,6 +436,8 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
           />
           <span className="font-semibold text-sidebar-foreground">RantAI Agents</span>
         </Link>
+        {/* Organization Switcher */}
+        <OrganizationSwitcher className="w-full" />
       </div>
 
       {/* Search */}

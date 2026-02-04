@@ -1,9 +1,12 @@
 import { streamText, convertToModelMessages } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { smartRetrieve, formatContextForPrompt } from "@/lib/rag";
+import { smartRetrieve, formatContextForPrompt, RetrievalResult } from "@/lib/rag";
 import { DEFAULT_ASSISTANTS } from "@/lib/assistants/defaults";
 import { auth } from "@/lib/auth";
 import { getCustomerContext, formatCustomerContextForPrompt } from "@/lib/customer-context";
+
+// Delimiter for sending sources metadata after stream
+const SOURCES_DELIMITER = "\n\n---SOURCES---\n";
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -183,6 +186,9 @@ export async function POST(req: Request) {
   // Convert UIMessage format (with parts array) to ModelMessage format (with content string)
   const messages = await convertToModelMessages(uiMessages);
 
+  // Store RAG sources to send with response
+  let ragSources: Array<{ title: string; section: string | null }> = [];
+
   // Only perform RAG retrieval if knowledge base is enabled
   if (useKnowledgeBase) {
     // Get the latest user message for RAG retrieval
@@ -212,6 +218,12 @@ export async function POST(req: Request) {
         if (retrievalResult.context) {
           const formattedContext = formatContextForPrompt(retrievalResult);
           systemPrompt = `${systemPrompt}\n\n${formattedContext}`;
+
+          // Store sources to send with response
+          ragSources = retrievalResult.sources.map((s) => ({
+            title: s.documentTitle,
+            section: s.section,
+          }));
 
           // Log retrieval for debugging (remove in production)
           console.log(
@@ -249,6 +261,39 @@ export async function POST(req: Request) {
     system: systemPrompt,
     messages,
   });
+
+  // If we have RAG sources, create a custom stream that appends them after the text
+  if (ragSources.length > 0) {
+    const textStream = result.toTextStreamResponse();
+    const originalBody = textStream.body;
+
+    if (originalBody) {
+      const reader = originalBody.getReader();
+      const encoder = new TextEncoder();
+
+      const customStream = new ReadableStream({
+        async start(controller) {
+          // Stream the original text content
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            controller.enqueue(value);
+          }
+
+          // Append sources delimiter and JSON
+          const sourcesData = SOURCES_DELIMITER + JSON.stringify(ragSources);
+          controller.enqueue(encoder.encode(sourcesData));
+          controller.close();
+        },
+      });
+
+      return new Response(customStream, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+        },
+      });
+    }
+  }
 
   return result.toTextStreamResponse();
   } catch (error) {

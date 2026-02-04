@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
+import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrganizationContext, canEdit } from "@/lib/organization"
 import {
   HORIZON_LIFE_SYSTEM_PROMPT,
   HORIZON_LIFE_KB_GROUP_ID,
@@ -50,11 +52,30 @@ async function ensureBuiltInAssistants() {
 }
 
 // GET /api/assistants - List all assistants
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
     await ensureBuiltInAssistants()
 
+    // Get organization context from header
+    const orgContext = await getOrganizationContext(request, session.user.id)
+
+    // Filter: organization-scoped assistants + built-in assistants
     const assistants = await prisma.assistant.findMany({
+      where: {
+        OR: [
+          // Built-in assistants (global)
+          { isBuiltIn: true },
+          // Organization-scoped assistants
+          ...(orgContext
+            ? [{ organizationId: orgContext.organizationId }]
+            : [{ organizationId: null }]),
+        ],
+      },
       orderBy: [{ isBuiltIn: "desc" }, { createdAt: "asc" }],
     })
 
@@ -71,6 +92,39 @@ export async function GET() {
 // POST /api/assistants - Create new assistant
 export async function POST(request: Request) {
   try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Get organization context
+    const orgContext = await getOrganizationContext(request, session.user.id)
+
+    // Check permission if organization context exists
+    if (orgContext && !canEdit(orgContext.membership.role)) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      )
+    }
+
+    // Check organization limits if creating within an org
+    if (orgContext) {
+      const organization = await prisma.organization.findUnique({
+        where: { id: orgContext.organizationId },
+        include: {
+          _count: { select: { assistants: true } },
+        },
+      })
+
+      if (organization && organization._count.assistants >= organization.maxAssistants) {
+        return NextResponse.json(
+          { error: `Organization has reached the maximum of ${organization.maxAssistants} assistants` },
+          { status: 400 }
+        )
+      }
+    }
+
     const body = await request.json()
 
     const { name, description, emoji, systemPrompt, useKnowledgeBase, knowledgeBaseGroupIds } =
@@ -93,6 +147,8 @@ export async function POST(request: Request) {
         knowledgeBaseGroupIds: knowledgeBaseGroupIds || [],
         isSystemDefault: false,
         isBuiltIn: false,
+        organizationId: orgContext?.organizationId || null,
+        createdBy: session.user.id,
       },
     })
 

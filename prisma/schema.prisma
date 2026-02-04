@@ -1,12 +1,10 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  extensions = [vector]
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // Agent model for sales representatives
@@ -133,19 +131,97 @@ model FeatureConfig {
   updatedAt DateTime @updatedAt
 }
 
+// Organization/Workspace for multi-tenancy
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique // URL-friendly identifier
+  logoUrl     String?
+  plan        String   @default("free") // free, starter, pro, enterprise
+
+  // Limits based on plan
+  maxMembers    Int @default(5)
+  maxAssistants Int @default(3)
+  maxDocuments  Int @default(100)
+  maxApiKeys    Int @default(2)
+
+  // Relationships
+  memberships       OrganizationMember[]
+  assistants        Assistant[]
+  documents         Document[]
+  groups            KnowledgeBaseGroup[]
+  embedKeys         EmbedApiKey[]
+  dashboardSessions DashboardSession[]
+  usageRecords      UsageRecord[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Organization membership (links users to orgs)
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  userId         String       // From NextAuth session
+  userEmail      String       // For display/invite
+  userName       String?      // Cached user name
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           String       @default("member") // owner, admin, member, viewer
+  invitedBy      String?      // userId who invited
+  invitedAt      DateTime     @default(now())
+  acceptedAt     DateTime?    // null = pending invite
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([userEmail])
+}
+
+// Usage tracking for analytics
+model UsageRecord {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?      // Who triggered (optional)
+
+  // What was used
+  resourceType String  // "chat", "embedding", "api_call"
+  resourceId   String? // assistantId, documentId, etc.
+
+  // Metrics
+  tokensInput  Int      @default(0)
+  tokensOutput Int      @default(0)
+  cost         Decimal? // Estimated cost in USD
+
+  metadata  Json?    // Additional context
+  createdAt DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([resourceType])
+}
+
 // AI Assistant configuration for chat
 model Assistant {
-  id                    String   @id @default(cuid())
+  id                    String        @id @default(cuid())
   name                  String
   description           String?
-  emoji                 String   @default("🤖")
-  systemPrompt          String   @db.Text
-  useKnowledgeBase      Boolean  @default(false)
-  knowledgeBaseGroupIds String[] // Array of KnowledgeBaseGroup IDs
-  isSystemDefault       Boolean  @default(false) // Global default assistant
-  isBuiltIn             Boolean  @default(false) // Non-deletable built-in assistants
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  emoji                 String        @default("🤖")
+  systemPrompt          String        @db.Text
+  useKnowledgeBase      Boolean       @default(false)
+  knowledgeBaseGroupIds String[]      // Array of KnowledgeBaseGroup IDs
+  isSystemDefault       Boolean       @default(false) // Global default assistant
+  isBuiltIn             Boolean       @default(false) // Non-deletable built-in assistants
+
+  // Organization scope (null = system/global assistant)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?       // userId who created
+  updatedBy      String?       // userId who last updated
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
 }
 
 // User preferences including default assistant selection
@@ -175,8 +251,16 @@ model KnowledgeBaseGroup {
   description String?
   color       String?         // Hex color for UI display
   documents   DocumentGroup[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+
+  // Organization scope (null = global/shared)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?       // userId who created
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
 }
 
 // Junction table for many-to-many Document <-> KnowledgeBaseGroup
@@ -194,6 +278,7 @@ model DocumentGroup {
 }
 
 // Knowledge base documents for RAG
+// Note: Document chunks are stored in SurrealDB for vector search
 model Document {
   id          String          @id @default(cuid())
   title       String
@@ -202,23 +287,16 @@ model Document {
   subcategory String?         // Plan names, specific topics
   metadata    Json?           // Additional structured data (pricing, features, etc.)
   groups      DocumentGroup[]
-  chunks      DocumentChunk[]
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-}
 
-// Document chunks with embeddings for vector search
-model DocumentChunk {
-  id         String                 @id @default(cuid())
-  documentId String
-  document   Document               @relation(fields: [documentId], references: [id], onDelete: Cascade)
-  content    String                 // The actual text chunk
-  chunkIndex Int                    // Order within the document
-  embedding  Unsupported("vector(1536)")? // OpenAI text-embedding-3-small produces 1536 dimensions
-  metadata   Json?                  // Chunk-level metadata (section headers, etc.)
-  createdAt  DateTime               @default(now())
+  // Organization scope (null = global/shared)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?       // userId who created
 
-  @@index([documentId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
 }
 
 // API Key for embeddable chat widget
@@ -238,6 +316,11 @@ model EmbedApiKey {
   requestCount   Int       @default(0)
   lastUsedAt     DateTime?
 
+  // Organization scope (required for API keys)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?       // userId who created
+
   // Management
   enabled        Boolean   @default(true)
   createdAt      DateTime  @default(now())
@@ -245,4 +328,40 @@ model EmbedApiKey {
 
   @@index([key])
   @@index([assistantId])
+  @@index([organizationId])
+}
+
+// Dashboard chat sessions (separate from widget conversations)
+model DashboardSession {
+  id          String             @id @default(cuid())
+  userId      String             // From NextAuth session
+  title       String             @default("New Chat")
+  assistantId String
+  messages    DashboardMessage[]
+
+  // Organization context (optional - for shared/team chats)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([assistantId])
+  @@index([organizationId])
+}
+
+// Messages in dashboard chat sessions
+model DashboardMessage {
+  id          String           @id @default(cuid())
+  sessionId   String
+  session     DashboardSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role        String           // "user" or "assistant"
+  content     String           @db.Text
+  replyTo     String?          // ID of the message being replied to
+  editHistory Json?            // Array of { content, assistantResponse, editedAt }
+  sources     Json?            // Array of sources for assistant messages
+  createdAt   DateTime         @default(now())
+
+  @@index([sessionId])
 }

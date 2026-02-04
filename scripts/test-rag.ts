@@ -1,7 +1,7 @@
 /**
  * Test script to verify RAG functionality
  *
- * Usage: npx tsx scripts/test-rag.ts
+ * Usage: pnpm tsx scripts/test-rag.ts
  */
 
 import { smartRetrieve, formatContextForPrompt, listDocuments } from "../lib/rag";
@@ -30,7 +30,7 @@ async function main() {
   try {
     const docs = await listDocuments();
     if (docs.length === 0) {
-      console.log("   No documents found! Run 'npm run rag:ingest' first.");
+      console.log("   No documents found! Run 'pnpm rag:ingest' first.");
       process.exit(1);
     }
     for (const doc of docs) {
@@ -39,7 +39,7 @@ async function main() {
   } catch (error) {
     console.error("Error listing documents:", error);
     console.log("\n⚠️  Make sure PostgreSQL is running and schema is set up.");
-    console.log("   Run: npm run setup && npm run rag:ingest");
+    console.log("   Run: pnpm setup && pnpm rag:ingest");
     process.exit(1);
   }
 

@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Download, FileText, Layers, Loader2, Eye, Code } from "lucide-react"
+import { Download, FileText, Layers, Loader2, Eye, Code, Brain } from "lucide-react"
 import ReactMarkdown from "react-markdown"
+import DocumentIntelligence from "./document-intelligence"
 
 interface DocumentViewerProps {
   documentId: string | null
@@ -198,6 +199,10 @@ export function DocumentViewer({ documentId, open, onOpenChange }: DocumentViewe
                   <Layers className="h-4 w-4" />
                   Chunks ({document.chunks.length})
                 </TabsTrigger>
+                <TabsTrigger value="intelligence" className="gap-2">
+                  <Brain className="h-4 w-4" />
+                  Intelligence
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="preview" className="flex-1 min-h-0 mt-4">
@@ -259,6 +264,10 @@ export function DocumentViewer({ documentId, open, onOpenChange }: DocumentViewe
                     ))}
                   </div>
                 </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="intelligence" className="flex-1 min-h-0 mt-4">
+                <DocumentIntelligence documentId={document.id} />
               </TabsContent>
             </Tabs>
           </>

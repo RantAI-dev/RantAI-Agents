@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:16
     container_name: rantai-agents-postgres
     restart: unless-stopped
     environment:
@@ -11,12 +11,28 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U horizonlife -d horizonlife_insurance"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+  surrealdb:
+    image: surrealdb/surrealdb:latest
+    container_name: rantai-agents-surrealdb
+    restart: unless-stopped
+    user: root
+    command: start --user root --pass root file:/data/database.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - surrealdb_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
+  surrealdb_data:

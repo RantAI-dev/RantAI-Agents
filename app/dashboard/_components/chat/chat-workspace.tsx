@@ -2,25 +2,78 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 import { useChat } from "@ai-sdk/react"
+import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Send, Loader2, Bot, User, Copy, Pencil, Trash2, RefreshCw, Check, ArrowDown } from "lucide-react"
-import type { ChatSession } from "../page"
+import {
+  ArrowLeft,
+  Send,
+  Bot,
+  User,
+  Copy,
+  Pencil,
+  Trash2,
+  RefreshCw,
+  Check,
+  ArrowDown,
+  AlertCircle,
+  Reply,
+  X,
+} from "lucide-react"
+import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { cn } from "@/lib/utils"
 import { EmptyState } from "./empty-state"
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
 import ReactMarkdown from "react-markdown"
+import { formatDistanceToNow } from "date-fns"
+import { useToast } from "@/hooks/use-toast"
+import { ToastAction } from "@/components/ui/toast"
+import { CodeBlock } from "./code-block"
+import { TypingIndicator, ButtonLoadingIndicator } from "./typing-indicator"
+import { QuickSuggestions } from "./quick-suggestions"
+import { MessageSources, Source } from "./message-sources"
+import { ConversationExport } from "./conversation-export"
+import { CommandPalette } from "./command-palette"
+import { FileUploadButton } from "./file-upload-button"
+import { FilePreview } from "./file-preview"
+import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
+import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } from "./edit-version-indicator"
+
+// Delimiter for sources metadata in streaming response
+const SOURCES_DELIMITER = "\n\n---SOURCES---\n"
 
 interface ChatWorkspaceProps {
   session?: ChatSession
   assistant: Assistant
   onBack?: () => void
   onUpdateSession?: (sessionId: string, updates: Partial<ChatSession>) => void
+  onNewChat?: () => void
+}
+
+// Edit history entry for versioning - includes both user prompt and AI response
+interface EditHistoryEntry {
+  content: string // The user's prompt
+  assistantResponse?: string // The AI's response to this prompt
+  editedAt: Date
+}
+
+// Extended message type with sources and edit history
+interface ChatMessage {
+  id: string
+  role: "user" | "assistant"
+  content: string
+  createdAt?: Date
+  sources?: Source[]
+  replyTo?: string
+  editHistory?: EditHistoryEntry[] // Previous versions of the message
 }
 
 // Helper to extract text content from UIMessage parts
-function getMessageContent(message: { content?: string; parts?: Array<{ type: string; text?: string }> }): string {
+function getMessageContent(message: {
+  content?: string
+  parts?: Array<{ type: string; text?: string }>
+}): string {
   if (message.content) {
     return message.content
   }
@@ -39,6 +92,7 @@ function MessageActions({
   onEdit,
   onDelete,
   onRegenerate,
+  onReply,
   isUser,
   copied,
 }: {
@@ -46,28 +100,48 @@ function MessageActions({
   onEdit?: () => void
   onDelete?: () => void
   onRegenerate?: () => void
+  onReply?: () => void
   isUser: boolean
   copied: boolean
 }) {
   return (
-    <div className={cn(
-      "flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
-      isUser ? "justify-end" : "justify-start"
-    )}>
+    <div
+      className={cn(
+        "flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+        isUser ? "justify-end" : "justify-start"
+      )}
+    >
       <Button
         variant="ghost"
         size="icon"
         className="h-7 w-7 text-muted-foreground hover:text-foreground"
         onClick={onCopy}
+        title="Copy message"
       >
-        {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+        {copied ? (
+          <Check className="h-3.5 w-3.5 text-green-500" />
+        ) : (
+          <Copy className="h-3.5 w-3.5" />
+        )}
       </Button>
+      {onReply && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          onClick={onReply}
+          title="Reply"
+        >
+          <Reply className="h-3.5 w-3.5" />
+        </Button>
+      )}
       {isUser && onEdit && (
         <Button
           variant="ghost"
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
           onClick={onEdit}
+          title="Edit message"
         >
           <Pencil className="h-3.5 w-3.5" />
         </Button>
@@ -78,6 +152,7 @@ function MessageActions({
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
           onClick={onRegenerate}
+          title="Regenerate response"
         >
           <RefreshCw className="h-3.5 w-3.5" />
         </Button>
@@ -88,6 +163,7 @@ function MessageActions({
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-destructive"
           onClick={onDelete}
+          title="Delete message"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
@@ -96,26 +172,158 @@ function MessageActions({
   )
 }
 
+// Message animation variants
+const messageVariants = {
+  initial: { opacity: 0, y: 15 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -10 },
+}
+
+// Markdown components with syntax highlighting and enhanced tables
+const markdownComponents = {
+  code({ node, className, children, ...props }: any) {
+    const match = /language-(\w+)/.exec(className || "")
+    const isInline = !match && !String(children).includes("\n")
+
+    if (isInline) {
+      return (
+        <code
+          className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono"
+          {...props}
+        >
+          {children}
+        </code>
+      )
+    }
+
+    return (
+      <CodeBlock language={match?.[1]}>
+        {String(children).replace(/\n$/, "")}
+      </CodeBlock>
+    )
+  },
+  // Style links
+  a({ children, href, ...props }: any) {
+    return (
+      <a
+        href={href}
+        className="text-primary underline underline-offset-2 hover:text-primary/80"
+        target="_blank"
+        rel="noopener noreferrer"
+        {...props}
+      >
+        {children}
+      </a>
+    )
+  },
+  // Style lists
+  ul({ children, ...props }: any) {
+    return (
+      <ul className="list-disc list-inside space-y-1 my-2" {...props}>
+        {children}
+      </ul>
+    )
+  },
+  ol({ children, ...props }: any) {
+    return (
+      <ol className="list-decimal list-inside space-y-1 my-2" {...props}>
+        {children}
+      </ol>
+    )
+  },
+  // Enhanced tables
+  table({ children, ...props }: any) {
+    return (
+      <div className="my-3 overflow-x-auto rounded-lg border">
+        <table className="w-full text-sm" {...props}>
+          {children}
+        </table>
+      </div>
+    )
+  },
+  thead({ children, ...props }: any) {
+    return (
+      <thead className="bg-muted/50 border-b" {...props}>
+        {children}
+      </thead>
+    )
+  },
+  tbody({ children, ...props }: any) {
+    return (
+      <tbody className="divide-y" {...props}>
+        {children}
+      </tbody>
+    )
+  },
+  tr({ children, ...props }: any) {
+    return (
+      <tr className="hover:bg-muted/30 transition-colors" {...props}>
+        {children}
+      </tr>
+    )
+  },
+  th({ children, ...props }: any) {
+    return (
+      <th
+        className="px-3 py-2 text-left font-medium text-muted-foreground"
+        {...props}
+      >
+        {children}
+      </th>
+    )
+  },
+  td({ children, ...props }: any) {
+    return (
+      <td className="px-3 py-2" {...props}>
+        {children}
+      </td>
+    )
+  },
+}
+
 export function ChatWorkspace({
   session,
   assistant,
   onBack,
   onUpdateSession,
+  onNewChat,
 }: ChatWorkspaceProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { toast } = useToast()
+
+  // State
   const [input, setInput] = useState("")
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [messageSources, setMessageSources] = useState<
+    Record<string, Source[]>
+  >({})
 
-  // Debug: Log the assistant being used (only on mount)
-  useEffect(() => {
-    console.log("[ChatWorkspace] Mounted with assistant:", assistant.id, assistant.name)
-    console.log("[ChatWorkspace] System prompt:", assistant.systemPrompt.substring(0, 80) + "...")
-    console.log("[ChatWorkspace] useKnowledgeBase:", assistant.useKnowledgeBase)
-  }, [assistant.id, assistant.name, assistant.systemPrompt, assistant.useKnowledgeBase])
+  // Edit state
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editContent, setEditContent] = useState("")
+
+  // Reply/Thread state
+  const [replyingTo, setReplyingTo] = useState<{
+    id: string
+    content: string
+  } | null>(null)
+
+  // File attachment state
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
+
+  // Error state
+  const [error, setError] = useState<{
+    message: string
+    retry: () => void
+  } | null>(null)
+
+  // Version viewing state for edited messages (messageId -> version number, 1-indexed)
+  const [viewingVersions, setViewingVersions] = useState<Record<string, number>>({})
 
   const chat = useChat({
     id: session?.id,
@@ -134,7 +342,8 @@ export function ChatWorkspace({
 
         const title =
           session.title === "New Chat" && updatedMessages.length >= 1
-            ? updatedMessages[0].content.slice(0, 50) + (updatedMessages[0].content.length > 50 ? "..." : "")
+            ? updatedMessages[0].content.slice(0, 50) +
+              (updatedMessages[0].content.length > 50 ? "..." : "")
             : session.title
 
         onUpdateSession(session.id, {
@@ -145,12 +354,9 @@ export function ChatWorkspace({
     },
   })
 
-  // Loading state is now managed manually since we bypass useChat's API
-
   // Reset messages when session changes
   useEffect(() => {
     if (session?.messages && session.messages.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       chat.setMessages(
         session.messages.map((m) => ({
           id: m.id,
@@ -159,22 +365,46 @@ export function ChatWorkspace({
         })) as any
       )
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       chat.setMessages([] as any)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Clear edit and reply state on session change
+    setEditingMessageId(null)
+    setEditContent("")
+    setReplyingTo(null)
+    setError(null)
   }, [session?.id])
 
-  // Auto-scroll when at bottom and new messages arrive
+  // Track if we should auto-scroll (only when user sends a message or during streaming)
+  const shouldAutoScroll = useRef(false)
+
+  // Auto-scroll only when user sends a message (not on every message change)
   useEffect(() => {
-    if (atBottom && virtuosoRef.current) {
+    if (shouldAutoScroll.current && virtuosoRef.current) {
       virtuosoRef.current.scrollToIndex({
         index: "LAST",
         behavior: "smooth",
       })
+      // Reset after scrolling, but keep scrolling during streaming
+      if (!isStreaming) {
+        shouldAutoScroll.current = false
+      }
     }
-  }, [chat.messages, atBottom])
+  }, [chat.messages, isStreaming])
 
+  // Auto-resize textarea
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current
+    if (textarea) {
+      textarea.style.height = "auto"
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`
+    }
+  }, [])
+
+  useEffect(() => {
+    adjustTextareaHeight()
+  }, [input, adjustTextareaHeight])
+
+  // Handlers
   const handleCopy = useCallback((id: string, content: string) => {
     navigator.clipboard.writeText(content)
     setCopiedId(id)
@@ -188,110 +418,421 @@ export function ChatWorkspace({
     })
   }, [])
 
-  // Handle form submit - manual API call to include assistant info
+  const scrollToMessage = useCallback((messageId: string) => {
+    const index = chat.messages.findIndex((m) => m.id === messageId)
+    if (index !== -1) {
+      virtuosoRef.current?.scrollToIndex({
+        index,
+        behavior: "smooth",
+        align: "center",
+      })
+    }
+  }, [chat.messages])
+
+  const handleSuggestionSelect = useCallback((suggestion: string) => {
+    setInput(suggestion)
+    textareaRef.current?.focus()
+  }, [])
+
+  // Edit handlers
+  const handleEditMessage = useCallback((messageId: string, content: string) => {
+    setEditingMessageId(messageId)
+    setEditContent(content)
+  }, [])
+
+  const handleCancelEdit = useCallback(() => {
+    setEditingMessageId(null)
+    setEditContent("")
+  }, [])
+
+  // Core message sending logic - used by both submit and edit
+  const sendMessage = useCallback(
+    async (
+      userInput: string,
+      baseMessages: typeof chat.messages,
+      replyToId?: string,
+      editHistory?: EditHistoryEntry[]
+    ) => {
+      setIsLoading(true)
+      setIsStreaming(false)
+      setError(null)
+
+      const userMessage = {
+        id: crypto.randomUUID(),
+        role: "user" as const,
+        content: userInput,
+        ...(replyToId && { replyTo: replyToId }),
+        ...(editHistory && editHistory.length > 0 && { editHistory }),
+      }
+
+      // Placeholder ID for the assistant message (will be replaced when streaming starts)
+      const pendingAssistantId = `pending-${crypto.randomUUID()}`
+
+      // Enable auto-scroll
+      shouldAutoScroll.current = true
+
+      // Add user message AND placeholder assistant message immediately for instant feedback
+      chat.setMessages([
+        ...baseMessages,
+        userMessage,
+        { id: pendingAssistantId, role: "assistant", content: "" },
+      ] as any)
+
+      // Update session
+      if (session && onUpdateSession) {
+        const title =
+          session.title === "New Chat"
+            ? userInput.slice(0, 50) + (userInput.length > 50 ? "..." : "")
+            : session.title
+
+        onUpdateSession(session.id, {
+          messages: [
+            ...baseMessages.map((m) => ({
+              id: m.id,
+              role: m.role,
+              content: getMessageContent(m),
+              createdAt: new Date(),
+              // Preserve replyTo and editHistory if they exist
+              ...((m as ChatMessage).replyTo && { replyTo: (m as ChatMessage).replyTo }),
+              ...((m as ChatMessage).editHistory && { editHistory: (m as ChatMessage).editHistory }),
+            })),
+            { ...userMessage, createdAt: new Date() },
+          ],
+          title,
+        })
+      }
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...baseMessages, userMessage],
+            assistantId: assistant.id,
+            systemPrompt: assistant.systemPrompt,
+            useKnowledgeBase: assistant.useKnowledgeBase,
+            knowledgeBaseGroupIds: assistant.knowledgeBaseGroupIds,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error("API Error:", response.status, errorText)
+          throw new Error(`Failed to get response: ${response.status}`)
+        }
+
+        // Handle streaming response
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+        let assistantContent = ""
+        const assistantMsgId = crypto.randomUUID()
+
+        // Replace the placeholder assistant message with the real one
+        chat.setMessages((prev) => {
+          const updated = [...prev]
+          const lastIdx = updated.length - 1
+          if (updated[lastIdx]?.role === "assistant" && updated[lastIdx]?.id.startsWith("pending-")) {
+            updated[lastIdx] = { id: assistantMsgId, role: "assistant", content: "" } as typeof updated[number]
+          }
+          return updated
+        })
+        setIsStreaming(true)
+
+        while (reader) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          const chunk = decoder.decode(value, { stream: true })
+          assistantContent += chunk
+
+          const displayContent = assistantContent.includes(SOURCES_DELIMITER)
+            ? assistantContent.split(SOURCES_DELIMITER)[0]
+            : assistantContent
+
+          chat.setMessages((prev) => {
+            const updated = [...prev]
+            const lastIdx = updated.length - 1
+            if (updated[lastIdx]?.role === "assistant") {
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                content: displayContent,
+              } as typeof updated[number]
+            }
+            return updated
+          })
+        }
+
+        setIsStreaming(false)
+
+        // Parse sources
+        let finalContent = assistantContent
+        let sources: Source[] = []
+
+        if (assistantContent.includes(SOURCES_DELIMITER)) {
+          const [content, sourcesJson] = assistantContent.split(SOURCES_DELIMITER)
+          finalContent = content.trim()
+          try {
+            sources = JSON.parse(sourcesJson)
+            setMessageSources((prev) => ({ ...prev, [assistantMsgId]: sources }))
+          } catch (e) {
+            console.warn("[Chat] Failed to parse sources:", e)
+          }
+
+          chat.setMessages((prev) => {
+            const updated = [...prev]
+            const lastIdx = updated.length - 1
+            if (updated[lastIdx]?.role === "assistant") {
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                content: finalContent,
+              } as typeof updated[number]
+            }
+            return updated
+          })
+        }
+
+        // Save to session
+        if (session && onUpdateSession && finalContent) {
+          onUpdateSession(session.id, {
+            messages: [
+              ...baseMessages.map((m) => ({
+                id: m.id,
+                role: m.role,
+                content: getMessageContent(m),
+                createdAt: new Date(),
+                // Preserve replyTo and editHistory if they exist
+                ...((m as ChatMessage).replyTo && { replyTo: (m as ChatMessage).replyTo }),
+                ...((m as ChatMessage).editHistory && { editHistory: (m as ChatMessage).editHistory }),
+              })),
+              { ...userMessage, createdAt: new Date() },
+              {
+                id: assistantMsgId,
+                role: "assistant" as const,
+                content: finalContent,
+                createdAt: new Date(),
+              },
+            ],
+          })
+        }
+      } catch (err) {
+        console.error("Chat error:", err)
+        setIsStreaming(false)
+
+        // Remove incomplete/placeholder assistant message
+        chat.setMessages((prev) => {
+          const lastMsg = prev[prev.length - 1]
+          if (lastMsg?.role === "assistant" && (!getMessageContent(lastMsg) || lastMsg.id.startsWith("pending-"))) {
+            return prev.slice(0, -1) as any
+          }
+          return prev
+        })
+
+        // Set error state
+        const retryFn = () => {
+          setInput(userInput)
+          setError(null)
+          textareaRef.current?.focus()
+        }
+
+        setError({
+          message: "Failed to get response. Please try again.",
+          retry: retryFn,
+        })
+
+        // Show toast
+        toast({
+          variant: "destructive",
+          title: "Message failed",
+          description: "Failed to get a response from the assistant.",
+          action: (
+            <ToastAction altText="Retry" onClick={retryFn}>
+              Retry
+            </ToastAction>
+          ),
+        })
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [chat, session, onUpdateSession, assistant, toast]
+  )
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editingMessageId || !editContent.trim()) return
+
+    const messageIndex = chat.messages.findIndex(
+      (m) => m.id === editingMessageId
+    )
+    if (messageIndex === -1) return
+
+    // Get the original message to preserve edit history
+    const originalMessage = chat.messages[messageIndex] as ChatMessage
+    const originalContent = getMessageContent(originalMessage)
+    const existingHistory = originalMessage.editHistory || []
+
+    // Get the assistant response that followed this user message (if any)
+    const nextMessage = chat.messages[messageIndex + 1]
+    const assistantResponse =
+      nextMessage?.role === "assistant" ? getMessageContent(nextMessage) : undefined
+
+    // Build new edit history by adding the original content and its response
+    const newEditHistory: EditHistoryEntry[] = [
+      ...existingHistory,
+      { content: originalContent, assistantResponse, editedAt: new Date() },
+    ]
+
+    // Get messages before the edited one
+    const truncatedMessages = chat.messages.slice(0, messageIndex)
+    const editedContent = editContent.trim()
+
+    // Preserve reply context if the original message had one
+    const replyToId = originalMessage.replyTo
+
+    // Clear edit state
+    setEditingMessageId(null)
+    setEditContent("")
+
+    // Send the edited message with history
+    await sendMessage(editedContent, truncatedMessages, replyToId, newEditHistory)
+  }, [editingMessageId, editContent, chat.messages, sendMessage])
+
+  // Regenerate handler
+  const handleRegenerate = useCallback(
+    async (messageId: string) => {
+      const messageIndex = chat.messages.findIndex((m) => m.id === messageId)
+      if (
+        messageIndex === -1 ||
+        chat.messages[messageIndex].role !== "assistant"
+      )
+        return
+
+      // Find the preceding user message
+      const userMessageIndex = messageIndex - 1
+      if (
+        userMessageIndex < 0 ||
+        chat.messages[userMessageIndex].role !== "user"
+      )
+        return
+
+      const userMessage = chat.messages[userMessageIndex]
+      const userContent = getMessageContent(userMessage)
+      const userReplyTo = (userMessage as ChatMessage).replyTo
+
+      // Get messages before the user message (to resend with the same context)
+      const truncatedMessages = chat.messages.slice(0, userMessageIndex)
+
+      // Send the same user message again to get a new response
+      await sendMessage(userContent, truncatedMessages, userReplyTo)
+    },
+    [chat.messages, sendMessage]
+  )
+
+  // Delete handler
+  const handleDeleteMessage = useCallback(
+    (messageId: string) => {
+      const messageIndex = chat.messages.findIndex((m) => m.id === messageId)
+      if (messageIndex === -1) return
+
+      // Remove message and all after it
+      const truncatedMessages = chat.messages.slice(0, messageIndex)
+      chat.setMessages(truncatedMessages as any)
+
+      if (session && onUpdateSession) {
+        onUpdateSession(session.id, {
+          messages: session.messages.slice(0, messageIndex),
+        })
+      }
+    },
+    [chat, session, onUpdateSession]
+  )
+
+  // Reply handler
+  const handleReply = useCallback((messageId: string, content: string) => {
+    setReplyingTo({ id: messageId, content })
+    textareaRef.current?.focus()
+  }, [])
+
+  // Clear chat handler
+  const handleClearChat = useCallback(() => {
+    chat.setMessages([] as any)
+    if (session && onUpdateSession) {
+      onUpdateSession(session.id, {
+        messages: [],
+        title: "New Chat",
+      })
+    }
+    setMessageSources({})
+    setError(null)
+  }, [chat, session, onUpdateSession])
+
+  // Export helpers
+  const exportAsMarkdown = useCallback(() => {
+    if (!session) return
+    let markdown = `# ${session.title}\n\n`
+    markdown += `*Exported on ${new Date().toLocaleDateString()}*\n\n---\n\n`
+    for (const msg of session.messages) {
+      const role = msg.role === "user" ? "**You**" : "**Assistant**"
+      markdown += `${role}:\n\n${msg.content}\n\n---\n\n`
+    }
+    const blob = new Blob([markdown], { type: "text/markdown" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${session.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [session])
+
+  const exportAsJson = useCallback(() => {
+    if (!session) return
+    const json = JSON.stringify(
+      {
+        title: session.title,
+        exportedAt: new Date().toISOString(),
+        messages: session.messages,
+      },
+      null,
+      2
+    )
+    const blob = new Blob([json], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `${session.title
+      .replace(/[^a-z0-9]/gi, "-")
+      .toLowerCase()}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [session])
+
+  // Submit handler
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
 
     const userInput = input.trim()
     setInput("")
-    setIsLoading(true)
 
-    // Add user message to chat state
-    const userMessage = {
-      id: crypto.randomUUID(),
-      role: "user" as const,
-      content: userInput,
-    }
+    // Capture and clear reply state
+    const replyContext = replyingTo
+    setReplyingTo(null)
 
-    // Update chat messages with user message
-    const currentMessages = chat.messages
-    chat.setMessages([...currentMessages, userMessage] as any)
-
-    // Add user message to session
-    if (session && onUpdateSession) {
-      const title =
-        session.title === "New Chat"
-          ? userInput.slice(0, 50) + (userInput.length > 50 ? "..." : "")
-          : session.title
-
-      onUpdateSession(session.id, {
-        messages: [...session.messages, { ...userMessage, createdAt: new Date() }],
-        title,
-      })
-    }
-
-    // Make manual API call with assistant info
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [...currentMessages, userMessage],
-          assistantId: assistant.id,
-          systemPrompt: assistant.systemPrompt,
-          useKnowledgeBase: assistant.useKnowledgeBase,
-          knowledgeBaseGroupIds: assistant.knowledgeBaseGroupIds,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('API Error:', response.status, errorText)
-        throw new Error(`Failed to get response: ${response.status}`)
-      }
-
-      // Handle streaming response
-      const reader = response.body?.getReader()
-      const decoder = new TextDecoder()
-      let assistantContent = ''
-      const assistantMsgId = crypto.randomUUID()
-
-      // Add empty assistant message that we'll update
-      chat.setMessages(prev => [...prev, { id: assistantMsgId, role: 'assistant', content: '' }] as any)
-
-      while (reader) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        // toTextStreamResponse returns plain text chunks
-        const chunk = decoder.decode(value, { stream: true })
-        assistantContent += chunk
-
-        // Update the last message with accumulated content
-        chat.setMessages(prev => {
-          const updated = [...prev]
-          const lastIdx = updated.length - 1
-          if (updated[lastIdx]?.role === 'assistant') {
-            // Use type assertion for internal message update
-            updated[lastIdx] = { ...updated[lastIdx], content: assistantContent } as typeof updated[number]
-          }
-          return updated
-        })
-      }
-
-      // Save final assistant message to session
-      if (session && onUpdateSession && assistantContent) {
-        onUpdateSession(session.id, {
-          messages: [
-            ...session.messages,
-            { ...userMessage, createdAt: new Date() },
-            { id: assistantMsgId, role: 'assistant', content: assistantContent, createdAt: new Date() },
-          ],
-        })
-      }
-    } catch (error) {
-      console.error('Chat error:', error)
-    } finally {
-      setIsLoading(false)
-    }
+    // Send the message using shared logic
+    await sendMessage(userInput, chat.messages, replyContext?.id)
   }
 
-  // Handle keyboard shortcut
+  // Keyboard handler
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       onSubmit(e)
+    }
+    if (e.key === "Escape") {
+      if (editingMessageId) {
+        handleCancelEdit()
+      } else if (replyingTo) {
+        setReplyingTo(null)
+      }
     }
   }
 
@@ -303,26 +844,65 @@ export function ChatWorkspace({
 
   return (
     <div className="flex flex-col h-full bg-background">
-      {/* Mobile back button */}
-      {onBack && (
-        <div className="flex items-center gap-2 p-4 border-b md:hidden">
-          <Button variant="ghost" size="icon" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+      {/* Header with mobile back button and actions */}
+      <div className="flex items-center justify-between gap-2 py-4 pl-14 pr-4 border-b">
+        <div className="flex items-center gap-2">
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onBack}
+              className="md:hidden"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
           <span className="font-medium truncate">{session.title}</span>
         </div>
-      )}
+        <div className="flex items-center gap-1">
+          <ConversationExport title={session.title} messages={session.messages} />
+          <CommandPalette
+            onNewChat={onNewChat || (() => {})}
+            onExportMarkdown={exportAsMarkdown}
+            onExportJson={exportAsJson}
+            onClearChat={handleClearChat}
+          />
+        </div>
+      </div>
 
       {/* Messages with Virtuoso */}
       <div className="flex-1 relative">
         {chat.messages.length === 0 && !isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center py-12">
-              <div className="text-5xl mb-4">{assistant.emoji}</div>
-              <h3 className="text-lg font-medium mb-1">{assistant.name}</h3>
-              <p className="text-sm text-muted-foreground">
+              <motion.div
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.3 }}
+                className="text-5xl mb-4"
+              >
+                {assistant.emoji}
+              </motion.div>
+              <motion.h3
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.3, delay: 0.1 }}
+                className="text-lg font-medium mb-1"
+              >
+                {assistant.name}
+              </motion.h3>
+              <motion.p
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ duration: 0.3, delay: 0.2 }}
+                className="text-sm text-muted-foreground max-w-sm"
+              >
                 {assistant.description}
-              </p>
+              </motion.p>
+              <QuickSuggestions
+                assistant={assistant}
+                onSelect={handleSuggestionSelect}
+              />
             </div>
           </div>
         ) : (
@@ -330,74 +910,261 @@ export function ChatWorkspace({
             ref={virtuosoRef}
             data={allMessages}
             className="h-full"
-            followOutput="smooth"
             atBottomStateChange={setAtBottom}
             atBottomThreshold={100}
             overscan={200}
             itemContent={(index, message) => {
-              const content = getMessageContent(message)
+              const rawContent = getMessageContent(message)
               const isUser = message.role === "user"
               const isLastMessage = index === allMessages.length - 1
-              const isLoadingMessage = isLoading && isLastMessage && message.role === "assistant" && !content
+              const isLoadingMessage =
+                isLoading &&
+                isLastMessage &&
+                message.role === "assistant" &&
+                !rawContent
+              const isStreamingMessage =
+                isStreaming && isLastMessage && message.role === "assistant"
+              const sources = messageSources[message.id] || []
+              const isEditing = editingMessageId === message.id
+
+              // Version handling for edited messages
+              const msgEditHistory = (message as ChatMessage).editHistory
+              const hasEditHistory = msgEditHistory && msgEditHistory.length > 0
+              const totalVersions = hasEditHistory ? msgEditHistory.length + 1 : 1
+              const currentViewingVersion = viewingVersions[message.id] || totalVersions
+              const content = hasEditHistory
+                ? getVersionContent(rawContent, msgEditHistory, currentViewingVersion)
+                : rawContent
+
+              // Get historical assistant response if viewing a previous version
+              const historicalAssistantResponse =
+                isUser && hasEditHistory
+                  ? getVersionAssistantResponse(msgEditHistory, currentViewingVersion, totalVersions)
+                  : undefined
+              const isViewingHistoricalVersion =
+                hasEditHistory && currentViewingVersion < totalVersions
 
               return (
-                <div className="max-w-3xl mx-auto px-4 py-3">
+                <motion.div
+                  variants={messageVariants}
+                  initial="initial"
+                  animate="animate"
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="max-w-3xl mx-auto px-4 py-3"
+                >
                   <div
                     className={cn(
                       "group flex gap-3",
                       isUser ? "flex-row-reverse" : ""
                     )}
                   >
+                    {/* Avatar */}
                     <div
                       className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full shadow-sm",
                         isUser
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted"
+                          ? "bg-gradient-to-br from-primary to-primary/70 text-primary-foreground"
+                          : "bg-gradient-to-br from-violet-500 to-purple-600 text-white"
                       )}
                     >
                       {isUser ? (
-                        <User className="h-5 w-5" />
+                        <User className="h-4 w-4" />
+                      ) : assistant.emoji ? (
+                        <span className="text-lg">{assistant.emoji}</span>
                       ) : (
-                        <Bot className="h-5 w-5" />
+                        <Bot className="h-4 w-4" />
                       )}
                     </div>
-                    <div className={cn("flex-1 min-w-0", isUser ? "ml-12" : "mr-12")}>
+
+                    {/* Message content */}
+                    <div
+                      className={cn("flex-1 min-w-0", isUser ? "ml-12" : "mr-12")}
+                    >
                       <div
                         className={cn(
-                          "rounded-lg py-2 px-3 text-sm",
+                          "rounded-2xl py-2.5 px-4 text-sm",
                           isUser
                             ? "bg-primary text-primary-foreground"
                             : "bg-muted"
                         )}
                       >
+                        {/* Reply indicator - show what message this is replying to */}
+                        {(message as ChatMessage).replyTo && (() => {
+                          const parentMsg = allMessages.find(
+                            (m) => m.id === (message as ChatMessage).replyTo
+                          )
+                          if (!parentMsg) return null
+                          const parentContent = getMessageContent(parentMsg)
+                          return (
+                            <MessageReplyIndicator
+                              parentContent={parentContent}
+                              onClick={() => scrollToMessage(parentMsg.id)}
+                              isUserMessage={isUser}
+                            />
+                          )
+                        })()}
+
                         {isLoadingMessage ? (
-                          <div className="flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="text-muted-foreground">Thinking...</span>
+                          <TypingIndicator />
+                        ) : isEditing ? (
+                          <div className="space-y-2">
+                            <Textarea
+                              value={editContent}
+                              onChange={(e) => setEditContent(e.target.value)}
+                              className="min-h-[60px] bg-background"
+                              autoFocus
+                            />
+                            <div className="flex gap-2">
+                              <Button size="sm" onClick={handleSaveEdit}>
+                                Save & Resend
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={handleCancelEdit}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
                           </div>
                         ) : (
                           <div className="chat-message prose prose-sm dark:prose-invert max-w-none">
-                            <ReactMarkdown>{content}</ReactMarkdown>
+                            <ReactMarkdown components={markdownComponents}>
+                              {content}
+                            </ReactMarkdown>
+                            {isStreamingMessage && (
+                              <span className="inline-block w-2 h-4 bg-foreground/70 animate-pulse ml-0.5 align-middle" />
+                            )}
                           </div>
                         )}
+
+                        {/* Sources */}
+                        {!isUser &&
+                          !isLoadingMessage &&
+                          !isEditing &&
+                          sources.length > 0 && (
+                            <MessageSources sources={sources} />
+                          )}
                       </div>
-                      {!isLoadingMessage && (
-                        <div className="mt-1">
-                          <MessageActions
-                            onCopy={() => handleCopy(message.id, content)}
-                            copied={copiedId === message.id}
-                            isUser={isUser}
-                          />
+
+                      {/* Historical AI response when viewing previous version */}
+                      {isUser && isViewingHistoricalVersion && historicalAssistantResponse && (
+                        <div className="mt-3 flex gap-3">
+                          <div
+                            className={cn(
+                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full shadow-sm",
+                              "bg-gradient-to-br from-violet-500 to-purple-600 text-white"
+                            )}
+                          >
+                            {assistant.emoji ? (
+                              <span className="text-sm">{assistant.emoji}</span>
+                            ) : (
+                              <Bot className="h-3.5 w-3.5" />
+                            )}
+                          </div>
+                          <div className="flex-1 rounded-2xl py-2.5 px-4 text-sm bg-muted/70 border border-muted-foreground/10">
+                            <div className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
+                              <span>Historical response</span>
+                              <span className="opacity-60">•</span>
+                              <span>Version {currentViewingVersion}/{totalVersions}</span>
+                            </div>
+                            <div className="chat-message prose prose-sm dark:prose-invert max-w-none opacity-90">
+                              <ReactMarkdown components={markdownComponents}>
+                                {historicalAssistantResponse}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Message footer */}
+                      {!isLoadingMessage && !isEditing && (
+                        <div
+                          className={cn(
+                            "flex items-center gap-2 mt-1",
+                            isUser ? "flex-row-reverse" : ""
+                          )}
+                        >
+                          <span className="text-[10px] text-muted-foreground">
+                            {formatDistanceToNow(new Date(), { addSuffix: true })}
+                          </span>
+                          {/* Show version indicator for edited messages, otherwise show regular actions */}
+                          {hasEditHistory ? (
+                            <EditVersionIndicator
+                              currentContent={rawContent}
+                              editHistory={msgEditHistory!}
+                              viewingVersion={currentViewingVersion}
+                              onVersionChange={(v) =>
+                                setViewingVersions((prev) => ({
+                                  ...prev,
+                                  [message.id]: v,
+                                }))
+                              }
+                              onCopy={(c) => handleCopy(message.id, c)}
+                              onEdit={
+                                isUser
+                                  ? () => handleEditMessage(message.id, rawContent)
+                                  : undefined
+                              }
+                              copied={copiedId === message.id}
+                              isUserMessage={isUser}
+                            />
+                          ) : (
+                            <MessageActions
+                              onCopy={() => handleCopy(message.id, content)}
+                              onEdit={
+                                isUser
+                                  ? () => handleEditMessage(message.id, content)
+                                  : undefined
+                              }
+                              onRegenerate={
+                                !isUser
+                                  ? () => handleRegenerate(message.id)
+                                  : undefined
+                              }
+                              onDelete={() => handleDeleteMessage(message.id)}
+                              onReply={() => handleReply(message.id, content)}
+                              copied={copiedId === message.id}
+                              isUser={isUser}
+                            />
+                          )}
                         </div>
                       )}
                     </div>
                   </div>
-                </div>
+                </motion.div>
               )
             }}
           />
         )}
+
+        {/* Error display */}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute bottom-4 left-4 right-4 max-w-3xl mx-auto"
+            >
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
+                <p className="text-sm text-destructive flex-1">{error.message}</p>
+                <Button size="sm" variant="outline" onClick={error.retry}>
+                  <RefreshCw className="h-4 w-4 mr-1" /> Retry
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7"
+                  onClick={() => setError(null)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Scroll to bottom button */}
         {showScrollButton && !atBottom && (
@@ -412,34 +1179,65 @@ export function ChatWorkspace({
         )}
       </div>
 
-      {/* Input */}
+      {/* Input area */}
       <div className="border-t p-4 bg-background">
         <form onSubmit={onSubmit} className="max-w-3xl mx-auto">
-          <div className="relative">
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
-              className="min-h-[60px] max-h-[200px] pr-12 resize-none rounded-2xl"
+          {/* Reply indicator */}
+          <AnimatePresence>
+            {replyingTo && (
+              <ThreadIndicator
+                parentContent={replyingTo.content}
+                onClear={() => setReplyingTo(null)}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* File preview */}
+          <AnimatePresence>
+            {attachedFile && (
+              <div className="mb-2">
+                <FilePreview
+                  file={attachedFile}
+                  onRemove={() => setAttachedFile(null)}
+                />
+              </div>
+            )}
+          </AnimatePresence>
+
+          <div className="relative flex items-end gap-2">
+            <FileUploadButton
+              onFileSelect={setAttachedFile}
               disabled={isLoading}
             />
-            <Button
-              type="submit"
-              size="icon"
-              className="absolute right-2 bottom-2 rounded-full"
-              disabled={!input.trim() || isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="h-4 w-4" />
-              )}
-            </Button>
+            <div className="flex-1 relative">
+              <Textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Type a message..."
+                className="min-h-[52px] max-h-[200px] pr-12 resize-none rounded-2xl border-2 focus-visible:ring-1"
+                disabled={isLoading}
+                rows={1}
+              />
+              <Button
+                type="submit"
+                size="icon"
+                className="absolute right-2 bottom-2 rounded-full h-8 w-8"
+                disabled={!input.trim() || isLoading}
+              >
+                {isLoading ? (
+                  <ButtonLoadingIndicator />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2 text-center">
-            Press Enter to send, Shift+Enter for new line
+          <p className="text-[10px] text-muted-foreground mt-2 text-center">
+            Enter to send · Shift+Enter for new line ·{" "}
+            <kbd className="px-1 rounded bg-muted font-mono">⌘K</kbd> command
+            palette
           </p>
         </form>
       </div>

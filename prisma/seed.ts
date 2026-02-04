@@ -2,12 +2,16 @@ import { PrismaClient } from "@prisma/client"
 import { hash } from "bcryptjs"
 import * as path from "path"
 import * as fs from "fs"
+import { SurrealDBClient, getSurrealDBConfigFromEnv } from "../lib/surrealdb/client"
 
 const prisma = new PrismaClient()
 
 // Embeddings configuration
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/embeddings"
 const EMBEDDING_MODEL = "openai/text-embedding-3-small"
+
+// Check if enhanced mode is enabled
+const USE_ENHANCED = process.env.ENHANCED_MODE === "true" || process.argv.includes("--enhanced")
 
 // Generate embeddings for texts
 async function generateEmbeddings(texts: string[]): Promise<number[][]> {
@@ -82,7 +86,7 @@ const KNOWLEDGE_BASE_CONFIG = [
   },
 ]
 
-// Simple text chunking for seed (without OpenAI embeddings initially)
+// Simple text chunking for seed
 function chunkText(text: string, chunkSize: number = 1000, overlap: number = 200): string[] {
   const chunks: string[] = []
   let start = 0
@@ -130,7 +134,44 @@ async function seedKnowledgeBase() {
 
     // Clear existing documents if forcing reseed
     console.log("Force reseeding - clearing existing documents...")
-    await prisma.documentChunk.deleteMany()
+
+    // Clear SurrealDB chunks, entities, and relations
+    try {
+      const surrealClient = await SurrealDBClient.getInstance(getSurrealDBConfigFromEnv())
+
+      // Dynamically discover and clear all relation tables
+      const dbInfo = await surrealClient.query<{ tables: Record<string, string> }>(`INFO FOR DB`)
+      const rawInfo = dbInfo[0]
+      const info = Array.isArray(rawInfo) ? rawInfo[0] : rawInfo
+
+      if (info?.tables) {
+        const excludedTables = ["entity", "document_chunk"]
+        const relationTables = Object.keys(info.tables).filter(
+          (table) => !excludedTables.includes(table)
+        )
+
+        let clearedRelations = 0
+        for (const relType of relationTables) {
+          try {
+            await surrealClient.query(`DELETE ${relType}`)
+            clearedRelations++
+          } catch {
+            // Table doesn't exist or query failed, skip
+          }
+        }
+        console.log(`  - Cleared ${clearedRelations} relation tables`)
+      }
+
+      await surrealClient.query(`DELETE document_chunk`)
+      console.log("  - Cleared SurrealDB chunks")
+      await surrealClient.query(`DELETE entity`)
+      console.log("  - Cleared SurrealDB entities")
+      console.log("  - SurrealDB ready for fresh data")
+    } catch (error) {
+      console.warn("  - Warning: Could not clear SurrealDB data (may not be running)")
+    }
+
+    // Clear PostgreSQL documents
     await prisma.documentGroup.deleteMany()
     await prisma.document.deleteMany()
   }
@@ -145,6 +186,19 @@ async function seedKnowledgeBase() {
   }
 
   console.log(`\nIngesting documents from: ${knowledgeBasePath}`)
+  if (USE_ENHANCED) {
+    console.log("🧠 Enhanced mode enabled - will extract entities and relations")
+  }
+
+  // Initialize SurrealDB client
+  let surrealClient: SurrealDBClient | null = null
+  try {
+    surrealClient = await SurrealDBClient.getInstance(getSurrealDBConfigFromEnv())
+    console.log("Connected to SurrealDB for vector storage")
+  } catch (error) {
+    console.warn("Warning: Could not connect to SurrealDB. Documents will be created without embeddings.")
+    console.warn("Start SurrealDB with: docker-compose up surrealdb")
+  }
 
   // Process each document
   for (const config of KNOWLEDGE_BASE_CONFIG) {
@@ -180,51 +234,129 @@ async function seedKnowledgeBase() {
     const chunks = chunkText(content)
     console.log(`  - Created ${chunks.length} chunks`)
 
-    // Prepare texts for embedding (include title and context)
-    const textsForEmbedding = chunks.map((chunk) =>
-      `${config.title}\n\n${chunk}`
-    )
+    if (surrealClient) {
+      // Prepare texts for embedding (include title and context)
+      const textsForEmbedding = chunks.map((chunk) =>
+        `${config.title}\n\n${chunk}`
+      )
 
-    // Generate embeddings
-    console.log(`  - Generating embeddings...`)
-    const embeddings = await generateEmbeddings(textsForEmbedding)
+      // Generate embeddings
+      console.log(`  - Generating embeddings...`)
+      const embeddings = await generateEmbeddings(textsForEmbedding)
 
-    // Store chunks with embeddings
-    for (let i = 0; i < chunks.length; i++) {
-      if (embeddings.length > 0 && embeddings[i]) {
-        // Store with embedding using raw SQL
-        const embeddingStr = `[${embeddings[i].join(",")}]`
-        await prisma.$executeRawUnsafe(
-          `INSERT INTO "DocumentChunk" (id, "documentId", content, "chunkIndex", embedding, metadata, "createdAt")
-           VALUES (gen_random_uuid()::text, $1, $2, $3, $4::vector, $5::jsonb, NOW())`,
-          document.id,
-          chunks[i],
-          i,
-          embeddingStr,
-          JSON.stringify({
-            title: config.title,
-            category: config.category,
-            section: config.subcategory,
-          })
-        )
-      } else {
-        // Store without embedding
-        await prisma.documentChunk.create({
-          data: {
-            documentId: document.id,
-            content: chunks[i],
-            chunkIndex: i,
-            metadata: {
-              title: config.title,
-              category: config.category,
-              section: config.subcategory,
-            },
-          },
-        })
+      // Store chunks with embeddings in SurrealDB
+      for (let i = 0; i < chunks.length; i++) {
+        if (embeddings.length > 0 && embeddings[i]) {
+          await surrealClient.query(
+            `CREATE document_chunk SET
+              id = $id,
+              document_id = $document_id,
+              file_id = $file_id,
+              content = $content,
+              chunk_index = $chunk_index,
+              embedding = $embedding,
+              metadata = $metadata,
+              created_at = time::now()`,
+            {
+              id: `${document.id}_${i}`,
+              document_id: document.id,
+              file_id: document.id,
+              content: chunks[i],
+              chunk_index: i,
+              embedding: embeddings[i],
+              metadata: {
+                title: config.title,
+                category: config.category,
+                section: config.subcategory,
+              },
+            }
+          )
+        }
       }
-    }
 
-    console.log(`  - Stored document: ${config.title} with ${embeddings.length > 0 ? "embeddings" : "no embeddings"}`)
+      console.log(`  - Stored document: ${config.title} with ${embeddings.length > 0 ? "embeddings" : "no embeddings"}`)
+
+      // Enhanced mode: Extract entities and relations
+      if (USE_ENHANCED) {
+        try {
+          console.log(`  - Extracting entities and relations...`)
+          const { extractEntitiesAndRelations } = await import("../lib/document-intelligence")
+
+          const { entities, relations } = await extractEntitiesAndRelations(
+            content,
+            document.id,
+            "seed-user"
+          )
+
+          console.log(`    Found ${entities.length} entities, ${relations.length} relations`)
+
+          // Store entities in SurrealDB (use UPSERT to handle duplicates)
+          const entityIdMap = new Map<string, string>()
+          for (const entity of entities) {
+            const sanitizedName = entity.name.toLowerCase().replace(/[^a-z0-9]/g, "_")
+            const entityId = `entity:${document.id}_${sanitizedName}`
+
+            try {
+              // SurrealDB UPSERT requires the record ID directly in the query
+              await surrealClient.query(
+                `UPSERT entity:\`${document.id}_${sanitizedName}\` CONTENT {
+                  name: $name,
+                  type: $type,
+                  confidence: $confidence,
+                  document_id: $document_id,
+                  file_id: $file_id,
+                  metadata: $metadata,
+                  updated_at: time::now()
+                }`,
+                {
+                  name: entity.name,
+                  type: entity.type,
+                  confidence: entity.confidence,
+                  document_id: document.id,
+                  file_id: document.id,
+                  metadata: entity.metadata || {},
+                }
+              )
+            } catch (entityError) {
+              console.warn(`    Warning: Failed to upsert entity ${entityId}`)
+            }
+            entityIdMap.set(entity.name.toLowerCase(), entityId)
+          }
+
+          // Store relations using RELATE syntax
+          let relationCount = 0
+          for (const relation of relations) {
+            const sourceId = entityIdMap.get(relation.metadata?.source_entity?.toLowerCase() || "")
+            const targetId = entityIdMap.get(relation.metadata?.target_entity?.toLowerCase() || "")
+
+            if (sourceId && targetId) {
+              try {
+                await surrealClient.relate(
+                  sourceId,
+                  relation.relation_type,
+                  targetId,
+                  {
+                    confidence: relation.confidence,
+                    document_id: document.id,
+                    context: relation.metadata?.context || "",
+                    created_at: new Date().toISOString(),
+                  }
+                )
+                relationCount++
+              } catch (relateError) {
+                // Skip failed relations silently
+              }
+            }
+          }
+
+          console.log(`    Stored ${entities.length} entities, ${relationCount} relations`)
+        } catch (enhancedError) {
+          console.warn(`  - Enhanced extraction failed:`, enhancedError)
+        }
+      }
+    } else {
+      console.log(`  - Stored document: ${config.title} (no embeddings - SurrealDB not available)`)
+    }
   }
 
   console.log("\n✓ Knowledge base seeding complete!")

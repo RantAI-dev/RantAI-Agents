@@ -57,15 +57,20 @@ async function processMarkdown(filePath: string): Promise<string> {
 
 /**
  * Process a PDF file and extract text
- * Uses dynamic import to avoid loading pdf-parse at module initialization
+ * Uses pdfjs-dist legacy build to avoid worker issues in Next.js
  */
 async function processPdf(filePath: string): Promise<string> {
-  // Dynamic import to avoid DOM API issues at module load time
-  const { PDFParse } = await import("pdf-parse");
-  const dataBuffer = fs.readFileSync(filePath);
-  const parser = new PDFParse({ data: dataBuffer });
-  const pdfData = await parser.getText();
-  return pdfData.text;
+  try {
+    // Use unpdf for serverless-compatible text extraction
+    const { extractText, getDocumentProxy } = await import("unpdf");
+    const dataBuffer = fs.readFileSync(filePath);
+    const pdf = await getDocumentProxy(new Uint8Array(dataBuffer));
+    const { text } = await extractText(pdf, { mergePages: true });
+    return text;
+  } catch (error) {
+    console.error("PDF processing error:", error);
+    throw new Error(`Failed to process PDF: ${error instanceof Error ? error.message : "Unknown error"}`);
+  }
 }
 
 /**

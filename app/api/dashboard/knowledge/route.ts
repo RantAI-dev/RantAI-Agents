@@ -1,13 +1,23 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { chunkDocument, generateEmbeddings, detectFileType } from "@/lib/rag"
+import { getOrganizationContext, canEdit } from "@/lib/organization"
+import {
+  chunkDocument,
+  smartChunkDocument,
+  generateEmbeddings,
+  detectFileType,
+  storeChunks,
+  getDocumentChunkCount,
+} from "@/lib/rag"
+import { extractEntities, extractEntitiesAndRelations } from "@/lib/document-intelligence"
+import { getSurrealClient } from "@/lib/surrealdb"
 import * as path from "path"
 
 // GET - List all documents
 export async function GET(request: Request) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -15,18 +25,27 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const groupId = searchParams.get("groupId")
 
-    // Build where clause for filtering by group
-    const whereClause = groupId
-      ? { groups: { some: { groupId } } }
-      : {}
+    // Get organization context
+    const orgContext = await getOrganizationContext(request, session.user.id)
+
+    // Build where clause for filtering by group and organization
+    const whereClause: Record<string, unknown> = {}
+
+    if (groupId) {
+      whereClause.groups = { some: { groupId } }
+    }
+
+    // Filter by organization
+    if (orgContext) {
+      whereClause.organizationId = orgContext.organizationId
+    } else {
+      whereClause.organizationId = null
+    }
 
     const documents = await prisma.document.findMany({
       where: whereClause,
       orderBy: { createdAt: "desc" },
       include: {
-        _count: {
-          select: { chunks: true },
-        },
         groups: {
           include: {
             group: {
@@ -37,18 +56,26 @@ export async function GET(request: Request) {
       },
     })
 
+    // Get chunk counts from SurrealDB for each document
+    const documentsWithCounts = await Promise.all(
+      documents.map(async (doc) => {
+        const chunkCount = await getDocumentChunkCount(doc.id)
+        return {
+          id: doc.id,
+          title: doc.title,
+          categories: doc.categories,
+          subcategory: doc.subcategory,
+          fileType: (doc.metadata as { fileType?: string } | null)?.fileType || "markdown",
+          chunkCount,
+          groups: doc.groups.map((dg) => dg.group),
+          createdAt: doc.createdAt.toISOString(),
+          updatedAt: doc.updatedAt.toISOString(),
+        }
+      })
+    )
+
     return NextResponse.json({
-      documents: documents.map((doc) => ({
-        id: doc.id,
-        title: doc.title,
-        categories: doc.categories,
-        subcategory: doc.subcategory,
-        fileType: (doc.metadata as { fileType?: string } | null)?.fileType || "markdown",
-        chunkCount: doc._count.chunks,
-        groups: doc.groups.map((dg) => dg.group),
-        createdAt: doc.createdAt.toISOString(),
-        updatedAt: doc.updatedAt.toISOString(),
-      })),
+      documents: documentsWithCounts,
     })
   } catch (error) {
     console.error("Failed to list documents:", error)
@@ -62,11 +89,39 @@ export async function GET(request: Request) {
 // POST - Create a new document
 export async function POST(request: Request) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
+    // Get organization context
+    const orgContext = await getOrganizationContext(request, session.user.id)
+
+    // Check permission if organization context exists
+    if (orgContext && !canEdit(orgContext.membership.role)) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      )
+    }
+
+    // Check organization limits if creating within an org
+    if (orgContext) {
+      const organization = await prisma.organization.findUnique({
+        where: { id: orgContext.organizationId },
+        include: {
+          _count: { select: { documents: true } },
+        },
+      })
+
+      if (organization && organization._count.documents >= organization.maxDocuments) {
+        return NextResponse.json(
+          { error: `Organization has reached the maximum of ${organization.maxDocuments} documents` },
+          { status: 400 }
+        )
+      }
+    }
+
     const contentType = request.headers.get("content-type") || ""
 
     let title: string
@@ -111,15 +166,15 @@ export async function POST(request: Request) {
         // Store PDF as base64 for viewing/downloading
         fileData = fileBuffer.toString("base64")
 
-        // Use pdf-parse for proper text extraction
+        // Use unpdf for serverless-compatible text extraction
         try {
-          const { PDFParse } = await import("pdf-parse")
-          const parser = new PDFParse({ data: fileBuffer })
-          const pdfData = await parser.getText()
-          content = pdfData.text
+          const { extractText, getDocumentProxy } = await import("unpdf")
+          const pdf = await getDocumentProxy(new Uint8Array(fileBuffer))
+          const { text } = await extractText(pdf, { mergePages: true })
+          content = text
         } catch (pdfError) {
           console.error("PDF parsing error:", pdfError)
-          // Fallback to basic extraction
+          // Fallback to placeholder
           content = `[PDF Document: ${title || file.name}]\n\nFailed to extract text from PDF.`
         }
       } else if (detectedType === "image") {
@@ -223,6 +278,8 @@ Format your response as structured text that can be used for search and retrieva
         categories,
         subcategory: subcategory || null,
         metadata: metadata as object,
+        organizationId: orgContext?.organizationId || null,
+        createdBy: session.user.id,
         groups: groupIds && groupIds.length > 0 ? {
           create: groupIds.map((gId) => ({
             groupId: gId,
@@ -240,11 +297,149 @@ Format your response as structured text that can be used for search and retrieva
       },
     })
 
-    // Chunk the content (use first category for chunking metadata)
-    const chunks = chunkDocument(content, title, categories[0], subcategory || undefined, {
-      chunkSize: 1000,
-      chunkOverlap: 200,
-    })
+    // Check if enhanced processing is requested
+    const { searchParams } = new URL(request.url)
+    const useEnhanced = searchParams.get("enhanced") === "true"
+
+    let chunks
+    let entityCount = 0
+
+    if (useEnhanced) {
+      // Use smart chunking (semantic-aware)
+      chunks = await smartChunkDocument(content, title, categories[0], subcategory || undefined, {
+        maxChunkSize: 800,
+        overlapSize: 200,
+        preserveCodeBlocks: true,
+        respectHeadingBoundaries: true,
+      })
+
+      // Check if combined extraction is enabled (98.5% fewer API calls)
+      const useCombined = searchParams.get("combined") !== "false"
+
+      // Extract entities and relations from the content
+      try {
+        const surrealClient = await getSurrealClient()
+
+        if (useCombined) {
+          // Combined extraction: entities + relations in single pass
+          console.log(`[Knowledge API] Using combined extraction for document ${document.id}`)
+          const { entities, relations } = await extractEntitiesAndRelations(
+            content,
+            document.id,
+            session.user.id
+          )
+          entityCount = entities.length
+
+          // Store entities in SurrealDB (use UPSERT to handle duplicates gracefully)
+          const entityIdMap = new Map<string, string>() // name -> id
+          for (const entity of entities) {
+            // Sanitize name for use in record ID (alphanumeric and underscore only)
+            const sanitizedName = entity.name.toLowerCase().replace(/[^a-z0-9]/g, "_")
+            const entityId = `entity:${document.id}_${sanitizedName}`
+
+            try {
+              // SurrealDB UPSERT requires the record ID directly in the query, not as a variable
+              await surrealClient.query(
+                `UPSERT entity:\`${document.id}_${sanitizedName}\` CONTENT {
+                  name: $name,
+                  type: $type,
+                  confidence: $confidence,
+                  document_id: $document_id,
+                  file_id: $file_id,
+                  metadata: $metadata,
+                  updated_at: time::now()
+                }`,
+                {
+                  name: entity.name,
+                  type: entity.type,
+                  confidence: entity.confidence,
+                  document_id: document.id,
+                  file_id: document.id,
+                  metadata: entity.metadata,
+                }
+              )
+            } catch (entityError) {
+              console.warn(`[Knowledge API] Failed to upsert entity ${entityId}:`, entityError)
+            }
+            entityIdMap.set(entity.name.toLowerCase(), entityId)
+          }
+
+          // Store relations using RELATE syntax
+          if (relations.length > 0) {
+            console.log(`[Knowledge API] Creating ${relations.length} relations`)
+            for (const relation of relations) {
+              const sourceId = entityIdMap.get(relation.metadata?.source_entity?.toLowerCase() || "")
+              const targetId = entityIdMap.get(relation.metadata?.target_entity?.toLowerCase() || "")
+
+              if (sourceId && targetId) {
+                try {
+                  await surrealClient.relate(
+                    sourceId,
+                    relation.relation_type,
+                    targetId,
+                    {
+                      confidence: relation.confidence,
+                      document_id: document.id,
+                      context: relation.metadata?.context,
+                      created_at: new Date().toISOString(),
+                    }
+                  )
+                } catch (relateError) {
+                  console.warn(`[Knowledge API] Failed to create relation ${sourceId} -> ${targetId}:`, relateError)
+                }
+              }
+            }
+          }
+        } else {
+          // Legacy: extract entities only
+          const entities = await extractEntities(content, document.id, undefined, {
+            useLLM: true,
+            usePatterns: true,
+          })
+          entityCount = entities.length
+
+          // Store entities in SurrealDB (use UPSERT to handle duplicates)
+          for (const entity of entities) {
+            const sanitizedName = entity.name.toLowerCase().replace(/[^a-z0-9]/g, "_")
+            const entityId = `entity:${document.id}_${sanitizedName}`
+
+            try {
+              // SurrealDB UPSERT requires the record ID directly in the query
+              await surrealClient.query(
+                `UPSERT entity:\`${document.id}_${sanitizedName}\` CONTENT {
+                  name: $name,
+                  type: $type,
+                  confidence: $confidence,
+                  document_id: $document_id,
+                  file_id: $file_id,
+                  metadata: $metadata,
+                  updated_at: time::now()
+                }`,
+                {
+                  name: entity.name,
+                  type: entity.type,
+                  confidence: entity.confidence,
+                  document_id: document.id,
+                  file_id: document.id,
+                  metadata: entity.metadata,
+                }
+              )
+            } catch (entityError) {
+              console.warn(`[Knowledge API] Failed to upsert entity ${entityId}:`, entityError)
+            }
+          }
+        }
+      } catch (entityError) {
+        console.error("Entity/Relation extraction failed:", entityError)
+        // Continue without entities - not a fatal error
+      }
+    } else {
+      // Use basic chunking (original behavior)
+      chunks = chunkDocument(content, title, categories[0], subcategory || undefined, {
+        chunkSize: 1000,
+        chunkOverlap: 200,
+      })
+    }
 
     // Generate embeddings for chunks
     const chunkTexts = chunks.map(
@@ -252,20 +447,8 @@ Format your response as structured text that can be used for search and retrieva
     )
     const embeddings = await generateEmbeddings(chunkTexts)
 
-    // Store chunks with embeddings
-    for (let i = 0; i < chunks.length; i++) {
-      await prisma.$executeRaw`
-        INSERT INTO "DocumentChunk" (id, "documentId", content, "chunkIndex", embedding, "createdAt")
-        VALUES (
-          ${`chunk-${document.id}-${i}`},
-          ${document.id},
-          ${chunks[i].content},
-          ${i},
-          ${embeddings[i]}::vector,
-          NOW()
-        )
-      `
-    }
+    // Store chunks with embeddings in SurrealDB
+    await storeChunks(document.id, chunks, embeddings)
 
     return NextResponse.json({
       id: document.id,
@@ -274,6 +457,8 @@ Format your response as structured text that can be used for search and retrieva
       groups: document.groups.map((dg) => dg.group),
       fileType,
       chunkCount: chunks.length,
+      entityCount: useEnhanced ? entityCount : undefined,
+      enhanced: useEnhanced,
     })
   } catch (error) {
     console.error("Failed to create document:", error)

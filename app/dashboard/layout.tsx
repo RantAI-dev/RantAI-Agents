@@ -8,6 +8,7 @@ import { AppSidebar } from "./_components/app-sidebar"
 import { Button } from "@/components/ui/button"
 import { FeaturesProvider } from "@/components/providers/features-provider"
 import { ChatSessionsProvider } from "@/hooks/use-chat-sessions"
+import { OrganizationProvider } from "@/hooks/use-organization"
 
 export default function DashboardLayout({
   children,
@@ -21,6 +22,7 @@ export default function DashboardLayout({
   return (
     <SessionProvider>
       <FeaturesProvider>
+        <OrganizationProvider>
         <ChatSessionsProvider>
           <div className="flex h-screen w-full overflow-hidden">
           {/* Icon Rail - always visible */}
@@ -38,7 +40,7 @@ export default function DashboardLayout({
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
-              className="absolute top-3 left-4 z-10 h-8 w-8 text-foreground/60 hover:text-foreground hover:bg-accent"
+              className="absolute top-4 left-4 z-10 h-8 w-8 text-foreground/60 hover:text-foreground hover:bg-accent"
             >
               {sidebarOpen ? (
                 <PanelLeftClose className="h-4 w-4" />
@@ -50,6 +52,7 @@ export default function DashboardLayout({
           </main>
         </div>
         </ChatSessionsProvider>
+        </OrganizationProvider>
       </FeaturesProvider>
     </SessionProvider>
   )

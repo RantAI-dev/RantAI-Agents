@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrganizationContext, canManage } from "@/lib/organization"
 import { DEFAULT_WIDGET_CONFIG } from "@/lib/embed/types"
 
 // GET /api/dashboard/embed-keys/:id - Get single key details
@@ -10,11 +11,20 @@ export async function GET(
 ) {
   try {
     const session = await auth()
-    if (!session?.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = await params
+    const orgContext = await getOrganizationContext(req, session.user.id)
+
+    // Only owner and admin can view API keys
+    if (orgContext && !canManage(orgContext.membership.role)) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      )
+    }
 
     const embedKey = await prisma.embedApiKey.findUnique({
       where: { id },
@@ -25,6 +35,15 @@ export async function GET(
         { error: "Embed key not found" },
         { status: 404 }
       )
+    }
+
+    // Verify organization access
+    if (embedKey.organizationId) {
+      if (!orgContext || embedKey.organizationId !== orgContext.organizationId) {
+        return NextResponse.json({ error: "Embed key not found" }, { status: 404 })
+      }
+    } else if (orgContext) {
+      return NextResponse.json({ error: "Embed key not found" }, { status: 404 })
     }
 
     const assistant = await prisma.assistant.findUnique({
@@ -62,13 +81,12 @@ export async function PUT(
 ) {
   try {
     const session = await auth()
-    if (!session?.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = await params
-    const body = await req.json()
-    const { name, allowedDomains, config, enabled } = body
+    const orgContext = await getOrganizationContext(req, session.user.id)
 
     // Verify key exists
     const existingKey = await prisma.embedApiKey.findUnique({
@@ -81,6 +99,21 @@ export async function PUT(
         { status: 404 }
       )
     }
+
+    // Verify organization access
+    if (existingKey.organizationId) {
+      if (!orgContext || existingKey.organizationId !== orgContext.organizationId) {
+        return NextResponse.json({ error: "Embed key not found" }, { status: 404 })
+      }
+
+      // Only owner and admin can manage API keys
+      if (!canManage(orgContext.membership.role)) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+      }
+    }
+
+    const body = await req.json()
+    const { name, allowedDomains, config, enabled } = body
 
     // Merge config with existing
     const existingConfig = existingKey.config as object
@@ -133,11 +166,12 @@ export async function DELETE(
 ) {
   try {
     const session = await auth()
-    if (!session?.user) {
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = await params
+    const orgContext = await getOrganizationContext(req, session.user.id)
 
     // Verify key exists
     const existingKey = await prisma.embedApiKey.findUnique({
@@ -149,6 +183,18 @@ export async function DELETE(
         { error: "Embed key not found" },
         { status: 404 }
       )
+    }
+
+    // Verify organization access
+    if (existingKey.organizationId) {
+      if (!orgContext || existingKey.organizationId !== orgContext.organizationId) {
+        return NextResponse.json({ error: "Embed key not found" }, { status: 404 })
+      }
+
+      // Only owner and admin can delete API keys
+      if (!canManage(orgContext.membership.role)) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+      }
     }
 
     await prisma.embedApiKey.delete({

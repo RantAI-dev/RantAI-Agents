@@ -1,16 +1,23 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrganizationContext, canEdit } from "@/lib/organization"
 
 // GET - List all groups
-export async function GET() {
+export async function GET(request: Request) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
+    // Get organization context
+    const orgContext = await getOrganizationContext(request, session.user.id)
+
     const groups = await prisma.knowledgeBaseGroup.findMany({
+      where: orgContext
+        ? { organizationId: orgContext.organizationId }
+        : { organizationId: null },
       orderBy: { name: "asc" },
       include: {
         _count: {
@@ -42,11 +49,22 @@ export async function GET() {
 // POST - Create a new group
 export async function POST(request: Request) {
   const session = await auth()
-  if (!session?.user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
+    // Get organization context
+    const orgContext = await getOrganizationContext(request, session.user.id)
+
+    // Check permission if organization context exists
+    if (orgContext && !canEdit(orgContext.membership.role)) {
+      return NextResponse.json(
+        { error: "Insufficient permissions" },
+        { status: 403 }
+      )
+    }
+
     const { name, description, color } = await request.json()
 
     if (!name) {
@@ -61,6 +79,7 @@ export async function POST(request: Request) {
         name,
         description: description || null,
         color: color || null,
+        organizationId: orgContext?.organizationId || null,
       },
     })
 

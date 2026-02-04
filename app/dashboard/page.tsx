@@ -3,13 +3,13 @@
 import { useCallback } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useAssistants } from "@/hooks/use-assistants"
-import { useChatSessions, type ChatSession } from "@/hooks/use-chat-sessions"
+import { useChatSessions, type ChatSession, type ChatMessage } from "@/hooks/use-chat-sessions"
 import { ChatWorkspace } from "./_components/chat/chat-workspace"
 import { EmptyState } from "./_components/chat/empty-state"
 
 export default function DashboardPage() {
   const isMobile = useIsMobile()
-  
+
   const {
     selectedAssistant,
     getAssistantById,
@@ -21,6 +21,8 @@ export default function DashboardPage() {
     activeSessionId,
     setActiveSessionId,
     updateSession,
+    syncMessages,
+    createSession,
   } = useChatSessions()
 
   // Get the assistant for the active session
@@ -29,8 +31,21 @@ export default function DashboardPage() {
     : selectedAssistant
 
   const handleUpdateSession = useCallback((sessionId: string, updates: Partial<ChatSession>) => {
-    updateSession(sessionId, updates)
-  }, [updateSession])
+    // Sync messages to database if messages are being updated
+    if (updates.messages) {
+      syncMessages(sessionId, updates.messages as ChatMessage[])
+    }
+    // Update title separately if provided
+    if (updates.title) {
+      updateSession(sessionId, { title: updates.title })
+    }
+  }, [updateSession, syncMessages])
+
+  const handleNewChat = useCallback(() => {
+    if (selectedAssistant) {
+      createSession(selectedAssistant.id)
+    }
+  }, [selectedAssistant, createSession])
 
   // Show loading state while assistants are loading
   if (assistantsLoading) {
@@ -60,6 +75,7 @@ export default function DashboardPage() {
         assistant={activeSessionAssistant}
         onBack={isMobile ? () => setActiveSessionId(null) : undefined}
         onUpdateSession={handleUpdateSession}
+        onNewChat={handleNewChat}
       />
     </div>
   )
