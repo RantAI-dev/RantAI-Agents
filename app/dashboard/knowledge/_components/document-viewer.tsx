@@ -55,13 +55,13 @@ interface DocumentDetail {
   updatedAt: string
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  LIFE_INSURANCE: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  HEALTH_INSURANCE: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  HOME_INSURANCE: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  FAQ: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  POLICY: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-  GENERAL: "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200",
+const CATEGORY_OUTLINE_CLASSES: Record<string, string> = {
+  LIFE_INSURANCE: "border-blue-500 text-blue-700 dark:border-blue-400 dark:text-blue-300",
+  HEALTH_INSURANCE: "border-green-500 text-green-700 dark:border-green-400 dark:text-green-300",
+  HOME_INSURANCE: "border-orange-500 text-orange-700 dark:border-orange-400 dark:text-orange-300",
+  FAQ: "border-purple-500 text-purple-700 dark:border-purple-400 dark:text-purple-300",
+  POLICY: "border-red-500 text-red-700 dark:border-red-400 dark:text-red-300",
+  GENERAL: "border-gray-500 text-gray-700 dark:border-gray-400 dark:text-gray-300",
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -190,8 +190,8 @@ export function DocumentViewer({ documentId, open, onOpenChange }: DocumentViewe
                     {document.categories.map((cat) => (
                       <Badge
                         key={cat}
-                        variant="secondary"
-                        className={CATEGORY_COLORS[cat] || ""}
+                        variant="outline"
+                        className={`text-xs ${CATEGORY_OUTLINE_CLASSES[cat] || ""}`}
                       >
                         {CATEGORY_LABELS[cat] || cat}
                       </Badge>

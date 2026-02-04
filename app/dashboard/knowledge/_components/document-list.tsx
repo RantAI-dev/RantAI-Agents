@@ -1,7 +1,8 @@
 "use client"
 
 import { DocumentCard } from "./document-card"
-import { FileText } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { FileText, Plus, FilterX } from "lucide-react"
 
 interface DocumentGroup {
   id: string
@@ -36,16 +37,28 @@ interface DocumentListProps {
   onView: (id: string) => void
   onEdit: (id: string) => void
   categoryMap: Map<string, Category>
+  onAddDocument?: () => void
+  onClearFilters?: () => void
 }
 
-export function DocumentList({ documents, loading, onDelete, onView, onEdit, categoryMap }: DocumentListProps) {
+export function DocumentList({
+  documents,
+  loading,
+  onDelete,
+  onView,
+  onEdit,
+  categoryMap,
+  onAddDocument,
+  onClearFilters,
+}: DocumentListProps) {
   if (loading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {[...Array(6)].map((_, i) => (
           <div
             key={i}
-            className="h-40 bg-muted rounded-lg animate-pulse"
+            className="h-44 rounded-xl border bg-muted/40 animate-pulse"
+            aria-hidden
           />
         ))}
       </div>
@@ -54,20 +67,45 @@ export function DocumentList({ documents, loading, onDelete, onView, onEdit, cat
 
   if (documents.length === 0) {
     return (
-      <div className="text-center py-12">
-        <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-        <h3 className="text-lg font-medium mb-1">No documents found</h3>
-        <p className="text-sm text-muted-foreground">
-          Add documents to your knowledge base to enhance AI responses.
+      <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+        <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-muted/60 mb-4">
+          <FileText className="h-8 w-8 text-muted-foreground" aria-hidden />
+        </div>
+        <h3 className="text-lg font-semibold mb-1">No documents found</h3>
+        <p className="text-sm text-muted-foreground max-w-sm mb-6">
+          {onClearFilters
+            ? "Try clearing filters or add a document to get started."
+            : "Add documents to your knowledge base to enhance AI responses."}
         </p>
+        <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Empty state actions">
+          {onAddDocument && (
+            <Button onClick={onAddDocument} aria-label="Add document">
+              <Plus className="h-4 w-4 mr-2" />
+              Add document
+            </Button>
+          )}
+          {onClearFilters && (
+            <Button variant="outline" onClick={onClearFilters} aria-label="Clear filters">
+              <FilterX className="h-4 w-4 mr-2" />
+              Clear filters
+            </Button>
+          )}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
       {documents.map((doc) => (
-        <DocumentCard key={doc.id} document={doc} onDelete={onDelete} onView={onView} onEdit={onEdit} categoryMap={categoryMap} />
+        <DocumentCard
+          key={doc.id}
+          document={doc}
+          onDelete={onDelete}
+          onView={onView}
+          onEdit={onEdit}
+          categoryMap={categoryMap}
+        />
       ))}
     </div>
   )

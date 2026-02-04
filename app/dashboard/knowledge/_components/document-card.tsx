@@ -94,33 +94,36 @@ export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }
   return (
     <>
       <Card
-        className="group cursor-pointer hover:border-primary/50 transition-colors"
+        className="group cursor-pointer transition-all duration-200 hover:shadow-md hover:shadow-primary/5 hover:border-primary/50 hover:-translate-y-0.5 flex flex-col min-h-[180px]"
         onClick={() => onView(document.id)}
       >
         <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-          <div className="flex items-start gap-3">
-            <div className={`rounded-lg p-2 ${bgColor}`}>
-              <FileIcon className={`h-4 w-4 ${iconColor}`} />
+          <div className="flex items-start gap-3 min-w-0 flex-1">
+            <div className={`rounded-lg p-2.5 shrink-0 ${bgColor}`} aria-hidden>
+              <FileIcon className={`h-5 w-5 ${iconColor}`} />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5 min-w-0">
               <CardTitle className="text-sm font-medium line-clamp-2">
                 {document.title}
               </CardTitle>
-              <div className="flex gap-1 flex-wrap">
+              <div className="flex gap-1.5 flex-wrap">
                 {document.categories.slice(0, 2).map((cat) => {
                   const { label, color } = getCategoryDisplay(cat, categoryMap)
                   return (
                     <Badge
                       key={cat}
-                      variant="secondary"
-                      style={{ backgroundColor: `${color}20`, color: color, borderColor: color }}
+                      variant="outline"
+                      className="text-xs font-medium shrink-0"
+                      style={{ borderColor: color, color }}
                     >
                       {label}
                     </Badge>
                   )
                 })}
                 {document.categories.length > 2 && (
-                  <Badge variant="outline">+{document.categories.length - 2}</Badge>
+                  <Badge variant="outline" className="text-xs shrink-0">
+                    +{document.categories.length - 2}
+                  </Badge>
                 )}
               </div>
             </div>
@@ -130,8 +133,9 @@ export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 opacity-0 group-hover:opacity-100"
+                className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
                 onClick={(e) => e.stopPropagation()}
+                aria-label="Document actions"
               >
                 <MoreVertical className="h-4 w-4" />
               </Button>

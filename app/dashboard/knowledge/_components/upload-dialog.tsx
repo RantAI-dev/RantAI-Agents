@@ -267,25 +267,44 @@ export function UploadDialog({
           <div className="space-y-2">
             <Label>Categories</Label>
             <div className="flex gap-2 flex-wrap">
-              {availableCategories.map((cat) => (
-                <Badge
-                  key={cat.name}
-                  variant={selectedCategories.includes(cat.name) ? "default" : "outline"}
-                  className="cursor-pointer"
-                  style={
-                    selectedCategories.includes(cat.name)
-                      ? { backgroundColor: cat.color, borderColor: cat.color }
-                      : { borderColor: cat.color, color: cat.color }
-                  }
-                  onClick={() => toggleCategory(cat.name)}
-                >
-                  {cat.label}
-                </Badge>
-              ))}
+              {availableCategories.map((cat) => {
+                const isSelected = selectedCategories.includes(cat.name)
+                return (
+                  <Badge
+                    key={cat.name}
+                    variant={isSelected ? "default" : "outline"}
+                    role="button"
+                    tabIndex={0}
+                    className="cursor-pointer"
+                    style={
+                      isSelected
+                        ? { backgroundColor: cat.color, borderColor: cat.color }
+                        : { borderColor: cat.color, color: cat.color }
+                    }
+                    onClick={() => toggleCategory(cat.name)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        toggleCategory(cat.name)
+                      }
+                    }}
+                  >
+                    {cat.label}
+                  </Badge>
+                )
+              })}
               <Badge
                 variant="outline"
-                className="cursor-pointer"
+                role="button"
+                tabIndex={0}
+                className="cursor-pointer border-dashed"
                 onClick={() => setCategoryDialogOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    setCategoryDialogOpen(true)
+                  }
+                }}
               >
                 <Plus className="h-3 w-3 mr-1" />
                 New
