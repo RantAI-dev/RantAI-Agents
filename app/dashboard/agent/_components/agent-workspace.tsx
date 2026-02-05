@@ -131,7 +131,7 @@ export function AgentWorkspace({
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b bg-background">
         {onBack && (
-          <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden">
+          <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden" aria-label="Back to queue">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         )}
@@ -187,7 +187,7 @@ export function AgentWorkspace({
               return (
                 <div className="max-w-3xl mx-auto px-4 py-3">
                   <div className="flex gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-chart-3/10 text-chart-3">
                       <User className="h-5 w-5" />
                     </div>
                     <div className="flex flex-col gap-1 items-start">
@@ -219,7 +219,7 @@ export function AgentWorkspace({
                       isAgent
                         ? "bg-primary text-primary-foreground"
                         : message.role === "USER"
-                        ? "bg-blue-100 text-blue-600"
+                        ? "bg-chart-3/10 text-chart-3"
                         : "bg-muted"
                     )}
                   >
@@ -255,7 +255,7 @@ export function AgentWorkspace({
                         onClick={() => handleCopy(message.id, message.content)}
                       >
                         {copiedId === message.id ? (
-                          <Check className="h-3.5 w-3.5 text-green-500" />
+                          <Check className="h-3.5 w-3.5 text-chart-2" />
                         ) : (
                           <Copy className="h-3.5 w-3.5" />
                         )}

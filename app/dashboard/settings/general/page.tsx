@@ -9,7 +9,7 @@ export default function GeneralSettingsPage() {
   const { theme, setTheme } = useTheme()
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold">General Settings</h2>
         <p className="text-sm text-muted-foreground">
@@ -19,12 +19,12 @@ export default function GeneralSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Appearance</CardTitle>
+          <CardTitle className="text-base">Appearance</CardTitle>
           <CardDescription>
             Customize how the dashboard looks.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="dark-mode">Dark Mode</Label>
@@ -43,12 +43,12 @@ export default function GeneralSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Notifications</CardTitle>
+          <CardTitle className="text-base">Notifications</CardTitle>
           <CardDescription>
             Configure notification preferences.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <Label htmlFor="sound">Sound Notifications</Label>

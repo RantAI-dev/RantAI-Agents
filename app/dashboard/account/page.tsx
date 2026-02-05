@@ -155,7 +155,7 @@ export default function AccountPage() {
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : saved ? (
-                <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                <CheckCircle className="h-4 w-4 mr-2 text-chart-2" />
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}

@@ -146,20 +146,21 @@ export function DocumentEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="flex max-h-[90vh] max-w-lg flex-col gap-4 overflow-hidden p-6">
         <DialogHeader>
-          <DialogTitle>Edit Document</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">Edit Document</DialogTitle>
           <DialogDescription>
             Update the document's title, categories, and knowledge base assignments.
           </DialogDescription>
         </DialogHeader>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          </div>
-        ) : document ? (
-          <div className="space-y-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : document ? (
+            <div className="space-y-4 py-4">
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="edit-title">Title</Label>
@@ -262,7 +263,7 @@ export function DocumentEditDialog({
                       >
                         <div
                           className="h-4 w-4 rounded flex items-center justify-center shrink-0"
-                          style={{ backgroundColor: kb.color || "#3b82f6" }}
+                          style={{ backgroundColor: kb.color ?? "var(--chart-3)" }}
                         >
                           {isSelected ? (
                             <Check className="h-3 w-3 text-white" />
@@ -286,14 +287,15 @@ export function DocumentEditDialog({
             {error && (
               <p className="text-sm text-destructive">{error}</p>
             )}
-          </div>
-        ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            {error || "No document selected"}
-          </div>
-        )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              {error || "No document selected"}
+            </div>
+          )}
+        </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex justify-end gap-2">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}

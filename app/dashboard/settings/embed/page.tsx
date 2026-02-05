@@ -77,8 +77,8 @@ export default function EmbedSettingsPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <Skeleton className="h-8 w-48" />
-            <Skeleton className="h-4 w-64 mt-2" />
+            <Skeleton className="h-7 w-48" />
+            <Skeleton className="h-4 w-64 mt-1" />
           </div>
           <Skeleton className="h-10 w-32" />
         </div>
@@ -95,8 +95,8 @@ export default function EmbedSettingsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Embed Widget</h1>
-          <p className="text-muted-foreground mt-1">
+          <h2 className="text-xl font-semibold">Embed Widget</h2>
+          <p className="text-sm text-muted-foreground">
             Create API keys to embed the chat widget on your websites
           </p>
         </div>
@@ -125,12 +125,12 @@ export default function EmbedSettingsPage() {
         <div className="space-y-4">
           {keys.map((key) => (
             <Card key={key.id} className={!key.enabled ? "opacity-60" : ""}>
-              <CardHeader className="pb-3">
+              <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
                     <div className="text-2xl">{key.assistant?.emoji || "🤖"}</div>
                     <div>
-                      <CardTitle className="flex items-center gap-2">
+                      <CardTitle className="text-base flex items-center gap-2">
                         {key.name}
                         {!key.enabled && (
                           <Badge variant="secondary">Disabled</Badge>
@@ -205,7 +205,7 @@ export default function EmbedSettingsPage() {
                       onClick={() => handleCopyKey(key.key, key.id)}
                     >
                       {copiedKey === key.id ? (
-                        <Check className="h-4 w-4 text-green-500" />
+                        <Check className="h-4 w-4 text-chart-2" />
                       ) : (
                         <Copy className="h-4 w-4" />
                       )}

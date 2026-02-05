@@ -99,9 +99,9 @@ export function CategoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="gap-4 p-6">
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className="text-lg font-semibold">
             {editingCategory ? "Edit Category" : "Create Category"}
           </DialogTitle>
           <DialogDescription>
@@ -151,7 +151,7 @@ export function CategoryDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

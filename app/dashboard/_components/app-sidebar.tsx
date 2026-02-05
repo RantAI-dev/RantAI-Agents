@@ -37,6 +37,7 @@ import { AssistantEditor } from "@/app/dashboard/_components/chat/assistant-edit
 import { formatDistanceToNow } from "date-fns"
 import type { Assistant, AssistantInput } from "@/lib/types/assistant"
 import { OrganizationSwitcher } from "./organization-switcher"
+import { SETTINGS_NAV_ITEMS } from "../settings/settings-nav-items"
 
 interface KnowledgeBase {
   id: string
@@ -135,7 +136,7 @@ function AssistantSelectorHeader({
                 </h3>
                 {defaultAssistant?.id === selectedAssistant.id && (
                   <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 gap-0.5 shrink-0">
-                    <Star className="h-2 w-2 fill-amber-500 text-amber-500" />
+                    <Star className="h-2 w-2 fill-chart-1 text-chart-1" />
                   </Badge>
                 )}
               </div>
@@ -186,6 +187,7 @@ function AssistantSelectorHeader({
                         onEditAssistant(assistant)
                         setOpen(false)
                       }}
+                      aria-label={`Edit ${assistant.name}`}
                     >
                       <Pencil className="h-3 w-3" />
                     </Button>
@@ -294,7 +296,7 @@ function ChatSectionContent({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-sidebar-foreground/60 hover:text-red-400 hover:bg-sidebar-hover"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-sidebar-foreground/60 hover:text-destructive hover:bg-sidebar-hover"
                   onClick={(e) => {
                     e.stopPropagation()
                     deleteSession(session.id)
@@ -430,7 +432,7 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
       <div className="p-3 border-b border-sidebar-border space-y-3">
         <Link href="/dashboard" className="flex items-center gap-2">
           <img
-            src="/logo/logo-rantai.png"
+            src="/logo/logo-rantai-border.png"
             alt="RantAI Agents"
             className="h-8 w-8 rounded-lg"
           />
@@ -490,7 +492,7 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
           <div className="space-y-1">
             <div className="px-3 py-2 rounded-lg bg-sidebar-hover">
               <div className="flex items-center gap-2 text-sm text-sidebar-foreground">
-                <div className="h-2 w-2 rounded-full bg-green-400" />
+                <div className="h-2 w-2 rounded-full bg-chart-2" />
                 <span>Queue Status</span>
               </div>
               <p className="text-xs text-sidebar-muted mt-1">Ready for customers</p>
@@ -548,11 +550,11 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
                         ? "h-8 opacity-100"
                         : "h-2 opacity-0 group-hover:h-5 group-hover:opacity-100"
                     )}
-                    style={{ backgroundColor: kb.color || "#3b82f6" }}
+                    style={{ backgroundColor: kb.color ?? "var(--chart-3)" }}
                   />
                   <div
                     className="h-4 w-4 rounded flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: kb.color || "#3b82f6" }}
+                    style={{ backgroundColor: kb.color ?? "var(--chart-3)" }}
                   >
                     <Folder className="h-2.5 w-2.5 text-white" />
                   </div>
@@ -606,7 +608,7 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
                     <div className="flex items-center gap-1.5">
                       <span className="font-medium truncate">{assistant.name}</span>
                       {isDefault && (
-                        <Star className="h-3 w-3 text-amber-500 fill-amber-500 shrink-0" />
+                        <Star className="h-3 w-3 text-chart-1 fill-chart-1 shrink-0" />
                       )}
                       {assistant.useKnowledgeBase && (
                         <Database className="h-3 w-3 text-sidebar-muted shrink-0" />
@@ -623,6 +625,7 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
                         e.stopPropagation()
                         handleEditAssistant(assistant)
                       }}
+                      aria-label={`Edit ${assistant.name}`}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -652,14 +655,14 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
         )}
 
         {currentSection === sections.settings && (
-          <div className="space-y-1">
-            {["General", "Features", "Channels", "About"].map((item) => {
-              const href = `/dashboard/settings/${item.toLowerCase()}`
-              const isActive = pathname === href
+          <div className="space-y-1 overflow-y-auto">
+            {SETTINGS_NAV_ITEMS.map((item) => {
+              const isActive = pathname === item.href
+              const Icon = item.icon
               return (
                 <Link
-                  key={item}
-                  href={href}
+                  key={item.href}
+                  href={item.href}
                   className={cn(
                     "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
                     isActive
@@ -667,7 +670,8 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
                       : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
                   )}
                 >
-                  <span className="flex-1">{item}</span>
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1 truncate">{item.title}</span>
                   {isActive && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
                 </Link>
               )

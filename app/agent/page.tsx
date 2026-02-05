@@ -225,7 +225,7 @@ export default function AgentDashboard() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <Image
-                src="/logo/logo-rantai.png"
+                src="/logo/logo-rantai-border.png"
                 alt="RantAI Agents"
                 width={100}
                 height={100}

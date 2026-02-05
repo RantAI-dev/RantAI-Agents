@@ -39,8 +39,8 @@ export const CodeBlock = memo<CodeBlockProps>(({ language, children }) => {
         >
           {copied ? (
             <>
-              <Check className="h-3 w-3 mr-1 text-green-500" />
-              <span className="text-green-500">Copied!</span>
+              <Check className="h-3 w-3 mr-1 text-chart-2" />
+              <span className="text-chart-2">Copied!</span>
             </>
           ) : (
             <>

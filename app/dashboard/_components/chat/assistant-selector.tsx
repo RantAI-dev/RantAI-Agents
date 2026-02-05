@@ -86,7 +86,7 @@ export function AssistantSelector({
                   <p className="text-sm font-medium truncate">{assistant.name}</p>
                   {isDefault(assistant.id) && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
-                      <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+                      <Star className="h-2.5 w-2.5 fill-chart-1 text-chart-1" />
                       Default
                     </Badge>
                   )}

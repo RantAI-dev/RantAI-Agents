@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs';
 
-const INPUT_FILE = path.join(process.cwd(), 'public/logo/logo-rantai.png');
+const INPUT_FILE = path.join(process.cwd(), 'public/logo/logo-rantai-border.png');
 const OUTPUT_DIR = path.join(process.cwd(), 'public/logo');
 
 interface FaviconSize {
@@ -19,7 +19,7 @@ const sizes: FaviconSize[] = [
 ];
 
 async function generateFavicons() {
-  console.log('🎨 Generating favicons from logo-rantai.png...\n');
+  console.log('🎨 Generating favicons from logo-rantai-border.png...\n');
 
   // Check if input file exists
   if (!fs.existsSync(INPUT_FILE)) {

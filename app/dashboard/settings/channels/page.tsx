@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -213,15 +213,13 @@ export default function ChannelSettingsPage() {
                       <div className="flex items-center gap-2">
                         <CardTitle className="text-base">{meta.name}</CardTitle>
                         {channel.isPrimary && (
-                          <Badge className="bg-amber-500 text-white">
+                          <Badge className="bg-chart-1 text-white">
                             <Zap className="h-3 w-3 mr-1" />
                             Primary
                           </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {meta.description}
-                      </p>
+                      <CardDescription>{meta.description}</CardDescription>
                     </div>
                   </div>
 
@@ -259,7 +257,7 @@ export default function ChannelSettingsPage() {
                       {isSaving ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       ) : isSaved ? (
-                        <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                        <CheckCircle className="h-4 w-4 mr-2 text-chart-2" />
                       ) : (
                         <Save className="h-4 w-4 mr-2" />
                       )}
@@ -301,7 +299,7 @@ export default function ChannelSettingsPage() {
       </div>
 
       <Card className="bg-muted/50 border-dashed">
-        <CardContent className="pt-6">
+        <CardContent>
           <h3 className="font-semibold mb-2">How Channel Routing Works</h3>
           <ul className="text-sm text-muted-foreground space-y-1">
             <li>• When a customer requests an agent, the system uses the <strong>primary channel</strong></li>

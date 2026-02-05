@@ -86,6 +86,16 @@ function getMessageContent(message: {
   return ""
 }
 
+// Normalize role from useChat (may include "system") to ChatMessage.role
+function toChatMessageRole(
+  role: string
+): "user" | "assistant" {
+  return role === "system" ? "assistant" : (role as "user" | "assistant")
+}
+
+// Type for message that may have extended fields (replyTo, editHistory) from our layer
+type MessageWithExtras = ChatMessage & { replyTo?: string; editHistory?: EditHistoryEntry[] }
+
 // Message Actions component
 function MessageActions({
   onCopy,
@@ -119,7 +129,7 @@ function MessageActions({
         title="Copy message"
       >
         {copied ? (
-          <Check className="h-3.5 w-3.5 text-green-500" />
+          <Check className="h-3.5 w-3.5 text-chart-2" />
         ) : (
           <Copy className="h-3.5 w-3.5" />
         )}
@@ -487,15 +497,17 @@ export function ChatWorkspace({
 
         onUpdateSession(session.id, {
           messages: [
-            ...baseMessages.map((m) => ({
-              id: m.id,
-              role: m.role,
-              content: getMessageContent(m),
-              createdAt: new Date(),
-              // Preserve replyTo and editHistory if they exist
-              ...((m as ChatMessage).replyTo && { replyTo: (m as ChatMessage).replyTo }),
-              ...((m as ChatMessage).editHistory && { editHistory: (m as ChatMessage).editHistory }),
-            })),
+            ...baseMessages.map((m) => {
+              const ext = m as unknown as MessageWithExtras
+              return {
+                id: m.id,
+                role: toChatMessageRole(m.role),
+                content: getMessageContent(m),
+                createdAt: new Date(),
+                ...(ext.replyTo != null && { replyTo: ext.replyTo }),
+                ...(ext.editHistory != null && { editHistory: ext.editHistory }),
+              }
+            }),
             { ...userMessage, createdAt: new Date() },
           ],
           title,
@@ -532,7 +544,7 @@ export function ChatWorkspace({
           const updated = [...prev]
           const lastIdx = updated.length - 1
           if (updated[lastIdx]?.role === "assistant" && updated[lastIdx]?.id.startsWith("pending-")) {
-            updated[lastIdx] = { id: assistantMsgId, role: "assistant", content: "" } as typeof updated[number]
+            updated[lastIdx] = { id: assistantMsgId, role: "assistant", content: "" } as unknown as typeof updated[number]
           }
           return updated
         })
@@ -595,15 +607,17 @@ export function ChatWorkspace({
         if (session && onUpdateSession && finalContent) {
           onUpdateSession(session.id, {
             messages: [
-              ...baseMessages.map((m) => ({
-                id: m.id,
-                role: m.role,
-                content: getMessageContent(m),
-                createdAt: new Date(),
-                // Preserve replyTo and editHistory if they exist
-                ...((m as ChatMessage).replyTo && { replyTo: (m as ChatMessage).replyTo }),
-                ...((m as ChatMessage).editHistory && { editHistory: (m as ChatMessage).editHistory }),
-              })),
+              ...baseMessages.map((m) => {
+                const ext = m as unknown as MessageWithExtras
+                return {
+                  id: m.id,
+                  role: toChatMessageRole(m.role),
+                  content: getMessageContent(m),
+                  createdAt: new Date(),
+                  ...(ext.replyTo != null && { replyTo: ext.replyTo }),
+                  ...(ext.editHistory != null && { editHistory: ext.editHistory }),
+                }
+              }),
               { ...userMessage, createdAt: new Date() },
               {
                 id: assistantMsgId,
@@ -666,7 +680,7 @@ export function ChatWorkspace({
     if (messageIndex === -1) return
 
     // Get the original message to preserve edit history
-    const originalMessage = chat.messages[messageIndex] as ChatMessage
+    const originalMessage = chat.messages[messageIndex] as unknown as ChatMessage
     const originalContent = getMessageContent(originalMessage)
     const existingHistory = originalMessage.editHistory || []
 
@@ -716,7 +730,7 @@ export function ChatWorkspace({
 
       const userMessage = chat.messages[userMessageIndex]
       const userContent = getMessageContent(userMessage)
-      const userReplyTo = (userMessage as ChatMessage).replyTo
+      const userReplyTo = (userMessage as unknown as ChatMessage).replyTo
 
       // Get messages before the user message (to resend with the same context)
       const truncatedMessages = chat.messages.slice(0, userMessageIndex)
@@ -928,7 +942,7 @@ export function ChatWorkspace({
               const isEditing = editingMessageId === message.id
 
               // Version handling for edited messages
-              const msgEditHistory = (message as ChatMessage).editHistory
+              const msgEditHistory = (message as unknown as ChatMessage).editHistory
               const hasEditHistory = msgEditHistory && msgEditHistory.length > 0
               const totalVersions = hasEditHistory ? msgEditHistory.length + 1 : 1
               const currentViewingVersion = viewingVersions[message.id] || totalVersions
@@ -989,9 +1003,10 @@ export function ChatWorkspace({
                         )}
                       >
                         {/* Reply indicator - show what message this is replying to */}
-                        {(message as ChatMessage).replyTo && (() => {
+                        {(message as unknown as ChatMessage).replyTo && (() => {
+                          const replyToId = (message as unknown as ChatMessage).replyTo
                           const parentMsg = allMessages.find(
-                            (m) => m.id === (message as ChatMessage).replyTo
+                            (m) => m.id === replyToId
                           )
                           if (!parentMsg) return null
                           const parentContent = getMessageContent(parentMsg)

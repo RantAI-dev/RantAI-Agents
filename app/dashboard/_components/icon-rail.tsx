@@ -114,7 +114,7 @@ export function IconRail() {
         <div className="flex items-center justify-center py-3">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="focus:outline-none">
+              <button className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md" aria-label="User menu">
                 <Avatar className="h-9 w-9 cursor-pointer hover:ring-2 hover:ring-sidebar-ring transition-all">
                   <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground text-sm font-medium">
                     {initials}

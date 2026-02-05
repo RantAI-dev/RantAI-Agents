@@ -181,15 +181,16 @@ export function UploadDialog({
         onOpenChange(open)
       }}
     >
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="flex max-h-[90vh] max-w-lg flex-col gap-4 overflow-hidden p-6">
         <DialogHeader>
-          <DialogTitle>Upload Document</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">Upload Document</DialogTitle>
           <DialogDescription>
             Upload a file to add to the knowledge base.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <form id="upload-document-form" onSubmit={handleSubmit} className="space-y-4">
           {/* File Upload Area */}
           <div
             className={cn(
@@ -350,7 +351,7 @@ export function UploadDialog({
                     >
                       <div
                         className="h-4 w-4 rounded flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: kb.color || "#3b82f6" }}
+                        style={{ backgroundColor: kb.color ?? "var(--chart-3)" }}
                       >
                         {isSelected ? (
                           <Check className="h-3 w-3 text-white" />
@@ -369,7 +370,7 @@ export function UploadDialog({
           {/* Enhanced Processing Toggle */}
           <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-500" />
+              <Sparkles className="h-4 w-4 text-chart-1" />
               <div>
                 <Label htmlFor="enhanced" className="text-sm font-medium cursor-pointer">
                   Enhanced Processing
@@ -388,24 +389,27 @@ export function UploadDialog({
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={loading || !selectedFile || selectedCategories.length === 0}
-            >
-              {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {loading ? "Uploading..." : "Upload"}
-            </Button>
-          </DialogFooter>
-        </form>
+          </form>
+        </div>
+
+        <DialogFooter className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            form="upload-document-form"
+            type="submit"
+            disabled={loading || !selectedFile || selectedCategories.length === 0}
+          >
+            {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {loading ? "Uploading..." : "Upload"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

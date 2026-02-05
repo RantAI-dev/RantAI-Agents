@@ -45,9 +45,9 @@ interface Document {
 function getFileTypeIcon(fileType?: string) {
   switch (fileType) {
     case "image":
-      return { Icon: Image, bgColor: "bg-green-100 dark:bg-green-900/30", iconColor: "text-green-600 dark:text-green-400" }
+      return { Icon: Image, bgColor: "bg-chart-2/10 dark:bg-chart-2/20", iconColor: "text-chart-2" }
     case "pdf":
-      return { Icon: FileType, bgColor: "bg-red-100 dark:bg-red-900/30", iconColor: "text-red-600 dark:text-red-400" }
+      return { Icon: FileType, bgColor: "bg-destructive/10 dark:bg-destructive/20", iconColor: "text-destructive" }
     default:
       return { Icon: FileText, bgColor: "bg-blue-100 dark:bg-blue-900/30", iconColor: "text-blue-600 dark:text-blue-400" }
   }
@@ -176,7 +176,7 @@ export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }
               <div key={group.id} className="flex items-center gap-1 text-xs text-muted-foreground">
                 <div
                   className="h-3 w-3 rounded flex items-center justify-center"
-                  style={{ backgroundColor: group.color || "#3b82f6" }}
+                  style={{ backgroundColor: group.color ?? "var(--chart-3)" }}
                 >
                   <Folder className="h-2 w-2 text-white" />
                 </div>

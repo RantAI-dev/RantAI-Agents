@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -101,17 +102,22 @@ export function EmbedKeyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="flex max-h-[90vh] max-w-lg flex-col gap-4 overflow-hidden p-6">
         <DialogHeader>
-          <DialogTitle>
+          <DialogTitle className="text-lg font-semibold">
             {editingKey ? "Edit API Key" : "Create API Key"}
           </DialogTitle>
+          <DialogDescription>
+            {editingKey
+              ? "Update the API key settings and widget configuration."
+              : "Create a new API key for embedding the chat widget on your website."}
+          </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Basic Info */}
-          <div className="space-y-4">
-            <div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <form id="embed-key-form" onSubmit={handleSubmit} className="space-y-4 py-4">
+            {/* Basic Info */}
+            <div className="space-y-2">
               <Label htmlFor="name">Name</Label>
               <Input
                 id="name"
@@ -120,12 +126,12 @@ export function EmbedKeyDialog({
                 placeholder="My Website Widget"
                 required
               />
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground">
                 A friendly name to identify this API key
               </p>
             </div>
 
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="assistant">Assistant</Label>
               <Select
                 value={assistantId}
@@ -144,184 +150,184 @@ export function EmbedKeyDialog({
                 </SelectContent>
               </Select>
               {editingKey && (
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-muted-foreground">
                   Assistant cannot be changed after creation
                 </p>
               )}
             </div>
-          </div>
 
-          {/* Configuration Tabs */}
-          <Tabs defaultValue="security" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="security">Security</TabsTrigger>
-              <TabsTrigger value="appearance">Appearance</TabsTrigger>
-              <TabsTrigger value="behavior">Behavior</TabsTrigger>
-            </TabsList>
+            {/* Configuration Tabs */}
+            <Tabs defaultValue="security" className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-2">
+                <TabsTrigger value="security">Security</TabsTrigger>
+                <TabsTrigger value="appearance">Appearance</TabsTrigger>
+                <TabsTrigger value="behavior">Behavior</TabsTrigger>
+              </TabsList>
 
-            {/* Security Tab */}
-            <TabsContent value="security" className="space-y-4 mt-4">
-              <div>
-                <Label htmlFor="domains">Allowed Domains</Label>
-                <Textarea
-                  id="domains"
-                  value={domains}
-                  onChange={(e) => setDomains(e.target.value)}
-                  placeholder="example.com&#10;*.staging.example.com&#10;localhost"
-                  rows={4}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  One domain per line. Use * for wildcard subdomains. Leave empty
-                  to allow all domains.
-                </p>
-              </div>
-            </TabsContent>
+              {/* Security Tab */}
+              <TabsContent value="security" className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="domains">Allowed Domains</Label>
+                  <Textarea
+                    id="domains"
+                    value={domains}
+                    onChange={(e) => setDomains(e.target.value)}
+                    placeholder="example.com&#10;*.staging.example.com&#10;localhost"
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    One domain per line. Use * for wildcard subdomains. Leave empty
+                    to allow all domains.
+                  </p>
+                </div>
+              </TabsContent>
 
-            {/* Appearance Tab */}
-            <TabsContent value="appearance" className="space-y-4 mt-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="primaryColor">Primary Color</Label>
-                  <div className="flex gap-2 mt-1">
-                    <Input
-                      type="color"
-                      id="primaryColor"
-                      value={config.theme.primaryColor}
-                      onChange={(e) => updateTheme("primaryColor", e.target.value)}
-                      className="w-12 h-10 p-1 cursor-pointer"
-                    />
-                    <Input
-                      value={config.theme.primaryColor}
-                      onChange={(e) => updateTheme("primaryColor", e.target.value)}
-                      className="flex-1"
-                    />
+              {/* Appearance Tab */}
+              <TabsContent value="appearance" className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="primaryColor">Primary Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        id="primaryColor"
+                        value={config.theme.primaryColor}
+                        onChange={(e) => updateTheme("primaryColor", e.target.value)}
+                        className="w-12 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={config.theme.primaryColor}
+                        onChange={(e) => updateTheme("primaryColor", e.target.value)}
+                        className="flex-1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="backgroundColor">Background Color</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="color"
+                        id="backgroundColor"
+                        value={config.theme.backgroundColor}
+                        onChange={(e) =>
+                          updateTheme("backgroundColor", e.target.value)
+                        }
+                        className="w-12 h-10 p-1 cursor-pointer"
+                      />
+                      <Input
+                        value={config.theme.backgroundColor}
+                        onChange={(e) =>
+                          updateTheme("backgroundColor", e.target.value)
+                        }
+                        className="flex-1"
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="backgroundColor">Background Color</Label>
-                  <div className="flex gap-2 mt-1">
-                    <Input
-                      type="color"
-                      id="backgroundColor"
-                      value={config.theme.backgroundColor}
-                      onChange={(e) =>
-                        updateTheme("backgroundColor", e.target.value)
-                      }
-                      className="w-12 h-10 p-1 cursor-pointer"
-                    />
-                    <Input
-                      value={config.theme.backgroundColor}
-                      onChange={(e) =>
-                        updateTheme("backgroundColor", e.target.value)
-                      }
-                      className="flex-1"
-                    />
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="position">Widget Position</Label>
+                  <Select
+                    value={config.position}
+                    onValueChange={(value) =>
+                      updateConfig({
+                        position: value as WidgetConfig["position"],
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                      <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                      <SelectItem value="top-right">Top Right</SelectItem>
+                      <SelectItem value="top-left">Top Left</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
 
-              <div>
-                <Label htmlFor="position">Widget Position</Label>
-                <Select
-                  value={config.position}
-                  onValueChange={(value) =>
-                    updateConfig({
-                      position: value as WidgetConfig["position"],
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bottom-right">Bottom Right</SelectItem>
-                    <SelectItem value="bottom-left">Bottom Left</SelectItem>
-                    <SelectItem value="top-right">Top Right</SelectItem>
-                    <SelectItem value="top-left">Top Left</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="customCssClass">Custom CSS Class</Label>
+                  <Input
+                    id="customCssClass"
+                    value={config.customCssClass || ""}
+                    onChange={(e) => updateConfig({ customCssClass: e.target.value })}
+                    placeholder="my-custom-widget"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Add a custom CSS class to the widget container
+                  </p>
+                </div>
 
-              <div>
-                <Label htmlFor="customCssClass">Custom CSS Class</Label>
-                <Input
-                  id="customCssClass"
-                  value={config.customCssClass || ""}
-                  onChange={(e) => updateConfig({ customCssClass: e.target.value })}
-                  placeholder="my-custom-widget"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Add a custom CSS class to the widget container
-                </p>
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="avatar">Avatar URL</Label>
+                  <Input
+                    id="avatar"
+                    value={config.avatar || ""}
+                    onChange={(e) => updateConfig({ avatar: e.target.value })}
+                    placeholder="https://example.com/avatar.png"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    URL to a custom avatar image (leave empty to use assistant emoji)
+                  </p>
+                </div>
+              </TabsContent>
 
-              <div>
-                <Label htmlFor="avatar">Avatar URL</Label>
-                <Input
-                  id="avatar"
-                  value={config.avatar || ""}
-                  onChange={(e) => updateConfig({ avatar: e.target.value })}
-                  placeholder="https://example.com/avatar.png"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  URL to a custom avatar image (leave empty to use assistant emoji)
-                </p>
-              </div>
-            </TabsContent>
+              {/* Behavior Tab */}
+              <TabsContent value="behavior" className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="headerTitle">Header Title</Label>
+                  <Input
+                    id="headerTitle"
+                    value={config.headerTitle || ""}
+                    onChange={(e) => updateConfig({ headerTitle: e.target.value })}
+                    placeholder="Chat with us"
+                  />
+                </div>
 
-            {/* Behavior Tab */}
-            <TabsContent value="behavior" className="space-y-4 mt-4">
-              <div>
-                <Label htmlFor="headerTitle">Header Title</Label>
-                <Input
-                  id="headerTitle"
-                  value={config.headerTitle || ""}
-                  onChange={(e) => updateConfig({ headerTitle: e.target.value })}
-                  placeholder="Chat with us"
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="welcomeMessage">Welcome Message</Label>
+                  <Textarea
+                    id="welcomeMessage"
+                    value={config.welcomeMessage}
+                    onChange={(e) => updateConfig({ welcomeMessage: e.target.value })}
+                    placeholder="Hi! How can I help you today?"
+                    rows={3}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The first message shown when the chat opens
+                  </p>
+                </div>
 
-              <div>
-                <Label htmlFor="welcomeMessage">Welcome Message</Label>
-                <Textarea
-                  id="welcomeMessage"
-                  value={config.welcomeMessage}
-                  onChange={(e) => updateConfig({ welcomeMessage: e.target.value })}
-                  placeholder="Hi! How can I help you today?"
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  The first message shown when the chat opens
-                </p>
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="placeholderText">Input Placeholder</Label>
+                  <Input
+                    id="placeholderText"
+                    value={config.placeholderText}
+                    onChange={(e) => updateConfig({ placeholderText: e.target.value })}
+                    placeholder="Type your message..."
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
+          </form>
+        </div>
 
-              <div>
-                <Label htmlFor="placeholderText">Input Placeholder</Label>
-                <Input
-                  id="placeholderText"
-                  value={config.placeholderText}
-                  onChange={(e) => updateConfig({ placeholderText: e.target.value })}
-                  placeholder="Type your message..."
-                />
-              </div>
-            </TabsContent>
-          </Tabs>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saving || !name || !assistantId}>
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {editingKey ? "Save Changes" : "Create Key"}
-            </Button>
-          </DialogFooter>
-        </form>
+        <DialogFooter className="flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+          >
+            Cancel
+          </Button>
+          <Button form="embed-key-form" type="submit" disabled={saving || !name || !assistantId}>
+            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {editingKey ? "Save Changes" : "Create Key"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

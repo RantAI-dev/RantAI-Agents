@@ -41,6 +41,7 @@ import { formatDistanceToNow } from "date-fns"
 import { Virtuoso } from "react-virtuoso"
 import type { Assistant, AssistantInput } from "@/lib/types/assistant"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { DashboardPageHeader } from "../_components/dashboard-page-header"
 
 function AssistantsPageContent() {
   const router = useRouter()
@@ -179,9 +180,7 @@ function AssistantsPageContent() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b pl-14 pr-4">
-          <h1 className="text-lg font-semibold">Assistants</h1>
-        </header>
+        <DashboardPageHeader title="Assistants" />
         <div className="flex-1 flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
@@ -261,11 +260,12 @@ function AssistantsPageContent() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-sidebar-foreground/60 hover:text-red-400 hover:bg-sidebar-hover"
+                    className="h-7 w-7 text-sidebar-foreground/60 hover:text-destructive hover:bg-sidebar-hover"
                     onClick={(e) => {
                       e.stopPropagation()
                       handleDeleteSession(session.id)
                     }}
+                    aria-label="Delete chat session"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -316,7 +316,7 @@ function AssistantsPageContent() {
                     <p className="text-sm font-medium truncate">{assistant.name}</p>
                     {isDefault && (
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
-                        <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
+                        <Star className="h-2.5 w-2.5 fill-chart-1 text-chart-1" />
                         Default
                       </Badge>
                     )}
@@ -340,6 +340,7 @@ function AssistantsPageContent() {
                           handleEdit(assistant)
                           setAssistantPopoverOpen(false)
                         }}
+                        aria-label={`Edit ${assistant.name}`}
                       >
                         <Pencil className="h-3 w-3" />
                       </Button>
@@ -353,7 +354,7 @@ function AssistantsPageContent() {
                         size="icon"
                         className={cn(
                           "h-6 w-6 opacity-0 group-hover:opacity-100",
-                          isDefault && "text-amber-500 opacity-100"
+                          isDefault && "text-chart-1 opacity-100"
                         )}
                         onClick={(e) => {
                           e.stopPropagation()
@@ -363,8 +364,9 @@ function AssistantsPageContent() {
                             handleSetDefault(assistant)
                           }
                         }}
+                        aria-label={isUserDefault(assistant) ? "Remove as default assistant" : "Set as default assistant"}
                       >
-                        <Star className={cn("h-3 w-3", isDefault && "fill-amber-500")} />
+                        <Star className={cn("h-3 w-3", isDefault && "fill-chart-1")} />
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -383,6 +385,7 @@ function AssistantsPageContent() {
                             setDeleteTarget(assistant)
                             setAssistantPopoverOpen(false)
                           }}
+                          aria-label={`Delete ${assistant.name}`}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -415,11 +418,7 @@ function AssistantsPageContent() {
   return (
     <TooltipProvider delayDuration={0}>
       <div className="flex flex-col h-full">
-        {/* Header */}
-        <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b pl-14 pr-4">
-          <h1 className="text-lg font-semibold">Assistants</h1>
-          <AssistantSelectorDropdown />
-        </header>
+        <DashboardPageHeader title="Assistants" actions={<AssistantSelectorDropdown />} />
 
         {/* Content - Split View like Chat Page */}
         <div className="flex-1 overflow-hidden">
@@ -517,9 +516,7 @@ function AssistantsPageContent() {
 function AssistantsPageFallback() {
   return (
     <div className="flex flex-col h-full">
-      <header className="flex h-14 shrink-0 items-center justify-between gap-2 border-b pl-14 pr-4">
-        <h1 className="text-lg font-semibold">Assistants</h1>
-      </header>
+      <DashboardPageHeader title="Assistants" />
       <div className="flex-1 flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>

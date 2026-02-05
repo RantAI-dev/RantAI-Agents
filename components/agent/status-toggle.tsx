@@ -22,7 +22,7 @@ export function StatusToggle({
         variant={isOnline ? "default" : "secondary"}
         className={cn(
           "gap-1.5",
-          isOnline && "bg-green-600 hover:bg-green-600"
+          isOnline && "bg-chart-2 hover:bg-chart-2"
         )}
       >
         {isConnected ? (
