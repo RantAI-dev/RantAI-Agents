@@ -4,6 +4,8 @@ import { smartRetrieve, formatContextForPrompt, RetrievalResult } from "@/lib/ra
 import { DEFAULT_ASSISTANTS } from "@/lib/assistants/defaults";
 import { auth } from "@/lib/auth";
 import { getCustomerContext, formatCustomerContextForPrompt } from "@/lib/customer-context";
+import { prisma } from "@/lib/prisma";
+import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models";
 
 // Delimiter for sending sources metadata after stream
 const SOURCES_DELIMITER = "\n\n---SOURCES---\n";
@@ -155,18 +157,53 @@ export async function POST(req: Request) {
     : (headerUseKnowledgeBase !== null ? headerUseKnowledgeBase === 'true' : undefined);
   const knowledgeBaseGroupIds: string[] | undefined = body.knowledgeBaseGroupIds;
 
-  // Look up assistant by ID from defaults
+  // Look up assistant by ID - first check defaults, then database
   const defaultAssistant = DEFAULT_ASSISTANTS.find(a => a.id === assistantId);
 
-  // Determine system prompt and knowledge base setting
-  // Priority: default assistant > custom prompt from request > fallback to HorizonLife
+  // Determine system prompt, model, and knowledge base setting
+  // Priority: database assistant > default assistant > custom prompt from request > fallback to HorizonLife
   let systemPrompt: string;
   let useKnowledgeBase: boolean;
+  let modelId: string = DEFAULT_MODEL_ID;
 
-  if (defaultAssistant) {
-    // Found in default assistants
+  if (assistantId && !defaultAssistant) {
+    // Try to fetch from database (user-created assistant)
+    try {
+      const dbAssistant = await prisma.assistant.findUnique({
+        where: { id: assistantId },
+        select: {
+          systemPrompt: true,
+          model: true,
+          useKnowledgeBase: true,
+          knowledgeBaseGroupIds: true,
+          name: true,
+        },
+      });
+
+      if (dbAssistant) {
+        systemPrompt = dbAssistant.systemPrompt;
+        useKnowledgeBase = dbAssistant.useKnowledgeBase;
+        modelId = dbAssistant.model || DEFAULT_MODEL_ID;
+        console.log("[Chat API] Using database assistant:", dbAssistant.name, "with model:", modelId);
+      } else if (customSystemPrompt) {
+        systemPrompt = customSystemPrompt;
+        useKnowledgeBase = useKnowledgeBaseParam ?? false;
+        console.log("[Chat API] Using custom system prompt");
+      } else {
+        systemPrompt = BASE_SYSTEM_PROMPT;
+        useKnowledgeBase = true;
+        console.log("[Chat API] Fallback to default HorizonLife prompt");
+      }
+    } catch (error) {
+      console.error("[Chat API] Error fetching assistant from database:", error);
+      systemPrompt = customSystemPrompt || BASE_SYSTEM_PROMPT;
+      useKnowledgeBase = useKnowledgeBaseParam ?? true;
+    }
+  } else if (defaultAssistant) {
+    // Found in default assistants (built-in)
     systemPrompt = defaultAssistant.systemPrompt;
     useKnowledgeBase = defaultAssistant.useKnowledgeBase;
+    // Default assistants use the default model unless we add model to defaults later
     console.log("[Chat API] Using default assistant:", defaultAssistant.name);
   } else if (customSystemPrompt) {
     // Custom assistant or explicit system prompt
@@ -178,6 +215,12 @@ export async function POST(req: Request) {
     systemPrompt = BASE_SYSTEM_PROMPT;
     useKnowledgeBase = true;
     console.log("[Chat API] Fallback to default HorizonLife prompt");
+  }
+
+  // Validate model ID
+  if (!isValidModel(modelId)) {
+    console.warn(`[Chat API] Invalid model ID "${modelId}", falling back to default`);
+    modelId = DEFAULT_MODEL_ID;
   }
 
   console.log("[Chat API] System prompt preview:", systemPrompt.substring(0, 60) + "...");
@@ -255,9 +298,10 @@ export async function POST(req: Request) {
     }
   }
 
+  console.log("[Chat API] Using model:", modelId);
+
   const result = streamText({
-    // Using Xiaomi MiMo-V2-Flash - fast, free, and great at explaining insurance products
-    model: openrouter("xiaomi/mimo-v2-flash"),
+    model: openrouter(modelId),
     system: systemPrompt,
     messages,
   });

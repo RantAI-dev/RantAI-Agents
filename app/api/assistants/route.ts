@@ -6,6 +6,7 @@ import {
   HORIZON_LIFE_SYSTEM_PROMPT,
   HORIZON_LIFE_KB_GROUP_ID,
 } from "@/lib/assistants/defaults"
+import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models"
 
 // Built-in assistants to seed if table is empty
 const BUILT_IN_ASSISTANTS = [
@@ -127,12 +128,21 @@ export async function POST(request: Request) {
 
     const body = await request.json()
 
-    const { name, description, emoji, systemPrompt, useKnowledgeBase, knowledgeBaseGroupIds } =
+    const { name, description, emoji, systemPrompt, model, useKnowledgeBase, knowledgeBaseGroupIds } =
       body
 
     if (!name || !systemPrompt) {
       return NextResponse.json(
         { error: "Name and system prompt are required" },
+        { status: 400 }
+      )
+    }
+
+    // Validate model if provided
+    const selectedModel = model || DEFAULT_MODEL_ID
+    if (!isValidModel(selectedModel)) {
+      return NextResponse.json(
+        { error: "Invalid model selected" },
         { status: 400 }
       )
     }
@@ -143,6 +153,7 @@ export async function POST(request: Request) {
         description: description || null,
         emoji: emoji || "🤖",
         systemPrompt,
+        model: selectedModel,
         useKnowledgeBase: useKnowledgeBase || false,
         knowledgeBaseGroupIds: knowledgeBaseGroupIds || [],
         isSystemDefault: false,

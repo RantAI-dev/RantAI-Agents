@@ -209,6 +209,7 @@ model Assistant {
   description           String?
   emoji                 String        @default("🤖")
   systemPrompt          String        @db.Text
+  model                 String        @default("xiaomi/mimo-v2-flash") // LLM model ID from OpenRouter
   useKnowledgeBase      Boolean       @default(false)
   knowledgeBaseGroupIds String[]      // Array of KnowledgeBaseGroup IDs
   isSystemDefault       Boolean       @default(false) // Global default assistant

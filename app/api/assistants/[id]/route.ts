@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext, canEdit, canManage } from "@/lib/organization"
+import { isValidModel } from "@/lib/models"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -103,9 +104,18 @@ export async function PUT(request: Request, { params }: RouteParams) {
       description,
       emoji,
       systemPrompt,
+      model,
       useKnowledgeBase,
       knowledgeBaseGroupIds,
     } = body
+
+    // Validate model if provided
+    if (model !== undefined && !isValidModel(model)) {
+      return NextResponse.json(
+        { error: "Invalid model selected" },
+        { status: 400 }
+      )
+    }
 
     const assistant = await prisma.assistant.update({
       where: { id },
@@ -114,6 +124,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
         ...(description !== undefined && { description }),
         ...(emoji !== undefined && { emoji }),
         ...(systemPrompt !== undefined && { systemPrompt }),
+        ...(model !== undefined && { model }),
         ...(useKnowledgeBase !== undefined && { useKnowledgeBase }),
         ...(knowledgeBaseGroupIds !== undefined && { knowledgeBaseGroupIds }),
         updatedBy: session.user.id,
