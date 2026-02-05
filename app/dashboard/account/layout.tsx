@@ -15,6 +15,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
 import { useProfileStore } from "@/hooks/use-profile"
+import { DashboardPageHeader } from "../_components/dashboard-page-header"
 
 const navItems = [
   {
@@ -119,7 +120,7 @@ export default function AccountLayout({
         <div className="text-xs text-sidebar-muted space-y-1">
           <div className="flex justify-between">
             <span>Session</span>
-            <span className="text-green-400">Active</span>
+            <span className="text-chart-2">Active</span>
           </div>
           <div className="flex justify-between">
             <span>User ID</span>
@@ -132,10 +133,7 @@ export default function AccountLayout({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b pl-14 pr-4 bg-background">
-        <h1 className="text-lg font-semibold">Account</h1>
-      </header>
+      <DashboardPageHeader title="Account" />
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
@@ -168,11 +166,11 @@ export default function AccountLayout({
         ) : (
           // Desktop: Resizable panels
           <ResizablePanelGroup direction="horizontal" className="h-full">
-            <ResizablePanel defaultSize={22} minSize={18} maxSize={28}>
+            <ResizablePanel defaultSize={25} minSize={18} maxSize={35}>
               <ProfileSidebar />
             </ResizablePanel>
             <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={78}>
+            <ResizablePanel defaultSize={75}>
               <div className="h-full overflow-auto">
                 <div className="max-w-2xl mx-auto p-6">{children}</div>
               </div>

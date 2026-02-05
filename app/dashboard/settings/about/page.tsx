@@ -1,6 +1,6 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -69,10 +69,11 @@ export default function AboutPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
             <Shield className="h-5 w-5" />
             RantAI Agents Platform
           </CardTitle>
+          <CardDescription>AI-powered agent platform for customer support</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
@@ -89,7 +90,8 @@ export default function AboutPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Technology Stack</CardTitle>
+          <CardTitle className="text-base">Technology Stack</CardTitle>
+          <CardDescription>Core technologies powering the platform</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 md:grid-cols-2">
@@ -123,12 +125,13 @@ export default function AboutPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Features</CardTitle>
+          <CardTitle className="text-base">Features</CardTitle>
+          <CardDescription>Key capabilities of the platform</CardDescription>
         </CardHeader>
         <CardContent>
           <ul className="space-y-3 text-sm">
             <li className="flex items-start gap-2">
-              <MessageSquare className="h-4 w-4 mt-0.5 text-blue-500" />
+              <MessageSquare className="h-4 w-4 mt-0.5 text-chart-3" />
               <div>
                 <span className="font-medium">AI Chat</span>
                 <p className="text-muted-foreground">
@@ -137,7 +140,7 @@ export default function AboutPage() {
               </div>
             </li>
             <li className="flex items-start gap-2">
-              <Shield className="h-4 w-4 mt-0.5 text-green-500" />
+              <Shield className="h-4 w-4 mt-0.5 text-chart-2" />
               <div>
                 <span className="font-medium">Agent Support</span>
                 <p className="text-muted-foreground">
@@ -146,7 +149,7 @@ export default function AboutPage() {
               </div>
             </li>
             <li className="flex items-start gap-2">
-              <Brain className="h-4 w-4 mt-0.5 text-purple-500" />
+              <Brain className="h-4 w-4 mt-0.5 text-chart-4" />
               <div>
                 <span className="font-medium">Knowledge Base</span>
                 <p className="text-muted-foreground">
@@ -155,7 +158,7 @@ export default function AboutPage() {
               </div>
             </li>
             <li className="flex items-start gap-2">
-              <Database className="h-4 w-4 mt-0.5 text-orange-500" />
+              <Database className="h-4 w-4 mt-0.5 text-chart-1" />
               <div>
                 <span className="font-medium">Multi-Channel</span>
                 <p className="text-muted-foreground">

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -105,8 +105,8 @@ export default function FeaturesSettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Feature Configuration</h1>
-        <p className="text-muted-foreground mt-1">
+        <h2 className="text-xl font-semibold">Feature Configuration</h2>
+        <p className="text-sm text-muted-foreground">
           Enable or disable application capabilities. Disabled features will be
           hidden from the navigation.
         </p>
@@ -133,14 +133,12 @@ export default function FeaturesSettingsPage() {
               <CardHeader>
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="p-2 rounded-lg bg-purple-500/10 shrink-0">
-                      <Icon className="h-5 w-5 text-purple-500" />
+                    <div className="p-2 rounded-lg bg-muted shrink-0">
+                      <Icon className="h-5 w-5 text-muted-foreground" />
                     </div>
                     <div className="min-w-0">
                       <CardTitle className="text-base">{meta.name}</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        {meta.description}
-                      </p>
+                      <CardDescription>{meta.description}</CardDescription>
                     </div>
                   </div>
 
@@ -169,7 +167,7 @@ export default function FeaturesSettingsPage() {
                       {isSaving ? (
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
                       ) : isSaved ? (
-                        <CheckCircle className="h-4 w-4 mr-2 text-green-500" />
+                        <CheckCircle className="h-4 w-4 mr-2 text-chart-2" />
                       ) : (
                         <Save className="h-4 w-4 mr-2" />
                       )}
@@ -183,8 +181,8 @@ export default function FeaturesSettingsPage() {
         })}
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="bg-muted/50 border-dashed">
+        <CardContent>
           <p className="text-sm text-muted-foreground">
             <strong>Note:</strong> Changes to feature settings may require you
             to refresh your browser to see the updated navigation.

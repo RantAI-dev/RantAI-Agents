@@ -41,8 +41,8 @@ export function EmptyState({ isOnline, queueCount }: EmptyStateProps) {
 
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
-      <div className="rounded-full bg-green-100 p-4 mb-4">
-        <Headphones className="h-8 w-8 text-green-600" />
+      <div className="rounded-full bg-chart-2/10 p-4 mb-4">
+        <Headphones className="h-8 w-8 text-chart-2" />
       </div>
       <h2 className="text-xl font-semibold mb-2">Ready to Help</h2>
       <p className="text-muted-foreground max-w-md">

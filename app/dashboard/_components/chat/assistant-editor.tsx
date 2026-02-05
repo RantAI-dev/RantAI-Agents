@@ -134,9 +134,9 @@ export function AssistantEditor({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-4 overflow-hidden p-6 sm:max-w-[500px]">
+        <DialogHeader className="shrink-0">
+          <DialogTitle className="text-lg font-semibold">
             {isEditing ? "Edit Assistant" : "Create New Assistant"}
           </DialogTitle>
           <DialogDescription>
@@ -146,7 +146,7 @@ export function AssistantEditor({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto py-4">
           {/* Emoji Picker */}
           <div className="space-y-2">
             <Label>Icon</Label>
@@ -258,7 +258,7 @@ export function AssistantEditor({
                         >
                           <div
                             className="h-4 w-4 rounded flex items-center justify-center shrink-0"
-                            style={{ backgroundColor: group.color || "#3b82f6" }}
+                            style={{ backgroundColor: group.color ?? "var(--chart-3)" }}
                           >
                             {isSelected ? (
                               <Check className="h-3 w-3 text-white" />
@@ -276,7 +276,7 @@ export function AssistantEditor({
                   )}
                 </div>
                 {useKnowledgeBase && selectedGroupIds.length === 0 && (
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-chart-1">
                     No groups selected - will use all documents
                   </p>
                 )}
@@ -297,7 +297,7 @@ export function AssistantEditor({
           </div>
         </div>
 
-        <DialogFooter className="flex-row justify-between sm:justify-between">
+        <DialogFooter className="shrink-0 flex flex-row flex-wrap justify-between gap-2">
           {canDelete ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>

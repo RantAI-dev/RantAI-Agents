@@ -42,7 +42,7 @@ export function QueuePanel({
           <div className="flex items-center gap-2">
             <div
               className={`h-2.5 w-2.5 rounded-full ${
-                isOnline ? "bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]" : "bg-sidebar-muted"
+                isOnline ? "bg-chart-2 shadow-[0_0_8px_var(--chart-2)]" : "bg-sidebar-muted"
               }`}
             />
             <Label htmlFor="online-toggle" className="text-sm font-medium text-sidebar-foreground">
@@ -54,7 +54,7 @@ export function QueuePanel({
             checked={isOnline}
             onCheckedChange={handleToggle}
             disabled={!isConnected}
-            className="data-[state=checked]:bg-green-500"
+            className="data-[state=checked]:bg-chart-2"
           />
         </div>
         {!isConnected && (

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useState, Suspense, useEffect } from "react"
+import { usePathname } from "next/navigation"
 import { SessionProvider } from "next-auth/react"
 import { PanelLeft, PanelLeftClose } from "lucide-react"
 import { IconRail } from "./_components/icon-rail"
@@ -10,12 +11,34 @@ import { FeaturesProvider } from "@/components/providers/features-provider"
 import { ChatSessionsProvider } from "@/hooks/use-chat-sessions"
 import { OrganizationProvider } from "@/hooks/use-organization"
 
+const DASHBOARD_TITLES: Record<string, string> = {
+  "/dashboard": "Chat",
+  "/dashboard/assistants": "Assistants",
+  "/dashboard/agent": "Agent",
+  "/dashboard/knowledge": "Knowledge",
+  "/dashboard/statistics": "Statistics",
+  "/dashboard/settings": "Settings",
+  "/dashboard/account": "Account",
+}
+
+function getPageTitle(pathname: string): string {
+  if (DASHBOARD_TITLES[pathname]) return DASHBOARD_TITLES[pathname]
+  if (pathname.startsWith("/dashboard/settings/")) return "Settings"
+  return "Dashboard"
+}
+
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const pathname = usePathname()
+
+  useEffect(() => {
+    const title = getPageTitle(pathname ?? "")
+    document.title = title ? `${title} | RantAI Agents` : "RantAI Agents"
+  }, [pathname])
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
 
@@ -41,6 +64,7 @@ export default function DashboardLayout({
               size="icon"
               onClick={toggleSidebar}
               className="absolute top-4 left-4 z-10 h-8 w-8 text-foreground/60 hover:text-foreground hover:bg-accent"
+              aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
             >
               {sidebarOpen ? (
                 <PanelLeftClose className="h-4 w-4" />

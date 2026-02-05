@@ -144,12 +144,11 @@ export default function MemberManagementPage() {
   }
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="container max-w-3xl py-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Team Members</h1>
-            <p className="text-muted-foreground">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold">Team Members</h2>
+          <p className="text-sm text-muted-foreground">
               Manage who has access to your organization.
             </p>
           </div>
@@ -243,7 +242,7 @@ export default function MemberManagementPage() {
         {/* Members List */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
               <Users className="h-5 w-5" />
               Members
               <Badge variant="secondary" className="ml-2">
@@ -307,7 +306,7 @@ export default function MemberManagementPage() {
                         {canManage && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Member options">
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>
@@ -351,7 +350,7 @@ export default function MemberManagementPage() {
         {/* Role Permissions */}
         <Card>
           <CardHeader>
-            <CardTitle>Role Permissions</CardTitle>
+            <CardTitle className="text-base">Role Permissions</CardTitle>
             <CardDescription>
               What each role can do in your organization
             </CardDescription>
@@ -359,7 +358,7 @@ export default function MemberManagementPage() {
           <CardContent>
             <div className="grid gap-4">
               <div className="flex items-start gap-3">
-                <Crown className="h-5 w-5 text-amber-500 mt-0.5" />
+                <Crown className="h-5 w-5 text-chart-1 mt-0.5" />
                 <div>
                   <div className="font-medium">Owner</div>
                   <div className="text-sm text-muted-foreground">
@@ -368,7 +367,7 @@ export default function MemberManagementPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <Shield className="h-5 w-5 text-blue-500 mt-0.5" />
+                <Shield className="h-5 w-5 text-chart-4 mt-0.5" />
                 <div>
                   <div className="font-medium">Admin</div>
                   <div className="text-sm text-muted-foreground">
@@ -377,7 +376,7 @@ export default function MemberManagementPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <User className="h-5 w-5 text-green-500 mt-0.5" />
+                <User className="h-5 w-5 text-chart-2 mt-0.5" />
                 <div>
                   <div className="font-medium">Member</div>
                   <div className="text-sm text-muted-foreground">
@@ -386,7 +385,7 @@ export default function MemberManagementPage() {
                 </div>
               </div>
               <div className="flex items-start gap-3">
-                <Eye className="h-5 w-5 text-gray-500 mt-0.5" />
+                <Eye className="h-5 w-5 text-muted-foreground mt-0.5" />
                 <div>
                   <div className="font-medium">Viewer</div>
                   <div className="text-sm text-muted-foreground">
@@ -419,7 +418,6 @@ export default function MemberManagementPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </div>
     </div>
   )
 }

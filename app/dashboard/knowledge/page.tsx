@@ -385,7 +385,7 @@ function KnowledgePageContent() {
           onClearFilters={() => setSelectedCategories([])}
         />
 
-        <div className="flex-1 overflow-auto p-4" role="region" aria-label="Documents">
+        <div className="flex-1 overflow-auto p-6" role="region" aria-label="Documents">
           <DocumentList
             documents={sortedDocuments}
             loading={loading}

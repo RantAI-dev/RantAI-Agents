@@ -175,7 +175,7 @@ export function DocumentViewer({ documentId, open, onOpenChange }: DocumentViewe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+      <DialogContent className="max-w-4xl h-[80vh] flex flex-col gap-4 overflow-hidden p-6">
         {loading ? (
           <div className="flex-1 flex items-center justify-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />

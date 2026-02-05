@@ -110,9 +110,9 @@ export function OrganizationSwitcher({ className }: OrganizationSwitcherProps) {
         </Button>
 
         <Dialog open={showNewOrgDialog} onOpenChange={setShowNewOrgDialog}>
-          <DialogContent>
+          <DialogContent className="gap-4 p-6">
             <DialogHeader>
-              <DialogTitle>Create Organization</DialogTitle>
+              <DialogTitle className="text-lg font-semibold">Create Organization</DialogTitle>
               <DialogDescription>
                 Create a new organization to manage your assistants, knowledge base, and team members.
               </DialogDescription>
@@ -131,7 +131,7 @@ export function OrganizationSwitcher({ className }: OrganizationSwitcherProps) {
                 />
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowNewOrgDialog(false)}>
                 Cancel
               </Button>
@@ -236,9 +236,9 @@ export function OrganizationSwitcher({ className }: OrganizationSwitcherProps) {
       </Popover>
 
       <Dialog open={showNewOrgDialog} onOpenChange={setShowNewOrgDialog}>
-        <DialogContent>
+        <DialogContent className="gap-4 p-6">
           <DialogHeader>
-            <DialogTitle>Create Organization</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">Create Organization</DialogTitle>
             <DialogDescription>
               Create a new organization to manage your assistants, knowledge base, and team members.
             </DialogDescription>
@@ -257,7 +257,7 @@ export function OrganizationSwitcher({ className }: OrganizationSwitcherProps) {
               />
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setShowNewOrgDialog(false)}>
               Cancel
             </Button>

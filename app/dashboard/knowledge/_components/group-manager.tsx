@@ -181,11 +181,11 @@ export function GroupManager({
                     ? "h-10 opacity-100"
                     : "h-2 opacity-0 group-hover/item:h-6 group-hover/item:opacity-100"
                 )}
-                style={{ backgroundColor: group.color || "#3b82f6" }}
+                style={{ backgroundColor: group.color ?? "var(--chart-3)" }}
               />
               <div
                 className="h-5 w-5 shrink-0 rounded flex items-center justify-center"
-                style={{ backgroundColor: group.color || "#3b82f6" }}
+                style={{ backgroundColor: group.color ?? "var(--chart-3)" }}
               >
                 <Folder className="h-3.5 w-3.5 text-white" />
               </div>
@@ -198,7 +198,7 @@ export function GroupManager({
             <div className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 transition-opacity">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-7 w-7">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Group options">
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>

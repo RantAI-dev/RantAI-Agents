@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/resizable"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useAgentSocket } from "@/components/agent/hooks/use-agent-socket"
+import { DashboardPageHeader } from "../_components/dashboard-page-header"
 import type { QueueConversation } from "@/types/socket"
 import { Badge } from "@/components/ui/badge"
 
@@ -147,20 +148,19 @@ export default function AgentPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b pl-14 pr-4">
-        <h1 className="text-lg font-semibold">Agent</h1>
-        <div className="ml-auto flex items-center gap-2">
-          {queue.length > 0 && (
-            <Badge variant="secondary">
-              {queue.length} waiting
+      <DashboardPageHeader
+        title="Agent"
+        actions={
+          <>
+            {queue.length > 0 && (
+              <Badge variant="secondary">{queue.length} waiting</Badge>
+            )}
+            <Badge variant={isOnline ? "default" : "outline"}>
+              {isOnline ? "Online" : "Offline"}
             </Badge>
-          )}
-          <Badge variant={isOnline ? "default" : "outline"}>
-            {isOnline ? "Online" : "Offline"}
-          </Badge>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {/* Content */}
       <div className="flex-1 overflow-hidden">
@@ -188,7 +188,7 @@ export default function AgentPage() {
         ) : (
           // Desktop: Resizable panels
           <ResizablePanelGroup direction="horizontal" className="h-full">
-            <ResizablePanel defaultSize={30} minSize={20} maxSize={40}>
+            <ResizablePanel defaultSize={25} minSize={18} maxSize={35}>
               <QueuePanel
                 queue={queue}
                 isOnline={isOnline}
@@ -199,7 +199,7 @@ export default function AgentPage() {
               />
             </ResizablePanel>
             <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={70}>
+            <ResizablePanel defaultSize={75}>
               {activeConversationId ? (
                 <AgentWorkspace
                   conversation={activeConversation}

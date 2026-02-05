@@ -34,8 +34,8 @@ export const FilePreview = memo<FilePreviewProps>(({ file, onRemove }) => {
   }
 
   const getFileIcon = () => {
-    if (isImage) return <ImageIcon className="h-4 w-4 text-blue-500" />
-    if (isPdf) return <FileText className="h-4 w-4 text-red-500" />
+    if (isImage) return <ImageIcon className="h-4 w-4 text-chart-3" />
+    if (isPdf) return <FileText className="h-4 w-4 text-destructive" />
     return <File className="h-4 w-4 text-muted-foreground" />
   }
 

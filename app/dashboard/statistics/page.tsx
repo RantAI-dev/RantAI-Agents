@@ -12,6 +12,7 @@ import {
   ArrowRight,
   Zap,
 } from "lucide-react"
+import { DashboardPageHeader } from "../_components/dashboard-page-header"
 
 interface Stats {
   totalConversations: number
@@ -49,10 +50,7 @@ export default function StatisticsPage() {
 
   return (
     <>
-      {/* Header */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b pl-14 pr-4">
-        <h1 className="text-lg font-semibold">Statistics</h1>
-      </header>
+      <DashboardPageHeader title="Statistics" />
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
@@ -68,7 +66,7 @@ export default function StatisticsPage() {
         ) : (
           <div className="space-y-8">
             <div>
-              <h2 className="text-2xl font-bold">Overview</h2>
+              <h2 className="text-base font-semibold">Overview</h2>
               <p className="text-muted-foreground mt-1">
                 Customer communication metrics and channel status
               </p>
@@ -96,10 +94,10 @@ export default function StatisticsPage() {
                   <CardTitle className="text-sm font-medium text-muted-foreground">
                     Active Now
                   </CardTitle>
-                  <Users className="h-4 w-4 text-green-500" />
+                  <Users className="h-4 w-4 text-chart-2" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-green-600">
+                  <div className="text-2xl font-bold text-chart-2">
                     {stats?.activeConversations || 0}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -116,7 +114,7 @@ export default function StatisticsPage() {
                   <CheckCircle className="h-4 w-4 text-blue-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-blue-600">
+                  <div className="text-2xl font-bold text-chart-3">
                     {stats?.resolvedToday || 0}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -201,7 +199,7 @@ export default function StatisticsPage() {
                             <Badge
                               variant={isEnabled ? "default" : "outline"}
                               className={
-                                isEnabled ? "bg-green-600" : "text-muted-foreground"
+                                isEnabled ? "bg-chart-2" : "text-muted-foreground"
                               }
                             >
                               {isEnabled ? "Active" : "Disabled"}

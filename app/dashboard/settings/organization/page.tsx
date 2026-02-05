@@ -1,11 +1,11 @@
 "use client"
 
 import { useState } from "react"
-import { Building2, Save, Trash2, AlertTriangle } from "lucide-react"
+import { Building2, Save, Trash2, AlertTriangle, AlertCircle, Loader2, CheckCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ export default function OrganizationSettingsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
 
   // Update name when active org changes
   useState(() => {
@@ -60,7 +60,6 @@ export default function OrganizationSettingsPage() {
 
     setIsSaving(true)
     setError(null)
-    setSuccess(null)
 
     try {
       const response = await fetch(`/api/organizations/${activeOrganization.id}`, {
@@ -74,7 +73,8 @@ export default function OrganizationSettingsPage() {
         throw new Error(data.error || "Failed to update organization")
       }
 
-      setSuccess("Organization updated successfully")
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
       await refetch()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update organization")
@@ -117,19 +117,18 @@ export default function OrganizationSettingsPage() {
   }
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="container max-w-2xl py-8 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Organization Settings</h1>
-          <p className="text-muted-foreground">
-            Manage your organization&apos;s settings and preferences.
-          </p>
-        </div>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold">Organization Settings</h2>
+        <p className="text-sm text-muted-foreground">
+          Manage your organization&apos;s settings and preferences.
+        </p>
+      </div>
 
         {/* General Settings */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
               <Building2 className="h-5 w-5" />
               General
             </CardTitle>
@@ -178,26 +177,33 @@ export default function OrganizationSettingsPage() {
             </div>
 
             {error && (
-              <div className="text-sm text-destructive">{error}</div>
+              <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex items-center gap-2 text-sm">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                {error}
+              </div>
             )}
-            {success && (
-              <div className="text-sm text-green-600">{success}</div>
+
+            {isAdmin && (
+              <div className="flex justify-end pt-4">
+                <Button onClick={handleSave} disabled={isSaving}>
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : saved ? (
+                    <CheckCircle className="h-4 w-4 mr-2 text-chart-2" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  {saved ? "Saved!" : "Save Changes"}
+                </Button>
+              </div>
             )}
           </CardContent>
-          {isAdmin && (
-            <CardFooter>
-              <Button onClick={handleSave} disabled={isSaving}>
-                <Save className="h-4 w-4 mr-2" />
-                {isSaving ? "Saving..." : "Save Changes"}
-              </Button>
-            </CardFooter>
-          )}
         </Card>
 
         {/* Usage & Limits */}
         <Card>
           <CardHeader>
-            <CardTitle>Usage & Limits</CardTitle>
+            <CardTitle className="text-base">Usage & Limits</CardTitle>
             <CardDescription>
               Current resource usage and plan limits
             </CardDescription>
@@ -251,7 +257,7 @@ export default function OrganizationSettingsPage() {
         {isOwner && (
           <Card className="border-destructive/50">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-destructive">
+              <CardTitle className="text-base flex items-center gap-2 text-destructive">
                 <AlertTriangle className="h-5 w-5" />
                 Danger Zone
               </CardTitle>
@@ -298,7 +304,6 @@ export default function OrganizationSettingsPage() {
             </CardContent>
           </Card>
         )}
-      </div>
     </div>
   )
 }

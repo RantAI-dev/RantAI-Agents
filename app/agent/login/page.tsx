@@ -48,7 +48,7 @@ export default function AgentLoginPage() {
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <Image
-              src="/logo/logo-rantai.png"
+              src="/logo/logo-rantai-border.png"
               alt="RantAI Agents"
               width={120}
               height={120}

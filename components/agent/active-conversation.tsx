@@ -71,7 +71,7 @@ export function ActiveConversation({
       case "ASSISTANT":
         return <Bot className="h-4 w-4 text-foreground" />
       case "AGENT":
-        return <UserCheck className="h-4 w-4 text-green-600" />
+        return <UserCheck className="h-4 w-4 text-chart-2" />
       default:
         return null
     }
@@ -97,7 +97,7 @@ export function ActiveConversation({
       case "ASSISTANT":
         return "bg-secondary"
       case "AGENT":
-        return "bg-green-100"
+        return "bg-chart-2/10"
       default:
         return "bg-muted"
     }
