@@ -402,3 +402,29 @@ model FileAttachment {
   @@index([messageId])
   @@index([uploadedBy])
 }
+
+// Memory type enum for agentic memory system
+enum MemoryType {
+  WORKING
+  SEMANTIC
+  LONG_TERM
+}
+
+// User memory storage for agentic memory system
+model UserMemory {
+  id          String     @id @default(cuid())
+  userId      String
+  type        MemoryType
+  key         String
+  value       Json
+  embedding   Float[]    // For semantic search (empty array if not set)
+  confidence  Float?
+  source      String?    // Which conversation/message
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  expiresAt   DateTime?  // For working memory TTL
+
+  @@index([userId, type])
+  @@index([key])
+}
+

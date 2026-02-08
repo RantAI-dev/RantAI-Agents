@@ -245,6 +245,27 @@ function ChatSectionContent({
     }
   }
 
+  // Prevent hydration mismatch by only rendering sessions after mount
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return (
+      <div className="space-y-1">
+        <Button
+          variant="ghost"
+          className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-hover mb-2"
+          onClick={handleNewChat}
+        >
+          <Plus className="h-4 w-4" />
+          New Chat
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-1">
       {/* New Chat Button */}

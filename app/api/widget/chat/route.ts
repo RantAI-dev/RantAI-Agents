@@ -9,6 +9,15 @@ import {
   checkRateLimit,
 } from "@/lib/embed"
 import { smartRetrieve, formatContextForPrompt } from "@/lib/rag"
+import {
+  loadWorkingMemory,
+  semanticRecall,
+  loadUserProfile,
+  buildPromptWithMemory,
+  storeForSemanticRecall,
+  updateUserProfile,
+  updateWorkingMemory,
+} from "@/lib/memory"
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -117,7 +126,7 @@ export async function POST(req: NextRequest) {
           parts: [{ type: "text", text: msg.content || "" }],
         }
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ) as any[]
 
     const messages = await convertToModelMessages(uiMessages)
@@ -137,12 +146,12 @@ export async function POST(req: NextRequest) {
             typeof lastUserMessage.content === "string"
               ? lastUserMessage.content
               : lastUserMessage.content
-                  .filter(
-                    (part): part is { type: "text"; text: string } =>
-                      part.type === "text"
-                  )
-                  .map((part) => part.text)
-                  .join(" ")
+                .filter(
+                  (part): part is { type: "text"; text: string } =>
+                    part.type === "text"
+                )
+                .map((part) => part.text)
+                .join(" ")
 
           const retrievalResult = await smartRetrieve(userQuery, {
             minSimilarity: 0.35,
@@ -158,6 +167,30 @@ export async function POST(req: NextRequest) {
           console.error("[Widget Chat] RAG error:", error)
         }
       }
+    }
+
+    // Memory integration - use embedKey.id as user ID for widget users
+    const widgetUserId = `widget_${embedKey.id}`
+    const threadId = body.threadId || `thread_${Date.now()}`
+    const lastUserMsg = rawMessages.filter((m: { role: string }) => m.role === 'user').pop()?.content || ''
+
+    try {
+      // Load memory contexts
+      const [workingMemory, semanticResults, userProfile] = await Promise.all([
+        loadWorkingMemory(threadId),
+        semanticRecall(lastUserMsg, widgetUserId, threadId),
+        loadUserProfile(widgetUserId),
+      ])
+
+      // Build enhanced system prompt with memory
+      systemPrompt = buildPromptWithMemory(
+        systemPrompt,
+        workingMemory,
+        semanticResults,
+        userProfile
+      )
+    } catch (memError) {
+      console.error("[Widget Chat] Memory load error:", memError)
     }
 
     // Update usage stats (async, non-blocking)
@@ -176,6 +209,19 @@ export async function POST(req: NextRequest) {
       model: openrouter("xiaomi/mimo-v2-flash"),
       system: systemPrompt,
       messages,
+      onFinish: async ({ text }) => {
+        // Update memories after response (non-blocking)
+        const msgId = `widget_${Date.now()}`
+        try {
+          await Promise.all([
+            storeForSemanticRecall(widgetUserId, threadId, lastUserMsg, text),
+            updateWorkingMemory(widgetUserId, threadId, lastUserMsg, text, msgId),
+            updateUserProfile(widgetUserId, lastUserMsg, text, threadId),
+          ])
+        } catch (memError) {
+          console.error("[Widget Chat] Memory update error:", memError)
+        }
+      },
     })
 
     const response = result.toTextStreamResponse()
