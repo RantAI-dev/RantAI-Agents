@@ -296,25 +296,44 @@ export async function updateWorkingMemory(
   threadId: string,
   userMessage: string,
   assistantResponse: string,
-  messageId: string
+  messageId: string,
+  extractedEntities?: Entity[],
+  extractedFacts?: Fact[]
 ): Promise<WorkingMemory> {
   const workingMemory = await loadWorkingMemory(threadId);
 
-  // Extract and add entities from user message
-  const newEntities = extractEntities(userMessage, messageId);
+  // Use provided entities or extract from message
+  const newEntities = extractedEntities && extractedEntities.length > 0
+    ? extractedEntities
+    : extractEntities(userMessage, messageId);
+
   if (newEntities.length > 0) {
     // console.log(`[Working Memory] Extracted ${newEntities.length} entities:`, newEntities.map(e => e.name).join(', '));
   }
   for (const entity of newEntities) {
+    if (!entity.source) entity.source = messageId;
+    if (!entity.createdAt) entity.createdAt = new Date();
     workingMemory.entities.set(entity.id, entity);
   }
 
-  // Extract and add facts
-  const newFacts = extractFacts(userMessage, messageId);
+  // Use provided facts or extract from message
+  const newFacts = extractedFacts && extractedFacts.length > 0
+    ? extractedFacts
+    : extractFacts(userMessage, messageId);
+
   if (newFacts.length > 0) {
     // console.log(`[Working Memory] Extracted ${newFacts.length} facts:`, newFacts.map(f => `${f.predicate}: ${f.object}`).join(', '));
   }
   for (const fact of newFacts) {
+    if (!fact.source) fact.source = messageId;
+    if (!fact.createdAt) fact.createdAt = new Date();
+    // Replace existing fact with same predicate so "ganti X jadi Y" works (no duplicate nama/age/etc.)
+    for (const [id, f] of workingMemory.facts.entries()) {
+      if (f.predicate === fact.predicate) {
+        workingMemory.facts.delete(id);
+        break;
+      }
+    }
     workingMemory.facts.set(fact.id, fact);
   }
 

@@ -33,6 +33,19 @@ export {
   clearUserProfile,
 } from './long-term-memory';
 
+// Mastra Memory Integration (MASTRA.md Phase 1)
+export {
+  getMastraMemory,
+  resetMastraMemory,
+  type MastraMemoryBridge,
+  type MastraRecallOptions,
+  type MastraRecallResult,
+  type MastraSaveMessageInput,
+  type MastraGetMessagesOptions,
+} from './mastra-memory';
+export { PostgreSQLSurrealAdapter, type AdapterMessage, type AdapterThread } from './mastra-adapter';
+export { MEMORY_CONFIG, getMemoryConfigSummary } from './config';
+
 import { WorkingMemory, SemanticRecallResult, UserProfile } from './types';
 import { formatWorkingMemoryForPrompt } from './working-memory';
 import { formatSemanticRecallForPrompt } from './semantic-memory';

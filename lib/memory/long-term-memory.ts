@@ -6,7 +6,7 @@
 import { prisma } from '@/lib/prisma';
 import { nanoid } from 'nanoid';
 import { UserProfile, Fact, Preference, DEFAULT_MEMORY_CONFIG } from './types';
-import { extractFactsWithLLM } from './fact-extractor';
+// import { extractFactsWithLLM } from './fact-extractor';
 import { generateText } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 
@@ -340,23 +340,52 @@ function extractPreferences(
 /**
  * Merge new facts with existing, avoiding duplicates
  */
+const MULTI_VALUE_PREDICATES = [
+  'interest',
+  'location',
+  'language',
+  'skill',
+  'hobby',
+  'visited',
+  'preference',
+];
+
+/**
+ * Merge new facts with existing, avoiding duplicates
+ */
 function mergeFacts(existing: Fact[], newFacts: Fact[]): Fact[] {
   const merged = [...existing];
 
   for (const newFact of newFacts) {
-    // Check for existing fact with same predicate
-    const existingIndex = merged.findIndex(
-      f => f.subject === newFact.subject && f.predicate === newFact.predicate
-    );
+    const isMultiValue = MULTI_VALUE_PREDICATES.includes(newFact.predicate);
 
-    if (existingIndex >= 0) {
-      // Update if new fact has higher confidence
-      if (newFact.confidence > merged[existingIndex].confidence) {
-        merged[existingIndex] = newFact;
+    if (isMultiValue) {
+      // Multi-value: Add if object value doesn't exist for this predicate
+      const duplicate = merged.find(
+        f => f.predicate === newFact.predicate &&
+          f.object.toLowerCase() === newFact.object.toLowerCase()
+      );
+      if (!duplicate) {
+        merged.push(newFact);
       }
     } else {
-      // Add new fact
-      merged.push(newFact);
+      // Single-value: Find existing fact with same predicate
+      const existingIndex = merged.findIndex(f => f.predicate === newFact.predicate);
+
+      if (existingIndex >= 0) {
+        // Update if new fact has higher confidence OR is newer and reasonable confidence
+        // We favor the latest information from the user for single-value fields (like budget, age)
+        const existingFact = merged[existingIndex];
+
+        // If new fact is >= old confidence, update.
+        // OR if new fact is > 0.8 confidence (high certainty), update regardless of old one.
+        if (newFact.confidence >= existingFact.confidence || newFact.confidence >= 0.8) {
+          merged[existingIndex] = newFact;
+        }
+      } else {
+        // Add new fact
+        merged.push(newFact);
+      }
     }
   }
 
@@ -376,8 +405,8 @@ function mergePreferences(existing: Preference[], newPrefs: Preference[]): Prefe
     );
 
     if (existingIndex >= 0) {
-      // Update if new preference has higher confidence
-      if (newPref.confidence > merged[existingIndex].confidence) {
+      // Update if new preference has same or higher confidence (so explicit "ganti X jadi Y" replaces)
+      if (newPref.confidence >= merged[existingIndex].confidence) {
         merged[existingIndex] = newPref;
       }
     } else {
@@ -391,11 +420,14 @@ function mergePreferences(existing: Preference[], newPrefs: Preference[]): Prefe
 /**
  * Update user profile after a conversation
  */
+// Update user profile after a conversation
 export async function updateUserProfile(
   userId: string,
   userMessage: string,
   assistantResponse: string,
-  conversationId: string
+  conversationId: string,
+  extractedFacts?: Fact[],
+  extractedPreferences?: Preference[]
 ): Promise<UserProfile> {
   // Load existing profile or create new
   let profile = await loadUserProfile(userId);
@@ -406,13 +438,16 @@ export async function updateUserProfile(
     // console.log(`[Long-term Memory] Loaded existing profile for user ${userId}: ${profile.facts.length} facts`);
   }
 
-  // Extract facts using LLM (smart extraction, any language)
-  const newFacts = await extractFactsWithLLM(userMessage, conversationId);
+  // Use provided facts or extract using regex (fallback)
+  const newFacts = extractedFacts && extractedFacts.length > 0
+    ? extractedFacts
+    : extractPermanentFacts(userMessage, assistantResponse, conversationId);
+
   if (newFacts.length > 0) {
     // console.log(`[Long-term Memory] Extracted ${newFacts.length} new facts:`, JSON.stringify(newFacts, null, 2));
   }
 
-  // Merge facts (simple concatenation for now to debug)
+  // Merge facts
   const oldFactCount = profile.facts.length;
   profile.facts = mergeFacts(profile.facts, newFacts);
 
@@ -420,8 +455,11 @@ export async function updateUserProfile(
     // console.log(`[Long-term Memory] Profile updated. Facts increased from ${oldFactCount} to ${profile.facts.length}`);
   }
 
-  // Extract and merge preferences
-  const newPrefs = extractPreferences(userMessage, assistantResponse, conversationId);
+  // Use provided preferences or extract
+  const newPrefs = extractedPreferences && extractedPreferences.length > 0
+    ? extractedPreferences
+    : extractPreferences(userMessage, assistantResponse, conversationId);
+
   if (newPrefs.length > 0) {
     // console.log(`[Long-term Memory] Extracted ${newPrefs.length} new preferences`);
   }

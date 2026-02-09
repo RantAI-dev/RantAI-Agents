@@ -130,6 +130,44 @@ export async function searchConversationMemory(
 }
 
 /**
+ * List conversation messages by thread (for Mastra adapter listMessages)
+ */
+export async function listConversationMemoryByThread(
+  userId: string,
+  threadId: string,
+  options: { limit?: number; offset?: number; order?: 'ASC' | 'DESC' } = {}
+): Promise<ConversationMemoryRecord[]> {
+  const client = await getClient();
+  const { limit = 40, offset = 0, order = 'ASC' } = options;
+
+  try {
+    const orderClause = order === 'DESC' ? 'ORDER BY createdAt DESC' : 'ORDER BY createdAt ASC';
+    const results = await client.query<ConversationMemoryRecord>(
+      `SELECT * FROM ${TABLE_NAME}
+       WHERE userId = $userId AND threadId = $threadId
+       ${orderClause}
+       LIMIT $limit START $offset`,
+      { userId, threadId, limit, offset }
+    );
+
+    let data: ConversationMemoryRecord[] = [];
+    if (Array.isArray(results) && results.length > 0) {
+      const first = results[0];
+      if (Array.isArray(first)) {
+        data = first as ConversationMemoryRecord[];
+      } else if (first && typeof first === 'object' && 'result' in first) {
+        const q = first as { result: ConversationMemoryRecord[] };
+        if (Array.isArray(q?.result)) data = q.result;
+      }
+    }
+    return data;
+  } catch (error) {
+    console.error('[SurrealDB Vector] Error listing memory by thread:', error);
+    return [];
+  }
+}
+
+/**
  * Delete all memories for a user
  */
 export async function deleteUserMemories(userId: string): Promise<void> {

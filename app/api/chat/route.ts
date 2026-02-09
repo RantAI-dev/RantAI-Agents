@@ -1,4 +1,5 @@
-import { streamText, convertToModelMessages } from "ai";
+import { streamText, convertToModelMessages, tool, zodSchema } from "ai";
+import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { smartRetrieve, formatContextForPrompt, RetrievalResult } from "@/lib/rag";
 import { DEFAULT_ASSISTANTS } from "@/lib/assistants/defaults";
@@ -15,6 +16,9 @@ import {
   storeForSemanticRecall,
   buildPromptWithMemory,
   getMemoryStats,
+  getMastraMemory,
+  MEMORY_CONFIG,
+  getMemoryConfigSummary,
   WorkingMemory,
   SemanticRecallResult,
   UserProfile,
@@ -23,9 +27,34 @@ import {
 // Delimiter for sending sources metadata after stream
 const SOURCES_DELIMITER = "\n\n---SOURCES---\n";
 
+// Tool argument interfaces
+interface MemoryToolArgs {
+  facts?: Array<{
+    category: string;
+    label: string;
+    value: string;
+    confidence: number;
+  }>;
+  preferences?: Array<{
+    category: string;
+    preference: string;
+    value: string;
+  }>;
+  entities?: Array<{
+    name: string;
+    type: string;
+  }>;
+}
+
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
+
+// Memory queue for tool calls (threadId -> queued items)
+const memoryQueue = new Map<
+  string,
+  Array<{ facts?: unknown[]; preferences?: unknown[]; entities?: unknown[] }>
+>();
 
 // Base system prompt with company information and guidelines
 const BASE_SYSTEM_PROMPT = `You are a friendly and knowledgeable insurance assistant for HorizonLife, a trusted insurance company. Your role is to help visitors understand our insurance products and guide them toward the right coverage.
@@ -157,6 +186,9 @@ export async function POST(req: Request) {
     console.log("[Chat API] Body systemPrompt:", body.systemPrompt ? body.systemPrompt.substring(0, 40) + "..." : "null");
     console.log("[Chat API] Body useKnowledgeBase:", body.useKnowledgeBase);
     console.log("[Chat API] Header assistantId:", headerAssistantId);
+    if (MEMORY_CONFIG.debug) {
+      console.log("[Chat API] Memory config:", getMemoryConfigSummary());
+    }
 
     // Normalize messages to UIMessage format (with parts array)
     // Our manual fetch sends { id, role, content } but convertToModelMessages expects { id, role, parts }
@@ -347,8 +379,31 @@ export async function POST(req: Request) {
 
       // 2. Semantic recall of relevant past messages (only for logged-in users)
       if (userId !== 'anonymous' && userQuery) {
-        semanticResults = await semanticRecall(userQuery, userId, threadId);
-        console.log(`[Memory] Semantic recall found ${semanticResults.length} relevant messages`);
+        if (MEMORY_CONFIG.useMastraMemory) {
+          try {
+            const mastraMemory = getMastraMemory();
+            if (MEMORY_CONFIG.debug) {
+              console.log("[Memory] Using Mastra Memory for semantic recall");
+            }
+            semanticResults = await mastraMemory.recall(userQuery, {
+              resourceId: userId,
+              threadId,
+              topK: 5,
+            });
+            console.log(`[Memory] Mastra recall found ${semanticResults.length} relevant messages`);
+          } catch (error) {
+            if (MEMORY_CONFIG.gracefulDegradation) {
+              console.error("[Memory] Mastra recall error, using fallback:", error);
+              semanticResults = await semanticRecall(userQuery, userId, threadId);
+              console.log(`[Memory] Fallback recall found ${semanticResults.length} messages`);
+            } else {
+              throw error;
+            }
+          }
+        } else {
+          semanticResults = await semanticRecall(userQuery, userId, threadId);
+          console.log(`[Memory] Semantic recall found ${semanticResults.length} relevant messages`);
+        }
       }
 
       // 3. Load long-term user profile (only for logged-in users)
@@ -361,6 +416,8 @@ export async function POST(req: Request) {
 
       // 4. Inject memory context into system prompt
       systemPrompt = buildPromptWithMemory(systemPrompt, workingMemory, semanticResults, userProfile);
+      // Ensure corrections/updates are saved so "ganti X jadi Y" works
+      systemPrompt += "\n\nWhen the user corrects or updates previously shared information (e.g. name, age, preference), you MUST call saveMemory with the new value so the stored profile is updated. Do not only acknowledge verbally—always call the tool with the updated fact or preference.";
 
       // Log memory stats
       const memoryStats = getMemoryStats(workingMemory, semanticResults, userProfile);
@@ -372,96 +429,198 @@ export async function POST(req: Request) {
 
     console.log("[Chat API] Using model:", modelId);
 
+    // Define schema for memory tool
+    const memorySchema = z.object({
+      facts: z.array(z.object({
+        category: z.string().describe("Category of fact (e.g. 'bio', 'work', 'family')"),
+        label: z.string().describe("Label/Predicate (e.g. 'age', 'occupation')"),
+        value: z.string().describe("Value/Object (e.g. '30', 'Engineer')"),
+        confidence: z.number().min(0).max(1).default(0.9),
+      })).optional(),
+      preferences: z.array(z.object({
+        category: z.string().describe("Category (e.g. 'communication', 'product')"),
+        preference: z.string().describe("Key (e.g. 'channel', 'insurance_type')"),
+        value: z.string().describe("Value (e.g. 'email', 'life')"),
+      })).optional(),
+      entities: z.array(z.object({
+        name: z.string().describe("Name of entity (person, organization, etc.)"),
+        type: z.string().describe("Type of entity (Person, Organization, Date, Location)"),
+      })).optional(),
+    });
+
     const result = streamText({
       model: openrouter(modelId),
       system: systemPrompt,
       messages,
+      tools: {
+        saveMemory: tool({
+          description: "Save important facts, preferences, and entities about the user from the conversation.",
+          inputSchema: zodSchema(memorySchema),
+          execute: async (
+            input: z.infer<typeof memorySchema>,
+            _options
+          ) => {
+            const { facts, preferences, entities } = input ?? {};
+            if (!memoryQueue.has(threadId)) {
+              memoryQueue.set(threadId, []);
+            }
+            memoryQueue.get(threadId)!.push({ facts, preferences, entities });
+            console.log("[Memory Tool] Queued memory for saving:", {
+              facts: facts?.length || 0,
+              preferences: preferences?.length || 0,
+              entities: entities?.length || 0,
+            });
+            return {
+              success: true,
+              queued: true,
+              items: {
+                facts: facts?.length || 0,
+                preferences: preferences?.length || 0,
+                entities: entities?.length || 0,
+              },
+            };
+          },
+        }),
+      },
     });
 
-    // If we have RAG sources, create a custom stream that appends them after the text
-    if (ragSources.length > 0) {
-      const textStream = result.toTextStreamResponse();
-      const originalBody = textStream.body;
-
-      if (originalBody) {
-        const reader = originalBody.getReader();
-        const encoder = new TextEncoder();
-
-        const customStream = new ReadableStream({
-          async start(controller) {
-            // Stream the original text content
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              controller.enqueue(value);
-            }
-
-            // Append sources delimiter and JSON
-            const sourcesData = SOURCES_DELIMITER + JSON.stringify(ragSources);
-            controller.enqueue(encoder.encode(sourcesData));
-            controller.close();
-          },
-        });
-
-        return new Response(customStream, {
-          headers: {
-            "Content-Type": "text/plain; charset=utf-8",
-          },
-        });
-      }
-    }
-
-    // ===== UPDATE MEMORIES AFTER STREAMING =====
-    // We need to capture the full response text to update memories
-    // The streamText result.toTextStreamResponse() consumes the stream, so we can't read it again easily in the same way
-    // Instead, we'll use the onFinish callback from streamText if available, or simpler:
-    // We will wrap the response stream to collect the text
-
-    // Actually, AI SDK's streamText returns a result object that has a text property promise
-    // BUT accessing .text waits for the stream to finish.
-
-    // IMPORTANT: precise handling of userId for anonymous users
     // If userId is 'anonymous', we still want working memory (session based) but maybe not long-term
     const effectiveUserId = userId === 'anonymous' ? 'anon_' + threadId : userId;
 
-    // We'll use a slightly different approach:
-    // 1. Return the stream immediately
-    // 2. But hook into the onFinish callback of streamText options if possible? 
-    // streamText doesn't have onFinish in the options object directly in this version?
-    // Let's check the imported 'streamText' from 'ai'. 
-
-    // Alternative: The `result` object from `streamText` allows us to await `text` 
-    // completely INDEPENDENTLY of the stream response sent to the client.
-    // This is a feature of the AI SDK - the stream can be read multiple times or the text can be awaited.
-
-    // So the existing code structure was actually mostly correct, but let's add robust logging 
-    // and fix the scope of the async operation.
-
+    // Use a self-executing async function to handle background memory updates
     (async () => {
       try {
         console.log(`[Memory] Waiting for response to finish for thread ${threadId}...`);
-        const fullResponseText = await result.text;
-        console.log(`[Memory] Response finished (${fullResponseText.length} chars). Updating memories...`);
 
-        // Update working memory (Session based)
+        // Wait for generation to complete
+        const fullResponse = await result.text;
+        const toolCalls = await result.toolCalls as any[];
+
+        console.log(`[Memory] Response finished. Text len: ${fullResponse.length}. Tool calls: ${toolCalls.length}`);
+
+        // Retrieve and process queued memories from tool calls
+        const queuedMemories = memoryQueue.get(threadId) || [];
+        memoryQueue.delete(threadId);
+
+        let extractedFacts: any[] = [];
+        let extractedPreferences: any[] = [];
+        let extractedEntities: any[] = [];
+
+        if (queuedMemories.length > 0) {
+          console.log(`[Memory] Processing ${queuedMemories.length} queued memory items`);
+          for (const mem of queuedMemories) {
+            if (mem.facts) extractedFacts.push(...(mem.facts as any[]));
+            if (mem.preferences) extractedPreferences.push(...(mem.preferences as any[]));
+            if (mem.entities) extractedEntities.push(...(mem.entities as any[]));
+          }
+          console.log(`[Memory] Total extracted: ${extractedFacts.length} facts, ${extractedPreferences.length} preferences, ${extractedEntities.length} entities`);
+        }
+
+        // Also extract from tool call args (backward compatibility)
+        for (const call of toolCalls) {
+          if (call.toolName === 'saveMemory') {
+            const args = call.args as any;
+            if (args?.facts) extractedFacts.push(...args.facts);
+            if (args?.preferences) extractedPreferences.push(...args.preferences);
+            if (args?.entities) extractedEntities.push(...args.entities);
+          }
+        }
+
+        // Conversion utilities
+        // We need robust type conversion here to match internal interfaces
+
+        // Fact conversion
+        const finalFacts = extractedFacts.map(f => ({
+          id: `fact_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          subject: 'user',
+          predicate: f.label || 'unknown',
+          object: f.value || 'unknown',
+          confidence: typeof f.confidence === 'number' ? f.confidence : 0.9,
+          source: threadId,
+          createdAt: new Date(),
+        }));
+
+        // Entity conversion
+        const finalEntities = extractedEntities.map(e => ({
+          id: `ent_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          name: e.name || 'unknown',
+          type: e.type || 'unknown',
+          source: threadId,
+          createdAt: new Date(),
+          attributes: {}, // Required by Entity interface
+          confidence: 0.9, // Required by Entity interface
+        }));
+
+        // Preference conversion
+        const finalPreferences = extractedPreferences.map(p => ({
+          id: `pref_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          category: p.category || 'general',
+          key: p.preference || 'unknown',
+          value: p.value || 'unknown',
+          confidence: 0.9,
+          source: threadId,
+        }));
+
         const messageId = `msg_${Date.now()}`;
-        await updateWorkingMemory(effectiveUserId, threadId, userQuery, fullResponseText, messageId);
 
-        // Update Long-term & Semantic (Only for logged in users)
+        // 1. Update working memory (Session based)
+        // Pass extracted data directly to avoid redundant regex extraction
+        await updateWorkingMemory(
+          effectiveUserId,
+          threadId,
+          userQuery,
+          fullResponse,
+          messageId,
+          finalEntities,
+          finalFacts
+        );
+
+        // 2. Update Long-term & Semantic (Only for logged in users)
         if (userId !== 'anonymous') {
           console.log(`[Memory] Updating long-term memory for user ${userId}`);
-          await storeForSemanticRecall(userId, threadId, userQuery, fullResponseText);
-          await updateUserProfile(userId, userQuery, fullResponseText, threadId);
+
+          // Store for semantic recall (vector db)
+          await storeForSemanticRecall(userId, threadId, userQuery, fullResponse);
+
+          // Update user profile (Postgres) with extracted facts/prefs
+          await updateUserProfile(
+            userId,
+            userQuery,
+            fullResponse,
+            threadId,
+            finalFacts,
+            finalPreferences
+          );
         } else {
           console.log(`[Memory] Skipping long-term memory for anonymous user`);
         }
 
+        // Optional: dual-write to Mastra Memory (same storage, for migration verification)
+        if (MEMORY_CONFIG.dualWrite && userId !== 'anonymous') {
+          try {
+            const mastraMemory = getMastraMemory();
+            if (MEMORY_CONFIG.debug) {
+              console.log('[Memory] Dual-writing to Mastra Memory');
+            }
+            await mastraMemory.saveMessage(threadId, {
+              role: 'user',
+              content: userQuery,
+              metadata: { userId, messageId, timestamp: new Date().toISOString() },
+            });
+            await mastraMemory.saveMessage(threadId, {
+              role: 'assistant',
+              content: fullResponse,
+              metadata: { userId, messageId, timestamp: new Date().toISOString() },
+            });
+            console.log('[Memory] Saved to Mastra Memory (dual-write)');
+          } catch (mastraError) {
+            console.error('[Memory] Mastra save error (non-fatal):', mastraError);
+          }
+        }
       } catch (err) {
         console.error('[Memory] Error in background memory update:', err);
       }
     })();
-
-    return result.toTextStreamResponse();
 
     return result.toTextStreamResponse();
   } catch (error) {
