@@ -6,8 +6,15 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  // External packages with native bindings (canvas for PDF-to-image OCR)
-  serverExternalPackages: ["canvas", "pdf-img-convert", "sharp"],
+  // External packages with native bindings (canvas for OCR, LibSQL for database)
+  serverExternalPackages: [
+    "canvas", 
+    "pdf-img-convert", 
+    "sharp", 
+    "@libsql/client", 
+    "@libsql/win32-x64-msvc", 
+    "@mastra/libsql"
+  ],
   async headers() {
     return [
       {

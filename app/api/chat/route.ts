@@ -1,4 +1,5 @@
-import { streamText, convertToModelMessages } from "ai";
+import { streamText, convertToModelMessages, tool, zodSchema } from "ai";
+import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { smartRetrieve, formatContextForPrompt, RetrievalResult } from "@/lib/rag";
 import { DEFAULT_ASSISTANTS } from "@/lib/assistants/defaults";
@@ -6,16 +7,65 @@ import { auth } from "@/lib/auth";
 import { getCustomerContext, formatCustomerContextForPrompt } from "@/lib/customer-context";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models";
+import {
+  loadWorkingMemory,
+  updateWorkingMemory,
+  loadUserProfile,
+  updateUserProfile,
+  semanticRecall,
+  storeForSemanticRecall,
+  buildPromptWithMemory,
+  getMemoryStats,
+  getMastraMemory,
+  MEMORY_CONFIG,
+  getMemoryConfigSummary,
+  WorkingMemory,
+  SemanticRecallResult,
+  UserProfile,
+} from "@/lib/memory";
 
 // Delimiter for sending sources metadata after stream
 const SOURCES_DELIMITER = "\n\n---SOURCES---\n";
+
+// Tool argument interfaces
+interface MemoryToolArgs {
+  facts?: Array<{
+    category: string;
+    label: string;
+    value: string;
+    confidence: number;
+  }>;
+  preferences?: Array<{
+    category: string;
+    preference: string;
+    value: string;
+  }>;
+  entities?: Array<{
+    name: string;
+    type: string;
+  }>;
+}
 
 const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
+// Memory queue for tool calls (threadId -> queued items)
+const memoryQueue = new Map<
+  string,
+  Array<{ facts?: unknown[]; preferences?: unknown[]; entities?: unknown[] }>
+>();
+
 // Base system prompt with company information and guidelines
 const BASE_SYSTEM_PROMPT = `You are a friendly and knowledgeable insurance assistant for HorizonLife, a trusted insurance company. Your role is to help visitors understand our insurance products and guide them toward the right coverage.
+
+CORE INSTRUCTIONS - MEMORY & CONTEXT:
+1. You have access to "memory" about the user (Working Memory, Long-term Profile, and Past Conversations).
+2. CHECK this memory context before answering.
+3. If you know the user's name, ALWAYS use it to greet them.
+4. If the user asks "do you know me?" or "what is my name?", USE the memory/profile to answer.
+5. Tailor your responses based on the user's known profile (age, family size, preferences).
+
 
 About HorizonLife:
 - Founded in 2010, serving over 500,000 customers
@@ -109,237 +159,470 @@ CRITICAL:
 
 export async function POST(req: Request) {
   try {
-  // Get assistant config from headers (most reliable method)
-  const headerAssistantId = req.headers.get('X-Assistant-Id');
-  const headerSystemPromptB64 = req.headers.get('X-System-Prompt');
-  const headerUseKnowledgeBase = req.headers.get('X-Use-Knowledge-Base');
+    // Get assistant config from headers (most reliable method)
+    const headerAssistantId = req.headers.get('X-Assistant-Id');
+    const headerSystemPromptB64 = req.headers.get('X-System-Prompt');
+    const headerUseKnowledgeBase = req.headers.get('X-Use-Knowledge-Base');
 
-  // Decode base64 system prompt from header
-  let headerSystemPrompt: string | null = null;
-  if (headerSystemPromptB64) {
-    try {
-      headerSystemPrompt = Buffer.from(headerSystemPromptB64, 'base64').toString('utf-8');
-    } catch {
-      console.log("[Chat API] Failed to decode system prompt from header");
-    }
-  }
-
-  const body = await req.json();
-  const { messages: rawMessages } = body;
-
-  console.log("[Chat API] ===== REQUEST DEBUG =====");
-  console.log("[Chat API] Body keys:", Object.keys(body));
-  console.log("[Chat API] Body assistantId:", body.assistantId);
-  console.log("[Chat API] Body systemPrompt:", body.systemPrompt ? body.systemPrompt.substring(0, 40) + "..." : "null");
-  console.log("[Chat API] Body useKnowledgeBase:", body.useKnowledgeBase);
-  console.log("[Chat API] Header assistantId:", headerAssistantId);
-
-  // Normalize messages to UIMessage format (with parts array)
-  // Our manual fetch sends { id, role, content } but convertToModelMessages expects { id, role, parts }
-  const uiMessages = rawMessages.map((msg: { id: string; role: string; content?: string; parts?: Array<{ type: string; text?: string }> }) => {
-    if (msg.parts) {
-      // Already in UIMessage format
-      return msg;
-    }
-    // Convert simple format to UIMessage format
-    return {
-      id: msg.id,
-      role: msg.role,
-      parts: [{ type: 'text', text: msg.content || '' }],
-    };
-  });
-
-  // Use body first, then headers as fallback
-  const assistantId = body.assistantId || headerAssistantId;
-  const customSystemPrompt = body.systemPrompt || headerSystemPrompt;
-  const useKnowledgeBaseParam = body.useKnowledgeBase !== undefined
-    ? body.useKnowledgeBase
-    : (headerUseKnowledgeBase !== null ? headerUseKnowledgeBase === 'true' : undefined);
-  const knowledgeBaseGroupIds: string[] | undefined = body.knowledgeBaseGroupIds;
-
-  // Look up assistant by ID - first check defaults, then database
-  const defaultAssistant = DEFAULT_ASSISTANTS.find(a => a.id === assistantId);
-
-  // Determine system prompt, model, and knowledge base setting
-  // Priority: database assistant > default assistant > custom prompt from request > fallback to HorizonLife
-  let systemPrompt: string;
-  let useKnowledgeBase: boolean;
-  let modelId: string = DEFAULT_MODEL_ID;
-
-  if (assistantId && !defaultAssistant) {
-    // Try to fetch from database (user-created assistant)
-    try {
-      const dbAssistant = await prisma.assistant.findUnique({
-        where: { id: assistantId },
-        select: {
-          systemPrompt: true,
-          model: true,
-          useKnowledgeBase: true,
-          knowledgeBaseGroupIds: true,
-          name: true,
-        },
-      });
-
-      if (dbAssistant) {
-        systemPrompt = dbAssistant.systemPrompt;
-        useKnowledgeBase = dbAssistant.useKnowledgeBase;
-        modelId = dbAssistant.model || DEFAULT_MODEL_ID;
-        console.log("[Chat API] Using database assistant:", dbAssistant.name, "with model:", modelId);
-      } else if (customSystemPrompt) {
-        systemPrompt = customSystemPrompt;
-        useKnowledgeBase = useKnowledgeBaseParam ?? false;
-        console.log("[Chat API] Using custom system prompt");
-      } else {
-        systemPrompt = BASE_SYSTEM_PROMPT;
-        useKnowledgeBase = true;
-        console.log("[Chat API] Fallback to default HorizonLife prompt");
-      }
-    } catch (error) {
-      console.error("[Chat API] Error fetching assistant from database:", error);
-      systemPrompt = customSystemPrompt || BASE_SYSTEM_PROMPT;
-      useKnowledgeBase = useKnowledgeBaseParam ?? true;
-    }
-  } else if (defaultAssistant) {
-    // Found in default assistants (built-in)
-    systemPrompt = defaultAssistant.systemPrompt;
-    useKnowledgeBase = defaultAssistant.useKnowledgeBase;
-    // Default assistants use the default model unless we add model to defaults later
-    console.log("[Chat API] Using default assistant:", defaultAssistant.name);
-  } else if (customSystemPrompt) {
-    // Custom assistant or explicit system prompt
-    systemPrompt = customSystemPrompt;
-    useKnowledgeBase = useKnowledgeBaseParam ?? false;
-    console.log("[Chat API] Using custom/user-created assistant prompt");
-  } else {
-    // Fallback to HorizonLife
-    systemPrompt = BASE_SYSTEM_PROMPT;
-    useKnowledgeBase = true;
-    console.log("[Chat API] Fallback to default HorizonLife prompt");
-  }
-
-  // Validate model ID
-  if (!isValidModel(modelId)) {
-    console.warn(`[Chat API] Invalid model ID "${modelId}", falling back to default`);
-    modelId = DEFAULT_MODEL_ID;
-  }
-
-  console.log("[Chat API] System prompt preview:", systemPrompt.substring(0, 60) + "...");
-  console.log("[Chat API] useKnowledgeBase:", useKnowledgeBase);
-
-  // Convert UIMessage format (with parts array) to ModelMessage format (with content string)
-  const messages = await convertToModelMessages(uiMessages);
-
-  // Store RAG sources to send with response
-  let ragSources: Array<{ title: string; section: string | null }> = [];
-
-  // Only perform RAG retrieval if knowledge base is enabled
-  if (useKnowledgeBase) {
-    // Get the latest user message for RAG retrieval
-    const lastUserMessage = [...messages]
-      .reverse()
-      .find((msg) => msg.role === "user");
-
-    if (lastUserMessage) {
+    // Decode base64 system prompt from header
+    let headerSystemPrompt: string | null = null;
+    if (headerSystemPromptB64) {
       try {
-        // Extract text content from the user message
-        const userQuery =
-          typeof lastUserMessage.content === "string"
-            ? lastUserMessage.content
-            : lastUserMessage.content
+        headerSystemPrompt = Buffer.from(headerSystemPromptB64, 'base64').toString('utf-8');
+      } catch {
+        console.log("[Chat API] Failed to decode system prompt from header");
+      }
+    }
+
+    const body = await req.json();
+    const { messages: rawMessages } = body;
+
+    // Extract threadId for memory tracking (generate one if not provided)
+    const threadId = body.threadId || body.sessionId || `thread_${Date.now()}`;
+
+    console.log("[Chat API] ===== REQUEST DEBUG =====");
+    console.log("[Chat API] Body keys:", Object.keys(body));
+    console.log("[Chat API] Body assistantId:", body.assistantId);
+    console.log("[Chat API] Body systemPrompt:", body.systemPrompt ? body.systemPrompt.substring(0, 40) + "..." : "null");
+    console.log("[Chat API] Body useKnowledgeBase:", body.useKnowledgeBase);
+    console.log("[Chat API] Header assistantId:", headerAssistantId);
+    if (MEMORY_CONFIG.debug) {
+      console.log("[Chat API] Memory config:", getMemoryConfigSummary());
+    }
+
+    // Normalize messages to UIMessage format (with parts array)
+    // Our manual fetch sends { id, role, content } but convertToModelMessages expects { id, role, parts }
+    const uiMessages = rawMessages.map((msg: { id: string; role: string; content?: string; parts?: Array<{ type: string; text?: string }> }) => {
+      if (msg.parts) {
+        // Already in UIMessage format
+        return msg;
+      }
+      // Convert simple format to UIMessage format
+      return {
+        id: msg.id,
+        role: msg.role,
+        parts: [{ type: 'text', text: msg.content || '' }],
+      };
+    });
+
+    // Use body first, then headers as fallback
+    const assistantId = body.assistantId || headerAssistantId;
+    const customSystemPrompt = body.systemPrompt || headerSystemPrompt;
+    const useKnowledgeBaseParam = body.useKnowledgeBase !== undefined
+      ? body.useKnowledgeBase
+      : (headerUseKnowledgeBase !== null ? headerUseKnowledgeBase === 'true' : undefined);
+    const knowledgeBaseGroupIds: string[] | undefined = body.knowledgeBaseGroupIds;
+
+    // Look up assistant by ID - first check defaults, then database
+    const defaultAssistant = DEFAULT_ASSISTANTS.find(a => a.id === assistantId);
+
+    // Determine system prompt, model, and knowledge base setting
+    // Priority: database assistant > default assistant > custom prompt from request > fallback to HorizonLife
+    let systemPrompt: string;
+    let useKnowledgeBase: boolean;
+    let modelId: string = DEFAULT_MODEL_ID;
+
+    if (assistantId && !defaultAssistant) {
+      // Try to fetch from database (user-created assistant)
+      try {
+        const dbAssistant = await prisma.assistant.findUnique({
+          where: { id: assistantId },
+          select: {
+            systemPrompt: true,
+            model: true,
+            useKnowledgeBase: true,
+            knowledgeBaseGroupIds: true,
+            name: true,
+          },
+        });
+
+        if (dbAssistant) {
+          systemPrompt = dbAssistant.systemPrompt;
+          useKnowledgeBase = dbAssistant.useKnowledgeBase;
+          modelId = dbAssistant.model || DEFAULT_MODEL_ID;
+          console.log("[Chat API] Using database assistant:", dbAssistant.name, "with model:", modelId);
+        } else if (customSystemPrompt) {
+          systemPrompt = customSystemPrompt;
+          useKnowledgeBase = useKnowledgeBaseParam ?? false;
+          console.log("[Chat API] Using custom system prompt");
+        } else {
+          systemPrompt = BASE_SYSTEM_PROMPT;
+          useKnowledgeBase = true;
+          console.log("[Chat API] Fallback to default HorizonLife prompt");
+        }
+      } catch (error) {
+        console.error("[Chat API] Error fetching assistant from database:", error);
+        systemPrompt = customSystemPrompt || BASE_SYSTEM_PROMPT;
+        useKnowledgeBase = useKnowledgeBaseParam ?? true;
+      }
+    } else if (defaultAssistant) {
+      // Found in default assistants (built-in)
+      systemPrompt = defaultAssistant.systemPrompt;
+      useKnowledgeBase = defaultAssistant.useKnowledgeBase;
+      // Default assistants use the default model unless we add model to defaults later
+      console.log("[Chat API] Using default assistant:", defaultAssistant.name);
+    } else if (customSystemPrompt) {
+      // Custom assistant or explicit system prompt
+      systemPrompt = customSystemPrompt;
+      useKnowledgeBase = useKnowledgeBaseParam ?? false;
+      console.log("[Chat API] Using custom/user-created assistant prompt");
+    } else {
+      // Fallback to HorizonLife
+      systemPrompt = BASE_SYSTEM_PROMPT;
+      useKnowledgeBase = true;
+      console.log("[Chat API] Fallback to default HorizonLife prompt");
+    }
+
+    // Validate model ID
+    if (!isValidModel(modelId)) {
+      console.warn(`[Chat API] Invalid model ID "${modelId}", falling back to default`);
+      modelId = DEFAULT_MODEL_ID;
+    }
+
+    console.log("[Chat API] System prompt preview:", systemPrompt.substring(0, 60) + "...");
+    console.log("[Chat API] useKnowledgeBase:", useKnowledgeBase);
+
+    // Convert UIMessage format (with parts array) to ModelMessage format (with content string)
+    const messages = await convertToModelMessages(uiMessages);
+
+    // Store RAG sources to send with response
+    let ragSources: Array<{ title: string; section: string | null }> = [];
+
+    // Only perform RAG retrieval if knowledge base is enabled
+    if (useKnowledgeBase) {
+      // Get the latest user message for RAG retrieval
+      const lastUserMessage = [...messages]
+        .reverse()
+        .find((msg) => msg.role === "user");
+
+      if (lastUserMessage) {
+        try {
+          // Extract text content from the user message
+          const userQuery =
+            typeof lastUserMessage.content === "string"
+              ? lastUserMessage.content
+              : lastUserMessage.content
                 .filter((part): part is { type: "text"; text: string } => part.type === "text")
                 .map((part) => part.text)
                 .join(" ");
 
-        // Retrieve relevant context from the knowledge base
-        const retrievalResult = await smartRetrieve(userQuery, {
-          minSimilarity: 0.35,
-          maxChunks: 5,
-          groupIds: knowledgeBaseGroupIds,
-        });
+          // Retrieve relevant context from the knowledge base
+          const retrievalResult = await smartRetrieve(userQuery, {
+            minSimilarity: 0.35,
+            maxChunks: 5,
+            groupIds: knowledgeBaseGroupIds,
+          });
 
-        // If we found relevant context, add it to the system prompt
-        if (retrievalResult.context) {
-          const formattedContext = formatContextForPrompt(retrievalResult);
-          systemPrompt = `${systemPrompt}\n\n${formattedContext}`;
+          // If we found relevant context, add it to the system prompt
+          if (retrievalResult.context) {
+            const formattedContext = formatContextForPrompt(retrievalResult);
+            systemPrompt = `${systemPrompt}\n\n${formattedContext}`;
 
-          // Store sources to send with response
-          ragSources = retrievalResult.sources.map((s) => ({
-            title: s.documentTitle,
-            section: s.section,
-          }));
+            // Store sources to send with response
+            ragSources = retrievalResult.sources.map((s) => ({
+              title: s.documentTitle,
+              section: s.section,
+            }));
 
-          // Log retrieval for debugging (remove in production)
-          console.log(
-            `[RAG] Retrieved ${retrievalResult.chunks.length} chunks for query: "${userQuery.substring(0, 50)}..."`
-          );
-          console.log(
-            `[RAG] Sources: ${retrievalResult.sources.map((s) => s.documentTitle).join(", ")}`
-          );
+            // Log retrieval for debugging (remove in production)
+            console.log(
+              `[RAG] Retrieved ${retrievalResult.chunks.length} chunks for query: "${userQuery.substring(0, 50)}..."`
+            );
+            console.log(
+              `[RAG] Sources: ${retrievalResult.sources.map((s) => s.documentTitle).join(", ")}`
+            );
+          }
+        } catch (error) {
+          // Log error but continue without RAG context
+          console.error("[RAG] Error during retrieval:", error);
+        }
+      }
+    }
+
+    // Check if the user is a logged-in customer and inject their context
+    const session = await auth();
+    const userId = session?.user?.id || 'anonymous';
+
+    if (session?.user?.userType === "customer") {
+      try {
+        const customerContext = await getCustomerContext(session.user.id);
+        if (customerContext) {
+          const customerPrompt = formatCustomerContextForPrompt(customerContext);
+          systemPrompt = `${systemPrompt}\n\n${customerPrompt}`;
+          console.log(`[Chat API] Customer context injected for: ${customerContext.firstName}`);
         }
       } catch (error) {
-        // Log error but continue without RAG context
-        console.error("[RAG] Error during retrieval:", error);
+        console.error("[Chat API] Error fetching customer context:", error);
       }
     }
-  }
 
-  // Check if the user is a logged-in customer and inject their context
-  const session = await auth();
-  if (session?.user?.userType === "customer") {
+    // ===== MEMORY SYSTEM INTEGRATION =====
+    let workingMemory: WorkingMemory | null = null;
+    let semanticResults: SemanticRecallResult[] = [];
+    let userProfile: UserProfile | null = null;
+
+    // Get the latest user message for memory operations
+    const lastUserMessage = [...messages].reverse().find((msg) => msg.role === "user");
+    const userQuery = lastUserMessage
+      ? typeof lastUserMessage.content === "string"
+        ? lastUserMessage.content
+        : lastUserMessage.content
+          .filter((part): part is { type: "text"; text: string } => part.type === "text")
+          .map((part) => part.text)
+          .join(" ")
+      : "";
+
     try {
-      const customerContext = await getCustomerContext(session.user.id);
-      if (customerContext) {
-        const customerPrompt = formatCustomerContextForPrompt(customerContext);
-        systemPrompt = `${systemPrompt}\n\n${customerPrompt}`;
-        console.log(`[Chat API] Customer context injected for: ${customerContext.firstName}`);
-      }
-    } catch (error) {
-      console.error("[Chat API] Error fetching customer context:", error);
-    }
-  }
+      // 1. Load working memory for current session
+      workingMemory = await loadWorkingMemory(threadId);
+      console.log(`[Memory] Loaded working memory for thread ${threadId}: ${workingMemory.entities.size} entities, ${workingMemory.facts.size} facts`);
 
-  console.log("[Chat API] Using model:", modelId);
-
-  const result = streamText({
-    model: openrouter(modelId),
-    system: systemPrompt,
-    messages,
-  });
-
-  // If we have RAG sources, create a custom stream that appends them after the text
-  if (ragSources.length > 0) {
-    const textStream = result.toTextStreamResponse();
-    const originalBody = textStream.body;
-
-    if (originalBody) {
-      const reader = originalBody.getReader();
-      const encoder = new TextEncoder();
-
-      const customStream = new ReadableStream({
-        async start(controller) {
-          // Stream the original text content
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            controller.enqueue(value);
+      // 2. Semantic recall of relevant past messages (only for logged-in users)
+      if (userId !== 'anonymous' && userQuery) {
+        if (MEMORY_CONFIG.useMastraMemory) {
+          try {
+            const mastraMemory = getMastraMemory();
+            if (MEMORY_CONFIG.debug) {
+              console.log("[Memory] Using Mastra Memory for semantic recall");
+            }
+            semanticResults = await mastraMemory.recall(userQuery, {
+              resourceId: userId,
+              threadId,
+              topK: 5,
+            });
+            console.log(`[Memory] Mastra recall found ${semanticResults.length} relevant messages`);
+          } catch (error) {
+            if (MEMORY_CONFIG.gracefulDegradation) {
+              console.error("[Memory] Mastra recall error, using fallback:", error);
+              semanticResults = await semanticRecall(userQuery, userId, threadId);
+              console.log(`[Memory] Fallback recall found ${semanticResults.length} messages`);
+            } else {
+              throw error;
+            }
           }
+        } else {
+          semanticResults = await semanticRecall(userQuery, userId, threadId);
+          console.log(`[Memory] Semantic recall found ${semanticResults.length} relevant messages`);
+        }
+      }
 
-          // Append sources delimiter and JSON
-          const sourcesData = SOURCES_DELIMITER + JSON.stringify(ragSources);
-          controller.enqueue(encoder.encode(sourcesData));
-          controller.close();
-        },
-      });
+      // 3. Load long-term user profile (only for logged-in users)
+      if (userId !== 'anonymous') {
+        userProfile = await loadUserProfile(userId);
+        if (userProfile) {
+          console.log(`[Memory] Loaded user profile: ${userProfile.facts.length} facts, ${userProfile.preferences.length} preferences`);
+        }
+      }
 
-      return new Response(customStream, {
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-        },
-      });
+      // 4. Inject memory context into system prompt
+      systemPrompt = buildPromptWithMemory(systemPrompt, workingMemory, semanticResults, userProfile);
+      // Ensure corrections/updates are saved so "ganti X jadi Y" works
+      systemPrompt += "\n\nWhen the user corrects or updates previously shared information (e.g. name, age, preference), you MUST call saveMemory with the new value so the stored profile is updated. Do not only acknowledge verbally—always call the tool with the updated fact or preference.";
+
+      // Log memory stats
+      const memoryStats = getMemoryStats(workingMemory, semanticResults, userProfile);
+      console.log("[Memory] Stats:", JSON.stringify(memoryStats));
+    } catch (error) {
+      console.error("[Memory] Error loading memories:", error);
+      // Continue without memory - graceful degradation
     }
-  }
 
-  return result.toTextStreamResponse();
+    console.log("[Chat API] Using model:", modelId);
+
+    // Define schema for memory tool
+    const memorySchema = z.object({
+      facts: z.array(z.object({
+        category: z.string().describe("Category of fact (e.g. 'bio', 'work', 'family')"),
+        label: z.string().describe("Label/Predicate (e.g. 'age', 'occupation')"),
+        value: z.string().describe("Value/Object (e.g. '30', 'Engineer')"),
+        confidence: z.number().min(0).max(1).default(0.9),
+      })).optional(),
+      preferences: z.array(z.object({
+        category: z.string().describe("Category (e.g. 'communication', 'product')"),
+        preference: z.string().describe("Key (e.g. 'channel', 'insurance_type')"),
+        value: z.string().describe("Value (e.g. 'email', 'life')"),
+      })).optional(),
+      entities: z.array(z.object({
+        name: z.string().describe("Name of entity (person, organization, etc.)"),
+        type: z.string().describe("Type of entity (Person, Organization, Date, Location)"),
+      })).optional(),
+    });
+
+    const result = streamText({
+      model: openrouter(modelId),
+      system: systemPrompt,
+      messages,
+      tools: {
+        saveMemory: tool({
+          description: "Save important facts, preferences, and entities about the user from the conversation.",
+          inputSchema: zodSchema(memorySchema),
+          execute: async (
+            input: z.infer<typeof memorySchema>,
+            _options
+          ) => {
+            const { facts, preferences, entities } = input ?? {};
+            if (!memoryQueue.has(threadId)) {
+              memoryQueue.set(threadId, []);
+            }
+            memoryQueue.get(threadId)!.push({ facts, preferences, entities });
+            console.log("[Memory Tool] Queued memory for saving:", {
+              facts: facts?.length || 0,
+              preferences: preferences?.length || 0,
+              entities: entities?.length || 0,
+            });
+            return {
+              success: true,
+              queued: true,
+              items: {
+                facts: facts?.length || 0,
+                preferences: preferences?.length || 0,
+                entities: entities?.length || 0,
+              },
+            };
+          },
+        }),
+      },
+    });
+
+    // If userId is 'anonymous', we still want working memory (session based) but maybe not long-term
+    const effectiveUserId = userId === 'anonymous' ? 'anon_' + threadId : userId;
+
+    // Use a self-executing async function to handle background memory updates
+    (async () => {
+      try {
+        console.log(`[Memory] Waiting for response to finish for thread ${threadId}...`);
+
+        // Wait for generation to complete
+        const fullResponse = await result.text;
+        const toolCalls = await result.toolCalls as any[];
+
+        console.log(`[Memory] Response finished. Text len: ${fullResponse.length}. Tool calls: ${toolCalls.length}`);
+
+        // Retrieve and process queued memories from tool calls
+        const queuedMemories = memoryQueue.get(threadId) || [];
+        memoryQueue.delete(threadId);
+
+        let extractedFacts: any[] = [];
+        let extractedPreferences: any[] = [];
+        let extractedEntities: any[] = [];
+
+        if (queuedMemories.length > 0) {
+          console.log(`[Memory] Processing ${queuedMemories.length} queued memory items`);
+          for (const mem of queuedMemories) {
+            if (mem.facts) extractedFacts.push(...(mem.facts as any[]));
+            if (mem.preferences) extractedPreferences.push(...(mem.preferences as any[]));
+            if (mem.entities) extractedEntities.push(...(mem.entities as any[]));
+          }
+          console.log(`[Memory] Total extracted: ${extractedFacts.length} facts, ${extractedPreferences.length} preferences, ${extractedEntities.length} entities`);
+        }
+
+        // Also extract from tool call args (backward compatibility)
+        for (const call of toolCalls) {
+          if (call.toolName === 'saveMemory') {
+            const args = call.args as any;
+            if (args?.facts) extractedFacts.push(...args.facts);
+            if (args?.preferences) extractedPreferences.push(...args.preferences);
+            if (args?.entities) extractedEntities.push(...args.entities);
+          }
+        }
+
+        // Conversion utilities
+        // We need robust type conversion here to match internal interfaces
+
+        // Fact conversion
+        const finalFacts = extractedFacts.map(f => ({
+          id: `fact_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          subject: 'user',
+          predicate: f.label || 'unknown',
+          object: f.value || 'unknown',
+          confidence: typeof f.confidence === 'number' ? f.confidence : 0.9,
+          source: threadId,
+          createdAt: new Date(),
+        }));
+
+        // Entity conversion
+        const finalEntities = extractedEntities.map(e => ({
+          id: `ent_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          name: e.name || 'unknown',
+          type: e.type || 'unknown',
+          source: threadId,
+          createdAt: new Date(),
+          attributes: {}, // Required by Entity interface
+          confidence: 0.9, // Required by Entity interface
+        }));
+
+        // Preference conversion
+        const finalPreferences = extractedPreferences.map(p => ({
+          id: `pref_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+          category: p.category || 'general',
+          key: p.preference || 'unknown',
+          value: p.value || 'unknown',
+          confidence: 0.9,
+          source: threadId,
+        }));
+
+        const messageId = `msg_${Date.now()}`;
+
+        // 1. Update working memory (Session based)
+        // Pass extracted data directly to avoid redundant regex extraction
+        await updateWorkingMemory(
+          effectiveUserId,
+          threadId,
+          userQuery,
+          fullResponse,
+          messageId,
+          finalEntities,
+          finalFacts
+        );
+
+        // 2. Update Long-term & Semantic (Only for logged in users)
+        if (userId !== 'anonymous') {
+          console.log(`[Memory] Updating long-term memory for user ${userId}`);
+
+          // Store for semantic recall (vector db)
+          await storeForSemanticRecall(userId, threadId, userQuery, fullResponse);
+
+          // Update user profile (Postgres) with extracted facts/prefs
+          await updateUserProfile(
+            userId,
+            userQuery,
+            fullResponse,
+            threadId,
+            finalFacts,
+            finalPreferences
+          );
+        } else {
+          console.log(`[Memory] Skipping long-term memory for anonymous user`);
+        }
+
+        // Optional: dual-write to Mastra Memory (same storage, for migration verification)
+        if (MEMORY_CONFIG.dualWrite && userId !== 'anonymous') {
+          try {
+            const mastraMemory = getMastraMemory();
+            if (MEMORY_CONFIG.debug) {
+              console.log('[Memory] Dual-writing to Mastra Memory');
+            }
+            await mastraMemory.saveMessage(threadId, {
+              role: 'user',
+              content: userQuery,
+              metadata: { userId, messageId, timestamp: new Date().toISOString() },
+            });
+            await mastraMemory.saveMessage(threadId, {
+              role: 'assistant',
+              content: fullResponse,
+              metadata: { userId, messageId, timestamp: new Date().toISOString() },
+            });
+            console.log('[Memory] Saved to Mastra Memory (dual-write)');
+          } catch (mastraError) {
+            console.error('[Memory] Mastra save error (non-fatal):', mastraError);
+          }
+        }
+      } catch (err) {
+        console.error('[Memory] Error in background memory update:', err);
+      }
+    })();
+
+    return result.toTextStreamResponse();
   } catch (error) {
     console.error("[Chat API] Error:", error);
     return new Response(JSON.stringify({ error: String(error) }), {

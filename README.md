@@ -360,6 +360,16 @@ User Message → AI Agent (RAG-Enhanced) → Response
 6. **Reranking** - LLM-based relevance scoring
 7. **Generation** - Context-aware response generation
 
+### Memory System
+
+RantAI Agents uses a three-tier memory architecture:
+
+- **Working Memory** – Short-term session context (TTL-based)
+- **Semantic Memory** – Vector-based recall of past conversations (SurrealDB)
+- **Long-term Memory** – Persistent user profiles (PostgreSQL)
+
+Optional **Mastra Memory** integration provides a Mastra-style API for semantic recall while still using the same PostgreSQL + SurrealDB storage. Enable with `MASTRA_MEMORY_ENABLED=true`. See [docs/mastra-memory-integration-plan.md](docs/mastra-memory-integration-plan.md) for details.
+
 ### Platform Architecture
 
 ```
