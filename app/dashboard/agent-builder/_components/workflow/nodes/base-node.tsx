@@ -7,6 +7,22 @@ import { cn } from "@/lib/utils"
 import { getNodeHeaderColor, type WorkflowNodeData } from "@/lib/workflow/types"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
 
+const EXEC_STATUS_BORDER: Record<string, string> = {
+  running: "border-blue-500 animate-pulse",
+  success: "border-emerald-500",
+  failed: "border-destructive",
+  suspended: "border-amber-500",
+  pending: "border-muted-foreground/40",
+}
+
+const EXEC_STATUS_DOT: Record<string, string> = {
+  running: "bg-blue-500 animate-pulse",
+  success: "bg-emerald-500",
+  failed: "bg-destructive",
+  suspended: "bg-amber-500",
+  pending: "bg-muted-foreground/40",
+}
+
 interface BaseNodeProps {
   id: string
   data: WorkflowNodeData
@@ -29,15 +45,32 @@ function BaseNodeComponent({
   outputHandles,
 }: BaseNodeProps) {
   const deleteNode = useWorkflowEditor((s) => s.deleteNode)
+  const executionStatus = useWorkflowEditor((s) => s.nodeExecutionStatus[id])
   const headerColor = getNodeHeaderColor(data.nodeType)
+
+  const borderClass = executionStatus
+    ? EXEC_STATUS_BORDER[executionStatus]
+    : selected
+      ? "border-primary"
+      : "border-border"
 
   return (
     <div
       className={cn(
         "relative bg-background rounded-lg shadow-md border-2 min-w-[180px] max-w-[260px] transition-colors",
-        selected ? "border-primary" : "border-border"
+        borderClass
       )}
     >
+      {/* Execution status dot */}
+      {executionStatus && (
+        <div
+          className={cn(
+            "absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full border-2 border-background z-10",
+            EXEC_STATUS_DOT[executionStatus]
+          )}
+        />
+      )}
+
       {/* Header */}
       <div
         className="flex items-center gap-2 px-3 py-1.5 rounded-t-md text-white text-xs font-medium"

@@ -41,6 +41,7 @@ interface WorkflowEditorState {
   isSaving: boolean
   isRunning: boolean
   showRunHistory: boolean
+  nodeExecutionStatus: Record<string, "pending" | "running" | "success" | "failed" | "suspended">
 
   // Actions
   loadWorkflow: (data: {
@@ -83,6 +84,9 @@ interface WorkflowEditorState {
   setSaving: (saving: boolean) => void
   setRunning: (running: boolean) => void
   toggleRunHistory: () => void
+  setShowRunHistory: (show: boolean) => void
+  setNodeExecutionStatus: (status: Record<string, "pending" | "running" | "success" | "failed" | "suspended">) => void
+  clearNodeExecutionStatus: () => void
 }
 
 const MAX_HISTORY = 50
@@ -103,6 +107,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   isSaving: false,
   isRunning: false,
   showRunHistory: false,
+  nodeExecutionStatus: {},
 
   loadWorkflow: (data) => {
     set({
@@ -264,4 +269,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   setSaving: (saving) => set({ isSaving: saving }),
   setRunning: (running) => set({ isRunning: running }),
   toggleRunHistory: () => set((s) => ({ showRunHistory: !s.showRunHistory })),
+  setShowRunHistory: (show) => set({ showRunHistory: show }),
+  setNodeExecutionStatus: (status) => set({ nodeExecutionStatus: status }),
+  clearNodeExecutionStatus: () => set({ nodeExecutionStatus: {} }),
 }))

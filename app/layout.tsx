@@ -4,6 +4,7 @@ import { Poppins } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { SessionProvider } from '@/components/providers/session-provider'
 import { ThemeProvider } from '@/components/theme-provider'
+import { Toaster } from '@/components/ui/sonner'
 import { brand } from '@/lib/branding'
 import './globals.css'
 
@@ -58,6 +59,7 @@ export default function RootLayout({
             {children}
           </SessionProvider>
         </ThemeProvider>
+        <Toaster />
         <Analytics />
       </body>
     </html>

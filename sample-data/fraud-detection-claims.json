@@ -1,0 +1,126 @@
+{
+  "description": "Sample insurance claims for testing the Fraud Detection workflow. Includes legitimate, suspicious, and clearly fraudulent examples based on the Kaggle Insurance Fraud Detection dataset structure.",
+  "dataset_reference": "https://www.kaggle.com/datasets/arpan129/insurance-fraud-detection",
+  "claims": [
+    {
+      "label": "Legitimate - Low Risk",
+      "expected_outcome": "auto-approve",
+      "data": {
+        "policy_number": "POL-2024-78234",
+        "months_as_customer": 84,
+        "age": 42,
+        "insured_sex": "FEMALE",
+        "insured_occupation": "exec-managerial",
+        "incident_type": "Single Vehicle Collision",
+        "incident_severity": "Minor Damage",
+        "incident_date": "2024-11-15",
+        "incident_city": "Columbus",
+        "total_claim_amount": 4200,
+        "injury_claim": 0,
+        "property_claim": 1200,
+        "vehicle_claim": 3000,
+        "authorities_contacted": "Police",
+        "police_report_available": "YES",
+        "number_of_vehicles_involved": 1,
+        "witnesses": 2,
+        "claim_description": "I was driving home from work on Route 33 around 5:30 PM when a deer ran across the road. I swerved to avoid it and hit the guardrail on the right shoulder. Front bumper and right headlight assembly damaged. Officer Martinez filed report #2024-CR-8821. Two other drivers stopped and provided their contact information as witnesses."
+      }
+    },
+    {
+      "label": "Suspicious - Medium Risk",
+      "expected_outcome": "analyst-review",
+      "data": {
+        "policy_number": "POL-2024-91456",
+        "months_as_customer": 4,
+        "age": 29,
+        "insured_sex": "MALE",
+        "insured_occupation": "handlers-cleaners",
+        "incident_type": "Multi-vehicle Collision",
+        "incident_severity": "Major Damage",
+        "incident_date": "2024-12-02",
+        "incident_city": "Springfield",
+        "total_claim_amount": 42000,
+        "injury_claim": 18000,
+        "property_claim": 4000,
+        "vehicle_claim": 20000,
+        "authorities_contacted": "None",
+        "police_report_available": "NO",
+        "number_of_vehicles_involved": 2,
+        "witnesses": 0,
+        "claim_description": "The other car ran a red light and hit me on the driver side. My back and neck are really hurting. The car is totaled I think. It happened at the intersection of Main and Oak around 11 PM. The other driver left the scene before I could get their information. I didn't call the police because I was in too much pain and just wanted to get home."
+      }
+    },
+    {
+      "label": "Fraudulent - High Risk",
+      "expected_outcome": "siu-escalation",
+      "data": {
+        "policy_number": "POL-2025-00312",
+        "months_as_customer": 2,
+        "age": 24,
+        "insured_sex": "MALE",
+        "insured_occupation": "other-service",
+        "incident_type": "Vehicle Theft",
+        "incident_severity": "Total Loss",
+        "incident_date": "2025-01-10",
+        "incident_city": "Northbrook",
+        "total_claim_amount": 95000,
+        "injury_claim": 25000,
+        "property_claim": 10000,
+        "vehicle_claim": 45000,
+        "authorities_contacted": "None",
+        "police_report_available": "NO",
+        "number_of_vehicles_involved": 1,
+        "witnesses": 0,
+        "claim_description": "My vehicle was stolen from my driveway sometime during the night. When I woke up it was gone. I also had valuable items in the trunk worth about $10,000 including electronics and designer clothing. I am experiencing severe emotional distress and anxiety since this happened and would like compensation for that as well. I need this resolved as quickly as possible."
+      }
+    },
+    {
+      "label": "Edge Case - Legitimate High Value",
+      "expected_outcome": "auto-approve or analyst-review",
+      "data": {
+        "policy_number": "POL-2023-45678",
+        "months_as_customer": 156,
+        "age": 55,
+        "insured_sex": "FEMALE",
+        "insured_occupation": "prof-specialty",
+        "incident_type": "Multi-vehicle Collision",
+        "incident_severity": "Total Loss",
+        "incident_date": "2024-10-28",
+        "incident_city": "Arlington",
+        "total_claim_amount": 78000,
+        "injury_claim": 35000,
+        "property_claim": 8000,
+        "vehicle_claim": 35000,
+        "authorities_contacted": "Police",
+        "police_report_available": "YES",
+        "number_of_vehicles_involved": 3,
+        "witnesses": 4,
+        "claim_description": "Three-car pileup on I-66 during morning rush hour at approximately 8:15 AM. A semi truck lost control and pushed the car behind me into my vehicle. I was taken to Virginia Hospital Center by ambulance with whiplash and a fractured collarbone. Dr. Sarah Kim at VHC is my treating physician, case #VHC-2024-11234. Police report #2024-VA-4412 filed by Officer Daniels of Virginia State Police. Four witnesses stopped to provide statements. The semi driver was cited for following too closely."
+      }
+    },
+    {
+      "label": "Suspicious - Component Mismatch",
+      "expected_outcome": "analyst-review",
+      "data": {
+        "policy_number": "POL-2024-67890",
+        "months_as_customer": 11,
+        "age": 33,
+        "insured_sex": "MALE",
+        "insured_occupation": "craft-repair",
+        "incident_type": "Single Vehicle Collision",
+        "incident_severity": "Major Damage",
+        "incident_date": "2024-11-22",
+        "incident_city": "Riverdale",
+        "total_claim_amount": 55000,
+        "injury_claim": 20000,
+        "property_claim": 5000,
+        "vehicle_claim": 15000,
+        "authorities_contacted": "Police",
+        "police_report_available": "YES",
+        "number_of_vehicles_involved": 1,
+        "witnesses": 1,
+        "claim_description": "Lost control on wet road and hit a tree on County Road 12. Significant front-end damage to my truck. I injured my back and knee in the impact. One person driving behind me saw the accident and called 911. Police report was filed."
+      }
+    }
+  ]
+}

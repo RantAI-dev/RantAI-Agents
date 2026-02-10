@@ -84,6 +84,12 @@ const KNOWLEDGE_BASE_CONFIG = [
     category: "FAQ",
     subcategory: "General",
   },
+  {
+    filename: "fraud-detection-guide.md",
+    title: "Insurance Fraud Detection Guide",
+    category: "FRAUD_DETECTION",
+    subcategory: "Investigation",
+  },
 ]
 
 // Simple text chunking for seed
@@ -363,6 +369,44 @@ async function seedKnowledgeBase() {
   return defaultKB.id
 }
 
+async function seedWorkflows(createdByUserId: string) {
+  console.log("\n--- Seeding Workflows ---")
+
+  // Dynamically import the template to avoid path alias issues in seed context
+  const { WORKFLOW_TEMPLATES } = await import("../lib/templates/workflow-templates")
+
+  const fraudTemplate = WORKFLOW_TEMPLATES.find((t) => t.id === "wf-fraud-detection")
+  if (!fraudTemplate) {
+    console.log("Fraud detection template not found. Skipping workflow seeding.")
+    return
+  }
+
+  // Check if workflow already exists (idempotent)
+  const existing = await prisma.workflow.findFirst({
+    where: { name: fraudTemplate.name },
+  })
+
+  if (existing) {
+    console.log(`Workflow "${fraudTemplate.name}" already exists (${existing.id}). Skipping.`)
+    return
+  }
+
+  const workflow = await prisma.workflow.create({
+    data: {
+      name: fraudTemplate.name,
+      description: fraudTemplate.description,
+      nodes: fraudTemplate.nodes as unknown as object[],
+      edges: fraudTemplate.edges as unknown as object[],
+      trigger: fraudTemplate.trigger as object,
+      variables: fraudTemplate.variables as object,
+      status: "DRAFT",
+      createdBy: createdByUserId,
+    },
+  })
+
+  console.log(`Created workflow: ${workflow.name} (${workflow.id})`)
+}
+
 async function main() {
   console.log("=== RantAI Agents - Database Seed ===\n")
 
@@ -402,9 +446,13 @@ async function main() {
   // Seed Knowledge Base
   const kbGroupId = await seedKnowledgeBase()
 
+  // Seed Workflows
+  await seedWorkflows(agent1.id)
+
   console.log("\n=== Seed Summary ===")
   console.log(`✓ Agents created: 2`)
   console.log(`✓ Knowledge Base Group ID: ${kbGroupId}`)
+  console.log(`✓ Workflows seeded`)
   console.log("\n🚀 To start the app:")
   console.log("  1. Run: pnpm dev")
   console.log("  2. Open: http://localhost:3000")

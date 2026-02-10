@@ -1,9 +1,20 @@
 "use client"
 
-import { useState, useCallback, useEffect, use } from "react"
+import { useState, useCallback, useEffect, useRef, use } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { ArrowLeft, Loader2, GitBranch } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { useWorkflows } from "@/hooks/use-workflows"
 import { useWorkflowRuns } from "@/hooks/use-workflow-runs"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
@@ -15,7 +26,7 @@ import { VariablesPanel } from "@/app/dashboard/agent-builder/_components/workfl
 import { RunHistory } from "@/app/dashboard/agent-builder/_components/workflow/run-history"
 import { RunDetail } from "@/app/dashboard/agent-builder/_components/workflow/run-detail"
 import { Input } from "@/components/ui/input"
-import type { WorkflowNodeData } from "@/lib/workflow/types"
+import type { WorkflowNodeData, StepLogEntry } from "@/lib/workflow/types"
 import type { Node, Edge } from "@xyflow/react"
 
 export default function WorkflowEditorPage({
@@ -46,6 +57,45 @@ export default function WorkflowEditorPage({
   } = useWorkflowRuns(id)
 
   const editor = useWorkflowEditor()
+  const [runDialogOpen, setRunDialogOpen] = useState(false)
+  const [runInputJson, setRunInputJson] = useState("{}")
+  const prevRunStatusRef = useRef<string | null>(null)
+
+  // Sync node execution status from activeRun steps
+  useEffect(() => {
+    if (!activeRun?.steps) {
+      editor.clearNodeExecutionStatus()
+      return
+    }
+    const steps = activeRun.steps as StepLogEntry[]
+    const statusMap: Record<string, "pending" | "running" | "success" | "failed" | "suspended"> = {}
+    for (const step of steps) {
+      statusMap[step.nodeId] = step.status
+    }
+    editor.setNodeExecutionStatus(statusMap)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRun?.steps])
+
+  // Toast on run status transitions
+  useEffect(() => {
+    const currentStatus = activeRun?.status ?? null
+    const prevStatus = prevRunStatusRef.current
+    prevRunStatusRef.current = currentStatus
+
+    if (!prevStatus || !currentStatus || prevStatus === currentStatus) return
+
+    if (currentStatus === "COMPLETED") {
+      toast.success("Workflow completed successfully")
+      editor.setRunning(false)
+    } else if (currentStatus === "FAILED") {
+      toast.error("Workflow execution failed")
+      editor.setRunning(false)
+    } else if (currentStatus === "PAUSED") {
+      toast.info("Workflow paused — waiting for human input")
+      editor.setRunning(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeRun?.status])
 
   // Load workflow into editor
   useEffect(() => {
@@ -89,15 +139,52 @@ export default function WorkflowEditorPage({
     }
   }, [id, editor, updateWorkflow])
 
-  const handleRun = useCallback(async () => {
-    editor.setRunning(true)
+  const handleRunClick = useCallback(() => {
+    const inputs = editor.variables?.inputs || []
+    if (inputs.length > 0) {
+      // Build a template from defined input variables
+      const template: Record<string, unknown> = {}
+      for (const v of inputs) {
+        if (v.defaultValue !== undefined) {
+          template[v.name] = v.defaultValue
+        } else if (v.type === "string") {
+          template[v.name] = ""
+        } else if (v.type === "number") {
+          template[v.name] = 0
+        } else if (v.type === "boolean") {
+          template[v.name] = false
+        } else if (v.type === "object") {
+          template[v.name] = {}
+        } else if (v.type === "array") {
+          template[v.name] = []
+        } else {
+          template[v.name] = null
+        }
+      }
+      setRunInputJson(JSON.stringify(template, null, 2))
+    } else {
+      setRunInputJson("{}")
+    }
+    setRunDialogOpen(true)
+  }, [editor.variables])
+
+  const handleRunExecute = useCallback(async () => {
+    let input: unknown = {}
     try {
-      await executeWorkflow({})
+      input = JSON.parse(runInputJson)
+    } catch {
+      return // invalid JSON, don't execute
+    }
+    setRunDialogOpen(false)
+    editor.setRunning(true)
+    editor.setShowRunHistory(true)
+    try {
+      await executeWorkflow(input)
       fetchRuns()
-    } finally {
+    } catch {
       editor.setRunning(false)
     }
-  }, [executeWorkflow, fetchRuns, editor])
+  }, [runInputJson, executeWorkflow, fetchRuns, editor])
 
   const handleDelete = useCallback(async () => {
     await deleteWorkflow(id)
@@ -162,7 +249,7 @@ export default function WorkflowEditorPage({
         {/* Toolbar actions inline */}
         <WorkflowToolbar
           onSave={handleSave}
-          onRun={handleRun}
+          onRun={handleRunClick}
           onDelete={handleDelete}
         />
       </div>
@@ -216,6 +303,63 @@ export default function WorkflowEditorPage({
         {/* Properties Panel */}
         <PropertiesPanel />
       </div>
+
+      {/* Run Input Dialog */}
+      <Dialog open={runDialogOpen} onOpenChange={setRunDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Run Workflow</DialogTitle>
+            <DialogDescription>
+              {(editor.variables?.inputs?.length ?? 0) > 0
+                ? `Provide input for: ${editor.variables.inputs.map((v) => v.name).join(", ")}`
+                : "Provide JSON input for this workflow execution."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="run-input">Input JSON</Label>
+            <Textarea
+              id="run-input"
+              value={runInputJson}
+              onChange={(e) => setRunInputJson(e.target.value)}
+              className="font-mono text-xs min-h-[200px]"
+              placeholder='{ "key": "value" }'
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  handleRunExecute()
+                }
+              }}
+            />
+            {(() => {
+              try {
+                JSON.parse(runInputJson)
+                return null
+              } catch {
+                return (
+                  <p className="text-xs text-destructive">Invalid JSON</p>
+                )
+              }
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRunDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRunExecute}
+              disabled={(() => {
+                try {
+                  JSON.parse(runInputJson)
+                  return false
+                } catch {
+                  return true
+                }
+              })()}
+            >
+              Run
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

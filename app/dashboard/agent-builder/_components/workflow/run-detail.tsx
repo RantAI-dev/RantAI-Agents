@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   CheckCircle2,
   XCircle,
@@ -42,6 +42,7 @@ interface RunDetailProps {
 export function RunDetail({ run, onResume }: RunDetailProps) {
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set())
   const [resumeInput, setResumeInput] = useState("")
+  const activeStepRef = useRef<HTMLDivElement>(null)
 
   const toggleStep = (stepId: string) => {
     setExpandedSteps((prev) => {
@@ -53,6 +54,27 @@ export function RunDetail({ run, onResume }: RunDetailProps) {
   }
 
   const steps = (run.steps || []) as StepLogEntry[]
+
+  // Auto-expand running step or last completed step
+  useEffect(() => {
+    if (steps.length === 0) return
+    const runningStep = steps.find((s) => s.status === "running")
+    const targetStep = runningStep || steps[steps.length - 1]
+    if (targetStep) {
+      setExpandedSteps((prev) => {
+        const next = new Set(prev)
+        next.add(targetStep.stepId)
+        return next
+      })
+    }
+  }, [steps.length, steps.map((s) => `${s.stepId}:${s.status}`).join(",")])
+
+  // Auto-scroll to running step
+  useEffect(() => {
+    if (activeStepRef.current) {
+      activeStepRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    }
+  }, [steps.find((s) => s.status === "running")?.stepId])
 
   return (
     <div className="space-y-1 p-2">
@@ -74,9 +96,12 @@ export function RunDetail({ run, onResume }: RunDetailProps) {
         const color = STEP_STATUS_COLOR[step.status] || "text-muted-foreground"
         const expanded = expandedSteps.has(step.stepId)
 
+        const isRunningStep = step.status === "running"
+
         return (
           <div
             key={step.stepId}
+            ref={isRunningStep ? activeStepRef : undefined}
             className="border rounded bg-muted/30"
           >
             <button

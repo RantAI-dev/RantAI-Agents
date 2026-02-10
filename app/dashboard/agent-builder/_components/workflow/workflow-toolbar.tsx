@@ -9,6 +9,7 @@ import {
   History,
   Loader2,
 } from "lucide-react"
+import { useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
@@ -38,9 +39,32 @@ export function WorkflowToolbar({ onSave, onRun, onDelete }: WorkflowToolbarProp
   const historyLength = useWorkflowEditor((s) => s.history.length)
   const toggleRunHistory = useWorkflowEditor((s) => s.toggleRunHistory)
   const showRunHistory = useWorkflowEditor((s) => s.showRunHistory)
+  const nodeExecutionStatus = useWorkflowEditor((s) => s.nodeExecutionStatus)
+  const nodes = useWorkflowEditor((s) => s.nodes)
+
+  const executionProgress = useMemo(() => {
+    const entries = Object.entries(nodeExecutionStatus)
+    if (entries.length === 0) return null
+    const completed = entries.filter(([, s]) => s === "success" || s === "failed").length
+    const total = entries.length
+    const runningEntry = entries.find(([, s]) => s === "running")
+    const runningLabel = runningEntry
+      ? nodes.find((n) => n.id === runningEntry[0])?.data?.label || "Processing"
+      : null
+    return { completed, total, runningLabel, percent: Math.round((completed / total) * 100) }
+  }, [nodeExecutionStatus, nodes])
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 border-b bg-background shrink-0 min-h-10">
+    <div className="relative flex items-center gap-2 px-3 py-1.5 border-b bg-background shrink-0 min-h-10">
+      {/* Execution progress bar */}
+      {executionProgress && (
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-muted">
+          <div
+            className="h-full bg-blue-500 transition-all duration-500 ease-out"
+            style={{ width: `${executionProgress.percent}%` }}
+          />
+        </div>
+      )}
       {/* Workflow name */}
       <span className="text-sm font-medium truncate max-w-[200px]">
         {workflowName || "Untitled Workflow"}
@@ -49,6 +73,14 @@ export function WorkflowToolbar({ onSave, onRun, onDelete }: WorkflowToolbarProp
       <Badge variant="secondary" className={STATUS_COLORS[workflowStatus] || ""}>
         {workflowStatus}
       </Badge>
+
+      {/* Step progress counter */}
+      {executionProgress && (
+        <span className="text-[10px] text-muted-foreground truncate max-w-[250px]">
+          Step {executionProgress.completed}/{executionProgress.total}
+          {executionProgress.runningLabel && ` — ${executionProgress.runningLabel}`}
+        </span>
+      )}
 
       <div className="flex-1" />
 

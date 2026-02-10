@@ -12,6 +12,7 @@ import type {
   HttpNodeData,
   SwitchNodeData,
   ToolNodeData,
+  CodeNodeData,
   TriggerConfig,
   WorkflowVariables,
 } from "@/lib/workflow/types"
@@ -418,6 +419,309 @@ const ticketRouterEdges: Edge[] = [
   },
 ]
 
+// ─── Template 6: Insurance Fraud Detection ───────────────
+
+const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
+  {
+    id: "trigger-webhook",
+    type: "workflowNode",
+    position: { x: 400, y: 0 },
+    data: {
+      label: "Receive Claim",
+      description: "Receive insurance claim data via webhook from claims system",
+      nodeType: NodeType.TRIGGER_WEBHOOK,
+      config: { webhookPath: "/fraud-detection" },
+    } as TriggerNodeData,
+  },
+  {
+    id: "transform-normalize",
+    type: "workflowNode",
+    position: { x: 400, y: 140 },
+    data: {
+      label: "Normalize Claim Data",
+      description: "Structure and validate incoming claim fields",
+      nodeType: NodeType.TRANSFORM,
+      expression: `return {
+  policy_number: input.policy_number || 'UNKNOWN',
+  months_as_customer: Number(input.months_as_customer) || 0,
+  age: Number(input.age) || 0,
+  insured_sex: input.insured_sex || 'unknown',
+  insured_occupation: input.insured_occupation || 'unknown',
+  incident_type: input.incident_type || 'unknown',
+  incident_severity: input.incident_severity || 'unknown',
+  incident_date: input.incident_date || new Date().toISOString(),
+  incident_city: input.incident_city || 'unknown',
+  total_claim_amount: Number(input.total_claim_amount) || 0,
+  injury_claim: Number(input.injury_claim) || 0,
+  property_claim: Number(input.property_claim) || 0,
+  vehicle_claim: Number(input.vehicle_claim) || 0,
+  authorities_contacted: input.authorities_contacted || 'None',
+  police_report_available: input.police_report_available || 'NO',
+  number_of_vehicles_involved: Number(input.number_of_vehicles_involved) || 1,
+  witnesses: Number(input.witnesses) || 0,
+  claim_description: input.claim_description || '',
+  receivedAt: new Date().toISOString()
+};`,
+    } as TransformNodeData,
+  },
+  {
+    id: "parallel-split",
+    type: "workflowNode",
+    position: { x: 400, y: 280 },
+    data: {
+      label: "Parallel Fraud Analysis",
+      description: "Run narrative analysis, rule-based scoring, and pattern matching simultaneously",
+      nodeType: NodeType.PARALLEL,
+    } as ParallelNodeData,
+  },
+  {
+    id: "llm-narrative",
+    type: "workflowNode",
+    position: { x: 80, y: 420 },
+    data: {
+      label: "Narrative Analysis",
+      description: "Analyze the claim description for inconsistencies and suspicious language",
+      nodeType: NodeType.LLM,
+      model: "openai/gpt-5-mini",
+      systemPrompt: `You are an insurance fraud detection specialist analyzing claim narratives.
+
+Analyze the following insurance claim for:
+1. Internal inconsistencies in the story
+2. Suspicious or vague language patterns
+3. Implausible details or timelines
+4. Emotional manipulation or excessive detail in unusual areas
+5. Missing critical details that a genuine claimant would include
+
+Respond with JSON:
+{
+  "narrative_risk_score": <0-100>,
+  "inconsistencies": ["list of found inconsistencies"],
+  "suspicious_patterns": ["list of suspicious language patterns"],
+  "assessment": "brief narrative assessment"
+}`,
+      temperature: 0.1,
+    } as LlmNodeData,
+  },
+  {
+    id: "code-rules",
+    type: "workflowNode",
+    position: { x: 400, y: 420 },
+    data: {
+      label: "Rule-Based Scoring",
+      description: "Compute fraud risk score using predefined business rules and red flags",
+      nodeType: NodeType.CODE,
+      code: `var score = 0;
+var flags = [];
+
+// High claim amount
+if (input.total_claim_amount > 50000) { score += 15; flags.push('High claim amount (>$50K)'); }
+if (input.total_claim_amount > 100000) { score += 10; flags.push('Very high claim amount (>$100K)'); }
+
+// Missing police report for major incidents
+if (input.police_report_available === 'NO' && input.incident_severity !== 'Minor Damage') {
+  score += 20; flags.push('No police report for non-minor incident');
+}
+
+// New customer filing large claim
+if (input.months_as_customer < 6) { score += 15; flags.push('Customer tenure < 6 months'); }
+if (input.months_as_customer < 12 && input.total_claim_amount > 30000) {
+  score += 10; flags.push('New customer with large claim');
+}
+
+// No witnesses
+if (input.witnesses === 0) { score += 10; flags.push('No witnesses reported'); }
+
+// Single vehicle incident with high claim
+if (input.number_of_vehicles_involved === 1 && input.total_claim_amount > 40000) {
+  score += 10; flags.push('Single vehicle, high claim');
+}
+
+// Injury claim without police report
+if (input.injury_claim > 0 && input.police_report_available === 'NO') {
+  score += 15; flags.push('Injury claim without police report');
+}
+
+// Claim components don't add up
+var componentSum = (input.injury_claim || 0) + (input.property_claim || 0) + (input.vehicle_claim || 0);
+if (Math.abs(componentSum - input.total_claim_amount) > 1000) {
+  score += 15; flags.push('Claim components do not sum to total');
+}
+
+score = Math.min(score, 100);
+return { rule_score: score, red_flags: flags, rules_evaluated: 9 };`,
+      runtime: "javascript",
+    } as CodeNodeData,
+  },
+  {
+    id: "llm-patterns",
+    type: "workflowNode",
+    position: { x: 720, y: 420 },
+    data: {
+      label: "Pattern Matching",
+      description: "Match claim data against known fraud patterns and indicators",
+      nodeType: NodeType.LLM,
+      model: "openai/gpt-5-mini",
+      systemPrompt: `You are an insurance fraud pattern detection system. Compare the following claim data against these known fraud patterns:
+
+KNOWN FRAUD PATTERNS:
+- Staged accidents: multiple claims in short period, specific body shops, round-number claims
+- Phantom injuries: injury claims without medical records, delayed injury reporting
+- Premium fraud: address manipulation, misrepresented vehicle usage
+- Inflated claims: repair estimates significantly above market rate
+- Organized rings: multiple related claimants, same providers, coordinated timelines
+
+Analyze the structured claim data and respond with JSON:
+{
+  "pattern_risk_score": <0-100>,
+  "matched_patterns": ["list of matched fraud patterns"],
+  "pattern_details": "explanation of pattern matches",
+  "recommended_checks": ["list of additional verification steps"]
+}`,
+      temperature: 0.1,
+    } as LlmNodeData,
+  },
+  {
+    id: "merge-results",
+    type: "workflowNode",
+    position: { x: 400, y: 580 },
+    data: {
+      label: "Merge Analysis Results",
+      description: "Combine results from all three parallel fraud analysis branches",
+      nodeType: NodeType.MERGE,
+      mergeStrategy: "all",
+    } as MergeNodeData,
+  },
+  {
+    id: "llm-synthesize",
+    type: "workflowNode",
+    position: { x: 400, y: 720 },
+    data: {
+      label: "Synthesize Assessment",
+      description: "Combine all fraud signals into a final risk assessment with overall score",
+      nodeType: NodeType.LLM,
+      model: "openai/gpt-5-mini",
+      systemPrompt: `You are a senior insurance fraud analyst producing a final assessment.
+
+You will receive the combined results of three fraud analysis methods:
+1. Narrative analysis (checked claim description for inconsistencies)
+2. Rule-based scoring (applied business rules and red flags)
+3. Pattern matching (compared against known fraud patterns)
+
+Produce a final fraud risk assessment. Calculate a weighted overall risk score:
+- Narrative analysis: 30% weight
+- Rule-based scoring: 40% weight
+- Pattern matching: 30% weight
+
+Respond with JSON only:
+{
+  "overall_risk_score": <0-100>,
+  "risk_level": "low" | "medium" | "high",
+  "confidence": <0-100>,
+  "summary": "2-3 sentence summary",
+  "key_findings": ["top 3-5 findings"],
+  "recommendation": "approve" | "review" | "escalate"
+}
+
+Risk level thresholds: low < 30, medium 30-65, high > 65`,
+      temperature: 0.2,
+    } as LlmNodeData,
+  },
+  {
+    id: "transform-parse",
+    type: "workflowNode",
+    position: { x: 400, y: 870 },
+    data: {
+      label: "Parse Assessment",
+      description: "Parse the LLM JSON response into a structured object",
+      nodeType: NodeType.TRANSFORM,
+      expression: `try {
+  var parsed = typeof input.text === 'string' ? JSON.parse(input.text) : input;
+  return parsed;
+} catch(e) {
+  return { risk_level: 'medium', overall_risk_score: 50, summary: input.text || 'Parse error', recommendation: 'review' };
+}`,
+    } as TransformNodeData,
+  },
+  {
+    id: "switch-risk",
+    type: "workflowNode",
+    position: { x: 400, y: 1010 },
+    data: {
+      label: "Route by Risk Level",
+      description: "Route the claim based on assessed fraud risk level",
+      nodeType: NodeType.SWITCH,
+      switchOn: "input.risk_level",
+      cases: [
+        { id: "low", value: "low", label: "Low Risk" },
+        { id: "medium", value: "medium", label: "Medium Risk" },
+        { id: "high", value: "high", label: "High Risk" },
+      ],
+    } as SwitchNodeData,
+  },
+  {
+    id: "transform-approve",
+    type: "workflowNode",
+    position: { x: 80, y: 1170 },
+    data: {
+      label: "Auto-Approve",
+      description: "Automatically approve low-risk claims for standard processing",
+      nodeType: NodeType.TRANSFORM,
+      expression: `return {
+  decision: 'approved',
+  decidedBy: 'auto',
+  risk_level: input.risk_level,
+  risk_score: input.overall_risk_score,
+  summary: input.summary,
+  decidedAt: new Date().toISOString()
+};`,
+    } as TransformNodeData,
+  },
+  {
+    id: "approval-analyst",
+    type: "workflowNode",
+    position: { x: 400, y: 1170 },
+    data: {
+      label: "Analyst Review",
+      description: "Route to fraud analyst for manual review of medium-risk claims",
+      nodeType: NodeType.APPROVAL,
+      prompt: "This claim has been flagged as MEDIUM RISK by automated fraud detection. Please review the analysis findings and approve or reject the claim.",
+    } as HumanInputNodeData,
+  },
+  {
+    id: "handoff-escalate",
+    type: "workflowNode",
+    position: { x: 720, y: 1170 },
+    data: {
+      label: "Escalate to SIU",
+      description: "Escalate high-risk claims to the Special Investigations Unit",
+      nodeType: NodeType.HANDOFF,
+      prompt: "HIGH RISK claim detected. This claim has been flagged with multiple fraud indicators and requires immediate investigation by the Special Investigations Unit (SIU). Claim is BLOCKED pending investigation.",
+    } as HumanInputNodeData,
+  },
+]
+
+const fraudDetectionEdges: Edge[] = [
+  // Main flow
+  { id: "e-trigger-normalize", source: "trigger-webhook", target: "transform-normalize" },
+  { id: "e-normalize-parallel", source: "transform-normalize", target: "parallel-split" },
+  // Parallel fan-out
+  { id: "e-parallel-narrative", source: "parallel-split", target: "llm-narrative" },
+  { id: "e-parallel-rules", source: "parallel-split", target: "code-rules" },
+  { id: "e-parallel-patterns", source: "parallel-split", target: "llm-patterns" },
+  // Parallel fan-in
+  { id: "e-narrative-merge", source: "llm-narrative", target: "merge-results" },
+  { id: "e-rules-merge", source: "code-rules", target: "merge-results" },
+  { id: "e-patterns-merge", source: "llm-patterns", target: "merge-results" },
+  // Synthesis
+  { id: "e-merge-synthesize", source: "merge-results", target: "llm-synthesize" },
+  { id: "e-synthesize-parse", source: "llm-synthesize", target: "transform-parse" },
+  { id: "e-parse-switch", source: "transform-parse", target: "switch-risk" },
+  // Risk level routing
+  { id: "e-switch-approve", source: "switch-risk", sourceHandle: "low", target: "transform-approve" },
+  { id: "e-switch-review", source: "switch-risk", sourceHandle: "medium", target: "approval-analyst" },
+  { id: "e-switch-escalate", source: "switch-risk", sourceHandle: "high", target: "handoff-escalate" },
+]
+
 // ─── Exports ──────────────────────────────────────────────
 
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
@@ -515,5 +819,24 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
       ],
     },
     tags: ["Webhook", "Routing"],
+  },
+  {
+    id: "wf-fraud-detection",
+    name: "Insurance Fraud Detection",
+    description:
+      "Receive claims via webhook, run parallel AI + rule-based fraud analysis, and route by risk level with human-in-the-loop review.",
+    icon: "🔍",
+    nodes: fraudDetectionNodes,
+    edges: fraudDetectionEdges,
+    trigger: { type: "webhook", webhookPath: "/fraud-detection" },
+    variables: {
+      inputs: [
+        { name: "claim", type: "object", description: "Insurance claim data with policy, incident, and financial details", required: true },
+      ],
+      outputs: [
+        { name: "decision", type: "object", description: "Fraud assessment decision with risk score and routing outcome", required: true },
+      ],
+    },
+    tags: ["Insurance", "Fraud", "Parallel", "Human-in-Loop"],
   },
 ]
