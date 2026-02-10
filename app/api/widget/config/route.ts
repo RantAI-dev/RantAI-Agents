@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { validateDomain, extractOrigin, validateApiKeyFormat } from "@/lib/embed"
 import { DEFAULT_WIDGET_CONFIG, type WidgetConfig } from "@/lib/embed/types"
+import { brand } from "@/lib/branding"
 
 // GET /api/widget/config?key=rantai_live_... - Get widget configuration
 export async function GET(req: NextRequest) {
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
         name: true,
         emoji: true,
         description: true,
+        liveChatEnabled: true,
       },
     })
 
@@ -87,7 +89,10 @@ export async function GET(req: NextRequest) {
       assistantName: assistant.name,
       assistantEmoji: assistant.emoji,
       assistantDescription: assistant.description,
+      liveChatEnabled: assistant.liveChatEnabled,
       config,
+      poweredByText: brand.poweredByText,
+      poweredByUrl: brand.companyUrl,
     })
   } catch (error) {
     console.error("[Widget Config API] Error:", error)

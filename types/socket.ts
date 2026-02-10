@@ -67,6 +67,7 @@ export interface AgentToServerEvents {
   "agent:typing": (data: { conversationId: string }) => void
   "agent:resolve": (data: { agentId: string; conversationId: string }) => void
   "agent:leave-conversation": (data: { conversationId: string }) => void
+  "agent:rejoin-conversation": (data: { agentId: string; conversationId: string }) => void
 }
 
 export interface ServerToAgentEvents {

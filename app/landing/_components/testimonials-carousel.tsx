@@ -10,10 +10,11 @@ import {
 } from "@/components/ui/carousel"
 import { Card, CardContent } from "@/components/ui/card"
 import { landing } from "./landing-styles"
+import { brand } from "@/lib/branding"
 
 const TESTIMONIALS = [
   {
-    quote: "RantAI Agents let us ship a support bot in days. RAG + human handoff just works.",
+    quote: `${brand.productName} let us ship a support bot in days. RAG + human handoff just works.`,
     name: "Alex Chen",
     role: "Head of Product",
     avatar: "/placeholder-user.jpg",
@@ -30,7 +31,7 @@ const TESTIMONIALS = [
     role: "Growth",
     avatar: "/placeholder-user.jpg",
   },
-] as const
+]
 
 export function TestimonialsCarousel() {
   return (

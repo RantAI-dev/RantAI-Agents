@@ -12,7 +12,8 @@ import {
   Bell,
   LogOut,
   User,
-  Bot,
+  Blocks,
+  GitBranch,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -50,13 +51,19 @@ const allNavItems: NavItem[] = [
     feature: null,
   },
   {
-    title: "Assistants",
-    url: "/dashboard/assistants",
-    icon: Bot,
+    title: "Agent Builder",
+    url: "/dashboard/agent-builder",
+    icon: Blocks,
     feature: null,
   },
   {
-    title: "Agent",
+    title: "Workflows",
+    url: "/dashboard/workflows",
+    icon: GitBranch,
+    feature: null,
+  },
+  {
+    title: "Live Chat",
     url: "/dashboard/agent",
     icon: Headphones,
     feature: "AGENT",

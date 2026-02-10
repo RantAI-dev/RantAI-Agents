@@ -13,6 +13,21 @@ import type { ConversationData } from "./channels/types"
 // Store for online agents
 const onlineAgents = new Map<string, string>() // agentId -> socketId
 
+// Share IO instance via globalThis so API routes can access it.
+// Next.js bundler (Turbopack/webpack) may create separate module instances
+// for the custom server vs API routes, so module-level vars aren't shared.
+// This pattern mirrors how Prisma shares its client via globalThis.
+declare global {
+  // eslint-disable-next-line no-var
+  var __socketIO: IOServer | undefined
+}
+
+let ioInstance: IOServer | null = null
+
+export function getIOInstance(): IOServer | null {
+  return ioInstance || globalThis.__socketIO || null
+}
+
 export function initSocketServer(httpServer: HTTPServer): IOServer {
   const io = new IOServer(httpServer, {
     path: "/api/socket",
@@ -22,6 +37,9 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
       methods: ["GET", "POST"],
     },
   })
+
+  ioInstance = io
+  globalThis.__socketIO = io
 
   io.on("connection", (socket) => {
     console.log("Client connected:", socket.id)
@@ -478,7 +496,7 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
             console.error("[Socket] Failed to send WhatsApp message:", waError)
           }
         } else {
-          // Send via socket for Portal/web chat
+          // Send via socket for Portal/web chat (customer receives this)
           io.to(`conversation:${conversation.sessionId}`).emit("chat:message", {
             id: message.id,
             role: message.role,
@@ -486,8 +504,38 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
             createdAt: message.createdAt.toISOString(),
           })
         }
+
+        // Also emit conversation:message so the agent dashboard gets the DB-confirmed message
+        // (replaces the optimistic pending message in the agent UI)
+        io.to(`conversation:${conversation.sessionId}`).emit("conversation:message", {
+          conversationId: conversation.id,
+          id: message.id,
+          role: message.role,
+          content: message.content,
+          createdAt: message.createdAt.toISOString(),
+        })
       } catch (error) {
         console.error("Error sending agent message:", error)
+      }
+    })
+
+    // Agent rejoins a conversation room (after page refresh / reconnect)
+    socket.on("agent:rejoin-conversation", async ({ agentId, conversationId }) => {
+      try {
+        const conversation = await prisma.conversation.findUnique({
+          where: { id: conversationId },
+        })
+
+        if (
+          conversation &&
+          conversation.agentId === agentId &&
+          conversation.status === ConversationStatus.AGENT_CONNECTED
+        ) {
+          socket.join(`conversation:${conversation.sessionId}`)
+          console.log(`Agent ${agentId} rejoined conversation ${conversationId}`)
+        }
+      } catch (error) {
+        console.error("Error rejoining conversation:", error)
       }
     })
 
@@ -586,7 +634,7 @@ async function getQueuePosition(conversationId: string): Promise<number> {
   return position + 1
 }
 
-async function broadcastQueueUpdate(io: IOServer) {
+export async function broadcastQueueUpdate(io: IOServer) {
   const conversations = await prisma.conversation.findMany({
     where: { status: ConversationStatus.WAITING_FOR_AGENT },
     orderBy: { handoffAt: "asc" },

@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { landing } from "./landing-styles"
 import { cn } from "@/lib/utils"
+import { brand } from "@/lib/branding"
 
 const PRICING_TIERS = [
   {
@@ -25,7 +26,7 @@ const PRICING_TIERS = [
     periodAnnual: "Try the platform",
     description: "Get started with core features.",
     features: ["1 assistant", "Limited knowledge base", "Web chat only", "Community support"],
-    cta: "Try RantAI",
+    cta: `Try ${brand.productShortName}`,
     href: "/agent/login",
     highlighted: false,
   },
@@ -51,7 +52,7 @@ const PRICING_TIERS = [
     href: "/agent/login",
     highlighted: false,
   },
-] as const
+]
 
 export function PricingSection() {
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly")

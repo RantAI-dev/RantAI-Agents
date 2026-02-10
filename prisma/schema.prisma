@@ -155,6 +155,10 @@ model Organization {
   embedKeys         EmbedApiKey[]
   dashboardSessions DashboardSession[]
   usageRecords      UsageRecord[]
+  tools             Tool[]
+  mcpServers        McpServerConfig[]
+  mcpApiKeys        McpApiKey[]
+  workflows         Workflow[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -220,6 +224,18 @@ model Assistant {
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy      String?       // userId who created
   updatedBy      String?       // userId who last updated
+
+  // Live Chat handoff — when enabled, widget can escalate to human agents
+  liveChatEnabled Boolean @default(false)
+
+  // Memory configuration per-assistant
+  memoryConfig Json? // { enabled, workingMemory, semanticRecall, longTermProfile, memoryInstructions }
+
+  // Tool bindings
+  tools AssistantTool[]
+
+  // Workflows
+  workflows Workflow[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -428,3 +444,188 @@ model UserMemory {
   @@index([key])
 }
 
+// Tool definition for agentic capabilities
+model Tool {
+  id              String   @id @default(cuid())
+  name            String                          // Machine name: "knowledge_search"
+  displayName     String                          // Human name: "Knowledge Base Search"
+  description     String   @db.Text               // LLM-facing description
+  category        String   @default("builtin")    // "builtin" | "custom" | "mcp"
+  parameters      Json                            // Zod-compatible JSON schema
+  isBuiltIn       Boolean  @default(false)
+  enabled         Boolean  @default(true)
+  executionConfig Json?                           // For custom: { type, url, method, headers }
+
+  // MCP association (null for builtin/custom tools)
+  mcpServerId String?
+  mcpServer   McpServerConfig? @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+
+  // Organization scope (null = system/global tool)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?
+
+  // Tool-Assistant bindings
+  assistantTools AssistantTool[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
+  @@index([category])
+  @@index([mcpServerId])
+}
+
+// Junction table: which tools are enabled for which assistant
+model AssistantTool {
+  id          String    @id @default(cuid())
+  assistantId String
+  assistant   Assistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  toolId      String
+  tool        Tool      @relation(fields: [toolId], references: [id], onDelete: Cascade)
+  enabled     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@unique([assistantId, toolId])
+  @@index([assistantId])
+  @@index([toolId])
+}
+
+// MCP Server configuration for external tool providers
+model McpServerConfig {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  transport       String                          // "stdio" | "sse" | "streamable-http"
+  url             String?                         // For SSE/HTTP transports
+  command         String?                         // For stdio transport
+  args            String[]                        // For stdio transport
+  env             Json?                           // Environment variables
+  headers         Json?                           // HTTP auth headers
+  enabled         Boolean   @default(true)
+  lastConnectedAt DateTime?
+  lastError       String?
+
+  // Discovered tools
+  tools Tool[]
+
+  // Organization scope
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+// Tool execution log for tracking and debugging
+model ToolExecution {
+  id          String   @id @default(cuid())
+  toolName    String
+  toolId      String?
+  assistantId String?
+  sessionId   String?
+  input       Json
+  output      Json?
+  error       String?
+  durationMs  Int?
+  status      String   @default("pending") // "pending" | "success" | "error"
+  organizationId String?
+  userId         String?
+  createdAt   DateTime @default(now())
+
+  @@index([toolName, createdAt])
+  @@index([sessionId])
+  @@index([organizationId, createdAt])
+}
+
+model McpApiKey {
+  id             String    @id @default(cuid())
+  name           String
+  key            String    @unique
+  exposedTools   String[]
+  requestCount   Int       @default(0)
+  lastUsedAt     DateTime?
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?
+  enabled        Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([key])
+  @@index([organizationId])
+}
+
+// ─── Workflow Builder ────────────────────────────────────────
+
+model Workflow {
+  id              String         @id @default(cuid())
+  name            String
+  description     String?
+
+  // Canvas data (React Flow format)
+  nodes           Json           @default("[]")
+  edges           Json           @default("[]")
+
+  // Metadata
+  trigger         Json           @default("{\"type\":\"manual\"}")
+  variables       Json           @default("{\"inputs\":[],\"outputs\":[]}")
+
+  // Status
+  status          WorkflowStatus @default(DRAFT)
+  version         Int            @default(1)
+
+  // Relations
+  organizationId  String?
+  organization    Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       String
+  assistantId     String?
+  assistant       Assistant?     @relation(fields: [assistantId], references: [id], onDelete: SetNull)
+
+  runs            WorkflowRun[]
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([organizationId])
+  @@index([assistantId])
+}
+
+model WorkflowRun {
+  id              String     @id @default(cuid())
+  workflowId      String
+  workflow        Workflow    @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  status          RunStatus
+  input           Json
+  output          Json?
+  error           String?
+
+  // Execution trace
+  steps           Json       @default("[]")
+  suspendedAt     String?    // Step ID where execution is suspended (HITL)
+  resumeData      Json?
+
+  startedAt       DateTime   @default(now())
+  completedAt     DateTime?
+
+  @@index([workflowId, startedAt])
+}
+
+enum WorkflowStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum RunStatus {
+  PENDING
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+}

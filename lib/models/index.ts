@@ -31,7 +31,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     id: "xiaomi/mimo-v2-flash",
     name: "MiMo V2 Flash",
     provider: "Xiaomi",
-    description: "Free, fast and efficient for general chat",
+    description: "Fast and efficient for general chat",
     contextWindow: 32768,
     pricing: { input: 0, output: 0 },
     capabilities: { vision: false, functionCalling: false, streaming: true },
@@ -48,8 +48,8 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     capabilities: { vision: true, functionCalling: true, streaming: true },
   },
   {
-    id: "openai/gpt-5.2-mini",
-    name: "GPT-5.2 Mini",
+    id: "openai/gpt-5-mini",
+    name: "GPT-5 Mini",
     provider: "OpenAI",
     description: "Fast and affordable, great for most tasks",
     contextWindow: 256000,
@@ -88,7 +88,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
 
   // Google Models
   {
-    id: "google/gemini-3-pro",
+    id: "google/gemini-3-pro-preview",
     name: "Gemini 3 Pro",
     provider: "Google",
     description: "Most advanced Gemini model",
@@ -97,7 +97,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     capabilities: { vision: true, functionCalling: true, streaming: true },
   },
   {
-    id: "google/gemini-3-flash",
+    id: "google/gemini-3-flash-preview",
     name: "Gemini 3 Flash",
     provider: "Google",
     description: "Fast multimodal model, great value",
@@ -126,11 +126,11 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     capabilities: { vision: false, functionCalling: false, streaming: true },
   },
 
-  // Zhipu Models
+  // Z.AI (formerly Zhipu) Models
   {
-    id: "zhipu/glm-4.7",
+    id: "z-ai/glm-4.7",
     name: "GLM 4.7",
-    provider: "Zhipu AI",
+    provider: "Z.AI",
     description: "Latest GLM model with strong capabilities",
     contextWindow: 128000,
     pricing: { input: 0.5, output: 1 },
@@ -139,7 +139,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
 
   // Moonshot Models
   {
-    id: "moonshot/kimi-k2.5",
+    id: "moonshotai/kimi-k2.5",
     name: "Kimi K2.5",
     provider: "Moonshot",
     description: "Advanced Chinese AI model",
@@ -161,8 +161,8 @@ export const AVAILABLE_MODELS: LLMModel[] = [
 
   // Qwen Models
   {
-    id: "qwen/qwen-3-72b",
-    name: "Qwen 3 72B",
+    id: "qwen/qwen3-32b",
+    name: "Qwen3 32B",
     provider: "Alibaba",
     description: "Strong multilingual support",
     contextWindow: 131072,

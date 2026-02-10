@@ -10,11 +10,13 @@ import { Button } from "@/components/ui/button"
 import { FeaturesProvider } from "@/components/providers/features-provider"
 import { ChatSessionsProvider } from "@/hooks/use-chat-sessions"
 import { OrganizationProvider } from "@/hooks/use-organization"
+import { brand } from "@/lib/branding"
 
 const DASHBOARD_TITLES: Record<string, string> = {
   "/dashboard": "Chat",
-  "/dashboard/assistants": "Assistants",
-  "/dashboard/agent": "Agent",
+  "/dashboard/agent-builder": "Agent Builder",
+  "/dashboard/workflows": "Workflows",
+  "/dashboard/agent": "Live Chat",
   "/dashboard/knowledge": "Knowledge",
   "/dashboard/statistics": "Statistics",
   "/dashboard/settings": "Settings",
@@ -23,6 +25,8 @@ const DASHBOARD_TITLES: Record<string, string> = {
 
 function getPageTitle(pathname: string): string {
   if (DASHBOARD_TITLES[pathname]) return DASHBOARD_TITLES[pathname]
+  if (pathname.startsWith("/dashboard/agent-builder/")) return "Agent Builder"
+  if (pathname.startsWith("/dashboard/workflows/")) return "Workflows"
   if (pathname.startsWith("/dashboard/settings/")) return "Settings"
   return "Dashboard"
 }
@@ -37,7 +41,7 @@ export default function DashboardLayout({
 
   useEffect(() => {
     const title = getPageTitle(pathname ?? "")
-    document.title = title ? `${title} | RantAI Agents` : "RantAI Agents"
+    document.title = title ? `${title} | ${brand.productName}` : brand.productName
   }, [pathname])
 
   const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
@@ -63,7 +67,7 @@ export default function DashboardLayout({
               variant="ghost"
               size="icon"
               onClick={toggleSidebar}
-              className="absolute top-4 left-4 z-10 h-8 w-8 text-foreground/60 hover:text-foreground hover:bg-accent"
+              className="absolute top-3 left-4 z-10 h-8 w-8 text-foreground/60 hover:text-foreground hover:bg-accent"
               aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
             >
               {sidebarOpen ? (

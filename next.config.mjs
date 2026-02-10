@@ -26,6 +26,15 @@ const nextConfig = {
           { key: "Access-Control-Allow-Headers", value: "Content-Type, X-Widget-Api-Key" },
         ],
       },
+      {
+        // MCP Server CORS headers (external MCP clients)
+        source: "/api/mcp/:path*",
+        headers: [
+          { key: "Access-Control-Allow-Origin", value: "*" },
+          { key: "Access-Control-Allow-Methods", value: "GET, POST, DELETE, OPTIONS" },
+          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version" },
+        ],
+      },
     ]
   },
 }

@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Copy, Check, ExternalLink } from "lucide-react"
 import type { EmbedApiKeyResponse } from "@/lib/embed/types"
+import { brand } from "@/lib/branding"
 
 interface EmbedCodeDialogProps {
   open: boolean
@@ -32,7 +33,7 @@ export function EmbedCodeDialog({
       ? window.location.origin
       : "https://your-domain.com"
 
-  const embedCode = `<!-- RantAI Chat Widget -->
+  const embedCode = `${brand.widgetComment}
 <script
   src="${baseUrl}/widget/rantai-widget.js"
   data-api-key="${embedKey.key}"

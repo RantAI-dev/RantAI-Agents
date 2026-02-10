@@ -21,6 +21,7 @@ import { TestimonialsCarousel } from "./_components/testimonials-carousel"
 import { PricingSection } from "./_components/pricing-section"
 import { landing } from "./_components/landing-styles"
 import { cn } from "@/lib/utils"
+import { brand } from "@/lib/branding"
 
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
@@ -56,12 +57,12 @@ const USE_CASES = [
 const INTEGRATIONS = ["Next.js", "OpenRouter", "PostgreSQL", "SurrealDB", "Twilio", "Salesforce"] as const
 
 const FAQ_ITEMS = [
-  { q: "What is RantAI Agents?", a: "RantAI Agents is an enterprise-grade AI agent platform that lets you build and deploy intelligent agents with RAG, multi-channel deployment (web, WhatsApp, email, widget), and human-in-the-loop handoff." },
+  { q: `What is ${brand.productName}?`, a: `${brand.productName} is an enterprise-grade AI agent platform that lets you build and deploy intelligent agents with RAG, multi-channel deployment (web, WhatsApp, email, widget), and human-in-the-loop handoff.` },
   { q: "Does it support RAG?", a: "Yes. The platform includes a full RAG pipeline: document ingestion, semantic chunking, vector storage in SurrealDB, hybrid search, reranking, and context-aware response generation." },
   { q: "Which channels are supported?", a: "You can deploy agents on the web portal, embeddable widget, WhatsApp (via Twilio), and email. Salesforce CRM integration is also available." },
   { q: "How does human handoff work?", a: "When the AI can't resolve an issue or you configure escalation, the conversation is queued for a human operator who can take over and continue the chat in real time." },
   { q: "What do I need to run it?", a: "You need Node.js v18+, pnpm, Docker (for PostgreSQL and SurrealDB), and an OpenRouter API key. See the README for a full quick start." },
-] as const
+]
 
 export default function LandingPage() {
   return (
@@ -80,9 +81,9 @@ export default function LandingPage() {
           className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6"
           aria-label="Main navigation"
         >
-          <Link href="/" className="flex items-center gap-2 shrink-0" aria-label="RantAI Agents home">
-            <Image src="/logo/logo-rantai-border.png" alt="RantAI" width={32} height={32} className="h-8 w-auto" />
-            <span className="font-semibold text-zinc-100">RantAI Agents</span>
+          <Link href="/" className="flex items-center gap-2 shrink-0" aria-label={`${brand.productName} home`}>
+            <Image src={brand.logoMain} alt={brand.productShortName} width={32} height={32} className="h-8 w-auto" />
+            <span className="font-semibold text-zinc-100">{brand.productName}</span>
           </Link>
           <div className="hidden md:flex items-center gap-6">
             {NAV_LINKS.map((link) => (
@@ -116,7 +117,7 @@ export default function LandingPage() {
                 Build. Deploy. Scale.
               </h1>
               <p className="text-lg sm:text-xl text-zinc-400 max-w-xl mx-auto lg:mx-0 mb-10">
-                RantAI Agents is a flexible platform for building intelligent agents with RAG, multi-channel deployment, and human-in-the-loop workflows—so you can power support, knowledge assistants, and domain-specific AI from one place.
+                {brand.productName} is a flexible platform for building intelligent agents with RAG, multi-channel deployment, and human-in-the-loop workflows—so you can power support, knowledge assistants, and domain-specific AI from one place.
               </p>
               <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
                 <Button size="lg" className={landing.btnPrimary} asChild>
@@ -321,8 +322,8 @@ export default function LandingPage() {
         <footer className={cn("border-t border-zinc-800 py-12 px-4 sm:px-6 bg-zinc-900/50")} role="contentinfo">
           <div className={cn(landing.container, "flex flex-col sm:flex-row items-center justify-between gap-6")}>
             <div className="flex items-center gap-2">
-              <Image src="/logo/logo-rantai-border.png" alt="" width={24} height={24} className="h-6 w-auto opacity-80" />
-              <span className="text-sm font-medium text-zinc-300">RantAI Agents</span>
+              <Image src={brand.logoMain} alt="" width={24} height={24} className="h-6 w-auto opacity-80" />
+              <span className="text-sm font-medium text-zinc-300">{brand.productName}</span>
             </div>
             <nav className="flex flex-wrap items-center justify-center gap-6 text-sm" aria-label="Footer navigation">
               <Link href="/dashboard" className="text-zinc-500 hover:text-zinc-300 transition-colors">Dashboard</Link>

@@ -10,6 +10,8 @@ import type {
 
 type AgentSocket = Socket<ServerToAgentEvents, AgentToServerEvents>
 
+const ONLINE_STORAGE_KEY = "rantai-agent-online"
+
 interface UseAgentSocketOptions {
   agentId: string
   onQueueUpdate?: (conversations: QueueConversation[]) => void
@@ -58,9 +60,14 @@ export function useAgentSocket({
     }
   })
 
-  // Keep isOnline ref in sync
+  // Keep isOnline ref in sync and persist to sessionStorage
   useEffect(() => {
     isOnlineRef.current = isOnline
+    try {
+      sessionStorage.setItem(ONLINE_STORAGE_KEY, isOnline ? "1" : "0")
+    } catch {
+      // Ignore storage errors
+    }
   }, [isOnline])
 
   useEffect(() => {
@@ -75,11 +82,22 @@ export function useAgentSocket({
 
     socket.on("connect", () => {
       setIsConnected(true)
+
+      // Auto-restore online state from sessionStorage after reconnect
+      try {
+        const wasOnline = sessionStorage.getItem(ONLINE_STORAGE_KEY) === "1"
+        if (wasOnline) {
+          socket.emit("agent:online", { agentId })
+          setIsOnline(true)
+        }
+      } catch {
+        // Ignore storage errors
+      }
     })
 
     socket.on("disconnect", () => {
       setIsConnected(false)
-      setIsOnline(false)
+      // Don't reset isOnline state on disconnect - we'll restore on reconnect
     })
 
     socket.on("queue:update", (data) => {
@@ -160,6 +178,13 @@ export function useAgentSocket({
     socketRef.current?.emit("agent:leave-conversation", { conversationId })
   }, [])
 
+  const rejoinConversation = useCallback(
+    (conversationId: string) => {
+      socketRef.current?.emit("agent:rejoin-conversation", { agentId, conversationId })
+    },
+    [agentId]
+  )
+
   return {
     isConnected,
     isOnline,
@@ -171,5 +196,6 @@ export function useAgentSocket({
     sendTyping,
     resolveConversation,
     leaveConversation,
+    rejoinConversation,
   }
 }

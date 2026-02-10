@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { LogOut, MessageSquare, Users } from "lucide-react"
 import Image from "next/image"
+import { brand } from "@/lib/branding"
 import { useAgentSocket } from "@/components/agent/hooks/use-agent-socket"
 import { ConversationQueue } from "@/components/agent/conversation-queue"
 import { ActiveConversation } from "@/components/agent/active-conversation"
@@ -225,8 +226,8 @@ export default function AgentDashboard() {
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
               <Image
-                src="/logo/logo-rantai-border.png"
-                alt="RantAI Agents"
+                src={brand.logoMain}
+                alt={brand.productName}
                 width={100}
                 height={100}
                 className="h-8 w-auto"

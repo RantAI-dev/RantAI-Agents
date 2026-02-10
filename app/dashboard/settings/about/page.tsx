@@ -11,6 +11,7 @@ import {
   Brain,
   ExternalLink
 } from "lucide-react"
+import { brand } from "@/lib/branding"
 
 export default function AboutPage() {
   const technologies = [
@@ -71,7 +72,7 @@ export default function AboutPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            RantAI Agents Platform
+            {brand.productName} Platform
           </CardTitle>
           <CardDescription>AI-powered agent platform for customer support</CardDescription>
         </CardHeader>
@@ -173,7 +174,7 @@ export default function AboutPage() {
       <Separator />
 
       <div className="text-center text-xs text-muted-foreground">
-        <p>Built with Rantai AI Platform</p>
+        <p>Built with {brand.productName}</p>
       </div>
     </div>
   )

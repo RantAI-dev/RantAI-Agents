@@ -89,7 +89,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Geist', 'Geist Fallback';
+  --font-sans: 'Poppins', sans-serif;
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -143,19 +143,156 @@
   }
 }
 
-/* Fix list rendering in chat messages */
+/* ── Chat message markdown overrides ── */
+.chat-message {
+  /* Tighten prose spacing for chat bubbles */
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--muted-foreground);
+  --tw-prose-quotes: var(--muted-foreground);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
+/* Reduce vertical spacing between elements */
+.chat-message > :first-child { margin-top: 0; }
+.chat-message > :last-child { margin-bottom: 0; }
+
+.chat-message p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+  line-height: 1.625;
+}
+
+/* ── Lists ── */
 .chat-message ol {
   list-style-type: decimal;
   padding-left: 1.5rem;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
 }
 
 .chat-message ul {
   list-style-type: disc;
   padding-left: 1.5rem;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
 }
 
 .chat-message ol li,
 .chat-message ul li {
   display: list-item;
-  margin-bottom: 0.25rem;
+  margin-top: 0.125em;
+  margin-bottom: 0.125em;
+  padding-left: 0.25em;
+}
+
+/* Nested lists */
+.chat-message li > ul,
+.chat-message li > ol {
+  margin-top: 0.125em;
+  margin-bottom: 0.125em;
+}
+
+/* Task-list checkboxes (GFM) */
+.chat-message ul.contains-task-list {
+  list-style: none;
+  padding-left: 0;
+}
+.chat-message li.task-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+.chat-message li.task-list-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+/* ── Headings ── */
+.chat-message h1,
+.chat-message h2,
+.chat-message h3,
+.chat-message h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+}
+.chat-message h1 { font-size: 1.25em; }
+.chat-message h2 { font-size: 1.125em; }
+.chat-message h3 { font-size: 1.05em; }
+.chat-message h4 { font-size: 1em; }
+
+/* ── Blockquotes ── */
+.chat-message blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 0.875em;
+  margin: 0.75em 0;
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+.chat-message blockquote p {
+  margin: 0.25em 0;
+}
+
+/* ── Horizontal rule ── */
+.chat-message hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0.75em 0;
+}
+
+/* ── Tables (GFM) ── */
+.chat-message table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.875em;
+  margin: 0.75em 0;
+}
+.chat-message thead th {
+  background: var(--muted);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5em 0.75em;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.chat-message tbody td {
+  padding: 0.5em 0.75em;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.chat-message tbody tr:last-child td {
+  border-bottom: none;
+}
+.chat-message tbody tr:hover {
+  background: color-mix(in oklch, var(--muted) 40%, transparent);
+}
+
+/* ── Inline code ── */
+.chat-message :not(pre) > code {
+  background: var(--muted);
+  padding: 0.15em 0.35em;
+  border-radius: 0.25em;
+  font-size: 0.875em;
+  font-family: var(--font-mono);
+}
+
+/* ── Strikethrough (GFM) ── */
+.chat-message del {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/* ── Images ── */
+.chat-message img {
+  border-radius: 0.5em;
+  max-width: 100%;
+  height: auto;
+  margin: 0.5em 0;
 }

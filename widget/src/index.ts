@@ -1,6 +1,6 @@
 import { WidgetAPI } from "./api"
 import { generateStyles } from "./styles"
-import { chatIcon, closeIcon, sendIcon } from "./icons"
+import { chatIcon, closeIcon, sendIcon, headphonesIcon, userIcon, agentIcon, botIcon } from "./icons"
 import type { WidgetPublicConfig, WidgetConfig, Message, WidgetState } from "./types"
 
 class RantAIWidgetInstance {
@@ -11,11 +11,15 @@ class RantAIWidgetInstance {
   private messagesContainer: HTMLDivElement | null = null
   private input: HTMLTextAreaElement | null = null
   private sendButton: HTMLButtonElement | null = null
+  private pollInterval: ReturnType<typeof setInterval> | null = null
+  private lastPollTimestamp: string | null = null
   private state: WidgetState = {
     isOpen: false,
     isLoading: false,
     messages: [],
     error: null,
+    handoffState: "idle",
+    conversationId: null,
   }
 
   constructor(apiKey: string, baseUrl: string) {
@@ -138,9 +142,6 @@ class RantAIWidgetInstance {
         </form>
       </div>
 
-      <div class="rantai-powered">
-        Powered by <a href="https://rantai.dev" target="_blank" rel="noopener">RantAI</a>
-      </div>
     `
   }
 
@@ -198,9 +199,9 @@ class RantAIWidgetInstance {
     this.chatWindow?.classList.remove("open")
   }
 
-  private addMessage(role: "user" | "assistant", content: string): Message {
+  private addMessage(role: "user" | "assistant" | "agent", content: string, id?: string): Message {
     const message: Message = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id: id || `msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       role,
       content,
       timestamp: new Date(),
@@ -231,7 +232,28 @@ class RantAIWidgetInstance {
       ? '<div class="rantai-typing"><span></span><span></span><span></span></div>'
       : this.formatMessageContent(message.content)
 
-    div.innerHTML = `<div class="rantai-message-bubble">${bubbleContent}</div>`
+    // Build avatar HTML based on role
+    let avatarHtml = ""
+    if (message.role === "assistant") {
+      const avatar = this.config?.config.avatar || this.config?.assistantEmoji || ""
+      const isValidUrl = avatar.startsWith("http://") || avatar.startsWith("https://")
+      const avatarContent = isValidUrl
+        ? `<img src="${avatar}" alt="" style="width: 100%; height: 100%; border-radius: 50%;">`
+        : avatar
+          ? `<span class="rantai-msg-avatar-emoji">${this.escapeHtml(avatar)}</span>`
+          : botIcon
+      avatarHtml = `<div class="rantai-msg-avatar rantai-msg-avatar-assistant">${avatarContent}</div>`
+    } else if (message.role === "agent") {
+      avatarHtml = `<div class="rantai-msg-avatar rantai-msg-avatar-agent">${agentIcon}</div>`
+    } else if (message.role === "user") {
+      avatarHtml = `<div class="rantai-msg-avatar rantai-msg-avatar-user">${userIcon}</div>`
+    }
+
+    const labelHtml =
+      message.role === "agent"
+        ? '<div class="rantai-agent-label">Agent</div>'
+        : ""
+    div.innerHTML = `${avatarHtml}<div class="rantai-msg-content">${labelHtml}<div class="rantai-message-bubble">${bubbleContent}</div></div>`
     this.messagesContainer.appendChild(div)
   }
 
@@ -286,7 +308,22 @@ class RantAIWidgetInstance {
     this.input.value = ""
     this.input.style.height = "auto"
 
-    // Add user message
+    // If in live chat mode, send via handoff API
+    if (
+      this.state.handoffState === "connected" &&
+      this.state.conversationId
+    ) {
+      this.addMessage("user", content)
+      try {
+        await this.api.sendHandoffMessage(this.state.conversationId, content)
+      } catch (error) {
+        console.error("[RantAI Widget] Handoff message error:", error)
+        this.showError("Failed to send message to agent")
+      }
+      return
+    }
+
+    // Normal AI chat flow
     this.addMessage("user", content)
 
     this.state.isLoading = true
@@ -303,11 +340,26 @@ class RantAIWidgetInstance {
     this.renderMessage(assistantMessage, { isThinking: true })
 
     try {
-      await this.api.sendMessage(this.state.messages.slice(0, -1), (content) => {
-        assistantMessage.content = content
-        this.updateMessage(assistantMessage.id, content)
+      await this.api.sendMessage(this.state.messages.slice(0, -1), (chunk) => {
+        assistantMessage.content = chunk
+        // Strip handoff marker from display during streaming
+        const display = chunk.replace(/\[AGENT_HANDOFF\]/g, "").trim()
+        this.updateMessage(assistantMessage.id, display)
         this.scrollToBottom()
       })
+
+      // After streaming completes, check for handoff marker
+      const raw = assistantMessage.content
+      if (raw.includes("[AGENT_HANDOFF]")) {
+        // Clean the marker from stored content
+        assistantMessage.content = raw.replace(/\[AGENT_HANDOFF\]/g, "").trim()
+        this.updateMessage(assistantMessage.id, assistantMessage.content)
+
+        // Show handoff button if live chat is enabled
+        if (this.config?.liveChatEnabled) {
+          this.showHandoffButton()
+        }
+      }
     } catch (error) {
       console.error("[RantAI Widget] Send message error:", error)
       this.state.messages.pop()
@@ -322,6 +374,152 @@ class RantAIWidgetInstance {
       if (this.input) this.input.disabled = false
       this.updateMessage(assistantMessage.id, assistantMessage.content)
     }
+  }
+
+  private showHandoffButton(): void {
+    if (!this.messagesContainer) return
+
+    const btn = document.createElement("button")
+    btn.className = "rantai-handoff-btn"
+    btn.innerHTML = `${headphonesIcon} Connect with Agent`
+    btn.addEventListener("click", () => {
+      btn.remove()
+      this.requestHandoff()
+    })
+    this.messagesContainer.appendChild(btn)
+    this.scrollToBottom()
+  }
+
+  private async requestHandoff(): Promise<void> {
+    if (!this.messagesContainer) return
+
+    this.state.handoffState = "requesting"
+
+    // Show waiting indicator
+    const waitingDiv = document.createElement("div")
+    waitingDiv.className = "rantai-waiting-indicator"
+    waitingDiv.id = "rantai-waiting"
+    waitingDiv.innerHTML = '<div class="rantai-waiting-dot"></div> Waiting for an agent...'
+    this.messagesContainer.appendChild(waitingDiv)
+    this.scrollToBottom()
+
+    try {
+      const chatHistory = this.state.messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({ role: m.role, content: m.content }))
+
+      const result = await this.api.requestHandoff({ chatHistory })
+      this.state.conversationId = result.conversationId
+      this.state.handoffState = "waiting"
+
+      // Start polling
+      this.startPolling()
+    } catch (error) {
+      console.error("[RantAI Widget] Handoff request error:", error)
+      this.state.handoffState = "idle"
+      const w = document.getElementById("rantai-waiting")
+      if (w) w.remove()
+      this.showError("Failed to connect with an agent. Please try again.")
+    }
+  }
+
+  private startPolling(): void {
+    if (this.pollInterval) return
+
+    this.lastPollTimestamp = null
+
+    this.pollInterval = setInterval(async () => {
+      if (!this.state.conversationId) return
+
+      try {
+        const result = await this.api.pollHandoff(
+          this.state.conversationId,
+          this.lastPollTimestamp || undefined
+        )
+
+        // Handle status transitions
+        if (
+          result.status === "AGENT_CONNECTED" &&
+          this.state.handoffState !== "connected"
+        ) {
+          this.state.handoffState = "connected"
+
+          // Remove waiting indicator
+          const w = document.getElementById("rantai-waiting")
+          if (w) w.remove()
+
+          // Show agent joined banner
+          this.showBanner(
+            `${result.agentName || "An agent"} joined the chat`
+          )
+        }
+
+        if (result.status === "RESOLVED" && this.state.handoffState !== "resolved") {
+          this.state.handoffState = "resolved"
+          this.stopPolling()
+          this.showBanner("Conversation resolved", true)
+
+          // Reset widget state after a short delay so user sees the banner,
+          // then gets a fresh chat session for the next conversation
+          setTimeout(() => this.resetToFreshChat(), 3000)
+        }
+
+        // Render new messages
+        for (const msg of result.messages) {
+          // Avoid duplicates
+          if (this.state.messages.some((m) => m.id === msg.id)) continue
+          // Skip system messages
+          if (msg.role === "system") continue
+
+          if (msg.role === "agent") {
+            this.addMessage("agent", msg.content, msg.id)
+          }
+        }
+
+        // Update poll timestamp
+        if (result.messages.length > 0) {
+          this.lastPollTimestamp =
+            result.messages[result.messages.length - 1].timestamp
+        }
+      } catch (error) {
+        console.error("[RantAI Widget] Poll error:", error)
+      }
+    }, 3000)
+  }
+
+  private stopPolling(): void {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval)
+      this.pollInterval = null
+    }
+  }
+
+  private resetToFreshChat(): void {
+    // Clear all state for a fresh session
+    this.state.messages = []
+    this.state.handoffState = "idle"
+    this.state.conversationId = null
+    this.state.isLoading = false
+    this.state.error = null
+    this.lastPollTimestamp = null
+
+    // Clear DOM messages and re-add welcome message
+    if (this.messagesContainer) {
+      this.messagesContainer.innerHTML = ""
+    }
+    if (this.config) {
+      this.addMessage("assistant", this.config.config.welcomeMessage)
+    }
+  }
+
+  private showBanner(text: string, resolved?: boolean): void {
+    if (!this.messagesContainer) return
+
+    const div = document.createElement("div")
+    div.className = `rantai-agent-banner${resolved ? " resolved" : ""}`
+    div.textContent = text
+    this.messagesContainer.appendChild(div)
+    this.scrollToBottom()
   }
 
   private escapeHtml(text: string): string {

@@ -18,9 +18,22 @@ export async function GET(
     const messages = await prisma.message.findMany({
       where: { conversationId: id },
       orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        createdAt: true,
+      },
     })
 
-    return NextResponse.json(messages)
+    return NextResponse.json({
+      messages: messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        createdAt: m.createdAt.toISOString(),
+      })),
+    })
   } catch (error) {
     console.error("Error fetching messages:", error)
     return NextResponse.json(

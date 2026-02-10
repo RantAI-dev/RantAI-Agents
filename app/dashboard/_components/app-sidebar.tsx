@@ -17,9 +17,11 @@ import {
   Database,
   Pencil,
   Folder,
-  Bot,
   Star,
   Trash2,
+  Blocks,
+  Wrench,
+  GitBranch,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,7 +32,9 @@ import {
 } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { brand } from "@/lib/branding"
 import { useAssistants } from "@/hooks/use-assistants"
+import { useWorkflows } from "@/hooks/use-workflows"
 import { useDefaultAssistant } from "@/hooks/use-default-assistant"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import { AssistantEditor } from "@/app/dashboard/_components/chat/assistant-editor"
@@ -59,14 +63,20 @@ const sections = {
     path: "/dashboard",
     exact: true,
   },
-  assistants: {
-    title: "Assistants",
-    subtitle: "Manage AI Assistants",
-    icon: Bot,
-    path: "/dashboard/assistants",
+  agentBuilder: {
+    title: "Agent Builder",
+    subtitle: "Build & Configure",
+    icon: Blocks,
+    path: "/dashboard/agent-builder",
+  },
+  workflows: {
+    title: "Workflows",
+    subtitle: "Visual Automations",
+    icon: GitBranch,
+    path: "/dashboard/workflows",
   },
   agent: {
-    title: "Agent",
+    title: "Live Chat",
     subtitle: "Customer Support",
     icon: Headphones,
     path: "/dashboard/agent",
@@ -396,6 +406,9 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
   // Default assistant
   const { assistant: defaultAssistant } = useDefaultAssistant()
 
+  // Workflows
+  const { workflows } = useWorkflows()
+
   // Assistant editor dialog state
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null)
@@ -431,7 +444,9 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
 
   // Determine current section based on pathname
   const getCurrentSection = () => {
-    if (pathname.startsWith("/dashboard/assistants")) return sections.assistants
+    if (pathname.startsWith("/dashboard/assistants")) return sections.agentBuilder
+    if (pathname.startsWith("/dashboard/agent-builder")) return sections.agentBuilder
+    if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/knowledge")) return sections.knowledge
     if (pathname.startsWith("/dashboard/statistics")) return sections.statistics
@@ -453,11 +468,11 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
       <div className="p-3 border-b border-sidebar-border space-y-3">
         <Link href="/dashboard" className="flex items-center gap-2">
           <img
-            src="/logo/logo-rantai-border.png"
-            alt="RantAI Agents"
+            src={brand.logoMain}
+            alt={brand.productName}
             className="h-8 w-8 rounded-lg"
           />
-          <span className="font-semibold text-sidebar-foreground">RantAI Agents</span>
+          <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
         </Link>
         {/* Organization Switcher */}
         <OrganizationSwitcher className="w-full" />
@@ -596,74 +611,67 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
           </div>
         )}
 
-        {currentSection === sections.assistants && (
+        {currentSection === sections.agentBuilder && (
           <div className="space-y-1">
-            {/* Assistant List for Selection */}
-            {assistants.map((assistant) => {
-              const assistantIdFromUrl = searchParams.get("assistant")
-              const isSelected = assistantIdFromUrl === assistant.id
-              const isDefault = defaultAssistant?.id === assistant.id
-              return (
-                <div
-                  key={assistant.id}
-                  className={cn(
-                    "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer",
-                    isSelected
-                      ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                  )}
-                  onClick={() => router.push(`/dashboard/assistants?assistant=${assistant.id}`)}
-                >
-                  {/* Selection indicator */}
-                  <div
-                    className={cn(
-                      "absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-sm bg-sidebar-foreground",
-                      "transition-all duration-150 ease-in-out",
-                      isSelected
-                        ? "h-8 opacity-100"
-                        : "h-2 opacity-0 group-hover:h-5 group-hover:opacity-100"
+            {assistants.map((assistant) => (
+              <Link
+                key={assistant.id}
+                href={`/dashboard/agent-builder/${assistant.id}`}
+                className={cn(
+                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+                  pathname === `/dashboard/agent-builder/${assistant.id}`
+                    ? "bg-sidebar-accent text-sidebar-foreground"
+                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                )}
+              >
+                <span className="text-lg">{assistant.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium truncate">{assistant.name}</span>
+                    {assistant.useKnowledgeBase && (
+                      <Database className="h-3 w-3 text-sidebar-muted shrink-0" />
                     )}
-                  />
-                  <span className="text-lg">{assistant.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-medium truncate">{assistant.name}</span>
-                      {isDefault && (
-                        <Star className="h-3 w-3 text-chart-1 fill-chart-1 shrink-0" />
-                      )}
-                      {assistant.useKnowledgeBase && (
-                        <Database className="h-3 w-3 text-sidebar-muted shrink-0" />
-                      )}
-                    </div>
-                    <p className="text-xs text-sidebar-muted truncate">{assistant.description}</p>
+                    {(assistant.toolCount ?? 0) > 0 && (
+                      <Wrench className="h-3 w-3 text-sidebar-muted shrink-0" />
+                    )}
                   </div>
-                  {assistant.isEditable && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleEditAssistant(assistant)
-                      }}
-                      aria-label={`Edit ${assistant.name}`}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
                 </div>
-              )
-            })}
-
-            {/* Add New Assistant */}
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-              onClick={handleCreateAssistant}
+              </Link>
+            ))}
+            <Link
+              href="/dashboard/agent-builder/new"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
             >
               <Plus className="h-4 w-4" />
-              New Assistant
-            </Button>
+              <span>Create Agent</span>
+            </Link>
+          </div>
+        )}
+
+        {currentSection === sections.workflows && (
+          <div className="space-y-1">
+            {workflows.map((workflow) => (
+              <Link
+                key={workflow.id}
+                href={`/dashboard/workflows/${workflow.id}`}
+                className={cn(
+                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+                  pathname === `/dashboard/workflows/${workflow.id}`
+                    ? "bg-sidebar-accent text-sidebar-foreground"
+                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                )}
+              >
+                <GitBranch className="h-4 w-4 shrink-0" />
+                <span className="flex-1 truncate font-medium">{workflow.name}</span>
+              </Link>
+            ))}
+            <Link
+              href="/dashboard/workflows"
+              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+            >
+              <Plus className="h-4 w-4" />
+              <span>New Workflow</span>
+            </Link>
           </div>
         )}
 

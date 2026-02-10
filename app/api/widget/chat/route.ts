@@ -260,6 +260,11 @@ export async function POST(req: NextRequest) {
       console.error("[Widget Chat] Memory load error:", memError)
     }
 
+    // Live Chat handoff instruction
+    if (assistant.liveChatEnabled) {
+      systemPrompt += `\n\nLIVE CHAT HANDOFF: You have the ability to transfer the conversation to a human agent. When the user explicitly asks to speak with a human, a real person, an agent, or customer support — OR when you cannot help them further and a human would be more appropriate — include the exact marker [AGENT_HANDOFF] at the end of your response. Only use this marker when handoff is genuinely needed. Do NOT use it for normal questions you can answer yourself.`
+    }
+
     // Update usage stats (async, non-blocking)
     prisma.embedApiKey
       .update({

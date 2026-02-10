@@ -1,4 +1,4 @@
-import { streamText, convertToModelMessages, tool, zodSchema } from "ai";
+import { streamText, convertToModelMessages, tool, zodSchema, stepCountIs } from "ai";
 import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { smartRetrieve, formatContextForPrompt, RetrievalResult } from "@/lib/rag";
@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { getCustomerContext, formatCustomerContextForPrompt } from "@/lib/customer-context";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models";
+import { resolveToolsForAssistant } from "@/lib/tools";
 import {
   loadWorkingMemory,
   updateWorkingMemory,
@@ -216,6 +217,21 @@ export async function POST(req: Request) {
     // Look up assistant by ID - first check defaults, then database
     const defaultAssistant = DEFAULT_ASSISTANTS.find(a => a.id === assistantId);
 
+    // Per-assistant memory configuration (null = all enabled for backward compatibility)
+    interface AssistantMemoryConfig {
+      enabled: boolean;
+      workingMemory: boolean;
+      semanticRecall: boolean;
+      longTermProfile: boolean;
+      memoryInstructions?: string;
+    }
+    let assistantMemoryConfig: AssistantMemoryConfig = {
+      enabled: true,
+      workingMemory: true,
+      semanticRecall: true,
+      longTermProfile: true,
+    };
+
     // Determine system prompt, model, and knowledge base setting
     // Priority: database assistant > default assistant > custom prompt from request > fallback to HorizonLife
     let systemPrompt: string;
@@ -232,7 +248,9 @@ export async function POST(req: Request) {
             model: true,
             useKnowledgeBase: true,
             knowledgeBaseGroupIds: true,
+            memoryConfig: true,
             name: true,
+            liveChatEnabled: true,
           },
         });
 
@@ -240,6 +258,21 @@ export async function POST(req: Request) {
           systemPrompt = dbAssistant.systemPrompt;
           useKnowledgeBase = dbAssistant.useKnowledgeBase;
           modelId = dbAssistant.model || DEFAULT_MODEL_ID;
+          // Read per-assistant memory config (null = all enabled)
+          if (dbAssistant.memoryConfig && typeof dbAssistant.memoryConfig === 'object') {
+            const mc = dbAssistant.memoryConfig as Record<string, unknown>;
+            assistantMemoryConfig = {
+              enabled: mc.enabled !== false,
+              workingMemory: mc.workingMemory !== false,
+              semanticRecall: mc.semanticRecall !== false,
+              longTermProfile: mc.longTermProfile !== false,
+              memoryInstructions: typeof mc.memoryInstructions === 'string' ? mc.memoryInstructions : undefined,
+            };
+          }
+          // Append live chat handoff instruction if enabled for this assistant
+          if (dbAssistant.liveChatEnabled) {
+            systemPrompt += `\n\nLIVE CHAT HANDOFF: You have the ability to transfer the conversation to a human agent. When the user explicitly asks to speak with a human, a real person, an agent, or customer support — OR when you cannot help them further and a human would be more appropriate — include the exact marker [AGENT_HANDOFF] at the end of your response. Only use this marker when handoff is genuinely needed. Do NOT use it for normal questions you can answer yourself.`;
+          }
           console.log("[Chat API] Using database assistant:", dbAssistant.name, "with model:", modelId);
         } else if (customSystemPrompt) {
           systemPrompt = customSystemPrompt;
@@ -373,12 +406,18 @@ export async function POST(req: Request) {
       : "";
 
     try {
+      if (!assistantMemoryConfig.enabled) {
+        console.log("[Memory] Memory disabled for this assistant, skipping all memory operations");
+      }
+
       // 1. Load working memory for current session
+      if (assistantMemoryConfig.enabled) {
       workingMemory = await loadWorkingMemory(threadId);
       console.log(`[Memory] Loaded working memory for thread ${threadId}: ${workingMemory.entities.size} entities, ${workingMemory.facts.size} facts`);
+      }
 
       // 2. Semantic recall of relevant past messages (only for logged-in users)
-      if (userId !== 'anonymous' && userQuery) {
+      if (assistantMemoryConfig.enabled && assistantMemoryConfig.semanticRecall && userId !== 'anonymous' && userQuery) {
         if (MEMORY_CONFIG.useMastraMemory) {
           try {
             const mastraMemory = getMastraMemory();
@@ -407,7 +446,7 @@ export async function POST(req: Request) {
       }
 
       // 3. Load long-term user profile (only for logged-in users)
-      if (userId !== 'anonymous') {
+      if (assistantMemoryConfig.enabled && assistantMemoryConfig.longTermProfile && userId !== 'anonymous') {
         userProfile = await loadUserProfile(userId);
         if (userProfile) {
           console.log(`[Memory] Loaded user profile: ${userProfile.facts.length} facts, ${userProfile.preferences.length} preferences`);
@@ -415,9 +454,15 @@ export async function POST(req: Request) {
       }
 
       // 4. Inject memory context into system prompt
-      systemPrompt = buildPromptWithMemory(systemPrompt, workingMemory, semanticResults, userProfile);
-      // Ensure corrections/updates are saved so "ganti X jadi Y" works
-      systemPrompt += "\n\nWhen the user corrects or updates previously shared information (e.g. name, age, preference), you MUST call saveMemory with the new value so the stored profile is updated. Do not only acknowledge verbally—always call the tool with the updated fact or preference.";
+      if (assistantMemoryConfig.enabled) {
+        systemPrompt = buildPromptWithMemory(systemPrompt, workingMemory, semanticResults, userProfile);
+        // Ensure corrections/updates are saved so "ganti X jadi Y" works
+        systemPrompt += "\n\nWhen the user corrects or updates previously shared information (e.g. name, age, preference), you MUST call saveMemory with the new value so the stored profile is updated. Do not only acknowledge verbally—always call the tool with the updated fact or preference.";
+        // Append per-assistant memory instructions if set
+        if (assistantMemoryConfig.memoryInstructions) {
+          systemPrompt += `\n\nMemory Instructions:\n${assistantMemoryConfig.memoryInstructions}`;
+        }
+      }
 
       // Log memory stats
       const memoryStats = getMemoryStats(workingMemory, semanticResults, userProfile);
@@ -428,6 +473,22 @@ export async function POST(req: Request) {
     }
 
     console.log("[Chat API] Using model:", modelId);
+
+    // ===== TOOL RESOLUTION =====
+    // Resolve assistant-configured tools (builtin, custom, MCP)
+    const { tools: resolvedTools, toolNames } = assistantId
+      ? await resolveToolsForAssistant(assistantId, modelId, {
+          userId: session?.user?.id,
+          assistantId,
+        })
+      : { tools: {}, toolNames: [] as string[] };
+
+    const hasAssistantTools = Object.keys(resolvedTools).length > 0;
+    if (hasAssistantTools) {
+      console.log("[Chat API] Tools enabled:", toolNames.join(", "));
+      // Instruct the model to use its tools instead of hallucinating
+      systemPrompt += `\n\n## Available Tools\nYou have these tools: ${toolNames.join(", ")}.\nIMPORTANT: When users ask questions that require external information, current events, calculations, or data processing, you MUST use the appropriate tool. Do NOT fabricate URLs, links, citations, or sources — always use a tool to get real information. If you have a web_search tool, use it for any factual claim that needs a source.`;
+    }
 
     // Define schema for memory tool
     const memorySchema = z.object({
@@ -448,46 +509,52 @@ export async function POST(req: Request) {
       })).optional(),
     });
 
+    // Combine all tools: assistant tools + memory saveMemory tool
+    const allTools = {
+      ...resolvedTools,
+      saveMemory: tool({
+        description: "Save important facts, preferences, and entities about the user from the conversation.",
+        inputSchema: zodSchema(memorySchema),
+        execute: async (
+          input: z.infer<typeof memorySchema>,
+          _options
+        ) => {
+          const { facts, preferences, entities } = input ?? {};
+          if (!memoryQueue.has(threadId)) {
+            memoryQueue.set(threadId, []);
+          }
+          memoryQueue.get(threadId)!.push({ facts, preferences, entities });
+          console.log("[Memory Tool] Queued memory for saving:", {
+            facts: facts?.length || 0,
+            preferences: preferences?.length || 0,
+            entities: entities?.length || 0,
+          });
+          return {
+            success: true,
+            queued: true,
+            items: {
+              facts: facts?.length || 0,
+              preferences: preferences?.length || 0,
+              entities: entities?.length || 0,
+            },
+          };
+        },
+      }),
+    };
+
     const result = streamText({
       model: openrouter(modelId),
       system: systemPrompt,
       messages,
-      tools: {
-        saveMemory: tool({
-          description: "Save important facts, preferences, and entities about the user from the conversation.",
-          inputSchema: zodSchema(memorySchema),
-          execute: async (
-            input: z.infer<typeof memorySchema>,
-            _options
-          ) => {
-            const { facts, preferences, entities } = input ?? {};
-            if (!memoryQueue.has(threadId)) {
-              memoryQueue.set(threadId, []);
-            }
-            memoryQueue.get(threadId)!.push({ facts, preferences, entities });
-            console.log("[Memory Tool] Queued memory for saving:", {
-              facts: facts?.length || 0,
-              preferences: preferences?.length || 0,
-              entities: entities?.length || 0,
-            });
-            return {
-              success: true,
-              queued: true,
-              items: {
-                facts: facts?.length || 0,
-                preferences: preferences?.length || 0,
-                entities: entities?.length || 0,
-              },
-            };
-          },
-        }),
-      },
+      tools: allTools,
+      stopWhen: hasAssistantTools ? stepCountIs(5) : stepCountIs(2),
     });
 
     // If userId is 'anonymous', we still want working memory (session based) but maybe not long-term
     const effectiveUserId = userId === 'anonymous' ? 'anon_' + threadId : userId;
 
     // Use a self-executing async function to handle background memory updates
+    if (assistantMemoryConfig.enabled) {
     (async () => {
       try {
         console.log(`[Memory] Waiting for response to finish for thread ${threadId}...`);
@@ -576,21 +643,25 @@ export async function POST(req: Request) {
         );
 
         // 2. Update Long-term & Semantic (Only for logged in users)
-        if (userId !== 'anonymous') {
+        if (userId !== 'anonymous' && (assistantMemoryConfig.semanticRecall || assistantMemoryConfig.longTermProfile)) {
           console.log(`[Memory] Updating long-term memory for user ${userId}`);
 
           // Store for semantic recall (vector db)
-          await storeForSemanticRecall(userId, threadId, userQuery, fullResponse);
+          if (assistantMemoryConfig.semanticRecall) {
+            await storeForSemanticRecall(userId, threadId, userQuery, fullResponse);
+          }
 
           // Update user profile (Postgres) with extracted facts/prefs
-          await updateUserProfile(
-            userId,
-            userQuery,
-            fullResponse,
-            threadId,
-            finalFacts,
-            finalPreferences
-          );
+          if (assistantMemoryConfig.longTermProfile) {
+            await updateUserProfile(
+              userId,
+              userQuery,
+              fullResponse,
+              threadId,
+              finalFacts,
+              finalPreferences
+            );
+          }
         } else {
           console.log(`[Memory] Skipping long-term memory for anonymous user`);
         }
@@ -621,6 +692,45 @@ export async function POST(req: Request) {
         console.error('[Memory] Error in background memory update:', err);
       }
     })();
+    } // end assistantMemoryConfig.enabled
+
+    // When assistant-configured tools are active, use UI message stream (shows tool usage in UI)
+    if (hasAssistantTools) {
+      return result.toUIMessageStreamResponse();
+    }
+
+    // If we have RAG sources, create a custom stream that appends them after the text
+    if (ragSources.length > 0) {
+      const textStream = result.toTextStreamResponse();
+      const originalBody = textStream.body;
+
+      if (originalBody) {
+        const reader = originalBody.getReader();
+        const encoder = new TextEncoder();
+
+        const customStream = new ReadableStream({
+          async start(controller) {
+            // Stream the original text content
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              controller.enqueue(value);
+            }
+
+            // Append sources delimiter and JSON
+            const sourcesData = SOURCES_DELIMITER + JSON.stringify(ragSources);
+            controller.enqueue(encoder.encode(sourcesData));
+            controller.close();
+          },
+        });
+
+        return new Response(customStream, {
+          headers: {
+            "Content-Type": "text/plain; charset=utf-8",
+          },
+        });
+      }
+    }
 
     return result.toTextStreamResponse();
   } catch (error) {

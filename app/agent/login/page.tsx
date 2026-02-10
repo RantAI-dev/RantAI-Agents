@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 import Image from "next/image"
+import { brand } from "@/lib/branding"
 
 export default function AgentLoginPage() {
   const router = useRouter()
@@ -48,8 +49,8 @@ export default function AgentLoginPage() {
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <Image
-              src="/logo/logo-rantai-border.png"
-              alt="RantAI Agents"
+              src={brand.logoMain}
+              alt={brand.productName}
               width={120}
               height={120}
               className="h-16 w-auto"
@@ -57,7 +58,7 @@ export default function AgentLoginPage() {
           </div>
           <CardTitle className="text-2xl">Agent Portal</CardTitle>
           <CardDescription>
-            Sign in to access the RantAI Agents dashboard
+            Sign in to access the {brand.productName} dashboard
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -73,7 +74,7 @@ export default function AgentLoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="agent@rantai.com"
+                placeholder={brand.demoAgentEmail}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -110,7 +111,7 @@ export default function AgentLoginPage() {
             <p className="text-sm text-muted-foreground text-center">
               <strong>Demo credentials:</strong>
               <br />
-              Email: agent@rantai.com
+              Email: {brand.demoAgentEmail}
               <br />
               Password: password123
             </p>

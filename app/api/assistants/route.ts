@@ -77,6 +77,9 @@ export async function GET(request: Request) {
             : [{ organizationId: null }]),
         ],
       },
+      include: {
+        _count: { select: { tools: true } },
+      },
       orderBy: [{ isBuiltIn: "desc" }, { createdAt: "asc" }],
     })
 
@@ -128,7 +131,7 @@ export async function POST(request: Request) {
 
     const body = await request.json()
 
-    const { name, description, emoji, systemPrompt, model, useKnowledgeBase, knowledgeBaseGroupIds } =
+    const { name, description, emoji, systemPrompt, model, useKnowledgeBase, knowledgeBaseGroupIds, memoryConfig, liveChatEnabled } =
       body
 
     if (!name || !systemPrompt) {
@@ -156,6 +159,8 @@ export async function POST(request: Request) {
         model: selectedModel,
         useKnowledgeBase: useKnowledgeBase || false,
         knowledgeBaseGroupIds: knowledgeBaseGroupIds || [],
+        ...(memoryConfig !== undefined && { memoryConfig }),
+        ...(liveChatEnabled !== undefined && { liveChatEnabled }),
         isSystemDefault: false,
         isBuiltIn: false,
         organizationId: orgContext?.organizationId || null,

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import type { Assistant, AssistantInput } from "@/lib/types/assistant"
+import type { Assistant, AssistantInput, MemoryConfig } from "@/lib/types/assistant"
 
 const SELECTED_KEY = "rantai-selected-assistant"
 const ASSISTANT_CHANGE_EVENT = "rantai-assistant-change"
@@ -13,11 +13,14 @@ interface DbAssistant {
   description: string | null
   emoji: string
   systemPrompt: string
+  model: string | null
   useKnowledgeBase: boolean
   knowledgeBaseGroupIds: string[]
+  memoryConfig?: object | null
   isSystemDefault: boolean
   isBuiltIn: boolean
   createdAt: string
+  _count?: { tools: number }
 }
 
 // Map database assistant to client-side Assistant type
@@ -28,10 +31,13 @@ function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
     description: dbAssistant.description || "",
     emoji: dbAssistant.emoji,
     systemPrompt: dbAssistant.systemPrompt,
+    model: dbAssistant.model || undefined,
     useKnowledgeBase: dbAssistant.useKnowledgeBase,
     knowledgeBaseGroupIds: dbAssistant.knowledgeBaseGroupIds,
+    memoryConfig: (dbAssistant.memoryConfig as MemoryConfig) || undefined,
     isDefault: dbAssistant.isSystemDefault,
     isEditable: true, // All assistants are editable
+    toolCount: dbAssistant._count?.tools ?? 0,
     createdAt: new Date(dbAssistant.createdAt),
   }
 }

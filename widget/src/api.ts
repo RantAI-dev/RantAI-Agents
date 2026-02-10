@@ -66,6 +66,76 @@ export class WidgetAPI {
     return fullContent
   }
 
+  async requestHandoff(data: {
+    customerName?: string
+    customerEmail?: string
+    productInterest?: string
+    chatHistory: Array<{ role: string; content: string }>
+  }): Promise<{ conversationId: string; status: string; queuePosition: number }> {
+    const response = await fetch(`${this.baseUrl}/api/widget/handoff`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Widget-Api-Key": this.apiKey,
+      },
+      body: JSON.stringify(data),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Handoff request failed" }))
+      throw new Error(error.error || `HTTP ${response.status}`)
+    }
+
+    return response.json()
+  }
+
+  async pollHandoff(
+    conversationId: string,
+    after?: string
+  ): Promise<{
+    status: string
+    agentName: string | null
+    messages: Array<{ id: string; role: string; content: string; timestamp: string }>
+  }> {
+    const params = new URLSearchParams({ conversationId })
+    if (after) params.set("after", after)
+
+    const response = await fetch(
+      `${this.baseUrl}/api/widget/handoff?${params.toString()}`,
+      {
+        headers: { "X-Widget-Api-Key": this.apiKey },
+      }
+    )
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Poll failed" }))
+      throw new Error(error.error || `HTTP ${response.status}`)
+    }
+
+    return response.json()
+  }
+
+  async sendHandoffMessage(
+    conversationId: string,
+    content: string
+  ): Promise<{ messageId: string }> {
+    const response = await fetch(`${this.baseUrl}/api/widget/handoff/message`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Widget-Api-Key": this.apiKey,
+      },
+      body: JSON.stringify({ conversationId, content }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Send failed" }))
+      throw new Error(error.error || `HTTP ${response.status}`)
+    }
+
+    return response.json()
+  }
+
   async uploadFile(file: File): Promise<{ base64?: string; content?: string }> {
     const formData = new FormData()
     formData.append("file", file)

@@ -206,6 +206,49 @@ export function generateStyles(config: WidgetConfig): string {
       gap: 8px;
       max-width: 88%;
       animation: rantai-fade-in 0.25s ease-out;
+      align-items: flex-start;
+    }
+
+    .rantai-msg-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 2px;
+      overflow: hidden;
+    }
+
+    .rantai-msg-avatar svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .rantai-msg-avatar-emoji {
+      font-size: 16px;
+      line-height: 1;
+    }
+
+    .rantai-msg-avatar-assistant {
+      background: rgba(0, 0, 0, 0.06);
+      color: ${safeTheme.textColor};
+    }
+
+    .rantai-msg-avatar-agent {
+      background: #059669;
+      color: white;
+    }
+
+    .rantai-msg-avatar-user {
+      background: ${safeTheme.userBubbleColor};
+      color: white;
+    }
+
+    .rantai-msg-content {
+      flex: 1;
+      min-width: 0;
     }
 
     @keyframes rantai-fade-in {
@@ -570,6 +613,99 @@ export function generateStyles(config: WidgetConfig): string {
 
     .rantai-input::-webkit-scrollbar-thumb:hover {
       background: rgba(0, 0, 0, 0.24);
+    }
+
+    /* Live Chat Handoff styles */
+    .rantai-handoff-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: fit-content;
+      margin: 8px auto;
+      padding: 10px 20px;
+      background: ${safeTheme.primaryColor};
+      color: white;
+      border: none;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: filter 0.2s, transform 0.2s;
+      animation: rantai-fade-in 0.25s ease-out;
+    }
+
+    .rantai-handoff-btn:hover {
+      filter: brightness(1.1);
+      transform: scale(1.03);
+    }
+
+    .rantai-handoff-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .rantai-waiting-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px;
+      margin: 4px auto;
+      font-size: 13px;
+      color: ${safeTheme.textColor};
+      opacity: 0.7;
+      animation: rantai-fade-in 0.25s ease-out;
+    }
+
+    .rantai-waiting-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: ${safeTheme.primaryColor};
+      animation: rantai-pulse 1.4s infinite;
+    }
+
+    @keyframes rantai-pulse {
+      0%, 100% { opacity: 0.4; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.3); }
+    }
+
+    .rantai-agent-banner {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      margin: 6px 0;
+      background: rgba(16, 185, 129, 0.08);
+      color: #059669;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      animation: rantai-fade-in 0.25s ease-out;
+    }
+
+    .rantai-agent-banner.resolved {
+      background: rgba(107, 114, 128, 0.08);
+      color: #6b7280;
+    }
+
+    .rantai-message.agent .rantai-message-bubble {
+      background: #ecfdf5;
+      color: ${safeTheme.textColor};
+      border-bottom-left-radius: 6px;
+    }
+
+    .rantai-message.agent {
+      max-width: 88%;
+    }
+
+    .rantai-agent-label {
+      font-size: 11px;
+      color: #059669;
+      font-weight: 500;
+      margin-bottom: 2px;
     }
 
     /* Mobile responsive */

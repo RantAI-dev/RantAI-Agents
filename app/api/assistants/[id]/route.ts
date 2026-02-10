@@ -107,6 +107,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
       model,
       useKnowledgeBase,
       knowledgeBaseGroupIds,
+      memoryConfig,
+      liveChatEnabled,
     } = body
 
     // Validate model if provided
@@ -127,6 +129,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
         ...(model !== undefined && { model }),
         ...(useKnowledgeBase !== undefined && { useKnowledgeBase }),
         ...(knowledgeBaseGroupIds !== undefined && { knowledgeBaseGroupIds }),
+        ...(memoryConfig !== undefined && { memoryConfig }),
+        ...(liveChatEnabled !== undefined && { liveChatEnabled }),
         updatedBy: session.user.id,
       },
     })

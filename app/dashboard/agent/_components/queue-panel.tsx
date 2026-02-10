@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Clock, User, Package, Headphones } from "lucide-react"
+import { Clock, User, Package, Headphones, MessageSquare } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import type { QueueConversation } from "@/types/socket"
 import { Virtuoso } from "react-virtuoso"
+import { cn } from "@/lib/utils"
 
 interface QueuePanelProps {
   queue: QueueConversation[]
@@ -16,6 +17,13 @@ interface QueuePanelProps {
   onGoOnline: () => void
   onGoOffline: () => void
   onAcceptConversation: (conversationId: string) => void
+  activeConversation?: {
+    id: string
+    customerName?: string | null
+    customerEmail?: string | null
+    productInterest?: string | null
+  } | null
+  onSelectConversation?: (conversationId: string) => void
 }
 
 export function QueuePanel({
@@ -25,6 +33,8 @@ export function QueuePanel({
   onGoOnline,
   onGoOffline,
   onAcceptConversation,
+  activeConversation,
+  onSelectConversation,
 }: QueuePanelProps) {
   const handleToggle = () => {
     if (isOnline) {
@@ -63,6 +73,44 @@ export function QueuePanel({
           </p>
         )}
       </div>
+
+      {/* Active Conversation */}
+      {activeConversation && (
+        <>
+          <div className="px-4 py-2 border-b border-sidebar-border flex items-center justify-between">
+            <span className="text-sm font-medium text-sidebar-foreground/70">Active</span>
+            <Badge className="bg-chart-2/20 text-chart-2 text-xs hover:bg-chart-2/30">
+              1
+            </Badge>
+          </div>
+          <div className="px-2 py-1 border-b border-sidebar-border">
+            <div
+              className={cn(
+                "rounded-lg bg-chart-2/10 border border-chart-2/20 p-3 space-y-1 cursor-pointer transition-colors hover:bg-chart-2/15",
+              )}
+              onClick={() => onSelectConversation?.(activeConversation.id)}
+            >
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-4 w-4 text-chart-2" />
+                <span className="font-medium text-sm text-sidebar-foreground">
+                  {activeConversation.customerName || "Customer"}
+                </span>
+              </div>
+              {activeConversation.customerEmail && (
+                <p className="text-xs text-sidebar-muted truncate pl-6">
+                  {activeConversation.customerEmail}
+                </p>
+              )}
+              {activeConversation.productInterest && (
+                <div className="flex items-center gap-1 text-xs text-sidebar-foreground/60 pl-6">
+                  <Package className="h-3 w-3" />
+                  <span>{activeConversation.productInterest}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Queue Header */}
       <div className="px-4 py-2 border-b border-sidebar-border flex items-center justify-between">

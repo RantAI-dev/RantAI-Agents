@@ -1,4 +1,4 @@
-import { Settings, Radio, Info, ToggleLeft, Code } from "lucide-react"
+import { Settings, Radio, Info, ToggleLeft, Code, Wrench, Plug } from "lucide-react"
 
 export const SETTINGS_NAV_ITEMS = [
   {
@@ -18,6 +18,18 @@ export const SETTINGS_NAV_ITEMS = [
     href: "/dashboard/settings/channels",
     icon: Radio,
     description: "Channel configuration",
+  },
+  {
+    title: "Tools",
+    href: "/dashboard/settings/tools",
+    icon: Wrench,
+    description: "Agent tools configuration",
+  },
+  {
+    title: "MCP",
+    href: "/dashboard/settings/mcp",
+    icon: Plug,
+    description: "MCP clients & server",
   },
   {
     title: "Embed Widget",

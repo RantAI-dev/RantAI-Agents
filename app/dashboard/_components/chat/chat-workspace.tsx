@@ -19,6 +19,8 @@ import {
   AlertCircle,
   Reply,
   X,
+  Headphones,
+  Loader2,
 } from "lucide-react"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
@@ -26,6 +28,7 @@ import { cn } from "@/lib/utils"
 import { EmptyState } from "./empty-state"
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
 import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
@@ -39,9 +42,16 @@ import { FileUploadButton } from "./file-upload-button"
 import { FilePreview } from "./file-preview"
 import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
 import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } from "./edit-version-indicator"
+import { ToolCallIndicator } from "./tool-call-indicator"
 
 // Delimiter for sources metadata in streaming response
 const SOURCES_DELIMITER = "\n\n---SOURCES---\n"
+
+// Marker for agent handoff in AI responses
+const AGENT_HANDOFF_MARKER = "[AGENT_HANDOFF]"
+
+// Handoff state type
+type HandoffState = "idle" | "requesting" | "waiting" | "connected" | "resolved"
 
 interface ChatWorkspaceProps {
   session?: ChatSession
@@ -84,6 +94,42 @@ function getMessageContent(message: {
       .join("")
   }
   return ""
+}
+
+// Extract tool call parts from UIMessage parts array
+interface ToolCallPart {
+  toolName: string
+  toolCallId: string
+  state: "input-streaming" | "input-available" | "execution-started" | "done" | "error"
+  input?: Record<string, unknown>
+  output?: unknown
+  errorText?: string
+}
+
+function getToolCallParts(message: {
+  parts?: Array<Record<string, unknown>>
+}): ToolCallPart[] {
+  if (!message.parts) return []
+  return message.parts
+    .filter((part) => part.type === "tool-invocation")
+    .map((part) => {
+      // Map SDK states to our indicator states
+      const rawState = part.state as string
+      let state: ToolCallPart["state"] = "done"
+      if (rawState === "partial-call") state = "input-streaming"
+      else if (rawState === "call") state = "execution-started"
+      else if (rawState === "result") state = "done"
+      else if (rawState === "error") state = "error"
+
+      return {
+        toolName: (part.toolName as string) || "unknown",
+        toolCallId: (part.toolCallId as string) || "",
+        state,
+        input: part.args as Record<string, unknown> | undefined,
+        output: part.output,
+        errorText: part.errorText as string | undefined,
+      }
+    })
 }
 
 // Normalize role from useChat (may include "system") to ChatMessage.role
@@ -189,21 +235,15 @@ const messageVariants = {
   exit: { opacity: 0, y: -10 },
 }
 
-// Markdown components with syntax highlighting and enhanced tables
+// Markdown components — only override code blocks (for syntax highlighting)
+// and links (for external target). Everything else is handled by CSS in globals.css.
 const markdownComponents = {
-  code({ node, className, children, ...props }: any) {
+  code({ className, children, ...props }: any) {
     const match = /language-(\w+)/.exec(className || "")
     const isInline = !match && !String(children).includes("\n")
 
     if (isInline) {
-      return (
-        <code
-          className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono"
-          {...props}
-        >
-          {children}
-        </code>
-      )
+      return <code {...props}>{children}</code>
     }
 
     return (
@@ -212,84 +252,30 @@ const markdownComponents = {
       </CodeBlock>
     )
   },
-  // Style links
   a({ children, href, ...props }: any) {
     return (
       <a
         href={href}
-        className="text-primary underline underline-offset-2 hover:text-primary/80"
         target="_blank"
         rel="noopener noreferrer"
+        className="text-primary underline underline-offset-2 hover:text-primary/80 break-words"
         {...props}
       >
         {children}
       </a>
     )
   },
-  // Style lists
-  ul({ children, ...props }: any) {
-    return (
-      <ul className="list-disc list-inside space-y-1 my-2" {...props}>
-        {children}
-      </ul>
-    )
-  },
-  ol({ children, ...props }: any) {
-    return (
-      <ol className="list-decimal list-inside space-y-1 my-2" {...props}>
-        {children}
-      </ol>
-    )
-  },
-  // Enhanced tables
+  // Wrap tables in a scrollable container
   table({ children, ...props }: any) {
     return (
-      <div className="my-3 overflow-x-auto rounded-lg border">
-        <table className="w-full text-sm" {...props}>
-          {children}
-        </table>
+      <div className="my-2 overflow-x-auto rounded-lg border">
+        <table {...props}>{children}</table>
       </div>
     )
   },
-  thead({ children, ...props }: any) {
-    return (
-      <thead className="bg-muted/50 border-b" {...props}>
-        {children}
-      </thead>
-    )
-  },
-  tbody({ children, ...props }: any) {
-    return (
-      <tbody className="divide-y" {...props}>
-        {children}
-      </tbody>
-    )
-  },
-  tr({ children, ...props }: any) {
-    return (
-      <tr className="hover:bg-muted/30 transition-colors" {...props}>
-        {children}
-      </tr>
-    )
-  },
-  th({ children, ...props }: any) {
-    return (
-      <th
-        className="px-3 py-2 text-left font-medium text-muted-foreground"
-        {...props}
-      >
-        {children}
-      </th>
-    )
-  },
-  td({ children, ...props }: any) {
-    return (
-      <td className="px-3 py-2" {...props}>
-        {children}
-      </td>
-    )
-  },
 }
+
+const remarkPlugins = [remarkGfm]
 
 export function ChatWorkspace({
   session,
@@ -335,6 +321,13 @@ export function ChatWorkspace({
   // Version viewing state for edited messages (messageId -> version number, 1-indexed)
   const [viewingVersions, setViewingVersions] = useState<Record<string, number>>({})
 
+  // Handoff state
+  const [handoffState, setHandoffState] = useState<HandoffState>("idle")
+  const [handoffConversationId, setHandoffConversationId] = useState<string | null>(null)
+  const [handoffTriggeredMsgId, setHandoffTriggeredMsgId] = useState<string | null>(null)
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastPollTimestamp = useRef<string | null>(null)
+
   const chat = useChat({
     id: session?.id,
     onFinish: (message) => {
@@ -377,11 +370,18 @@ export function ChatWorkspace({
     } else {
       chat.setMessages([] as any)
     }
-    // Clear edit and reply state on session change
+    // Clear edit, reply, and handoff state on session change
     setEditingMessageId(null)
     setEditContent("")
     setReplyingTo(null)
     setError(null)
+    setHandoffState("idle")
+    setHandoffConversationId(null)
+    lastPollTimestamp.current = null
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
   }, [session?.id])
 
   // Track if we should auto-scroll (only when user sends a message or during streaming)
@@ -515,11 +515,20 @@ export function ChatWorkspace({
       }
 
       try {
+        // Normalize messages to plain { id, role, content } before sending.
+        // This strips any custom `parts` set during SSE streaming (e.g. tool-invocation)
+        // which would break convertToModelMessages on the server.
+        const normalizedMessages = [...baseMessages, userMessage].map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: getMessageContent(m) || (m as { content?: string }).content || "",
+        }))
+
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: [...baseMessages, userMessage],
+            messages: normalizedMessages,
             assistantId: assistant.id,
             systemPrompt: assistant.systemPrompt,
             useKnowledgeBase: assistant.useKnowledgeBase,
@@ -539,6 +548,9 @@ export function ChatWorkspace({
         let assistantContent = ""
         const assistantMsgId = crypto.randomUUID()
 
+        // Detect if response is SSE (UIMessageStream) vs plain text
+        const isSSE = response.headers.get("x-vercel-ai-ui-message-stream") === "v1"
+
         // Replace the placeholder assistant message with the real one
         chat.setMessages((prev) => {
           const updated = [...prev]
@@ -550,37 +562,145 @@ export function ChatWorkspace({
         })
         setIsStreaming(true)
 
+        // SSE parsing state
+        let sseBuffer = ""
+        const toolCalls = new Map<string, {
+          toolCallId: string
+          toolName: string
+          state: string
+          args?: Record<string, unknown>
+          output?: unknown
+          errorText?: string
+        }>()
+
         while (reader) {
           const { done, value } = await reader.read()
           if (done) break
 
           const chunk = decoder.decode(value, { stream: true })
-          assistantContent += chunk
 
-          const displayContent = assistantContent.includes(SOURCES_DELIMITER)
-            ? assistantContent.split(SOURCES_DELIMITER)[0]
-            : assistantContent
+          if (isSSE) {
+            // Parse SSE protocol: data: <json>\n\n
+            sseBuffer += chunk
+            const lines = sseBuffer.split("\n")
+            sseBuffer = lines.pop() || "" // Keep last incomplete line
 
-          chat.setMessages((prev) => {
-            const updated = [...prev]
-            const lastIdx = updated.length - 1
-            if (updated[lastIdx]?.role === "assistant") {
-              updated[lastIdx] = {
-                ...updated[lastIdx],
-                content: displayContent,
-              } as typeof updated[number]
+            for (const line of lines) {
+              const trimmed = line.trim()
+              if (!trimmed || !trimmed.startsWith("data: ")) continue
+              const data = trimmed.slice(6)
+              if (data === "[DONE]") continue
+
+              try {
+                const part = JSON.parse(data)
+                switch (part.type) {
+                  case "text-delta":
+                    assistantContent += part.delta
+                    break
+                  case "tool-input-start":
+                    toolCalls.set(part.toolCallId, {
+                      toolCallId: part.toolCallId,
+                      toolName: part.toolName,
+                      state: "call",
+                    })
+                    break
+                  case "tool-input-available":
+                    if (toolCalls.has(part.toolCallId)) {
+                      const tc = toolCalls.get(part.toolCallId)!
+                      tc.args = part.input as Record<string, unknown>
+                      tc.state = "call"
+                    }
+                    break
+                  case "tool-output-available": {
+                    const tc = toolCalls.get(part.toolCallId)
+                    if (tc) {
+                      tc.output = part.output
+                      tc.state = "result"
+                    }
+                    break
+                  }
+                  case "tool-output-error": {
+                    const tc = toolCalls.get(part.toolCallId)
+                    if (tc) {
+                      tc.errorText = part.errorText
+                      tc.state = "error"
+                    }
+                    break
+                  }
+                  case "tool-input-error": {
+                    const tc = toolCalls.get(part.toolCallId)
+                    if (tc) {
+                      tc.errorText = part.errorText
+                      tc.state = "error"
+                    }
+                    break
+                  }
+                }
+              } catch {
+                // Invalid JSON line, skip
+              }
             }
-            return updated
-          })
+
+            // Build parts array from tracked tool calls
+            const parts: Array<Record<string, unknown>> = []
+            for (const tc of toolCalls.values()) {
+              parts.push({
+                type: "tool-invocation",
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                state: tc.state,
+                args: tc.args,
+                output: tc.output,
+                errorText: tc.errorText,
+              })
+            }
+
+            // Update message with content + tool parts (strip handoff marker from display)
+            const sseDisplayContent = assistantContent.replace(AGENT_HANDOFF_MARKER, "").trim()
+            chat.setMessages((prev) => {
+              const updated = [...prev]
+              const lastIdx = updated.length - 1
+              if (updated[lastIdx]?.role === "assistant") {
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  content: sseDisplayContent,
+                  parts,
+                } as unknown as typeof updated[number]
+              }
+              return updated
+            })
+          } else {
+            // Plain text stream (no tools)
+            assistantContent += chunk
+
+            let displayContent = assistantContent.includes(SOURCES_DELIMITER)
+              ? assistantContent.split(SOURCES_DELIMITER)[0]
+              : assistantContent
+
+            // Strip handoff marker from live display
+            displayContent = displayContent.replace(AGENT_HANDOFF_MARKER, "").trim()
+
+            chat.setMessages((prev) => {
+              const updated = [...prev]
+              const lastIdx = updated.length - 1
+              if (updated[lastIdx]?.role === "assistant") {
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  content: displayContent,
+                } as typeof updated[number]
+              }
+              return updated
+            })
+          }
         }
 
         setIsStreaming(false)
 
-        // Parse sources
+        // Parse sources (only for plain text responses)
         let finalContent = assistantContent
         let sources: Source[] = []
 
-        if (assistantContent.includes(SOURCES_DELIMITER)) {
+        if (!isSSE && assistantContent.includes(SOURCES_DELIMITER)) {
           const [content, sourcesJson] = assistantContent.split(SOURCES_DELIMITER)
           finalContent = content.trim()
           try {
@@ -601,6 +721,30 @@ export function ChatWorkspace({
             }
             return updated
           })
+        }
+
+        // Detect and handle agent handoff marker
+        const hasHandoffMarker = assistantContent.includes(AGENT_HANDOFF_MARKER)
+        if (hasHandoffMarker) {
+          finalContent = finalContent.replace(AGENT_HANDOFF_MARKER, "").trim()
+
+          // Update the displayed message with marker stripped
+          chat.setMessages((prev) => {
+            const updated = [...prev]
+            const lastIdx = updated.length - 1
+            if (updated[lastIdx]?.role === "assistant") {
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                content: finalContent,
+              } as typeof updated[number]
+            }
+            return updated
+          })
+
+          // If liveChatEnabled, set flag to show handoff button after this message
+          if (assistant.liveChatEnabled) {
+            setHandoffTriggeredMsgId(assistantMsgId)
+          }
         }
 
         // Save to session
@@ -777,7 +921,178 @@ export function ChatWorkspace({
     }
     setMessageSources({})
     setError(null)
+    setHandoffState("idle")
+    setHandoffConversationId(null)
+    setHandoffTriggeredMsgId(null)
+    lastPollTimestamp.current = null
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
   }, [chat, session, onUpdateSession])
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+      }
+    }
+  }, [])
+
+  // Handoff: request handoff to human agent
+  const requestHandoff = useCallback(async () => {
+    setHandoffState("requesting")
+
+    try {
+      const chatHistory = chat.messages.map((m) => ({
+        role: m.role,
+        content: getMessageContent(m),
+      }))
+
+      const response = await fetch("/api/dashboard/handoff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assistantId: assistant.id,
+          chatHistory,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Handoff request failed: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setHandoffConversationId(data.conversationId)
+      setHandoffState("waiting")
+      lastPollTimestamp.current = null
+
+      // Add system message to chat
+      const systemMsg = {
+        id: `system-handoff-${Date.now()}`,
+        role: "assistant" as const,
+        content: `Connecting you with a live agent... You are #${data.queuePosition} in the queue.`,
+      }
+      chat.setMessages((prev) => [...prev, systemMsg] as any)
+      shouldAutoScroll.current = true
+
+      // Start polling
+      startPolling(data.conversationId)
+    } catch (err) {
+      console.error("Handoff request failed:", err)
+      setHandoffState("idle")
+      toast({
+        variant: "destructive",
+        title: "Handoff failed",
+        description: "Could not connect to a live agent. Please try again.",
+      })
+    }
+  }, [chat, assistant.id, toast])
+
+  // Handoff: start polling for agent messages
+  const startPolling = useCallback((conversationId: string) => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+    }
+
+    const poll = async () => {
+      try {
+        const params = new URLSearchParams({ conversationId })
+        if (lastPollTimestamp.current) {
+          params.set("after", lastPollTimestamp.current)
+        }
+
+        const response = await fetch(`/api/dashboard/handoff?${params.toString()}`)
+        if (!response.ok) return
+
+        const data = await response.json()
+
+        // Update handoff state based on conversation status
+        if (data.status === "AGENT_CONNECTED" && handoffState !== "connected") {
+          setHandoffState("connected")
+          // Add agent joined banner
+          const bannerMsg = {
+            id: `banner-joined-${Date.now()}`,
+            role: "assistant" as const,
+            content: `**${data.agentName || "An agent"}** has joined the conversation.`,
+          }
+          chat.setMessages((prev) => [...prev, bannerMsg] as any)
+          shouldAutoScroll.current = true
+        } else if (data.status === "RESOLVED") {
+          setHandoffState("resolved")
+          // Add resolved banner
+          const resolvedMsg = {
+            id: `banner-resolved-${Date.now()}`,
+            role: "assistant" as const,
+            content: "This conversation has been resolved by the agent.",
+          }
+          chat.setMessages((prev) => [...prev, resolvedMsg] as any)
+          shouldAutoScroll.current = true
+          // Stop polling
+          if (pollIntervalRef.current) {
+            clearInterval(pollIntervalRef.current)
+            pollIntervalRef.current = null
+          }
+        }
+
+        // Add new agent messages
+        if (data.messages && data.messages.length > 0) {
+          const newMessages = data.messages
+            .filter((m: { role: string }) => m.role === "agent")
+            .map((m: { id: string; content: string; timestamp: string }) => ({
+              id: `agent-${m.id}`,
+              role: "assistant" as const,
+              content: `**Agent:** ${m.content}`,
+            }))
+
+          if (newMessages.length > 0) {
+            chat.setMessages((prev) => [...prev, ...newMessages] as any)
+            shouldAutoScroll.current = true
+          }
+
+          // Update last poll timestamp
+          const lastMessage = data.messages[data.messages.length - 1]
+          if (lastMessage?.timestamp) {
+            lastPollTimestamp.current = lastMessage.timestamp
+          }
+        }
+      } catch (err) {
+        console.error("Poll error:", err)
+      }
+    }
+
+    // Poll immediately, then every 3 seconds
+    poll()
+    pollIntervalRef.current = setInterval(poll, 3000)
+  }, [chat, handoffState])
+
+  // Handoff: send message to agent
+  const sendHandoffMessage = useCallback(async (content: string) => {
+    if (!handoffConversationId) return
+
+    try {
+      const response = await fetch("/api/dashboard/handoff/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: handoffConversationId,
+          content,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to send message to agent")
+      }
+    } catch (err) {
+      console.error("Send handoff message error:", err)
+      toast({
+        variant: "destructive",
+        title: "Message failed",
+        description: "Could not send message to the agent.",
+      })
+    }
+  }, [handoffConversationId, toast])
 
   // Export helpers
   const exportAsMarkdown = useCallback(() => {
@@ -827,6 +1142,22 @@ export function ChatWorkspace({
     const userInput = input.trim()
     setInput("")
 
+    // If connected to agent, send via handoff API instead of AI
+    if (handoffState === "connected" && handoffConversationId) {
+      // Add user message to chat locally
+      const userMsg = {
+        id: crypto.randomUUID(),
+        role: "user" as const,
+        content: userInput,
+      }
+      chat.setMessages((prev) => [...prev, userMsg] as any)
+      shouldAutoScroll.current = true
+
+      // Send to agent via handoff API
+      await sendHandoffMessage(userInput)
+      return
+    }
+
     // Capture and clear reply state
     const replyContext = replyingTo
     setReplyingTo(null)
@@ -872,6 +1203,28 @@ export function ChatWorkspace({
             </Button>
           )}
           <span className="font-medium truncate">{session.title}</span>
+          {/* Live chat status indicator */}
+          {handoffState === "connected" && (
+            <span className="flex items-center gap-1.5 text-xs text-chart-2 bg-chart-2/10 px-2 py-0.5 rounded-full">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-chart-2 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-chart-2" />
+              </span>
+              Live Chat
+            </span>
+          )}
+          {handoffState === "waiting" && (
+            <span className="flex items-center gap-1.5 text-xs text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Waiting...
+            </span>
+          )}
+          {handoffState === "resolved" && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              <Check className="h-3 w-3" />
+              Resolved
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <ConversationExport title={session.title} messages={session.messages} />
@@ -1043,14 +1396,35 @@ export function ChatWorkspace({
                             </div>
                           </div>
                         ) : (
-                          <div className="chat-message prose prose-sm dark:prose-invert max-w-none">
-                            <ReactMarkdown components={markdownComponents}>
-                              {content}
-                            </ReactMarkdown>
-                            {isStreamingMessage && (
-                              <span className="inline-block w-2 h-4 bg-foreground/70 animate-pulse ml-0.5 align-middle" />
-                            )}
-                          </div>
+                          <>
+                            {/* Tool call indicators for assistant messages */}
+                            {!isUser && (() => {
+                              const toolParts = getToolCallParts(message as unknown as { parts?: Array<Record<string, unknown>> })
+                              if (toolParts.length === 0) return null
+                              return (
+                                <div className="space-y-0.5 mb-1">
+                                  {toolParts.map((tp) => (
+                                    <ToolCallIndicator
+                                      key={tp.toolCallId}
+                                      toolName={tp.toolName}
+                                      state={tp.state}
+                                      args={tp.input}
+                                      result={tp.output}
+                                      errorText={tp.errorText}
+                                    />
+                                  ))}
+                                </div>
+                              )
+                            })()}
+                            <div className="chat-message max-w-none">
+                              <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
+                                {content}
+                              </ReactMarkdown>
+                              {isStreamingMessage && (
+                                <span className="inline-block w-2 h-4 bg-foreground/70 animate-pulse ml-0.5 align-middle" />
+                              )}
+                            </div>
+                          </>
                         )}
 
                         {/* Sources */}
@@ -1059,6 +1433,46 @@ export function ChatWorkspace({
                           !isEditing &&
                           sources.length > 0 && (
                             <MessageSources sources={sources} />
+                          )}
+
+                        {/* Handoff button — shown after the message that triggered handoff */}
+                        {!isUser &&
+                          handoffTriggeredMsgId === message.id &&
+                          handoffState === "idle" && (
+                            <div className="mt-3 flex justify-center">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-2 rounded-full border-primary/30 hover:bg-primary/10"
+                                onClick={requestHandoff}
+                              >
+                                <Headphones className="h-4 w-4" />
+                                Connect with Live Agent
+                              </Button>
+                            </div>
+                          )}
+
+                        {/* Handoff requesting state */}
+                        {!isUser &&
+                          handoffTriggeredMsgId === message.id &&
+                          handoffState === "requesting" && (
+                            <div className="mt-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Connecting...
+                            </div>
+                          )}
+
+                        {/* Handoff waiting state */}
+                        {!isUser &&
+                          handoffTriggeredMsgId === message.id &&
+                          handoffState === "waiting" && (
+                            <div className="mt-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                              <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-primary/80" />
+                              </span>
+                              Waiting for an agent...
+                            </div>
                           )}
                       </div>
 
@@ -1083,8 +1497,8 @@ export function ChatWorkspace({
                               <span className="opacity-60">•</span>
                               <span>Version {currentViewingVersion}/{totalVersions}</span>
                             </div>
-                            <div className="chat-message prose prose-sm dark:prose-invert max-w-none opacity-90">
-                              <ReactMarkdown components={markdownComponents}>
+                            <div className="chat-message max-w-none opacity-90">
+                              <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
                                 {historicalAssistantResponse}
                               </ReactMarkdown>
                             </div>
@@ -1230,9 +1644,15 @@ export function ChatWorkspace({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type a message..."
+                placeholder={
+                  handoffState === "connected"
+                    ? "Type a message to the agent..."
+                    : handoffState === "resolved"
+                      ? "Conversation resolved"
+                      : "Type a message..."
+                }
                 className="min-h-[52px] max-h-[200px] pr-12 resize-none rounded-2xl border-2 focus-visible:ring-1"
-                disabled={isLoading}
+                disabled={isLoading || handoffState === "waiting" || handoffState === "requesting" || handoffState === "resolved"}
                 rows={1}
               />
               <Button
@@ -1250,9 +1670,14 @@ export function ChatWorkspace({
             </div>
           </div>
           <p className="text-[10px] text-muted-foreground mt-2 text-center">
-            Enter to send · Shift+Enter for new line ·{" "}
-            <kbd className="px-1 rounded bg-muted font-mono">⌘K</kbd> command
-            palette
+            {handoffState === "connected"
+              ? "You are chatting with a live agent · Enter to send"
+              : <>
+                  Enter to send · Shift+Enter for new line ·{" "}
+                  <kbd className="px-1 rounded bg-muted font-mono">⌘K</kbd> command
+                  palette
+                </>
+            }
           </p>
         </form>
       </div>

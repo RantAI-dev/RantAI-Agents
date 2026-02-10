@@ -21,12 +21,15 @@ export interface WidgetPublicConfig {
   assistantName: string
   assistantEmoji: string
   assistantDescription?: string
+  liveChatEnabled: boolean
   config: WidgetConfig
+  poweredByText?: string
+  poweredByUrl?: string
 }
 
 export interface Message {
   id: string
-  role: "user" | "assistant"
+  role: "user" | "assistant" | "agent"
   content: string
   timestamp: Date
 }
@@ -36,4 +39,6 @@ export interface WidgetState {
   isLoading: boolean
   messages: Message[]
   error: string | null
+  handoffState: "idle" | "requesting" | "waiting" | "connected" | "resolved"
+  conversationId: string | null
 }

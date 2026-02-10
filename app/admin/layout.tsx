@@ -14,6 +14,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { brand } from "@/lib/branding"
 
 const navigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -58,8 +59,8 @@ export default function AdminLayout({
       <div className="fixed inset-y-0 left-0 z-50 w-64 bg-white border-r">
         <div className="flex h-16 items-center gap-3 px-6 border-b">
           <Image
-            src="/logo/logo-rantai-border.png"
-            alt="RantAI Agents"
+            src={brand.logoMain}
+            alt={brand.productName}
             width={100}
             height={100}
             className="h-8 w-auto"

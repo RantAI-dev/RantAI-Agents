@@ -18,6 +18,7 @@ import {
   CheckCircle,
   AlertCircle,
 } from "lucide-react"
+import { brand } from "@/lib/branding"
 
 interface ChannelConfig {
   id: string | null
@@ -57,7 +58,7 @@ const channelMeta: Record<string, ChannelMetaItem> = {
     color: "sky",
     fields: [
       { key: "orgId", label: "Organization ID", placeholder: "00Dfj00000II7jp" },
-      { key: "deploymentName", label: "Deployment Developer Name", placeholder: "rantai_chat" },
+      { key: "deploymentName", label: "Deployment Developer Name", placeholder: brand.salesforceDeploymentName },
       { key: "siteUrl", label: "Embedded Service Site URL", placeholder: "https://xxx.my.site.com/ESWdeploymentname" },
       { key: "scrt2Url", label: "SCRT2 URL", placeholder: "https://xxx.salesforce-scrt.com" },
     ],
@@ -84,8 +85,8 @@ const channelMeta: Record<string, ChannelMetaItem> = {
       { key: "smtpPort", label: "SMTP Port", placeholder: "587" },
       { key: "smtpUser", label: "SMTP Username", placeholder: "your@email.com" },
       { key: "smtpPass", label: "SMTP Password", placeholder: "App password", type: "password" },
-      { key: "fromEmail", label: "From Email", placeholder: "support@rantai.com" },
-      { key: "fromName", label: "From Name", placeholder: "RantAI Support" },
+      { key: "fromEmail", label: "From Email", placeholder: brand.supportEmail },
+      { key: "fromName", label: "From Name", placeholder: brand.supportEmailName },
     ],
   },
 }
