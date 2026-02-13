@@ -8,6 +8,7 @@ export interface CompiledStep {
   nodeType: NodeType
   data: WorkflowNodeData
   successors: string[]
+  predecessors: string[]
   sourceHandles: Record<string, string[]> // handleId -> target nodeIds
 }
 
@@ -31,6 +32,14 @@ export function compileWorkflow(
 
   let triggerNodeId = ""
 
+  // Build predecessors map
+  const predecessorMap = new Map<string, string[]>()
+  for (const edge of edges) {
+    const preds = predecessorMap.get(edge.target) || []
+    if (!preds.includes(edge.source)) preds.push(edge.source)
+    predecessorMap.set(edge.target, preds)
+  }
+
   for (const node of sorted) {
     const data = node.data as WorkflowNodeData
     const successors = getNodeSuccessors(node.id, edges)
@@ -50,6 +59,7 @@ export function compileWorkflow(
       nodeType: data.nodeType,
       data,
       successors,
+      predecessors: predecessorMap.get(node.id) || [],
       sourceHandles,
     }
 
