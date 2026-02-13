@@ -24,7 +24,6 @@ import {
   HardDrive,
   Github,
 } from "lucide-react"
-import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -202,22 +201,23 @@ export default function McpSettingsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <DashboardPageHeader
-        title="MCP"
-        subtitle="Model Context Protocol — connect to external tools or expose yours"
-        actions={
-          activeTab === "clients" ? (
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" />
-              Add Server
-            </Button>
-          ) : undefined
-        }
-      />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold">MCP</h2>
+          <p className="text-sm text-muted-foreground">
+            Model Context Protocol — connect to external tools or expose yours
+          </p>
+        </div>
+        {activeTab === "clients" && (
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Add Server
+          </Button>
+        )}
+      </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-4xl mx-auto">
+      <div>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-4">
               <TabsTrigger value="clients">MCP Clients</TabsTrigger>
@@ -277,8 +277,8 @@ export default function McpSettingsPage() {
                 ) : servers.length === 0 ? (
                   <Card>
                     <CardContent className="flex flex-col items-center justify-center py-12">
-                      <Plug className="h-12 w-12 text-muted-foreground mb-4" />
-                      <h3 className="text-lg font-medium mb-1">
+                      <Plug className="h-10 w-10 text-muted-foreground mb-3" />
+                      <h3 className="text-sm font-medium mb-1">
                         No MCP servers configured
                       </h3>
                       <p className="text-sm text-muted-foreground mb-4 text-center max-w-md">
@@ -451,7 +451,6 @@ export default function McpSettingsPage() {
               <McpServerConfig />
             </TabsContent>
           </Tabs>
-        </div>
       </div>
 
       <McpServerDialog

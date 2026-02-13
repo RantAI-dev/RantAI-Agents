@@ -49,7 +49,7 @@ export default function StatisticsPage() {
   }, [])
 
   return (
-    <>
+    <div className="flex flex-col h-full">
       <DashboardPageHeader title="Statistics" />
 
       {/* Content */}
@@ -224,6 +224,6 @@ export default function StatisticsPage() {
           </div>
         )}
       </div>
-    </>
+    </div>
   )
 }

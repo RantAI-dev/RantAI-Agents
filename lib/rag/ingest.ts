@@ -47,6 +47,24 @@ const KNOWLEDGE_BASE_CONFIG = [
     category: "FAQ",
     subcategory: "General",
   },
+  {
+    filename: "claim-procedures.md",
+    title: "Claim Procedures",
+    category: "CLAIMS",
+    subcategory: "Procedures",
+  },
+  {
+    filename: "policy-underwriting.md",
+    title: "Policy & Underwriting Guide",
+    category: "POLICY",
+    subcategory: "Underwriting",
+  },
+  {
+    filename: "vehicle-insurance.md",
+    title: "Vehicle Insurance Products",
+    category: "VEHICLE_INSURANCE",
+    subcategory: "Products",
+  },
 ];
 
 const CHUNK_OPTIONS: ChunkOptions = {

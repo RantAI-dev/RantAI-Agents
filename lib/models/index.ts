@@ -174,7 +174,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
 /**
  * Default model ID used when no model is specified
  */
-export const DEFAULT_MODEL_ID = "xiaomi/mimo-v2-flash"
+export const DEFAULT_MODEL_ID = "google/gemini-3-flash-preview"
 
 /**
  * Get model by ID

@@ -63,12 +63,32 @@ export function useWorkflowRuns(workflowId: string | null) {
         body: JSON.stringify({ input }),
       })
       if (!res.ok) throw new Error("Failed to execute workflow")
-      const run = await res.json()
+
+      const contentType = res.headers.get("content-type") || ""
+
+      // STANDARD mode returns JSON directly
+      if (contentType.includes("application/json")) {
+        const run = await res.json()
+        await fetchRuns()
+        setActiveRun(run)
+        return run as WorkflowRunItem
+      }
+
+      // CHATFLOW mode returns streaming text — extract run ID from header
+      const runId = res.headers.get("x-run-id")
+      // Consume stream in background (don't block, don't cancel — server needs it)
+      if (res.body) {
+        const reader = res.body.getReader()
+        ;(async () => { while (!(await reader.read()).done); })().catch(() => {})
+      }
       await fetchRuns()
-      setActiveRun(run)
-      return run as WorkflowRunItem
+      if (runId) {
+        const detail = await fetchRunDetail(runId)
+        return detail
+      }
+      return null
     },
-    [workflowId, fetchRuns]
+    [workflowId, fetchRuns, fetchRunDetail]
   )
 
   const resumeRun = useCallback(

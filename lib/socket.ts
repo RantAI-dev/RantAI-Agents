@@ -600,6 +600,15 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
       }
     })
 
+    // Workflow execution: join/leave run room for real-time updates
+    socket.on("workflow:join" as string, ({ runId }: { runId: string }) => {
+      socket.join(`workflow:${runId}`)
+    })
+
+    socket.on("workflow:leave" as string, ({ runId }: { runId: string }) => {
+      socket.leave(`workflow:${runId}`)
+    })
+
     // Handle disconnect
     socket.on("disconnect", () => {
       // Find and remove agent if this was an agent socket

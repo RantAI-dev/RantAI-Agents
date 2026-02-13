@@ -109,14 +109,14 @@ export default function EmbedSettingsPage() {
       {keys.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <Key className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No API Keys Yet</h3>
-            <p className="text-muted-foreground text-center mb-4 max-w-md">
+            <Key className="h-10 w-10 text-muted-foreground mb-3" />
+            <h3 className="text-sm font-medium mb-1">No API Keys Yet</h3>
+            <p className="text-sm text-muted-foreground text-center mb-4 max-w-md">
               Create your first API key to embed the chat widget on your website.
               Each key is tied to an assistant and can have domain restrictions.
             </p>
             <Button onClick={() => setCreateDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4 mr-1" />
               Create Your First Key
             </Button>
           </CardContent>

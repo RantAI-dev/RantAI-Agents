@@ -84,8 +84,8 @@ export function KnowledgeHeader({
           </DropdownMenuContent>
         </DropdownMenu>
       )}
-      <Button onClick={onAddDocument}>
-        <Plus className="h-4 w-4 mr-2" />
+      <Button onClick={onAddDocument} size="sm">
+        <Plus className="h-4 w-4 mr-1.5" />
         Add Document
       </Button>
     </>

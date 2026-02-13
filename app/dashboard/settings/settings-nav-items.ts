@@ -1,4 +1,4 @@
-import { Settings, Radio, Info, ToggleLeft, Code, Wrench, Plug } from "lucide-react"
+import { Settings, Radio, Info, ToggleLeft, Code, Wrench, Plug, KeyRound } from "lucide-react"
 
 export const SETTINGS_NAV_ITEMS = [
   {
@@ -30,6 +30,12 @@ export const SETTINGS_NAV_ITEMS = [
     href: "/dashboard/settings/mcp",
     icon: Plug,
     description: "MCP clients & server",
+  },
+  {
+    title: "Credentials",
+    href: "/dashboard/settings/credentials",
+    icon: KeyRound,
+    description: "API keys & auth for workflows",
   },
   {
     title: "Embed Widget",

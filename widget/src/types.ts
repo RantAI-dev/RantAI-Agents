@@ -41,4 +41,6 @@ export interface WidgetState {
   error: string | null
   handoffState: "idle" | "requesting" | "waiting" | "connected" | "resolved"
   conversationId: string | null
+  visitorId: string   // persistent per browser (localStorage)
+  threadId: string    // persistent per chat session, reset on clear
 }

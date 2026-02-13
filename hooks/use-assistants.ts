@@ -19,6 +19,7 @@ interface DbAssistant {
   memoryConfig?: object | null
   isSystemDefault: boolean
   isBuiltIn: boolean
+  liveChatEnabled?: boolean
   createdAt: string
   _count?: { tools: number }
 }
@@ -37,6 +38,7 @@ function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
     memoryConfig: (dbAssistant.memoryConfig as MemoryConfig) || undefined,
     isDefault: dbAssistant.isSystemDefault,
     isEditable: true, // All assistants are editable
+    liveChatEnabled: dbAssistant.liveChatEnabled ?? false,
     toolCount: dbAssistant._count?.tools ?? 0,
     createdAt: new Date(dbAssistant.createdAt),
   }
@@ -156,7 +158,9 @@ export function useAssistants() {
         })
 
         if (!response.ok) {
-          throw new Error("Failed to update assistant")
+          const data = await response.json().catch(() => ({}))
+          const message = typeof data?.error === "string" ? data.error : "Failed to update assistant"
+          throw new Error(message)
         }
 
         const data = await response.json()

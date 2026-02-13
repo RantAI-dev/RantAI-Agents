@@ -3,6 +3,9 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { prisma } from "@/lib/prisma"
 import type { WorkflowNodeData, AgentNodeData } from "../types"
 import type { ExecutionContext } from "../engine"
+import { buildTemplateContext } from "../engine"
+import { resolveTemplate } from "../template-engine"
+import { extractPrompt } from "./llm"
 
 /**
  * Agent node handler — loads an assistant and generates text using its config.
@@ -10,9 +13,10 @@ import type { ExecutionContext } from "../engine"
 export async function executeAgent(
   data: WorkflowNodeData,
   input: unknown,
-  _context: ExecutionContext
+  context: ExecutionContext
 ): Promise<{ output: unknown }> {
   const nodeData = data as AgentNodeData
+  const tctx = buildTemplateContext(data.label, data.nodeType, input, context)
 
   if (!nodeData.assistantId) {
     throw new Error("Agent node: no assistant selected")
@@ -33,9 +37,9 @@ export async function executeAgent(
 
   const model = openrouter(assistant.model || "openai/gpt-4o-mini")
 
-  const prompt =
-    nodeData.promptTemplate?.replace("{{input}}", JSON.stringify(input)) ||
-    `Process the following input:\n${JSON.stringify(input)}`
+  const prompt = nodeData.promptTemplate
+    ? resolveTemplate(nodeData.promptTemplate, tctx)
+    : extractPrompt(input)
 
   const result = await generateText({
     model,
@@ -43,5 +47,5 @@ export async function executeAgent(
     prompt,
   })
 
-  return { output: { text: result.text, model: assistant.model } }
+  return { output: { text: result.text, model: assistant.model, usage: result.usage } }
 }

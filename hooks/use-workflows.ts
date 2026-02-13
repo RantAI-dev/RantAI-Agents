@@ -10,6 +10,10 @@ export interface WorkflowItem {
   edges: unknown[]
   trigger: { type: string }
   variables: { inputs: unknown[]; outputs: unknown[] }
+  mode: "STANDARD" | "CHATFLOW"
+  chatflowConfig: { welcomeMessage?: string; starterPrompts?: string[]; enableFollowUps?: boolean }
+  apiEnabled: boolean
+  apiKey: string | null
   status: "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED"
   version: number
   assistantId: string | null

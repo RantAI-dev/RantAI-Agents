@@ -1,3 +1,5 @@
+import { DEFAULT_MODEL_ID } from "@/lib/models"
+
 // ─── Node Type Enum ──────────────────────────────────────
 
 export enum NodeType {
@@ -10,7 +12,6 @@ export enum NodeType {
   // AI
   AGENT = "agent",
   LLM = "llm",
-  PROMPT = "prompt",
 
   // Tools
   TOOL = "tool",
@@ -24,6 +25,8 @@ export enum NodeType {
   LOOP = "loop",
   PARALLEL = "parallel",
   MERGE = "merge",
+  ERROR_HANDLER = "error_handler",
+  SUB_WORKFLOW = "sub_workflow",
 
   // Human
   HUMAN_INPUT = "human_input",
@@ -34,16 +37,20 @@ export enum NodeType {
   TRANSFORM = "transform",
   FILTER = "filter",
   AGGREGATE = "aggregate",
+  OUTPUT_PARSER = "output_parser",
 
   // Integration
   RAG_SEARCH = "rag_search",
   DATABASE = "database",
   STORAGE = "storage",
+
+  // Output
+  STREAM_OUTPUT = "stream_output",
 }
 
 // ─── Node Categories ─────────────────────────────────────
 
-export type NodeCategory = "trigger" | "ai" | "tools" | "flow" | "human" | "data" | "integration"
+export type NodeCategory = "trigger" | "ai" | "tools" | "flow" | "human" | "data" | "integration" | "output"
 
 export interface NodeCategoryMeta {
   label: string
@@ -71,7 +78,6 @@ export const NODE_CATEGORIES: Record<NodeCategory, NodeCategoryMeta> = {
     types: [
       { type: NodeType.AGENT, label: "Agent", description: "Run an AI agent with tools" },
       { type: NodeType.LLM, label: "LLM", description: "Direct LLM call" },
-      { type: NodeType.PROMPT, label: "Prompt Template", description: "Apply a prompt template" },
     ],
   },
   tools: {
@@ -95,6 +101,8 @@ export const NODE_CATEGORIES: Record<NodeCategory, NodeCategoryMeta> = {
       { type: NodeType.LOOP, label: "Loop", description: "Iterate over data" },
       { type: NodeType.PARALLEL, label: "Parallel", description: "Run branches in parallel" },
       { type: NodeType.MERGE, label: "Merge", description: "Merge parallel branches" },
+      { type: NodeType.ERROR_HANDLER, label: "Error Handler", description: "Try-catch with error branch" },
+      { type: NodeType.SUB_WORKFLOW, label: "Sub-Workflow", description: "Execute another workflow" },
     ],
   },
   human: {
@@ -115,6 +123,7 @@ export const NODE_CATEGORIES: Record<NodeCategory, NodeCategoryMeta> = {
       { type: NodeType.TRANSFORM, label: "Transform", description: "Transform data" },
       { type: NodeType.FILTER, label: "Filter", description: "Filter data" },
       { type: NodeType.AGGREGATE, label: "Aggregate", description: "Combine data" },
+      { type: NodeType.OUTPUT_PARSER, label: "Output Parser", description: "Parse LLM JSON output" },
     ],
   },
   integration: {
@@ -127,6 +136,14 @@ export const NODE_CATEGORIES: Record<NodeCategory, NodeCategoryMeta> = {
       { type: NodeType.STORAGE, label: "Storage", description: "File storage operations" },
     ],
   },
+  output: {
+    label: "Output",
+    color: "bg-rose-500",
+    headerColor: "#f43f5e",
+    types: [
+      { type: NodeType.STREAM_OUTPUT, label: "Stream Output", description: "Stream LLM response to user (chatflow)" },
+    ],
+  },
 }
 
 // ─── Node Data Interfaces ────────────────────────────────
@@ -135,6 +152,7 @@ export interface BaseNodeData {
   [key: string]: unknown
   label: string
   description?: string
+  notes?: string
   nodeType: NodeType
 }
 
@@ -143,6 +161,7 @@ export interface TriggerNodeData extends BaseNodeData {
   config: {
     schedule?: string
     webhookPath?: string
+    webhookSecret?: string
     eventName?: string
   }
 }
@@ -157,11 +176,15 @@ export interface AgentNodeData extends BaseNodeData {
 }
 
 export interface LlmNodeData extends BaseNodeData {
-  nodeType: NodeType.LLM | NodeType.PROMPT
+  nodeType: NodeType.LLM
   model: string
   systemPrompt?: string
   temperature?: number
   maxTokens?: number
+  topP?: number  // Nucleus sampling (0-1), default: 1
+  frequencyPenalty?: number  // Penalize token repetition by frequency (-2.0 to 2.0), default: 0
+  presencePenalty?: number  // Penalize tokens based on presence (-2.0 to 2.0), default: 0
+  stopSequences?: string[]  // Array of strings where generation should stop
 }
 
 export interface ToolNodeData extends BaseNodeData {
@@ -169,6 +192,7 @@ export interface ToolNodeData extends BaseNodeData {
   toolId: string
   toolName: string
   inputMapping: Record<string, string>
+  credentialId?: string
 }
 
 export interface CodeNodeData extends BaseNodeData {
@@ -183,6 +207,10 @@ export interface HttpNodeData extends BaseNodeData {
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH"
   headers?: Record<string, string>
   body?: string
+  credentialId?: string
+  timeout?: number  // Request timeout in milliseconds (default: 30000)
+  maxRetries?: number  // Max retry attempts on failure (default: 0)
+  responseType?: "json" | "text" | "blob"  // Expected response type (default: auto-detect)
 }
 
 export interface ConditionNodeData extends BaseNodeData {
@@ -211,6 +239,8 @@ export interface LoopNodeData extends BaseNodeData {
   condition?: string
   concurrency?: number
   itemVariable?: string
+  itemsPath?: string  // Path to extract array from input (e.g., "documents", "data.items")
+  maxIterations?: number  // Safety limit to prevent infinite loops (default: 100)
 }
 
 export interface ParallelNodeData extends BaseNodeData {
@@ -245,6 +275,11 @@ export interface AggregateNodeData extends BaseNodeData {
   expression?: string
 }
 
+export interface OutputParserNodeData extends BaseNodeData {
+  nodeType: NodeType.OUTPUT_PARSER
+  strict: boolean
+}
+
 export interface RagSearchNodeData extends BaseNodeData {
   nodeType: NodeType.RAG_SEARCH
   knowledgeBaseGroupIds: string[]
@@ -256,12 +291,40 @@ export interface DatabaseNodeData extends BaseNodeData {
   nodeType: NodeType.DATABASE
   operation: "query" | "insert" | "update" | "delete"
   query: string
+  timeout?: number  // Query timeout in milliseconds (default: 10000)
+  resultLimit?: number  // Max rows to return (default: 1000)
 }
 
 export interface StorageNodeData extends BaseNodeData {
   nodeType: NodeType.STORAGE
   operation: "read" | "write" | "delete" | "list"
   path?: string
+}
+
+export interface ErrorHandlerNodeData extends BaseNodeData {
+  nodeType: NodeType.ERROR_HANDLER
+  retryCount?: number
+  retryDelay?: number
+  fallbackValue?: string
+}
+
+export interface SubWorkflowNodeData extends BaseNodeData {
+  nodeType: NodeType.SUB_WORKFLOW
+  workflowId: string
+  workflowName?: string
+  inputMapping?: Record<string, string>
+}
+
+export interface StreamOutputNodeData extends BaseNodeData {
+  nodeType: NodeType.STREAM_OUTPUT
+  model: string
+  systemPrompt?: string
+  temperature?: number
+  maxTokens?: number
+  topP?: number
+  frequencyPenalty?: number
+  presencePenalty?: number
+  stopSequences?: string[]
 }
 
 // ─── Discriminated Union ─────────────────────────────────
@@ -278,13 +341,17 @@ export type WorkflowNodeData =
   | LoopNodeData
   | ParallelNodeData
   | MergeNodeData
+  | ErrorHandlerNodeData
+  | SubWorkflowNodeData
   | HumanInputNodeData
   | TransformNodeData
   | FilterNodeData
   | AggregateNodeData
+  | OutputParserNodeData
   | RagSearchNodeData
   | DatabaseNodeData
   | StorageNodeData
+  | StreamOutputNodeData
 
 // ─── Workflow Variables ──────────────────────────────────
 
@@ -324,6 +391,11 @@ export interface StepLogEntry {
   durationMs: number
   startedAt: string
   completedAt?: string
+  tokenUsage?: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  }
 }
 
 // ─── Default node data factories ─────────────────────────
@@ -342,8 +414,7 @@ export function createDefaultNodeData(nodeType: NodeType): WorkflowNodeData {
       return { ...base, nodeType, assistantId: "", maxSteps: 5 } as AgentNodeData
 
     case NodeType.LLM:
-    case NodeType.PROMPT:
-      return { ...base, nodeType, model: "xiaomi/mimo-v2-flash", temperature: 0.7 } as LlmNodeData
+      return { ...base, nodeType, model: DEFAULT_MODEL_ID, temperature: 0.7 } as LlmNodeData
 
     case NodeType.TOOL:
     case NodeType.MCP_TOOL:
@@ -353,7 +424,7 @@ export function createDefaultNodeData(nodeType: NodeType): WorkflowNodeData {
       return { ...base, nodeType, code: "// Write your code here\nreturn { data: input };", runtime: "javascript" } as CodeNodeData
 
     case NodeType.HTTP:
-      return { ...base, nodeType, url: "", method: "GET" } as HttpNodeData
+      return { ...base, nodeType, url: "", method: "GET", timeout: 30000, maxRetries: 0 } as HttpNodeData
 
     case NodeType.CONDITION:
       return { ...base, nodeType, conditions: [{ id: "if", label: "If", expression: "" }, { id: "else", label: "Else", expression: "true" }] } as ConditionNodeData
@@ -362,7 +433,7 @@ export function createDefaultNodeData(nodeType: NodeType): WorkflowNodeData {
       return { ...base, nodeType, switchOn: "", cases: [{ id: "case1", value: "", label: "Case 1" }] } as SwitchNodeData
 
     case NodeType.LOOP:
-      return { ...base, nodeType, loopType: "foreach", concurrency: 1 } as LoopNodeData
+      return { ...base, nodeType, loopType: "foreach", concurrency: 1, maxIterations: 100 } as LoopNodeData
 
     case NodeType.PARALLEL:
       return { ...base, nodeType } as ParallelNodeData
@@ -384,14 +455,26 @@ export function createDefaultNodeData(nodeType: NodeType): WorkflowNodeData {
     case NodeType.AGGREGATE:
       return { ...base, nodeType, operation: "merge" } as AggregateNodeData
 
+    case NodeType.OUTPUT_PARSER:
+      return { ...base, nodeType, strict: false } as OutputParserNodeData
+
     case NodeType.RAG_SEARCH:
       return { ...base, nodeType, knowledgeBaseGroupIds: [], topK: 5 } as RagSearchNodeData
 
     case NodeType.DATABASE:
-      return { ...base, nodeType, operation: "query", query: "" } as DatabaseNodeData
+      return { ...base, nodeType, operation: "query", query: "", timeout: 10000, resultLimit: 1000 } as DatabaseNodeData
 
     case NodeType.STORAGE:
       return { ...base, nodeType, operation: "read" } as StorageNodeData
+
+    case NodeType.ERROR_HANDLER:
+      return { ...base, nodeType, retryCount: 0, retryDelay: 1000 } as ErrorHandlerNodeData
+
+    case NodeType.SUB_WORKFLOW:
+      return { ...base, nodeType, workflowId: "", inputMapping: {} } as SubWorkflowNodeData
+
+    case NodeType.STREAM_OUTPUT:
+      return { ...base, nodeType, model: DEFAULT_MODEL_ID, temperature: 0.7 } as StreamOutputNodeData
 
     default:
       return base as WorkflowNodeData

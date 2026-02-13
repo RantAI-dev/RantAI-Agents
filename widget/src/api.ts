@@ -24,7 +24,9 @@ export class WidgetAPI {
 
   async sendMessage(
     messages: Message[],
-    onChunk: (chunk: string) => void
+    onChunk: (chunk: string) => void,
+    visitorId?: string,
+    threadId?: string
   ): Promise<string> {
     const response = await fetch(`${this.baseUrl}/api/widget/chat`, {
       method: "POST",
@@ -37,6 +39,8 @@ export class WidgetAPI {
           role: m.role,
           content: m.content,
         })),
+        visitorId,
+        threadId,
       }),
     })
 
@@ -60,10 +64,14 @@ export class WidgetAPI {
 
       const chunk = decoder.decode(value, { stream: true })
       fullContent += chunk
-      onChunk(fullContent)
+      // Strip ---SOURCES--- delimiter from display
+      const sourcesIdx = fullContent.indexOf("\n\n---SOURCES---\n")
+      onChunk(sourcesIdx >= 0 ? fullContent.substring(0, sourcesIdx) : fullContent)
     }
 
-    return fullContent
+    // Return clean content without sources delimiter
+    const sourcesIdx = fullContent.indexOf("\n\n---SOURCES---\n")
+    return sourcesIdx >= 0 ? fullContent.substring(0, sourcesIdx) : fullContent
   }
 
   async requestHandoff(data: {
@@ -71,6 +79,7 @@ export class WidgetAPI {
     customerEmail?: string
     productInterest?: string
     chatHistory: Array<{ role: string; content: string }>
+    visitorId?: string
   }): Promise<{ conversationId: string; status: string; queuePosition: number }> {
     const response = await fetch(`${this.baseUrl}/api/widget/handoff`, {
       method: "POST",

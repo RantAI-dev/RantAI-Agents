@@ -9,6 +9,14 @@ import { prisma } from "@/lib/prisma";
 import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models";
 import { resolveToolsForAssistant } from "@/lib/tools";
 import {
+  LANGUAGE_INSTRUCTION,
+  LIVE_CHAT_HANDOFF_INSTRUCTION,
+  CORRECTION_INSTRUCTION_WITH_TOOL,
+  buildToolInstruction,
+} from "@/lib/prompts/instructions";
+import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow";
+import { extractAndSaveFacts, stripSources } from "@/lib/workflow/chatflow-memory";
+import {
   loadWorkingMemory,
   updateWorkingMemory,
   loadUserProfile,
@@ -57,106 +65,8 @@ const memoryQueue = new Map<
   Array<{ facts?: unknown[]; preferences?: unknown[]; entities?: unknown[] }>
 >();
 
-// Base system prompt with company information and guidelines
-const BASE_SYSTEM_PROMPT = `You are a friendly and knowledgeable insurance assistant for HorizonLife, a trusted insurance company. Your role is to help visitors understand our insurance products and guide them toward the right coverage.
-
-CORE INSTRUCTIONS - MEMORY & CONTEXT:
-1. You have access to "memory" about the user (Working Memory, Long-term Profile, and Past Conversations).
-2. CHECK this memory context before answering.
-3. If you know the user's name, ALWAYS use it to greet them.
-4. If the user asks "do you know me?" or "what is my name?", USE the memory/profile to answer.
-5. Tailor your responses based on the user's known profile (age, family size, preferences).
-
-
-About HorizonLife:
-- Founded in 2010, serving over 500,000 customers
-- 98% claims approval rate
-- 24/7 customer support
-- A+ Financial Strength Rating from AM Best
-- Operating in 48 states plus Washington D.C.
-
-Our Products:
-1. Life Insurance (Starting from $15/month):
-   - Term Life: Basic, Plus, Premium tiers
-   - Whole Life: Classic and Elite options
-   - Universal Life: Flexible and Indexed (IUL) options
-
-2. Health Insurance (Starting from $99/month):
-   - Bronze, Silver, Gold, Platinum tiers
-   - Individual and Family plans
-   - 10,000+ in-network hospitals
-   - 500,000+ in-network physicians
-
-3. Home Insurance (Starting from $25/month):
-   - Essential, Plus, Premium, Elite tiers
-   - Flood and Earthquake add-ons
-   - Umbrella liability policies
-
-CRITICAL - LANGUAGE RULE (HIGHEST PRIORITY):
-You MUST ALWAYS respond in the SAME LANGUAGE the user writes in.
-- If user writes in Indonesian → respond ENTIRELY in Indonesian
-- If user writes in English → respond ENTIRELY in English
-- If user writes in any other language → respond in that language
-- NEVER mix languages. NEVER respond in English when user writes in Indonesian.
-Examples:
-- User: "berikan aku quote" → Respond in Indonesian: "Dengan senang hati saya akan menghubungkan Anda dengan spesialis kami untuk mendapatkan penawaran yang dipersonalisasi! [AGENT_HANDOFF]"
-- User: "give me a quote" → Respond in English: "I'd be happy to connect you with our specialist for a personalized quote! [AGENT_HANDOFF]"
-
-Guidelines for responses:
-- Be helpful, friendly, and professional
-- When answering questions about products, USE THE RETRIEVED CONTEXT provided below to give accurate, detailed information
-- If the retrieved context contains specific details (pricing, coverage limits, features), use those exact details
-- Keep responses concise but informative - you can use bullet points for clarity
-- For complex claims or policy questions beyond the provided context, suggest speaking with an advisor
-- Don't make up specific policy details - if information isn't in the context, say you can connect them with an agent for specifics
-- Encourage users to get a free quote or schedule a call for personalized pricing
-
-IMPORTANT - Using Retrieved Context:
-Below this prompt, you may see "Relevant Product Information" with details retrieved from our knowledge base.
-- ALWAYS prioritize information from the retrieved context over your general knowledge
-- Quote specific numbers, features, and details from the context when available
-- If the context answers the user's question, use it directly
-- If the context is not relevant to the question, you may use your general knowledge about HorizonLife
-
-IMPORTANT - Purchase Intent & Quote Request Detection:
-When the user expresses ANY of the following intents, you MUST use the request_agent_handoff tool to connect them with an agent:
-
-1. Purchase intent:
-   - "I want to buy..."
-   - "I'm ready to sign up"
-   - "How do I purchase this?"
-   - "I want to get this policy"
-   - "Sign me up"
-
-2. Quote requests:
-   - "Get me a quote"
-   - "I want a personalized quote"
-   - "How much would it cost for me?"
-   - "Can I get pricing?"
-   - "What's my rate?"
-
-3. Agent requests (in any language):
-   - "I'd like to speak to a human/agent/person"
-   - "Can I talk to someone?"
-   - "Connect me to an agent"
-   - "Hubungkan dengan spesialis" (Indonesian for "connect to specialist")
-   - Any request to speak with a human or specialist
-
-When you detect ANY of these intents, you MUST ALWAYS:
-1. Include the EXACT text [AGENT_HANDOFF] at the END of your response - this is MANDATORY and triggers the handoff UI
-2. Respond with a friendly message offering to connect them with a specialist
-
-MANDATORY: You MUST end your response with [AGENT_HANDOFF] when handoff is needed. Never skip this marker.
-
-Example responses:
-- English: "I'd be happy to connect you with one of our sales specialists! [AGENT_HANDOFF]"
-- Indonesian: "Saya dengan senang hati akan menghubungkan Anda dengan spesialis kami! [AGENT_HANDOFF]"
-
-CRITICAL:
-- Do NOT ask for personal information yourself
-- Do NOT try to collect quote information
-- ALWAYS include [AGENT_HANDOFF] at the end when connecting to an agent
-- The marker [AGENT_HANDOFF] is REQUIRED - without it the system cannot trigger the handoff`;
+/** Generic fallback prompt — used when no assistant is selected */
+const BASE_SYSTEM_PROMPT = `You are a helpful AI assistant. Answer questions accurately, concisely, and helpfully. Be friendly and professional.`;
 
 export async function POST(req: Request) {
   try {
@@ -271,7 +181,7 @@ export async function POST(req: Request) {
           }
           // Append live chat handoff instruction if enabled for this assistant
           if (dbAssistant.liveChatEnabled) {
-            systemPrompt += `\n\nLIVE CHAT HANDOFF: You have the ability to transfer the conversation to a human agent. When the user explicitly asks to speak with a human, a real person, an agent, or customer support — OR when you cannot help them further and a human would be more appropriate — include the exact marker [AGENT_HANDOFF] at the end of your response. Only use this marker when handoff is genuinely needed. Do NOT use it for normal questions you can answer yourself.`;
+            systemPrompt += LIVE_CHAT_HANDOFF_INSTRUCTION;
           }
           console.log("[Chat API] Using database assistant:", dbAssistant.name, "with model:", modelId);
         } else if (customSystemPrompt) {
@@ -280,19 +190,23 @@ export async function POST(req: Request) {
           console.log("[Chat API] Using custom system prompt");
         } else {
           systemPrompt = BASE_SYSTEM_PROMPT;
+          systemPrompt += LANGUAGE_INSTRUCTION;
           useKnowledgeBase = true;
-          console.log("[Chat API] Fallback to default HorizonLife prompt");
+          console.log("[Chat API] Fallback to generic prompt");
         }
       } catch (error) {
         console.error("[Chat API] Error fetching assistant from database:", error);
         systemPrompt = customSystemPrompt || BASE_SYSTEM_PROMPT;
+        systemPrompt += LANGUAGE_INSTRUCTION;
         useKnowledgeBase = useKnowledgeBaseParam ?? true;
       }
     } else if (defaultAssistant) {
       // Found in default assistants (built-in)
       systemPrompt = defaultAssistant.systemPrompt;
       useKnowledgeBase = defaultAssistant.useKnowledgeBase;
-      // Default assistants use the default model unless we add model to defaults later
+      if (defaultAssistant.liveChatEnabled) {
+        systemPrompt += LIVE_CHAT_HANDOFF_INSTRUCTION;
+      }
       console.log("[Chat API] Using default assistant:", defaultAssistant.name);
     } else if (customSystemPrompt) {
       // Custom assistant or explicit system prompt
@@ -300,10 +214,11 @@ export async function POST(req: Request) {
       useKnowledgeBase = useKnowledgeBaseParam ?? false;
       console.log("[Chat API] Using custom/user-created assistant prompt");
     } else {
-      // Fallback to HorizonLife
+      // Fallback to generic prompt
       systemPrompt = BASE_SYSTEM_PROMPT;
+      systemPrompt += LANGUAGE_INSTRUCTION;
       useKnowledgeBase = true;
-      console.log("[Chat API] Fallback to default HorizonLife prompt");
+      console.log("[Chat API] Fallback to generic prompt");
     }
 
     // Validate model ID
@@ -314,6 +229,135 @@ export async function POST(req: Request) {
 
     console.log("[Chat API] System prompt preview:", systemPrompt.substring(0, 60) + "...");
     console.log("[Chat API] useKnowledgeBase:", useKnowledgeBase);
+
+    // Auth (moved before chatflow check so userId is available for memory)
+    const session = await auth();
+    const userId = session?.user?.id || 'anonymous';
+
+    // ===== CHATFLOW CHECK =====
+    // If this assistant has an active CHATFLOW workflow, execute it instead of normal chat.
+    // If chatflow returns fallback (no STREAM_OUTPUT reached), continues to normal agent below.
+    if (assistantId) {
+      try {
+        const chatflowWorkflow = await prisma.workflow.findFirst({
+          where: {
+            assistantId,
+            mode: "CHATFLOW",
+            status: "ACTIVE",
+          },
+        });
+
+        if (chatflowWorkflow) {
+          console.log("[Chat API] Chatflow workflow found:", chatflowWorkflow.name);
+          // Extract the last user message
+          const lastMsg = [...rawMessages].reverse().find((m: { role: string }) => m.role === "user");
+          const userText = lastMsg?.content || lastMsg?.parts?.find((p: { type: string; text?: string }) => p.type === "text")?.text || "";
+
+          // Load memory (respect per-assistant memory config — same as normal chat)
+          let memoryContext: ChatflowMemoryContext | undefined
+          if (assistantMemoryConfig.enabled) {
+            try {
+              const wm = assistantMemoryConfig.workingMemory
+                ? await loadWorkingMemory(threadId) : null
+
+              let sr: SemanticRecallResult[] = []
+              if (assistantMemoryConfig.semanticRecall && userId !== 'anonymous' && userText) {
+                if (MEMORY_CONFIG.useMastraMemory) {
+                  try {
+                    const mastraMemory = getMastraMemory()
+                    sr = await mastraMemory.recall(userText, { resourceId: userId, threadId, topK: 5 })
+                  } catch (err) {
+                    if (MEMORY_CONFIG.gracefulDegradation) {
+                      sr = await semanticRecall(userText, userId, threadId)
+                    }
+                  }
+                } else {
+                  sr = await semanticRecall(userText, userId, threadId)
+                }
+              }
+
+              const up = (assistantMemoryConfig.longTermProfile && userId !== 'anonymous')
+                ? await loadUserProfile(userId) : null
+
+              memoryContext = { workingMemory: wm, semanticResults: sr, userProfile: up }
+              console.log("[Chat API] Memory loaded for chatflow:", {
+                workingMemory: wm ? wm.entities.size + " entities, " + wm.facts.size + " facts" : "disabled",
+                semanticResults: sr.length,
+                userProfile: up ? "yes" : "no",
+              })
+            } catch (err) {
+              console.error("[Chat API] Memory load for chatflow error:", err)
+            }
+          }
+
+          // Execute chatflow with memory
+          const { response: chatflowResponse, fallback } = await executeChatflow(chatflowWorkflow, userText, systemPrompt, memoryContext)
+
+          // Fallback: chatflow path didn't reach a STREAM_OUTPUT node (e.g. Switch default)
+          // Continue to normal agent processing below
+          if (fallback || !chatflowResponse) {
+            console.log("[Chat API] Chatflow fallback — continuing with normal agent")
+            // Fall through to normal chat processing below
+          } else {
+            // Stream tee: fork stream for client + background memory save
+            const chatBody = chatflowResponse.body
+            if (chatBody && assistantMemoryConfig.enabled) {
+              const [clientStream, saveStream] = chatBody.tee()
+              const effectiveUserId = userId === 'anonymous' ? 'anon_' + threadId : userId
+
+              ;(async () => {
+                try {
+                  const reader = saveStream.getReader()
+                  const decoder = new TextDecoder()
+                  let fullResponse = ""
+                  while (true) {
+                    const { done, value } = await reader.read()
+                    if (done) break
+                    fullResponse += decoder.decode(value, { stream: true })
+                  }
+
+                  // Strip ---SOURCES--- delimiter before saving to memory
+                  const cleanResponse = stripSources(fullResponse)
+                  const messageId = `msg_${Date.now()}`
+
+                  // Working memory (session)
+                  if (assistantMemoryConfig.workingMemory) {
+                    await updateWorkingMemory(effectiveUserId, threadId, userText, cleanResponse, messageId, [], [])
+                  }
+
+                  // Semantic recall (vector DB)
+                  if (assistantMemoryConfig.semanticRecall && userId !== 'anonymous') {
+                    await storeForSemanticRecall(userId, threadId, userText, cleanResponse)
+                  }
+
+                  // Mastra dual-write
+                  if (MEMORY_CONFIG.dualWrite && userId !== 'anonymous') {
+                    const mastraMemory = getMastraMemory()
+                    await mastraMemory.saveMessage(threadId, { role: 'user', content: userText, metadata: { userId, messageId, timestamp: new Date().toISOString() } })
+                    await mastraMemory.saveMessage(threadId, { role: 'assistant', content: cleanResponse, metadata: { userId, messageId, timestamp: new Date().toISOString() } })
+                  }
+
+                  // Extract facts to user profile (non-blocking LLM call)
+                  if (userId !== 'anonymous') {
+                    await extractAndSaveFacts(effectiveUserId, threadId, userText, cleanResponse)
+                  }
+
+                  console.log(`[Chat API] Chatflow memory saved for ${effectiveUserId} (thread: ${threadId})`)
+                } catch (err) {
+                  console.error("[Chat API] Chatflow memory save error:", err)
+                }
+              })()
+
+              return new Response(clientStream, { headers: chatflowResponse.headers })
+            } else {
+              return chatflowResponse
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[Chat API] Chatflow check error (continuing with normal chat):", error);
+      }
+    }
 
     // Convert UIMessage format (with parts array) to ModelMessage format (with content string)
     const messages = await convertToModelMessages(uiMessages);
@@ -373,8 +417,7 @@ export async function POST(req: Request) {
     }
 
     // Check if the user is a logged-in customer and inject their context
-    const session = await auth();
-    const userId = session?.user?.id || 'anonymous';
+    // (session and userId already declared above chatflow check)
 
     if (session?.user?.userType === "customer") {
       try {
@@ -457,7 +500,7 @@ export async function POST(req: Request) {
       if (assistantMemoryConfig.enabled) {
         systemPrompt = buildPromptWithMemory(systemPrompt, workingMemory, semanticResults, userProfile);
         // Ensure corrections/updates are saved so "ganti X jadi Y" works
-        systemPrompt += "\n\nWhen the user corrects or updates previously shared information (e.g. name, age, preference), you MUST call saveMemory with the new value so the stored profile is updated. Do not only acknowledge verbally—always call the tool with the updated fact or preference.";
+        systemPrompt += CORRECTION_INSTRUCTION_WITH_TOOL;
         // Append per-assistant memory instructions if set
         if (assistantMemoryConfig.memoryInstructions) {
           systemPrompt += `\n\nMemory Instructions:\n${assistantMemoryConfig.memoryInstructions}`;
@@ -487,7 +530,7 @@ export async function POST(req: Request) {
     if (hasAssistantTools) {
       console.log("[Chat API] Tools enabled:", toolNames.join(", "));
       // Instruct the model to use its tools instead of hallucinating
-      systemPrompt += `\n\n## Available Tools\nYou have these tools: ${toolNames.join(", ")}.\nIMPORTANT: When users ask questions that require external information, current events, calculations, or data processing, you MUST use the appropriate tool. Do NOT fabricate URLs, links, citations, or sources — always use a tool to get real information. If you have a web_search tool, use it for any factual claim that needs a source.`;
+      systemPrompt += buildToolInstruction(toolNames);
     }
 
     // Define schema for memory tool

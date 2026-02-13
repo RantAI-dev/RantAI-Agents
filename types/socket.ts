@@ -128,3 +128,50 @@ export const AgentStatus = {
 } as const
 
 export type AgentStatusType = (typeof AgentStatus)[keyof typeof AgentStatus]
+
+// Workflow execution events
+export interface WorkflowExecutionEvents {
+  "workflow:step:start": (data: {
+    runId: string
+    nodeId: string
+    nodeType: string
+    label: string
+  }) => void
+  "workflow:step:success": (data: {
+    runId: string
+    nodeId: string
+    nodeType: string
+    durationMs: number
+    outputPreview?: string
+  }) => void
+  "workflow:step:error": (data: {
+    runId: string
+    nodeId: string
+    nodeType: string
+    error: string
+    durationMs: number
+  }) => void
+  "workflow:step:suspend": (data: {
+    runId: string
+    nodeId: string
+    nodeType: string
+    prompt?: string
+  }) => void
+  "workflow:step:stream-chunk": (data: {
+    runId: string
+    nodeId: string
+    chunk: string
+    accumulated: string
+  }) => void
+  "workflow:run:complete": (data: {
+    runId: string
+    status: "COMPLETED" | "FAILED" | "PAUSED"
+    durationMs: number
+    error?: string
+  }) => void
+}
+
+export interface WorkflowClientToServerEvents {
+  "workflow:join": (data: { runId: string }) => void
+  "workflow:leave": (data: { runId: string }) => void
+}

@@ -72,32 +72,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
       )
     }
 
-    // Cannot edit built-in assistants
-    if (existing.isBuiltIn) {
-      return NextResponse.json(
-        { error: "Cannot edit built-in assistants" },
-        { status: 403 }
-      )
-    }
-
-    // Verify organization ownership
-    if (existing.organizationId) {
-      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
-        return NextResponse.json(
-          { error: "Assistant not found" },
-          { status: 404 }
-        )
-      }
-
-      // Check edit permission
-      if (!canEdit(orgContext.membership.role)) {
-        return NextResponse.json(
-          { error: "Insufficient permissions" },
-          { status: 403 }
-        )
-      }
-    }
-
     const body = await request.json()
     const {
       name,
@@ -110,6 +84,50 @@ export async function PUT(request: Request, { params }: RouteParams) {
       memoryConfig,
       liveChatEnabled,
     } = body
+
+    // Built-in assistants: only allow updating a whitelist of fields (e.g. Live Chat, prompt, model)
+    const isBuiltIn = existing.isBuiltIn
+    if (isBuiltIn) {
+      if (model !== undefined && !isValidModel(model)) {
+        return NextResponse.json(
+          { error: "Invalid model selected" },
+          { status: 400 }
+        )
+      }
+      const allowedData: Record<string, unknown> = {
+        updatedBy: session.user.id,
+      }
+      if (description !== undefined) allowedData.description = description
+      if (emoji !== undefined) allowedData.emoji = emoji
+      if (systemPrompt !== undefined) allowedData.systemPrompt = systemPrompt
+      if (model !== undefined) allowedData.model = model
+      if (memoryConfig !== undefined) allowedData.memoryConfig = memoryConfig
+      if (liveChatEnabled !== undefined) allowedData.liveChatEnabled = liveChatEnabled
+      // name, useKnowledgeBase, knowledgeBaseGroupIds are not allowed for built-in
+
+      const assistant = await prisma.assistant.update({
+        where: { id },
+        data: allowedData,
+      })
+      return NextResponse.json(assistant)
+    }
+
+    // Non–built-in: verify organization ownership
+    if (existing.organizationId) {
+      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
+        return NextResponse.json(
+          { error: "Assistant not found" },
+          { status: 404 }
+        )
+      }
+
+      if (!canEdit(orgContext.membership.role)) {
+        return NextResponse.json(
+          { error: "Insufficient permissions" },
+          { status: 403 }
+        )
+      }
+    }
 
     // Validate model if provided
     if (model !== undefined && !isValidModel(model)) {

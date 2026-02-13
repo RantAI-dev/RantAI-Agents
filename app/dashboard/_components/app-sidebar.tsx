@@ -444,7 +444,6 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
 
   // Determine current section based on pathname
   const getCurrentSection = () => {
-    if (pathname.startsWith("/dashboard/assistants")) return sections.agentBuilder
     if (pathname.startsWith("/dashboard/agent-builder")) return sections.agentBuilder
     if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
     if (pathname.startsWith("/dashboard/agent")) return sections.agent

@@ -159,6 +159,7 @@ model Organization {
   mcpServers        McpServerConfig[]
   mcpApiKeys        McpApiKey[]
   workflows         Workflow[]
+  credentials       Credential[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -560,6 +561,22 @@ model McpApiKey {
   @@index([organizationId])
 }
 
+// ─── Credential Management ──────────────────────────────────
+
+model Credential {
+  id              String   @id @default(cuid())
+  name            String
+  type            String   // "api_key", "oauth2", "basic_auth", "bearer"
+  encryptedData   String   @db.Text // AES-256-GCM encrypted JSON
+  organizationId  String?
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
 // ─── Workflow Builder ────────────────────────────────────────
 
 model Workflow {
@@ -574,6 +591,14 @@ model Workflow {
   // Metadata
   trigger         Json           @default("{\"type\":\"manual\"}")
   variables       Json           @default("{\"inputs\":[],\"outputs\":[]}")
+
+  // Execution mode
+  mode            WorkflowMode   @default(STANDARD)
+  chatflowConfig  Json           @default("{}")
+
+  // Public API access
+  apiEnabled      Boolean        @default(false)
+  apiKey          String?        @unique
 
   // Status
   status          WorkflowStatus @default(DRAFT)
@@ -613,6 +638,11 @@ model WorkflowRun {
   completedAt     DateTime?
 
   @@index([workflowId, startedAt])
+}
+
+enum WorkflowMode {
+  STANDARD   // Execute once, return result
+  CHATFLOW   // Handle chat messages, support streaming
 }
 
 enum WorkflowStatus {
