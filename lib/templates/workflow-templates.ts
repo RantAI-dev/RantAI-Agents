@@ -5,14 +5,13 @@ import type {
   LlmNodeData,
   TransformNodeData,
   RagSearchNodeData,
-  ConditionNodeData,
   HumanInputNodeData,
   ParallelNodeData,
   MergeNodeData,
-  HttpNodeData,
   SwitchNodeData,
-  ToolNodeData,
   CodeNodeData,
+  StreamOutputNodeData,
+  OutputParserNodeData,
   TriggerConfig,
   WorkflowVariables,
 } from "@/lib/workflow/types"
@@ -23,6 +22,7 @@ export interface WorkflowTemplate {
   name: string
   description: string
   icon: string
+  mode?: "STANDARD" | "CHATFLOW"
   nodes: Node<WorkflowNodeData>[]
   edges: Edge[]
   trigger: TriggerConfig
@@ -31,11 +31,12 @@ export interface WorkflowTemplate {
 }
 
 // ─── Template 1: Simple Chat Pipeline ─────────────────────
+// Flow: Trigger → LLM → Transform
 
 const simpleChatNodes: Node<WorkflowNodeData>[] = [
   {
     id: "trigger-1",
-    type: "workflowNode",
+    type: NodeType.TRIGGER_MANUAL,
     position: { x: 250, y: 0 },
     data: {
       label: "Manual Trigger",
@@ -45,20 +46,20 @@ const simpleChatNodes: Node<WorkflowNodeData>[] = [
   },
   {
     id: "llm-1",
-    type: "workflowNode",
+    type: NodeType.LLM,
     position: { x: 250, y: 150 },
     data: {
       label: "Chat LLM",
       description: "Process the user message with an LLM",
       nodeType: NodeType.LLM,
-      model: "openai/gpt-5-mini",
+      model: "xiaomi/mimo-v2-flash",
       systemPrompt: "You are a helpful assistant. Answer the user's question concisely.",
       temperature: 0.7,
     } as LlmNodeData,
   },
   {
     id: "transform-1",
-    type: "workflowNode",
+    type: NodeType.TRANSFORM,
     position: { x: 250, y: 300 },
     data: {
       label: "Format Response",
@@ -75,11 +76,12 @@ const simpleChatEdges: Edge[] = [
 ]
 
 // ─── Template 2: RAG Question Answering ───────────────────
+// Flow: Trigger → RAG Search → LLM → Transform
 
 const ragQANodes: Node<WorkflowNodeData>[] = [
   {
     id: "trigger-1",
-    type: "workflowNode",
+    type: NodeType.TRIGGER_MANUAL,
     position: { x: 250, y: 0 },
     data: {
       label: "Manual Trigger",
@@ -89,7 +91,7 @@ const ragQANodes: Node<WorkflowNodeData>[] = [
   },
   {
     id: "rag-1",
-    type: "workflowNode",
+    type: NodeType.RAG_SEARCH,
     position: { x: 250, y: 150 },
     data: {
       label: "Search Knowledge Base",
@@ -102,13 +104,13 @@ const ragQANodes: Node<WorkflowNodeData>[] = [
   },
   {
     id: "llm-1",
-    type: "workflowNode",
+    type: NodeType.LLM,
     position: { x: 250, y: 300 },
     data: {
       label: "Answer with Context",
       description: "Generate an answer using retrieved context",
       nodeType: NodeType.LLM,
-      model: "openai/gpt-5-mini",
+      model: "xiaomi/mimo-v2-flash",
       systemPrompt:
         "Answer the user's question based on the provided context. Cite sources when possible. If the context doesn't contain relevant information, say so.",
       temperature: 0.3,
@@ -116,7 +118,7 @@ const ragQANodes: Node<WorkflowNodeData>[] = [
   },
   {
     id: "transform-1",
-    type: "workflowNode",
+    type: NodeType.TRANSFORM,
     position: { x: 250, y: 450 },
     data: {
       label: "Format Answer",
@@ -134,297 +136,13 @@ const ragQAEdges: Edge[] = [
   { id: "e-llm-transform", source: "llm-1", target: "transform-1" },
 ]
 
-// ─── Template 3: Content Moderation ───────────────────────
-
-const moderationNodes: Node<WorkflowNodeData>[] = [
-  {
-    id: "trigger-1",
-    type: "workflowNode",
-    position: { x: 250, y: 0 },
-    data: {
-      label: "Manual Trigger",
-      nodeType: NodeType.TRIGGER_MANUAL,
-      config: {},
-    } as TriggerNodeData,
-  },
-  {
-    id: "llm-classify",
-    type: "workflowNode",
-    position: { x: 250, y: 150 },
-    data: {
-      label: "Classify Content",
-      description: "Classify whether content is safe or needs review",
-      nodeType: NodeType.LLM,
-      model: "openai/gpt-5-mini",
-      systemPrompt:
-        'Classify the following content as either "safe" or "needs_review". Respond with a JSON object: { "classification": "safe" | "needs_review", "reason": "brief explanation" }',
-      temperature: 0,
-    } as LlmNodeData,
-  },
-  {
-    id: "condition-1",
-    type: "workflowNode",
-    position: { x: 250, y: 300 },
-    data: {
-      label: "Is Safe?",
-      description: "Branch based on classification result",
-      nodeType: NodeType.CONDITION,
-      conditions: [
-        { id: "if", label: "Safe", expression: 'input.classification === "safe"' },
-        { id: "else", label: "Needs Review", expression: "true" },
-      ],
-    } as ConditionNodeData,
-  },
-  {
-    id: "transform-approve",
-    type: "workflowNode",
-    position: { x: 80, y: 460 },
-    data: {
-      label: "Auto-Approve",
-      description: "Content is safe, auto-approve it",
-      nodeType: NodeType.TRANSFORM,
-      expression: 'return { status: "approved", reviewedBy: "auto", ...input };',
-    } as TransformNodeData,
-  },
-  {
-    id: "human-review",
-    type: "workflowNode",
-    position: { x: 420, y: 460 },
-    data: {
-      label: "Human Review",
-      description: "Send to a human moderator for review",
-      nodeType: NodeType.HUMAN_INPUT,
-      prompt: "This content was flagged for review. Please approve or reject it.",
-    } as HumanInputNodeData,
-  },
-]
-
-const moderationEdges: Edge[] = [
-  { id: "e-trigger-classify", source: "trigger-1", target: "llm-classify" },
-  { id: "e-classify-condition", source: "llm-classify", target: "condition-1" },
-  {
-    id: "e-condition-approve",
-    source: "condition-1",
-    sourceHandle: "if",
-    target: "transform-approve",
-  },
-  {
-    id: "e-condition-review",
-    source: "condition-1",
-    sourceHandle: "else",
-    target: "human-review",
-  },
-]
-
-// ─── Template 4: Parallel Data Enrichment ─────────────────
-
-const parallelNodes: Node<WorkflowNodeData>[] = [
-  {
-    id: "trigger-1",
-    type: "workflowNode",
-    position: { x: 300, y: 0 },
-    data: {
-      label: "Manual Trigger",
-      nodeType: NodeType.TRIGGER_MANUAL,
-      config: {},
-    } as TriggerNodeData,
-  },
-  {
-    id: "parallel-1",
-    type: "workflowNode",
-    position: { x: 300, y: 130 },
-    data: {
-      label: "Parallel Split",
-      description: "Run multiple enrichment tasks in parallel",
-      nodeType: NodeType.PARALLEL,
-    } as ParallelNodeData,
-  },
-  {
-    id: "tool-search",
-    type: "workflowNode",
-    position: { x: 60, y: 270 },
-    data: {
-      label: "Web Search",
-      description: "Search the web for recent information",
-      nodeType: NodeType.TOOL,
-      toolId: "",
-      toolName: "web_search",
-      inputMapping: { query: "{{input.query}}" },
-    } as ToolNodeData,
-  },
-  {
-    id: "rag-1",
-    type: "workflowNode",
-    position: { x: 300, y: 270 },
-    data: {
-      label: "Knowledge Base",
-      description: "Search internal knowledge base",
-      nodeType: NodeType.RAG_SEARCH,
-      knowledgeBaseGroupIds: [],
-      topK: 5,
-    } as RagSearchNodeData,
-  },
-  {
-    id: "http-1",
-    type: "workflowNode",
-    position: { x: 540, y: 270 },
-    data: {
-      label: "External API",
-      description: "Fetch data from an external API",
-      nodeType: NodeType.HTTP,
-      url: "https://api.example.com/data",
-      method: "GET",
-    } as HttpNodeData,
-  },
-  {
-    id: "merge-1",
-    type: "workflowNode",
-    position: { x: 300, y: 420 },
-    data: {
-      label: "Merge Results",
-      description: "Combine all enrichment results",
-      nodeType: NodeType.MERGE,
-      mergeStrategy: "all",
-    } as MergeNodeData,
-  },
-  {
-    id: "llm-synthesize",
-    type: "workflowNode",
-    position: { x: 300, y: 560 },
-    data: {
-      label: "Synthesize",
-      description: "Use LLM to synthesize all gathered data into a coherent response",
-      nodeType: NodeType.LLM,
-      model: "openai/gpt-5-mini",
-      systemPrompt:
-        "Synthesize the following data from multiple sources into a comprehensive, well-structured response. Highlight key findings and note any conflicting information.",
-      temperature: 0.5,
-    } as LlmNodeData,
-  },
-]
-
-const parallelEdges: Edge[] = [
-  { id: "e-trigger-parallel", source: "trigger-1", target: "parallel-1" },
-  { id: "e-parallel-search", source: "parallel-1", target: "tool-search" },
-  { id: "e-parallel-rag", source: "parallel-1", target: "rag-1" },
-  { id: "e-parallel-http", source: "parallel-1", target: "http-1" },
-  { id: "e-search-merge", source: "tool-search", target: "merge-1" },
-  { id: "e-rag-merge", source: "rag-1", target: "merge-1" },
-  { id: "e-http-merge", source: "http-1", target: "merge-1" },
-  { id: "e-merge-llm", source: "merge-1", target: "llm-synthesize" },
-]
-
-// ─── Template 5: Customer Ticket Router ───────────────────
-
-const ticketRouterNodes: Node<WorkflowNodeData>[] = [
-  {
-    id: "trigger-webhook",
-    type: "workflowNode",
-    position: { x: 300, y: 0 },
-    data: {
-      label: "Webhook Trigger",
-      description: "Receive incoming support tickets via webhook",
-      nodeType: NodeType.TRIGGER_WEBHOOK,
-      config: { webhookPath: "/tickets" },
-    } as TriggerNodeData,
-  },
-  {
-    id: "llm-classify",
-    type: "workflowNode",
-    position: { x: 300, y: 150 },
-    data: {
-      label: "Classify Ticket",
-      description: "Use LLM to classify the ticket category",
-      nodeType: NodeType.LLM,
-      model: "openai/gpt-5-mini",
-      systemPrompt:
-        'Classify this support ticket into one of these categories: "technical", "billing", "general". Respond with JSON: { "category": "...", "priority": "low"|"medium"|"high", "summary": "..." }',
-      temperature: 0,
-    } as LlmNodeData,
-  },
-  {
-    id: "switch-1",
-    type: "workflowNode",
-    position: { x: 300, y: 310 },
-    data: {
-      label: "Route by Category",
-      description: "Route to the appropriate handler based on category",
-      nodeType: NodeType.SWITCH,
-      switchOn: "input.category",
-      cases: [
-        { id: "technical", value: "technical", label: "Technical" },
-        { id: "billing", value: "billing", label: "Billing" },
-        { id: "general", value: "general", label: "General" },
-      ],
-    } as SwitchNodeData,
-  },
-  {
-    id: "tool-technical",
-    type: "workflowNode",
-    position: { x: 60, y: 480 },
-    data: {
-      label: "Technical Agent",
-      description: "Handle with knowledge base search for technical issues",
-      nodeType: NodeType.TOOL,
-      toolId: "",
-      toolName: "knowledge_search",
-      inputMapping: { query: "{{input.summary}}" },
-    } as ToolNodeData,
-  },
-  {
-    id: "transform-billing",
-    type: "workflowNode",
-    position: { x: 300, y: 480 },
-    data: {
-      label: "Billing Lookup",
-      description: "Look up billing information and prepare response",
-      nodeType: NodeType.TRANSFORM,
-      expression:
-        'return { action: "billing_lookup", customerId: input.customerId, issue: input.summary };',
-    } as TransformNodeData,
-  },
-  {
-    id: "handoff-1",
-    type: "workflowNode",
-    position: { x: 540, y: 480 },
-    data: {
-      label: "Human Handoff",
-      description: "Escalate general inquiries to a human agent",
-      nodeType: NodeType.HANDOFF,
-      prompt: "General support ticket requiring human attention.",
-    } as HumanInputNodeData,
-  },
-]
-
-const ticketRouterEdges: Edge[] = [
-  { id: "e-trigger-classify", source: "trigger-webhook", target: "llm-classify" },
-  { id: "e-classify-switch", source: "llm-classify", target: "switch-1" },
-  {
-    id: "e-switch-technical",
-    source: "switch-1",
-    sourceHandle: "technical",
-    target: "tool-technical",
-  },
-  {
-    id: "e-switch-billing",
-    source: "switch-1",
-    sourceHandle: "billing",
-    target: "transform-billing",
-  },
-  {
-    id: "e-switch-general",
-    source: "switch-1",
-    sourceHandle: "general",
-    target: "handoff-1",
-  },
-]
-
-// ─── Template 6: Insurance Fraud Detection ───────────────
+// ─── Template 3: Insurance Fraud Detection ───────────────
+// Flow: Webhook → Normalize → Parallel(Narrative, Rules, Patterns) → Merge → Synthesize → Parse → Switch → Approve/Review/Escalate
 
 const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
   {
     id: "trigger-webhook",
-    type: "workflowNode",
+    type: NodeType.TRIGGER_WEBHOOK,
     position: { x: 400, y: 0 },
     data: {
       label: "Receive Claim",
@@ -435,8 +153,8 @@ const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
   },
   {
     id: "transform-normalize",
-    type: "workflowNode",
-    position: { x: 400, y: 140 },
+    type: NodeType.TRANSFORM,
+    position: { x: 400, y: 150 },
     data: {
       label: "Normalize Claim Data",
       description: "Structure and validate incoming claim fields",
@@ -466,23 +184,24 @@ const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
   },
   {
     id: "parallel-split",
-    type: "workflowNode",
-    position: { x: 400, y: 280 },
+    type: NodeType.PARALLEL,
+    position: { x: 400, y: 300 },
     data: {
       label: "Parallel Fraud Analysis",
       description: "Run narrative analysis, rule-based scoring, and pattern matching simultaneously",
       nodeType: NodeType.PARALLEL,
     } as ParallelNodeData,
   },
+  // ── 3 parallel branches ──
   {
     id: "llm-narrative",
-    type: "workflowNode",
-    position: { x: 80, y: 420 },
+    type: NodeType.LLM,
+    position: { x: 80, y: 450 },
     data: {
       label: "Narrative Analysis",
       description: "Analyze the claim description for inconsistencies and suspicious language",
       nodeType: NodeType.LLM,
-      model: "openai/gpt-5-mini",
+      model: "xiaomi/mimo-v2-flash",
       systemPrompt: `You are an insurance fraud detection specialist analyzing claim narratives.
 
 Analyze the following insurance claim for:
@@ -504,8 +223,8 @@ Respond with JSON:
   },
   {
     id: "code-rules",
-    type: "workflowNode",
-    position: { x: 400, y: 420 },
+    type: NodeType.CODE,
+    position: { x: 400, y: 450 },
     data: {
       label: "Rule-Based Scoring",
       description: "Compute fraud risk score using predefined business rules and red flags",
@@ -554,13 +273,13 @@ return { rule_score: score, red_flags: flags, rules_evaluated: 9 };`,
   },
   {
     id: "llm-patterns",
-    type: "workflowNode",
-    position: { x: 720, y: 420 },
+    type: NodeType.LLM,
+    position: { x: 720, y: 450 },
     data: {
       label: "Pattern Matching",
       description: "Match claim data against known fraud patterns and indicators",
       nodeType: NodeType.LLM,
-      model: "openai/gpt-5-mini",
+      model: "xiaomi/mimo-v2-flash",
       systemPrompt: `You are an insurance fraud pattern detection system. Compare the following claim data against these known fraud patterns:
 
 KNOWN FRAUD PATTERNS:
@@ -580,10 +299,11 @@ Analyze the structured claim data and respond with JSON:
       temperature: 0.1,
     } as LlmNodeData,
   },
+  // ── Merge + final assessment ──
   {
     id: "merge-results",
-    type: "workflowNode",
-    position: { x: 400, y: 580 },
+    type: NodeType.MERGE,
+    position: { x: 400, y: 600 },
     data: {
       label: "Merge Analysis Results",
       description: "Combine results from all three parallel fraud analysis branches",
@@ -593,13 +313,13 @@ Analyze the structured claim data and respond with JSON:
   },
   {
     id: "llm-synthesize",
-    type: "workflowNode",
-    position: { x: 400, y: 720 },
+    type: NodeType.LLM,
+    position: { x: 400, y: 750 },
     data: {
       label: "Synthesize Assessment",
       description: "Combine all fraud signals into a final risk assessment with overall score",
       nodeType: NodeType.LLM,
-      model: "openai/gpt-5-mini",
+      model: "xiaomi/mimo-v2-flash",
       systemPrompt: `You are a senior insurance fraud analyst producing a final assessment.
 
 You will receive the combined results of three fraud analysis methods:
@@ -628,8 +348,8 @@ Risk level thresholds: low < 30, medium 30-65, high > 65`,
   },
   {
     id: "transform-parse",
-    type: "workflowNode",
-    position: { x: 400, y: 870 },
+    type: NodeType.TRANSFORM,
+    position: { x: 400, y: 900 },
     data: {
       label: "Parse Assessment",
       description: "Parse the LLM JSON response into a structured object",
@@ -642,10 +362,11 @@ Risk level thresholds: low < 30, medium 30-65, high > 65`,
 }`,
     } as TransformNodeData,
   },
+  // ── Risk routing ──
   {
     id: "switch-risk",
-    type: "workflowNode",
-    position: { x: 400, y: 1010 },
+    type: NodeType.SWITCH,
+    position: { x: 400, y: 1050 },
     data: {
       label: "Route by Risk Level",
       description: "Route the claim based on assessed fraud risk level",
@@ -660,8 +381,8 @@ Risk level thresholds: low < 30, medium 30-65, high > 65`,
   },
   {
     id: "transform-approve",
-    type: "workflowNode",
-    position: { x: 80, y: 1170 },
+    type: NodeType.TRANSFORM,
+    position: { x: 80, y: 1200 },
     data: {
       label: "Auto-Approve",
       description: "Automatically approve low-risk claims for standard processing",
@@ -678,8 +399,8 @@ Risk level thresholds: low < 30, medium 30-65, high > 65`,
   },
   {
     id: "approval-analyst",
-    type: "workflowNode",
-    position: { x: 400, y: 1170 },
+    type: NodeType.APPROVAL,
+    position: { x: 400, y: 1200 },
     data: {
       label: "Analyst Review",
       description: "Route to fraud analyst for manual review of medium-risk claims",
@@ -689,8 +410,8 @@ Risk level thresholds: low < 30, medium 30-65, high > 65`,
   },
   {
     id: "handoff-escalate",
-    type: "workflowNode",
-    position: { x: 720, y: 1170 },
+    type: NodeType.HANDOFF,
+    position: { x: 720, y: 1200 },
     data: {
       label: "Escalate to SIU",
       description: "Escalate high-risk claims to the Special Investigations Unit",
@@ -701,25 +422,474 @@ Risk level thresholds: low < 30, medium 30-65, high > 65`,
 ]
 
 const fraudDetectionEdges: Edge[] = [
-  // Main flow
-  { id: "e-trigger-normalize", source: "trigger-webhook", target: "transform-normalize" },
+  { id: "e-trigger-normalize",  source: "trigger-webhook",   target: "transform-normalize" },
   { id: "e-normalize-parallel", source: "transform-normalize", target: "parallel-split" },
-  // Parallel fan-out
-  { id: "e-parallel-narrative", source: "parallel-split", target: "llm-narrative" },
-  { id: "e-parallel-rules", source: "parallel-split", target: "code-rules" },
-  { id: "e-parallel-patterns", source: "parallel-split", target: "llm-patterns" },
-  // Parallel fan-in
-  { id: "e-narrative-merge", source: "llm-narrative", target: "merge-results" },
-  { id: "e-rules-merge", source: "code-rules", target: "merge-results" },
-  { id: "e-patterns-merge", source: "llm-patterns", target: "merge-results" },
-  // Synthesis
-  { id: "e-merge-synthesize", source: "merge-results", target: "llm-synthesize" },
-  { id: "e-synthesize-parse", source: "llm-synthesize", target: "transform-parse" },
-  { id: "e-parse-switch", source: "transform-parse", target: "switch-risk" },
-  // Risk level routing
-  { id: "e-switch-approve", source: "switch-risk", sourceHandle: "low", target: "transform-approve" },
-  { id: "e-switch-review", source: "switch-risk", sourceHandle: "medium", target: "approval-analyst" },
-  { id: "e-switch-escalate", source: "switch-risk", sourceHandle: "high", target: "handoff-escalate" },
+  { id: "e-parallel-narrative", source: "parallel-split",     target: "llm-narrative" },
+  { id: "e-parallel-rules",    source: "parallel-split",     target: "code-rules" },
+  { id: "e-parallel-patterns",  source: "parallel-split",     target: "llm-patterns" },
+  { id: "e-narrative-merge",   source: "llm-narrative",      target: "merge-results" },
+  { id: "e-rules-merge",       source: "code-rules",         target: "merge-results" },
+  { id: "e-patterns-merge",    source: "llm-patterns",       target: "merge-results" },
+  { id: "e-merge-synthesize",  source: "merge-results",      target: "llm-synthesize" },
+  { id: "e-synthesize-parse",  source: "llm-synthesize",     target: "transform-parse" },
+  { id: "e-parse-switch",      source: "transform-parse",    target: "switch-risk" },
+  { id: "e-switch-approve",    source: "switch-risk", sourceHandle: "low",    target: "transform-approve" },
+  { id: "e-switch-review",     source: "switch-risk", sourceHandle: "medium", target: "approval-analyst" },
+  { id: "e-switch-escalate",   source: "switch-risk", sourceHandle: "high",   target: "handoff-escalate" },
+]
+
+// ─── Template 4: Customer Service Chatflow ────────────────
+// Flow: Trigger → LLM (classify) → Output Parser → Switch
+//       ├─ product  → RAG Products   → Stream (Product Advisor)
+//       ├─ claim    → RAG Claims     → Stream (Claim Info)
+//       ├─ complaint→ Handoff (Agent)
+//       └─ default  → (no Stream Output — falls back to normal agent)
+
+const customerServiceNodes: Node<WorkflowNodeData>[] = [
+  {
+    id: "trigger-1",
+    type: NodeType.TRIGGER_MANUAL,
+    position: { x: 350, y: 0 },
+    data: {
+      label: "Chat Message",
+      nodeType: NodeType.TRIGGER_MANUAL,
+      config: {},
+    } as TriggerNodeData,
+  },
+  {
+    id: "llm-classify",
+    type: NodeType.LLM,
+    position: { x: 350, y: 150 },
+    data: {
+      label: "Classify Intent",
+      description: "Classify the customer message into product inquiry, claim question, or complaint",
+      nodeType: NodeType.LLM,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `You are an intent classifier for an insurance company customer service chatbot.
+
+Classify the customer's message into one of these categories:
+- "product": Questions about insurance products, coverage, premiums, benefits, how to buy
+- "claim": Questions about claims, claim status, claim process, required documents
+- "complaint": Complaints, dissatisfaction, escalation requests, demands to speak with human
+- "general": Greetings, company info, office locations, working hours, other
+
+Respond with JSON only: { "intent": "product" | "claim" | "complaint" | "general" }`,
+      temperature: 0,
+    } as LlmNodeData,
+  },
+  {
+    id: "parser-intent",
+    type: NodeType.OUTPUT_PARSER,
+    position: { x: 350, y: 300 },
+    data: {
+      label: "Parse Intent",
+      description: "Parse LLM classification JSON into structured data",
+      nodeType: NodeType.OUTPUT_PARSER,
+      strict: false,
+    } as OutputParserNodeData,
+  },
+  {
+    id: "switch-intent",
+    type: NodeType.SWITCH,
+    position: { x: 350, y: 450 },
+    data: {
+      label: "Route by Intent",
+      description: "Route to the appropriate handler based on customer intent",
+      nodeType: NodeType.SWITCH,
+      switchOn: "input.intent",
+      cases: [
+        { id: "product", value: "product", label: "Product" },
+        { id: "claim", value: "claim", label: "Claim" },
+        { id: "complaint", value: "complaint", label: "Complaint" },
+      ],
+      defaultCase: "general",
+    } as SwitchNodeData,
+  },
+  // ── Product branch: RAG → Stream ──
+  {
+    id: "rag-products",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 50, y: 600 },
+    data: {
+      label: "Search Products KB",
+      description: "Search insurance products knowledge base",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: [],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "stream-product",
+    type: NodeType.STREAM_OUTPUT,
+    position: { x: 50, y: 750 },
+    data: {
+      label: "Product Advisor",
+      description: "Answer product questions with KB context",
+      nodeType: NodeType.STREAM_OUTPUT,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `Kamu adalah customer service virtual perusahaan asuransi. Jawab pertanyaan nasabah tentang produk asuransi berdasarkan konteks yang diberikan.
+
+Panduan:
+- Jelaskan fitur dan manfaat produk dengan bahasa yang mudah dipahami
+- Sebutkan persyaratan dan ketentuan penting
+- Jika ditanya harga/premi, berikan kisaran jika ada di konteks, atau arahkan ke agent untuk penawaran personal
+- Selalu jawab dalam bahasa yang sama dengan pertanyaan nasabah
+- Jika informasi tidak ada di konteks, katakan "Untuk informasi lebih detail, silakan hubungi call center kami."`,
+      temperature: 0.5,
+    } as StreamOutputNodeData,
+  },
+  // ── Claim branch: RAG → Stream ──
+  {
+    id: "rag-claims",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 300, y: 600 },
+    data: {
+      label: "Search Claims KB",
+      description: "Search claims procedures knowledge base",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: [],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "stream-claim",
+    type: NodeType.STREAM_OUTPUT,
+    position: { x: 300, y: 750 },
+    data: {
+      label: "Claim Info",
+      description: "Answer claim-related questions with KB context",
+      nodeType: NodeType.STREAM_OUTPUT,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `Kamu adalah customer service virtual perusahaan asuransi yang membantu nasabah terkait klaim.
+
+Panduan:
+- Jelaskan proses klaim langkah demi langkah
+- Sebutkan dokumen yang diperlukan untuk setiap jenis klaim
+- Berikan estimasi waktu proses jika ada di konteks
+- Untuk cek status klaim, minta nomor klaim dan arahkan ke sistem tracking
+- Selalu jawab dalam bahasa yang sama dengan pertanyaan nasabah`,
+      temperature: 0.5,
+    } as StreamOutputNodeData,
+  },
+  // ── Complaint branch: Handoff ──
+  {
+    id: "handoff-complaint",
+    type: NodeType.HANDOFF,
+    position: { x: 550, y: 600 },
+    data: {
+      label: "Escalate to Agent",
+      description: "Transfer complaint to human customer service agent",
+      nodeType: NodeType.HANDOFF,
+      prompt: "Nasabah mengajukan keluhan dan membutuhkan penanganan langsung dari agent. Silakan review percakapan sebelumnya.",
+    } as HumanInputNodeData,
+  },
+  // ── Default branch: no Stream Output → fallback to normal agent ──
+]
+
+const customerServiceEdges: Edge[] = [
+  { id: "e-trigger-classify",   source: "trigger-1",     target: "llm-classify" },
+  { id: "e-classify-parser",    source: "llm-classify",  target: "parser-intent" },
+  { id: "e-parser-switch",      source: "parser-intent",  target: "switch-intent" },
+  { id: "e-switch-product",     source: "switch-intent", sourceHandle: "product",   target: "rag-products" },
+  { id: "e-rag-product-stream", source: "rag-products",  target: "stream-product" },
+  { id: "e-switch-claim",       source: "switch-intent", sourceHandle: "claim",     target: "rag-claims" },
+  { id: "e-rag-claim-stream",   source: "rag-claims",    target: "stream-claim" },
+  { id: "e-switch-complaint",   source: "switch-intent", sourceHandle: "complaint", target: "handoff-complaint" },
+  // Default branch: no edge — chatflow falls back to normal agent processing
+]
+
+// ─── Template 5: Agent Policy Assistant ───────────────────
+// Flow: Trigger → Parallel(RAG Policy, RAG Underwriting) → Merge → Stream
+
+const agentPolicyNodes: Node<WorkflowNodeData>[] = [
+  {
+    id: "trigger-1",
+    type: NodeType.TRIGGER_MANUAL,
+    position: { x: 300, y: 0 },
+    data: {
+      label: "Agent Question",
+      nodeType: NodeType.TRIGGER_MANUAL,
+      config: {},
+    } as TriggerNodeData,
+  },
+  {
+    id: "parallel-search",
+    type: NodeType.PARALLEL,
+    position: { x: 300, y: 150 },
+    data: {
+      label: "Parallel KB Search",
+      description: "Search policy and underwriting knowledge bases simultaneously",
+      nodeType: NodeType.PARALLEL,
+    } as ParallelNodeData,
+  },
+  {
+    id: "rag-policy",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 100, y: 300 },
+    data: {
+      label: "Search Policy KB",
+      description: "Search policy terms, coverage details, exclusions",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: [],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "rag-underwriting",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 500, y: 300 },
+    data: {
+      label: "Search Underwriting KB",
+      description: "Search underwriting guidelines, risk criteria, approval rules",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: [],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "merge-results",
+    type: NodeType.MERGE,
+    position: { x: 300, y: 450 },
+    data: {
+      label: "Merge Results",
+      description: "Combine results from both knowledge bases",
+      nodeType: NodeType.MERGE,
+      mergeStrategy: "all",
+    } as MergeNodeData,
+  },
+  {
+    id: "stream-answer",
+    type: NodeType.STREAM_OUTPUT,
+    position: { x: 300, y: 600 },
+    data: {
+      label: "Policy Advisor",
+      description: "Answer agent's question using combined KB context",
+      nodeType: NodeType.STREAM_OUTPUT,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `Kamu adalah asisten internal untuk agent asuransi. Tugasmu membantu agent mencari informasi polis, coverage, dan aturan underwriting.
+
+Panduan:
+- Jawab berdasarkan konteks dari knowledge base yang diberikan
+- Gunakan format struktural: tabel, bullet points, heading jika perlu
+- Jika ada ketentuan underwriting yang relevan, selalu sertakan
+- Sebutkan sumber/dokumen referensi jika tersedia di konteks
+- Jika informasi tidak ditemukan, katakan secara eksplisit dan sarankan untuk cek manual
+- Gunakan bahasa yang profesional dan to-the-point
+- Jawab dalam bahasa yang sama dengan pertanyaan`,
+      temperature: 0.3,
+    } as StreamOutputNodeData,
+  },
+]
+
+const agentPolicyEdges: Edge[] = [
+  { id: "e-trigger-parallel",     source: "trigger-1",       target: "parallel-search" },
+  { id: "e-parallel-policy",      source: "parallel-search", target: "rag-policy" },
+  { id: "e-parallel-underwriting", source: "parallel-search", target: "rag-underwriting" },
+  { id: "e-policy-merge",         source: "rag-policy",      target: "merge-results" },
+  { id: "e-underwriting-merge",   source: "rag-underwriting", target: "merge-results" },
+  { id: "e-merge-stream",         source: "merge-results",   target: "stream-answer" },
+]
+
+// ─── Template 6: Claim Filing Guide ──────────────────────
+// Flow: Trigger → LLM (classify) → Output Parser → Switch
+//       ├─ inquiry     → RAG Procedures → Stream (Explain Process)
+//       ├─ file_new    → RAG Documents  → Stream (Guide Filing)
+//       ├─ check_status→ Stream (Claim Status)
+//       └─ general     → RAG Claims     → Stream (General Help)
+
+const claimFilingNodes: Node<WorkflowNodeData>[] = [
+  {
+    id: "trigger-1",
+    type: NodeType.TRIGGER_MANUAL,
+    position: { x: 350, y: 0 },
+    data: {
+      label: "Chat Message",
+      nodeType: NodeType.TRIGGER_MANUAL,
+      config: {},
+    } as TriggerNodeData,
+  },
+  {
+    id: "llm-classify",
+    type: NodeType.LLM,
+    position: { x: 350, y: 150 },
+    data: {
+      label: "Classify Need",
+      description: "Determine if customer wants to inquire about, file, or track a claim",
+      nodeType: NodeType.LLM,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `You are a claim intent classifier for an insurance company.
+
+Classify the customer's message into one of these categories:
+- "inquiry": Asking about claim process, requirements, eligibility, timelines
+- "file_new": Wants to file/submit a new claim, reporting an incident
+- "check_status": Wants to check existing claim status, tracking
+- "general": Other claim-related questions
+
+Respond with JSON only: { "need": "inquiry" | "file_new" | "check_status" | "general" }`,
+      temperature: 0,
+    } as LlmNodeData,
+  },
+  {
+    id: "parser-need",
+    type: NodeType.OUTPUT_PARSER,
+    position: { x: 350, y: 300 },
+    data: {
+      label: "Parse Need",
+      description: "Parse LLM classification JSON into structured data",
+      nodeType: NodeType.OUTPUT_PARSER,
+      strict: false,
+    } as OutputParserNodeData,
+  },
+  {
+    id: "switch-need",
+    type: NodeType.SWITCH,
+    position: { x: 350, y: 450 },
+    data: {
+      label: "Route by Need",
+      description: "Route to the appropriate claim handler",
+      nodeType: NodeType.SWITCH,
+      switchOn: "input.need",
+      cases: [
+        { id: "inquiry", value: "inquiry", label: "Inquiry" },
+        { id: "file_new", value: "file_new", label: "File New" },
+        { id: "check_status", value: "check_status", label: "Check Status" },
+      ],
+      defaultCase: "general",
+    } as SwitchNodeData,
+  },
+  // ── Inquiry branch: RAG → Stream ──
+  {
+    id: "rag-procedures",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 50, y: 600 },
+    data: {
+      label: "Search Procedures",
+      description: "Search claim procedures and eligibility requirements",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: [],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "stream-inquiry",
+    type: NodeType.STREAM_OUTPUT,
+    position: { x: 50, y: 750 },
+    data: {
+      label: "Explain Process",
+      description: "Explain claim process and requirements",
+      nodeType: NodeType.STREAM_OUTPUT,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `Kamu adalah pemandu klaim asuransi. Jelaskan proses klaim berdasarkan konteks yang diberikan.
+
+Panduan:
+- Jelaskan langkah-langkah proses klaim secara berurutan
+- Sebutkan dokumen yang diperlukan
+- Berikan estimasi waktu proses jika ada
+- Jelaskan syarat dan ketentuan yang berlaku
+- Gunakan bahasa yang mudah dipahami nasabah awam
+- Jawab dalam bahasa yang sama dengan pertanyaan nasabah`,
+      temperature: 0.5,
+    } as StreamOutputNodeData,
+  },
+  // ── File new branch: RAG → Stream ──
+  {
+    id: "rag-documents",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 300, y: 600 },
+    data: {
+      label: "Search Documents KB",
+      description: "Search required documents and filing forms",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: [],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "stream-filing",
+    type: NodeType.STREAM_OUTPUT,
+    position: { x: 300, y: 750 },
+    data: {
+      label: "Guide Filing",
+      description: "Guide customer through claim filing step by step",
+      nodeType: NodeType.STREAM_OUTPUT,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `Kamu adalah pemandu pengajuan klaim asuransi. Bantu nasabah mengajukan klaim baru langkah demi langkah.
+
+Panduan:
+- Tanyakan informasi satu per satu, jangan sekaligus
+- Urutan: (1) Nomor polis, (2) Jenis insiden, (3) Tanggal kejadian, (4) Kronologi singkat, (5) Dokumen pendukung
+- Jelaskan dokumen apa saja yang perlu disiapkan berdasarkan jenis klaim
+- Berikan instruksi cara mengunggah atau mengirim dokumen
+- Jika nasabah sudah memberikan info, langsung lanjut ke step berikutnya
+- Jawab dalam bahasa yang sama dengan pertanyaan nasabah`,
+      temperature: 0.5,
+    } as StreamOutputNodeData,
+  },
+  // ── Check status branch: Stream (no RAG) ──
+  {
+    id: "stream-status",
+    type: NodeType.STREAM_OUTPUT,
+    position: { x: 550, y: 600 },
+    data: {
+      label: "Claim Status",
+      description: "Help customer check their claim status",
+      nodeType: NodeType.STREAM_OUTPUT,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `Kamu adalah asisten tracking klaim asuransi. Bantu nasabah mengecek status klaim mereka.
+
+Panduan:
+- Minta nomor klaim jika belum diberikan
+- Jelaskan bahwa status klaim bisa dicek via: (1) Portal nasabah online, (2) Call center, (3) Email ke claims@company.com
+- Jelaskan tahapan proses klaim: Diterima → Verifikasi → Penilaian → Persetujuan → Pembayaran
+- Berikan estimasi waktu untuk setiap tahapan
+- Jawab dalam bahasa yang sama dengan pertanyaan nasabah`,
+      temperature: 0.5,
+    } as StreamOutputNodeData,
+  },
+  // ── Default branch: RAG → Stream ──
+  {
+    id: "rag-general-claims",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 800, y: 600 },
+    data: {
+      label: "Search Claims KB",
+      description: "Search general claims knowledge base",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: [],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "stream-general-claim",
+    type: NodeType.STREAM_OUTPUT,
+    position: { x: 800, y: 750 },
+    data: {
+      label: "General Claim Help",
+      description: "Handle general claim questions",
+      nodeType: NodeType.STREAM_OUTPUT,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `Kamu adalah asisten klaim asuransi. Jawab pertanyaan umum nasabah terkait klaim berdasarkan konteks yang diberikan.
+
+Panduan:
+- Jawab dengan jelas dan ringkas
+- Arahkan nasabah ke proses yang tepat jika diperlukan
+- Jawab dalam bahasa yang sama dengan pertanyaan nasabah`,
+      temperature: 0.5,
+    } as StreamOutputNodeData,
+  },
+]
+
+const claimFilingEdges: Edge[] = [
+  { id: "e-trigger-classify",      source: "trigger-1",        target: "llm-classify" },
+  { id: "e-classify-parser",       source: "llm-classify",     target: "parser-need" },
+  { id: "e-parser-switch",         source: "parser-need",      target: "switch-need" },
+  { id: "e-switch-inquiry",        source: "switch-need", sourceHandle: "inquiry",      target: "rag-procedures" },
+  { id: "e-rag-procedures-stream", source: "rag-procedures",   target: "stream-inquiry" },
+  { id: "e-switch-file",           source: "switch-need", sourceHandle: "file_new",     target: "rag-documents" },
+  { id: "e-rag-documents-stream",  source: "rag-documents",    target: "stream-filing" },
+  { id: "e-switch-status",         source: "switch-need", sourceHandle: "check_status", target: "stream-status" },
+  { id: "e-switch-general",        source: "switch-need", sourceHandle: "default",      target: "rag-general-claims" },
+  { id: "e-rag-general-stream",    source: "rag-general-claims", target: "stream-general-claim" },
 ]
 
 // ─── Exports ──────────────────────────────────────────────
@@ -728,114 +898,87 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: "wf-simple-chat",
     name: "Simple Chat Pipeline",
-    description:
-      "Basic linear pipeline: trigger → LLM → transform. The simplest workflow to understand the basics.",
+    description: "Basic linear pipeline: trigger → LLM → transform. The simplest workflow to understand the basics.",
     icon: "💬",
     nodes: simpleChatNodes,
     edges: simpleChatEdges,
     trigger: { type: "manual" },
     variables: {
-      inputs: [
-        { name: "message", type: "string", description: "User message", required: true },
-      ],
-      outputs: [
-        { name: "response", type: "string", description: "Assistant response", required: true },
-      ],
+      inputs: [{ name: "message", type: "string", description: "User message", required: true }],
+      outputs: [{ name: "response", type: "string", description: "Assistant response", required: true }],
     },
     tags: ["Starter", "Chat"],
   },
   {
     id: "wf-rag-qa",
     name: "RAG Question Answering",
-    description:
-      "Search a knowledge base, pass context to an LLM, and return a sourced answer.",
-    icon: "📖",
+    description: "Search a knowledge base, pass context to an LLM, and return a sourced answer.",
+    icon: "📚",
     nodes: ragQANodes,
     edges: ragQAEdges,
     trigger: { type: "manual" },
     variables: {
-      inputs: [
-        { name: "question", type: "string", description: "User question", required: true },
-      ],
-      outputs: [
-        { name: "answer", type: "string", description: "Answer with sources", required: true },
-      ],
+      inputs: [{ name: "question", type: "string", description: "User question", required: true }],
+      outputs: [{ name: "answer", type: "string", description: "Answer with sources", required: true }],
     },
     tags: ["RAG", "Knowledge"],
   },
   {
-    id: "wf-content-moderation",
-    name: "Content Moderation",
-    description:
-      "Classify content safety with an LLM, auto-approve safe content, and route flagged content to human review.",
-    icon: "🛡️",
-    nodes: moderationNodes,
-    edges: moderationEdges,
+    id: "wf-customer-service",
+    name: "Customer Service Chatflow",
+    description: "Intent classification → routing: product FAQ, claim info, or auto-escalate complaints to human agent. For widget/customer-facing.",
+    icon: "🎧",
+    mode: "CHATFLOW",
+    nodes: customerServiceNodes,
+    edges: customerServiceEdges,
     trigger: { type: "manual" },
     variables: {
-      inputs: [
-        { name: "content", type: "string", description: "Content to moderate", required: true },
-      ],
-      outputs: [
-        { name: "status", type: "string", description: "Moderation result", required: true },
-      ],
+      inputs: [{ name: "message", type: "string", description: "Customer message", required: true }],
+      outputs: [{ name: "response", type: "string", description: "CS response", required: true }],
     },
-    tags: ["Moderation", "Human-in-Loop"],
+    tags: ["Insurance", "Chatflow", "Widget"],
   },
   {
-    id: "wf-parallel-enrichment",
-    name: "Parallel Data Enrichment",
-    description:
-      "Run web search, knowledge base retrieval, and API calls in parallel, then merge and synthesize results.",
-    icon: "⚡",
-    nodes: parallelNodes,
-    edges: parallelEdges,
+    id: "wf-agent-policy",
+    name: "Agent Policy Assistant",
+    description: "Parallel search across policy + underwriting KBs, merge results, and answer with combined context. For internal agents.",
+    icon: "🔎",
+    mode: "CHATFLOW",
+    nodes: agentPolicyNodes,
+    edges: agentPolicyEdges,
     trigger: { type: "manual" },
     variables: {
-      inputs: [
-        { name: "query", type: "string", description: "Research query", required: true },
-      ],
-      outputs: [
-        { name: "synthesis", type: "string", description: "Synthesized results", required: true },
-      ],
+      inputs: [{ name: "question", type: "string", description: "Agent question", required: true }],
+      outputs: [{ name: "answer", type: "string", description: "Policy information", required: true }],
     },
-    tags: ["Parallel", "Research"],
+    tags: ["Insurance", "Chatflow", "Internal"],
   },
   {
-    id: "wf-ticket-router",
-    name: "Customer Ticket Router",
-    description:
-      "Receive tickets via webhook, classify with LLM, and route to technical, billing, or human agents.",
-    icon: "🎫",
-    nodes: ticketRouterNodes,
-    edges: ticketRouterEdges,
-    trigger: { type: "webhook", webhookPath: "/tickets" },
+    id: "wf-claim-filing",
+    name: "Claim Filing Guide",
+    description: "Classify claim intent → route: process inquiry, guided filing, or status tracking. Each path uses dedicated KB and prompts. For widget/customer-facing.",
+    icon: "📋",
+    mode: "CHATFLOW",
+    nodes: claimFilingNodes,
+    edges: claimFilingEdges,
+    trigger: { type: "manual" },
     variables: {
-      inputs: [
-        { name: "ticket", type: "object", description: "Incoming ticket data", required: true },
-      ],
-      outputs: [
-        { name: "result", type: "object", description: "Routing result", required: true },
-      ],
+      inputs: [{ name: "message", type: "string", description: "Customer message", required: true }],
+      outputs: [{ name: "response", type: "string", description: "Claim guidance", required: true }],
     },
-    tags: ["Webhook", "Routing"],
+    tags: ["Insurance", "Chatflow", "Widget"],
   },
   {
     id: "wf-fraud-detection",
     name: "Insurance Fraud Detection",
-    description:
-      "Receive claims via webhook, run parallel AI + rule-based fraud analysis, and route by risk level with human-in-the-loop review.",
+    description: "Receive claims via webhook, run parallel AI + rule-based fraud analysis, and route by risk level with human-in-the-loop review.",
     icon: "🔍",
     nodes: fraudDetectionNodes,
     edges: fraudDetectionEdges,
     trigger: { type: "webhook", webhookPath: "/fraud-detection" },
     variables: {
-      inputs: [
-        { name: "claim", type: "object", description: "Insurance claim data with policy, incident, and financial details", required: true },
-      ],
-      outputs: [
-        { name: "decision", type: "object", description: "Fraud assessment decision with risk score and routing outcome", required: true },
-      ],
+      inputs: [{ name: "claim", type: "object", description: "Insurance claim data with policy, incident, and financial details", required: true }],
+      outputs: [{ name: "decision", type: "object", description: "Fraud assessment decision with risk score and routing outcome", required: true }],
     },
     tags: ["Insurance", "Fraud", "Parallel", "Human-in-Loop"],
   },
