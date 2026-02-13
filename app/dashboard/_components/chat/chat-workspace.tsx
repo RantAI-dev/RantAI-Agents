@@ -27,12 +27,10 @@ import type { Assistant } from "@/lib/types/assistant"
 import { cn } from "@/lib/utils"
 import { EmptyState } from "./empty-state"
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
-import ReactMarkdown from "react-markdown"
-import remarkGfm from "remark-gfm"
 import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
-import { CodeBlock } from "./code-block"
+import { MarkdownContent } from "./markdown-content"
 import { TypingIndicator, ButtonLoadingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
@@ -234,48 +232,6 @@ const messageVariants = {
   animate: { opacity: 1, y: 0 },
   exit: { opacity: 0, y: -10 },
 }
-
-// Markdown components — only override code blocks (for syntax highlighting)
-// and links (for external target). Everything else is handled by CSS in globals.css.
-const markdownComponents = {
-  code({ className, children, ...props }: any) {
-    const match = /language-(\w+)/.exec(className || "")
-    const isInline = !match && !String(children).includes("\n")
-
-    if (isInline) {
-      return <code {...props}>{children}</code>
-    }
-
-    return (
-      <CodeBlock language={match?.[1]}>
-        {String(children).replace(/\n$/, "")}
-      </CodeBlock>
-    )
-  },
-  a({ children, href, ...props }: any) {
-    return (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-primary underline underline-offset-2 hover:text-primary/80 break-words"
-        {...props}
-      >
-        {children}
-      </a>
-    )
-  },
-  // Wrap tables in a scrollable container
-  table({ children, ...props }: any) {
-    return (
-      <div className="my-2 overflow-x-auto rounded-lg border">
-        <table {...props}>{children}</table>
-      </div>
-    )
-  },
-}
-
-const remarkPlugins = [remarkGfm]
 
 export function ChatWorkspace({
   session,
@@ -1416,14 +1372,10 @@ export function ChatWorkspace({
                                 </div>
                               )
                             })()}
-                            <div className="chat-message max-w-none">
-                              <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
-                                {content}
-                              </ReactMarkdown>
-                              {isStreamingMessage && (
-                                <span className="inline-block w-2 h-4 bg-foreground/70 animate-pulse ml-0.5 align-middle" />
-                              )}
-                            </div>
+                            <MarkdownContent content={content} />
+                            {isStreamingMessage && (
+                              <span className="inline-block w-2 h-4 bg-foreground/70 animate-pulse ml-0.5 align-middle" />
+                            )}
                           </>
                         )}
 
@@ -1497,10 +1449,8 @@ export function ChatWorkspace({
                               <span className="opacity-60">•</span>
                               <span>Version {currentViewingVersion}/{totalVersions}</span>
                             </div>
-                            <div className="chat-message max-w-none opacity-90">
-                              <ReactMarkdown remarkPlugins={remarkPlugins} components={markdownComponents}>
-                                {historicalAssistantResponse}
-                              </ReactMarkdown>
+                            <div className="opacity-90">
+                              <MarkdownContent content={historicalAssistantResponse} />
                             </div>
                           </div>
                         </div>

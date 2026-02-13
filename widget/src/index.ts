@@ -4,6 +4,11 @@ import { chatIcon, closeIcon, sendIcon, headphonesIcon, userIcon, agentIcon, bot
 import type { WidgetPublicConfig, WidgetConfig, Message, WidgetState } from "./types"
 
 class RantAIWidgetInstance {
+  private static STORAGE_KEY_VISITOR = "rantai_visitor_id"
+  private static STORAGE_KEY_THREAD = "rantai_thread_id"
+  private static STORAGE_KEY_MESSAGES = "rantai_messages"
+  private static MAX_PERSISTED_MESSAGES = 50
+
   private api: WidgetAPI
   private config: WidgetPublicConfig | null = null
   private container: HTMLDivElement | null = null
@@ -20,14 +25,81 @@ class RantAIWidgetInstance {
     error: null,
     handoffState: "idle",
     conversationId: null,
+    visitorId: "",
+    threadId: "",
   }
 
   constructor(apiKey: string, baseUrl: string) {
     this.api = new WidgetAPI(apiKey, baseUrl)
   }
 
+  private generateId(prefix: string): string {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 8)}`
+  }
+
+  private loadOrCreateVisitorId(): string {
+    try {
+      const stored = localStorage.getItem(RantAIWidgetInstance.STORAGE_KEY_VISITOR)
+      if (stored) return stored
+      const id = this.generateId("vis")
+      localStorage.setItem(RantAIWidgetInstance.STORAGE_KEY_VISITOR, id)
+      return id
+    } catch {
+      return this.generateId("vis")
+    }
+  }
+
+  private loadOrCreateThreadId(): string {
+    try {
+      const stored = localStorage.getItem(RantAIWidgetInstance.STORAGE_KEY_THREAD)
+      if (stored) return stored
+      const id = this.generateId("thread")
+      localStorage.setItem(RantAIWidgetInstance.STORAGE_KEY_THREAD, id)
+      return id
+    } catch {
+      return this.generateId("thread")
+    }
+  }
+
+  private resetThreadId(): string {
+    const id = this.generateId("thread")
+    try {
+      localStorage.setItem(RantAIWidgetInstance.STORAGE_KEY_THREAD, id)
+    } catch { /* ignore if localStorage blocked */ }
+    return id
+  }
+
+  private persistMessages(): void {
+    try {
+      const slim = this.state.messages
+        .slice(-RantAIWidgetInstance.MAX_PERSISTED_MESSAGES)
+        .map(m => ({ id: m.id, role: m.role, content: m.content, timestamp: m.timestamp }))
+      localStorage.setItem(RantAIWidgetInstance.STORAGE_KEY_MESSAGES, JSON.stringify(slim))
+    } catch { /* localStorage full or blocked */ }
+  }
+
+  private loadPersistedMessages(): boolean {
+    try {
+      const stored = localStorage.getItem(RantAIWidgetInstance.STORAGE_KEY_MESSAGES)
+      if (!stored) return false
+      const messages = JSON.parse(stored) as Message[]
+      if (!messages.length) return false
+      for (const msg of messages) {
+        msg.timestamp = new Date(msg.timestamp)
+        this.state.messages.push(msg)
+        this.renderMessage(msg)
+      }
+      this.scrollToBottom()
+      return true
+    } catch { return false }
+  }
+
   async init(): Promise<void> {
     try {
+      // Load or create persistent identity
+      this.state.visitorId = this.loadOrCreateVisitorId()
+      this.state.threadId = this.loadOrCreateThreadId()
+
       // Load config
       this.config = await this.api.getConfig()
 
@@ -37,10 +109,13 @@ class RantAIWidgetInstance {
       // Create UI
       this.createUI()
 
-      // Add welcome message
-      this.addMessage("assistant", this.config.config.welcomeMessage)
+      // Load persisted messages OR show welcome message
+      const hasPersistedMessages = this.loadPersistedMessages()
+      if (!hasPersistedMessages) {
+        this.addMessage("assistant", this.config.config.welcomeMessage)
+      }
 
-      console.log("[RantAI Widget] Initialized successfully")
+      console.log(`[RantAI Widget] Initialized (visitor: ${this.state.visitorId}, thread: ${this.state.threadId})`)
     } catch (error) {
       console.error("[RantAI Widget] Failed to initialize:", error)
       throw error
@@ -210,6 +285,7 @@ class RantAIWidgetInstance {
     this.state.messages.push(message)
     this.renderMessage(message)
     this.scrollToBottom()
+    this.persistMessages()
 
     return message
   }
@@ -340,13 +416,18 @@ class RantAIWidgetInstance {
     this.renderMessage(assistantMessage, { isThinking: true })
 
     try {
-      await this.api.sendMessage(this.state.messages.slice(0, -1), (chunk) => {
-        assistantMessage.content = chunk
-        // Strip handoff marker from display during streaming
-        const display = chunk.replace(/\[AGENT_HANDOFF\]/g, "").trim()
-        this.updateMessage(assistantMessage.id, display)
-        this.scrollToBottom()
-      })
+      await this.api.sendMessage(
+        this.state.messages.slice(0, -1),
+        (chunk) => {
+          assistantMessage.content = chunk
+          // Strip handoff marker from display during streaming
+          const display = chunk.replace(/\[AGENT_HANDOFF\]/g, "").trim()
+          this.updateMessage(assistantMessage.id, display)
+          this.scrollToBottom()
+        },
+        this.state.visitorId,
+        this.state.threadId
+      )
 
       // After streaming completes, check for handoff marker
       const raw = assistantMessage.content
@@ -373,6 +454,7 @@ class RantAIWidgetInstance {
       if (this.sendButton) this.sendButton.disabled = false
       if (this.input) this.input.disabled = false
       this.updateMessage(assistantMessage.id, assistantMessage.content)
+      this.persistMessages()
     }
   }
 
@@ -408,7 +490,7 @@ class RantAIWidgetInstance {
         .filter((m) => m.role === "user" || m.role === "assistant")
         .map((m) => ({ role: m.role, content: m.content }))
 
-      const result = await this.api.requestHandoff({ chatHistory })
+      const result = await this.api.requestHandoff({ chatHistory, visitorId: this.state.visitorId })
       this.state.conversationId = result.conversationId
       this.state.handoffState = "waiting"
 
@@ -501,7 +583,9 @@ class RantAIWidgetInstance {
     this.state.conversationId = null
     this.state.isLoading = false
     this.state.error = null
+    this.state.threadId = this.resetThreadId()
     this.lastPollTimestamp = null
+    try { localStorage.removeItem(RantAIWidgetInstance.STORAGE_KEY_MESSAGES) } catch {}
 
     // Clear DOM messages and re-add welcome message
     if (this.messagesContainer) {

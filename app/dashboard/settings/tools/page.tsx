@@ -21,7 +21,6 @@ import {
   FileDown,
   Code,
 } from "lucide-react"
-import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -264,8 +263,8 @@ export default function ToolsSettingsPage() {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
-          <Wrench className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium mb-1">No tools yet</h3>
+          <Wrench className="h-10 w-10 text-muted-foreground mb-3" />
+          <h3 className="text-sm font-medium mb-1">No tools yet</h3>
           <p className="text-sm text-muted-foreground mb-4">
             Tools will appear here once the system seeds built-in tools.
           </p>
@@ -279,20 +278,21 @@ export default function ToolsSettingsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <DashboardPageHeader
-        title="Tools"
-        subtitle="Manage agent tools that assistants can use during conversations"
-        actions={
-          <Button size="sm" onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            Create Tool
-          </Button>
-        }
-      />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold">Tools</h2>
+          <p className="text-sm text-muted-foreground">
+            Manage agent tools that assistants can use during conversations
+          </p>
+        </div>
+        <Button onClick={() => setDialogOpen(true)}>
+          <Plus className="h-4 w-4 mr-1" />
+          Create Tool
+        </Button>
+      </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-4xl mx-auto space-y-4">
+      <div className="space-y-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -350,7 +350,6 @@ export default function ToolsSettingsPage() {
               </Tabs>
             </>
           )}
-        </div>
       </div>
 
       <ToolDialog
