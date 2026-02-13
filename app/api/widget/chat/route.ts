@@ -10,6 +10,14 @@ import {
   checkRateLimit,
 } from "@/lib/embed"
 import { smartRetrieve, formatContextForPrompt } from "@/lib/rag"
+import { DEFAULT_MODEL_ID } from "@/lib/models"
+import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow"
+import {
+  LANGUAGE_INSTRUCTION,
+  CORRECTION_INSTRUCTION_WITH_TOOL,
+  LIVE_CHAT_HANDOFF_INSTRUCTION,
+} from "@/lib/prompts/instructions"
+import { extractAndSaveFacts, stripSources } from "@/lib/workflow/chatflow-memory"
 import {
   loadWorkingMemory,
   semanticRecall,
@@ -121,7 +129,7 @@ export async function POST(req: NextRequest) {
 
     // Parse request body
     const body = await req.json()
-    const { messages: rawMessages, visitorId } = body
+    const { messages: rawMessages, visitorId, customerId } = body
 
     if (!rawMessages || !Array.isArray(rawMessages)) {
       return NextResponse.json(
@@ -140,6 +148,170 @@ export async function POST(req: NextRequest) {
         { error: "Assistant not found", code: "ASSISTANT_NOT_FOUND" },
         { status: 404 }
       )
+    }
+
+    // Identity resolution: authenticated customer > anonymous visitor > fallback
+    // - customerId: future authenticated widget users (e.g. logged-in customers via portal)
+    // - visitorId: anonymous browser visitors (e.g. vis_xxx from localStorage)
+    // - fallback: widget_${embedKey.id} (backward-compatible, when no identity is provided)
+    const isAuthenticated = !!customerId
+    const widgetUserId = customerId
+      ? `cust_${customerId}`
+      : visitorId || `widget_${embedKey.id}`
+    const isAnonymous = !isAuthenticated
+
+    // Parse per-assistant memory config (same as chat/route.ts)
+    interface AssistantMemoryConfig {
+      enabled: boolean; workingMemory: boolean;
+      semanticRecall: boolean; longTermProfile: boolean;
+    }
+    let assistantMemoryConfig: AssistantMemoryConfig = {
+      enabled: true, workingMemory: true,
+      semanticRecall: true, longTermProfile: true,
+    }
+    if (assistant.memoryConfig && typeof assistant.memoryConfig === 'object') {
+      const mc = assistant.memoryConfig as Record<string, unknown>
+      assistantMemoryConfig = {
+        enabled: mc.enabled !== false,
+        workingMemory: mc.workingMemory !== false,
+        semanticRecall: mc.semanticRecall !== false,
+        longTermProfile: mc.longTermProfile !== false,
+      }
+    }
+
+    // Shared variables (needed for both chatflow and normal chat paths)
+    const threadId = body.threadId || `thread_${Date.now()}`
+    const lastUserMsg = rawMessages.filter((m: { role: string; content?: string }) => m.role === 'user').pop()?.content || ''
+
+    // ===== CHATFLOW CHECK =====
+    // If this assistant has an active CHATFLOW workflow, execute it instead of normal chat
+    try {
+      const chatflowWorkflow = await prisma.workflow.findFirst({
+        where: {
+          assistantId: embedKey.assistantId,
+          mode: "CHATFLOW",
+          status: "ACTIVE",
+        },
+      })
+
+      if (chatflowWorkflow) {
+        console.log("[Widget Chat] Chatflow workflow found:", chatflowWorkflow.name)
+        const lastMsg = [...rawMessages].reverse().find((m: { role: string; content?: string; parts?: Array<{ type: string; text?: string }> }) => m.role === "user")
+        const userText = lastMsg?.content || lastMsg?.parts?.find((p: { type: string; text?: string }) => p.type === "text")?.text || ""
+
+        // Load memory for chatflow (respect assistantMemoryConfig)
+        let memoryContext: ChatflowMemoryContext | undefined
+        if (assistantMemoryConfig.enabled) {
+          try {
+            const workingMemory = assistantMemoryConfig.workingMemory
+              ? await loadWorkingMemory(threadId) : null
+
+            let semanticResults: Awaited<ReturnType<typeof semanticRecall>> = []
+            if (assistantMemoryConfig.semanticRecall && lastUserMsg) {
+              if (MEMORY_CONFIG.useMastraMemory) {
+                try {
+                  const mastraMemory = getMastraMemory()
+                  semanticResults = await mastraMemory.recall(lastUserMsg, {
+                    resourceId: widgetUserId, threadId, topK: 5,
+                  })
+                } catch (err) {
+                  if (MEMORY_CONFIG.gracefulDegradation) {
+                    semanticResults = await semanticRecall(lastUserMsg, widgetUserId, threadId)
+                  }
+                }
+              } else {
+                semanticResults = await semanticRecall(lastUserMsg, widgetUserId, threadId)
+              }
+            }
+
+            const userProfile = assistantMemoryConfig.longTermProfile
+              ? await loadUserProfile(widgetUserId) : null
+            memoryContext = { workingMemory, semanticResults, userProfile }
+            console.log("[Widget Chat] Memory loaded for chatflow:", {
+              workingMemory: workingMemory ? workingMemory.entities.size + " entities, " + workingMemory.facts.size + " facts" : "disabled",
+              semanticResults: semanticResults.length,
+              userProfile: userProfile ? "yes" : "no/disabled",
+            })
+          } catch (err) {
+            console.error("[Widget Chat] Memory load for chatflow error:", err)
+          }
+        }
+
+        const { response: chatflowResponse, fallback } = await executeChatflow(chatflowWorkflow, userText, assistant.systemPrompt, memoryContext)
+
+        // Fallback: chatflow path didn't reach a STREAM_OUTPUT node — continue to normal agent
+        if (fallback || !chatflowResponse) {
+          console.log("[Widget Chat] Chatflow fallback — continuing with normal agent")
+          // Fall through to normal chat processing below
+        } else {
+          // Stream tee: fork stream for client + background memory save
+          const streamBody = chatflowResponse.body
+          if (streamBody && assistantMemoryConfig.enabled) {
+            const [clientStream, saveStream] = streamBody.tee()
+
+            // Background: accumulate response text and save memory
+            ;(async () => {
+              try {
+                const reader = saveStream.getReader()
+                const decoder = new TextDecoder()
+                let fullResponse = ""
+                while (true) {
+                  const { done, value } = await reader.read()
+                  if (done) break
+                  fullResponse += decoder.decode(value, { stream: true })
+                }
+
+                // Strip ---SOURCES--- delimiter before saving to memory
+                const cleanResponse = stripSources(fullResponse)
+                const messageId = `msg_${Date.now()}`
+
+                // Save working memory (session) — respect config
+                if (assistantMemoryConfig.workingMemory) {
+                  await updateWorkingMemory(widgetUserId, threadId, lastUserMsg, cleanResponse, messageId, [], [])
+                }
+
+                // Save semantic recall (vector DB) — respect config
+                if (assistantMemoryConfig.semanticRecall) {
+                  await storeForSemanticRecall(widgetUserId, threadId, lastUserMsg, cleanResponse)
+                }
+
+                // Mastra dual-write (optional)
+                if (MEMORY_CONFIG.dualWrite && assistantMemoryConfig.semanticRecall) {
+                  const mastraMemory = getMastraMemory()
+                  await mastraMemory.saveMessage(threadId, { role: 'user', content: lastUserMsg, metadata: { userId: widgetUserId, messageId, timestamp: new Date().toISOString() } })
+                  await mastraMemory.saveMessage(threadId, { role: 'assistant', content: cleanResponse, metadata: { userId: widgetUserId, messageId, timestamp: new Date().toISOString() } })
+                }
+
+                // TTL for anonymous widget visitors (authenticated customers persist indefinitely)
+                if (isAnonymous) {
+                  await prisma.userMemory.updateMany({
+                    where: { userId: widgetUserId },
+                    data: { expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+                  })
+                }
+
+                // Extract facts to user profile (non-blocking LLM call) — respect config
+                if (assistantMemoryConfig.longTermProfile) {
+                  await extractAndSaveFacts(widgetUserId, threadId, lastUserMsg, cleanResponse)
+                }
+
+                console.log(`[Widget Chat] Chatflow memory saved for ${widgetUserId} (authenticated: ${isAuthenticated}, thread: ${threadId})`)
+              } catch (err) {
+                console.error("[Widget Chat] Chatflow memory save error:", err)
+              }
+            })()
+
+            const response = new Response(clientStream, { headers: chatflowResponse.headers })
+            response.headers.set("Access-Control-Allow-Origin", "*")
+            return response
+          } else {
+            chatflowResponse.headers.set("Access-Control-Allow-Origin", "*")
+            return chatflowResponse
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[Widget Chat] Chatflow check error (continuing with normal chat):", error)
     }
 
     // Normalize messages to UIMessage format
@@ -198,46 +370,45 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Memory integration
-    // Use visitorId if provided, otherwise fallback to embedKey.id (legacy)
-    const widgetUserId = visitorId || `widget_${embedKey.id}`;
-    // Use threadId from body or generate one
-    const threadId = body.threadId || `thread_${Date.now()}`;
+    // Memory integration (widgetUserId, threadId, lastUserMsg declared above chatflow check)
+    // Respect assistantMemoryConfig — same pattern as chat/route.ts
 
-    // Last user message content for memory updates
-    const lastUserMsg = rawMessages.filter((m: { role: string, content?: string }) => m.role === 'user').pop()?.content || '';
-
+    if (assistantMemoryConfig.enabled) {
     try {
       // Load memory contexts (with optional Mastra path)
-      const workingMemory = await loadWorkingMemory(threadId);
+      const workingMemory = assistantMemoryConfig.workingMemory
+        ? await loadWorkingMemory(threadId) : null;
 
-      let semanticResults: Awaited<ReturnType<typeof semanticRecall>>;
-      if (MEMORY_CONFIG.useMastraMemory) {
-        try {
-          const mastraMemory = getMastraMemory();
-          if (MEMORY_CONFIG.debug) {
-            console.log("[Widget Memory] Using Mastra Memory for semantic recall");
+      let semanticResults: Awaited<ReturnType<typeof semanticRecall>> = [];
+      if (assistantMemoryConfig.semanticRecall && lastUserMsg) {
+        if (MEMORY_CONFIG.useMastraMemory) {
+          try {
+            const mastraMemory = getMastraMemory();
+            if (MEMORY_CONFIG.debug) {
+              console.log("[Widget Memory] Using Mastra Memory for semantic recall");
+            }
+            semanticResults = await mastraMemory.recall(lastUserMsg, {
+              resourceId: widgetUserId,
+              threadId,
+              topK: 5,
+            });
+            console.log(`[Widget Memory] Mastra recall found ${semanticResults.length} messages`);
+          } catch (error) {
+            if (MEMORY_CONFIG.gracefulDegradation) {
+              console.error("[Widget Memory] Mastra recall error, using fallback:", error);
+              semanticResults = await semanticRecall(lastUserMsg, widgetUserId, threadId);
+              console.log(`[Widget Memory] Fallback recall found ${semanticResults.length} messages`);
+            } else {
+              throw error;
+            }
           }
-          semanticResults = await mastraMemory.recall(lastUserMsg, {
-            resourceId: widgetUserId,
-            threadId,
-            topK: 5,
-          });
-          console.log(`[Widget Memory] Mastra recall found ${semanticResults.length} messages`);
-        } catch (error) {
-          if (MEMORY_CONFIG.gracefulDegradation) {
-            console.error("[Widget Memory] Mastra recall error, using fallback:", error);
-            semanticResults = await semanticRecall(lastUserMsg, widgetUserId, threadId);
-            console.log(`[Widget Memory] Fallback recall found ${semanticResults.length} messages`);
-          } else {
-            throw error;
-          }
+        } else {
+          semanticResults = await semanticRecall(lastUserMsg, widgetUserId, threadId);
         }
-      } else {
-        semanticResults = await semanticRecall(lastUserMsg, widgetUserId, threadId);
       }
 
-      const userProfile = await loadUserProfile(widgetUserId);
+      const userProfile = assistantMemoryConfig.longTermProfile
+        ? await loadUserProfile(widgetUserId) : null;
 
       // Build enhanced system prompt with memory
       systemPrompt = buildPromptWithMemory(
@@ -248,21 +419,22 @@ export async function POST(req: NextRequest) {
       )
 
       // Enforce language consistency
-      systemPrompt += `\n\nIMPORTANT: You must ALWAYS reply in the same language as the user's last message. If they speak Indonesian, reply in Indonesian. If they speak English, reply in English. Do not mix languages unless necessary for technical terms.`;
+      systemPrompt += LANGUAGE_INSTRUCTION;
       // Ensure corrections/updates are saved so "ganti X jadi Y" works
-      systemPrompt += `\n\nWhen the user corrects or updates previously shared information (e.g. name, age, preference), you MUST call saveMemory with the new value so the stored profile is updated. Do not only acknowledge verbally—always call the tool with the updated fact or preference.`;
+      systemPrompt += CORRECTION_INSTRUCTION_WITH_TOOL;
 
       // Log stats
       const memoryStats = getMemoryStats(workingMemory, semanticResults, userProfile);
-      console.log(`[Widget Chat] Memory loaded for ${widgetUserId}:`, JSON.stringify(memoryStats));
+      console.log(`[Widget Chat] Memory loaded for ${widgetUserId} (authenticated: ${isAuthenticated}):`, JSON.stringify(memoryStats));
 
     } catch (memError) {
       console.error("[Widget Chat] Memory load error:", memError)
     }
+    } // end assistantMemoryConfig.enabled
 
     // Live Chat handoff instruction
     if (assistant.liveChatEnabled) {
-      systemPrompt += `\n\nLIVE CHAT HANDOFF: You have the ability to transfer the conversation to a human agent. When the user explicitly asks to speak with a human, a real person, an agent, or customer support — OR when you cannot help them further and a human would be more appropriate — include the exact marker [AGENT_HANDOFF] at the end of your response. Only use this marker when handoff is genuinely needed. Do NOT use it for normal questions you can answer yourself.`
+      systemPrompt += LIVE_CHAT_HANDOFF_INSTRUCTION
     }
 
     // Update usage stats (async, non-blocking)
@@ -297,7 +469,7 @@ export async function POST(req: NextRequest) {
 
     // Stream response
     const result = streamText({
-      model: openrouter("xiaomi/mimo-v2-flash"),
+      model: openrouter(assistant.model || DEFAULT_MODEL_ID),
       system: systemPrompt,
       messages,
       tools: {
@@ -332,7 +504,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Handle background memory updates
+    // Handle background memory updates (respect assistantMemoryConfig)
+    if (assistantMemoryConfig.enabled) {
     (async () => {
       try {
         const fullResponse = await result.text;
@@ -435,7 +608,8 @@ export async function POST(req: NextRequest) {
           // unless we have specific logic.
           // Visitor IDs from frontend start with 'vis_'. Legacy identifiers might be different.
           // Safety check: only apply if it looks like a generated visitor ID.
-          if (widgetUserId.startsWith('vis_')) {
+          // TTL for anonymous widget visitors (authenticated customers persist indefinitely)
+          if (isAnonymous) {
             const expirationDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
             // Update all memories for this user to expire in 30 days
@@ -473,6 +647,7 @@ export async function POST(req: NextRequest) {
         console.error("[Widget Chat] Memory update error:", memError)
       }
     })();
+    } // end assistantMemoryConfig.enabled (normal chat save)
 
     const response = result.toTextStreamResponse()
 

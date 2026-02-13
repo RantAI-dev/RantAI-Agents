@@ -42,7 +42,16 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
     const { id } = await params
     const body = await req.json()
-    const { name, description, nodes, edges, trigger, variables, status } = body
+    const { name, description, nodes, edges, trigger, variables, status, mode, chatflowConfig, apiEnabled, assistantId } = body
+
+    // Auto-generate API key when enabling API access
+    let apiKey: string | undefined
+    if (apiEnabled === true) {
+      const existing = await prisma.workflow.findUnique({ where: { id }, select: { apiKey: true } })
+      if (!existing?.apiKey) {
+        apiKey = `wf_${id.slice(0, 8)}_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
+      }
+    }
 
     const workflow = await prisma.workflow.update({
       where: { id },
@@ -54,6 +63,13 @@ export async function PUT(req: Request, { params }: RouteParams) {
         ...(trigger !== undefined && { trigger }),
         ...(variables !== undefined && { variables }),
         ...(status !== undefined && { status }),
+        ...(mode !== undefined && { mode }),
+        ...(chatflowConfig !== undefined && { chatflowConfig }),
+        ...(apiEnabled !== undefined && { apiEnabled }),
+        ...(assistantId !== undefined && { assistantId: assistantId || null }),
+        ...(apiKey && { apiKey }),
+        // Clear API key when disabling
+        ...(apiEnabled === false && { apiKey: null }),
       },
       include: { _count: { select: { runs: true } } },
     })
