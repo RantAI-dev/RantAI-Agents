@@ -133,14 +133,14 @@ function VariableRow({
       <Input
         value={variable.name}
         onChange={(e) => onUpdate({ name: e.target.value })}
-        className="h-6 text-[10px] flex-1"
+        className="h-7 text-xs flex-1"
         placeholder="name"
       />
       <Select
         value={variable.type}
         onValueChange={(v) => onUpdate({ type: v as WorkflowVariable["type"] })}
       >
-        <SelectTrigger className="h-6 text-[10px] w-[70px]">
+        <SelectTrigger className="h-7 text-xs w-[80px]">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

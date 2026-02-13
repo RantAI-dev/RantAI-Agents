@@ -9,10 +9,13 @@ import {
   type NodeCategory,
   type NodeType,
 } from "@/lib/workflow/types"
+import { NODE_ICON_MAP } from "./nodes/node-icons"
+import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
 
 export function NodePalette() {
   const [search, setSearch] = useState("")
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const addNodeAtCenter = useWorkflowEditor((s) => s.addNodeAtCenter)
 
   const toggleCategory = useCallback((cat: string) => {
     setCollapsed((prev) => ({ ...prev, [cat]: !prev[cat] }))
@@ -24,6 +27,13 @@ export function NodePalette() {
       e.dataTransfer.effectAllowed = "move"
     },
     []
+  )
+
+  const onClick = useCallback(
+    (nodeType: NodeType) => {
+      addNodeAtCenter(nodeType)
+    },
+    [addNodeAtCenter]
   )
 
   const lowerSearch = search.toLowerCase()
@@ -81,17 +91,31 @@ export function NodePalette() {
                         key={nodeType.type}
                         draggable
                         onDragStart={(e) => onDragStart(e, nodeType.type)}
+                        onClick={() => onClick(nodeType.type)}
                         className={cn(
-                          "flex flex-col gap-0 px-2.5 py-1.5 rounded cursor-grab active:cursor-grabbing",
-                          "hover:bg-muted/80 transition-colors border border-transparent hover:border-border"
+                          "flex items-start gap-2 px-2.5 py-1.5 rounded cursor-pointer active:cursor-grabbing",
+                          "hover:bg-muted/80 transition-colors border border-transparent hover:border-border active:bg-muted"
                         )}
                       >
-                        <span className="text-xs font-medium text-foreground">
-                          {nodeType.label}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground leading-tight">
-                          {nodeType.description}
-                        </span>
+                        {(() => {
+                          const Icon = NODE_ICON_MAP[nodeType.type]
+                          return Icon ? (
+                            <span
+                              className="shrink-0 mt-0.5 flex items-center justify-center w-5 h-5 rounded"
+                              style={{ color: catMeta.headerColor }}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                            </span>
+                          ) : null
+                        })()}
+                        <div className="flex flex-col gap-0 min-w-0">
+                          <span className="text-xs font-medium text-foreground">
+                            {nodeType.label}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground leading-tight">
+                            {nodeType.description}
+                          </span>
+                        </div>
                       </div>
                     ))}
                   </div>

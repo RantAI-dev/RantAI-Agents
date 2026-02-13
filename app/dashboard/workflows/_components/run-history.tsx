@@ -7,6 +7,7 @@ import {
   Clock,
   Loader2,
   Pause,
+  PlayCircle,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -46,8 +47,12 @@ export function RunHistory({
 
   if (runs.length === 0) {
     return (
-      <div className="text-center py-6">
-        <p className="text-xs text-muted-foreground">No runs yet. Click Run to execute the workflow.</p>
+      <div className="flex flex-col items-center gap-2 py-6">
+        <PlayCircle className="h-8 w-8 text-muted-foreground/30" />
+        <p className="text-xs font-medium text-muted-foreground">No runs yet</p>
+        <p className="text-[10px] text-muted-foreground/70 max-w-[200px] text-center leading-relaxed">
+          Execute your workflow to see run history here. Click the Run button in the toolbar to get started.
+        </p>
       </div>
     )
   }

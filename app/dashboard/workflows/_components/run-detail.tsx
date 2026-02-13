@@ -77,14 +77,32 @@ export function RunDetail({ run, onResume }: RunDetailProps) {
   }, [steps.find((s) => s.status === "running")?.stepId])
 
   return (
-    <div className="space-y-1 p-2">
+    <div className="space-y-1.5 p-3">
       {/* Run header */}
-      <div className="flex items-center gap-2 mb-2">
-        <Badge variant="secondary" className="text-[10px]">
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        <Badge variant="secondary" className="text-[10px] py-0.5">
           {run.status}
         </Badge>
+        {(() => {
+          const totalDuration = steps.reduce((sum, s) => sum + (s.durationMs || 0), 0)
+          const totalTokens = steps.reduce((sum, s) => sum + (s.tokenUsage?.totalTokens || 0), 0)
+          return (
+            <>
+              {totalDuration > 0 && (
+                <span className="text-[10px] text-muted-foreground">
+                  {totalDuration >= 1000 ? `${(totalDuration / 1000).toFixed(1)}s` : `${totalDuration}ms`}
+                </span>
+              )}
+              {totalTokens > 0 && (
+                <span className="text-[10px] text-muted-foreground">
+                  {totalTokens.toLocaleString()} tokens
+                </span>
+              )}
+            </>
+          )
+        })()}
         {run.error && (
-          <span className="text-[10px] text-destructive truncate">
+          <span className="text-[10px] text-destructive truncate" title={run.error}>
             {run.error}
           </span>
         )}
@@ -123,41 +141,59 @@ export function RunDetail({ run, onResume }: RunDetailProps) {
               <span className="text-xs font-medium flex-1 truncate">
                 {step.label}
               </span>
+              {step.tokenUsage && (
+                <span className="text-[10px] text-muted-foreground/70" title={`${step.tokenUsage.promptTokens} prompt + ${step.tokenUsage.completionTokens} completion`}>
+                  {step.tokenUsage.totalTokens}tok
+                </span>
+              )}
               {step.durationMs > 0 && (
                 <span className="text-[10px] text-muted-foreground">
-                  {step.durationMs}ms
+                  {step.durationMs >= 1000 ? `${(step.durationMs / 1000).toFixed(1)}s` : `${step.durationMs}ms`}
                 </span>
               )}
             </button>
 
             {expanded && (
-              <div className="px-2 pb-2 space-y-1 border-t">
+              <div className="px-2.5 pb-2.5 pt-1.5 space-y-1.5 border-t">
                 {step.input !== undefined && (
                   <div>
-                    <span className="text-[10px] font-semibold text-muted-foreground">
-                      Input:
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      Input
                     </span>
-                    <pre className="text-[10px] bg-background rounded p-1 overflow-auto max-h-24">
+                    <pre className="text-[10px] font-mono bg-background rounded p-2 overflow-auto max-h-28 mt-0.5">
                       {JSON.stringify(step.input, null, 2)}
                     </pre>
                   </div>
                 )}
+                {step.tokenUsage && (
+                  <div className="flex gap-3 text-[10px]">
+                    <span className="text-muted-foreground">
+                      Prompt: <span className="font-medium text-foreground">{step.tokenUsage.promptTokens.toLocaleString()}</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      Completion: <span className="font-medium text-foreground">{step.tokenUsage.completionTokens.toLocaleString()}</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      Total: <span className="font-medium text-foreground">{step.tokenUsage.totalTokens.toLocaleString()}</span>
+                    </span>
+                  </div>
+                )}
                 {step.output !== undefined && (
                   <div>
-                    <span className="text-[10px] font-semibold text-muted-foreground">
-                      Output:
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      Output
                     </span>
-                    <pre className="text-[10px] bg-background rounded p-1 overflow-auto max-h-24">
+                    <pre className="text-[10px] font-mono bg-background rounded p-2 overflow-auto max-h-28 mt-0.5">
                       {JSON.stringify(step.output, null, 2)}
                     </pre>
                   </div>
                 )}
                 {step.error && (
                   <div>
-                    <span className="text-[10px] font-semibold text-destructive">
-                      Error:
+                    <span className="text-xs font-semibold text-destructive">
+                      Error
                     </span>
-                    <pre className="text-[10px] text-destructive bg-destructive/5 rounded p-1">
+                    <pre className="text-[10px] font-mono text-destructive bg-destructive/5 rounded p-2 mt-0.5">
                       {step.error}
                     </pre>
                   </div>
@@ -170,14 +206,14 @@ export function RunDetail({ run, onResume }: RunDetailProps) {
 
       {/* Resume form for PAUSED runs */}
       {run.status === "PAUSED" && onResume && (
-        <div className="mt-3 p-2 border rounded bg-amber-50 dark:bg-amber-900/10 space-y-2">
+        <div className="mt-3 p-3 border rounded bg-amber-50 dark:bg-amber-900/20 space-y-2">
           <p className="text-xs font-medium text-amber-700 dark:text-amber-300">
             Workflow is waiting for human input
           </p>
           <Textarea
             value={resumeInput}
             onChange={(e) => setResumeInput(e.target.value)}
-            className="text-xs min-h-[60px]"
+            className="text-xs min-h-[80px]"
             placeholder="Enter your response..."
           />
           <div className="flex gap-2">

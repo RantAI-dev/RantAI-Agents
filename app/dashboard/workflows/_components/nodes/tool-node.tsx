@@ -25,14 +25,24 @@ function ToolNodeComponent({ id, data, selected }: NodeProps) {
       icon={<Icon className="h-3.5 w-3.5" />}
     >
       {nodeData.nodeType === NodeType.HTTP && (
-        <span className="inline-block bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[10px] px-1.5 py-0.5 rounded font-medium">
-          {(nodeData as HttpNodeData).method}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className="inline-block bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 text-[10px] px-1.5 py-0.5 rounded font-medium w-fit">
+            {(nodeData as HttpNodeData).method}
+          </span>
+          {(nodeData as HttpNodeData).url && (
+            <p className="truncate text-[10px] text-muted-foreground/70" title={(nodeData as HttpNodeData).url}>{(nodeData as HttpNodeData).url}</p>
+          )}
+        </div>
       )}
       {(nodeData.nodeType === NodeType.TOOL || nodeData.nodeType === NodeType.MCP_TOOL) &&
         (nodeData as ToolNodeData).toolName && (
-          <p className="truncate">{(nodeData as ToolNodeData).toolName}</p>
+          <p className="truncate" title={(nodeData as ToolNodeData).toolName}>{(nodeData as ToolNodeData).toolName}</p>
         )}
+      {nodeData.nodeType === NodeType.CODE && (nodeData as CodeNodeData).code && (
+        <p className="truncate font-mono text-[10px] text-muted-foreground/70">
+          {(nodeData as CodeNodeData).code.split("\n")[0]}
+        </p>
+      )}
     </BaseNode>
   )
 }

@@ -38,7 +38,7 @@ function ConditionNodeComponent({ id, data, selected }: NodeProps) {
         {handles.map((h) => (
           <span
             key={h.id}
-            className="inline-block bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded"
+            className="inline-block bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded"
           >
             {h.label}
           </span>

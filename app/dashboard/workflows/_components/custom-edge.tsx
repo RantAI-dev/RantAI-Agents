@@ -32,8 +32,9 @@ function CustomEdgeComponent({
       id={id}
       path={edgePath}
       style={{
-        strokeWidth: 2,
-        stroke: selected ? "hsl(var(--primary))" : "#64748b",
+        strokeWidth: selected ? 2.5 : 2,
+        stroke: selected ? "hsl(var(--primary))" : "hsl(var(--muted-foreground) / 0.5)",
+        transition: "stroke 0.2s, stroke-width 0.2s",
         ...style,
       }}
     />

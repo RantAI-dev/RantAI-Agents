@@ -22,8 +22,13 @@ interface WorkflowEditorState {
   workflowName: string
   workflowDescription: string
   workflowStatus: string
+  workflowMode: "STANDARD" | "CHATFLOW"
+  assistantId: string | null
+  apiEnabled: boolean
+  apiKey: string | null
   trigger: TriggerConfig
   variables: WorkflowVariables
+  chatflowConfig: { welcomeMessage?: string; starterPrompts?: string[]; enableFollowUps?: boolean }
 
   // Canvas state
   nodes: Node<WorkflowNodeData>[]
@@ -31,6 +36,9 @@ interface WorkflowEditorState {
 
   // Selection
   selectedNodeId: string | null
+
+  // Clipboard
+  copiedNodes: { nodes: Node<WorkflowNodeData>[]; edges: Edge[] } | null
 
   // Undo/redo
   history: HistoryEntry[]
@@ -42,6 +50,7 @@ interface WorkflowEditorState {
   isRunning: boolean
   showRunHistory: boolean
   nodeExecutionStatus: Record<string, "pending" | "running" | "success" | "failed" | "suspended">
+  nodeOutputs: Record<string, unknown>
 
   // Actions
   loadWorkflow: (data: {
@@ -53,6 +62,11 @@ interface WorkflowEditorState {
     trigger: TriggerConfig
     variables: WorkflowVariables
     status: string
+    mode?: "STANDARD" | "CHATFLOW"
+    chatflowConfig?: { welcomeMessage?: string; starterPrompts?: string[] }
+    assistantId?: string | null
+    apiEnabled?: boolean
+    apiKey?: string | null
   }) => void
   resetEditor: () => void
 
@@ -61,6 +75,11 @@ interface WorkflowEditorState {
     description: string
     trigger: TriggerConfig
     variables: WorkflowVariables
+    mode: "STANDARD" | "CHATFLOW"
+    chatflowConfig: { welcomeMessage?: string; starterPrompts?: string[]; enableFollowUps?: boolean }
+    apiEnabled: boolean
+    status: string
+    assistantId: string | null
   }>) => void
 
   // Node/Edge ops
@@ -70,14 +89,33 @@ interface WorkflowEditorState {
   addNode: (type: NodeType, position: { x: number; y: number }) => void
   updateNodeData: (nodeId: string, data: Partial<WorkflowNodeData>) => void
   deleteNode: (nodeId: string) => void
+  deleteSelectedNodes: () => void
+  setNodes: (nodes: Node<WorkflowNodeData>[]) => void
+  setEdges: (edges: Edge[]) => void
 
   // Selection
   selectNode: (nodeId: string | null) => void
+
+  // Clipboard
+  copySelectedNodes: () => void
+  pasteNodes: () => void
+  duplicateSelectedNodes: () => void
 
   // History
   undo: () => void
   redo: () => void
   pushHistory: () => void
+
+  // Viewport
+  _screenToFlowPosition: ((pos: { x: number; y: number }) => { x: number; y: number }) | null
+  _getViewport: (() => { x: number; y: number; zoom: number }) | null
+  _flowWrapper: HTMLElement | null
+  setReactFlowHelpers: (helpers: {
+    screenToFlowPosition: (pos: { x: number; y: number }) => { x: number; y: number }
+    getViewport: () => { x: number; y: number; zoom: number }
+    flowWrapper: HTMLElement | null
+  }) => void
+  addNodeAtCenter: (type: NodeType) => void
 
   // State
   setDirty: (dirty: boolean) => void
@@ -86,6 +124,7 @@ interface WorkflowEditorState {
   toggleRunHistory: () => void
   setShowRunHistory: (show: boolean) => void
   setNodeExecutionStatus: (status: Record<string, "pending" | "running" | "success" | "failed" | "suspended">) => void
+  setNodeOutputs: (outputs: Record<string, unknown>) => void
   clearNodeExecutionStatus: () => void
 }
 
@@ -96,11 +135,17 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   workflowName: "",
   workflowDescription: "",
   workflowStatus: "DRAFT",
+  workflowMode: "STANDARD",
+  assistantId: null,
+  apiEnabled: false,
+  apiKey: null,
   trigger: { type: "manual" },
   variables: { inputs: [], outputs: [] },
+  chatflowConfig: {},
   nodes: [],
   edges: [],
   selectedNodeId: null,
+  copiedNodes: null,
   history: [],
   historyIndex: -1,
   isDirty: false,
@@ -108,6 +153,36 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   isRunning: false,
   showRunHistory: false,
   nodeExecutionStatus: {},
+  nodeOutputs: {},
+  _screenToFlowPosition: null,
+  _getViewport: null,
+  _flowWrapper: null,
+
+  setReactFlowHelpers: (helpers) => {
+    set({
+      _screenToFlowPosition: helpers.screenToFlowPosition,
+      _getViewport: helpers.getViewport,
+      _flowWrapper: helpers.flowWrapper,
+    })
+  },
+
+  addNodeAtCenter: (type) => {
+    const state = get()
+    const screenToFlow = state._screenToFlowPosition
+    const wrapper = state._flowWrapper
+    if (screenToFlow && wrapper) {
+      const rect = wrapper.getBoundingClientRect()
+      const center = screenToFlow({
+        x: rect.left + rect.width / 2,
+        y: rect.top + rect.height / 2,
+      })
+      state.addNode(type, center)
+    } else {
+      // Fallback: stack nodes vertically
+      const maxY = state.nodes.reduce((max, n) => Math.max(max, n.position.y), 0)
+      state.addNode(type, { x: 200, y: maxY + 120 })
+    }
+  },
 
   loadWorkflow: (data) => {
     set({
@@ -115,6 +190,11 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       workflowName: data.name,
       workflowDescription: data.description || "",
       workflowStatus: data.status,
+      workflowMode: data.mode || "STANDARD",
+      chatflowConfig: data.chatflowConfig || {},
+      assistantId: data.assistantId || null,
+      apiEnabled: data.apiEnabled || false,
+      apiKey: data.apiKey || null,
       nodes: data.nodes,
       edges: data.edges,
       trigger: data.trigger,
@@ -132,11 +212,17 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       workflowName: "",
       workflowDescription: "",
       workflowStatus: "DRAFT",
+      workflowMode: "STANDARD",
+      chatflowConfig: {},
+      assistantId: null,
+      apiEnabled: false,
+      apiKey: null,
       trigger: { type: "manual" },
       variables: { inputs: [], outputs: [] },
       nodes: [],
       edges: [],
       selectedNodeId: null,
+      copiedNodes: null,
       history: [],
       historyIndex: -1,
       isDirty: false,
@@ -147,12 +233,16 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
 
   setWorkflowMeta: (meta) => {
     set((state) => ({
-      ...meta,
       isDirty: true,
       workflowName: meta.name ?? state.workflowName,
       workflowDescription: meta.description ?? state.workflowDescription,
       trigger: meta.trigger ?? state.trigger,
       variables: meta.variables ?? state.variables,
+      workflowMode: meta.mode ?? state.workflowMode,
+      chatflowConfig: meta.chatflowConfig ?? state.chatflowConfig,
+      assistantId: meta.assistantId !== undefined ? meta.assistantId : state.assistantId,
+      apiEnabled: meta.apiEnabled ?? state.apiEnabled,
+      workflowStatus: meta.status ?? state.workflowStatus,
     }))
   },
 
@@ -217,8 +307,95 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
     }))
   },
 
+  deleteSelectedNodes: () => {
+    const state = get()
+    const selectedIds = state.nodes.filter((n) => n.selected).map((n) => n.id)
+    // Also include single-selected node from selectedNodeId
+    if (state.selectedNodeId && !selectedIds.includes(state.selectedNodeId)) {
+      selectedIds.push(state.selectedNodeId)
+    }
+    if (selectedIds.length === 0) return
+    get().pushHistory()
+    set((s) => ({
+      nodes: s.nodes.filter((n) => !selectedIds.includes(n.id)),
+      edges: s.edges.filter((e) => !selectedIds.includes(e.source) && !selectedIds.includes(e.target)),
+      selectedNodeId: null,
+      isDirty: true,
+    }))
+  },
+
+  setNodes: (nodes) => {
+    set({ nodes, isDirty: true })
+  },
+
+  setEdges: (edges) => {
+    set({ edges, isDirty: true })
+  },
+
   selectNode: (nodeId) => {
     set({ selectedNodeId: nodeId })
+  },
+
+  copySelectedNodes: () => {
+    const state = get()
+    const selectedIds = state.nodes.filter((n) => n.selected).map((n) => n.id)
+    if (state.selectedNodeId && !selectedIds.includes(state.selectedNodeId)) {
+      selectedIds.push(state.selectedNodeId)
+    }
+    if (selectedIds.length === 0) return
+    const selectedNodes = state.nodes.filter((n) => selectedIds.includes(n.id))
+    const selectedEdges = state.edges.filter(
+      (e) => selectedIds.includes(e.source) && selectedIds.includes(e.target)
+    )
+    set({
+      copiedNodes: {
+        nodes: JSON.parse(JSON.stringify(selectedNodes)),
+        edges: JSON.parse(JSON.stringify(selectedEdges)),
+      },
+    })
+  },
+
+  pasteNodes: () => {
+    const state = get()
+    if (!state.copiedNodes || state.copiedNodes.nodes.length === 0) return
+    get().pushHistory()
+
+    const ts = Date.now()
+    const idMap: Record<string, string> = {}
+    const offset = 50
+
+    const newNodes = state.copiedNodes.nodes.map((n, i) => {
+      const newId = `node_${ts}_${Math.random().toString(36).slice(2, 7)}_${i}`
+      idMap[n.id] = newId
+      return {
+        ...n,
+        id: newId,
+        position: { x: n.position.x + offset, y: n.position.y + offset },
+        selected: true,
+      }
+    })
+
+    const newEdges = state.copiedNodes.edges.map((e) => ({
+      ...e,
+      id: `edge_${ts}_${Math.random().toString(36).slice(2, 7)}`,
+      source: idMap[e.source] || e.source,
+      target: idMap[e.target] || e.target,
+    }))
+
+    // Deselect existing nodes
+    const updatedNodes = state.nodes.map((n) => ({ ...n, selected: false }))
+
+    set({
+      nodes: [...updatedNodes, ...newNodes],
+      edges: [...state.edges, ...newEdges],
+      selectedNodeId: newNodes.length === 1 ? newNodes[0].id : null,
+      isDirty: true,
+    })
+  },
+
+  duplicateSelectedNodes: () => {
+    get().copySelectedNodes()
+    get().pasteNodes()
   },
 
   pushHistory: () => {
@@ -271,5 +448,6 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   toggleRunHistory: () => set((s) => ({ showRunHistory: !s.showRunHistory })),
   setShowRunHistory: (show) => set({ showRunHistory: show }),
   setNodeExecutionStatus: (status) => set({ nodeExecutionStatus: status }),
-  clearNodeExecutionStatus: () => set({ nodeExecutionStatus: {} }),
+  setNodeOutputs: (outputs) => set({ nodeOutputs: outputs }),
+  clearNodeExecutionStatus: () => set({ nodeExecutionStatus: {}, nodeOutputs: {} }),
 }))
