@@ -36,6 +36,12 @@ export async function GET(req: Request, { params }: RouteParams) {
       )
     }
 
+    // Verify org ownership
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    if (credential.organizationId && credential.organizationId !== orgContext?.organizationId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     return NextResponse.json(credential)
   } catch (error) {
     console.error("[Credentials API] GET [id] error:", error)

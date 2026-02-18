@@ -5,6 +5,10 @@ import { getOrganizationContext, canEdit } from "@/lib/organization"
 import {
   HORIZON_LIFE_SYSTEM_PROMPT,
   HORIZON_LIFE_KB_GROUP_ID,
+  CODE_ASSISTANT_PROMPT,
+  CREATIVE_WRITER_PROMPT,
+  DATA_ANALYST_PROMPT,
+  RESEARCH_ASSISTANT_PROMPT,
 } from "@/lib/assistants/defaults"
 import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models"
 
@@ -28,6 +32,55 @@ const BUILT_IN_ASSISTANTS = [
     emoji: "💬",
     systemPrompt:
       "You are a helpful assistant. Be concise, friendly, and informative.",
+    model: "google/gemini-3-flash-preview",
+    useKnowledgeBase: false,
+    knowledgeBaseGroupIds: [],
+    isSystemDefault: false,
+    isBuiltIn: true,
+  },
+  {
+    id: "code-assistant",
+    name: "Code Assistant",
+    description: "Coding help, debugging, and code review",
+    emoji: "👨‍💻",
+    systemPrompt: CODE_ASSISTANT_PROMPT,
+    model: "google/gemini-3-flash-preview",
+    useKnowledgeBase: false,
+    knowledgeBaseGroupIds: [],
+    isSystemDefault: false,
+    isBuiltIn: true,
+  },
+  {
+    id: "creative-writer",
+    name: "Creative Writer",
+    description: "Writing, storytelling, and content creation",
+    emoji: "✍️",
+    systemPrompt: CREATIVE_WRITER_PROMPT,
+    model: "google/gemini-3-flash-preview",
+    useKnowledgeBase: false,
+    knowledgeBaseGroupIds: [],
+    isSystemDefault: false,
+    isBuiltIn: true,
+  },
+  {
+    id: "data-analyst",
+    name: "Data Analyst",
+    description: "Data analysis, charts, and spreadsheets",
+    emoji: "📊",
+    systemPrompt: DATA_ANALYST_PROMPT,
+    model: "google/gemini-3-flash-preview",
+    useKnowledgeBase: false,
+    knowledgeBaseGroupIds: [],
+    isSystemDefault: false,
+    isBuiltIn: true,
+  },
+  {
+    id: "research-assistant",
+    name: "Research Assistant",
+    description: "Research, summarization, and fact-finding",
+    emoji: "🔍",
+    systemPrompt: RESEARCH_ASSISTANT_PROMPT,
+    model: "google/gemini-3-flash-preview",
     useKnowledgeBase: false,
     knowledgeBaseGroupIds: [],
     isSystemDefault: false,
@@ -35,14 +88,16 @@ const BUILT_IN_ASSISTANTS = [
   },
 ]
 
-// Ensure built-in assistants exist
+// Ensure built-in assistants exist (upserts missing ones)
 async function ensureBuiltInAssistants() {
-  const existingCount = await prisma.assistant.count({
+  const existing = await prisma.assistant.findMany({
     where: { isBuiltIn: true },
+    select: { id: true },
   })
+  const existingIds = new Set(existing.map((a) => a.id))
 
-  if (existingCount === 0) {
-    for (const assistant of BUILT_IN_ASSISTANTS) {
+  for (const assistant of BUILT_IN_ASSISTANTS) {
+    if (!existingIds.has(assistant.id)) {
       await prisma.assistant.upsert({
         where: { id: assistant.id },
         update: {},

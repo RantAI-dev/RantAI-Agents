@@ -24,6 +24,17 @@ export async function GET(
         messages: {
           orderBy: { createdAt: "asc" },
         },
+        artifacts: {
+          where: { artifactType: { not: null } },
+          select: {
+            id: true,
+            title: true,
+            content: true,
+            artifactType: true,
+            metadata: true,
+            mimeType: true,
+          },
+        },
       },
     })
 
@@ -52,6 +63,14 @@ export async function GET(
           content: string
           similarity?: number
         }> | undefined,
+        metadata: m.metadata as Record<string, unknown> | null,
+      })),
+      artifacts: chatSession.artifacts.map((a) => ({
+        id: a.id,
+        title: a.title,
+        content: a.content,
+        artifactType: a.artifactType,
+        metadata: a.metadata as Record<string, unknown> | null,
       })),
     })
   } catch (error) {

@@ -86,6 +86,7 @@ export async function GET(
       metadata: document.metadata,
       // New S3 fields
       fileType,
+      artifactType: document.artifactType || null,
       fileSize: document.fileSize,
       mimeType: document.mimeType,
       s3Key: document.s3Key,

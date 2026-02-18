@@ -4,9 +4,8 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { smartRetrieve, formatContextForPrompt, RetrievalResult } from "@/lib/rag";
 import { DEFAULT_ASSISTANTS } from "@/lib/assistants/defaults";
 import { auth } from "@/lib/auth";
-import { getCustomerContext, formatCustomerContextForPrompt } from "@/lib/customer-context";
 import { prisma } from "@/lib/prisma";
-import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models";
+import { DEFAULT_MODEL_ID, isValidModel, getModelById } from "@/lib/models";
 import { resolveToolsForAssistant } from "@/lib/tools";
 import {
   LANGUAGE_INSTRUCTION,
@@ -32,6 +31,11 @@ import {
   SemanticRecallResult,
   UserProfile,
 } from "@/lib/memory";
+
+// Debug logging — only active in development
+const debug = process.env.NODE_ENV !== "production"
+  ? (...args: unknown[]) => console.log("[Chat API]", ...args)
+  : () => {};
 
 // Delimiter for sending sources metadata after stream
 const SOURCES_DELIMITER = "\n\n---SOURCES---\n";
@@ -70,6 +74,12 @@ const BASE_SYSTEM_PROMPT = `You are a helpful AI assistant. Answer questions acc
 
 export async function POST(req: Request) {
   try {
+    // Auth guard — prevent unauthenticated LLM usage
+    const session = await auth();
+    if (!session?.user?.id) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    }
+
     // Get assistant config from headers (most reliable method)
     const headerAssistantId = req.headers.get('X-Assistant-Id');
     const headerSystemPromptB64 = req.headers.get('X-System-Prompt');
@@ -81,7 +91,7 @@ export async function POST(req: Request) {
       try {
         headerSystemPrompt = Buffer.from(headerSystemPromptB64, 'base64').toString('utf-8');
       } catch {
-        console.log("[Chat API] Failed to decode system prompt from header");
+        debug("Failed to decode system prompt from header");
       }
     }
 
@@ -91,14 +101,14 @@ export async function POST(req: Request) {
     // Extract threadId for memory tracking (generate one if not provided)
     const threadId = body.threadId || body.sessionId || `thread_${Date.now()}`;
 
-    console.log("[Chat API] ===== REQUEST DEBUG =====");
-    console.log("[Chat API] Body keys:", Object.keys(body));
-    console.log("[Chat API] Body assistantId:", body.assistantId);
-    console.log("[Chat API] Body systemPrompt:", body.systemPrompt ? body.systemPrompt.substring(0, 40) + "..." : "null");
-    console.log("[Chat API] Body useKnowledgeBase:", body.useKnowledgeBase);
-    console.log("[Chat API] Header assistantId:", headerAssistantId);
+    debug("===== REQUEST DEBUG =====");
+    debug("Body keys:", Object.keys(body));
+    debug("Body assistantId:", body.assistantId);
+    debug("Body systemPrompt:", body.systemPrompt ? body.systemPrompt.substring(0, 40) + "..." : "null");
+    debug("Body useKnowledgeBase:", body.useKnowledgeBase);
+    debug("Header assistantId:", headerAssistantId);
     if (MEMORY_CONFIG.debug) {
-      console.log("[Chat API] Memory config:", getMemoryConfigSummary());
+      debug("Memory config:", getMemoryConfigSummary());
     }
 
     // Normalize messages to UIMessage format (with parts array)
@@ -183,16 +193,16 @@ export async function POST(req: Request) {
           if (dbAssistant.liveChatEnabled) {
             systemPrompt += LIVE_CHAT_HANDOFF_INSTRUCTION;
           }
-          console.log("[Chat API] Using database assistant:", dbAssistant.name, "with model:", modelId);
+          debug("Using database assistant:", dbAssistant.name, "with model:", modelId);
         } else if (customSystemPrompt) {
           systemPrompt = customSystemPrompt;
           useKnowledgeBase = useKnowledgeBaseParam ?? false;
-          console.log("[Chat API] Using custom system prompt");
+          debug("Using custom system prompt");
         } else {
           systemPrompt = BASE_SYSTEM_PROMPT;
           systemPrompt += LANGUAGE_INSTRUCTION;
           useKnowledgeBase = true;
-          console.log("[Chat API] Fallback to generic prompt");
+          debug("Fallback to generic prompt");
         }
       } catch (error) {
         console.error("[Chat API] Error fetching assistant from database:", error);
@@ -207,18 +217,18 @@ export async function POST(req: Request) {
       if (defaultAssistant.liveChatEnabled) {
         systemPrompt += LIVE_CHAT_HANDOFF_INSTRUCTION;
       }
-      console.log("[Chat API] Using default assistant:", defaultAssistant.name);
+      debug("Using default assistant:", defaultAssistant.name);
     } else if (customSystemPrompt) {
       // Custom assistant or explicit system prompt
       systemPrompt = customSystemPrompt;
       useKnowledgeBase = useKnowledgeBaseParam ?? false;
-      console.log("[Chat API] Using custom/user-created assistant prompt");
+      debug("Using custom/user-created assistant prompt");
     } else {
       // Fallback to generic prompt
       systemPrompt = BASE_SYSTEM_PROMPT;
       systemPrompt += LANGUAGE_INSTRUCTION;
       useKnowledgeBase = true;
-      console.log("[Chat API] Fallback to generic prompt");
+      debug("Fallback to generic prompt");
     }
 
     // Validate model ID
@@ -227,12 +237,11 @@ export async function POST(req: Request) {
       modelId = DEFAULT_MODEL_ID;
     }
 
-    console.log("[Chat API] System prompt preview:", systemPrompt.substring(0, 60) + "...");
-    console.log("[Chat API] useKnowledgeBase:", useKnowledgeBase);
+    debug("System prompt preview:", systemPrompt.substring(0, 60) + "...");
+    debug("useKnowledgeBase:", useKnowledgeBase);
 
-    // Auth (moved before chatflow check so userId is available for memory)
-    const session = await auth();
-    const userId = session?.user?.id || 'anonymous';
+    // Use session from auth guard at the top
+    const userId = session.user.id;
 
     // ===== CHATFLOW CHECK =====
     // If this assistant has an active CHATFLOW workflow, execute it instead of normal chat.
@@ -248,7 +257,7 @@ export async function POST(req: Request) {
         });
 
         if (chatflowWorkflow) {
-          console.log("[Chat API] Chatflow workflow found:", chatflowWorkflow.name);
+          debug("Chatflow workflow found:", chatflowWorkflow.name);
           // Extract the last user message
           const lastMsg = [...rawMessages].reverse().find((m: { role: string }) => m.role === "user");
           const userText = lastMsg?.content || lastMsg?.parts?.find((p: { type: string; text?: string }) => p.type === "text")?.text || "";
@@ -280,7 +289,7 @@ export async function POST(req: Request) {
                 ? await loadUserProfile(userId) : null
 
               memoryContext = { workingMemory: wm, semanticResults: sr, userProfile: up }
-              console.log("[Chat API] Memory loaded for chatflow:", {
+              debug("Memory loaded for chatflow:", {
                 workingMemory: wm ? wm.entities.size + " entities, " + wm.facts.size + " facts" : "disabled",
                 semanticResults: sr.length,
                 userProfile: up ? "yes" : "no",
@@ -296,7 +305,7 @@ export async function POST(req: Request) {
           // Fallback: chatflow path didn't reach a STREAM_OUTPUT node (e.g. Switch default)
           // Continue to normal agent processing below
           if (fallback || !chatflowResponse) {
-            console.log("[Chat API] Chatflow fallback — continuing with normal agent")
+            debug("Chatflow fallback — continuing with normal agent")
             // Fall through to normal chat processing below
           } else {
             // Stream tee: fork stream for client + background memory save
@@ -416,22 +425,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // Check if the user is a logged-in customer and inject their context
-    // (session and userId already declared above chatflow check)
-
-    if (session?.user?.userType === "customer") {
-      try {
-        const customerContext = await getCustomerContext(session.user.id);
-        if (customerContext) {
-          const customerPrompt = formatCustomerContextForPrompt(customerContext);
-          systemPrompt = `${systemPrompt}\n\n${customerPrompt}`;
-          console.log(`[Chat API] Customer context injected for: ${customerContext.firstName}`);
-        }
-      } catch (error) {
-        console.error("[Chat API] Error fetching customer context:", error);
-      }
-    }
-
     // ===== MEMORY SYSTEM INTEGRATION =====
     let workingMemory: WorkingMemory | null = null;
     let semanticResults: SemanticRecallResult[] = [];
@@ -515,7 +508,7 @@ export async function POST(req: Request) {
       // Continue without memory - graceful degradation
     }
 
-    console.log("[Chat API] Using model:", modelId);
+    debug("Using model:", modelId);
 
     // ===== TOOL RESOLUTION =====
     // Resolve assistant-configured tools (builtin, custom, MCP)
@@ -523,14 +516,92 @@ export async function POST(req: Request) {
       ? await resolveToolsForAssistant(assistantId, modelId, {
           userId: session?.user?.id,
           assistantId,
+          sessionId: body.sessionId || undefined,
+          organizationId: body.organizationId || undefined,
         })
       : { tools: {}, toolNames: [] as string[] };
 
+    // ===== TOOLBAR OVERRIDES =====
+    // Honor per-message enableTools toggle — strip all assistant tools when disabled
+    if (body.enableTools === false) {
+      for (const key of Object.keys(resolvedTools)) {
+        delete resolvedTools[key];
+      }
+      toolNames.length = 0;
+      debug("All tools disabled by user toggle");
+    }
+
+    // Honor per-message enableWebSearch toggle from the toolbar
+    const enableWebSearch = body.enableWebSearch;
+    if (enableWebSearch === false && resolvedTools.web_search) {
+      delete resolvedTools.web_search;
+      const idx = toolNames.indexOf("web_search");
+      if (idx !== -1) toolNames.splice(idx, 1);
+      debug("Web search disabled by user toggle");
+    } else if (enableWebSearch === true && !resolvedTools.web_search) {
+      // Dynamically add web search tool even if not bound to assistant
+      const { BUILTIN_TOOLS } = await import("@/lib/tools/builtin");
+      const wsTool = BUILTIN_TOOLS.web_search;
+      if (wsTool) {
+        resolvedTools.web_search = tool({
+          description: wsTool.description,
+          inputSchema: zodSchema(wsTool.parameters),
+          execute: async (params) => wsTool.execute(params as Record<string, unknown>, {
+            userId: session?.user?.id,
+            assistantId,
+            sessionId: body.sessionId || undefined,
+          }),
+        });
+        toolNames.push("web_search");
+        debug("Web search enabled by user toggle");
+      }
+    }
+
+    // ===== AUTO ARTIFACT TOOLS =====
+    // Always inject artifact tools for models that support function calling (auto mode)
+    // Canvas mode controls prompt behavior (forced vs auto), not tool availability
+    const modelInfo = getModelById(modelId);
+    if (modelInfo?.capabilities.functionCalling && !resolvedTools.create_artifact) {
+      const { BUILTIN_TOOLS } = await import("@/lib/tools/builtin");
+      const createTool = BUILTIN_TOOLS.create_artifact;
+      const updateTool = BUILTIN_TOOLS.update_artifact;
+      if (createTool) {
+        resolvedTools.create_artifact = tool({
+          description: createTool.description,
+          inputSchema: zodSchema(createTool.parameters),
+          execute: async (params) => createTool.execute(params as Record<string, unknown>, {
+            userId: session?.user?.id,
+            assistantId,
+            organizationId: body.organizationId || undefined,
+            sessionId: body.sessionId || undefined,
+          }),
+        });
+        toolNames.push("create_artifact");
+      }
+      if (updateTool) {
+        resolvedTools.update_artifact = tool({
+          description: updateTool.description,
+          inputSchema: zodSchema(updateTool.parameters),
+          execute: async (params) => updateTool.execute(params as Record<string, unknown>, {
+            userId: session?.user?.id,
+            assistantId,
+            organizationId: body.organizationId || undefined,
+            sessionId: body.sessionId || undefined,
+          }),
+        });
+        toolNames.push("update_artifact");
+      }
+      debug("Artifact tools auto-injected for capable model");
+    }
+
     const hasAssistantTools = Object.keys(resolvedTools).length > 0;
     if (hasAssistantTools) {
-      console.log("[Chat API] Tools enabled:", toolNames.join(", "));
+      debug("Tools enabled:", toolNames.join(", "));
       // Instruct the model to use its tools instead of hallucinating
-      systemPrompt += buildToolInstruction(toolNames);
+      systemPrompt += buildToolInstruction(toolNames, {
+        targetArtifactId: body.targetArtifactId,
+        canvasMode: body.canvasMode,
+      });
     }
 
     // Define schema for memory tool
@@ -778,7 +849,7 @@ export async function POST(req: Request) {
     return result.toTextStreamResponse();
   } catch (error) {
     console.error("[Chat API] Error:", error);
-    return new Response(JSON.stringify({ error: String(error) }), {
+    return new Response(JSON.stringify({ error: "An internal error occurred. Please try again." }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     });

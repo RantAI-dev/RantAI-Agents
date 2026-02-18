@@ -70,6 +70,7 @@ export async function GET(request: Request) {
           categories: doc.categories,
           subcategory: doc.subcategory,
           fileType,
+          artifactType: doc.artifactType || null,
           fileSize: doc.fileSize,
           hasS3File: !!doc.s3Key,
           chunkCount,

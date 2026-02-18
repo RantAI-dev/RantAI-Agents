@@ -42,6 +42,7 @@ export async function GET(req: Request) {
         description: t.description,
         category: t.category,
         parameters: t.parameters,
+        executionConfig: t.executionConfig,
         isBuiltIn: t.isBuiltIn,
         enabled: t.enabled,
         mcpServer: t.mcpServer,

@@ -150,6 +150,7 @@ export async function GET(req: NextRequest) {
     const validation = await validateWidget(req)
     if ("error" in validation) return validation.error
 
+    const { embedKey } = validation
     const conversationId = req.nextUrl.searchParams.get("conversationId")
     const after = req.nextUrl.searchParams.get("after")
 
@@ -168,6 +169,14 @@ export async function GET(req: NextRequest) {
     })
 
     if (!conversation) {
+      return NextResponse.json(
+        { error: "Conversation not found", code: "NOT_FOUND" },
+        { status: 404, headers: corsHeaders }
+      )
+    }
+
+    // Verify conversation belongs to this widget's embed key
+    if (!conversation.sessionId.startsWith(`widget_${embedKey.id}_`)) {
       return NextResponse.json(
         { error: "Conversation not found", code: "NOT_FOUND" },
         { status: 404, headers: corsHeaders }

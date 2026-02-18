@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrganizationContext } from "@/lib/organization"
+import { encryptJsonField } from "@/lib/workflow/credentials"
 
 // GET /api/dashboard/mcp-servers/[id]
 export async function GET(
@@ -37,6 +39,12 @@ export async function GET(
       )
     }
 
+    // Verify org ownership
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    if (server.organizationId && server.organizationId !== orgContext?.organizationId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     return NextResponse.json({
       id: server.id,
       name: server.name,
@@ -45,8 +53,8 @@ export async function GET(
       url: server.url,
       command: server.command,
       args: server.args,
-      env: server.env,
-      headers: server.headers,
+      hasEnv: !!server.env && Object.keys(server.env as Record<string, unknown>).length > 0,
+      hasHeaders: !!server.headers && Object.keys(server.headers as Record<string, unknown>).length > 0,
       enabled: server.enabled,
       lastConnectedAt: server.lastConnectedAt?.toISOString() ?? null,
       lastError: server.lastError,
@@ -84,6 +92,12 @@ export async function PUT(
       )
     }
 
+    // Verify org ownership
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    if (existing.organizationId && existing.organizationId !== orgContext?.organizationId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     const body = await req.json()
     const {
       name,
@@ -106,13 +120,19 @@ export async function PUT(
         ...(url !== undefined && { url }),
         ...(command !== undefined && { command }),
         ...(args !== undefined && { args }),
-        ...(env !== undefined && { env }),
-        ...(headers !== undefined && { headers }),
+        ...(env !== undefined && { env: encryptJsonField(env) || null }),
+        ...(headers !== undefined && { headers: encryptJsonField(headers) || null }),
         ...(enabled !== undefined && { enabled }),
       },
     })
 
-    return NextResponse.json(server)
+    // Strip secrets from response
+    const { env: _env, headers: _headers, ...safeServer } = server
+    return NextResponse.json({
+      ...safeServer,
+      hasEnv: !!_env && Object.keys(_env as Record<string, unknown>).length > 0,
+      hasHeaders: !!_headers && Object.keys(_headers as Record<string, unknown>).length > 0,
+    })
   } catch (error) {
     console.error("[MCP Servers API] PUT error:", error)
     return NextResponse.json(
@@ -141,6 +161,12 @@ export async function DELETE(
         { error: "MCP server not found" },
         { status: 404 }
       )
+    }
+
+    // Verify org ownership
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    if (server.organizationId && server.organizationId !== orgContext?.organizationId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
     // Delete associated tools first (cascade), then server

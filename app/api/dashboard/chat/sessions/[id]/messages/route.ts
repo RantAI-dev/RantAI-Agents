@@ -17,6 +17,7 @@ interface MessageInput {
     content: string
     similarity?: number
   }>
+  metadata?: Record<string, unknown>
 }
 
 // POST /api/dashboard/chat/sessions/[id]/messages - Add message(s) to session
@@ -65,6 +66,7 @@ export async function POST(
             replyTo: msg.replyTo,
             editHistory: msg.editHistory || undefined,
             sources: msg.sources || undefined,
+            metadata: msg.metadata || undefined,
           },
         })
       )
@@ -85,6 +87,7 @@ export async function POST(
         replyTo: m.replyTo,
         editHistory: m.editHistory,
         sources: m.sources,
+        metadata: m.metadata,
       })),
     })
   } catch (error) {
@@ -130,7 +133,14 @@ export async function PATCH(
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
-    // Update message
+    // Verify message belongs to this session before updating
+    const existingMessage = await prisma.dashboardMessage.findFirst({
+      where: { id: messageId, sessionId },
+    })
+    if (!existingMessage) {
+      return NextResponse.json({ error: "Message not found" }, { status: 404 })
+    }
+
     const updated = await prisma.dashboardMessage.update({
       where: { id: messageId },
       data: {

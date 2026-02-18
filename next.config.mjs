@@ -18,6 +18,16 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // Global security headers
+        source: "/(.*)",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+      {
         // Widget API CORS headers
         source: "/api/widget/:path*",
         headers: [

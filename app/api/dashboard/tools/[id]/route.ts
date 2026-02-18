@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrganizationContext } from "@/lib/organization"
 
 // GET /api/dashboard/tools/[id]
 export async function GET(
@@ -26,7 +27,24 @@ export async function GET(
       return NextResponse.json({ error: "Tool not found" }, { status: 404 })
     }
 
-    return NextResponse.json(tool)
+    // Verify org ownership for non-built-in tools
+    if (!tool.isBuiltIn) {
+      const orgContext = await getOrganizationContext(req, session.user.id)
+      if (tool.organizationId && tool.organizationId !== orgContext?.organizationId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+    }
+
+    // Redact auth credentials from executionConfig
+    let safeExecutionConfig = tool.executionConfig
+    if (safeExecutionConfig && typeof safeExecutionConfig === "object" && !Array.isArray(safeExecutionConfig)) {
+      const config = safeExecutionConfig as Record<string, unknown>
+      if ("authValue" in config) {
+        safeExecutionConfig = { ...config, authValue: "••••••••" }
+      }
+    }
+
+    return NextResponse.json({ ...tool, executionConfig: safeExecutionConfig })
   } catch (error) {
     console.error("[Tools API] GET [id] error:", error)
     return NextResponse.json(
@@ -52,6 +70,14 @@ export async function PUT(
 
     if (!existing) {
       return NextResponse.json({ error: "Tool not found" }, { status: 404 })
+    }
+
+    // Verify org ownership
+    if (!existing.isBuiltIn) {
+      const orgContext = await getOrganizationContext(req, session.user.id)
+      if (existing.organizationId && existing.organizationId !== orgContext?.organizationId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
     }
 
     const body = await req.json()
@@ -95,6 +121,14 @@ export async function DELETE(
 
     if (!tool) {
       return NextResponse.json({ error: "Tool not found" }, { status: 404 })
+    }
+
+    // Verify org ownership
+    if (!tool.isBuiltIn) {
+      const orgContext = await getOrganizationContext(req, session.user.id)
+      if (tool.organizationId && tool.organizationId !== orgContext?.organizationId) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
     }
 
     if (tool.isBuiltIn) {

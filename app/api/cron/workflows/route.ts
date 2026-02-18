@@ -13,13 +13,29 @@ import { workflowEngine } from "@/lib/workflow"
  */
 export async function GET(req: Request) {
   try {
-    // Verify cron secret (skip check if not configured — dev mode)
+    // Verify cron secret — fail closed in production
     const cronSecret = process.env.CRON_SECRET
+    if (!cronSecret && process.env.NODE_ENV === "production") {
+      return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 401 })
+    }
     if (cronSecret) {
       const authHeader = req.headers.get("authorization")
       if (authHeader !== `Bearer ${cronSecret}`) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
       }
+    }
+
+    // Clean up expired user memories (TTL enforcement)
+    let expiredMemoryCount = 0
+    try {
+      const deleted = await prisma.userMemory.deleteMany({
+        where: {
+          expiresAt: { not: null, lt: new Date() },
+        },
+      })
+      expiredMemoryCount = deleted.count
+    } catch (err) {
+      console.error("[Cron] Memory cleanup error:", err)
     }
 
     // Find all active workflows with schedule triggers
@@ -33,7 +49,7 @@ export async function GET(req: Request) {
     })
 
     if (scheduledWorkflows.length === 0) {
-      return NextResponse.json({ executed: 0, message: "No scheduled workflows" })
+      return NextResponse.json({ executed: 0, expiredMemoryCount, message: "No scheduled workflows" })
     }
 
     const now = new Date()
@@ -64,6 +80,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       executed: results.length,
+      expiredMemoryCount,
       results,
       checkedAt: now.toISOString(),
     })

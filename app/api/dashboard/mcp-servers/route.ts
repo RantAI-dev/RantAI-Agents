@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import { encryptJsonField } from "@/lib/workflow/credentials"
 
 // GET /api/dashboard/mcp-servers - List all MCP server configs
 export async function GET(req: Request) {
@@ -94,8 +95,8 @@ export async function POST(req: Request) {
         url: url || null,
         command: command || null,
         args: args || [],
-        env: env || null,
-        headers: headers || null,
+        env: encryptJsonField(env) || null,
+        headers: encryptJsonField(headers) || null,
         enabled: true,
         organizationId: orgContext?.organizationId || null,
         createdBy: session.user.id,

@@ -3,6 +3,16 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -62,6 +72,7 @@ export function GroupManager({
   const [description, setDescription] = useState("")
   const [color, setColor] = useState(PRESET_COLORS[0])
   const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<KnowledgeGroup | null>(null)
 
   const handleCreate = () => {
     setEditingGroup(null)
@@ -79,23 +90,23 @@ export function GroupManager({
     setDialogOpen(true)
   }
 
-  const handleDelete = async (group: KnowledgeGroup) => {
-    if (!confirm(`Delete group "${group.name}"? Documents will be unassigned but not deleted.`)) {
-      return
-    }
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return
 
     try {
-      const response = await fetch(`/api/dashboard/knowledge/groups/${group.id}`, {
+      const response = await fetch(`/api/dashboard/knowledge/groups/${deleteTarget.id}`, {
         method: "DELETE",
       })
       if (response.ok) {
-        if (selectedGroupId === group.id) {
+        if (selectedGroupId === deleteTarget.id) {
           onSelectGroup(null)
         }
         onGroupsChange()
       }
     } catch (error) {
       console.error("Failed to delete group:", error)
+    } finally {
+      setDeleteTarget(null)
     }
   }
 
@@ -208,7 +219,7 @@ export function GroupManager({
                     Edit
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => handleDelete(group)}
+                    onClick={() => setDeleteTarget(group)}
                     className="text-destructive focus:text-destructive"
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
@@ -295,6 +306,24 @@ export function GroupManager({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete group</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete &ldquo;{deleteTarget?.name}&rdquo;? Documents will be unassigned but not deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

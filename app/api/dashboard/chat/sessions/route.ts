@@ -10,39 +10,28 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Return session metadata only (messages loaded on demand via /sessions/[id])
     const sessions = await prisma.dashboardSession.findMany({
       where: { userId: session.user.id },
       include: {
         messages: {
-          orderBy: { createdAt: "asc" },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { content: true, createdAt: true },
         },
+        _count: { select: { messages: true } },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { updatedAt: "desc" },
     })
 
-    // Transform to match the frontend ChatSession interface
     const response = sessions.map((s) => ({
       id: s.id,
       title: s.title,
       assistantId: s.assistantId,
       createdAt: s.createdAt.toISOString(),
-      messages: s.messages.map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "assistant",
-        content: m.content,
-        createdAt: m.createdAt.toISOString(),
-        replyTo: m.replyTo,
-        editHistory: m.editHistory as Array<{
-          content: string
-          assistantResponse?: string
-          editedAt: string
-        }> | undefined,
-        sources: m.sources as Array<{
-          title: string
-          content: string
-          similarity?: number
-        }> | undefined,
-      })),
+      updatedAt: s.updatedAt.toISOString(),
+      messageCount: s._count.messages,
+      lastMessage: s.messages[0]?.content?.slice(0, 100) || null,
     }))
 
     return NextResponse.json(response)
