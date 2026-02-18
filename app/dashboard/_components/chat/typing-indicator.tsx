@@ -5,20 +5,20 @@ import { motion } from "framer-motion"
 
 export const TypingIndicator = memo(() => {
   return (
-    <div className="flex items-center gap-2 py-1">
+    <div className="flex items-center gap-2.5 py-1">
       <div className="flex items-center gap-1">
         {[0, 1, 2].map((i) => (
           <motion.span
             key={i}
-            className="w-2 h-2 bg-muted-foreground/50 rounded-full"
+            className="w-1.5 h-1.5 bg-foreground/30 rounded-full"
             animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.5, 1, 0.5],
+              scale: [1, 1.3, 1],
+              opacity: [0.3, 0.8, 0.3],
             }}
             transition={{
-              duration: 1,
+              duration: 1.2,
               repeat: Infinity,
-              delay: i * 0.2,
+              delay: i * 0.15,
               ease: "easeInOut",
             }}
           />

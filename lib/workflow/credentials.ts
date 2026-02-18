@@ -71,6 +71,32 @@ export function decryptCredential(
 }
 
 /**
+ * Encrypt a simple key-value object (e.g. MCP env/headers).
+ * Stores as { _encrypted: "base64..." } so callers can detect encrypted vs legacy plaintext.
+ */
+export function encryptJsonField(
+  data: Record<string, string> | null | undefined
+): { _encrypted: string } | null {
+  if (!data || Object.keys(data).length === 0) return null
+  return { _encrypted: encryptCredential(data) }
+}
+
+/**
+ * Decrypt a JSON field that may be encrypted ({ _encrypted: "..." }) or legacy plaintext.
+ */
+export function decryptJsonField(
+  stored: unknown
+): Record<string, string> | null {
+  if (!stored || typeof stored !== "object") return null
+  const obj = stored as Record<string, unknown>
+  if ("_encrypted" in obj && typeof obj._encrypted === "string") {
+    return decryptCredential(obj._encrypted) as Record<string, string>
+  }
+  // Legacy plaintext — return as-is
+  return stored as Record<string, string>
+}
+
+/**
  * Supported credential types and their expected data shapes.
  */
 export type CredentialType = "api_key" | "oauth2" | "basic_auth" | "bearer"

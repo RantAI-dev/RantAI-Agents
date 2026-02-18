@@ -11,6 +11,7 @@ import { FeaturesProvider } from "@/components/providers/features-provider"
 import { ChatSessionsProvider } from "@/hooks/use-chat-sessions"
 import { OrganizationProvider } from "@/hooks/use-organization"
 import { brand } from "@/lib/branding"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 const DASHBOARD_TITLES: Record<string, string> = {
   "/dashboard": "Chat",
@@ -18,7 +19,7 @@ const DASHBOARD_TITLES: Record<string, string> = {
   "/dashboard/workflows": "Workflows",
   "/dashboard/agent": "Live Chat",
   "/dashboard/knowledge": "Knowledge",
-  "/dashboard/statistics": "Statistics",
+  "/dashboard/organization": "Organization",
   "/dashboard/settings": "Settings",
   "/dashboard/account": "Account",
 }
@@ -27,6 +28,7 @@ function getPageTitle(pathname: string): string {
   if (DASHBOARD_TITLES[pathname]) return DASHBOARD_TITLES[pathname]
   if (pathname.startsWith("/dashboard/agent-builder/")) return "Agent Builder"
   if (pathname.startsWith("/dashboard/workflows/")) return "Workflows"
+  if (pathname.startsWith("/dashboard/organization/")) return "Organization"
   if (pathname.startsWith("/dashboard/settings/")) return "Settings"
   return "Dashboard"
 }
@@ -76,7 +78,9 @@ export default function DashboardLayout({
                 <PanelLeft className="h-4 w-4" />
               )}
             </Button>
-            {children}
+            <ErrorBoundary>
+              {children}
+            </ErrorBoundary>
           </main>
         </div>
         </ChatSessionsProvider>

@@ -19,9 +19,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { MoreVertical, Trash2, FileText, Layers, Eye, Folder, Pencil, Image, FileType } from "lucide-react"
+import { Separator } from "@/components/ui/separator"
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip"
+import { MoreVertical, Trash2, Layers, Eye, Pencil } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { useState } from "react"
+import { getFileTypeIcon, getCategoryDisplay, getFileExtensionLabel } from "./file-type-utils"
 
 interface DocumentGroup {
   id: string
@@ -35,22 +42,11 @@ interface Document {
   categories: string[]
   subcategory: string | null
   fileType?: "markdown" | "pdf" | "image"
+  artifactType?: string | null
   chunkCount: number
   groups: DocumentGroup[]
   createdAt: string
   updatedAt: string
-}
-
-// Get icon and color based on file type
-function getFileTypeIcon(fileType?: string) {
-  switch (fileType) {
-    case "image":
-      return { Icon: Image, bgColor: "bg-chart-2/10 dark:bg-chart-2/20", iconColor: "text-chart-2" }
-    case "pdf":
-      return { Icon: FileType, bgColor: "bg-destructive/10 dark:bg-destructive/20", iconColor: "text-destructive" }
-    default:
-      return { Icon: FileText, bgColor: "bg-blue-100 dark:bg-blue-900/30", iconColor: "text-blue-600 dark:text-blue-400" }
-  }
 }
 
 interface Category {
@@ -69,22 +65,9 @@ interface DocumentCardProps {
   categoryMap: Map<string, Category>
 }
 
-// Helper to get category display info with fallback for unknown categories
-function getCategoryDisplay(categoryName: string, categoryMap: Map<string, Category>) {
-  const category = categoryMap.get(categoryName)
-  if (category) {
-    return { label: category.label, color: category.color }
-  }
-  // Fallback for unknown categories
-  return {
-    label: categoryName.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()),
-    color: "#6b7280", // gray
-  }
-}
-
 export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }: DocumentCardProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const { Icon: FileIcon, bgColor, iconColor } = getFileTypeIcon(document.fileType)
+  const { Icon: FileIcon, bgColor, iconColor, accentColor } = getFileTypeIcon(document.fileType, document.artifactType)
 
   const handleDelete = () => {
     onDelete(document.id)
@@ -94,36 +77,70 @@ export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }
   return (
     <>
       <Card
-        className="group cursor-pointer transition-all duration-200 hover:shadow-md hover:shadow-primary/5 hover:border-primary/50 hover:-translate-y-0.5 flex flex-col min-h-[180px]"
+        className="group relative cursor-pointer transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/50 hover:-translate-y-1 flex flex-col min-h-[180px] overflow-hidden"
+        style={{ borderTop: `2.5px solid ${accentColor}` }}
         onClick={() => onView(document.id)}
       >
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+        <span
+          className="absolute bottom-2.5 right-3 text-[11px] font-mono font-bold opacity-80"
+          style={{ color: accentColor }}
+        >
+          {getFileExtensionLabel(document.fileType, document.artifactType)}
+        </span>
+        <CardHeader className="flex flex-row items-start justify-between space-y-0 pt-4 pb-2">
           <div className="flex items-start gap-3 min-w-0 flex-1">
-            <div className={`rounded-lg p-2.5 shrink-0 ${bgColor}`} aria-hidden>
+            <div
+              className={`rounded-xl p-2.5 shrink-0 ring-1 ring-inset ring-black/5 dark:ring-white/5 ${bgColor}`}
+              aria-hidden
+            >
               <FileIcon className={`h-5 w-5 ${iconColor}`} />
             </div>
             <div className="space-y-1.5 min-w-0">
-              <CardTitle className="text-sm font-medium line-clamp-2">
+              <CardTitle className="text-sm font-semibold leading-snug line-clamp-2">
                 {document.title}
               </CardTitle>
-              <div className="flex gap-1.5 flex-wrap">
+              <div className="flex gap-1.5 flex-wrap items-center">
                 {document.categories.slice(0, 2).map((cat) => {
                   const { label, color } = getCategoryDisplay(cat, categoryMap)
                   return (
                     <Badge
                       key={cat}
-                      variant="outline"
-                      className="text-xs font-medium shrink-0"
-                      style={{ borderColor: color, color }}
+                      className="text-[10px] font-medium h-5 px-1.5 border-0 shrink-0"
+                      style={{
+                        backgroundColor: `color-mix(in oklch, ${color} 12%, transparent)`,
+                        color,
+                      }}
                     >
                       {label}
                     </Badge>
                   )
                 })}
                 {document.categories.length > 2 && (
-                  <Badge variant="outline" className="text-xs shrink-0">
+                  <Badge variant="outline" className="text-[10px] h-5 px-1.5 shrink-0">
                     +{document.categories.length - 2}
                   </Badge>
+                )}
+                {document.groups.length > 0 && (
+                  <>
+                    {document.groups.slice(0, 3).map((group) => (
+                      <Tooltip key={group.id}>
+                        <TooltipTrigger asChild>
+                          <div
+                            className="h-3 w-3 rounded-sm shrink-0"
+                            style={{ backgroundColor: group.color ?? "var(--chart-3)" }}
+                          />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">
+                          {group.name}
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                    {document.groups.length > 3 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        +{document.groups.length - 3}
+                      </span>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -159,8 +176,9 @@ export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }
             </DropdownMenuContent>
           </DropdownMenu>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <CardContent className="mt-auto pt-0">
+          <Separator className="mb-3" />
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
               <Layers className="h-3 w-3" />
               <span>{document.chunkCount} chunks</span>
@@ -170,27 +188,6 @@ export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }
                 addSuffix: true,
               })}
             </span>
-          </div>
-          <div className="flex items-center gap-2 mt-2 flex-wrap">
-            {document.groups.slice(0, 2).map((group) => (
-              <div key={group.id} className="flex items-center gap-1 text-xs text-muted-foreground">
-                <div
-                  className="h-3 w-3 rounded flex items-center justify-center"
-                  style={{ backgroundColor: group.color ?? "var(--chart-3)" }}
-                >
-                  <Folder className="h-2 w-2 text-white" />
-                </div>
-                <span>{group.name}</span>
-              </div>
-            ))}
-            {document.groups.length > 2 && (
-              <span className="text-xs text-muted-foreground">+{document.groups.length - 2} more</span>
-            )}
-            {document.subcategory && (
-              <span className="text-xs text-muted-foreground">
-                {document.subcategory}
-              </span>
-            )}
           </div>
         </CardContent>
       </Card>

@@ -1,11 +1,11 @@
-import { tool as aiTool } from "ai"
+import { tool as aiTool, jsonSchema } from "ai"
 import type { CoreTool } from "ai"
 import { prisma } from "@/lib/prisma"
 import { AVAILABLE_MODELS } from "@/lib/models"
 import { BUILTIN_TOOLS } from "./builtin"
 import { adaptMcpToolsToAiSdk } from "@/lib/mcp/tool-adapter"
 import type { McpServerOptions, McpToolInfo } from "@/lib/mcp/client"
-import type { ToolContext, ResolvedTools } from "./types"
+import type { ToolContext, ResolvedTools, ExecutionConfig } from "./types"
 
 function getModelById(modelId: string) {
   return AVAILABLE_MODELS.find((m) => m.id === modelId)
@@ -108,6 +108,77 @@ export async function resolveToolsForAssistant(
       } catch {
         // MCP tool unavailable, skip silently
       }
+    }
+
+    if (toolDef.category === "custom") {
+      const config = toolDef.executionConfig as ExecutionConfig | null
+      if (!config?.url) {
+        console.warn(`[Tools] Custom tool "${toolDef.name}" has no URL, skipping`)
+        continue
+      }
+
+      const authHeaders: Record<string, string> = {}
+      if (config.authType === "bearer" && config.authValue) {
+        authHeaders["Authorization"] = `Bearer ${config.authValue}`
+      } else if (config.authType === "api_key" && config.authValue) {
+        authHeaders[config.authHeaderName || "X-API-Key"] = config.authValue
+      }
+
+      tools[toolDef.name] = aiTool({
+        description: toolDef.description,
+        inputSchema: jsonSchema(
+          toolDef.parameters as Parameters<typeof jsonSchema>[0]
+        ),
+        execute: async (params) => {
+          const startTime = Date.now()
+          const timeoutMs = config.timeoutMs || 30000
+          try {
+            const parsed = new URL(config.url)
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+              throw new Error(`Invalid protocol: ${parsed.protocol}`)
+            }
+
+            const controller = new AbortController()
+            const timer = setTimeout(() => controller.abort(), timeoutMs)
+            try {
+              const method = config.method || "POST"
+              const opts: RequestInit = {
+                method,
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(config.headers || {}),
+                  ...authHeaders,
+                },
+                signal: controller.signal,
+              }
+              if (method !== "GET" && method !== "DELETE") {
+                opts.body = JSON.stringify(params)
+              }
+              const res = await fetch(config.url, opts)
+              clearTimeout(timer)
+              if (!res.ok) {
+                const errText = await res.text().catch(() => "Unknown")
+                throw new Error(`HTTP ${res.status}: ${errText.substring(0, 500)}`)
+              }
+              const result = await res.json().catch(() => res.text())
+              logToolExecution(toolDef.name, toolDef.id, params, result, context, Date.now() - startTime).catch(() => {})
+              return result
+            } catch (err) {
+              clearTimeout(timer)
+              if ((err as Error).name === "AbortError") {
+                throw new Error(`Timed out after ${timeoutMs}ms`)
+              }
+              throw err
+            }
+          } catch (error) {
+            logToolExecution(toolDef.name, toolDef.id, params, null, context, Date.now() - startTime, error).catch(() => {})
+            return {
+              error: `Tool execution failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            }
+          }
+        },
+      })
+      toolNames.push(toolDef.name)
     }
   }
 

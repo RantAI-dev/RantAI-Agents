@@ -222,7 +222,7 @@ export function OrganizationSwitcher({ className }: OrganizationSwitcherProps) {
                   <CommandItem
                     onSelect={() => {
                       setOpen(false)
-                      router.push("/dashboard/settings/organization")
+                      router.push("/dashboard/organization")
                     }}
                   >
                     <Settings className="mr-2 h-4 w-4" />

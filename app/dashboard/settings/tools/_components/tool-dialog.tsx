@@ -21,9 +21,16 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { Separator } from "@/components/ui/separator"
 import { useTools } from "@/hooks/use-tools"
 import { toast } from "sonner"
-import { Loader2, Plus, Trash2 } from "lucide-react"
+import { Loader2, Plus, Trash2, ChevronDown, Globe } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface ParameterRow {
   name: string
@@ -92,6 +99,16 @@ export function ToolDialog({
   const [paramRows, setParamRows] = useState<ParameterRow[]>([])
   const [paramTab, setParamTab] = useState("visual")
 
+  // Execution config state
+  const [execConfigOpen, setExecConfigOpen] = useState(false)
+  const [execUrl, setExecUrl] = useState("")
+  const [execMethod, setExecMethod] = useState("POST")
+  const [execAuthType, setExecAuthType] = useState<"none" | "api_key" | "bearer">("none")
+  const [execAuthHeaderName, setExecAuthHeaderName] = useState("X-API-Key")
+  const [execAuthValue, setExecAuthValue] = useState("")
+  const [execTimeoutMs, setExecTimeoutMs] = useState(30000)
+  const [execHeaders, setExecHeaders] = useState<Array<{ key: string; value: string }>>([])
+
   const editingTool = editToolId
     ? tools.find((t) => t.id === editToolId)
     : null
@@ -103,12 +120,43 @@ export function ToolDialog({
       setDescription(editingTool.description)
       setParametersJson(JSON.stringify(editingTool.parameters, null, 2))
       setParamRows(parametersToRows(editingTool.parameters))
+      // Load execution config
+      const ec = editingTool.executionConfig
+      if (ec) {
+        setExecUrl(ec.url || "")
+        setExecMethod(ec.method || "POST")
+        setExecAuthType((ec.authType as "none" | "api_key" | "bearer") || "none")
+        setExecAuthHeaderName(ec.authHeaderName || "X-API-Key")
+        setExecAuthValue(ec.authValue || "")
+        setExecTimeoutMs(ec.timeoutMs || 30000)
+        setExecHeaders(
+          ec.headers
+            ? Object.entries(ec.headers).map(([key, value]) => ({ key, value }))
+            : []
+        )
+        setExecConfigOpen(true)
+      } else {
+        setExecUrl("")
+        setExecMethod("POST")
+        setExecAuthType("none")
+        setExecAuthHeaderName("X-API-Key")
+        setExecAuthValue("")
+        setExecTimeoutMs(30000)
+        setExecHeaders([])
+      }
     } else {
       setName("")
       setDisplayName("")
       setDescription("")
       setParametersJson('{\n  "type": "object",\n  "properties": {}\n}')
       setParamRows([])
+      setExecUrl("")
+      setExecMethod("POST")
+      setExecAuthType("none")
+      setExecAuthHeaderName("X-API-Key")
+      setExecAuthValue("")
+      setExecTimeoutMs(30000)
+      setExecHeaders([])
     }
   }, [editingTool, open])
 
@@ -156,6 +204,23 @@ export function ToolDialog({
     setParamRows((prev) => prev.filter((_, i) => i !== index))
   }
 
+  const buildExecutionConfig = () => {
+    if (!execUrl.trim()) return null
+    const headers: Record<string, string> = {}
+    for (const h of execHeaders) {
+      if (h.key.trim()) headers[h.key.trim()] = h.value
+    }
+    return {
+      url: execUrl.trim(),
+      method: execMethod,
+      ...(Object.keys(headers).length > 0 ? { headers } : {}),
+      authType: execAuthType,
+      ...(execAuthType === "api_key" ? { authHeaderName: execAuthHeaderName } : {}),
+      ...(execAuthType !== "none" && execAuthValue ? { authValue: execAuthValue } : {}),
+      timeoutMs: execTimeoutMs,
+    }
+  }
+
   const handleSubmit = async () => {
     if (!name.trim() || !displayName.trim() || !description.trim()) {
       toast.error("All fields are required")
@@ -174,6 +239,8 @@ export function ToolDialog({
       }
     }
 
+    const executionConfig = buildExecutionConfig()
+
     setSaving(true)
     try {
       if (editToolId) {
@@ -181,10 +248,11 @@ export function ToolDialog({
           displayName,
           description,
           parameters,
+          executionConfig,
         })
         toast.success("Tool updated")
       } else {
-        await createTool({ name, displayName, description, parameters })
+        await createTool({ name, displayName, description, parameters, executionConfig })
         toast.success("Tool created")
       }
       onOpenChange(false)
@@ -349,6 +417,161 @@ export function ToolDialog({
               </TabsContent>
             </Tabs>
           </div>
+
+          <Separator />
+
+          {/* Execution Config */}
+          <Collapsible open={execConfigOpen} onOpenChange={setExecConfigOpen}>
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="ghost"
+                className="flex w-full justify-between px-0 h-auto font-medium hover:bg-transparent"
+                type="button"
+              >
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  <span>Execution Config (HTTP)</span>
+                  {execUrl.trim() && (
+                    <span className="text-[10px] font-normal text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {execMethod} {new URL(execUrl).hostname}
+                    </span>
+                  )}
+                </div>
+                <ChevronDown className={cn("h-4 w-4 transition-transform", execConfigOpen && "rotate-180")} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-3 pt-3">
+              <p className="text-xs text-muted-foreground">
+                Configure the HTTP endpoint that this tool calls when invoked by the AI.
+                Without this, the tool cannot execute.
+              </p>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="exec-url">Endpoint URL</Label>
+                <Input
+                  id="exec-url"
+                  placeholder="https://api.example.com/my-tool"
+                  value={execUrl}
+                  onChange={(e) => setExecUrl(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>HTTP Method</Label>
+                <Select value={execMethod} onValueChange={setExecMethod}>
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GET">GET</SelectItem>
+                    <SelectItem value="POST">POST</SelectItem>
+                    <SelectItem value="PUT">PUT</SelectItem>
+                    <SelectItem value="PATCH">PATCH</SelectItem>
+                    <SelectItem value="DELETE">DELETE</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Authentication</Label>
+                <Select
+                  value={execAuthType}
+                  onValueChange={(v) => setExecAuthType(v as "none" | "api_key" | "bearer")}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="bearer">Bearer Token</SelectItem>
+                    <SelectItem value="api_key">API Key</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {execAuthType === "api_key" && (
+                <div className="space-y-1.5">
+                  <Label>Header Name</Label>
+                  <Input
+                    placeholder="X-API-Key"
+                    value={execAuthHeaderName}
+                    onChange={(e) => setExecAuthHeaderName(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {execAuthType !== "none" && (
+                <div className="space-y-1.5">
+                  <Label>{execAuthType === "bearer" ? "Token" : "API Key Value"}</Label>
+                  <Input
+                    type="password"
+                    placeholder="Enter secret..."
+                    value={execAuthValue}
+                    onChange={(e) => setExecAuthValue(e.target.value)}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label>Timeout (ms)</Label>
+                <Input
+                  type="number"
+                  min={1000}
+                  max={120000}
+                  value={execTimeoutMs}
+                  onChange={(e) => setExecTimeoutMs(Number(e.target.value) || 30000)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Max wait time for a response. Default: 30000ms (30s).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Custom Headers</Label>
+                {execHeaders.map((header, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Header name"
+                      value={header.key}
+                      onChange={(e) => {
+                        const updated = [...execHeaders]
+                        updated[i] = { ...updated[i], key: e.target.value }
+                        setExecHeaders(updated)
+                      }}
+                      className="h-8 text-sm font-mono"
+                    />
+                    <Input
+                      placeholder="Value"
+                      value={header.value}
+                      onChange={(e) => {
+                        const updated = [...execHeaders]
+                        updated[i] = { ...updated[i], value: e.target.value }
+                        setExecHeaders(updated)
+                      }}
+                      className="h-8 text-sm"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-destructive"
+                      onClick={() => setExecHeaders(execHeaders.filter((_, j) => j !== i))}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setExecHeaders([...execHeaders, { key: "", value: "" }])}
+                  className="w-full"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add Header
+                </Button>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
         <DialogFooter>

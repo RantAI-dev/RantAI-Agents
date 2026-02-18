@@ -1,6 +1,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
+@source "../node_modules/streamdown/dist/*.js";
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -141,6 +143,90 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* ── Thin scrollbar utility (auto-hide) ── */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scrollbar-thin:hover,
+.scrollbar-thin:active {
+  scrollbar-color: var(--border) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  background: var(--border);
+}
+
+/* ── Dark data dashboard utilities ── */
+
+/* Dot-grid background pattern */
+.dot-grid-bg {
+  background-image: radial-gradient(circle, var(--border) 0.5px, transparent 0.5px);
+  background-size: 24px 24px;
+}
+
+/* Glow accent utilities */
+.glow-amber {
+  box-shadow: 0 0 12px -2px oklch(0.78 0.16 70 / 0.15);
+}
+.glow-cyan {
+  box-shadow: 0 0 12px -2px oklch(0.72 0.14 200 / 0.15);
+}
+.glow-violet {
+  box-shadow: 0 0 12px -2px oklch(0.62 0.2 295 / 0.15);
+}
+.glow-chart-1 {
+  box-shadow: 0 0 12px -2px oklch(from var(--chart-1) l c h / 0.15);
+}
+
+/* Pulse glow keyframes */
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Staggered fade-in for card grids */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out both;
+}
+
+/* Stagger delays for grid children */
+.stagger-grid > :nth-child(1) { animation-delay: 0ms; }
+.stagger-grid > :nth-child(2) { animation-delay: 60ms; }
+.stagger-grid > :nth-child(3) { animation-delay: 120ms; }
+.stagger-grid > :nth-child(4) { animation-delay: 180ms; }
+.stagger-grid > :nth-child(5) { animation-delay: 240ms; }
+.stagger-grid > :nth-child(6) { animation-delay: 300ms; }
+.stagger-grid > :nth-child(7) { animation-delay: 360ms; }
+.stagger-grid > :nth-child(8) { animation-delay: 420ms; }
+
+/* Chart glow filter */
+.chart-glow {
+  filter: drop-shadow(0 0 4px oklch(from var(--chart-1) l c h / 0.4));
 }
 
 /* ── Chat message markdown overrides ── */

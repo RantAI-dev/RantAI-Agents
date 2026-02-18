@@ -91,6 +91,32 @@ export const S3Paths = {
    */
   temp: (uploadId: string, filename: string): string =>
     `temp/${uploadId}/${sanitizeFilename(filename)}`,
+
+  /**
+   * Path for chat artifacts (stored as knowledge documents)
+   * Format: artifacts/{orgId|global}/{sessionId}/{artifactId}{ext}
+   */
+  artifact: (orgId: string | null, sessionId: string, artifactId: string, ext: string): string =>
+    `artifacts/${orgId || "global"}/${sessionId}/${artifactId}${ext}`,
+}
+
+/**
+ * Get file extension for an artifact type
+ */
+export function getArtifactExtension(type: string): string {
+  const map: Record<string, string> = {
+    "text/html": ".html",
+    "text/markdown": ".md",
+    "image/svg+xml": ".svg",
+    "application/react": ".tsx",
+    "application/mermaid": ".mmd",
+    "application/code": ".txt",
+    "application/sheet": ".csv",
+    "text/latex": ".tex",
+    "application/slides": ".pptx",
+    "application/python": ".py",
+  }
+  return map[type] || ".txt"
 }
 
 /**

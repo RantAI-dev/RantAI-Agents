@@ -1,4 +1,4 @@
-import { Settings, Radio, Info, ToggleLeft, Code, Wrench, Plug, KeyRound } from "lucide-react"
+import { Settings, Info, ToggleLeft, Code, Wrench, Plug, KeyRound, Brain, BarChart3, CreditCard } from "lucide-react"
 
 export const SETTINGS_NAV_ITEMS = [
   {
@@ -13,13 +13,7 @@ export const SETTINGS_NAV_ITEMS = [
     icon: ToggleLeft,
     description: "Enable/disable capabilities",
   },
-  {
-    title: "Channels",
-    href: "/dashboard/settings/channels",
-    icon: Radio,
-    description: "Channel configuration",
-  },
-  {
+{
     title: "Tools",
     href: "/dashboard/settings/tools",
     icon: Wrench,
@@ -32,10 +26,28 @@ export const SETTINGS_NAV_ITEMS = [
     description: "MCP clients & server",
   },
   {
+    title: "Memory",
+    href: "/dashboard/settings/memory",
+    icon: Brain,
+    description: "AI memory management",
+  },
+  {
+    title: "Statistics",
+    href: "/dashboard/settings/statistics",
+    icon: BarChart3,
+    description: "Analytics & usage metrics",
+  },
+  {
     title: "Credentials",
     href: "/dashboard/settings/credentials",
     icon: KeyRound,
     description: "API keys & auth for workflows",
+  },
+  {
+    title: "Billing",
+    href: "/dashboard/settings/billing",
+    icon: CreditCard,
+    description: "Plan, usage & payments",
   },
   {
     title: "Embed Widget",

@@ -4,7 +4,6 @@ import {
   MessageSquare,
   Headphones,
   BookOpen,
-  BarChart3,
   Settings,
 } from "lucide-react"
 import { usePathname } from "next/navigation"
@@ -54,13 +53,6 @@ const allMainItems: MainItem[] = [
     url: "/dashboard/knowledge",
     icon: BookOpen,
     description: "RAG documents",
-    feature: null,
-  },
-  {
-    title: "Statistics",
-    url: "/dashboard/statistics",
-    icon: BarChart3,
-    description: "Stats overview",
     feature: null,
   },
 ]

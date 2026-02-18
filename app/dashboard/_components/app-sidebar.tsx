@@ -10,7 +10,6 @@ import {
   MessageSquare,
   Headphones,
   BookOpen,
-  BarChart3,
   Settings,
   ChevronRight,
   ChevronDown,
@@ -22,6 +21,7 @@ import {
   Blocks,
   Wrench,
   GitBranch,
+  Building2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -42,6 +42,7 @@ import { formatDistanceToNow } from "date-fns"
 import type { Assistant, AssistantInput } from "@/lib/types/assistant"
 import { OrganizationSwitcher } from "./organization-switcher"
 import { SETTINGS_NAV_ITEMS } from "../settings/settings-nav-items"
+import { ORG_NAV_ITEMS } from "../organization/org-nav-items"
 
 interface KnowledgeBase {
   id: string
@@ -87,11 +88,11 @@ const sections = {
     icon: BookOpen,
     path: "/dashboard/knowledge",
   },
-  statistics: {
-    title: "Statistics",
-    subtitle: "Overview",
-    icon: BarChart3,
-    path: "/dashboard/statistics",
+  organization: {
+    title: "Organization",
+    subtitle: "Team & Settings",
+    icon: Building2,
+    path: "/dashboard/organization",
   },
   settings: {
     title: "Settings",
@@ -294,7 +295,7 @@ function ChatSectionContent({
           <p className="px-3 py-1 text-xs font-medium text-sidebar-muted uppercase tracking-wider">
             Recent Chats
           </p>
-          {sessions.slice(0, 10).map((session) => {
+          {sessions.map((session) => {
             const sessionAssistant = getAssistantById(session.assistantId)
             const isActive = activeSessionId === session.id
             return (
@@ -448,7 +449,7 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
     if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/knowledge")) return sections.knowledge
-    if (pathname.startsWith("/dashboard/statistics")) return sections.statistics
+    if (pathname.startsWith("/dashboard/organization")) return sections.organization
     if (pathname.startsWith("/dashboard/settings")) return sections.settings
     if (pathname.startsWith("/dashboard/account")) return sections.account
     if (pathname === "/dashboard") return sections.chat
@@ -494,23 +495,27 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
       </div>
 
       {/* Current Section Content */}
-      <div className="flex-1 overflow-auto p-2">
-        {/* Section Header */}
-        {currentSection === sections.chat ? (
-          <AssistantSelectorHeader
-            assistants={assistants}
-            selectedAssistant={selectedAssistant}
-            onSelectAssistant={handleSelectAssistant}
-            onCreateAssistant={handleCreateAssistant}
-            onEditAssistant={handleEditAssistant}
-          />
-        ) : (
-          <div className="px-2 py-1.5 mb-2">
-            <h3 className="text-sm font-medium text-sidebar-foreground">{currentSection.title}</h3>
-            <p className="text-xs text-sidebar-muted">{currentSection.subtitle}</p>
-          </div>
-        )}
+      <div className="flex-1 flex flex-col overflow-hidden p-2">
+        {/* Section Header (pinned) */}
+        <div className="shrink-0">
+          {currentSection === sections.chat ? (
+            <AssistantSelectorHeader
+              assistants={assistants}
+              selectedAssistant={selectedAssistant}
+              onSelectAssistant={handleSelectAssistant}
+              onCreateAssistant={handleCreateAssistant}
+              onEditAssistant={handleEditAssistant}
+            />
+          ) : (
+            <div className="px-2 py-1.5 mb-2">
+              <h3 className="text-sm font-medium text-sidebar-foreground">{currentSection.title}</h3>
+              <p className="text-xs text-sidebar-muted">{currentSection.subtitle}</p>
+            </div>
+          )}
+        </div>
 
+        {/* Scrollable content area */}
+        <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
         {/* Quick Actions based on section */}
         {currentSection === sections.chat && (
           <ChatSectionContent
@@ -674,11 +679,28 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
           </div>
         )}
 
-        {currentSection === sections.statistics && (
-          <div className="space-y-1">
-            <p className="px-3 py-2 text-xs text-sidebar-muted">
-              View metrics and analytics in the main content area.
-            </p>
+        {currentSection === sections.organization && (
+          <div className="space-y-1 overflow-y-auto">
+            {ORG_NAV_ITEMS.map((item) => {
+              const isActive = pathname === item.href
+              const Icon = item.icon
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn(
+                    "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-foreground"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="flex-1 truncate">{item.title}</span>
+                  {isActive && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
+                </Link>
+              )
+            })}
           </div>
         )}
 
@@ -706,6 +728,7 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
             })}
           </div>
         )}
+        </div>
       </div>
 
       {/* Footer */}

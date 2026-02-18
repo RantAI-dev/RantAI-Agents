@@ -1,180 +1,142 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
+import { DashboardPageHeader } from "../../_components/dashboard-page-header"
 import {
-  Shield,
-  Cpu,
-  Database,
   MessageSquare,
+  Shield,
   Brain,
-  ExternalLink
+  Radio,
+  Wrench,
+  Globe,
+  ExternalLink,
+  Sparkles,
 } from "lucide-react"
 import { brand } from "@/lib/branding"
 
+const features = [
+  {
+    icon: MessageSquare,
+    title: "AI Chat",
+    description: "Intelligent conversational agents with context-aware responses",
+    color: "text-chart-1",
+    bg: "bg-chart-1/10",
+  },
+  {
+    icon: Brain,
+    title: "Knowledge Base",
+    description: "RAG-powered document retrieval with vector search",
+    color: "text-violet-500",
+    bg: "bg-violet-500/10",
+  },
+  {
+    icon: Shield,
+    title: "Live Agent Handoff",
+    description: "Seamless escalation to human agents with queue management",
+    color: "text-cyan-500",
+    bg: "bg-cyan-500/10",
+  },
+  {
+    icon: Wrench,
+    title: "Agentic Tools",
+    description: "Built-in, custom, and MCP tool integrations for agents",
+    color: "text-amber-500",
+    bg: "bg-amber-500/10",
+  },
+  {
+    icon: Radio,
+    title: "Multi-Channel",
+    description: "Deploy across Portal, WhatsApp, Email, and more",
+    color: "text-chart-2",
+    bg: "bg-chart-2/10",
+  },
+  {
+    icon: Sparkles,
+    title: "Memory System",
+    description: "Working, semantic, and long-term memory for personalized interactions",
+    color: "text-chart-4",
+    bg: "bg-chart-4/10",
+  },
+]
+
 export default function AboutPage() {
-  const technologies = [
-    {
-      name: "Next.js 16",
-      description: "React framework with App Router",
-      icon: Cpu,
-      category: "Framework",
-    },
-    {
-      name: "React 19",
-      description: "UI library with Server Components",
-      icon: Cpu,
-      category: "Framework",
-    },
-    {
-      name: "PostgreSQL + pgvector",
-      description: "Database with vector similarity search",
-      icon: Database,
-      category: "Database",
-    },
-    {
-      name: "Prisma ORM",
-      description: "Type-safe database client",
-      icon: Database,
-      category: "Database",
-    },
-    {
-      name: "Socket.io",
-      description: "Real-time bidirectional communication",
-      icon: MessageSquare,
-      category: "Real-time",
-    },
-    {
-      name: "OpenRouter AI",
-      description: "LLM integration for AI chat",
-      icon: Brain,
-      category: "AI",
-    },
-    {
-      name: "NextAuth v5",
-      description: "Authentication and session management",
-      icon: Shield,
-      category: "Security",
-    },
-  ]
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold">About</h2>
-        <p className="text-sm text-muted-foreground">
-          System information and technology stack.
-        </p>
-      </div>
+    <div className="flex flex-col h-full">
+      <DashboardPageHeader title="About" subtitle="System information" />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Shield className="h-5 w-5" />
-            {brand.productName} Platform
-          </CardTitle>
-          <CardDescription>AI-powered agent platform for customer support</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            An AI-powered agent platform that provides intelligent customer support,
-            document management with RAG capabilities, and multi-channel communication.
-          </p>
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-2xl mx-auto px-6 py-10 space-y-10">
+          {/* Hero — Logo + Brand */}
+          <div className="flex flex-col items-center text-center space-y-5">
+            <div className="relative">
+              <div className="absolute inset-0 rounded-2xl bg-primary/5 blur-2xl scale-150" />
+              <img
+                src={brand.logoMain}
+                alt={brand.productName}
+                className="relative h-20 w-20 rounded-2xl shadow-lg ring-1 ring-border"
+              />
+            </div>
 
-          <div className="flex items-center gap-2">
-            <Badge variant="outline">Version 1.0.0</Badge>
-            <Badge variant="secondary">Production</Badge>
+            <div className="space-y-1.5">
+              <h2 className="text-2xl font-bold tracking-tight">
+                {brand.productName}
+              </h2>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Enterprise AI agent platform with RAG, multi-channel deployment, and human-in-the-loop workflows.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center rounded-full border px-3 py-1 font-mono text-xs text-muted-foreground">
+                v1.0.0
+              </span>
+              <a
+                href={brand.companyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
+              >
+                <Globe className="h-3 w-3" />
+                {brand.companyUrl.replace("https://", "")}
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Technology Stack</CardTitle>
-          <CardDescription>Core technologies powering the platform</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            {technologies.map((tech) => {
-              const Icon = tech.icon
-              return (
+          {/* Divider */}
+          <div className="h-px bg-border" />
+
+          {/* Features */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest text-center">
+              Capabilities
+            </h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {features.map((f) => (
                 <div
-                  key={tech.name}
-                  className="flex items-start gap-3 p-3 rounded-lg border bg-muted/30"
+                  key={f.title}
+                  className="group flex items-start gap-3 rounded-xl border p-3.5 transition-all duration-200 hover:shadow-md hover:border-foreground/10"
                 >
-                  <div className="p-2 rounded-md bg-background">
-                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  <div className={`rounded-lg p-2 ${f.bg} shrink-0`}>
+                    <f.icon className={`h-4 w-4 ${f.color}`} />
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{tech.name}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {tech.category}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {tech.description}
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{f.title}</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed mt-0.5">
+                      {f.description}
                     </p>
                   </div>
                 </div>
-              )
-            })}
+              ))}
+            </div>
           </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Features</CardTitle>
-          <CardDescription>Key capabilities of the platform</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-3 text-sm">
-            <li className="flex items-start gap-2">
-              <MessageSquare className="h-4 w-4 mt-0.5 text-chart-3" />
-              <div>
-                <span className="font-medium">AI Chat</span>
-                <p className="text-muted-foreground">
-                  Intelligent chatbot with RAG-powered knowledge retrieval
-                </p>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <Shield className="h-4 w-4 mt-0.5 text-chart-2" />
-              <div>
-                <span className="font-medium">Agent Support</span>
-                <p className="text-muted-foreground">
-                  Real-time customer handoff and queue management
-                </p>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <Brain className="h-4 w-4 mt-0.5 text-chart-4" />
-              <div>
-                <span className="font-medium">Knowledge Base</span>
-                <p className="text-muted-foreground">
-                  Document management with automatic chunking and embeddings
-                </p>
-              </div>
-            </li>
-            <li className="flex items-start gap-2">
-              <Database className="h-4 w-4 mt-0.5 text-chart-1" />
-              <div>
-                <span className="font-medium">Multi-Channel</span>
-                <p className="text-muted-foreground">
-                  Support for Portal, Salesforce, WhatsApp, and Email channels
-                </p>
-              </div>
-            </li>
-          </ul>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      <div className="text-center text-xs text-muted-foreground">
-        <p>Built with {brand.productName}</p>
+          {/* Footer */}
+          <div className="pt-2 text-center">
+            <p className="text-[11px] font-mono text-muted-foreground/50">
+              {brand.companyName} &middot; {new Date().getFullYear()}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -16,6 +16,7 @@ interface Document {
   categories: string[]
   subcategory: string | null
   fileType?: "markdown" | "pdf"
+  artifactType?: string | null
   chunkCount: number
   groups: DocumentGroup[]
   createdAt: string
@@ -96,16 +97,17 @@ export function DocumentList({
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 stagger-grid">
       {documents.map((doc) => (
-        <DocumentCard
-          key={doc.id}
-          document={doc}
-          onDelete={onDelete}
-          onView={onView}
-          onEdit={onEdit}
-          categoryMap={categoryMap}
-        />
+        <div key={doc.id} className="animate-fade-in-up">
+          <DocumentCard
+            document={doc}
+            onDelete={onDelete}
+            onView={onView}
+            onEdit={onEdit}
+            categoryMap={categoryMap}
+          />
+        </div>
       ))}
     </div>
   )

@@ -13,6 +13,16 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -22,7 +32,6 @@ import {
 } from "@/components/ui/dialog"
 import { DocumentList } from "./_components/document-list"
 import { UploadDialog } from "./_components/upload-dialog"
-import { DocumentViewer } from "./_components/document-viewer"
 import { DocumentEditDialog } from "./_components/document-edit-dialog"
 import { CategoryDialog, Category } from "./_components/category-dialog"
 import { KnowledgeHeader } from "./_components/knowledge-header"
@@ -56,6 +65,7 @@ interface Document {
   categories: string[]
   subcategory: string | null
   fileType?: "markdown" | "pdf"
+  artifactType?: string | null
   chunkCount: number
   groups: DocumentGroup[]
   createdAt: string
@@ -91,8 +101,6 @@ function KnowledgePageContent() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
-  const [viewingDocumentId, setViewingDocumentId] = useState<string | null>(null)
-  const [viewerOpen, setViewerOpen] = useState(false)
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [sortOption, setSortOption] = useState<SortOption>("newest")
@@ -109,6 +117,7 @@ function KnowledgePageContent() {
   const [kbDescription, setKbDescription] = useState("")
   const [kbColor, setKbColor] = useState(PRESET_COLORS[0])
   const [savingKB, setSavingKB] = useState(false)
+  const [deleteKBDialogOpen, setDeleteKBDialogOpen] = useState(false)
 
   // Get selected KB info
   const selectedKB = knowledgeBases.find((kb) => kb.id === selectedKBId)
@@ -194,8 +203,7 @@ function KnowledgePageContent() {
   }
 
   const handleView = (id: string) => {
-    setViewingDocumentId(id)
-    setViewerOpen(true)
+    router.push(`/dashboard/knowledge/${id}`)
   }
 
   const handleEdit = (id: string) => {
@@ -269,9 +277,6 @@ function KnowledgePageContent() {
 
   const handleDeleteKB = async () => {
     if (!selectedKB) return
-    if (!confirm(`Delete "${selectedKB.name}"? Documents will be unassigned but not deleted.`)) {
-      return
-    }
 
     try {
       const response = await fetch(`/api/dashboard/knowledge/groups/${selectedKB.id}`, {
@@ -284,6 +289,8 @@ function KnowledgePageContent() {
       }
     } catch (error) {
       console.error("Failed to delete knowledge base:", error)
+    } finally {
+      setDeleteKBDialogOpen(false)
     }
   }
 
@@ -346,7 +353,7 @@ function KnowledgePageContent() {
         documentCount={documents.length}
         onAddDocument={() => setUploadDialogOpen(true)}
         onEditKB={selectedKB ? handleEditKB : undefined}
-        onDeleteKB={selectedKB ? handleDeleteKB : undefined}
+        onDeleteKB={selectedKB ? () => setDeleteKBDialogOpen(true) : undefined}
       />
 
       <div className="flex flex-col flex-1 overflow-hidden">
@@ -408,13 +415,6 @@ function KnowledgePageContent() {
         defaultKBIds={selectedKBId ? [selectedKBId] : []}
         categories={categories}
         onCategoriesChange={fetchCategories}
-      />
-
-      {/* Document Viewer */}
-      <DocumentViewer
-        documentId={viewingDocumentId}
-        open={viewerOpen}
-        onOpenChange={setViewerOpen}
       />
 
       {/* Document Edit Dialog */}
@@ -503,6 +503,24 @@ function KnowledgePageContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete KB Confirmation */}
+      <AlertDialog open={deleteKBDialogOpen} onOpenChange={setDeleteKBDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete knowledge base</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete &ldquo;{selectedKB?.name}&rdquo;? Documents will be unassigned but not deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteKB} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

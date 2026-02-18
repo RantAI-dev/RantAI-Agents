@@ -21,6 +21,18 @@ export interface ChatMessage {
     content: string
     similarity?: number
   }>
+  metadata?: { artifactIds?: string[] } | null
+}
+
+export interface PersistedArtifactData {
+  id: string
+  title: string
+  content: string
+  artifactType: string
+  metadata?: {
+    artifactLanguage?: string
+    versions?: Array<{ content: string; title: string; timestamp: number }>
+  } | null
 }
 
 export interface ChatSession {
@@ -29,38 +41,30 @@ export interface ChatSession {
   assistantId: string
   createdAt: Date
   messages: ChatMessage[]
+  artifacts?: PersistedArtifactData[]
 }
 
 const STORAGE_KEY = "rantai-agents-chat-sessions"
 
-// Helper to safely parse dates from JSON (for localStorage cache)
-function parseSessions(json: string): ChatSession[] {
-  try {
-    const data = JSON.parse(json)
-    return data.map((s: any) => ({
-      ...s,
-      assistantId: s.assistantId || "",
-      createdAt: new Date(s.createdAt),
-      messages: s.messages.map((m: any) => ({
-        ...m,
-        createdAt: new Date(m.createdAt),
-        editHistory: m.editHistory?.map((h: any) => ({
-          ...h,
-          editedAt: new Date(h.editedAt),
-        })),
-      })),
-    }))
-  } catch {
-    return []
-  }
+// Parse session metadata from list API (no messages)
+function parseSessionMetadata(data: any[]): ChatSession[] {
+  return data.map((s) => ({
+    id: s.id,
+    title: s.title,
+    assistantId: s.assistantId || "",
+    createdAt: new Date(s.createdAt),
+    messages: [], // Messages loaded on demand
+  }))
 }
 
-// Helper to parse API response
-function parseApiSessions(data: any[]): ChatSession[] {
-  return data.map((s) => ({
-    ...s,
-    createdAt: new Date(s.createdAt),
-    messages: s.messages.map((m: any) => ({
+// Parse full session from detail API (with messages)
+function parseFullSession(data: any): ChatSession {
+  return {
+    id: data.id,
+    title: data.title,
+    assistantId: data.assistantId || "",
+    createdAt: new Date(data.createdAt),
+    messages: (data.messages || []).map((m: any) => ({
       ...m,
       createdAt: new Date(m.createdAt),
       editHistory: m.editHistory?.map((h: any) => ({
@@ -68,7 +72,8 @@ function parseApiSessions(data: any[]): ChatSession[] {
         editedAt: new Date(h.editedAt),
       })),
     })),
-  }))
+    artifacts: data.artifacts || undefined,
+  }
 }
 
 interface ChatSessionsContextType {
@@ -92,47 +97,32 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const loadedSessionsRef = useRef<Set<string>>(new Set())
 
-  // Load sessions from localStorage first (fast), then fetch from API
+  // Load session list (metadata only) from API
   useEffect(() => {
     const loadSessions = async () => {
-      // Load from localStorage immediately for fast initial render
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = parseSessions(stored)
-        setSessions(parsed)
-        const lastActive = localStorage.getItem(`${STORAGE_KEY}-active`)
-        if (lastActive && parsed.some((s) => s.id === lastActive)) {
-          setActiveSessionId(lastActive)
-        }
+      // Restore active session ID from localStorage
+      const lastActive = localStorage.getItem(`${STORAGE_KEY}-active`)
+      if (lastActive) {
+        setActiveSessionId(lastActive)
       }
       setIsLoaded(true)
 
-      // Then fetch from API to get latest data
       try {
         const response = await fetch("/api/dashboard/chat/sessions")
         if (response.ok) {
           const data = await response.json()
-          const apiSessions = parseApiSessions(data)
+          const apiSessions = parseSessionMetadata(data)
           setSessions(apiSessions)
-          // Update localStorage with API data
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(apiSessions))
         }
       } catch (error) {
         console.error("[ChatSessions] Failed to fetch from API:", error)
-        // Keep using localStorage data as fallback
       }
     }
 
     loadSessions()
   }, [])
-
-  // Save to localStorage whenever sessions change (for offline cache)
-  useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))
-    }
-  }, [sessions, isLoaded])
 
   // Save active session ID
   useEffect(() => {
@@ -141,11 +131,43 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     }
   }, [activeSessionId, isLoaded])
 
+  // Lazy-load messages when active session changes
+  useEffect(() => {
+    if (!activeSessionId) return
+
+    const session = sessions.find((s) => s.id === activeSessionId)
+    if (!session) return
+
+    // Skip if already loaded (has messages or was loaded before)
+    if (session.messages.length > 0 || loadedSessionsRef.current.has(activeSessionId)) return
+
+    const loadMessages = async () => {
+      try {
+        const response = await fetch(`/api/dashboard/chat/sessions/${activeSessionId}`)
+        if (response.ok) {
+          const data = await response.json()
+          const fullSession = parseFullSession(data)
+          loadedSessionsRef.current.add(activeSessionId)
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === activeSessionId
+                ? { ...s, messages: fullSession.messages, artifacts: fullSession.artifacts }
+                : s
+            )
+          )
+        }
+      } catch (error) {
+        console.error("[ChatSessions] Failed to load session messages:", error)
+      }
+    }
+
+    loadMessages()
+  }, [activeSessionId, sessions])
+
   const activeSession = sessions.find((s) => s.id === activeSessionId)
 
   // Create a new session
   const createSession = useCallback(async (assistantId: string): Promise<ChatSession> => {
-    // Create optimistically with a temporary ID
     const tempId = crypto.randomUUID()
     const newSession: ChatSession = {
       id: tempId,
@@ -155,11 +177,10 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       messages: [],
     }
 
-    // Update UI immediately
     setSessions((prev) => [newSession, ...prev])
     setActiveSessionId(tempId)
+    loadedSessionsRef.current.add(tempId) // Mark as loaded (empty is valid)
 
-    // Create in database
     try {
       const response = await fetch("/api/dashboard/chat/sessions", {
         method: "POST",
@@ -177,7 +198,8 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
           messages: [],
         }
 
-        // Replace temp session with real one
+        loadedSessionsRef.current.delete(tempId)
+        loadedSessionsRef.current.add(dbSession.id)
         setSessions((prev) =>
           prev.map((s) => (s.id === tempId ? dbSession : s))
         )
@@ -197,7 +219,6 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       prev.map((s) => (s.id === sessionId ? { ...s, ...updates } : s))
     )
 
-    // Sync title changes to database
     if (updates.title) {
       fetch(`/api/dashboard/chat/sessions/${sessionId}`, {
         method: "PATCH",
@@ -211,12 +232,10 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
 
   // Sync messages to database (debounced)
   const syncMessages = useCallback((sessionId: string, messages: ChatMessage[]) => {
-    // Update local state immediately
     setSessions((prev) =>
       prev.map((s) => (s.id === sessionId ? { ...s, messages } : s))
     )
 
-    // Debounce database sync
     if (syncTimeoutRef.current) {
       clearTimeout(syncTimeoutRef.current)
     }
@@ -224,7 +243,6 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     setIsSyncing(true)
     syncTimeoutRef.current = setTimeout(async () => {
       try {
-        // Get current session messages from database
         const response = await fetch(`/api/dashboard/chat/sessions/${sessionId}`)
         if (!response.ok) {
           setIsSyncing(false)
@@ -234,7 +252,6 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
         const data = await response.json()
         const existingMessageIds = new Set(data.messages.map((m: any) => m.id))
 
-        // Find new messages to add
         const newMessages = messages.filter((m) => !existingMessageIds.has(m.id))
 
         if (newMessages.length > 0) {
@@ -252,12 +269,12 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
                   editedAt: h.editedAt.toISOString(),
                 })),
                 sources: m.sources,
+                metadata: m.metadata,
               })),
             }),
           })
         }
 
-        // Update existing messages that have changes (like editHistory)
         const existingMessages = messages.filter((m) => existingMessageIds.has(m.id))
         for (const msg of existingMessages) {
           const dbMsg = data.messages.find((dm: any) => dm.id === msg.id)
@@ -284,30 +301,37 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
       } finally {
         setIsSyncing(false)
       }
-    }, 1000) // Debounce by 1 second
+    }, 1000)
   }, [])
 
-  // Delete a session
+  // Delete a session — uses functional state to avoid stale closures (#23)
   const deleteSession = useCallback((sessionId: string) => {
     setSessions((prev) => {
       const filtered = prev.filter((s) => s.id !== sessionId)
+      // Derive next active session from the filtered list
+      setActiveSessionId((current) =>
+        current === sessionId ? (filtered[0]?.id ?? null) : current
+      )
       return filtered
     })
-    setActiveSessionId((current) => {
-      if (current === sessionId) {
-        const remaining = sessions.filter((s) => s.id !== sessionId)
-        return remaining[0]?.id || null
-      }
-      return current
-    })
 
-    // Delete from database
+    loadedSessionsRef.current.delete(sessionId)
+
     fetch(`/api/dashboard/chat/sessions/${sessionId}`, {
       method: "DELETE",
     }).catch((error) => {
       console.error("[ChatSessions] Failed to delete session:", error)
     })
-  }, [sessions])
+  }, [])
+
+  // Cleanup debounce timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current)
+      }
+    }
+  }, [])
 
   return (
     <ChatSessionsContext.Provider

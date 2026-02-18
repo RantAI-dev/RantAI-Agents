@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   ArrowLeft,
   Send,
+  Square,
   Bot,
   User,
   Copy,
@@ -36,11 +37,29 @@ import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
 import { ConversationExport } from "./conversation-export"
 import { CommandPalette } from "./command-palette"
-import { FileUploadButton } from "./file-upload-button"
 import { FilePreview } from "./file-preview"
+import { ChatInputToolbar, type AssistantToolInfo, type CanvasMode } from "./chat-input-toolbar"
 import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
 import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } from "./edit-version-indicator"
 import { ToolCallIndicator } from "./tool-call-indicator"
+import { useArtifacts } from "./artifacts/use-artifacts"
+import { ArtifactIndicator } from "./artifacts/artifact-indicator"
+import { ArtifactPanel } from "./artifacts/artifact-panel"
+import type { Artifact, ArtifactType } from "./artifacts/types"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "@/components/ui/resizable"
 
 // Delimiter for sources metadata in streaming response
 const SOURCES_DELIMITER = "\n\n---SOURCES---\n"
@@ -161,65 +180,65 @@ function MessageActions({
   return (
     <div
       className={cn(
-        "flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+        "flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
         isUser ? "justify-end" : "justify-start"
       )}
     >
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+        className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-lg"
         onClick={onCopy}
         title="Copy message"
       >
         {copied ? (
-          <Check className="h-3.5 w-3.5 text-chart-2" />
+          <Check className="h-3 w-3 text-chart-2" />
         ) : (
-          <Copy className="h-3.5 w-3.5" />
+          <Copy className="h-3 w-3" />
         )}
       </Button>
       {onReply && (
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-lg"
           onClick={onReply}
           title="Reply"
         >
-          <Reply className="h-3.5 w-3.5" />
+          <Reply className="h-3 w-3" />
         </Button>
       )}
       {isUser && onEdit && (
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-lg"
           onClick={onEdit}
           title="Edit message"
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil className="h-3 w-3" />
         </Button>
       )}
       {!isUser && onRegenerate && (
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-lg"
           onClick={onRegenerate}
           title="Regenerate response"
         >
-          <RefreshCw className="h-3.5 w-3.5" />
+          <RefreshCw className="h-3 w-3" />
         </Button>
       )}
       {onDelete && (
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+          className="h-6 w-6 text-muted-foreground hover:text-destructive rounded-lg"
           onClick={onDelete}
           title="Delete message"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-3 w-3" />
         </Button>
       )}
     </div>
@@ -233,6 +252,523 @@ const messageVariants = {
   exit: { opacity: 0, y: -10 },
 }
 
+// Extracted messages area to share between artifact and non-artifact layouts
+function MessagesArea({
+  chat,
+  allMessages,
+  isLoading,
+  isStreaming,
+  assistant,
+  messageSources,
+  editingMessageId,
+  editContent,
+  viewingVersions,
+  copiedId,
+  error,
+  showScrollButton,
+  atBottom,
+  handoffState,
+  handoffTriggeredMsgId,
+  virtuosoRef,
+  setAtBottom,
+  setEditContent,
+  setViewingVersions,
+  setError,
+  handleSuggestionSelect,
+  handleSaveEdit,
+  handleCancelEdit,
+  handleCopy,
+  handleEditMessage,
+  handleRegenerate,
+  handleDeleteMessage,
+  handleReply,
+  scrollToBottom,
+  scrollToMessage,
+  requestHandoff,
+  openArtifact,
+  artifacts,
+}: {
+  chat: ReturnType<typeof useChat>
+  allMessages: ReturnType<typeof useChat>["messages"]
+  isLoading: boolean
+  isStreaming: boolean
+  assistant: Assistant
+  messageSources: Record<string, Source[]>
+  editingMessageId: string | null
+  editContent: string
+  viewingVersions: Record<string, number>
+  copiedId: string | null
+  error: { message: string; retry: () => void } | null
+  showScrollButton: boolean
+  atBottom: boolean
+  handoffState: HandoffState
+  handoffTriggeredMsgId: string | null
+  virtuosoRef: React.RefObject<VirtuosoHandle | null>
+  setAtBottom: (v: boolean) => void
+  setEditContent: (v: string) => void
+  setViewingVersions: React.Dispatch<React.SetStateAction<Record<string, number>>>
+  setError: (v: { message: string; retry: () => void } | null) => void
+  handleSuggestionSelect: (s: string) => void
+  handleSaveEdit: () => void
+  handleCancelEdit: () => void
+  handleCopy: (id: string, content: string) => void
+  handleEditMessage: (id: string, content: string) => void
+  handleRegenerate: (id: string) => void
+  handleDeleteMessage: (id: string) => void
+  handleReply: (id: string, content: string) => void
+  scrollToBottom: () => void
+  scrollToMessage: (id: string) => void
+  requestHandoff: () => void
+  openArtifact: (id: string) => void
+  artifacts: Map<string, Artifact>
+}) {
+  return (
+    <div className="h-full w-full relative">
+      {chat.messages.length === 0 && !isLoading ? (
+        <div className="flex items-center justify-center h-full w-full">
+          <div className="text-center py-12 max-w-lg mx-auto">
+            <motion.div
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.4, type: "spring", stiffness: 200, damping: 20 }}
+              className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-violet-500/10 to-purple-600/10 border border-violet-500/20 mb-5"
+            >
+              <span className="text-3xl">{assistant.emoji || "🤖"}</span>
+            </motion.div>
+            <motion.h3
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.3, delay: 0.1 }}
+              className="text-xl font-semibold mb-2 tracking-tight"
+            >
+              {assistant.name}
+            </motion.h3>
+            <motion.p
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.3, delay: 0.2 }}
+              className="text-sm text-muted-foreground max-w-md mx-auto text-center leading-relaxed"
+            >
+              {assistant.description}
+            </motion.p>
+            <QuickSuggestions
+              assistant={assistant}
+              onSelect={handleSuggestionSelect}
+            />
+          </div>
+        </div>
+      ) : (
+        <Virtuoso
+          ref={virtuosoRef}
+          data={allMessages}
+          className="h-full"
+          atBottomStateChange={setAtBottom}
+          atBottomThreshold={100}
+          overscan={200}
+          itemContent={(index, message) => {
+            const rawContent = getMessageContent(message)
+            const isUser = message.role === "user"
+            const isLastMessage = index === allMessages.length - 1
+            const isLoadingMessage =
+              isLoading &&
+              isLastMessage &&
+              message.role === "assistant" &&
+              !rawContent
+            const isStreamingMessage =
+              isStreaming && isLastMessage && message.role === "assistant"
+            const sources = messageSources[message.id] || []
+            const isEditing = editingMessageId === message.id
+
+            const msgEditHistory = (message as unknown as ChatMessage).editHistory
+            const hasEditHistory = msgEditHistory && msgEditHistory.length > 0
+            const totalVersions = hasEditHistory ? msgEditHistory.length + 1 : 1
+            const currentViewingVersion = viewingVersions[message.id] || totalVersions
+            const content = hasEditHistory
+              ? getVersionContent(rawContent, msgEditHistory, currentViewingVersion)
+              : rawContent
+
+            const historicalAssistantResponse =
+              isUser && hasEditHistory
+                ? getVersionAssistantResponse(msgEditHistory, currentViewingVersion, totalVersions)
+                : undefined
+            const isViewingHistoricalVersion =
+              hasEditHistory && currentViewingVersion < totalVersions
+
+            return (
+              <motion.div
+                variants={messageVariants}
+                initial="initial"
+                animate="animate"
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="max-w-3xl mx-auto px-4 py-4"
+              >
+                <div
+                  className={cn(
+                    "group flex gap-3",
+                    isUser ? "flex-row-reverse" : ""
+                  )}
+                >
+                  {/* Avatar */}
+                  <div
+                    className={cn(
+                      "flex shrink-0 items-center justify-center rounded-full",
+                      isUser
+                        ? "h-8 w-8 bg-neutral-300 text-neutral-700 dark:bg-neutral-600 dark:text-white shadow-sm"
+                        : "h-8 w-8 bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-sm"
+                    )}
+                  >
+                    {isUser ? (
+                      <User className="h-3.5 w-3.5" />
+                    ) : assistant.emoji ? (
+                      <span className="text-base">{assistant.emoji}</span>
+                    ) : (
+                      <Bot className="h-3.5 w-3.5" />
+                    )}
+                  </div>
+
+                  {/* Message content */}
+                  <div
+                    className={cn("flex-1 min-w-0", isUser ? "ml-12" : "mr-8")}
+                  >
+                    {/* Assistant name label */}
+                    {!isUser && (
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold text-foreground">{assistant.name}</span>
+                      </div>
+                    )}
+                    <div
+                      className={cn(
+                        "text-sm",
+                        isUser
+                          ? "rounded-2xl py-2.5 px-4 bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100"
+                          : ""
+                      )}
+                    >
+                      {/* Reply indicator */}
+                      {(message as unknown as ChatMessage).replyTo && (() => {
+                        const replyToId = (message as unknown as ChatMessage).replyTo
+                        const parentMsg = allMessages.find(
+                          (m) => m.id === replyToId
+                        )
+                        if (!parentMsg) return null
+                        const parentContent = getMessageContent(parentMsg)
+                        return (
+                          <MessageReplyIndicator
+                            parentContent={parentContent}
+                            onClick={() => scrollToMessage(parentMsg.id)}
+                            isUserMessage={isUser}
+                          />
+                        )
+                      })()}
+
+                      {isLoadingMessage ? (
+                        <TypingIndicator />
+                      ) : isEditing ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            className="min-h-[60px] bg-background"
+                            autoFocus
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={handleSaveEdit}>
+                              Save & Resend
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={handleCancelEdit}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Tool call indicators (live during streaming) */}
+                          {!isUser && (() => {
+                            const toolParts = getToolCallParts(message as unknown as { parts?: Array<Record<string, unknown>> })
+                            if (toolParts.length > 0) {
+                              return (
+                                <div className="space-y-0.5 mb-1">
+                                  {toolParts.map((tp) => {
+                                    const isArtifactTool = (tp.toolName === "create_artifact" || tp.toolName === "update_artifact") && tp.state === "done" && tp.output
+                                    if (isArtifactTool) {
+                                      const out = tp.output as Record<string, unknown>
+                                      const artifactId = out.id as string
+                                      const existing = artifactId ? artifacts.get(artifactId) : undefined
+                                      return (
+                                        <ArtifactIndicator
+                                          key={tp.toolCallId}
+                                          title={
+                                            tp.toolName === "update_artifact"
+                                              ? `Updated: ${(out.title as string) || existing?.title || "Artifact"}`
+                                              : (out.title as string) || "Artifact"
+                                          }
+                                          type={existing?.type || (out.type as ArtifactType) || "text/html"}
+                                          onClick={() => {
+                                            if (artifactId) openArtifact(artifactId)
+                                          }}
+                                        />
+                                      )
+                                    }
+                                    return (
+                                      <ToolCallIndicator
+                                        key={tp.toolCallId}
+                                        toolName={tp.toolName}
+                                        state={tp.state}
+                                        args={tp.input}
+                                        result={tp.output}
+                                        errorText={tp.errorText}
+                                      />
+                                    )
+                                  })}
+                                </div>
+                              )
+                            }
+                            // Fallback: render tool calls + artifact indicators from persisted metadata (after session switch/refresh)
+                            const msgMeta = (message as unknown as { metadata?: { artifactIds?: string[]; toolCalls?: ToolCallPart[] } }).metadata
+                            const persistedTCs = msgMeta?.toolCalls
+                            const persistedIds = msgMeta?.artifactIds
+                            if ((persistedTCs && persistedTCs.length > 0) || (persistedIds && persistedIds.length > 0)) {
+                              return (
+                                <div className="space-y-0.5 mb-1">
+                                  {persistedTCs?.map((tc) => {
+                                    const isArtifactTool = (tc.toolName === "create_artifact" || tc.toolName === "update_artifact") && tc.state === "done" && tc.output
+                                    if (isArtifactTool) {
+                                      const out = tc.output as Record<string, unknown>
+                                      const artifactId = out.id as string
+                                      const existing = artifactId ? artifacts.get(artifactId) : undefined
+                                      return (
+                                        <ArtifactIndicator
+                                          key={tc.toolCallId}
+                                          title={
+                                            tc.toolName === "update_artifact"
+                                              ? `Updated: ${(out.title as string) || existing?.title || "Artifact"}`
+                                              : (out.title as string) || "Artifact"
+                                          }
+                                          type={existing?.type || (out.type as ArtifactType) || "text/html"}
+                                          onClick={() => {
+                                            if (artifactId) openArtifact(artifactId)
+                                          }}
+                                        />
+                                      )
+                                    }
+                                    return (
+                                      <ToolCallIndicator
+                                        key={tc.toolCallId}
+                                        toolName={tc.toolName}
+                                        state={tc.state}
+                                        args={tc.input}
+                                        result={tc.output}
+                                        errorText={tc.errorText}
+                                      />
+                                    )
+                                  })}
+                                  {/* Artifact IDs without matching tool call (legacy/fallback) */}
+                                  {persistedIds?.filter((aid) => !persistedTCs?.some((tc) => {
+                                    const out = tc.output as Record<string, unknown> | undefined
+                                    return out?.id === aid
+                                  })).map((aid) => {
+                                    const art = artifacts.get(aid)
+                                    if (!art) return null
+                                    return (
+                                      <ArtifactIndicator
+                                        key={aid}
+                                        title={art.title}
+                                        type={art.type}
+                                        onClick={() => openArtifact(aid)}
+                                      />
+                                    )
+                                  })}
+                                </div>
+                              )
+                            }
+                            return null
+                          })()}
+                          <MarkdownContent content={content} isStreaming={isStreamingMessage} />
+                        </>
+                      )}
+
+                      {/* Sources */}
+                      {!isUser &&
+                        !isLoadingMessage &&
+                        !isEditing &&
+                        sources.length > 0 && (
+                          <MessageSources sources={sources} />
+                        )}
+
+                      {/* Handoff button */}
+                      {!isUser &&
+                        handoffTriggeredMsgId === message.id &&
+                        handoffState === "idle" && (
+                          <div className="mt-3 flex justify-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-2 rounded-full border-primary/30 hover:bg-primary/10"
+                              onClick={requestHandoff}
+                            >
+                              <Headphones className="h-4 w-4" />
+                              Connect with Live Agent
+                            </Button>
+                          </div>
+                        )}
+
+                      {!isUser &&
+                        handoffTriggeredMsgId === message.id &&
+                        handoffState === "requesting" && (
+                          <div className="mt-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Connecting...
+                          </div>
+                        )}
+
+                      {!isUser &&
+                        handoffTriggeredMsgId === message.id &&
+                        handoffState === "waiting" && (
+                          <div className="mt-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                            <span className="relative flex h-3 w-3">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-3 w-3 bg-primary/80" />
+                            </span>
+                            Waiting for an agent...
+                          </div>
+                        )}
+                    </div>
+
+                    {/* Historical AI response when viewing previous version */}
+                    {isUser && isViewingHistoricalVersion && historicalAssistantResponse && (
+                      <div className="mt-3 flex gap-3">
+                        <div
+                          className={cn(
+                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full shadow-sm",
+                            "bg-gradient-to-br from-violet-500 to-purple-600 text-white"
+                          )}
+                        >
+                          {assistant.emoji ? (
+                            <span className="text-sm">{assistant.emoji}</span>
+                          ) : (
+                            <Bot className="h-3.5 w-3.5" />
+                          )}
+                        </div>
+                        <div className="flex-1 rounded-2xl py-2.5 px-4 text-sm bg-muted/70 border border-muted-foreground/10">
+                          <div className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
+                            <span>Historical response</span>
+                            <span className="opacity-60">&middot;</span>
+                            <span>Version {currentViewingVersion}/{totalVersions}</span>
+                          </div>
+                          <div className="opacity-90">
+                            <MarkdownContent content={historicalAssistantResponse} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Message footer */}
+                    {!isLoadingMessage && !isEditing && (
+                      <div
+                        className={cn(
+                          "flex items-center gap-2 mt-2",
+                          isUser ? "flex-row-reverse" : ""
+                        )}
+                      >
+                        <span className="text-[10px] text-muted-foreground">
+                          {formatDistanceToNow(message.createdAt ? new Date(message.createdAt) : new Date(), { addSuffix: true })}
+                        </span>
+                        {hasEditHistory ? (
+                          <EditVersionIndicator
+                            currentContent={rawContent}
+                            editHistory={msgEditHistory!}
+                            viewingVersion={currentViewingVersion}
+                            onVersionChange={(v) =>
+                              setViewingVersions((prev) => ({
+                                ...prev,
+                                [message.id]: v,
+                              }))
+                            }
+                            onCopy={(c) => handleCopy(message.id, c)}
+                            onEdit={
+                              isUser
+                                ? () => handleEditMessage(message.id, rawContent)
+                                : undefined
+                            }
+                            copied={copiedId === message.id}
+                            isUserMessage={isUser}
+                          />
+                        ) : (
+                          <MessageActions
+                            onCopy={() => handleCopy(message.id, content)}
+                            onEdit={
+                              isUser
+                                ? () => handleEditMessage(message.id, content)
+                                : undefined
+                            }
+                            onRegenerate={
+                              !isUser
+                                ? () => handleRegenerate(message.id)
+                                : undefined
+                            }
+                            onDelete={() => handleDeleteMessage(message.id)}
+                            onReply={() => handleReply(message.id, content)}
+                            copied={copiedId === message.id}
+                            isUser={isUser}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )
+          }}
+        />
+      )}
+
+      {/* Error display */}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute bottom-4 left-4 right-4 max-w-3xl mx-auto"
+          >
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+              <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
+              <p className="text-sm text-destructive flex-1">{error.message}</p>
+              <Button size="sm" variant="outline" onClick={error.retry}>
+                <RefreshCw className="h-4 w-4 mr-1" /> Retry
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7"
+                onClick={() => setError(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Scroll to bottom button */}
+      {showScrollButton && !atBottom && (
+        <Button
+          variant="secondary"
+          size="icon"
+          className="absolute bottom-4 right-4 rounded-full shadow-lg"
+          onClick={scrollToBottom}
+        >
+          <ArrowDown className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  )
+}
+
 export function ChatWorkspace({
   session,
   assistant,
@@ -242,6 +778,7 @@ export function ChatWorkspace({
 }: ChatWorkspaceProps) {
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const { toast } = useToast()
 
   // State
@@ -284,6 +821,34 @@ export function ChatWorkspace({
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastPollTimestamp = useRef<string | null>(null)
 
+  // Toolbar: per-message overrides for web search, knowledge base & tools
+  const [webSearchOverride, setWebSearchOverride] = useState<boolean | null>(null)
+  const [selectedKBGroupIds, setSelectedKBGroupIds] = useState<string[] | null>(null)
+  const [toolsOverride, setToolsOverride] = useState<boolean | null>(null)
+  const [assistantTools, setAssistantTools] = useState<AssistantToolInfo[]>([])
+
+  // Knowledge base groups for picker
+  const [kbGroups, setKBGroups] = useState<{ id: string; name: string; color: string | null; documentCount: number }[]>([])
+
+  // Canvas mode — forces AI to create/update artifacts
+  const [canvasMode, setCanvasMode] = useState<CanvasMode>(false)
+
+  // GitHub import dialog state
+  const [githubDialogOpen, setGithubDialogOpen] = useState(false)
+  const [githubUrl, setGithubUrl] = useState("")
+
+  // Artifacts system
+  const {
+    artifacts,
+    activeArtifact,
+    activeArtifactId,
+    addOrUpdateArtifact,
+    removeArtifact,
+    loadFromPersisted,
+    openArtifact,
+    closeArtifact,
+  } = useArtifacts()
+
   const chat = useChat({
     id: session?.id,
     onFinish: (message) => {
@@ -321,10 +886,34 @@ export function ChatWorkspace({
           id: m.id,
           role: m.role,
           content: m.content,
+          metadata: m.metadata || undefined,
         })) as any
       )
     } else {
       chat.setMessages([] as any)
+    }
+    // Load persisted artifacts — always fetch fresh from API because
+    // session.artifacts in context can be stale (not updated after tool creates new artifacts)
+    if (session?.id) {
+      // Show context artifacts instantly (if any) while fetching fresh data
+      if (session.artifacts && session.artifacts.length > 0) {
+        loadFromPersisted(session.artifacts)
+      }
+      fetch(`/api/dashboard/chat/sessions/${session.id}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.artifacts?.length > 0) {
+            loadFromPersisted(data.artifacts)
+          } else if (!session.artifacts?.length) {
+            loadFromPersisted([])
+          }
+        })
+        .catch(() => {
+          // Fallback: keep whatever was loaded from context
+          if (!session.artifacts?.length) loadFromPersisted([])
+        })
+    } else {
+      loadFromPersisted([])
     }
     // Clear edit, reply, and handoff state on session change
     setEditingMessageId(null)
@@ -339,6 +928,57 @@ export function ChatWorkspace({
       pollIntervalRef.current = null
     }
   }, [session?.id])
+
+  // Fetch assistant tools for toolbar display
+  useEffect(() => {
+    if (!assistant?.id || assistant.id === "general") {
+      setAssistantTools([])
+      setWebSearchOverride(null)
+      setSelectedKBGroupIds(null)
+      setToolsOverride(null)
+      return
+    }
+    fetch(`/api/assistants/${assistant.id}/tools`)
+      .then((res) => res.json())
+      .then((tools) => {
+        if (Array.isArray(tools)) {
+          setAssistantTools(
+            tools
+              .filter((t: { enabledForAssistant?: boolean }) => t.enabledForAssistant !== false)
+              .map((t: { name: string; displayName: string; description: string; category: string }) => ({
+                name: t.name,
+                displayName: t.displayName,
+                description: t.description,
+                category: t.category,
+              }))
+          )
+        } else {
+          setAssistantTools([])
+        }
+      })
+      .catch(() => setAssistantTools([]))
+    // Reset overrides when assistant changes
+    setWebSearchOverride(null)
+    setSelectedKBGroupIds(null)
+    setToolsOverride(null)
+  }, [assistant?.id])
+
+  // Fetch knowledge base groups for picker
+  useEffect(() => {
+    fetch("/api/dashboard/knowledge/groups")
+      .then((res) => res.json())
+      .then((data) => setKBGroups(data.groups || []))
+      .catch(() => setKBGroups([]))
+  }, [])
+
+  // Derived toolbar values
+  const webSearchAvailable = assistantTools.some((t) => t.name === "web_search")
+  const effectiveWebSearch = webSearchOverride ?? webSearchAvailable
+  const effectiveKBGroupIds = selectedKBGroupIds ?? (assistant.knowledgeBaseGroupIds || [])
+  const effectiveKnowledgeBase = selectedKBGroupIds !== null
+    ? selectedKBGroupIds.length > 0
+    : (assistant.useKnowledgeBase ?? false)
+  const effectiveToolsEnabled = toolsOverride ?? (assistantTools.length > 0)
 
   // Track if we should auto-scroll (only when user sends a message or during streaming)
   const shouldAutoScroll = useRef(false)
@@ -480,15 +1120,24 @@ export function ChatWorkspace({
           content: getMessageContent(m) || (m as { content?: string }).content || "",
         }))
 
+        const abortController = new AbortController()
+        abortControllerRef.current = abortController
+
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: abortController.signal,
           body: JSON.stringify({
             messages: normalizedMessages,
             assistantId: assistant.id,
+            sessionId: session?.id,
             systemPrompt: assistant.systemPrompt,
-            useKnowledgeBase: assistant.useKnowledgeBase,
-            knowledgeBaseGroupIds: assistant.knowledgeBaseGroupIds,
+            useKnowledgeBase: effectiveKnowledgeBase,
+            knowledgeBaseGroupIds: effectiveKBGroupIds,
+            enableWebSearch: effectiveWebSearch,
+            enableTools: effectiveToolsEnabled,
+            canvasMode: canvasMode || undefined,
+            targetArtifactId: activeArtifactId || undefined,
           }),
         })
 
@@ -565,6 +1214,26 @@ export function ChatWorkspace({
                       const tc = toolCalls.get(part.toolCallId)!
                       tc.args = part.input as Record<string, unknown>
                       tc.state = "call"
+
+                      // Progressive artifact rendering — show content as it streams
+                      if (
+                        (tc.toolName === "create_artifact" || tc.toolName === "update_artifact") &&
+                        tc.args
+                      ) {
+                        const args = tc.args
+                        if (args.type && args.content) {
+                          const streamingId = tc.toolName === "update_artifact" && args.id
+                            ? args.id as string
+                            : `streaming-${part.toolCallId}`
+                          addOrUpdateArtifact({
+                            id: streamingId,
+                            title: (args.title as string) || "Generating...",
+                            type: (args.type as ArtifactType) || "text/html",
+                            content: args.content as string,
+                            language: (args.language as string) || undefined,
+                          })
+                        }
+                      }
                     }
                     break
                   case "tool-output-available": {
@@ -572,6 +1241,40 @@ export function ChatWorkspace({
                     if (tc) {
                       tc.output = part.output
                       tc.state = "result"
+
+                      // Handle create_artifact — replace streaming placeholder with final
+                      if (tc.toolName === "create_artifact" && part.output && typeof part.output === "object") {
+                        const out = part.output as Record<string, unknown>
+                        if (out.id && out.title && out.type && out.content) {
+                          // Remove streaming placeholder, add final artifact
+                          removeArtifact(`streaming-${part.toolCallId}`)
+                          addOrUpdateArtifact({
+                            id: out.id as string,
+                            title: out.title as string,
+                            type: out.type as ArtifactType,
+                            content: out.content as string,
+                            language: (out.language as string) || undefined,
+                          })
+                        }
+                      }
+
+                      // Handle update_artifact — update existing artifact (versioning handled by hook)
+                      if (tc.toolName === "update_artifact" && part.output && typeof part.output === "object") {
+                        const out = part.output as Record<string, unknown>
+                        if (out.id && out.content) {
+                          // Find existing artifact to get its type
+                          const existing = artifacts.get(out.id as string)
+                          if (existing) {
+                            addOrUpdateArtifact({
+                              id: out.id as string,
+                              title: (out.title as string) || existing.title,
+                              type: existing.type,
+                              content: out.content as string,
+                              language: existing.language,
+                            })
+                          }
+                        }
+                      }
                     }
                     break
                   }
@@ -703,6 +1406,24 @@ export function ChatWorkspace({
           }
         }
 
+        // Collect artifact IDs from completed tool calls
+        const artifactIds = Array.from(toolCalls.values())
+          .filter(tc => (tc.toolName === "create_artifact" || tc.toolName === "update_artifact") && tc.state === "result" && tc.output)
+          .map(tc => (tc.output as Record<string, unknown>).id as string)
+          .filter(Boolean)
+
+        // Collect all tool call data for persistence (so they render after session switch)
+        const persistedToolCalls = Array.from(toolCalls.values())
+          .filter(tc => tc.state === "result" || tc.state === "error")
+          .map(tc => ({
+            toolCallId: tc.toolCallId,
+            toolName: tc.toolName,
+            state: tc.state === "result" ? "done" as const : "error" as const,
+            input: tc.args,
+            output: tc.output,
+            errorText: tc.errorText,
+          }))
+
         // Save to session
         if (session && onUpdateSession && finalContent) {
           onUpdateSession(session.id, {
@@ -724,11 +1445,23 @@ export function ChatWorkspace({
                 role: "assistant" as const,
                 content: finalContent,
                 createdAt: new Date(),
+                ...((artifactIds.length > 0 || persistedToolCalls.length > 0) && {
+                  metadata: {
+                    ...(artifactIds.length > 0 && { artifactIds }),
+                    ...(persistedToolCalls.length > 0 && { toolCalls: persistedToolCalls }),
+                  },
+                }),
               },
             ],
           })
         }
       } catch (err) {
+        // Handle user-initiated abort — keep partial content
+        if (err instanceof DOMException && err.name === "AbortError") {
+          setIsStreaming(false)
+          return
+        }
+
         console.error("Chat error:", err)
         setIsStreaming(false)
 
@@ -766,10 +1499,20 @@ export function ChatWorkspace({
         })
       } finally {
         setIsLoading(false)
+        abortControllerRef.current = null
+        // Reset toolbar overrides back to defaults (keep activeArtifactId for iteration)
+        setWebSearchOverride(null)
+        setSelectedKBGroupIds(null)
+        setToolsOverride(null)
       }
     },
-    [chat, session, onUpdateSession, assistant, toast]
+    [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, canvasMode, activeArtifactId]
   )
+
+  const handleStop = useCallback(() => {
+    abortControllerRef.current?.abort()
+    abortControllerRef.current = null
+  }, [])
 
   const handleSaveEdit = useCallback(async () => {
     if (!editingMessageId || !editContent.trim()) return
@@ -1146,7 +1889,7 @@ export function ChatWorkspace({
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Header with mobile back button and actions */}
-      <div className="flex items-center justify-between gap-2 py-4 pl-14 pr-4 border-b">
+      <div className="flex items-center justify-between gap-2 py-3 pl-14 pr-4 border-b border-border/50">
         <div className="flex items-center gap-2">
           {onBack && (
             <Button
@@ -1193,373 +1936,98 @@ export function ChatWorkspace({
         </div>
       </div>
 
-      {/* Messages with Virtuoso */}
-      <div className="flex-1 relative">
-        {chat.messages.length === 0 && !isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center py-12">
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.3 }}
-                className="text-5xl mb-4"
-              >
-                {assistant.emoji}
-              </motion.div>
-              <motion.h3
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.3, delay: 0.1 }}
-                className="text-lg font-medium mb-1"
-              >
-                {assistant.name}
-              </motion.h3>
-              <motion.p
-                initial={{ y: 10, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ duration: 0.3, delay: 0.2 }}
-                className="text-sm text-muted-foreground max-w-sm mx-auto text-center"
-              >
-                {assistant.description}
-              </motion.p>
-              <QuickSuggestions
-                assistant={assistant}
-                onSelect={handleSuggestionSelect}
-              />
-            </div>
-          </div>
-        ) : (
-          <Virtuoso
-            ref={virtuosoRef}
-            data={allMessages}
-            className="h-full"
-            atBottomStateChange={setAtBottom}
-            atBottomThreshold={100}
-            overscan={200}
-            itemContent={(index, message) => {
-              const rawContent = getMessageContent(message)
-              const isUser = message.role === "user"
-              const isLastMessage = index === allMessages.length - 1
-              const isLoadingMessage =
-                isLoading &&
-                isLastMessage &&
-                message.role === "assistant" &&
-                !rawContent
-              const isStreamingMessage =
-                isStreaming && isLastMessage && message.role === "assistant"
-              const sources = messageSources[message.id] || []
-              const isEditing = editingMessageId === message.id
-
-              // Version handling for edited messages
-              const msgEditHistory = (message as unknown as ChatMessage).editHistory
-              const hasEditHistory = msgEditHistory && msgEditHistory.length > 0
-              const totalVersions = hasEditHistory ? msgEditHistory.length + 1 : 1
-              const currentViewingVersion = viewingVersions[message.id] || totalVersions
-              const content = hasEditHistory
-                ? getVersionContent(rawContent, msgEditHistory, currentViewingVersion)
-                : rawContent
-
-              // Get historical assistant response if viewing a previous version
-              const historicalAssistantResponse =
-                isUser && hasEditHistory
-                  ? getVersionAssistantResponse(msgEditHistory, currentViewingVersion, totalVersions)
-                  : undefined
-              const isViewingHistoricalVersion =
-                hasEditHistory && currentViewingVersion < totalVersions
-
-              return (
-                <motion.div
-                  variants={messageVariants}
-                  initial="initial"
-                  animate="animate"
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="max-w-3xl mx-auto px-4 py-3"
-                >
-                  <div
-                    className={cn(
-                      "group flex gap-3",
-                      isUser ? "flex-row-reverse" : ""
-                    )}
-                  >
-                    {/* Avatar */}
-                    <div
-                      className={cn(
-                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-full shadow-sm",
-                        isUser
-                          ? "bg-gradient-to-br from-primary to-primary/70 text-primary-foreground"
-                          : "bg-gradient-to-br from-violet-500 to-purple-600 text-white"
-                      )}
-                    >
-                      {isUser ? (
-                        <User className="h-4 w-4" />
-                      ) : assistant.emoji ? (
-                        <span className="text-lg">{assistant.emoji}</span>
-                      ) : (
-                        <Bot className="h-4 w-4" />
-                      )}
-                    </div>
-
-                    {/* Message content */}
-                    <div
-                      className={cn("flex-1 min-w-0", isUser ? "ml-12" : "mr-12")}
-                    >
-                      <div
-                        className={cn(
-                          "rounded-2xl py-2.5 px-4 text-sm",
-                          isUser
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted"
-                        )}
-                      >
-                        {/* Reply indicator - show what message this is replying to */}
-                        {(message as unknown as ChatMessage).replyTo && (() => {
-                          const replyToId = (message as unknown as ChatMessage).replyTo
-                          const parentMsg = allMessages.find(
-                            (m) => m.id === replyToId
-                          )
-                          if (!parentMsg) return null
-                          const parentContent = getMessageContent(parentMsg)
-                          return (
-                            <MessageReplyIndicator
-                              parentContent={parentContent}
-                              onClick={() => scrollToMessage(parentMsg.id)}
-                              isUserMessage={isUser}
-                            />
-                          )
-                        })()}
-
-                        {isLoadingMessage ? (
-                          <TypingIndicator />
-                        ) : isEditing ? (
-                          <div className="space-y-2">
-                            <Textarea
-                              value={editContent}
-                              onChange={(e) => setEditContent(e.target.value)}
-                              className="min-h-[60px] bg-background"
-                              autoFocus
-                            />
-                            <div className="flex gap-2">
-                              <Button size="sm" onClick={handleSaveEdit}>
-                                Save & Resend
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={handleCancelEdit}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            {/* Tool call indicators for assistant messages */}
-                            {!isUser && (() => {
-                              const toolParts = getToolCallParts(message as unknown as { parts?: Array<Record<string, unknown>> })
-                              if (toolParts.length === 0) return null
-                              return (
-                                <div className="space-y-0.5 mb-1">
-                                  {toolParts.map((tp) => (
-                                    <ToolCallIndicator
-                                      key={tp.toolCallId}
-                                      toolName={tp.toolName}
-                                      state={tp.state}
-                                      args={tp.input}
-                                      result={tp.output}
-                                      errorText={tp.errorText}
-                                    />
-                                  ))}
-                                </div>
-                              )
-                            })()}
-                            <MarkdownContent content={content} />
-                            {isStreamingMessage && (
-                              <span className="inline-block w-2 h-4 bg-foreground/70 animate-pulse ml-0.5 align-middle" />
-                            )}
-                          </>
-                        )}
-
-                        {/* Sources */}
-                        {!isUser &&
-                          !isLoadingMessage &&
-                          !isEditing &&
-                          sources.length > 0 && (
-                            <MessageSources sources={sources} />
-                          )}
-
-                        {/* Handoff button — shown after the message that triggered handoff */}
-                        {!isUser &&
-                          handoffTriggeredMsgId === message.id &&
-                          handoffState === "idle" && (
-                            <div className="mt-3 flex justify-center">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="gap-2 rounded-full border-primary/30 hover:bg-primary/10"
-                                onClick={requestHandoff}
-                              >
-                                <Headphones className="h-4 w-4" />
-                                Connect with Live Agent
-                              </Button>
-                            </div>
-                          )}
-
-                        {/* Handoff requesting state */}
-                        {!isUser &&
-                          handoffTriggeredMsgId === message.id &&
-                          handoffState === "requesting" && (
-                            <div className="mt-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Connecting...
-                            </div>
-                          )}
-
-                        {/* Handoff waiting state */}
-                        {!isUser &&
-                          handoffTriggeredMsgId === message.id &&
-                          handoffState === "waiting" && (
-                            <div className="mt-3 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                              <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/60 opacity-75" />
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-primary/80" />
-                              </span>
-                              Waiting for an agent...
-                            </div>
-                          )}
-                      </div>
-
-                      {/* Historical AI response when viewing previous version */}
-                      {isUser && isViewingHistoricalVersion && historicalAssistantResponse && (
-                        <div className="mt-3 flex gap-3">
-                          <div
-                            className={cn(
-                              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full shadow-sm",
-                              "bg-gradient-to-br from-violet-500 to-purple-600 text-white"
-                            )}
-                          >
-                            {assistant.emoji ? (
-                              <span className="text-sm">{assistant.emoji}</span>
-                            ) : (
-                              <Bot className="h-3.5 w-3.5" />
-                            )}
-                          </div>
-                          <div className="flex-1 rounded-2xl py-2.5 px-4 text-sm bg-muted/70 border border-muted-foreground/10">
-                            <div className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
-                              <span>Historical response</span>
-                              <span className="opacity-60">•</span>
-                              <span>Version {currentViewingVersion}/{totalVersions}</span>
-                            </div>
-                            <div className="opacity-90">
-                              <MarkdownContent content={historicalAssistantResponse} />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Message footer */}
-                      {!isLoadingMessage && !isEditing && (
-                        <div
-                          className={cn(
-                            "flex items-center gap-2 mt-1",
-                            isUser ? "flex-row-reverse" : ""
-                          )}
-                        >
-                          <span className="text-[10px] text-muted-foreground">
-                            {formatDistanceToNow(new Date(), { addSuffix: true })}
-                          </span>
-                          {/* Show version indicator for edited messages, otherwise show regular actions */}
-                          {hasEditHistory ? (
-                            <EditVersionIndicator
-                              currentContent={rawContent}
-                              editHistory={msgEditHistory!}
-                              viewingVersion={currentViewingVersion}
-                              onVersionChange={(v) =>
-                                setViewingVersions((prev) => ({
-                                  ...prev,
-                                  [message.id]: v,
-                                }))
-                              }
-                              onCopy={(c) => handleCopy(message.id, c)}
-                              onEdit={
-                                isUser
-                                  ? () => handleEditMessage(message.id, rawContent)
-                                  : undefined
-                              }
-                              copied={copiedId === message.id}
-                              isUserMessage={isUser}
-                            />
-                          ) : (
-                            <MessageActions
-                              onCopy={() => handleCopy(message.id, content)}
-                              onEdit={
-                                isUser
-                                  ? () => handleEditMessage(message.id, content)
-                                  : undefined
-                              }
-                              onRegenerate={
-                                !isUser
-                                  ? () => handleRegenerate(message.id)
-                                  : undefined
-                              }
-                              onDelete={() => handleDeleteMessage(message.id)}
-                              onReply={() => handleReply(message.id, content)}
-                              copied={copiedId === message.id}
-                              isUser={isUser}
-                            />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-              )
-            }}
-          />
-        )}
-
-        {/* Error display */}
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="absolute bottom-4 left-4 right-4 max-w-3xl mx-auto"
-            >
-              <div className="flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0" />
-                <p className="text-sm text-destructive flex-1">{error.message}</p>
-                <Button size="sm" variant="outline" onClick={error.retry}>
-                  <RefreshCw className="h-4 w-4 mr-1" /> Retry
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-7 w-7"
-                  onClick={() => setError(null)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Scroll to bottom button */}
-        {showScrollButton && !atBottom && (
-          <Button
-            variant="secondary"
-            size="icon"
-            className="absolute bottom-4 right-4 rounded-full shadow-lg"
-            onClick={scrollToBottom}
-          >
-            <ArrowDown className="h-4 w-4" />
-          </Button>
-        )}
+      {/* Messages with Virtuoso + optional Artifact Panel */}
+      <div className="flex-1 relative flex overflow-hidden">
+      {activeArtifact ? (
+        <ResizablePanelGroup direction="horizontal">
+          <ResizablePanel defaultSize={55} minSize={30}>
+            <MessagesArea
+              chat={chat}
+              allMessages={allMessages}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              assistant={assistant}
+              messageSources={messageSources}
+              editingMessageId={editingMessageId}
+              editContent={editContent}
+              viewingVersions={viewingVersions}
+              copiedId={copiedId}
+              error={error}
+              showScrollButton={showScrollButton}
+              atBottom={atBottom}
+              handoffState={handoffState}
+              handoffTriggeredMsgId={handoffTriggeredMsgId}
+              virtuosoRef={virtuosoRef}
+              setAtBottom={setAtBottom}
+              setEditContent={setEditContent}
+              setViewingVersions={setViewingVersions}
+              setError={setError}
+              handleSuggestionSelect={handleSuggestionSelect}
+              handleSaveEdit={handleSaveEdit}
+              handleCancelEdit={handleCancelEdit}
+              handleCopy={handleCopy}
+              handleEditMessage={handleEditMessage}
+              handleRegenerate={handleRegenerate}
+              handleDeleteMessage={handleDeleteMessage}
+              handleReply={handleReply}
+              scrollToBottom={scrollToBottom}
+              scrollToMessage={scrollToMessage}
+              requestHandoff={requestHandoff}
+              openArtifact={openArtifact}
+              artifacts={artifacts}
+            />
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={45} minSize={25}>
+            <ArtifactPanel
+              artifact={activeArtifact}
+              onClose={closeArtifact}
+              onUpdateArtifact={addOrUpdateArtifact}
+              sessionId={session?.id}
+            />
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      ) : (
+        <MessagesArea
+          chat={chat}
+          allMessages={allMessages}
+          isLoading={isLoading}
+          isStreaming={isStreaming}
+          assistant={assistant}
+          messageSources={messageSources}
+          editingMessageId={editingMessageId}
+          editContent={editContent}
+          viewingVersions={viewingVersions}
+          copiedId={copiedId}
+          error={error}
+          showScrollButton={showScrollButton}
+          atBottom={atBottom}
+          handoffState={handoffState}
+          handoffTriggeredMsgId={handoffTriggeredMsgId}
+          virtuosoRef={virtuosoRef}
+          setAtBottom={setAtBottom}
+          setEditContent={setEditContent}
+          setViewingVersions={setViewingVersions}
+          setError={setError}
+          handleSuggestionSelect={handleSuggestionSelect}
+          handleSaveEdit={handleSaveEdit}
+          handleCancelEdit={handleCancelEdit}
+          handleCopy={handleCopy}
+          handleEditMessage={handleEditMessage}
+          handleRegenerate={handleRegenerate}
+          handleDeleteMessage={handleDeleteMessage}
+          handleReply={handleReply}
+          scrollToBottom={scrollToBottom}
+          scrollToMessage={scrollToMessage}
+          requestHandoff={requestHandoff}
+          openArtifact={openArtifact}
+          artifacts={artifacts}
+        />
+      )}
       </div>
 
       {/* Input area */}
-      <div className="border-t p-4 bg-background">
+      <div className="px-4 pb-4 pt-2 bg-background">
         <form onSubmit={onSubmit} className="max-w-3xl mx-auto">
           {/* Reply indicator */}
           <AnimatePresence>
@@ -1583,12 +2051,9 @@ export function ChatWorkspace({
             )}
           </AnimatePresence>
 
-          <div className="relative flex items-end gap-2">
-            <FileUploadButton
-              onFileSelect={setAttachedFile}
-              disabled={isLoading}
-            />
-            <div className="flex-1 relative">
+          {/* Unified input container */}
+          <div className="rounded-2xl border border-border/60 bg-muted/30 shadow-sm transition-all focus-within:border-foreground/20 focus-within:shadow-md focus-within:bg-muted/40">
+            <div className="relative">
               <Textarea
                 ref={textareaRef}
                 value={input}
@@ -1599,38 +2064,108 @@ export function ChatWorkspace({
                     ? "Type a message to the agent..."
                     : handoffState === "resolved"
                       ? "Conversation resolved"
-                      : "Type a message..."
+                      : "Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
                 }
-                className="min-h-[52px] max-h-[200px] pr-12 resize-none rounded-2xl border-2 focus-visible:ring-1"
+                className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none"
                 disabled={isLoading || handoffState === "waiting" || handoffState === "requesting" || handoffState === "resolved"}
                 rows={1}
               />
               <Button
-                type="submit"
+                type={isStreaming ? "button" : "submit"}
                 size="icon"
-                className="absolute right-2 bottom-2 rounded-full h-8 w-8"
-                disabled={!input.trim() || isLoading}
+                className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
+                disabled={isStreaming ? false : (!input.trim() || isLoading)}
+                onClick={isStreaming ? handleStop : undefined}
               >
                 {isLoading ? (
-                  <ButtonLoadingIndicator />
+                  isStreaming ? (
+                    <Square className="h-3.5 w-3.5 fill-current" />
+                  ) : (
+                    <ButtonLoadingIndicator />
+                  )
                 ) : (
                   <Send className="h-4 w-4" />
                 )}
               </Button>
             </div>
+
+            {/* Toolbar inside container */}
+            <div className="px-2 pb-2">
+              <ChatInputToolbar
+                onFileSelect={setAttachedFile}
+                fileAttached={!!attachedFile}
+                webSearchEnabled={effectiveWebSearch}
+                onToggleWebSearch={() => setWebSearchOverride((prev) => !(prev ?? webSearchAvailable))}
+                knowledgeBaseGroupIds={effectiveKBGroupIds}
+                onKBGroupsChange={setSelectedKBGroupIds}
+                kbGroups={kbGroups}
+                toolsEnabled={effectiveToolsEnabled}
+                onToggleTools={() => setToolsOverride((prev) => !(prev ?? (assistantTools.length > 0)))}
+                assistantTools={assistantTools}
+                onImportGithub={() => {
+                  setGithubUrl("")
+                  setGithubDialogOpen(true)
+                }}
+                canvasMode={canvasMode}
+                onSetCanvasMode={setCanvasMode}
+                artifacts={artifacts}
+                activeArtifactId={activeArtifactId}
+                onOpenArtifact={openArtifact}
+                onCloseArtifact={closeArtifact}
+                disabled={isLoading}
+              />
+            </div>
           </div>
+
           <p className="text-[10px] text-muted-foreground mt-2 text-center">
             {handoffState === "connected"
               ? "You are chatting with a live agent · Enter to send"
               : <>
-                  Enter to send · Shift+Enter for new line ·{" "}
-                  <kbd className="px-1 rounded bg-muted font-mono">⌘K</kbd> command
-                  palette
+                  <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[9px]">Enter</kbd> to send · <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[9px]">Shift+Enter</kbd> new line · <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[9px]">⌘K</kbd> commands
                 </>
             }
           </p>
         </form>
       </div>
+
+      {/* GitHub Import Dialog */}
+      <Dialog open={githubDialogOpen} onOpenChange={setGithubDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import from GitHub</DialogTitle>
+            <DialogDescription>
+              Enter a GitHub file or repository URL to import code.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={githubUrl}
+            onChange={(e) => setGithubUrl(e.target.value)}
+            placeholder="https://github.com/owner/repo/blob/main/file.ts"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && githubUrl.trim()) {
+                setInput((prev) => prev + (prev ? "\n" : "") + `Import code from: ${githubUrl.trim()}`)
+                setGithubDialogOpen(false)
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGithubDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (githubUrl.trim()) {
+                  setInput((prev) => prev + (prev ? "\n" : "") + `Import code from: ${githubUrl.trim()}`)
+                  setGithubDialogOpen(false)
+                }
+              }}
+              disabled={!githubUrl.trim()}
+            >
+              Import
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

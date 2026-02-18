@@ -9,6 +9,15 @@ export interface ToolItem {
   description: string
   category: "builtin" | "custom" | "mcp"
   parameters: object
+  executionConfig?: {
+    url?: string
+    method?: string
+    headers?: Record<string, string>
+    authType?: "none" | "api_key" | "bearer"
+    authHeaderName?: string
+    authValue?: string
+    timeoutMs?: number
+  } | null
   isBuiltIn: boolean
   enabled: boolean
   mcpServer?: { id: string; name: string } | null

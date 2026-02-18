@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { mcpClientManager, type McpServerOptions } from "./client"
+import { decryptJsonField } from "@/lib/workflow/credentials"
 
 /**
  * Connect to an MCP server, discover its tools, and sync them to the database.
@@ -21,8 +22,8 @@ export async function discoverAndSyncTools(serverId: string) {
     url: serverConfig.url,
     command: serverConfig.command,
     args: serverConfig.args,
-    env: serverConfig.env as Record<string, string> | null,
-    headers: serverConfig.headers as Record<string, string> | null,
+    env: decryptJsonField(serverConfig.env),
+    headers: decryptJsonField(serverConfig.headers),
   }
 
   try {

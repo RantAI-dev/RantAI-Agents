@@ -24,3 +24,13 @@ export interface ResolvedTools {
   tools: Record<string, CoreTool>
   toolNames: string[]
 }
+
+export interface ExecutionConfig {
+  url: string
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+  headers?: Record<string, string>
+  authType?: "none" | "api_key" | "bearer"
+  authHeaderName?: string
+  authValue?: string
+  timeoutMs?: number
+}

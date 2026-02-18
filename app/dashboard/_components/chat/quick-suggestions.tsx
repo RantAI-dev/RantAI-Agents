@@ -2,8 +2,7 @@
 
 import { memo } from "react"
 import { motion } from "framer-motion"
-import { Button } from "@/components/ui/button"
-import { Sparkles } from "lucide-react"
+import { ArrowUpRight } from "lucide-react"
 import type { Assistant } from "@/lib/types/assistant"
 
 interface QuickSuggestionsProps {
@@ -33,33 +32,22 @@ const containerVariants = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.1,
-      delayChildren: 0.2,
+      staggerChildren: 0.08,
+      delayChildren: 0.3,
     },
   },
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 15, scale: 0.95 },
+  hidden: { opacity: 0, y: 12, scale: 0.97 },
   show: {
     opacity: 1,
     y: 0,
     scale: 1,
     transition: {
-      type: "spring",
+      type: "spring" as const,
       stiffness: 300,
       damping: 24,
-    },
-  },
-}
-
-const headerVariants = {
-  hidden: { opacity: 0, y: -10 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: {
-      duration: 0.3,
     },
   },
 }
@@ -72,29 +60,22 @@ export const QuickSuggestions = memo<QuickSuggestionsProps>(
 
     return (
       <motion.div
-        className="flex flex-col items-center gap-3 mt-6"
+        className="flex flex-col items-center gap-3 mt-8"
         variants={containerVariants}
         initial="hidden"
         animate="show"
       >
-        <motion.div
-          className="flex items-center gap-1.5 text-xs text-muted-foreground"
-          variants={headerVariants}
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          <span>Try asking</span>
-        </motion.div>
         <div className="flex flex-wrap justify-center gap-2 max-w-lg">
           {suggestions.map((suggestion, i) => (
             <motion.div key={i} variants={itemVariants}>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-auto py-2 px-3 text-sm font-normal whitespace-normal text-left text-foreground hover:bg-primary/5 hover:border-primary/30 transition-colors"
+              <button
+                type="button"
+                className="group flex items-center gap-1.5 py-2.5 px-4 text-sm text-foreground/80 font-normal rounded-xl border border-border/50 bg-muted/30 hover:bg-muted/60 hover:border-border hover:text-foreground transition-colors cursor-pointer"
                 onClick={() => onSelect(suggestion)}
               >
-                {suggestion}
-              </Button>
+                <span>{suggestion}</span>
+                <ArrowUpRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 text-muted-foreground shrink-0 transition-opacity duration-200" />
+              </button>
             </motion.div>
           ))}
         </div>

@@ -20,6 +20,9 @@ import {
   Send,
   FileDown,
   Code,
+  HelpCircle,
+  ChevronDown,
+  AlertTriangle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -37,9 +40,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 import { useTools, type ToolItem } from "@/hooks/use-tools"
 import { ToolDialog } from "./_components/tool-dialog"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 const TOOL_ICONS: Record<string, React.ElementType> = {
   knowledge_search: BookOpen,
@@ -61,6 +70,7 @@ export default function ToolsSettingsPage() {
   const [deletingTool, setDeletingTool] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("all")
+  const [helpOpen, setHelpOpen] = useState(false)
 
   const filteredTools = useMemo(() => {
     let filtered = tools
@@ -209,6 +219,12 @@ export default function ToolsSettingsPage() {
                 {tool.mcpServer.name}
               </span>
             )}
+            {tool.category === "custom" && !tool.executionConfig?.url && (
+              <span className="flex items-center gap-1 text-amber-500">
+                <AlertTriangle className="h-3 w-3" />
+                No endpoint configured
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -291,6 +307,92 @@ export default function ToolsSettingsPage() {
           Create Tool
         </Button>
       </div>
+
+      {/* In-app documentation */}
+      <Collapsible open={helpOpen} onOpenChange={setHelpOpen}>
+        <div className="rounded-lg border border-muted bg-card px-4 py-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">How Custom Tools Work</p>
+                <p className="text-xs text-muted-foreground">
+                  Create tools that your AI assistants can call during conversations.
+                </p>
+              </div>
+            </div>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs">
+                {helpOpen ? "Hide" : "Learn more"}
+                <ChevronDown
+                  className={cn(
+                    "h-3.5 w-3.5 transition-transform",
+                    helpOpen && "rotate-180"
+                  )}
+                />
+              </Button>
+            </CollapsibleTrigger>
+          </div>
+          <CollapsibleContent>
+            <div className="mt-4 space-y-4 text-sm border-t border-muted pt-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <h4 className="font-medium flex items-center gap-1.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">1</span>
+                    Create a Tool
+                  </h4>
+                  <p className="text-muted-foreground text-xs leading-relaxed pl-6.5">
+                    Give it a name, display name, and description. The AI reads the description to decide when to use your tool, so be specific about what it does.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <h4 className="font-medium flex items-center gap-1.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">2</span>
+                    Define Parameters
+                  </h4>
+                  <p className="text-muted-foreground text-xs leading-relaxed pl-6.5">
+                    Use the visual editor or paste JSON Schema. Parameters tell the AI what inputs your tool accepts (e.g. a city name, an ID, a search query).
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <h4 className="font-medium flex items-center gap-1.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">3</span>
+                    Configure Execution
+                  </h4>
+                  <p className="text-muted-foreground text-xs leading-relaxed pl-6.5">
+                    Set the HTTP endpoint URL that will be called when the AI invokes your tool. The parameters are sent as JSON in the request body.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <h4 className="font-medium flex items-center gap-1.5">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold">4</span>
+                    Assign to an Assistant
+                  </h4>
+                  <p className="text-muted-foreground text-xs leading-relaxed pl-6.5">
+                    Go to the assistant&apos;s settings and enable your tool in the Tools tab. The assistant will then be able to call it during chats.
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-md bg-muted/50 p-3 space-y-2">
+                <h4 className="font-medium text-xs">Example: Weather API Tool</h4>
+                <pre className="text-[11px] text-muted-foreground overflow-x-auto whitespace-pre">{`POST https://your-api.com/weather
+Content-Type: application/json
+
+Request:  { "city": "Jakarta" }
+Response: { "temperature": 32, "condition": "Sunny" }`}</pre>
+              </div>
+
+              <div className="space-y-1.5">
+                <h4 className="font-medium text-xs">Authentication</h4>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  You can configure <strong>Bearer Token</strong> (sends <code className="text-[11px] bg-muted px-1 rounded">Authorization: Bearer &lt;token&gt;</code>) or <strong>API Key</strong> (sends the key in a custom header like <code className="text-[11px] bg-muted px-1 rounded">X-API-Key</code>) in the Execution Config section of the tool dialog.
+                </p>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
 
       <div className="space-y-4">
           {isLoading ? (
