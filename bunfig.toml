@@ -1,0 +1,3 @@
+[install]
+# Trust native packages that need compilation
+trustedDependencies = ["@prisma/client", "@prisma/engines", "prisma", "esbuild", "canvas"]
