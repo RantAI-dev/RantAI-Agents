@@ -204,13 +204,13 @@ export default function AgentDashboard() {
     if (socket.isOnline) {
       socket.goOffline()
     }
-    await signOut({ callbackUrl: "/agent/login" })
+    await signOut({ callbackUrl: "/login" })
   }
 
   // Redirect if not authenticated
   useEffect(() => {
     if (!session) {
-      router.push("/agent/login")
+      router.push("/login")
     }
   }, [session, router])
 

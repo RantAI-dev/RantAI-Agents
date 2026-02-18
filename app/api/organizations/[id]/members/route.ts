@@ -111,6 +111,13 @@ export async function POST(
       return NextResponse.json({ error: "Organization not found" }, { status: 404 })
     }
 
+    if (organization.plan === "free") {
+      return NextResponse.json(
+        { error: "Organization management requires a paid plan. Please upgrade." },
+        { status: 403 }
+      )
+    }
+
     if (organization._count.memberships >= organization.maxMembers) {
       return NextResponse.json(
         { error: `Organization has reached the maximum of ${organization.maxMembers} members` },
@@ -133,16 +140,11 @@ export async function POST(
       )
     }
 
-    // Look up user by email (from Agent or Customer)
-    // For now, we'll create a pending invite with just the email
-    // The user will be linked when they accept
-    const agent = await prisma.agent.findUnique({ where: { email: email.toLowerCase() } })
-    const customer = agent
-      ? null
-      : await prisma.customer.findUnique({ where: { email: email.toLowerCase() } })
+    // Look up user by email
+    const existingUser = await prisma.user.findUnique({ where: { email: email.toLowerCase() } })
 
-    const userId = agent?.id || customer?.id
-    const userName = agent?.name || (customer ? `${customer.firstName} ${customer.lastName}` : null)
+    const userId = existingUser?.id
+    const userName = existingUser?.name || null
 
     const member = await prisma.organizationMember.create({
       data: {

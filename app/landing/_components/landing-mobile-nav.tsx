@@ -52,7 +52,7 @@ export function LandingMobileNav() {
               Open dashboard
             </Link>
             <Link
-              href="/agent/login"
+              href="/login"
               onClick={() => setOpen(false)}
               className="rounded-lg px-4 py-3 bg-white text-zinc-950 font-medium hover:bg-zinc-200 transition-colors text-center"
             >

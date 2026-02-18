@@ -11,7 +11,7 @@ export async function GET() {
   }
 
   try {
-    const agent = await prisma.agent.findUnique({
+    const agent = await prisma.user.findUnique({
       where: { id: session.user.id },
       select: {
         id: true,
@@ -67,7 +67,7 @@ export async function PUT(request: Request) {
       )
     }
 
-    const agent = await prisma.agent.update({
+    const agent = await prisma.user.update({
       where: { id: session.user.id },
       data: { name: name.trim() },
       select: {

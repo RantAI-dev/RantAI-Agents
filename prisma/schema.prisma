@@ -7,63 +7,26 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Agent model for sales representatives
-model Agent {
+// User role enum
+enum Role {
+  USER
+  ADMIN
+}
+
+// User model (platform users — renamed from Agent, keeps same DB table)
+model User {
   id            String         @id @default(cuid())
   email         String         @unique
   name          String
   passwordHash  String
-  status        String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE
+  role          Role           @default(USER)
+  status        String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE (for live chat)
   avatarS3Key   String?        // S3 key for avatar image
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   conversations Conversation[]
-}
 
-// Customer model for logged-in customers (nasabah)
-model Customer {
-  id                String    @id @default(cuid())
-  email             String    @unique
-  passwordHash      String
-  firstName         String
-  lastName          String
-  phone             String?
-  preferredLanguage String    @default("en") // "en" or "id"
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  policies          Policy[]
-}
-
-// Policy model - insurance policies owned by customers (only safe data)
-model Policy {
-  id                String    @id @default(cuid())
-  policyNumber      String    @unique
-  customerId        String
-  customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
-
-  // Product info (safe to display)
-  productType       String    // LIFE_INSURANCE, HEALTH_INSURANCE, HOME_INSURANCE
-  productTier       String    // "Gold", "Premium", "Basic", etc.
-  productName       String    // "Term Life Plus", "Health Gold Plan", etc.
-
-  // Coverage info (safe to display)
-  coverageStartDate DateTime
-  coverageEndDate   DateTime?
-  premiumAmount     Decimal
-  premiumFrequency  String    // MONTHLY, QUARTERLY, ANNUAL
-
-  // Payment status (safe to display)
-  paymentStatus     String    @default("CURRENT") // CURRENT, OVERDUE, GRACE_PERIOD
-  lastPaymentDate   DateTime?
-  nextPaymentDate   DateTime?
-
-  // Policy status
-  status            String    @default("ACTIVE") // ACTIVE, PENDING, CANCELLED, EXPIRED
-
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  @@index([customerId])
+  @@map("Agent")
 }
 
 // Conversation session between customer and AI/agent
@@ -78,12 +41,17 @@ model Conversation {
   customerEmail   String?
   customerPhone   String?
   agentId         String?
-  agent           Agent?    @relation(fields: [agentId], references: [id])
+  agent           User?     @relation(fields: [agentId], references: [id])
   messages        Message[]
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   handoffAt       DateTime?
   resolvedAt      DateTime?
+
+  @@index([status])
+  @@index([channel])
+  @@index([agentId])
+  @@index([createdAt])
 }
 
 // Individual messages in a conversation
@@ -96,6 +64,8 @@ model Message {
   metadata       String?      // JSON string for channel-specific data (WhatsApp message ID, etc.)
   createdAt      DateTime     @default(now())
   readAt         DateTime?
+
+  @@index([conversationId])
 }
 
 // Callback requests for when no agents are available
@@ -319,11 +289,17 @@ model Document {
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy      String?       // userId who created
 
+  // Artifact association (null = regular knowledge document)
+  sessionId    String?
+  session      DashboardSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  artifactType String?           // "text/html" | "application/react" | etc.
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([organizationId])
   @@index([s3Key])
+  @@index([sessionId])
 }
 
 // API Key for embeddable chat widget
@@ -365,6 +341,7 @@ model DashboardSession {
   title       String             @default("New Chat")
   assistantId String
   messages    DashboardMessage[]
+  artifacts   Document[]         // Artifacts created in this session
 
   // Organization context (optional - for shared/team chats)
   organizationId String?
@@ -388,6 +365,7 @@ model DashboardMessage {
   replyTo     String?          // ID of the message being replied to
   editHistory Json?            // Array of { content, assistantResponse, editedAt }
   sources     Json?            // Array of sources for assistant messages
+  metadata    Json?            // Extra data e.g. { artifactIds: string[] }
   attachments FileAttachment[] // File attachments for this message
   createdAt   DateTime         @default(now())
 
@@ -442,6 +420,7 @@ model UserMemory {
   expiresAt   DateTime?  // For working memory TTL
 
   @@index([userId, type])
+  @@index([userId, type, key])
   @@index([key])
 }
 

@@ -98,7 +98,7 @@ export default function LandingPage() {
               <Link href="/dashboard">Open dashboard</Link>
             </Button>
             <Button size="sm" className="hidden md:inline-flex bg-white text-zinc-950 hover:bg-zinc-200" asChild>
-              <Link href="/agent/login">Sign in</Link>
+              <Link href="/login">Sign in</Link>
             </Button>
           </div>
         </nav>
@@ -121,7 +121,7 @@ export default function LandingPage() {
               </p>
               <div className="flex flex-wrap items-center justify-center lg:justify-start gap-4">
                 <Button size="lg" className={landing.btnPrimary} asChild>
-                  <Link href="/agent/login">Get started</Link>
+                  <Link href="/login">Get started</Link>
                 </Button>
                 <Button size="lg" variant="outline" className={landing.btnSecondary} asChild>
                   <Link href="#features">See features</Link>
@@ -291,7 +291,7 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4">
               <Button size="lg" className={landing.btnPrimary} asChild>
-                <Link href="/agent/login">Get started free</Link>
+                <Link href="/login">Get started free</Link>
               </Button>
               <Button size="lg" variant="outline" className={landing.btnSecondary} asChild>
                 <Link href="/dashboard">Open dashboard</Link>
@@ -327,7 +327,7 @@ export default function LandingPage() {
             </div>
             <nav className="flex flex-wrap items-center justify-center gap-6 text-sm" aria-label="Footer navigation">
               <Link href="/dashboard" className="text-zinc-500 hover:text-zinc-300 transition-colors">Dashboard</Link>
-              <Link href="/agent/login" className="text-zinc-500 hover:text-zinc-300 transition-colors">Agent login</Link>
+              <Link href="/login" className="text-zinc-500 hover:text-zinc-300 transition-colors">Sign in</Link>
               <Link href="#features" className="text-zinc-500 hover:text-zinc-300 transition-colors">Features</Link>
               <Link href="#pricing" className="text-zinc-500 hover:text-zinc-300 transition-colors">Pricing</Link>
               <Link href="#faq" className="text-zinc-500 hover:text-zinc-300 transition-colors">FAQ</Link>

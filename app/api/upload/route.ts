@@ -145,7 +145,7 @@ export async function POST(request: Request) {
 
     // For avatar uploads, update the agent
     if (type === "avatar") {
-      await prisma.agent.update({
+      await prisma.user.update({
         where: { id: session.user.id },
         data: { avatarS3Key: s3Key },
       }).catch(() => {

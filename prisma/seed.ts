@@ -410,10 +410,10 @@ async function seedWorkflows(createdByUserId: string) {
 async function main() {
   console.log("=== RantAI Agents - Database Seed ===\n")
 
-  // Create test agents
+  // Create test users
   const passwordHash = await hash("password123", 12)
 
-  const agent1 = await prisma.agent.upsert({
+  const user1 = await prisma.user.upsert({
     where: { email: "agent@rantai.com" },
     update: {},
     create: {
@@ -424,22 +424,23 @@ async function main() {
     },
   })
 
-  const agent2 = await prisma.agent.upsert({
+  const user2 = await prisma.user.upsert({
     where: { email: "admin@rantai.com" },
-    update: {},
+    update: { role: "ADMIN" },
     create: {
       email: "admin@rantai.com",
       name: "Michael Chen",
       passwordHash,
       status: "OFFLINE",
+      role: "ADMIN",
     },
   })
 
-  console.log("Seeded agents:")
-  console.log(`  - ${agent1.name} (${agent1.email})`)
-  console.log(`  - ${agent2.name} (${agent2.email})`)
+  console.log("Seeded users:")
+  console.log(`  - ${user1.name} (${user1.email}) [${user1.role}]`)
+  console.log(`  - ${user2.name} (${user2.email}) [${user2.role}]`)
 
-  console.log("\n📋 Agent Login Credentials:")
+  console.log("\n📋 Login Credentials:")
   console.log("  Email: agent@rantai.com")
   console.log("  Password: password123")
 
@@ -447,10 +448,10 @@ async function main() {
   const kbGroupId = await seedKnowledgeBase()
 
   // Seed Workflows
-  await seedWorkflows(agent1.id)
+  await seedWorkflows(user1.id)
 
   console.log("\n=== Seed Summary ===")
-  console.log(`✓ Agents created: 2`)
+  console.log(`✓ Users created: 2`)
   console.log(`✓ Knowledge Base Group ID: ${kbGroupId}`)
   console.log(`✓ Workflows seeded`)
   console.log("\n🚀 To start the app:")

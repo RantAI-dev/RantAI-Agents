@@ -33,7 +33,7 @@ export default function AdminLayout({
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      router.push("/agent/login")
+      router.push("/login")
     }
   }, [status, router])
 
@@ -50,7 +50,7 @@ export default function AdminLayout({
   }
 
   const handleSignOut = async () => {
-    await signOut({ callbackUrl: "/agent/login" })
+    await signOut({ callbackUrl: "/login" })
   }
 
   return (

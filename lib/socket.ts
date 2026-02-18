@@ -372,7 +372,7 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
       socket.join("agents")
       socket.join(`agent:${agentId}`)
 
-      await prisma.agent.update({
+      await prisma.user.update({
         where: { id: agentId },
         data: { status: AgentStatus.ONLINE },
       })
@@ -389,7 +389,7 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
       socket.leave("agents")
       socket.leave(`agent:${agentId}`)
 
-      await prisma.agent.update({
+      await prisma.user.update({
         where: { id: agentId },
         data: { status: AgentStatus.OFFLINE },
       })
@@ -399,7 +399,7 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
 
     // Agent changes status
     socket.on("agent:status-change", async ({ agentId, status }) => {
-      await prisma.agent.update({
+      await prisma.user.update({
         where: { id: agentId },
         data: { status },
       })
@@ -416,7 +416,7 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
           },
         })
 
-        const agent = await prisma.agent.findUnique({
+        const agent = await prisma.user.findUnique({
           where: { id: agentId },
         })
 
@@ -615,7 +615,7 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
       for (const [agentId, socketId] of onlineAgents.entries()) {
         if (socketId === socket.id) {
           onlineAgents.delete(agentId)
-          prisma.agent
+          prisma.user
             .update({
               where: { id: agentId },
               data: { status: AgentStatus.OFFLINE },

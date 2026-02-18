@@ -11,7 +11,7 @@ import { Loader2 } from "lucide-react"
 import Image from "next/image"
 import { brand } from "@/lib/branding"
 
-export default function AgentLoginPage() {
+export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -24,7 +24,7 @@ export default function AgentLoginPage() {
     setIsLoading(true)
 
     try {
-      const result = await signIn("agent-credentials", {
+      const result = await signIn("credentials", {
         email,
         password,
         redirect: false,
@@ -56,9 +56,9 @@ export default function AgentLoginPage() {
               className="h-16 w-auto"
             />
           </div>
-          <CardTitle className="text-2xl">Agent Portal</CardTitle>
+          <CardTitle className="text-2xl">Sign In</CardTitle>
           <CardDescription>
-            Sign in to access the {brand.productName} dashboard
+            Sign in to access {brand.productName}
           </CardDescription>
         </CardHeader>
         <CardContent>

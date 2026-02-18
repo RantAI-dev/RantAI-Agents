@@ -5,10 +5,9 @@ import { prisma } from "@/lib/prisma"
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
-    // Agent credentials provider
     Credentials({
-      id: "agent-credentials",
-      name: "Agent Login",
+      id: "credentials",
+      name: "Login",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
@@ -18,17 +17,17 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null
         }
 
-        const agent = await prisma.agent.findUnique({
+        const user = await prisma.user.findUnique({
           where: { email: credentials.email as string },
         })
 
-        if (!agent) {
+        if (!user) {
           return null
         }
 
         const isPasswordValid = await compare(
           credentials.password as string,
-          agent.passwordHash
+          user.passwordHash
         )
 
         if (!isPasswordValid) {
@@ -36,49 +35,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         return {
-          id: agent.id,
-          email: agent.email,
-          name: agent.name,
-          userType: "agent" as const,
-        }
-      },
-    }),
-
-    // Customer credentials provider
-    Credentials({
-      id: "customer-credentials",
-      name: "Customer Login",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          return null
-        }
-
-        const customer = await prisma.customer.findUnique({
-          where: { email: credentials.email as string },
-        })
-
-        if (!customer) {
-          return null
-        }
-
-        const isPasswordValid = await compare(
-          credentials.password as string,
-          customer.passwordHash
-        )
-
-        if (!isPasswordValid) {
-          return null
-        }
-
-        return {
-          id: customer.id,
-          email: customer.email,
-          name: customer.firstName,
-          userType: "customer" as const,
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
         }
       },
     }),
@@ -87,20 +47,20 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id
-        token.userType = user.userType
+        token.role = user.role
       }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string
-        session.user.userType = token.userType as "agent" | "customer"
+        session.user.role = token.role as "USER" | "ADMIN"
       }
       return session
     },
   },
   pages: {
-    signIn: "/agent/login",
+    signIn: "/login",
   },
   session: {
     strategy: "jwt",

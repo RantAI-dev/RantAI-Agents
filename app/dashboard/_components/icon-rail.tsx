@@ -7,13 +7,13 @@ import {
   MessageSquare,
   Headphones,
   BookOpen,
-  BarChart3,
   Settings,
   Bell,
   LogOut,
   User,
   Blocks,
   GitBranch,
+  Building2,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { useFeaturesContext } from "@/components/providers/features-provider"
+import { useOrganization } from "@/hooks/use-organization"
 
 type FeatureKey = "AGENT" | null
 
@@ -75,9 +76,9 @@ const allNavItems: NavItem[] = [
     feature: null,
   },
   {
-    title: "Statistics",
-    url: "/dashboard/statistics",
-    icon: BarChart3,
+    title: "Organization",
+    url: "/dashboard/organization",
+    icon: Building2,
     feature: null,
   },
 ]
@@ -94,11 +95,14 @@ export function IconRail() {
   const { data: session } = useSession()
   const pathname = usePathname()
   const { isAgentEnabled } = useFeaturesContext()
+  const { activeOrganization, isOwner, isAdmin } = useOrganization()
 
-  // Filter nav items based on enabled features
+  const showOrgSection = !!activeOrganization && (isOwner || isAdmin)
+
+  // Filter nav items based on enabled features and permissions
   const mainNavItems = allNavItems.filter((item) => {
-    if (item.feature === null) return true
     if (item.feature === "AGENT") return isAgentEnabled
+    if (item.url === "/dashboard/organization") return showOrgSection
     return true
   })
 
@@ -143,7 +147,7 @@ export function IconRail() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => signOut({ callbackUrl: "/agent/login" })}
+                onClick={() => signOut({ callbackUrl: "/login" })}
                 className="cursor-pointer text-destructive focus:text-destructive"
               >
                 <LogOut className="mr-2 h-4 w-4" />

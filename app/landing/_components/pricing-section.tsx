@@ -27,7 +27,7 @@ const PRICING_TIERS = [
     description: "Get started with core features.",
     features: ["1 assistant", "Limited knowledge base", "Web chat only", "Community support"],
     cta: `Try ${brand.productShortName}`,
-    href: "/agent/login",
+    href: "/login",
     highlighted: false,
   },
   {
@@ -39,7 +39,7 @@ const PRICING_TIERS = [
     description: "For teams getting started.",
     features: ["Multiple assistants", "Larger knowledge base", "WhatsApp & Email", "Priority support"],
     cta: "Get Pro",
-    href: "/agent/login",
+    href: "/login",
     highlighted: true,
   },
   {
@@ -49,7 +49,7 @@ const PRICING_TIERS = [
     description: "Security, scale, and SSO.",
     features: ["Unlimited scale", "SSO & audit logs", "Dedicated support", "Custom integrations"],
     cta: "Contact sales",
-    href: "/agent/login",
+    href: "/login",
     highlighted: false,
   },
 ]
