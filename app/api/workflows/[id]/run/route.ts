@@ -71,10 +71,25 @@ export async function POST(req: Request, { params }: RouteParams) {
       where: { id: runId },
     })
 
+    // When workflow is PAUSED (e.g. hit a HUMAN_INPUT/APPROVAL/HANDOFF node),
+    // build partial output from completed step logs so API consumers still get
+    // the analysis results from nodes that ran before the pause point.
+    let output = run?.output
+    if (run?.status === "PAUSED" && !output && run.steps) {
+      const steps = run.steps as Array<{ nodeId: string; status: string; output: unknown }>
+      const partialOutput: Record<string, unknown> = {}
+      for (const step of steps) {
+        if (step.status === "success" && step.output != null) {
+          partialOutput[step.nodeId] = step.output
+        }
+      }
+      output = partialOutput
+    }
+
     return NextResponse.json({
       runId: run?.id,
       status: run?.status,
-      output: run?.output,
+      output,
       error: run?.error,
       startedAt: run?.startedAt,
       completedAt: run?.completedAt,

@@ -86,8 +86,11 @@ export async function POST(req: Request, { params }: RouteParams) {
         console.error("[Execute] Memory load error:", err)
       }
 
+      // Extract system_context from input (used by claim investigation chatflow)
+      const systemContext = typeof input === "object" && input.system_context ? String(input.system_context) : undefined
+
       // Pass run.id to enable Socket.io step events + run tracking
-      const { response, stepLogs } = await executeChatflow(workflow, message, undefined, memoryContext, run.id)
+      const { response, stepLogs } = await executeChatflow(workflow, message, systemContext, memoryContext, run.id)
 
       // Fallback (no STREAM_OUTPUT reached) — return plain text response
       if (!response) {

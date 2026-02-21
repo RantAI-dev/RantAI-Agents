@@ -216,8 +216,11 @@ function buildScope(ctx: TemplateContext): Record<string, unknown> {
 
   // Inject node outputs as top-level references so "nodeId.output.x" works
   // in complex expressions (e.g. "nodeId.output.count > 5")
+  // Only inject if the nodeId is a valid JS identifier (no hyphens, etc.)
   for (const [nodeId, output] of Object.entries(ctx.flow.nodeOutputs)) {
-    scope[nodeId] = { output }
+    if (/^[$_a-zA-Z][$_a-zA-Z0-9]*$/.test(nodeId)) {
+      scope[nodeId] = { output }
+    }
   }
 
   return scope

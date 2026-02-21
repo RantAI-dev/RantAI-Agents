@@ -136,19 +136,21 @@ const ragQAEdges: Edge[] = [
   { id: "e-llm-transform", source: "llm-1", target: "transform-1" },
 ]
 
-// ─── Template 3: Insurance Fraud Detection ───────────────
-// Flow: Webhook → Normalize → Parallel(Narrative, Rules, Patterns) → Merge → Synthesize → Parse → Switch → Approve/Review/Escalate
+// ─── Template 3: Health Insurance Fraud Detection ────────
+// Flow: Manual Trigger → Normalize → RAG (Policy Rules)
+//       → Parallel(Narrative AI, Rule Engine, Pattern AI + RAG)
+//       → Merge → Synthesize → Parse → Switch → Approve/Review/Escalate
 
 const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
   {
-    id: "trigger-webhook",
-    type: NodeType.TRIGGER_WEBHOOK,
+    id: "trigger-manual",
+    type: NodeType.TRIGGER_MANUAL,
     position: { x: 400, y: 0 },
     data: {
       label: "Receive Claim",
-      description: "Receive insurance claim data via webhook from claims system",
-      nodeType: NodeType.TRIGGER_WEBHOOK,
-      config: { webhookPath: "/fraud-detection" },
+      description: "Triggered from Claims dashboard when analyst clicks Analyze",
+      nodeType: NodeType.TRIGGER_MANUAL,
+      config: {},
     } as TriggerNodeData,
   },
   {
@@ -157,27 +159,30 @@ const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
     position: { x: 400, y: 150 },
     data: {
       label: "Normalize Claim Data",
-      description: "Structure and validate incoming claim fields",
+      description: "Structure incoming claim, customer, policy, and provider data",
       nodeType: NodeType.TRANSFORM,
       expression: `return {
-  policy_number: input.policy_number || 'UNKNOWN',
-  months_as_customer: Number(input.months_as_customer) || 0,
-  age: Number(input.age) || 0,
-  insured_sex: input.insured_sex || 'unknown',
-  insured_occupation: input.insured_occupation || 'unknown',
-  incident_type: input.incident_type || 'unknown',
-  incident_severity: input.incident_severity || 'unknown',
-  incident_date: input.incident_date || new Date().toISOString(),
-  incident_city: input.incident_city || 'unknown',
-  total_claim_amount: Number(input.total_claim_amount) || 0,
-  injury_claim: Number(input.injury_claim) || 0,
-  property_claim: Number(input.property_claim) || 0,
-  vehicle_claim: Number(input.vehicle_claim) || 0,
-  authorities_contacted: input.authorities_contacted || 'None',
-  police_report_available: input.police_report_available || 'NO',
-  number_of_vehicles_involved: Number(input.number_of_vehicles_involved) || 1,
-  witnesses: Number(input.witnesses) || 0,
-  claim_description: input.claim_description || '',
+  claim_number: input.claim_number || 'UNKNOWN',
+  claim_type: input.claim_type || 'health',
+  customer_name: input.customer_name || '',
+  customer_gender: input.customer_gender || 'unknown',
+  customer_id_number: input.customer_id_number || '',
+  policy_number: input.policy_number || '',
+  product_name: input.product_name || '',
+  annual_limit: Number(input.annual_limit) || 0,
+  remaining_limit: Number(input.remaining_limit) || 0,
+  policy_start_date: input.policy_start_date || '',
+  provider_name: input.provider_name || '',
+  provider_city: input.provider_city || '',
+  provider_on_watchlist: input.provider_on_watchlist || false,
+  diagnosis_code: input.diagnosis_code || '',
+  diagnosis_desc: input.diagnosis_desc || '',
+  service_date: input.service_date || '',
+  claim_date: input.claim_date || '',
+  total_amount: Number(input.total_amount) || 0,
+  procedures: input.procedures || [],
+  claim_history: input.claim_history || [],
+  history_count: (input.claim_history || []).length,
   receivedAt: new Date().toISOString()
 };`,
     } as TransformNodeData,
@@ -188,122 +193,287 @@ const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
     position: { x: 400, y: 300 },
     data: {
       label: "Parallel Fraud Analysis",
-      description: "Run narrative analysis, rule-based scoring, and pattern matching simultaneously",
+      description: "Run narrative analysis, rule engine, and pattern matching simultaneously",
       nodeType: NodeType.PARALLEL,
     } as ParallelNodeData,
   },
-  // ── 3 parallel branches ──
+  // ── Branch 1: RAG Policy Rules → AI Narrative Analysis ──
+  {
+    id: "rag-policy-rules",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 50, y: 450 },
+    data: {
+      label: "Lookup Policy Rules",
+      description: "Search knowledge base for policy coverage rules, exclusions, and limits",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: ["horizon-life-kb"],
+      topK: 5,
+      queryTemplate: "{{input.product_name}} coverage rules exclusions limit for {{input.diagnosis_code}} {{input.diagnosis_desc}}",
+    } as RagSearchNodeData,
+  },
   {
     id: "llm-narrative",
     type: NodeType.LLM,
-    position: { x: 80, y: 450 },
+    position: { x: 50, y: 600 },
     data: {
       label: "Narrative Analysis",
-      description: "Analyze the claim description for inconsistencies and suspicious language",
+      description: "AI analyzes claim data for inconsistencies and suspicious patterns",
       nodeType: NodeType.LLM,
       model: "xiaomi/mimo-v2-flash",
-      systemPrompt: `You are an insurance fraud detection specialist analyzing claim narratives.
+      systemPrompt: `Kamu adalah spesialis deteksi fraud asuransi kesehatan Indonesia. Analisis klaim secara OBJEKTIF dan PROPORSIONAL.
 
-Analyze the following insurance claim for:
-1. Internal inconsistencies in the story
-2. Suspicious or vague language patterns
-3. Implausible details or timelines
-4. Emotional manipulation or excessive detail in unusual areas
-5. Missing critical details that a genuine claimant would include
+DATA KLAIM:
+- Nomor: {{$variables.claim_number}}
+- Tipe: {{$variables.claim_type}}
+- Nasabah: {{$variables.customer_name}} ({{$variables.customer_gender}})
+- Polis: {{$variables.policy_number}} — {{$variables.product_name}}
+- Limit Tahunan: Rp {{$variables.annual_limit}} | Limit Tersisa: Rp {{$variables.remaining_limit}}
+- Provider: {{$variables.provider_name}}, {{$variables.provider_city}} (Watchlist: {{$variables.provider_on_watchlist}})
+- Diagnosis: {{$variables.diagnosis_code}} — {{$variables.diagnosis_desc}}
+- Tanggal Layanan: {{$variables.service_date}}
+- Total: Rp {{$variables.total_amount}}
+- Jumlah Klaim Sebelumnya: {{$variables.history_count}}
 
-Respond with JSON:
+RIWAYAT KLAIM SEBELUMNYA:
+{{$variables.claim_history}}
+
+KONTEKS ATURAN POLIS:
+{{input.context}}
+
+PANDUAN SCORING (PENTING — ikuti dengan ketat):
+- 0-20: Klaim bersih, tidak ada temuan. Diagnosis wajar, biaya normal, riwayat bersih.
+- 20-40: Ada anomali ringan (biaya sedikit di atas rata-rata, atau riwayat klaim agak sering tapi masih wajar).
+- 40-60: Ada pola mencurigakan yang KONKRET: biaya jauh di atas benchmark, ATAU diagnosis berulang + provider sama, ATAU klaim mendekati limit. Perlu review manual.
+- 60-80: Banyak indikator fraud kuat: provider watchlist + biaya tidak wajar, ATAU riwayat fraud score meningkat + pola berulang, ATAU klaim melebihi limit.
+- 80-100: Fraud sangat jelas: bukti kuat multipel (watchlist + limit terlampaui + pola berulang + biaya sangat tidak wajar).
+
+JANGAN beri skor >60 hanya karena biaya "tinggi" tanpa bukti fraud lain. Pertimbangkan konteks: rawat inap Rp 15-30 juta WAJAR untuk prosedur tertentu.
+
+Respond ONLY with JSON:
 {
-  "narrative_risk_score": <0-100>,
-  "inconsistencies": ["list of found inconsistencies"],
-  "suspicious_patterns": ["list of suspicious language patterns"],
-  "assessment": "brief narrative assessment"
+  "narrative_score": <0-100>,
+  "findings": [
+    { "issue": "deskripsi temuan", "severity": "LOW|MEDIUM|HIGH|CRITICAL" }
+  ],
+  "summary": "Ringkasan 2-3 kalimat dalam bahasa Indonesia"
 }`,
       temperature: 0.1,
     } as LlmNodeData,
   },
+  // ── Branch 2: Rule Engine (Code) ──
   {
     id: "code-rules",
     type: NodeType.CODE,
     position: { x: 400, y: 450 },
     data: {
-      label: "Rule-Based Scoring",
-      description: "Compute fraud risk score using predefined business rules and red flags",
+      label: "Rule Engine",
+      description: "Apply business rules: duplicate check, limit validation, gender mismatch, frequency, watchlist",
       nodeType: NodeType.CODE,
       code: `var score = 0;
 var flags = [];
+var history = input.claim_history || [];
 
-// High claim amount
-if (input.total_claim_amount > 50000) { score += 15; flags.push('High claim amount (>$50K)'); }
-if (input.total_claim_amount > 100000) { score += 10; flags.push('Very high claim amount (>$100K)'); }
-
-// Missing police report for major incidents
-if (input.police_report_available === 'NO' && input.incident_severity !== 'Minor Damage') {
-  score += 20; flags.push('No police report for non-minor incident');
+// R1: PROVIDER_WATCHLIST — provider ada di daftar hitam
+if (input.provider_on_watchlist) {
+  score += 30;
+  flags.push({ rule: 'PROVIDER_WATCHLIST', severity: 'HIGH', message: 'Provider ' + input.provider_name + ' ada di watchlist fraud' });
 }
 
-// New customer filing large claim
-if (input.months_as_customer < 6) { score += 15; flags.push('Customer tenure < 6 months'); }
-if (input.months_as_customer < 12 && input.total_claim_amount > 30000) {
-  score += 10; flags.push('New customer with large claim');
+// R2: LIMIT_EXCEEDED — klaim melebihi sisa limit polis
+if (input.total_amount > input.remaining_limit) {
+  score += 25;
+  flags.push({ rule: 'LIMIT_EXCEEDED', severity: 'HIGH', message: 'Klaim Rp ' + input.total_amount.toLocaleString() + ' melebihi sisa limit Rp ' + input.remaining_limit.toLocaleString() });
 }
 
-// No witnesses
-if (input.witnesses === 0) { score += 10; flags.push('No witnesses reported'); }
-
-// Single vehicle incident with high claim
-if (input.number_of_vehicles_involved === 1 && input.total_claim_amount > 40000) {
-  score += 10; flags.push('Single vehicle, high claim');
+// R3: CUMULATIVE_HIGH — total kumulatif riwayat + klaim ini > 60% annual limit
+if (history.length > 0 && input.annual_limit) {
+  var totalHistAmount = history.reduce(function(sum, h) { return sum + (h.total_amount || 0); }, 0);
+  var cumulative = totalHistAmount + input.total_amount;
+  var usageRatio = cumulative / input.annual_limit;
+  if (usageRatio > 0.8) {
+    score += 15;
+    flags.push({ rule: 'CUMULATIVE_HIGH', severity: 'MEDIUM', message: 'Utilisasi polis ' + Math.round(usageRatio * 100) + '% (Rp ' + Math.round(cumulative/1000000) + ' jt dari ' + Math.round(input.annual_limit/1000000) + ' jt)' });
+  } else if (usageRatio > 0.6) {
+    score += 8;
+    flags.push({ rule: 'CUMULATIVE_HIGH', severity: 'LOW', message: 'Utilisasi polis ' + Math.round(usageRatio * 100) + '% — perlu perhatian' });
+  }
 }
 
-// Injury claim without police report
-if (input.injury_claim > 0 && input.police_report_available === 'NO') {
-  score += 15; flags.push('Injury claim without police report');
+// R4: HF-04 — klaim duplikat (tanggal + provider sama)
+var dupes = history.filter(function(h) {
+  return h.service_date === input.service_date && h.provider_id === input.provider_id;
+});
+if (dupes.length > 0) {
+  score += 30;
+  flags.push({ rule: 'HF-04', severity: 'HIGH', message: 'Klaim duplikat: tanggal dan provider sama dengan klaim ' + dupes[0].claim_number });
 }
 
-// Claim components don't add up
-var componentSum = (input.injury_claim || 0) + (input.property_claim || 0) + (input.vehicle_claim || 0);
-if (Math.abs(componentSum - input.total_claim_amount) > 1000) {
-  score += 15; flags.push('Claim components do not sum to total');
+// R5: HF-10 — gender mismatch dengan diagnosis
+var femaleOnly = ['O80', 'O82', 'N83', 'C56', 'N80', 'N81'];
+var maleOnly = ['N40', 'C61', 'N41', 'N42'];
+var icd = input.diagnosis_code || '';
+if (input.customer_gender === 'male' && femaleOnly.some(function(c) { return icd.startsWith(c); })) {
+  score += 40;
+  flags.push({ rule: 'HF-10', severity: 'CRITICAL', message: 'Diagnosis ' + icd + ' khusus perempuan pada pasien laki-laki' });
+}
+if (input.customer_gender === 'female' && maleOnly.some(function(c) { return icd.startsWith(c); })) {
+  score += 40;
+  flags.push({ rule: 'HF-10', severity: 'CRITICAL', message: 'Diagnosis ' + icd + ' khusus laki-laki pada pasien perempuan' });
+}
+
+// R6: REPEATED_DIAGNOSIS — diagnosis berulang >60% dari riwayat
+if (history.length >= 3) {
+  var sameDiag = history.filter(function(h) { return h.diagnosis_code === input.diagnosis_code; });
+  var diagRatio = sameDiag.length / history.length;
+  if (diagRatio > 0.8) {
+    score += 15;
+    flags.push({ rule: 'REPEATED_DIAGNOSIS', severity: 'MEDIUM', message: Math.round(diagRatio * 100) + '% riwayat klaim diagnosis sama (' + input.diagnosis_code + ') — indikasi churning' });
+  } else if (diagRatio > 0.6) {
+    score += 8;
+    flags.push({ rule: 'REPEATED_DIAGNOSIS', severity: 'LOW', message: Math.round(diagRatio * 100) + '% riwayat klaim diagnosis sama (' + input.diagnosis_code + ')' });
+  }
+}
+
+// R7: HF-06 — konsentrasi provider dalam riwayat >80%
+if (history.length >= 3) {
+  var providerCounts = {};
+  history.forEach(function(h) {
+    providerCounts[h.provider_name] = (providerCounts[h.provider_name] || 0) + 1;
+  });
+  var maxProvider = '';
+  var maxCount = 0;
+  Object.keys(providerCounts).forEach(function(p) {
+    if (providerCounts[p] > maxCount) { maxCount = providerCounts[p]; maxProvider = p; }
+  });
+  var provRatio = maxCount / history.length;
+  if (provRatio > 0.8) {
+    score += 10;
+    flags.push({ rule: 'HF-06', severity: 'MEDIUM', message: Math.round(provRatio * 100) + '% klaim ke provider ' + maxProvider + ' — potensi kolusi' });
+  }
+}
+
+// R8: HF-07 — frekuensi klaim tinggi (30 hari & 180 hari)
+var now = new Date(input.claim_date);
+var d30 = new Date(now); d30.setDate(d30.getDate() - 30);
+var d180 = new Date(now); d180.setDate(d180.getDate() - 180);
+var recent30 = history.filter(function(h) { return new Date(h.claim_date) >= d30; });
+var recent180 = history.filter(function(h) { return new Date(h.claim_date) >= d180; });
+if (recent30.length > 10) {
+  score += 20;
+  flags.push({ rule: 'HF-07', severity: 'HIGH', message: recent30.length + ' klaim dalam 30 hari — sangat tidak wajar' });
+} else if (recent30.length > 3) {
+  score += 10;
+  flags.push({ rule: 'HF-07', severity: 'MEDIUM', message: recent30.length + ' klaim dalam 30 hari' });
+}
+if (recent180.length > 4) {
+  score += 10;
+  flags.push({ rule: 'HF-07b', severity: 'MEDIUM', message: recent180.length + ' klaim dalam 6 bulan — frekuensi tinggi' });
+}
+
+// R9: HIGH_VALUE — klaim bernilai tinggi
+var valThreshold = input.claim_type === 'health' ? 50000000 : 500000000;
+if (input.total_amount > valThreshold) {
+  score += 15;
+  flags.push({ rule: 'HIGH_VALUE', severity: 'MEDIUM', message: 'Klaim bernilai tinggi: Rp ' + Math.round(input.total_amount/1000000) + ' juta' });
+} else if (input.total_amount > valThreshold * 0.5) {
+  score += 5;
+  flags.push({ rule: 'HIGH_VALUE', severity: 'LOW', message: 'Klaim cukup besar: Rp ' + Math.round(input.total_amount/1000000) + ' juta' });
+}
+
+// R10: ESCALATION_TREND — riwayat skor fraud yang meningkat
+// history sorted DESC (newest first); slice(0,3) = 3 terbaru, reverse = kronologis
+var scoredHistory = history.filter(function(h) { return h.fraud_score !== undefined && h.fraud_score !== null; });
+if (scoredHistory.length >= 3) {
+  var recentScores = scoredHistory.slice(0, 3).reverse();
+  var increasing = recentScores.every(function(h, i) {
+    return i === 0 || h.fraud_score >= recentScores[i-1].fraud_score;
+  });
+  var avgScore = recentScores.reduce(function(s, h) { return s + h.fraud_score; }, 0) / recentScores.length;
+  if (increasing && avgScore > 50) {
+    score += 15;
+    flags.push({ rule: 'ESCALATION_TREND', severity: 'HIGH', message: 'Tren skor fraud meningkat (rata-rata ' + Math.round(avgScore) + ')' });
+  }
 }
 
 score = Math.min(score, 100);
-return { rule_score: score, red_flags: flags, rules_evaluated: 9 };`,
+var hasCritical = flags.some(function(f) { return f.severity === 'CRITICAL'; });
+if (hasCritical && score < 80) score = 80;
+
+return { rule_score: score, flags: flags, total_flags: flags.length, rules_evaluated: 10 };`,
       runtime: "javascript",
     } as CodeNodeData,
+  },
+  // ── Branch 3: Pattern Analysis with RAG ──
+  {
+    id: "rag-fraud-patterns",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 750, y: 450 },
+    data: {
+      label: "Lookup Fraud Patterns",
+      description: "Search knowledge base for known fraud patterns and medical cost benchmarks",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: ["horizon-life-kb"],
+      topK: 5,
+      queryTemplate: "fraud patterns for {{input.diagnosis_desc}} {{input.provider_city}} health insurance claim",
+    } as RagSearchNodeData,
   },
   {
     id: "llm-patterns",
     type: NodeType.LLM,
-    position: { x: 720, y: 450 },
+    position: { x: 750, y: 600 },
     data: {
-      label: "Pattern Matching",
-      description: "Match claim data against known fraud patterns and indicators",
+      label: "Pattern Analysis",
+      description: "Compare claim against known fraud patterns and cost benchmarks from knowledge base",
       nodeType: NodeType.LLM,
       model: "xiaomi/mimo-v2-flash",
-      systemPrompt: `You are an insurance fraud pattern detection system. Compare the following claim data against these known fraud patterns:
+      systemPrompt: `Kamu adalah sistem pendeteksi pola fraud asuransi kesehatan Indonesia. Bandingkan klaim dengan pola fraud dan benchmark biaya secara OBJEKTIF.
 
-KNOWN FRAUD PATTERNS:
-- Staged accidents: multiple claims in short period, specific body shops, round-number claims
-- Phantom injuries: injury claims without medical records, delayed injury reporting
-- Premium fraud: address manipulation, misrepresented vehicle usage
-- Inflated claims: repair estimates significantly above market rate
-- Organized rings: multiple related claimants, same providers, coordinated timelines
+DATA KLAIM:
+- Nomor: {{$variables.claim_number}}
+- Nasabah: {{$variables.customer_name}} ({{$variables.customer_gender}})
+- Provider: {{$variables.provider_name}}, {{$variables.provider_city}} (Watchlist: {{$variables.provider_on_watchlist}})
+- Diagnosis: {{$variables.diagnosis_code}} — {{$variables.diagnosis_desc}}
+- Total: Rp {{$variables.total_amount}}
+- Limit Tahunan: Rp {{$variables.annual_limit}} | Limit Tersisa: Rp {{$variables.remaining_limit}}
+- Jumlah Klaim Sebelumnya: {{$variables.history_count}}
 
-Analyze the structured claim data and respond with JSON:
+RIWAYAT KLAIM SEBELUMNYA:
+{{$variables.claim_history}}
+
+KONTEKS POLA FRAUD & BENCHMARK:
+{{input.context}}
+
+Analisis:
+1. Apakah biaya klaim wajar dibanding benchmark untuk diagnosis dan kota tersebut?
+2. Apakah ada pola yang cocok dengan modus fraud yang diketahui (HF-01 s/d HF-10)?
+3. Apakah riwayat klaim menunjukkan pola mencurigakan?
+4. Apakah ada indikasi kolusi dengan provider?
+
+PANDUAN SCORING (PENTING — ikuti dengan ketat):
+- 0-20: Tidak ada pola fraud. Biaya wajar sesuai benchmark. Riwayat bersih.
+- 20-40: Ada 1 pola minor (biaya sedikit di atas benchmark, atau diagnosis umum yang sering diklaim).
+- 40-60: Ada 1-2 pola fraud teridentifikasi KONKRET. Biaya di atas benchmark tapi bukan ekstrem. Riwayat menunjukkan tren mencurigakan.
+- 60-80: Ada 2-3 pola fraud kuat. Provider watchlist + biaya tidak wajar, ATAU pola berulang dengan bukti kuat dari riwayat.
+- 80-100: Banyak pola fraud sekaligus dengan bukti kuat (watchlist + biaya sangat tidak wajar + riwayat fraud + kolusi provider).
+
+JANGAN beri skor >60 hanya karena biaya "tinggi". Pertimbangkan: prosedur medis memang mahal. Skor tinggi harus didukung BUKTI KONKRET dari pola dan riwayat.
+
+Respond ONLY with JSON:
 {
-  "pattern_risk_score": <0-100>,
-  "matched_patterns": ["list of matched fraud patterns"],
-  "pattern_details": "explanation of pattern matches",
-  "recommended_checks": ["list of additional verification steps"]
+  "pattern_score": <0-100>,
+  "matched_patterns": ["kode pola yang cocok, misal HF-01, HF-03"],
+  "cost_comparison": "wajar|tinggi|sangat_tinggi",
+  "summary": "Ringkasan temuan pola dalam bahasa Indonesia",
+  "recommended_checks": ["langkah verifikasi yang disarankan"]
 }`,
       temperature: 0.1,
     } as LlmNodeData,
   },
-  // ── Merge + final assessment ──
+  // ── Merge + Synthesize ──
   {
     id: "merge-results",
     type: NodeType.MERGE,
-    position: { x: 400, y: 600 },
+    position: { x: 400, y: 750 },
     data: {
       label: "Merge Analysis Results",
       description: "Combine results from all three parallel fraud analysis branches",
@@ -314,51 +484,57 @@ Analyze the structured claim data and respond with JSON:
   {
     id: "llm-synthesize",
     type: NodeType.LLM,
-    position: { x: 400, y: 750 },
+    position: { x: 400, y: 900 },
     data: {
       label: "Synthesize Assessment",
-      description: "Combine all fraud signals into a final risk assessment with overall score",
+      description: "Produce final weighted risk score and recommendation",
       nodeType: NodeType.LLM,
       model: "xiaomi/mimo-v2-flash",
-      systemPrompt: `You are a senior insurance fraud analyst producing a final assessment.
+      systemPrompt: `Kamu adalah analis fraud senior asuransi yang menghasilkan penilaian akhir.
 
-You will receive the combined results of three fraud analysis methods:
-1. Narrative analysis (checked claim description for inconsistencies)
-2. Rule-based scoring (applied business rules and red flags)
-3. Pattern matching (compared against known fraud patterns)
+Kamu menerima hasil gabungan dari 3 metode analisis:
+1. Narrative Analysis (25% bobot) - analisis AI terhadap data klaim
+2. Rule Engine (40% bobot) - aturan bisnis dan red flags
+3. Pattern Analysis (35% bobot) - pencocokan pola fraud dan benchmark biaya
 
-Produce a final fraud risk assessment. Calculate a weighted overall risk score:
-- Narrative analysis: 30% weight
-- Rule-based scoring: 40% weight
-- Pattern matching: 30% weight
+Hitung skor risiko keseluruhan berdasarkan bobot di atas.
 
-Respond with JSON only:
+Respond ONLY with valid JSON:
 {
   "overall_risk_score": <0-100>,
-  "risk_level": "low" | "medium" | "high",
+  "risk_level": "LOW" | "MEDIUM" | "HIGH",
   "confidence": <0-100>,
-  "summary": "2-3 sentence summary",
-  "key_findings": ["top 3-5 findings"],
-  "recommendation": "approve" | "review" | "escalate"
+  "summary": "Ringkasan 2-3 kalimat dalam bahasa Indonesia",
+  "key_findings": ["5 temuan utama dalam bahasa Indonesia"],
+  "recommendation": "AUTO_APPROVE" | "REVIEW" | "ESCALATE"
 }
 
-Risk level thresholds: low < 30, medium 30-65, high > 65`,
+Threshold risk level: LOW < 30, MEDIUM 30-69, HIGH >= 70`,
       temperature: 0.2,
     } as LlmNodeData,
   },
   {
     id: "transform-parse",
     type: NodeType.TRANSFORM,
-    position: { x: 400, y: 900 },
+    position: { x: 400, y: 1050 },
     data: {
       label: "Parse Assessment",
-      description: "Parse the LLM JSON response into a structured object",
+      description: "Parse LLM JSON response into structured object",
       nodeType: NodeType.TRANSFORM,
       expression: `try {
-  var parsed = typeof input.text === 'string' ? JSON.parse(input.text) : input;
-  return parsed;
+  var text = input.text || '';
+  var jsonMatch = text.match(/\\{[\\s\\S]*\\}/);
+  var parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(text);
+  return {
+    risk_level: (parsed.risk_level || 'MEDIUM').toUpperCase(),
+    overall_risk_score: parsed.overall_risk_score || 50,
+    confidence: parsed.confidence || 50,
+    summary: parsed.summary || '',
+    key_findings: parsed.key_findings || [],
+    recommendation: parsed.recommendation || 'REVIEW'
+  };
 } catch(e) {
-  return { risk_level: 'medium', overall_risk_score: 50, summary: input.text || 'Parse error', recommendation: 'review' };
+  return { risk_level: 'MEDIUM', overall_risk_score: 50, confidence: 30, summary: text || 'Parse error', key_findings: [], recommendation: 'REVIEW' };
 }`,
     } as TransformNodeData,
   },
@@ -366,33 +542,35 @@ Risk level thresholds: low < 30, medium 30-65, high > 65`,
   {
     id: "switch-risk",
     type: NodeType.SWITCH,
-    position: { x: 400, y: 1050 },
+    position: { x: 400, y: 1200 },
     data: {
       label: "Route by Risk Level",
-      description: "Route the claim based on assessed fraud risk level",
+      description: "Route claim based on fraud risk level",
       nodeType: NodeType.SWITCH,
       switchOn: "input.risk_level",
       cases: [
-        { id: "low", value: "low", label: "Low Risk" },
-        { id: "medium", value: "medium", label: "Medium Risk" },
-        { id: "high", value: "high", label: "High Risk" },
+        { id: "low", value: "LOW", label: "Low Risk → Auto Approve" },
+        { id: "medium", value: "MEDIUM", label: "Medium → Review" },
+        { id: "high", value: "HIGH", label: "High → Escalate" },
       ],
     } as SwitchNodeData,
   },
   {
     id: "transform-approve",
     type: NodeType.TRANSFORM,
-    position: { x: 80, y: 1200 },
+    position: { x: 80, y: 1350 },
     data: {
       label: "Auto-Approve",
-      description: "Automatically approve low-risk claims for standard processing",
+      description: "Auto-approve low risk claims",
       nodeType: NodeType.TRANSFORM,
       expression: `return {
-  decision: 'approved',
-  decidedBy: 'auto',
+  decision: 'AUTO_APPROVED',
+  decidedBy: 'SYSTEM',
+  status: 'AUTO_APPROVED',
   risk_level: input.risk_level,
   risk_score: input.overall_risk_score,
   summary: input.summary,
+  key_findings: input.key_findings,
   decidedAt: new Date().toISOString()
 };`,
     } as TransformNodeData,
@@ -400,42 +578,47 @@ Risk level thresholds: low < 30, medium 30-65, high > 65`,
   {
     id: "approval-analyst",
     type: NodeType.APPROVAL,
-    position: { x: 400, y: 1200 },
+    position: { x: 400, y: 1350 },
     data: {
       label: "Analyst Review",
-      description: "Route to fraud analyst for manual review of medium-risk claims",
+      description: "Route to analyst for manual review of medium-risk claim",
       nodeType: NodeType.APPROVAL,
-      prompt: "This claim has been flagged as MEDIUM RISK by automated fraud detection. Please review the analysis findings and approve or reject the claim.",
+      prompt: "Klaim ini terdeteksi MEDIUM RISK oleh sistem fraud detection. Silakan review temuan analisis dan approve/reject klaim.",
     } as HumanInputNodeData,
   },
   {
     id: "handoff-escalate",
     type: NodeType.HANDOFF,
-    position: { x: 720, y: 1200 },
+    position: { x: 720, y: 1350 },
     data: {
       label: "Escalate to SIU",
-      description: "Escalate high-risk claims to the Special Investigations Unit",
+      description: "Escalate high-risk claim to Special Investigations Unit",
       nodeType: NodeType.HANDOFF,
-      prompt: "HIGH RISK claim detected. This claim has been flagged with multiple fraud indicators and requires immediate investigation by the Special Investigations Unit (SIU). Claim is BLOCKED pending investigation.",
+      prompt: "KLAIM HIGH RISK terdeteksi. Klaim ini memiliki multiple indikator fraud dan memerlukan investigasi mendalam oleh SIU. Klaim DIBLOKIR menunggu investigasi.",
     } as HumanInputNodeData,
   },
 ]
 
 const fraudDetectionEdges: Edge[] = [
-  { id: "e-trigger-normalize",  source: "trigger-webhook",   target: "transform-normalize" },
-  { id: "e-normalize-parallel", source: "transform-normalize", target: "parallel-split" },
-  { id: "e-parallel-narrative", source: "parallel-split",     target: "llm-narrative" },
-  { id: "e-parallel-rules",    source: "parallel-split",     target: "code-rules" },
-  { id: "e-parallel-patterns",  source: "parallel-split",     target: "llm-patterns" },
-  { id: "e-narrative-merge",   source: "llm-narrative",      target: "merge-results" },
-  { id: "e-rules-merge",       source: "code-rules",         target: "merge-results" },
-  { id: "e-patterns-merge",    source: "llm-patterns",       target: "merge-results" },
-  { id: "e-merge-synthesize",  source: "merge-results",      target: "llm-synthesize" },
-  { id: "e-synthesize-parse",  source: "llm-synthesize",     target: "transform-parse" },
-  { id: "e-parse-switch",      source: "transform-parse",    target: "switch-risk" },
-  { id: "e-switch-approve",    source: "switch-risk", sourceHandle: "low",    target: "transform-approve" },
-  { id: "e-switch-review",     source: "switch-risk", sourceHandle: "medium", target: "approval-analyst" },
-  { id: "e-switch-escalate",   source: "switch-risk", sourceHandle: "high",   target: "handoff-escalate" },
+  { id: "e-trigger-normalize",    source: "trigger-manual",       target: "transform-normalize" },
+  { id: "e-normalize-parallel",   source: "transform-normalize",  target: "parallel-split" },
+  // Branch 1: RAG policy rules → LLM narrative
+  { id: "e-parallel-rag-policy",  source: "parallel-split",       target: "rag-policy-rules" },
+  { id: "e-rag-policy-narrative", source: "rag-policy-rules",     target: "llm-narrative" },
+  // Branch 2: Code rules (gets claim data directly)
+  { id: "e-parallel-rules",      source: "parallel-split",       target: "code-rules" },
+  // Branch 3: RAG fraud patterns → LLM patterns
+  { id: "e-parallel-rag-fraud",   source: "parallel-split",       target: "rag-fraud-patterns" },
+  { id: "e-rag-fraud-patterns",   source: "rag-fraud-patterns",   target: "llm-patterns" },
+  { id: "e-narrative-merge",    source: "llm-narrative",        target: "merge-results" },
+  { id: "e-rules-merge",        source: "code-rules",           target: "merge-results" },
+  { id: "e-patterns-merge",     source: "llm-patterns",         target: "merge-results" },
+  { id: "e-merge-synthesize",   source: "merge-results",        target: "llm-synthesize" },
+  { id: "e-synthesize-parse",   source: "llm-synthesize",       target: "transform-parse" },
+  { id: "e-parse-switch",       source: "transform-parse",      target: "switch-risk" },
+  { id: "e-switch-approve",     source: "switch-risk", sourceHandle: "low",    target: "transform-approve" },
+  { id: "e-switch-review",      source: "switch-risk", sourceHandle: "medium", target: "approval-analyst" },
+  { id: "e-switch-escalate",    source: "switch-risk", sourceHandle: "high",   target: "handoff-escalate" },
 ]
 
 // ─── Template 4: Customer Service Chatflow ────────────────
@@ -892,6 +1075,129 @@ const claimFilingEdges: Edge[] = [
   { id: "e-rag-general-stream",    source: "rag-general-claims", target: "stream-general-claim" },
 ]
 
+// ─── Template 7: Fraud Investigation Chatflow ────────────
+// Flow: Trigger → Parallel(RAG Policy, RAG Fraud, RAG Benchmark) → Merge → Stream
+
+const fraudInvestigationNodes: Node<WorkflowNodeData>[] = [
+  {
+    id: "trigger-1",
+    type: NodeType.TRIGGER_MANUAL,
+    position: { x: 350, y: 0 },
+    data: {
+      label: "Investigator Question",
+      nodeType: NodeType.TRIGGER_MANUAL,
+      config: {},
+    } as TriggerNodeData,
+  },
+  {
+    id: "parallel-search",
+    type: NodeType.PARALLEL,
+    position: { x: 350, y: 150 },
+    data: {
+      label: "Parallel KB Search",
+      description: "Search policy rules, fraud patterns, and medical benchmarks simultaneously",
+      nodeType: NodeType.PARALLEL,
+    } as ParallelNodeData,
+  },
+  {
+    id: "rag-policy",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 50, y: 300 },
+    data: {
+      label: "Policy Rules KB",
+      description: "Search policy coverage, exclusions, and limits",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: ["horizon-life-kb"],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "rag-fraud",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 350, y: 300 },
+    data: {
+      label: "Fraud Patterns KB",
+      description: "Search known fraud patterns and indicators",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: ["horizon-life-kb"],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "rag-benchmark",
+    type: NodeType.RAG_SEARCH,
+    position: { x: 650, y: 300 },
+    data: {
+      label: "Medical Benchmark KB",
+      description: "Search medical cost benchmarks per diagnosis per city",
+      nodeType: NodeType.RAG_SEARCH,
+      knowledgeBaseGroupIds: ["horizon-life-kb"],
+      topK: 5,
+    } as RagSearchNodeData,
+  },
+  {
+    id: "merge-results",
+    type: NodeType.MERGE,
+    position: { x: 350, y: 450 },
+    data: {
+      label: "Merge KB Results",
+      description: "Combine results from all three knowledge bases",
+      nodeType: NodeType.MERGE,
+      mergeStrategy: "all",
+    } as MergeNodeData,
+  },
+  {
+    id: "stream-answer",
+    type: NodeType.STREAM_OUTPUT,
+    position: { x: 350, y: 600 },
+    data: {
+      label: "Investigation Assistant",
+      description: "Answer investigator questions using combined KB context and claim data",
+      nodeType: NodeType.STREAM_OUTPUT,
+      model: "xiaomi/mimo-v2-flash",
+      systemPrompt: `Kamu adalah rekan kerja senior di tim investigasi fraud asuransi kesehatan. Kamu berpengalaman dan bisa menjelaskan hal teknis dengan bahasa sehari-hari yang mudah dipahami.
+
+KONTEKS KLAIM YANG SEDANG DIINVESTIGASI:
+{{system_context}}
+
+GAYA KOMUNIKASI:
+- Jawab seperti ngobrol dengan rekan kerja, bukan menulis laporan formal
+- Langsung ke poin penting, tidak perlu numbering panjang atau tabel kecuali diminta
+- Boleh kasih opini profesional ("menurut saya...", "ini wajar karena...", "yang perlu diwaspadai...")
+- Gunakan angka dan fakta dari knowledge base tapi sampaikan secara natural dalam kalimat
+- Jangan pakai heading/subheading berlebihan — cukup paragraf pendek yang mengalir
+- Kalau ada yang mencurigakan, jelaskan kenapa dengan bahasa yang jelas
+- Kalau klaim wajar, bilang langsung tanpa bertele-tele
+- Bahasa Indonesia santai tapi tetap profesional (bukan bahasa gaul)
+
+KEMAMPUANMU:
+- Cek apakah klaim sesuai aturan polis (coverage, exclusion, waiting period)
+- Identifikasi pola fraud dari knowledge base
+- Bandingkan biaya klaim dengan benchmark medis
+- Analisis riwayat klaim untuk pola mencurigakan
+- Kasih rekomendasi langkah selanjutnya
+
+CONTOH TONE YANG BENAR:
+"Skor 13 untuk klaim ini sudah tepat. Rp 600.000 untuk flu rawat jalan di RS Mitra Keluarga itu wajar — benchmark-nya Rp 200.000-800.000 untuk area Jabodetabek. Tidak ada red flag dari sisi biaya maupun frekuensi."
+
+CONTOH TONE YANG SALAH:
+"## Analisis Klaim\\n### 1. Evaluasi Biaya\\n| Parameter | Nilai |\\n..."`,
+      temperature: 0.3,
+    } as StreamOutputNodeData,
+  },
+]
+
+const fraudInvestigationEdges: Edge[] = [
+  { id: "e-trigger-parallel",   source: "trigger-1",       target: "parallel-search" },
+  { id: "e-parallel-policy",    source: "parallel-search",  target: "rag-policy" },
+  { id: "e-parallel-fraud",     source: "parallel-search",  target: "rag-fraud" },
+  { id: "e-parallel-benchmark", source: "parallel-search",  target: "rag-benchmark" },
+  { id: "e-policy-merge",       source: "rag-policy",       target: "merge-results" },
+  { id: "e-fraud-merge",        source: "rag-fraud",        target: "merge-results" },
+  { id: "e-benchmark-merge",    source: "rag-benchmark",    target: "merge-results" },
+  { id: "e-merge-stream",       source: "merge-results",    target: "stream-answer" },
+]
+
 // ─── Exports ──────────────────────────────────────────────
 
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
@@ -970,16 +1276,42 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: "wf-fraud-detection",
-    name: "Insurance Fraud Detection",
-    description: "Receive claims via webhook, run parallel AI + rule-based fraud analysis, and route by risk level with human-in-the-loop review.",
+    name: "Health Insurance Fraud Detection",
+    description: "Parallel AI fraud analysis for health insurance claims: narrative analysis, rule engine (8 rules), and pattern matching with RAG. Routes by risk level (auto-approve / review / escalate).",
     icon: "🔍",
     nodes: fraudDetectionNodes,
     edges: fraudDetectionEdges,
-    trigger: { type: "webhook", webhookPath: "/fraud-detection" },
+    trigger: { type: "manual" },
     variables: {
-      inputs: [{ name: "claim", type: "object", description: "Insurance claim data with policy, incident, and financial details", required: true }],
-      outputs: [{ name: "decision", type: "object", description: "Fraud assessment decision with risk score and routing outcome", required: true }],
+      inputs: [
+        { name: "claim_number", type: "string", description: "Claim number", required: true },
+        { name: "claim_type", type: "string", description: "health or life", required: true },
+        { name: "customer_name", type: "string", description: "Customer name", required: true },
+        { name: "customer_gender", type: "string", description: "male or female", required: true },
+        { name: "diagnosis_code", type: "string", description: "ICD-10 diagnosis code", required: false },
+        { name: "diagnosis_desc", type: "string", description: "Diagnosis description", required: true },
+        { name: "total_amount", type: "number", description: "Total claim amount in IDR", required: true },
+        { name: "remaining_limit", type: "number", description: "Remaining policy limit", required: true },
+        { name: "provider_on_watchlist", type: "boolean", description: "Whether provider is on watchlist", required: true },
+        { name: "claim_history", type: "array", description: "Array of previous claims", required: false },
+      ],
+      outputs: [{ name: "decision", type: "object", description: "Fraud assessment with risk score, findings, and routing decision", required: true }],
     },
-    tags: ["Insurance", "Fraud", "Parallel", "Human-in-Loop"],
+    tags: ["Insurance", "Fraud", "Parallel", "Human-in-Loop", "RAG"],
+  },
+  {
+    id: "wf-fraud-investigation",
+    name: "Fraud Investigation Chatflow",
+    description: "Interactive chatflow for fraud investigators. Search claim history, policy rules, fraud patterns, and medical benchmarks to assist investigation. For internal investigator use.",
+    icon: "🕵️",
+    mode: "CHATFLOW",
+    nodes: fraudInvestigationNodes,
+    edges: fraudInvestigationEdges,
+    trigger: { type: "manual" },
+    variables: {
+      inputs: [{ name: "message", type: "string", description: "Investigator question", required: true }],
+      outputs: [{ name: "response", type: "string", description: "Investigation findings", required: true }],
+    },
+    tags: ["Insurance", "Fraud", "Chatflow", "Internal", "RAG"],
   },
 ]
