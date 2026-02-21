@@ -29,7 +29,10 @@
     "docker:logs": "docker compose logs -f",
     "db:cleanup": "bun scripts/cleanup-conversations.ts",
     "db:reset-memory": "bun scripts/reset-memory.ts",
-    "setup": "bun run docker:up && sleep 5 && bun run db:push && bun run db:generate && bun run db:seed",
+    "setup": "bun run docker:up && bun run setup:db",
+    "setup:clean": "bun run docker:up && bun run setup:db:clean",
+    "setup:db": "bun scripts/wait-for-db.ts && bun run db:push && bun run db:generate && bun run db:seed",
+    "setup:db:clean": "bun scripts/wait-for-db.ts && bun run db:push && bun run db:generate && FORCE_RESEED=true bun run db:seed",
     "migrate:s3": "bun scripts/migrate-files-to-s3.ts",
     "migrate:s3:dry-run": "bun scripts/migrate-files-to-s3.ts --dry-run"
   },

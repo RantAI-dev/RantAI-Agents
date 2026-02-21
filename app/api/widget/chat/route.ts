@@ -335,6 +335,9 @@ export async function POST(req: NextRequest) {
     // Build system prompt
     let systemPrompt = assistant.systemPrompt
 
+    // Store RAG sources to send with response (match dashboard behavior)
+    let ragSources: Array<{ title: string; section: string | null }> = []
+
     // RAG retrieval if enabled
     if (assistant.useKnowledgeBase) {
       const lastUserMessage = [...messages]
@@ -363,11 +366,27 @@ export async function POST(req: NextRequest) {
           if (retrievalResult.context) {
             const formattedContext = formatContextForPrompt(retrievalResult)
             systemPrompt = `${systemPrompt}\n\n${formattedContext}`
+
+            ragSources = retrievalResult.sources.map((s) => ({
+              title: s.documentTitle,
+              section: s.section,
+            }))
+
+            console.log(
+              `[Widget RAG] Retrieved ${retrievalResult.chunks.length} chunks for query: "${userQuery.substring(0, 50)}..."`
+            )
+            console.log(
+              `[Widget RAG] Sources: ${retrievalResult.sources.map((s) => s.documentTitle).join(", ")}`
+            )
+          } else {
+            console.log(`[Widget RAG] No results for query: "${userQuery.substring(0, 50)}..." (groupIds: ${JSON.stringify(assistant.knowledgeBaseGroupIds)})`)
           }
         } catch (error) {
           console.error("[Widget Chat] RAG error:", error)
         }
       }
+    } else {
+      console.log("[Widget Chat] Knowledge base disabled for this assistant")
     }
 
     // Memory integration (widgetUserId, threadId, lastUserMsg declared above chatflow check)

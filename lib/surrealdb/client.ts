@@ -299,6 +299,29 @@ export class SurrealDBClient {
   }
 
   /**
+   * Normalize raw SDK query results into SurrealQueryResult format.
+   * SurrealDB JS SDK v1.x returns results as direct arrays (T[][]),
+   * but our codebase expects the older { result: T[], status, time } wrapper.
+   */
+  private normalizeQueryResult<T>(rawResult: unknown[]): SurrealQueryResult<T>[] {
+    return rawResult.map((item) => {
+      // New SDK format (v1.x): item is T[] directly
+      if (Array.isArray(item)) {
+        return { result: item as T[] };
+      }
+      // Old SDK format: item is { result: T[], status, time }
+      if (item && typeof item === "object" && "result" in item) {
+        return item as SurrealQueryResult<T>;
+      }
+      // Single value (e.g., from non-SELECT statements)
+      if (item !== null && item !== undefined) {
+        return { result: [item] as T[] };
+      }
+      return { result: [] as T[] };
+    });
+  }
+
+  /**
    * Execute raw SurrealQL query with automatic retry on token expiration
    */
   async query<T = unknown>(sql: string, vars?: Record<string, unknown>): Promise<SurrealQueryResult<T>[]> {
@@ -309,13 +332,13 @@ export class SurrealDBClient {
     try {
       await this.ensureFreshAuth();
       const result = await this.db.query(sql, vars);
-      return result as SurrealQueryResult<T>[];
+      return this.normalizeQueryResult<T>(result as unknown[]);
     } catch (error) {
       if (this.isConnectionError(error)) {
         try {
           await this.fullReconnect();
           const result = await this.db.query(sql, vars);
-          return result as SurrealQueryResult<T>[];
+          return this.normalizeQueryResult<T>(result as unknown[]);
         } catch (reconnectError) {
           console.error("[SurrealDB] Query failed after full reconnect:", reconnectError);
           throw reconnectError;
@@ -326,12 +349,12 @@ export class SurrealDBClient {
         try {
           await this.reauthenticate();
           const result = await this.db.query(sql, vars);
-          return result as SurrealQueryResult<T>[];
+          return this.normalizeQueryResult<T>(result as unknown[]);
         } catch (reauthError) {
           try {
             await this.fullReconnect();
             const result = await this.db.query(sql, vars);
-            return result as SurrealQueryResult<T>[];
+            return this.normalizeQueryResult<T>(result as unknown[]);
           } catch (reconnectError) {
             console.error("[SurrealDB] Query failed after full reconnect:", reconnectError);
             throw reconnectError;
