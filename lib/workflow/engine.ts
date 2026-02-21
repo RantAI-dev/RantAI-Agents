@@ -393,6 +393,19 @@ export class WorkflowEngine {
     const step = compiled.stepMap.get(nodeId)
     if (!step) return
 
+    // ── MERGE gate: wait until ALL predecessors have produced output ──
+    // In a PARALLEL→MERGE pattern, each branch independently follows
+    // successors to the MERGE node. Only the LAST branch to arrive
+    // should actually execute the merge and continue the chain.
+    if (step.nodeType === NodeType.MERGE) {
+      const allPredecessorsReady = step.predecessors.every(
+        (predId) => context.stepOutputs.has(predId)
+      )
+      if (!allPredecessorsReady) {
+        return // Other branches haven't finished yet — skip for now
+      }
+    }
+
     const handler = NODE_HANDLERS[step.nodeType]
     if (!handler) {
       stepLogs.push(createStepLog(step, "failed", input, null, `No handler for ${step.nodeType}`))

@@ -92,7 +92,12 @@ export async function executeChatflow(
   const compiled = compileWorkflow(nodes, edges)
 
   const effectiveRunId = runId || `chatflow_${Date.now()}`
-  const input = { message: userMessage }
+  const input: Record<string, unknown> = { message: userMessage }
+  // If systemPrompt is provided (e.g. claim context from investigation chat),
+  // also inject it as system_context in the input so {{system_context}} templates resolve
+  if (systemPrompt) {
+    input.system_context = systemPrompt
+  }
   const flow = createFlowState(workflow.id, effectiveRunId, input, "trigger_manual")
   const context: ExecutionContext = {
     workflowId: workflow.id,
@@ -366,6 +371,16 @@ async function executeStepRecursive(
   const step = compiled.stepMap.get(nodeId)
   if (!step) return
 
+  // ── MERGE gate: wait until ALL predecessors have produced output ──
+  if (step.nodeType === NodeType.MERGE) {
+    const allPredecessorsReady = step.predecessors.every(
+      (predId) => context.stepOutputs.has(predId)
+    )
+    if (!allPredecessorsReady) {
+      return // Other branches haven't finished yet
+    }
+  }
+
   const handler = NODE_HANDLERS[step.nodeType]
   if (!handler) {
     throw new Error(`No handler for node type: ${step.nodeType}`)
@@ -422,6 +437,35 @@ async function executeStepRecursive(
 
   context.stepOutputs.set(nodeId, result.output)
   context.flow.nodeOutputs[nodeId] = result.output
+
+  // ── PARALLEL: run branches concurrently ──
+  if (step.nodeType === NodeType.PARALLEL) {
+    await Promise.all(
+      step.successors.map((id) =>
+        executeStepRecursive(id, compiled, context, stepLogs, result.output, stopBeforeNodeIds, runId)
+      )
+    )
+    return
+  }
+
+  // ── MERGE: collect predecessor outputs ──
+  if (step.nodeType === NodeType.MERGE) {
+    const predecessorOutputs = step.predecessors
+      .map((predId) => context.stepOutputs.get(predId))
+      .filter((o) => o !== undefined)
+
+    const mergeHandler = NODE_HANDLERS[step.nodeType]
+    if (mergeHandler) {
+      const mergeResult = await mergeHandler(step.data, predecessorOutputs, context)
+      context.stepOutputs.set(nodeId, mergeResult.output)
+      context.flow.nodeOutputs[nodeId] = mergeResult.output
+
+      const mergeIdx = stepLogs.findIndex((s) => s.nodeId === nodeId && s.status === "success")
+      if (mergeIdx >= 0) {
+        stepLogs[mergeIdx] = { ...stepLogs[mergeIdx], output: mergeResult.output }
+      }
+    }
+  }
 
   // Determine next nodes
   let nextNodeIds: string[]
