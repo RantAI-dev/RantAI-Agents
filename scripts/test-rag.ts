@@ -10,8 +10,10 @@ const TEST_QUERIES = [
   "What is Term Life Premium and how much does it cost?",
   "What's the deductible for the Gold health insurance plan?",
   "Does home insurance cover floods?",
+  "What auto insurance plans do you offer?",
   "What's your claims approval rate?",
   "How do I file a claim?",
+  "Halo ada produk apa saja?",
 ];
 
 async function main() {
@@ -19,9 +21,9 @@ async function main() {
   console.log("RAG Test Script");
   console.log("=".repeat(60));
 
-  // Check environment
-  if (!process.env.OPENAI_API_KEY) {
-    console.error("Error: OPENAI_API_KEY is not set");
+  // Check environment (embeddings use OpenRouter, not OpenAI directly)
+  if (!process.env.OPENROUTER_API_KEY) {
+    console.error("Error: OPENROUTER_API_KEY is not set");
     process.exit(1);
   }
 
@@ -53,8 +55,8 @@ async function main() {
 
     try {
       const result = await smartRetrieve(query, {
-        minSimilarity: 0.35,
-        maxChunks: 3,
+        minSimilarity: 0.30,
+        maxChunks: 5,
       });
 
       if (result.chunks.length === 0) {

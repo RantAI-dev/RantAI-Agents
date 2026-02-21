@@ -11,6 +11,78 @@ import {
  * Supports both basic vector search and hybrid search (vector + entity)
  */
 
+// Simple heuristic: common non-ASCII or Indonesian/Malay stop words
+const NON_ENGLISH_INDICATORS = [
+  "apa", "ada", "yang", "dan", "untuk", "dari", "ini", "itu", "saya",
+  "bisa", "mau", "bagaimana", "berapa", "dimana", "kapan", "siapa",
+  "apakah", "tolong", "halo", "selamat", "terima", "kasih", "dengan",
+  "tidak", "juga", "sudah", "belum", "produk", "asuransi", "klaim",
+  "premi", "polis", "pertanggungan", "manfaat", "biaya",
+];
+
+/**
+ * Detect if a query is likely non-English
+ */
+function isLikelyNonEnglish(query: string): boolean {
+  // Strip punctuation before checking
+  const words = query.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
+  const matches = words.filter((w) => NON_ENGLISH_INDICATORS.includes(w));
+  // If 30%+ of words match non-English indicators, treat as non-English
+  return matches.length >= Math.max(1, Math.ceil(words.length * 0.3));
+}
+
+/**
+ * Translate a non-English query to English for better embedding match.
+ * Uses a fast/cheap model via OpenRouter.
+ */
+async function translateQueryForSearch(query: string): Promise<string> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    console.log("[RAG] No OPENROUTER_API_KEY, skipping translation");
+    return query;
+  }
+
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "xiaomi/mimo-v2-flash",
+        messages: [
+          {
+            role: "system",
+            content: "Translate the following user question to English for semantic search over an insurance knowledge base. Keep the searchable intent precise — omit greetings like 'halo/hi/hello'. For broad questions (e.g. 'what products do you have?'), expand to include insurance context (e.g. 'What insurance products and plans are available?'). If already in English, output it as-is. Output ONLY the translated search query, nothing else.",
+          },
+          { role: "user", content: query },
+        ],
+        max_tokens: 200,
+        temperature: 0,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`[RAG] Translation API error: ${response.status} - ${errorText.slice(0, 200)}`);
+      return query;
+    }
+
+    const data = await response.json();
+    const translated = data.choices?.[0]?.message?.content?.trim();
+    if (translated && translated.length > 0) {
+      console.log(`[RAG] Translated query: "${query}" → "${translated}"`);
+      return translated;
+    }
+    console.warn("[RAG] Translation returned empty response");
+  } catch (error) {
+    console.warn("[RAG] Translation failed:", (error as Error).message);
+  }
+
+  return query;
+}
+
 export interface HybridRetrievalResult {
   context: string;
   sources: Array<{
@@ -45,15 +117,20 @@ export async function retrieveContext(
   }
 ): Promise<RetrievalResult> {
   const {
-    minSimilarity = 0.35, // Lower threshold to capture more relevant results
+    minSimilarity = 0.30, // Lower threshold to capture broad/overview queries
     maxChunks = 5,
     categoryFilter,
     groupIds,
   } = options || {};
 
+  // Translate non-English queries for better embedding match
+  const searchQuery = isLikelyNonEnglish(query)
+    ? await translateQueryForSearch(query)
+    : query;
+
   // Search for similar chunks
   const chunks = await searchWithThreshold(
-    query,
+    searchQuery,
     minSimilarity,
     maxChunks,
     categoryFilter,
@@ -114,7 +191,7 @@ export function detectQueryCategory(
 ): string | undefined {
   const queryLower = query.toLowerCase();
 
-  // Life insurance keywords
+  // Life insurance keywords (EN + ID)
   const lifeKeywords = [
     "life insurance",
     "term life",
@@ -127,9 +204,12 @@ export function detectQueryCategory(
     "life policy",
     "iul",
     "indexed universal",
+    "asuransi jiwa",
+    "jiwa",
+    "santunan kematian",
   ];
 
-  // Health insurance keywords
+  // Health insurance keywords (EN + ID)
   const healthKeywords = [
     "health insurance",
     "medical",
@@ -149,9 +229,16 @@ export function detectQueryCategory(
     "platinum",
     "out-of-pocket",
     "in-network",
+    "asuransi kesehatan",
+    "kesehatan",
+    "dokter",
+    "rumah sakit",
+    "resep",
+    "rawat inap",
+    "rawat jalan",
   ];
 
-  // Home insurance keywords
+  // Home insurance keywords (EN + ID)
   const homeKeywords = [
     "home insurance",
     "homeowner",
@@ -166,6 +253,31 @@ export function detectQueryCategory(
     "condo",
     "umbrella",
     "personal property",
+    "asuransi rumah",
+    "rumah",
+    "properti",
+    "banjir",
+    "gempa",
+  ];
+
+  // Vehicle/Auto insurance keywords (EN + ID)
+  const vehicleKeywords = [
+    "auto insurance",
+    "car insurance",
+    "vehicle insurance",
+    "auto coverage",
+    "vehicle coverage",
+    "roadside assistance",
+    "collision",
+    "comprehensive",
+    "liability only",
+    "accident forgiveness",
+    "asuransi kendaraan",
+    "asuransi mobil",
+    "asuransi motor",
+    "kendaraan",
+    "mobil",
+    "motor",
   ];
 
   // Check for matches
@@ -174,9 +286,10 @@ export function detectQueryCategory(
     queryLower.includes(kw)
   ).length;
   const homeScore = homeKeywords.filter((kw) => queryLower.includes(kw)).length;
+  const vehicleScore = vehicleKeywords.filter((kw) => queryLower.includes(kw)).length;
 
   // Return category with highest score (if any)
-  const maxScore = Math.max(lifeScore, healthScore, homeScore);
+  const maxScore = Math.max(lifeScore, healthScore, homeScore, vehicleScore);
 
   if (maxScore === 0) {
     return undefined; // Search all categories
@@ -185,6 +298,7 @@ export function detectQueryCategory(
   if (lifeScore === maxScore) return "LIFE_INSURANCE";
   if (healthScore === maxScore) return "HEALTH_INSURANCE";
   if (homeScore === maxScore) return "HOME_INSURANCE";
+  if (vehicleScore === maxScore) return "VEHICLE_INSURANCE";
 
   return undefined;
 }
@@ -258,6 +372,11 @@ export async function hybridRetrieve(
     categoryFilter,
   } = options || {};
 
+  // Translate non-English queries for better embedding match
+  const searchQuery = isLikelyNonEnglish(query)
+    ? await translateQueryForSearch(query)
+    : query;
+
   const searchConfig: HybridSearchConfig = {
     vectorWeight,
     entityWeight,
@@ -268,7 +387,7 @@ export async function hybridRetrieve(
   };
 
   const hybridSearch = new HybridSearch(searchConfig);
-  const { results, stats } = await hybridSearch.search(query, maxResults);
+  const { results, stats } = await hybridSearch.search(searchQuery, maxResults);
 
   if (results.length === 0) {
     return {

@@ -2,7 +2,6 @@ import { streamText, convertToModelMessages, tool, zodSchema, stepCountIs } from
 import { z } from "zod";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { smartRetrieve, formatContextForPrompt, RetrievalResult } from "@/lib/rag";
-import { DEFAULT_ASSISTANTS } from "@/lib/assistants/defaults";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_MODEL_ID, isValidModel, getModelById } from "@/lib/models";
@@ -134,9 +133,6 @@ export async function POST(req: Request) {
       : (headerUseKnowledgeBase !== null ? headerUseKnowledgeBase === 'true' : undefined);
     const knowledgeBaseGroupIds: string[] | undefined = body.knowledgeBaseGroupIds;
 
-    // Look up assistant by ID - first check defaults, then database
-    const defaultAssistant = DEFAULT_ASSISTANTS.find(a => a.id === assistantId);
-
     // Per-assistant memory configuration (null = all enabled for backward compatibility)
     interface AssistantMemoryConfig {
       enabled: boolean;
@@ -153,13 +149,13 @@ export async function POST(req: Request) {
     };
 
     // Determine system prompt, model, and knowledge base setting
-    // Priority: database assistant > default assistant > custom prompt from request > fallback to HorizonLife
+    // Priority: database assistant > custom prompt from request > fallback generic
     let systemPrompt: string;
     let useKnowledgeBase: boolean;
     let modelId: string = DEFAULT_MODEL_ID;
 
-    if (assistantId && !defaultAssistant) {
-      // Try to fetch from database (user-created assistant)
+    if (assistantId) {
+      // Look up assistant from database (all assistants including built-in are seeded there)
       try {
         const dbAssistant = await prisma.assistant.findUnique({
           where: { id: assistantId },
@@ -202,7 +198,7 @@ export async function POST(req: Request) {
           systemPrompt = BASE_SYSTEM_PROMPT;
           systemPrompt += LANGUAGE_INSTRUCTION;
           useKnowledgeBase = true;
-          debug("Fallback to generic prompt");
+          debug("Assistant not found in DB, fallback to generic prompt");
         }
       } catch (error) {
         console.error("[Chat API] Error fetching assistant from database:", error);
@@ -210,16 +206,8 @@ export async function POST(req: Request) {
         systemPrompt += LANGUAGE_INSTRUCTION;
         useKnowledgeBase = useKnowledgeBaseParam ?? true;
       }
-    } else if (defaultAssistant) {
-      // Found in default assistants (built-in)
-      systemPrompt = defaultAssistant.systemPrompt;
-      useKnowledgeBase = defaultAssistant.useKnowledgeBase;
-      if (defaultAssistant.liveChatEnabled) {
-        systemPrompt += LIVE_CHAT_HANDOFF_INSTRUCTION;
-      }
-      debug("Using default assistant:", defaultAssistant.name);
     } else if (customSystemPrompt) {
-      // Custom assistant or explicit system prompt
+      // Custom system prompt from request
       systemPrompt = customSystemPrompt;
       useKnowledgeBase = useKnowledgeBaseParam ?? false;
       debug("Using custom/user-created assistant prompt");
@@ -394,7 +382,7 @@ export async function POST(req: Request) {
 
           // Retrieve relevant context from the knowledge base
           const retrievalResult = await smartRetrieve(userQuery, {
-            minSimilarity: 0.35,
+            minSimilarity: 0.30,
             maxChunks: 5,
             groupIds: knowledgeBaseGroupIds,
           });
@@ -410,13 +398,14 @@ export async function POST(req: Request) {
               section: s.section,
             }));
 
-            // Log retrieval for debugging (remove in production)
             console.log(
               `[RAG] Retrieved ${retrievalResult.chunks.length} chunks for query: "${userQuery.substring(0, 50)}..."`
             );
             console.log(
               `[RAG] Sources: ${retrievalResult.sources.map((s) => s.documentTitle).join(", ")}`
             );
+          } else {
+            console.log(`[RAG] No results for query: "${userQuery.substring(0, 50)}..." (groupIds: ${JSON.stringify(knowledgeBaseGroupIds)})`);
           }
         } catch (error) {
           // Log error but continue without RAG context

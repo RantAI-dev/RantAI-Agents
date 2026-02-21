@@ -2,120 +2,16 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext, canEdit } from "@/lib/organization"
-import {
-  HORIZON_LIFE_SYSTEM_PROMPT,
-  HORIZON_LIFE_KB_GROUP_ID,
-  CODE_ASSISTANT_PROMPT,
-  CREATIVE_WRITER_PROMPT,
-  DATA_ANALYST_PROMPT,
-  RESEARCH_ASSISTANT_PROMPT,
-} from "@/lib/assistants/defaults"
 import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models"
 
-// Built-in assistants to seed if table is empty
-const BUILT_IN_ASSISTANTS = [
-  {
-    id: "horizon-life",
-    name: "Horizon Life Assistant",
-    description: "Insurance expert for HorizonLife",
-    emoji: "🏠",
-    systemPrompt: HORIZON_LIFE_SYSTEM_PROMPT,
-    useKnowledgeBase: true,
-    knowledgeBaseGroupIds: [HORIZON_LIFE_KB_GROUP_ID],
-    isSystemDefault: true,
-    isBuiltIn: true,
-  },
-  {
-    id: "general",
-    name: "Just Chat",
-    description: "General conversation assistant",
-    emoji: "💬",
-    systemPrompt:
-      "You are a helpful assistant. Be concise, friendly, and informative.",
-    model: "google/gemini-3-flash-preview",
-    useKnowledgeBase: false,
-    knowledgeBaseGroupIds: [],
-    isSystemDefault: false,
-    isBuiltIn: true,
-  },
-  {
-    id: "code-assistant",
-    name: "Code Assistant",
-    description: "Coding help, debugging, and code review",
-    emoji: "👨‍💻",
-    systemPrompt: CODE_ASSISTANT_PROMPT,
-    model: "google/gemini-3-flash-preview",
-    useKnowledgeBase: false,
-    knowledgeBaseGroupIds: [],
-    isSystemDefault: false,
-    isBuiltIn: true,
-  },
-  {
-    id: "creative-writer",
-    name: "Creative Writer",
-    description: "Writing, storytelling, and content creation",
-    emoji: "✍️",
-    systemPrompt: CREATIVE_WRITER_PROMPT,
-    model: "google/gemini-3-flash-preview",
-    useKnowledgeBase: false,
-    knowledgeBaseGroupIds: [],
-    isSystemDefault: false,
-    isBuiltIn: true,
-  },
-  {
-    id: "data-analyst",
-    name: "Data Analyst",
-    description: "Data analysis, charts, and spreadsheets",
-    emoji: "📊",
-    systemPrompt: DATA_ANALYST_PROMPT,
-    model: "google/gemini-3-flash-preview",
-    useKnowledgeBase: false,
-    knowledgeBaseGroupIds: [],
-    isSystemDefault: false,
-    isBuiltIn: true,
-  },
-  {
-    id: "research-assistant",
-    name: "Research Assistant",
-    description: "Research, summarization, and fact-finding",
-    emoji: "🔍",
-    systemPrompt: RESEARCH_ASSISTANT_PROMPT,
-    model: "google/gemini-3-flash-preview",
-    useKnowledgeBase: false,
-    knowledgeBaseGroupIds: [],
-    isSystemDefault: false,
-    isBuiltIn: true,
-  },
-]
-
-// Ensure built-in assistants exist (upserts missing ones)
-async function ensureBuiltInAssistants() {
-  const existing = await prisma.assistant.findMany({
-    where: { isBuiltIn: true },
-    select: { id: true },
-  })
-  const existingIds = new Set(existing.map((a) => a.id))
-
-  for (const assistant of BUILT_IN_ASSISTANTS) {
-    if (!existingIds.has(assistant.id)) {
-      await prisma.assistant.upsert({
-        where: { id: assistant.id },
-        update: {},
-        create: assistant,
-      })
-    }
-  }
-}
-
 // GET /api/assistants - List all assistants
+// Built-in assistants are created by seed.ts during setup (bun run setup)
 export async function GET(request: Request) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
-
-    await ensureBuiltInAssistants()
 
     // Get organization context from header
     const orgContext = await getOrganizationContext(request, session.user.id)
