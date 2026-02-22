@@ -12,6 +12,7 @@ import {
   CORRECTION_INSTRUCTION_WITH_TOOL,
   buildToolInstruction,
 } from "@/lib/prompts/instructions";
+import { resolveSkillsForAssistant } from "@/lib/skills/resolver";
 import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow";
 import { extractAndSaveFacts, stripSources } from "@/lib/workflow/chatflow-memory";
 import {
@@ -153,6 +154,8 @@ export async function POST(req: Request) {
     let systemPrompt: string;
     let useKnowledgeBase: boolean;
     let modelId: string = DEFAULT_MODEL_ID;
+    let assistantModelConfig: Record<string, unknown> | null = null;
+    let assistantGuardRails: Record<string, unknown> | null = null;
 
     if (assistantId) {
       // Look up assistant from database (all assistants including built-in are seeded there)
@@ -165,6 +168,8 @@ export async function POST(req: Request) {
             useKnowledgeBase: true,
             knowledgeBaseGroupIds: true,
             memoryConfig: true,
+            modelConfig: true,
+            guardRails: true,
             name: true,
             liveChatEnabled: true,
           },
@@ -188,6 +193,14 @@ export async function POST(req: Request) {
           // Append live chat handoff instruction if enabled for this assistant
           if (dbAssistant.liveChatEnabled) {
             systemPrompt += LIVE_CHAT_HANDOFF_INSTRUCTION;
+          }
+          // Read per-assistant model config (temperature, topP, etc.)
+          if (dbAssistant.modelConfig && typeof dbAssistant.modelConfig === 'object') {
+            assistantModelConfig = dbAssistant.modelConfig as Record<string, unknown>;
+          }
+          // Read per-assistant guard rails
+          if (dbAssistant.guardRails && typeof dbAssistant.guardRails === 'object') {
+            assistantGuardRails = dbAssistant.guardRails as Record<string, unknown>;
           }
           debug("Using database assistant:", dbAssistant.name, "with model:", modelId);
         } else if (customSystemPrompt) {
@@ -411,6 +424,19 @@ export async function POST(req: Request) {
           // Log error but continue without RAG context
           console.error("[RAG] Error during retrieval:", error);
         }
+      }
+    }
+
+    // ===== SKILL RESOLUTION =====
+    if (assistantId) {
+      try {
+        const skillPrompt = await resolveSkillsForAssistant(assistantId);
+        if (skillPrompt) {
+          systemPrompt += "\n\n" + skillPrompt;
+          debug("Skills appended to prompt:", skillPrompt.substring(0, 80) + "...");
+        }
+      } catch (error) {
+        console.error("[Chat API] Skill resolution error:", error);
       }
     }
 
@@ -645,12 +671,41 @@ export async function POST(req: Request) {
       }),
     };
 
+    // Resolve prompt variables ({{user_name}}, {{date}}, etc.)
+    {
+      const { resolvePromptVariables } = await import("@/lib/prompts/variables");
+      systemPrompt = resolvePromptVariables(systemPrompt, {
+        userName: session.user.name || undefined,
+        assistantName: undefined, // Already in the prompt context
+      });
+    }
+
+    // Append guard rails instructions if configured
+    if (assistantGuardRails) {
+      const { buildGuardRailsPrompt } = await import("@/lib/prompts/guard-rails");
+      const guardRailsPrompt = buildGuardRailsPrompt(assistantGuardRails as any);
+      if (guardRailsPrompt) systemPrompt += guardRailsPrompt;
+    }
+
+    // Append response format instruction if configured
+    if (assistantModelConfig?.responseFormat && assistantModelConfig.responseFormat !== "default") {
+      const { getResponseFormatInstruction } = await import("@/lib/prompts/response-format");
+      const formatInstruction = getResponseFormatInstruction(assistantModelConfig.responseFormat as string);
+      if (formatInstruction) systemPrompt += formatInstruction;
+    }
+
     const result = streamText({
       model: openrouter(modelId),
       system: systemPrompt,
       messages,
       tools: allTools,
       stopWhen: hasAssistantTools ? stepCountIs(5) : stepCountIs(2),
+      // Per-assistant model parameters
+      ...(assistantModelConfig?.temperature != null && { temperature: Number(assistantModelConfig.temperature) }),
+      ...(assistantModelConfig?.topP != null && { topP: Number(assistantModelConfig.topP) }),
+      ...(assistantModelConfig?.maxTokens != null && { maxTokens: Number(assistantModelConfig.maxTokens) }),
+      ...(assistantModelConfig?.presencePenalty != null && { presencePenalty: Number(assistantModelConfig.presencePenalty) }),
+      ...(assistantModelConfig?.frequencyPenalty != null && { frequencyPenalty: Number(assistantModelConfig.frequencyPenalty) }),
     });
 
     // If userId is 'anonymous', we still want working memory (session based) but maybe not long-term

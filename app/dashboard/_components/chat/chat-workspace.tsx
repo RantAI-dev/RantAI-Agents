@@ -349,7 +349,7 @@ function MessagesArea({
               transition={{ duration: 0.3, delay: 0.2 }}
               className="text-sm text-muted-foreground max-w-md mx-auto text-center leading-relaxed"
             >
-              {assistant.description}
+              {assistant.openingMessage || assistant.description}
             </motion.p>
             <QuickSuggestions
               assistant={assistant}

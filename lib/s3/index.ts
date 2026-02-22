@@ -86,6 +86,13 @@ export const S3Paths = {
     `chat/${sessionId}/${messageId}/${sanitizeFilename(filename)}`,
 
   /**
+   * Path for agent/assistant avatars
+   * Format: agents/{orgId|global}/{assistantId}/avatar/{filename}
+   */
+  agentAvatar: (orgId: string | null, assistantId: string, filename: string): string =>
+    `agents/${orgId || "global"}/${assistantId}/avatar/${sanitizeFilename(filename)}`,
+
+  /**
    * Path for temporary uploads
    * Format: temp/{uploadId}/{filename}
    */

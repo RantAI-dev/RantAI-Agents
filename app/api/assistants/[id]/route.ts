@@ -83,6 +83,12 @@ export async function PUT(request: Request, { params }: RouteParams) {
       knowledgeBaseGroupIds,
       memoryConfig,
       liveChatEnabled,
+      modelConfig,
+      openingMessage,
+      openingQuestions,
+      chatConfig,
+      guardRails,
+      avatarS3Key,
     } = body
 
     // Built-in assistants: only allow updating a whitelist of fields (e.g. Live Chat, prompt, model)
@@ -103,6 +109,12 @@ export async function PUT(request: Request, { params }: RouteParams) {
       if (model !== undefined) allowedData.model = model
       if (memoryConfig !== undefined) allowedData.memoryConfig = memoryConfig
       if (liveChatEnabled !== undefined) allowedData.liveChatEnabled = liveChatEnabled
+      if (modelConfig !== undefined) allowedData.modelConfig = modelConfig
+      if (openingMessage !== undefined) allowedData.openingMessage = openingMessage
+      if (openingQuestions !== undefined) allowedData.openingQuestions = openingQuestions
+      if (chatConfig !== undefined) allowedData.chatConfig = chatConfig
+      if (guardRails !== undefined) allowedData.guardRails = guardRails
+      if (avatarS3Key !== undefined) allowedData.avatarS3Key = avatarS3Key
       // name, useKnowledgeBase, knowledgeBaseGroupIds are not allowed for built-in
 
       const assistant = await prisma.assistant.update({
@@ -149,6 +161,12 @@ export async function PUT(request: Request, { params }: RouteParams) {
         ...(knowledgeBaseGroupIds !== undefined && { knowledgeBaseGroupIds }),
         ...(memoryConfig !== undefined && { memoryConfig }),
         ...(liveChatEnabled !== undefined && { liveChatEnabled }),
+        ...(modelConfig !== undefined && { modelConfig }),
+        ...(openingMessage !== undefined && { openingMessage }),
+        ...(openingQuestions !== undefined && { openingQuestions }),
+        ...(chatConfig !== undefined && { chatConfig }),
+        ...(guardRails !== undefined && { guardRails }),
+        ...(avatarS3Key !== undefined && { avatarS3Key }),
         updatedBy: session.user.id,
       },
     })

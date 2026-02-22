@@ -3,43 +3,54 @@
 import { Headphones } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { cn } from "@/lib/utils"
-import { ModelSelectorCards } from "./model-selector-cards"
+import { AvatarPicker } from "./avatar-picker"
+import { OpeningSettings } from "./opening-settings"
+import { StructuredPromptEditor } from "./structured-prompt-editor"
 import { PromptTemplatePicker } from "./prompt-template-picker"
-import type { MemoryConfig } from "@/lib/types/assistant"
-
-const EMOJI_OPTIONS = ["💬", "🤖", "🧠", "📚", "🎯", "💡", "🔮", "⭐", "🌟", "🏠", "💼", "🎧"]
+import { AiPromptGenerator } from "./ai-prompt-generator"
+import { PromptVariables } from "./prompt-variables"
 
 interface TabConfigureProps {
   name: string
   description: string
   emoji: string
-  model: string
+  avatarUrl?: string | null
   systemPrompt: string
   liveChatEnabled: boolean
+  openingMessage: string
+  openingQuestions: string[]
+  isNew: boolean
   onNameChange: (v: string) => void
   onDescriptionChange: (v: string) => void
   onEmojiChange: (v: string) => void
-  onModelChange: (v: string) => void
+  onAvatarUpload: (s3Key: string, url: string) => void
+  onAvatarRemove: () => void
   onSystemPromptChange: (v: string) => void
   onLiveChatEnabledChange: (v: boolean) => void
+  onOpeningMessageChange: (v: string) => void
+  onOpeningQuestionsChange: (v: string[]) => void
 }
 
 export function TabConfigure({
   name,
   description,
   emoji,
-  model,
+  avatarUrl,
   systemPrompt,
   liveChatEnabled,
+  openingMessage,
+  openingQuestions,
+  isNew,
   onNameChange,
   onDescriptionChange,
   onEmojiChange,
-  onModelChange,
+  onAvatarUpload,
+  onAvatarRemove,
   onSystemPromptChange,
   onLiveChatEnabledChange,
+  onOpeningMessageChange,
+  onOpeningQuestionsChange,
 }: TabConfigureProps) {
   const handleTemplatePick = (prompt: string, templateEmoji: string) => {
     onSystemPromptChange(prompt)
@@ -52,71 +63,76 @@ export function TabConfigure({
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-foreground">Identity</h2>
 
-        {/* Emoji Picker */}
-        <div className="space-y-2">
-          <Label className="text-xs text-muted-foreground">Emoji</Label>
-          <div className="flex flex-wrap gap-2">
-            {EMOJI_OPTIONS.map((e) => (
-              <button
-                key={e}
-                type="button"
-                onClick={() => onEmojiChange(e)}
-                className={cn(
-                  "text-2xl p-1.5 rounded-lg transition-all",
-                  emoji === e
-                    ? "bg-primary/10 ring-2 ring-primary scale-110"
-                    : "hover:bg-muted"
-                )}
-              >
-                {e}
-              </button>
-            ))}
+        <div className="flex items-start gap-4">
+          {/* Avatar/Emoji Picker */}
+          <AvatarPicker
+            emoji={emoji}
+            avatarUrl={avatarUrl}
+            onEmojiChange={onEmojiChange}
+            onAvatarUpload={onAvatarUpload}
+            onAvatarRemove={onAvatarRemove}
+          />
+
+          {/* Name & Description */}
+          <div className="flex-1 space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="agent-name">Name</Label>
+              <Input
+                id="agent-name"
+                value={name}
+                onChange={(e) => onNameChange(e.target.value)}
+                placeholder="My Agent"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="agent-description">Description</Label>
+              <Input
+                id="agent-description"
+                value={description}
+                onChange={(e) => onDescriptionChange(e.target.value)}
+                placeholder="What does this agent do?"
+              />
+            </div>
           </div>
         </div>
-
-        {/* Name */}
-        <div className="space-y-2">
-          <Label htmlFor="agent-name">Name</Label>
-          <Input
-            id="agent-name"
-            value={name}
-            onChange={(e) => onNameChange(e.target.value)}
-            placeholder="My Agent"
-          />
-        </div>
-
-        {/* Description */}
-        <div className="space-y-2">
-          <Label htmlFor="agent-description">Description</Label>
-          <Input
-            id="agent-description"
-            value={description}
-            onChange={(e) => onDescriptionChange(e.target.value)}
-            placeholder="What does this agent do?"
-          />
-        </div>
       </section>
 
-      {/* Model */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold text-foreground">Model</h2>
-        <ModelSelectorCards selectedModelId={model} onSelect={onModelChange} />
-      </section>
+      {/* Opening Settings */}
+      <OpeningSettings
+        openingMessage={openingMessage}
+        openingQuestions={openingQuestions}
+        onOpeningMessageChange={onOpeningMessageChange}
+        onOpeningQuestionsChange={onOpeningQuestionsChange}
+      />
 
       {/* System Prompt */}
       <section className="space-y-4">
         <h2 className="text-sm font-semibold text-foreground">System Prompt</h2>
+
+        <AiPromptGenerator
+          currentPrompt={systemPrompt}
+          onGenerated={({ systemPrompt: prompt, suggestedName, suggestedEmoji }) => {
+            onSystemPromptChange(prompt)
+            if (suggestedName) onNameChange(suggestedName)
+            if (suggestedEmoji) onEmojiChange(suggestedEmoji)
+          }}
+        />
 
         <PromptTemplatePicker
           currentPrompt={systemPrompt}
           onSelect={handleTemplatePick}
         />
 
-        <Textarea
-          value={systemPrompt}
-          onChange={(e) => onSystemPromptChange(e.target.value)}
-          placeholder="You are a helpful assistant..."
-          className="min-h-[300px] font-mono text-sm"
+        <StructuredPromptEditor
+          systemPrompt={systemPrompt}
+          onSystemPromptChange={onSystemPromptChange}
+          defaultStructured={isNew}
+        />
+
+        <PromptVariables
+          onInsert={(token) => {
+            onSystemPromptChange(systemPrompt + token)
+          }}
         />
       </section>
 

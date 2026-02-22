@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import type { Assistant, AssistantInput, MemoryConfig } from "@/lib/types/assistant"
+import type { Assistant, AssistantInput, MemoryConfig, ModelConfig, ChatConfig, GuardRailsConfig } from "@/lib/types/assistant"
 
 const SELECTED_KEY = "rantai-selected-assistant"
 const ASSISTANT_CHANGE_EVENT = "rantai-assistant-change"
@@ -17,6 +17,12 @@ interface DbAssistant {
   useKnowledgeBase: boolean
   knowledgeBaseGroupIds: string[]
   memoryConfig?: object | null
+  modelConfig?: object | null
+  chatConfig?: object | null
+  guardRails?: object | null
+  avatarS3Key?: string | null
+  openingMessage?: string | null
+  openingQuestions?: string[]
   isSystemDefault: boolean
   isBuiltIn: boolean
   liveChatEnabled?: boolean
@@ -36,6 +42,12 @@ function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
     useKnowledgeBase: dbAssistant.useKnowledgeBase,
     knowledgeBaseGroupIds: dbAssistant.knowledgeBaseGroupIds,
     memoryConfig: (dbAssistant.memoryConfig as MemoryConfig) || undefined,
+    modelConfig: (dbAssistant.modelConfig as ModelConfig) || undefined,
+    chatConfig: (dbAssistant.chatConfig as ChatConfig) || undefined,
+    guardRails: (dbAssistant.guardRails as GuardRailsConfig) || undefined,
+    avatarS3Key: dbAssistant.avatarS3Key || undefined,
+    openingMessage: dbAssistant.openingMessage || undefined,
+    openingQuestions: dbAssistant.openingQuestions || undefined,
     isDefault: dbAssistant.isSystemDefault,
     isEditable: true, // All assistants are editable
     liveChatEnabled: dbAssistant.liveChatEnabled ?? false,

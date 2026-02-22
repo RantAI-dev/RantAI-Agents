@@ -7,11 +7,15 @@ import {
   Save,
   MoreHorizontal,
   Settings,
+  Cpu,
   Wrench,
+  Sparkles,
   BookOpen,
   Brain,
-  MessageSquare,
+  MessageSquareText,
+  Play,
   Rocket,
+  Shield,
   Copy,
   Star,
   Trash2,
@@ -37,14 +41,18 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-export type TabId = "configure" | "tools" | "knowledge" | "memory" | "test" | "deploy"
+export type TabId = "configure" | "model" | "tools" | "skills" | "knowledge" | "memory" | "guardrails" | "chat" | "test" | "deploy"
 
 const TABS: { id: TabId; label: string; icon: typeof Settings }[] = [
   { id: "configure", label: "Configure", icon: Settings },
+  { id: "model", label: "Model", icon: Cpu },
   { id: "tools", label: "Tools", icon: Wrench },
+  { id: "skills", label: "Skills", icon: Sparkles },
   { id: "knowledge", label: "Knowledge", icon: BookOpen },
   { id: "memory", label: "Memory", icon: Brain },
-  { id: "test", label: "Test", icon: MessageSquare },
+  { id: "guardrails", label: "Guard Rails", icon: Shield },
+  { id: "chat", label: "Chat", icon: MessageSquareText },
+  { id: "test", label: "Test", icon: Play },
   { id: "deploy", label: "Deploy", icon: Rocket },
 ]
 

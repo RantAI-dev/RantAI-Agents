@@ -7,6 +7,7 @@ import {
   Wrench,
   Package,
   Plug,
+  FileJson,
   ChevronDown,
   ChevronRight,
   Check,
@@ -17,14 +18,16 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useTools, type ToolItem } from "@/hooks/use-tools"
+import { OpenApiImportDialog } from "./openapi-import-dialog"
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ElementType }> = {
   builtin: { label: "Built-in", icon: Package },
   custom: { label: "Custom", icon: Wrench },
+  openapi: { label: "OpenAPI", icon: FileJson },
   mcp: { label: "MCP", icon: Plug },
 }
 
-const CATEGORY_ORDER = ["builtin", "custom", "mcp"]
+const CATEGORY_ORDER = ["builtin", "custom", "openapi", "mcp"]
 
 interface TabToolsProps {
   selectedToolIds: string[]
@@ -39,9 +42,10 @@ export function TabTools({
   modelSupportsFunctionCalling,
   isNew,
 }: TabToolsProps) {
-  const { tools, isLoading } = useTools()
+  const { tools, isLoading, fetchTools } = useTools()
   const [search, setSearch] = useState("")
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [openApiOpen, setOpenApiOpen] = useState(false)
 
   const toggleCategory = (cat: string) => {
     setCollapsed((prev) => {
@@ -96,15 +100,26 @@ export function TabTools({
         </p>
       )}
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          placeholder="Search tools..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-8 h-9"
-        />
+      {/* Search + Actions */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search tools..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-8 h-9"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setOpenApiOpen(true)}
+          className="shrink-0"
+        >
+          <FileJson className="h-3.5 w-3.5 mr-1.5" />
+          Import OpenAPI
+        </Button>
       </div>
 
       {/* Tool Groups */}
@@ -197,6 +212,13 @@ export function TabTools({
           <ExternalLink className="ml-1 h-3 w-3" />
         </Link>
       </Button>
+
+      {/* OpenAPI Import Dialog */}
+      <OpenApiImportDialog
+        open={openApiOpen}
+        onOpenChange={setOpenApiOpen}
+        onImported={() => fetchTools()}
+      />
     </div>
   )
 }

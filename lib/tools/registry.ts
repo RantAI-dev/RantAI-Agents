@@ -110,7 +110,7 @@ export async function resolveToolsForAssistant(
       }
     }
 
-    if (toolDef.category === "custom") {
+    if (toolDef.category === "custom" || toolDef.category === "openapi") {
       const config = toolDef.executionConfig as ExecutionConfig | null
       if (!config?.url) {
         console.warn(`[Tools] Custom tool "${toolDef.name}" has no URL, skipping`)

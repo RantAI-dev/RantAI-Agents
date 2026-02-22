@@ -82,8 +82,10 @@ export async function POST(request: Request) {
 
     const body = await request.json()
 
-    const { name, description, emoji, systemPrompt, model, useKnowledgeBase, knowledgeBaseGroupIds, memoryConfig, liveChatEnabled } =
-      body
+    const {
+      name, description, emoji, systemPrompt, model, useKnowledgeBase, knowledgeBaseGroupIds,
+      memoryConfig, liveChatEnabled, modelConfig, openingMessage, openingQuestions, chatConfig, guardRails, avatarS3Key,
+    } = body
 
     if (!name || !systemPrompt) {
       return NextResponse.json(
@@ -112,6 +114,12 @@ export async function POST(request: Request) {
         knowledgeBaseGroupIds: knowledgeBaseGroupIds || [],
         ...(memoryConfig !== undefined && { memoryConfig }),
         ...(liveChatEnabled !== undefined && { liveChatEnabled }),
+        ...(modelConfig !== undefined && { modelConfig }),
+        ...(openingMessage !== undefined && { openingMessage }),
+        ...(openingQuestions !== undefined && { openingQuestions }),
+        ...(chatConfig !== undefined && { chatConfig }),
+        ...(guardRails !== undefined && { guardRails }),
+        ...(avatarS3Key !== undefined && { avatarS3Key }),
         isSystemDefault: false,
         isBuiltIn: false,
         organizationId: orgContext?.organizationId || null,

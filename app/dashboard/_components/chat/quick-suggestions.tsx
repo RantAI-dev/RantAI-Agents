@@ -54,9 +54,12 @@ const itemVariants = {
 
 export const QuickSuggestions = memo<QuickSuggestionsProps>(
   ({ onSelect, assistant }) => {
-    // Get suggestions based on assistant ID or use default
+    // Priority: assistant's configured opening questions > hardcoded suggestions > defaults
+    const configuredQuestions = assistant.openingQuestions?.filter((q) => q.trim())
     const suggestions =
-      SUGGESTIONS[assistant.id] || SUGGESTIONS.default
+      configuredQuestions && configuredQuestions.length > 0
+        ? configuredQuestions
+        : SUGGESTIONS[assistant.id] || SUGGESTIONS.default
 
     return (
       <motion.div
