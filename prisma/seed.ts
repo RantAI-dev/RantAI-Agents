@@ -739,6 +739,44 @@ async function forceReseedCleanup() {
   console.log(`  - Cleared ${deletedAssistants.count} built-in assistants (will be recreated)`)
 }
 
+async function seedCatalogItems() {
+  console.log("\n--- Seeding Marketplace Catalog ---")
+
+  const { STATIC_CATALOG } = await import("../lib/marketplace/catalog")
+
+  for (const item of STATIC_CATALOG) {
+    await prisma.catalogItem.upsert({
+      where: { id: item.id },
+      update: {
+        displayName: item.displayName,
+        description: item.description,
+        category: item.category,
+        type: item.type,
+        icon: item.icon,
+        tags: item.tags,
+        skillContent: item.skillTemplate?.content || null,
+        skillCategory: item.skillTemplate?.category || null,
+        toolTemplate: item.toolTemplate ? (item.toolTemplate as object) : null,
+      },
+      create: {
+        id: item.id,
+        name: item.name,
+        displayName: item.displayName,
+        description: item.description,
+        category: item.category,
+        type: item.type,
+        icon: item.icon,
+        tags: item.tags,
+        skillContent: item.skillTemplate?.content || null,
+        skillCategory: item.skillTemplate?.category || null,
+        toolTemplate: item.toolTemplate ? (item.toolTemplate as object) : null,
+      },
+    })
+  }
+
+  console.log(`Seeded ${STATIC_CATALOG.length} catalog items`)
+}
+
 async function main() {
   console.log("\n🌱 RantAI Agents — Database Seed\n")
 
@@ -780,6 +818,9 @@ async function main() {
 
   // Seed Knowledge Base
   const kbGroupId = await seedKnowledgeBase()
+
+  // Seed Marketplace Catalog
+  await seedCatalogItems()
 
   // Seed Workflows
   await seedWorkflows(user1.id)
