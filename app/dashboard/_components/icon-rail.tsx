@@ -14,6 +14,7 @@ import {
   Blocks,
   GitBranch,
   Building2,
+  Store,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -73,6 +74,12 @@ const allNavItems: NavItem[] = [
     title: "Knowledge",
     url: "/dashboard/knowledge",
     icon: BookOpen,
+    feature: null,
+  },
+  {
+    title: "Marketplace",
+    url: "/dashboard/marketplace",
+    icon: Store,
     feature: null,
   },
   {
