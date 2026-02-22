@@ -1,4 +1,4 @@
-import { Settings, Info, ToggleLeft, Code, Wrench, Plug, KeyRound, Brain, BarChart3, CreditCard } from "lucide-react"
+import { Settings, Info, ToggleLeft, Code, Wrench, Sparkles, Plug, KeyRound, Brain, BarChart3, CreditCard } from "lucide-react"
 
 export const SETTINGS_NAV_ITEMS = [
   {
@@ -18,6 +18,12 @@ export const SETTINGS_NAV_ITEMS = [
     href: "/dashboard/settings/tools",
     icon: Wrench,
     description: "Agent tools configuration",
+  },
+  {
+    title: "Skills",
+    href: "/dashboard/settings/skills",
+    icon: Sparkles,
+    description: "Instruction-based agent skills",
   },
   {
     title: "MCP",
