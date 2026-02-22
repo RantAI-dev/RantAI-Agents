@@ -126,10 +126,13 @@ model Organization {
   dashboardSessions DashboardSession[]
   usageRecords      UsageRecord[]
   tools             Tool[]
+  skills            Skill[]
   mcpServers        McpServerConfig[]
   mcpApiKeys        McpApiKey[]
   workflows         Workflow[]
   credentials       Credential[]
+  openApiSpecs      OpenApiSpec[]
+  marketplaceInstalls MarketplaceInstall[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -199,11 +202,30 @@ model Assistant {
   // Live Chat handoff — when enabled, widget can escalate to human agents
   liveChatEnabled Boolean @default(false)
 
+  // Avatar image (S3 key, null = use emoji)
+  avatarS3Key String?
+
+  // Model parameters per-assistant
+  modelConfig Json? // { temperature?, topP?, maxTokens?, presencePenalty?, frequencyPenalty?, reasoningEffort? }
+
+  // Opening/onboarding settings
+  openingMessage  String?  @db.Text // Welcome message shown when conversation starts
+  openingQuestions String[] // Conversation starter suggestions
+
+  // Guard rails / safety settings
+  guardRails Json? // { blockedTopics?, safetyInstructions?, maxResponseLength?, requireCitations? }
+
+  // Chat preferences per-assistant
+  chatConfig Json? // { autoCreateTopic?, messageThreshold?, limitHistory?, historyCount?, autoSummary?, autoScroll? }
+
   // Memory configuration per-assistant
   memoryConfig Json? // { enabled, workingMemory, semanticRecall, longTermProfile, memoryInstructions }
 
   // Tool bindings
   tools AssistantTool[]
+
+  // Skill bindings
+  skills AssistantSkill[]
 
   // Workflows
   workflows Workflow[]
@@ -440,6 +462,9 @@ model Tool {
   mcpServerId String?
   mcpServer   McpServerConfig? @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
 
+  // OpenAPI spec association (null for non-openapi tools)
+  openApiSpecId String?
+
   // Organization scope (null = system/global tool)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -643,3 +668,95 @@ enum RunStatus {
 // InsuranceCustomer, InsurancePolicy, Provider, Claim models
 // have been migrated to HorizonLife-Demo (merged into Customer/Policy models).
 // RantAI-Agents now serves as pure workflow service provider only.
+
+// ─── Skills System (OpenClaw / Custom) ──────────────────────
+
+model Skill {
+  id             String   @id @default(cuid())
+  name           String
+  displayName    String
+  description    String   @db.Text
+  content        String   @db.Text             // Skill prompt markdown
+  source         String   @default("custom")   // "openclaw" | "custom" | "marketplace"
+  sourceUrl      String?                       // ClawHub URL
+  version        String?
+  category       String   @default("general")  // "productivity", "coding", "writing", etc.
+  tags           String[]
+  metadata       Json?                         // OpenClaw frontmatter
+  enabled        Boolean  @default(true)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?
+  assistantSkills AssistantSkill[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@unique([name, organizationId])
+  @@index([organizationId])
+}
+
+model AssistantSkill {
+  id          String   @id @default(cuid())
+  assistantId String
+  assistant   Assistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  skillId     String
+  skill       Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  enabled     Boolean  @default(true)
+  priority    Int      @default(0)
+  createdAt   DateTime @default(now())
+  @@unique([assistantId, skillId])
+  @@index([assistantId])
+  @@index([skillId])
+}
+
+// ─── OpenAPI Spec Import ────────────────────────────────────
+
+model OpenApiSpec {
+  id           String   @id @default(cuid())
+  name         String
+  specUrl      String?
+  specContent  Json
+  version      String?
+  serverUrl    String
+  authConfig   Json?    // { type, token, headerName }
+  toolCount    Int      @default(0)
+  organizationId String?
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  @@index([organizationId])
+}
+
+// ─── Tool Marketplace ───────────────────────────────────────
+
+model MarketplaceInstall {
+  id             String   @id @default(cuid())
+  catalogItemId  String
+  itemType       String   // "tool" | "skill"
+  installedId    String   // Created Tool.id or Skill.id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  installedBy    String?
+  createdAt      DateTime @default(now())
+  @@unique([catalogItemId, organizationId])
+  @@index([organizationId])
+}
+
+model CatalogItem {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  displayName   String
+  description   String   @db.Text
+  category      String
+  type          String   // "tool" | "skill"
+  icon          String   @default("Sparkles")
+  tags          String[]
+  featured      Boolean  @default(false)
+  skillContent  String?  @db.Text
+  skillCategory String?
+  toolTemplate  Json?
+  sourceUrl     String?
+  sourceSlug    String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
