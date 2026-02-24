@@ -1,11 +1,12 @@
 "use client"
 
-import { useMemo, useState, useEffect, useCallback } from "react"
-import { X, ChevronDown, ChevronRight, Copy, Check, AlertCircle, Plus, Trash2 } from "lucide-react"
+import { useMemo, useState, useEffect } from "react"
+import { X, ChevronDown, ChevronRight, AlertCircle, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import { ExpressionEditor } from "./expression-editor"
 import {
   Select,
@@ -21,11 +22,13 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
+import { NODE_ICON_MAP } from "./nodes/node-icons"
 import {
   NodeType,
   getNodeCategory,
   NODE_CATEGORIES,
   type WorkflowNodeData,
+  type WorkflowVariable,
   type AgentNodeData,
   type LlmNodeData,
   type ToolNodeData,
@@ -58,7 +61,7 @@ function FieldError({ message }: { message?: string }) {
   return (
     <div className="flex items-center gap-1 mt-0.5">
       <AlertCircle className="h-3 w-3 text-destructive shrink-0" />
-      <span className="text-[10px] text-destructive">{message}</span>
+      <span className="text-[11px] text-destructive">{message}</span>
     </div>
   )
 }
@@ -118,7 +121,7 @@ function Section({
   const [open, setOpen] = useState(defaultOpen)
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex items-center gap-1.5 w-full py-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors">
+      <CollapsibleTrigger className="flex items-center gap-1.5 w-full py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors">
         {open ? (
           <ChevronDown className="h-3 w-3" />
         ) : (
@@ -164,14 +167,14 @@ function ModelSelector({
         <SelectContent>
           {[...grouped.entries()].map(([provider, models]) => (
             <div key={provider}>
-              <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+              <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                 {provider}
               </div>
               {models.map((m) => (
                 <SelectItem key={m.id} value={m.id} className="text-xs">
                   <span>{m.name}</span>
                   {m.pricing.input === 0 && (
-                    <span className="ml-1 text-[10px] text-emerald-600">free</span>
+                    <span className="ml-1 text-[11px] text-emerald-600">free</span>
                   )}
                 </SelectItem>
               ))}
@@ -200,8 +203,10 @@ function AssistantSelector({
   error?: string
 }) {
   const [assistants, setAssistants] = useState<AssistantOption[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     fetch("/api/assistants")
       .then((r) => r.json())
       .then((data) => {
@@ -216,6 +221,7 @@ function AssistantSelector({
         }
       })
       .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   return (
@@ -223,17 +229,25 @@ function AssistantSelector({
       <Label className="text-xs">Assistant</Label>
       <Select value={value || "__none__"} onValueChange={(v) => onChange(v === "__none__" ? "" : v)}>
         <SelectTrigger className={cn("h-7 text-xs", error && "border-destructive")}>
-          <SelectValue placeholder="Select assistant" />
+          <SelectValue placeholder={loading ? "Loading..." : "Select assistant"} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="__none__" className="text-xs">
-            Select assistant...
-          </SelectItem>
-          {assistants.map((a) => (
-            <SelectItem key={a.id} value={a.id} className="text-xs">
-              {a.emoji} {a.name}
+          {loading ? (
+            <SelectItem value="__loading__" className="text-xs text-muted-foreground" disabled>
+              Loading assistants...
             </SelectItem>
-          ))}
+          ) : (
+            <>
+              <SelectItem value="__none__" className="text-xs">
+                Select assistant...
+              </SelectItem>
+              {assistants.map((a) => (
+                <SelectItem key={a.id} value={a.id} className="text-xs">
+                  {a.emoji} {a.name}
+                </SelectItem>
+              ))}
+            </>
+          )}
         </SelectContent>
       </Select>
       <FieldError message={error} />
@@ -373,8 +387,10 @@ function ToolSelector({
   isMcp?: boolean
 }) {
   const [tools, setTools] = useState<ToolOption[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     fetch("/api/dashboard/tools")
       .then((r) => r.json())
       .then((data) => {
@@ -396,6 +412,7 @@ function ToolSelector({
         }
       })
       .catch(() => {})
+      .finally(() => setLoading(false))
   }, [isMcp])
 
   const grouped = useMemo(() => {
@@ -424,31 +441,39 @@ function ToolSelector({
         }}
       >
         <SelectTrigger className="h-7 text-xs">
-          <SelectValue placeholder="Select tool..." />
+          <SelectValue placeholder={loading ? "Loading..." : "Select tool..."} />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="__none__" className="text-xs">
-            Select tool...
-          </SelectItem>
-          {[...grouped.entries()].map(([cat, catTools]) => (
-            <div key={cat}>
-              <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                {cat}
-              </div>
-              {catTools.map((t) => (
-                <SelectItem key={t.id} value={t.id} className="text-xs">
-                  <div className="flex flex-col">
-                    <span>{t.displayName}</span>
-                    {t.description && (
-                      <span className="text-[10px] text-muted-foreground truncate max-w-[180px]">
-                        {t.description}
-                      </span>
-                    )}
+          {loading ? (
+            <SelectItem value="__loading__" className="text-xs text-muted-foreground" disabled>
+              Loading tools...
+            </SelectItem>
+          ) : (
+            <>
+              <SelectItem value="__none__" className="text-xs">
+                Select tool...
+              </SelectItem>
+              {[...grouped.entries()].map(([cat, catTools]) => (
+                <div key={cat}>
+                  <div className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    {cat}
                   </div>
-                </SelectItem>
+                  {catTools.map((t) => (
+                    <SelectItem key={t.id} value={t.id} className="text-xs">
+                      <div className="flex flex-col">
+                        <span>{t.displayName}</span>
+                        {t.description && (
+                          <span className="text-[11px] text-muted-foreground truncate max-w-[180px]">
+                            {t.description}
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </div>
               ))}
-            </div>
-          ))}
+            </>
+          )}
         </SelectContent>
       </Select>
     </div>
@@ -502,7 +527,7 @@ function KnowledgeBaseGroupSelector({
     <div className="space-y-1">
       <Label className="text-xs">Knowledge Base Groups</Label>
       {groups.length === 0 ? (
-        <p className="text-[10px] text-muted-foreground italic">No groups available</p>
+        <p className="text-[11px] text-muted-foreground italic">No groups available</p>
       ) : (
         <div className="flex flex-col gap-1 max-h-[120px] overflow-y-auto">
           {groups.map((g) => (
@@ -520,182 +545,178 @@ function KnowledgeBaseGroupSelector({
                 className="h-3 w-3 rounded border-border"
               />
               <span className="flex-1 truncate">{g.name}</span>
-              <span className="text-[10px] text-muted-foreground">{g.documentCount} docs</span>
+              <span className="text-[11px] text-muted-foreground">{g.documentCount} docs</span>
             </label>
           ))}
         </div>
       )}
       {value.length === 0 && groups.length > 0 && (
-        <p className="text-[10px] text-muted-foreground">All groups will be searched</p>
+        <p className="text-[11px] text-muted-foreground">All groups will be searched</p>
       )}
     </div>
   )
 }
 
-// ─── JSON Viewer ──────────────────────────────────────────────────────────────
 
-function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
-  const [expanded, setExpanded] = useState(depth < 2)
-
-  if (value === null) return <span className="text-orange-500">null</span>
-  if (value === undefined) return <span className="text-muted-foreground">undefined</span>
-  if (typeof value === "boolean")
-    return <span className="text-violet-600 dark:text-violet-400">{String(value)}</span>
-  if (typeof value === "number")
-    return <span className="text-blue-600 dark:text-blue-400">{value}</span>
-  if (typeof value === "string") {
-    const display = value.length > 100 ? value.slice(0, 100) + "…" : value
-    return <span className="text-emerald-700 dark:text-emerald-400">&quot;{display}&quot;</span>
-  }
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="text-muted-foreground">[]</span>
-    return (
-      <span>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          {expanded ? "▼" : "▶"} [{value.length}]
-        </button>
-        {expanded && (
-          <div className="ml-3 border-l border-border/50 pl-2">
-            {value.map((item, i) => (
-              <div key={i} className="leading-relaxed">
-                <span className="text-muted-foreground/60">{i}: </span>
-                <JsonValue value={item} depth={depth + 1} />
-              </div>
-            ))}
-          </div>
-        )}
-      </span>
-    )
-  }
-
-  if (typeof value === "object") {
-    const keys = Object.keys(value as Record<string, unknown>)
-    if (keys.length === 0) return <span className="text-muted-foreground">{"{}"}</span>
-    return (
-      <span>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          {expanded ? "▼" : "▶"} {"{"}
-          {keys.length}
-          {"}"}
-        </button>
-        {expanded && (
-          <div className="ml-3 border-l border-border/50 pl-2">
-            {keys.map((key) => (
-              <div key={key} className="leading-relaxed">
-                <span className="text-sky-700 dark:text-sky-400">{key}</span>
-                <span className="text-muted-foreground">: </span>
-                <JsonValue
-                  value={(value as Record<string, unknown>)[key]}
-                  depth={depth + 1}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-      </span>
-    )
-  }
-
-  return <span>{String(value)}</span>
-}
-
-// ─── Node Output Preview ──────────────────────────────────────────────────────
+// ─── Node Execution Status ───────────────────────────────────────────────────
 
 function NodeOutputPreview({ nodeId }: { nodeId: string }) {
   const executionStatus = useWorkflowEditor((s) => s.nodeExecutionStatus[nodeId])
-  const [copied, setCopied] = useState(false)
-  const [output, setOutput] = useState<unknown>(null)
 
-  const hasOutput = executionStatus === "success" || executionStatus === "failed"
+  if (!executionStatus || executionStatus === "pending" || executionStatus === "running") return null
 
-  useEffect(() => {
-    if (!hasOutput) {
-      setOutput(null)
-      return
-    }
-    const stepOutputs = (globalThis as unknown as { __workflowStepOutputs?: Record<string, unknown> }).__workflowStepOutputs
-    if (stepOutputs && stepOutputs[nodeId] !== undefined) {
-      setOutput(stepOutputs[nodeId])
-    }
-  }, [nodeId, hasOutput, executionStatus])
-
-  const handleCopy = useCallback(() => {
-    try {
-      const text = typeof output === "string" ? output : JSON.stringify(output, null, 2)
-      navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch { /* ignore */ }
-  }, [output])
-
-  if (!executionStatus) return null
-
-  const statusLabel = {
-    pending: "Pending",
-    running: "Running...",
-    success: "Completed",
-    failed: "Failed",
-    suspended: "Suspended",
+  const config = {
+    success: { label: "Completed", color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/50" },
+    failed: { label: "Failed", color: "text-destructive", bg: "bg-red-50 dark:bg-red-950/50" },
+    suspended: { label: "Suspended", color: "text-amber-500", bg: "bg-amber-50 dark:bg-amber-950/50" },
   }[executionStatus]
 
-  const statusColor = {
-    pending: "text-muted-foreground",
-    running: "text-blue-500",
-    success: "text-emerald-600",
-    failed: "text-destructive",
-    suspended: "text-amber-500",
-  }[executionStatus]
+  if (!config) return null
 
   return (
-    <Section title="Output" defaultOpen={false}>
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className={`text-[10px] ${statusColor}`}>
-            {statusLabel}
-          </span>
-          {output !== null && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5"
-              onClick={handleCopy}
-            >
-              {copied ? (
-                <Check className="h-3 w-3 text-green-500" />
-              ) : (
-                <Copy className="h-3 w-3" />
-              )}
-            </Button>
-          )}
-        </div>
-
-        {output !== null && (
-          <div className="bg-muted/50 rounded p-2 overflow-auto max-h-[200px] text-[10px] font-mono">
-            <JsonValue value={output} />
-          </div>
-        )}
-
-        {output === null && hasOutput && (
-          <p className="text-[10px] text-muted-foreground italic">
-            Output not available in this view
-          </p>
-        )}
-
-        {executionStatus === "running" && (
-          <div className="flex items-center gap-1.5">
-            <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />
-            <p className="text-[10px] text-muted-foreground">Executing...</p>
-          </div>
-        )}
+    <Section title="Last Run" defaultOpen={false}>
+      <div className={`flex items-center gap-2 rounded px-2 py-1.5 ${config.bg}`}>
+        <span className={`text-xs font-medium ${config.color}`}>
+          {config.label}
+        </span>
       </div>
     </Section>
+  )
+}
+
+// ─── Variables Section (collapsible, always visible at top) ──────────────────
+
+const VARIABLE_TYPES = ["string", "number", "boolean", "object", "array"] as const
+
+function VariablesSection() {
+  const [open, setOpen] = useState(true)
+  const variables = useWorkflowEditor((s) => s.variables)
+  const setWorkflowMeta = useWorkflowEditor((s) => s.setWorkflowMeta)
+
+  const totalVars = variables.inputs.length + variables.outputs.length
+
+  const addVariable = (kind: "inputs" | "outputs") => {
+    const newVar: WorkflowVariable = { name: "", type: "string", required: false }
+    setWorkflowMeta({
+      variables: { ...variables, [kind]: [...variables[kind], newVar] },
+    })
+  }
+
+  const updateVariable = (kind: "inputs" | "outputs", index: number, partial: Partial<WorkflowVariable>) => {
+    const updated = [...variables[kind]]
+    updated[index] = { ...updated[index], ...partial }
+    setWorkflowMeta({ variables: { ...variables, [kind]: updated } })
+  }
+
+  const removeVariable = (kind: "inputs" | "outputs", index: number) => {
+    setWorkflowMeta({
+      variables: { ...variables, [kind]: variables[kind].filter((_, i) => i !== index) },
+    })
+  }
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="shrink-0 border-b">
+      <CollapsibleTrigger className="flex items-center gap-1.5 w-full px-3 py-2 text-xs font-semibold hover:bg-muted/50 transition-colors">
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <span className="flex-1 text-left">Variables</span>
+        {totalVars > 0 && (
+          <span className="text-[11px] text-muted-foreground font-normal">{totalVars}</span>
+        )}
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className="px-3 pb-3 space-y-3">
+          {/* Inputs */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Inputs</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => addVariable("inputs")}>
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              {variables.inputs.map((v, i) => (
+                <VariableRow
+                  key={i}
+                  variable={v}
+                  onUpdate={(p) => updateVariable("inputs", i, p)}
+                  onRemove={() => removeVariable("inputs", i)}
+                />
+              ))}
+              {variables.inputs.length === 0 && (
+                <p className="text-[11px] text-muted-foreground italic">No inputs</p>
+              )}
+            </div>
+          </div>
+
+          {/* Outputs */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Outputs</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => addVariable("outputs")}>
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+            <div className="space-y-1.5">
+              {variables.outputs.map((v, i) => (
+                <VariableRow
+                  key={i}
+                  variable={v}
+                  onUpdate={(p) => updateVariable("outputs", i, p)}
+                  onRemove={() => removeVariable("outputs", i)}
+                />
+              ))}
+              {variables.outputs.length === 0 && (
+                <p className="text-[11px] text-muted-foreground italic">No outputs</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  )
+}
+
+function VariableRow({
+  variable,
+  onUpdate,
+  onRemove,
+}: {
+  variable: WorkflowVariable
+  onUpdate: (partial: Partial<WorkflowVariable>) => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input
+        value={variable.name}
+        onChange={(e) => onUpdate({ name: e.target.value })}
+        className="h-7 text-xs flex-1"
+        placeholder="name"
+      />
+      <Select
+        value={variable.type}
+        onValueChange={(v) => onUpdate({ type: v as WorkflowVariable["type"] })}
+      >
+        <SelectTrigger className="h-7 text-xs w-[80px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {VARIABLE_TYPES.map((t) => (
+            <SelectItem key={t} value={t} className="text-[11px]">
+              {t}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Switch
+        checked={variable.required}
+        onCheckedChange={(v) => onUpdate({ required: v })}
+        className="scale-75"
+      />
+      <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" onClick={onRemove}>
+        <Trash2 className="h-3 w-3" />
+      </Button>
+    </div>
   )
 }
 
@@ -712,49 +733,57 @@ export function PropertiesPanel() {
     [nodes, selectedNodeId]
   )
 
-  if (!selectedNode || !selectedNodeId) {
-    return (
-      <div className="w-[280px] shrink-0 border-l bg-background flex items-center justify-center p-4">
-        <p className="text-xs text-muted-foreground text-center">
-          Select a node to edit its properties
-        </p>
-      </div>
-    )
-  }
-
-  const data = selectedNode.data as WorkflowNodeData
-  const category = getNodeCategory(data.nodeType)
-  const categoryMeta = NODE_CATEGORIES[category]
+  const data = selectedNode ? (selectedNode.data as WorkflowNodeData) : null
+  const category = data ? getNodeCategory(data.nodeType) : null
+  const categoryMeta = category ? NODE_CATEGORIES[category] : null
+  const NodeIcon = data ? NODE_ICON_MAP[data.nodeType] : null
 
   const update = (partial: Partial<WorkflowNodeData>) => {
-    updateNodeData(selectedNodeId, partial)
+    if (selectedNodeId) updateNodeData(selectedNodeId, partial)
   }
 
   return (
-    <div className="w-[280px] shrink-0 border-l bg-background flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 border-b">
-        <span
-          className="w-2.5 h-2.5 rounded-full shrink-0"
-          style={{ backgroundColor: categoryMeta.headerColor }}
-        />
-        <span className="text-xs font-semibold flex-1 truncate">{data.label}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={() => selectNode(null)}
-        >
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+    <div data-tour="properties" className="w-[320px] shrink-0 border-l bg-background flex flex-col h-full">
+      {/* Variables — always visible, collapsible */}
+      <VariablesSection />
 
-      {/* Form */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        <BasicFields data={data} update={update} />
-        <NodeSpecificFields data={data} update={update} />
-        <NodeOutputPreview nodeId={selectedNodeId} />
-      </div>
+      {/* Properties — only when node selected */}
+      {data && selectedNodeId && categoryMeta ? (
+        <>
+          {/* Node context header */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 border-b bg-muted/30 shrink-0">
+            <span
+              className="w-2 h-2 rounded-full shrink-0"
+              style={{ backgroundColor: categoryMeta.headerColor }}
+            />
+            {NodeIcon && (
+              <span className="shrink-0" style={{ color: categoryMeta.headerColor }}>
+                <NodeIcon className="h-3.5 w-3.5" />
+              </span>
+            )}
+            <span className="text-xs font-medium flex-1 truncate">{data.label}</span>
+            <button
+              onClick={() => selectNode(null)}
+              className="shrink-0 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+
+          {/* Node config */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            <BasicFields data={data} update={update} />
+            <NodeSpecificFields data={data} update={update} />
+            <NodeOutputPreview nodeId={selectedNodeId} />
+          </div>
+        </>
+      ) : (
+        <div className="flex-1 flex items-center justify-center p-4">
+          <p className="text-xs text-muted-foreground text-center">
+            Select a node to edit its properties
+          </p>
+        </div>
+      )}
     </div>
   )
 }
@@ -861,7 +890,7 @@ function NodeSpecificFields({
                   placeholder="Optional HMAC-SHA256 secret"
                   type="password"
                 />
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   If set, requests must include x-webhook-signature header.
                 </p>
               </div>
@@ -881,7 +910,7 @@ function NodeSpecificFields({
             </div>
           )}
           {td.nodeType === NodeType.TRIGGER_MANUAL && (
-            <p className="text-[10px] text-muted-foreground italic">
+            <p className="text-[11px] text-muted-foreground italic">
               Triggered manually via the Run button or API.
             </p>
           )}
@@ -1074,7 +1103,7 @@ function NodeSpecificFields({
             />
           </Section>
           <Section title="Input Mapping" defaultOpen={mappingEntries.length > 0}>
-            <p className="text-[10px] text-muted-foreground mb-2">
+            <p className="text-[11px] text-muted-foreground mb-2">
               Map tool parameters to values or expressions.
             </p>
             <div className="space-y-1.5">
@@ -1223,7 +1252,7 @@ function NodeSpecificFields({
                 className="h-7 text-xs"
                 placeholder="Default: 30000"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Request timeout in milliseconds.
               </p>
             </div>
@@ -1242,7 +1271,7 @@ function NodeSpecificFields({
                 className="h-7 text-xs"
                 placeholder="Default: 0"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Retries with exponential backoff on failure.
               </p>
             </div>
@@ -1324,7 +1353,7 @@ function NodeSpecificFields({
                 rows={1}
                 placeholder="e.g., {{ input.category }}"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Value to match against each case below.
               </p>
             </div>
@@ -1385,7 +1414,7 @@ function NodeSpecificFields({
             </div>
           </Section>
           <Section title="Default Case" defaultOpen={false}>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               When no case matches, the flow routes to the &quot;default&quot; output handle.
             </p>
           </Section>
@@ -1427,7 +1456,7 @@ function NodeSpecificFields({
                   className="h-7 text-xs font-mono"
                   placeholder="e.g., documents, data.items"
                 />
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Optional. Path to extract array from input object.
                 </p>
               </div>
@@ -1462,7 +1491,7 @@ function NodeSpecificFields({
                 max={10000}
                 placeholder="100"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Safety limit to prevent infinite loops.
               </p>
             </div>
@@ -1479,7 +1508,7 @@ function NodeSpecificFields({
                 max={20}
                 placeholder="Default: 1"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Items processed in parallel per batch. 1 = sequential.
               </p>
             </div>
@@ -1558,7 +1587,7 @@ function NodeSpecificFields({
                 className="h-7 text-xs"
                 placeholder="No timeout"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Wait time in seconds before auto-resolving.
               </p>
             </div>
@@ -1669,7 +1698,7 @@ function NodeSpecificFields({
               </SelectContent>
             </Select>
           </div>
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
             Parse LLM JSON output into structured data.
             {pd.strict
               ? " Throws error on invalid JSON."
@@ -1834,7 +1863,7 @@ function NodeSpecificFields({
                 mono
                 placeholder="SELECT * FROM users WHERE ..."
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Only SELECT queries are allowed for security.
               </p>
             </div>
@@ -1855,7 +1884,7 @@ function NodeSpecificFields({
                 className="h-7 text-xs"
                 placeholder="Default: 10000"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Timeout in milliseconds.
               </p>
             </div>
@@ -1874,7 +1903,7 @@ function NodeSpecificFields({
                 className="h-7 text-xs"
                 placeholder="Default: 1000"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Maximum number of rows returned.
               </p>
             </div>
@@ -1918,7 +1947,7 @@ function NodeSpecificFields({
               rows={1}
               placeholder="e.g., documents/{{ input.filename }}"
             />
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               S3-compatible storage path. Supports template expressions.
             </p>
           </div>
@@ -1931,7 +1960,7 @@ function NodeSpecificFields({
       return (
         <>
           <Section title="Configuration">
-            <p className="text-[10px] text-muted-foreground mb-2">
+            <p className="text-[11px] text-muted-foreground mb-2">
               Wraps connected &quot;Success&quot; branch in a try-catch. On failure, routes to &quot;Error&quot; branch.
             </p>
             <div className="space-y-1">
@@ -1947,7 +1976,7 @@ function NodeSpecificFields({
                 max={10}
                 placeholder="Default: 0"
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Number of retry attempts before routing to error branch.
               </p>
             </div>
@@ -1964,7 +1993,7 @@ function NodeSpecificFields({
                   min={100}
                   placeholder="Default: 1000"
                 />
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Delay in milliseconds between retries. Multiplied by attempt number.
                 </p>
               </div>
@@ -1982,7 +2011,7 @@ function NodeSpecificFields({
                 rows={2}
                 placeholder='e.g. {"status": "fallback"}'
               />
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Optional value passed to the error branch as fallbackValue.
               </p>
             </div>
@@ -2009,7 +2038,7 @@ function NodeSpecificFields({
             </div>
           </Section>
           <Section title="Input Mapping" defaultOpen={mappingEntries.length > 0}>
-            <p className="text-[10px] text-muted-foreground mb-2">
+            <p className="text-[11px] text-muted-foreground mb-2">
               Map parent data to child workflow inputs.
             </p>
             {mappingEntries.map(([key, value], i) => (

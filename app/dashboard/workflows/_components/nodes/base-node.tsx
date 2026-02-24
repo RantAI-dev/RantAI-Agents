@@ -1,27 +1,11 @@
 "use client"
 
-import { memo, type ReactNode } from "react"
+import { memo, useState, useCallback, type ReactNode } from "react"
 import { Handle, Position } from "@xyflow/react"
-import { X, StickyNote } from "lucide-react"
+import { X, StickyNote, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getNodeHeaderColor, type WorkflowNodeData } from "@/lib/workflow/types"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
-
-const EXEC_STATUS_BORDER: Record<string, string> = {
-  running: "border-blue-500 animate-pulse",
-  success: "border-emerald-500",
-  failed: "border-destructive",
-  suspended: "border-amber-500",
-  pending: "border-muted-foreground/40",
-}
-
-const EXEC_STATUS_DOT: Record<string, string> = {
-  running: "bg-blue-500 animate-pulse",
-  success: "bg-emerald-500",
-  failed: "bg-destructive",
-  suspended: "bg-amber-500",
-  pending: "bg-muted-foreground/40",
-}
 
 const HANDLE_CLASS = "!w-3 !h-3 !bg-muted-foreground !border-2 !border-background"
 
@@ -36,20 +20,6 @@ interface BaseNodeProps {
   outputHandles?: { id: string; label: string; position?: number }[]
 }
 
-/** Format node output for inline preview (1-2 lines max) */
-function formatOutputPreview(output: unknown): string | null {
-  if (output === null || output === undefined) return null
-  if (typeof output === "string") return output
-  if (typeof output === "object") {
-    const obj = output as Record<string, unknown>
-    if (typeof obj.text === "string") return obj.text
-    if (typeof obj.message === "string") return obj.message
-    if (typeof obj.context === "string") return obj.context
-    return JSON.stringify(output)
-  }
-  return String(output)
-}
-
 function BaseNodeComponent({
   id,
   data,
@@ -62,35 +32,53 @@ function BaseNodeComponent({
 }: BaseNodeProps) {
   const deleteNode = useWorkflowEditor((s) => s.deleteNode)
   const executionStatus = useWorkflowEditor((s) => s.nodeExecutionStatus[id])
-  const nodeOutput = useWorkflowEditor((s) => s.nodeOutputs[id])
   const headerColor = getNodeHeaderColor(data.nodeType)
+  const [confirmDelete, setConfirmDelete] = useState(false)
 
-  const borderClass = executionStatus
-    ? EXEC_STATUS_BORDER[executionStatus]
-    : selected
-      ? "border-primary"
-      : "border-border"
+  const handleDelete = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (confirmDelete) {
+        deleteNode(id)
+        setConfirmDelete(false)
+      } else {
+        setConfirmDelete(true)
+        // Reset after 2s if not confirmed
+        setTimeout(() => setConfirmDelete(false), 2000)
+      }
+    },
+    [confirmDelete, deleteNode, id]
+  )
 
   return (
     <div
       className={cn(
-        "relative bg-background rounded-lg shadow-md border-2 w-[220px] transition-colors",
-        borderClass
+        "relative bg-background rounded-lg shadow-md border-2 w-[240px] transition-all",
+        selected
+          ? "border-primary ring-2 ring-primary/30"
+          : "border-border"
       )}
     >
-      {/* Execution status dot */}
-      {executionStatus && (
-        <div
-          className={cn(
-            "absolute -top-1.5 -right-1.5 h-3 w-3 rounded-full border-2 border-background z-10",
-            EXEC_STATUS_DOT[executionStatus]
-          )}
-        />
+      {/* Execution status indicator */}
+      {executionStatus === "success" && (
+        <div className="absolute -top-2.5 -right-2.5 z-10">
+          <CheckCircle2 className="h-5 w-5 text-emerald-500 fill-background" />
+        </div>
+      )}
+      {executionStatus === "failed" && (
+        <div className="absolute -top-2.5 -right-2.5 z-10">
+          <XCircle className="h-5 w-5 text-destructive fill-background" />
+        </div>
+      )}
+      {executionStatus === "suspended" && (
+        <div className="absolute -top-2.5 -right-2.5 z-10">
+          <AlertCircle className="h-5 w-5 text-amber-500 fill-background" />
+        </div>
       )}
 
       {/* Header */}
       <div
-        className="flex items-center gap-2 px-3 py-1.5 rounded-t-md text-white text-xs font-medium"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-t-lg text-white text-xs font-medium"
         style={{ backgroundColor: headerColor }}
       >
         <span className="shrink-0">{icon}</span>
@@ -101,14 +89,17 @@ function BaseNodeComponent({
           </span>
         )}
         <button
-          onClick={(e) => {
-            e.stopPropagation()
-            deleteNode(id)
-          }}
-          className="opacity-0 group-hover:opacity-100 hover:opacity-100 shrink-0 p-0.5 rounded hover:bg-white/20 transition-opacity"
-          style={{ opacity: selected ? 1 : undefined }}
+          onClick={handleDelete}
+          className={cn(
+            "shrink-0 p-0.5 rounded transition-all",
+            confirmDelete
+              ? "opacity-100 bg-white/30"
+              : "opacity-0 group-hover:opacity-100 hover:opacity-100 hover:bg-white/20"
+          )}
+          style={{ opacity: selected && !confirmDelete ? 1 : undefined }}
+          title={confirmDelete ? "Click again to delete" : "Delete node"}
         >
-          <X className="h-3 w-3" />
+          <X className={cn("h-3 w-3", confirmDelete && "text-red-200")} />
         </button>
       </div>
 
@@ -116,20 +107,6 @@ function BaseNodeComponent({
       {children && (
         <div className="px-3 py-2 text-xs text-muted-foreground">{children}</div>
       )}
-
-      {/* Output preview after execution */}
-      {executionStatus === "success" && nodeOutput !== undefined && (() => {
-        const preview = formatOutputPreview(nodeOutput)
-        if (!preview) return null
-        const truncated = preview.length > 80 ? preview.slice(0, 80) + "..." : preview
-        return (
-          <div className="px-3 pb-2 pt-0.5" title={preview.slice(0, 500)}>
-            <div className="text-[10px] font-mono bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 rounded px-1.5 py-1 truncate">
-              {truncated}
-            </div>
-          </div>
-        )
-      })()}
 
       {/* Input handle */}
       {hasInput && (
@@ -151,7 +128,7 @@ function BaseNodeComponent({
           ))}
           <div className="flex justify-around px-1 pb-0.5 -mt-0.5">
             {outputHandles.map((h) => (
-              <span key={h.id} className="text-[10px] text-muted-foreground/80 text-center">
+              <span key={h.id} className="text-[11px] text-muted-foreground/80 text-center">
                 {h.label}
               </span>
             ))}

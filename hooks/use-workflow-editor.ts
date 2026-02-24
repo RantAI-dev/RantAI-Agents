@@ -48,9 +48,7 @@ interface WorkflowEditorState {
   isDirty: boolean
   isSaving: boolean
   isRunning: boolean
-  showRunHistory: boolean
   nodeExecutionStatus: Record<string, "pending" | "running" | "success" | "failed" | "suspended">
-  nodeOutputs: Record<string, unknown>
 
   // Actions
   loadWorkflow: (data: {
@@ -121,10 +119,7 @@ interface WorkflowEditorState {
   setDirty: (dirty: boolean) => void
   setSaving: (saving: boolean) => void
   setRunning: (running: boolean) => void
-  toggleRunHistory: () => void
-  setShowRunHistory: (show: boolean) => void
   setNodeExecutionStatus: (status: Record<string, "pending" | "running" | "success" | "failed" | "suspended">) => void
-  setNodeOutputs: (outputs: Record<string, unknown>) => void
   clearNodeExecutionStatus: () => void
 }
 
@@ -151,9 +146,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   isDirty: false,
   isSaving: false,
   isRunning: false,
-  showRunHistory: false,
   nodeExecutionStatus: {},
-  nodeOutputs: {},
   _screenToFlowPosition: null,
   _getViewport: null,
   _flowWrapper: null,
@@ -445,9 +438,6 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   setDirty: (dirty) => set({ isDirty: dirty }),
   setSaving: (saving) => set({ isSaving: saving }),
   setRunning: (running) => set({ isRunning: running }),
-  toggleRunHistory: () => set((s) => ({ showRunHistory: !s.showRunHistory })),
-  setShowRunHistory: (show) => set({ showRunHistory: show }),
   setNodeExecutionStatus: (status) => set({ nodeExecutionStatus: status }),
-  setNodeOutputs: (outputs) => set({ nodeOutputs: outputs }),
-  clearNodeExecutionStatus: () => set({ nodeExecutionStatus: {}, nodeOutputs: {} }),
+  clearNodeExecutionStatus: () => set({ nodeExecutionStatus: {} }),
 }))

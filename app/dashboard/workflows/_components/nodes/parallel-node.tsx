@@ -19,7 +19,7 @@ function ParallelNodeComponent({ id, data, selected }: NodeProps) {
       icon={<Icon className="h-3.5 w-3.5" />}
     >
       {isMerge && (
-        <span className="inline-block bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-medium">
+        <span className="inline-block bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-medium">
           {(nodeData as MergeNodeData).mergeStrategy}
         </span>
       )}

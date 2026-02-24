@@ -150,7 +150,7 @@ export default function WorkflowsPage() {
     setNewName("")
     setNewDescription("")
     if (workflow) {
-      router.push(`/dashboard/workflows/${workflow.id}`)
+      router.push(`/dashboard/workflows/${workflow.id}?tour=true`)
     }
   }, [newName, newDescription, createWorkflow, router])
 
@@ -183,7 +183,7 @@ export default function WorkflowsPage() {
 
           // Small delay to ensure state is synced before navigation
           await new Promise((resolve) => setTimeout(resolve, 100))
-          router.push(`/dashboard/workflows/${workflow.id}`)
+          router.push(`/dashboard/workflows/${workflow.id}?tour=true`)
         }
       } finally {
         setIsCreatingTemplate(false)

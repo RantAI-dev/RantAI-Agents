@@ -25,7 +25,7 @@ function LlmNodeComponent({ id, data, selected }: NodeProps) {
         </span>
       )}
       {isStreamOutput && (
-        <span className="inline-block bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 text-[10px] px-1.5 py-0.5 rounded font-medium">
+        <span className="inline-block bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300 text-[10px] px-1.5 py-0.5 rounded font-medium">
           streaming
         </span>
       )}

@@ -39,8 +39,8 @@ export function NodePalette() {
   const lowerSearch = search.toLowerCase()
 
   return (
-    <div className="flex flex-col h-full border-r bg-background w-[220px] shrink-0">
-      <div className="p-2 border-b">
+    <div data-tour="palette" className="flex flex-col h-full border-r bg-background w-[240px] shrink-0">
+      <div className="p-2">
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
@@ -112,7 +112,7 @@ export function NodePalette() {
                           <span className="text-xs font-medium text-foreground">
                             {nodeType.label}
                           </span>
-                          <span className="text-[10px] text-muted-foreground leading-tight">
+                          <span className="text-[11px] text-muted-foreground leading-tight">
                             {nodeType.description}
                           </span>
                         </div>

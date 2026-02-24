@@ -20,7 +20,7 @@ function LoopNodeComponent({ id, data, selected }: NodeProps) {
         { id: "done", label: "Done" },
       ]}
     >
-      <span className="inline-block bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-medium">
+      <span className="inline-block bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0.5 rounded font-medium">
         {nodeData.loopType}
       </span>
     </BaseNode>

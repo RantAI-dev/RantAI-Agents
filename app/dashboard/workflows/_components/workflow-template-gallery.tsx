@@ -30,7 +30,7 @@ export function WorkflowTemplateGallery({
             key={template.id}
             onClick={() => onUseTemplate(template)}
             disabled={isCreating}
-            className="group relative flex-shrink-0 w-[200px] rounded-lg border border-dashed border-primary/30 bg-primary/[0.02] p-4 text-left transition-all hover:border-primary/60 hover:bg-primary/[0.05] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group relative flex-shrink-0 w-[200px] rounded-lg border border-dashed border-primary/30 bg-primary/[0.02] p-4 text-left transition-all hover:border-primary/60 hover:bg-primary/[0.05] hover:shadow-md hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isCreating && (
               <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-background/80">

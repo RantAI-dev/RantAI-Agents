@@ -85,7 +85,7 @@ export function RunHistory({
                 <span className="text-xs font-medium truncate">
                   {run.id.slice(0, 8)}
                 </span>
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                <Badge variant="secondary" className="text-[10px] px-1.5 py-0.5 font-medium">
                   {config.label}
                 </Badge>
               </div>

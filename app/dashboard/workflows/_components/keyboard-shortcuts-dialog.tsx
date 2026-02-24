@@ -21,20 +21,20 @@ const SHORTCUTS = [
     { keys: `${mod}+Z`, action: "Undo" },
     { keys: isMac ? `${mod}+Shift+Z` : `${mod}+Y`, action: "Redo" },
     { keys: `${mod}+K`, action: "Quick add node" },
-    { keys: "?", action: "Show shortcuts" },
+    { keys: "?", action: "Show this dialog" },
   ]},
   { category: "Nodes", items: [
     { keys: `${mod}+C`, action: "Copy selected node(s)" },
     { keys: `${mod}+V`, action: "Paste node(s)" },
     { keys: `${mod}+D`, action: "Duplicate selected node(s)" },
-    { keys: "Delete", action: "Delete selected node(s)" },
+    { keys: "Delete / Backspace", action: "Delete selected node(s)" },
     { keys: "Escape", action: "Deselect all" },
   ]},
   { category: "Canvas", items: [
     { keys: "Shift+Click", action: "Multi-select nodes" },
     { keys: "Drag", action: "Box selection" },
     { keys: "Scroll", action: "Zoom in/out" },
-    { keys: "Middle Mouse Drag", action: "Pan canvas" },
+    { keys: "Middle Click+Drag", action: "Pan canvas" },
   ]},
 ]
 
@@ -61,12 +61,17 @@ export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcut
                       {shortcut.action}
                     </span>
                     <div className="flex items-center gap-1">
-                      {shortcut.keys.split("+").map((key, i) => (
-                        <span key={i}>
-                          {i > 0 && <span className="text-muted-foreground text-xs mx-0.5">+</span>}
-                          <kbd className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 text-xs font-mono bg-muted border rounded">
-                            {key}
-                          </kbd>
+                      {shortcut.keys.split(" / ").map((combo, ci) => (
+                        <span key={ci} className="flex items-center gap-1">
+                          {ci > 0 && <span className="text-muted-foreground text-xs mx-0.5">/</span>}
+                          {combo.split("+").map((key, ki) => (
+                            <span key={ki}>
+                              {ki > 0 && <span className="text-muted-foreground text-xs mx-0.5">+</span>}
+                              <kbd className="inline-flex items-center justify-center min-w-[24px] h-6 px-1.5 text-xs font-mono bg-muted border rounded">
+                                {key}
+                              </kbd>
+                            </span>
+                          ))}
                         </span>
                       ))}
                     </div>

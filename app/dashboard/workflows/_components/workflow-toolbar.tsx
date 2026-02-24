@@ -20,8 +20,10 @@ import {
   Rocket,
   Plus,
   X as XIcon,
+  HelpCircle,
+  Map,
 } from "lucide-react"
-import { useMemo, useState, useCallback, useRef, useEffect } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -46,6 +48,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
 
 function ToolbarTooltip({ children, label, shortcut }: { children: React.ReactNode; label: string; shortcut?: string }) {
@@ -71,13 +74,18 @@ interface WorkflowToolbarProps {
   onAutoLayout?: () => void
   showGrid?: boolean
   onToggleGrid?: () => void
+  showMinimap?: boolean
+  onToggleMinimap?: () => void
+  onShowTutorial?: () => void
+  onOpenRunHistory?: () => void
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-muted text-muted-foreground",
-  ACTIVE: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300",
-  PAUSED: "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300",
-  ARCHIVED: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
+function ButtonGroup({ children, className, ...rest }: { children: React.ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div {...rest} className={cn("flex items-center gap-0.5 bg-muted/50 rounded-md px-1 py-0.5", className)}>
+      {children}
+    </div>
+  )
 }
 
 const MODE_COLORS: Record<string, string> = {
@@ -85,7 +93,7 @@ const MODE_COLORS: Record<string, string> = {
   CHATFLOW: "bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300",
 }
 
-export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleStatus, showChatTest, onToggleChatTest, onAutoLayout, showGrid = true, onToggleGrid }: WorkflowToolbarProps) {
+export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleStatus, showChatTest, onToggleChatTest, onAutoLayout, showGrid = true, onToggleGrid, showMinimap = true, onToggleMinimap, onShowTutorial, onOpenRunHistory }: WorkflowToolbarProps) {
   const workflowName = useWorkflowEditor((s) => s.workflowName)
   const workflowStatus = useWorkflowEditor((s) => s.workflowStatus)
   const workflowMode = useWorkflowEditor((s) => s.workflowMode)
@@ -101,10 +109,6 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
   const redo = useWorkflowEditor((s) => s.redo)
   const historyIndex = useWorkflowEditor((s) => s.historyIndex)
   const historyLength = useWorkflowEditor((s) => s.history.length)
-  const toggleRunHistory = useWorkflowEditor((s) => s.toggleRunHistory)
-  const showRunHistory = useWorkflowEditor((s) => s.showRunHistory)
-  const nodeExecutionStatus = useWorkflowEditor((s) => s.nodeExecutionStatus)
-  const nodes = useWorkflowEditor((s) => s.nodes)
 
   const [copiedKey, setCopiedKey] = useState(false)
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([])
@@ -167,53 +171,17 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
     }
   }, [apiKey])
 
-  const executionProgress = useMemo(() => {
-    const entries = Object.entries(nodeExecutionStatus)
-    if (entries.length === 0) return null
-    const completed = entries.filter(([, s]) => s === "success" || s === "failed").length
-    const total = entries.length
-    const runningEntry = entries.find(([, s]) => s === "running")
-    const runningLabel = runningEntry
-      ? nodes.find((n) => n.id === runningEntry[0])?.data?.label || "Processing"
-      : null
-    return { completed, total, runningLabel, percent: Math.round((completed / total) * 100) }
-  }, [nodeExecutionStatus, nodes])
 
   return (
     <TooltipProvider delayDuration={300}>
-    <div className="relative flex items-center gap-2 px-3 py-1.5 border-b bg-background shrink-0 min-h-10" role="toolbar" aria-label="Workflow toolbar">
-      {/* Execution progress bar */}
-      {executionProgress && (
-        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-muted">
-          <div
-            className="h-full bg-blue-500 transition-all duration-500 ease-out"
-            style={{ width: `${executionProgress.percent}%` }}
-          />
-        </div>
-      )}
-      {/* Workflow name */}
+    <div data-tour="toolbar" className="relative flex items-center gap-2 px-3 py-1.5 shrink-0 min-h-10" role="toolbar" aria-label="Workflow toolbar">
+      {/* Workflow name + badges */}
       <span className="text-sm font-medium truncate max-w-[200px]">
         {workflowName || "Untitled Workflow"}
       </span>
 
-      {onToggleStatus ? (
-        <Button
-          variant={workflowStatus === "ACTIVE" ? "default" : "outline"}
-          size="sm"
-          className={`h-6 text-[11px] gap-1 ${
-            workflowStatus === "ACTIVE"
-              ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-              : ""
-          }`}
-          onClick={onToggleStatus}
-        >
-          <Rocket className="h-3 w-3" />
-          {workflowStatus === "ACTIVE" ? "Active" : "Deploy"}
-        </Button>
-      ) : (
-        <Badge variant="secondary" className={STATUS_COLORS[workflowStatus] || ""}>
-          {workflowStatus}
-        </Badge>
+      {isDirty && (
+        <span className="w-2 h-2 rounded-full bg-orange-400 shrink-0" title="Unsaved changes" />
       )}
 
       <Badge variant="secondary" className={MODE_COLORS[workflowMode] || ""}>
@@ -227,17 +195,21 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
         </Badge>
       )}
 
-      {/* Step progress counter */}
-      {executionProgress && (
-        <span className="text-[10px] text-muted-foreground truncate max-w-[250px]">
-          Step {executionProgress.completed}/{executionProgress.total}
-          {executionProgress.runningLabel && ` — ${executionProgress.runningLabel}`}
-        </span>
-      )}
-
       <div className="flex-1" />
 
-      {/* Settings popover */}
+      {/* Help + Settings */}
+      {onShowTutorial && (
+        <ToolbarTooltip label="Tutorial">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onShowTutorial}
+          >
+            <HelpCircle className="h-4 w-4" />
+          </Button>
+        </ToolbarTooltip>
+      )}
       <Popover>
         <PopoverTrigger asChild>
           <Button
@@ -253,7 +225,7 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
           <div className="space-y-4">
             <div className="space-y-1">
               <h4 className="text-sm font-semibold">Workflow Mode</h4>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[10px] text-muted-foreground">
                 Chatflow mode handles chat messages via this workflow instead of direct LLM.
               </p>
             </div>
@@ -275,7 +247,7 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
               <>
                 <div className="border-t pt-3 space-y-1">
                   <h4 className="text-sm font-semibold">Linked Agent</h4>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[10px] text-muted-foreground">
                     Chat messages to this agent will be processed by this workflow.
                   </p>
                 </div>
@@ -301,7 +273,7 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
 
                 <div className="border-t pt-3 space-y-1">
                   <h4 className="text-sm font-semibold">Welcome Message</h4>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[10px] text-muted-foreground">
                     Greeting shown when chat opens.
                   </p>
                 </div>
@@ -336,7 +308,7 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
 
                 <div className="border-t pt-3 space-y-1">
                   <h4 className="text-sm font-semibold">Starter Prompts</h4>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[10px] text-muted-foreground">
                     Suggested questions shown at start.
                   </p>
                 </div>
@@ -405,7 +377,7 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
 
             <div className="border-t pt-3 space-y-1">
               <h4 className="text-sm font-semibold">Public API</h4>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[10px] text-muted-foreground">
                 Enable to expose this workflow as a REST API endpoint.
               </p>
             </div>
@@ -458,29 +430,33 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
         </PopoverContent>
       </Popover>
 
-      {/* Export / Import */}
-      <ToolbarTooltip label="Export as JSON">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={handleExport}
-          aria-label="Export Workflow"
-        >
-          <Download className="h-4 w-4" />
-        </Button>
-      </ToolbarTooltip>
-      <ToolbarTooltip label="Import from JSON">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => importInputRef.current?.click()}
-          aria-label="Import Workflow"
-        >
-          <Upload className="h-4 w-4" />
-        </Button>
-      </ToolbarTooltip>
+      <div className="w-px h-5 bg-border" />
+
+      {/* File group: Export + Import */}
+      <ButtonGroup>
+        <ToolbarTooltip label="Export JSON">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={handleExport}
+            aria-label="Export Workflow"
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+        </ToolbarTooltip>
+        <ToolbarTooltip label="Import JSON">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={() => importInputRef.current?.click()}
+            aria-label="Import Workflow"
+          >
+            <Upload className="h-4 w-4" />
+          </Button>
+        </ToolbarTooltip>
+      </ButtonGroup>
       <input
         ref={importInputRef}
         type="file"
@@ -489,65 +465,78 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
         onChange={handleImportFile}
       />
 
-      {/* Auto-Layout */}
-      {onAutoLayout && (
-        <ToolbarTooltip label="Auto Layout">
+      {/* Canvas group: Auto-Layout + Grid + Minimap */}
+      <ButtonGroup>
+        {onAutoLayout && (
+          <ToolbarTooltip label="Auto Layout">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onAutoLayout}
+              aria-label="Auto Layout"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+          </ToolbarTooltip>
+        )}
+        {onToggleGrid && (
+          <ToolbarTooltip label={showGrid ? "Hide Grid" : "Show Grid"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 ${showGrid ? "bg-background shadow-sm" : ""}`}
+              onClick={onToggleGrid}
+              aria-label={showGrid ? "Hide Grid" : "Show Grid"}
+            >
+              <Grid3x3 className="h-4 w-4" />
+            </Button>
+          </ToolbarTooltip>
+        )}
+        {onToggleMinimap && (
+          <ToolbarTooltip label={showMinimap ? "Hide Minimap" : "Show Minimap"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 ${showMinimap ? "bg-background shadow-sm" : ""}`}
+              onClick={onToggleMinimap}
+              aria-label={showMinimap ? "Hide Minimap" : "Show Minimap"}
+            >
+              <Map className="h-4 w-4" />
+            </Button>
+          </ToolbarTooltip>
+        )}
+      </ButtonGroup>
+
+      {/* Edit group: Undo + Redo */}
+      <ButtonGroup>
+        <ToolbarTooltip label="Undo" shortcut="Ctrl+Z">
           <Button
             variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={onAutoLayout}
-            aria-label="Auto Layout"
+            onClick={undo}
+            disabled={historyIndex <= 0}
+            aria-label="Undo"
           >
-            <LayoutGrid className="h-4 w-4" />
+            <Undo2 className="h-4 w-4" />
           </Button>
         </ToolbarTooltip>
-      )}
-
-      {/* Grid Toggle */}
-      {onToggleGrid && (
-        <ToolbarTooltip label={showGrid ? "Hide Grid" : "Show Grid"}>
+        <ToolbarTooltip label="Redo" shortcut="Ctrl+Y">
           <Button
-            variant={showGrid ? "secondary" : "ghost"}
+            variant="ghost"
             size="icon"
             className="h-7 w-7"
-            onClick={onToggleGrid}
-            aria-label={showGrid ? "Hide Grid" : "Show Grid"}
+            onClick={redo}
+            disabled={historyIndex >= historyLength - 1}
+            aria-label="Redo"
           >
-            <Grid3x3 className="h-4 w-4" />
+            <Redo2 className="h-4 w-4" />
           </Button>
         </ToolbarTooltip>
-      )}
+      </ButtonGroup>
 
-      <div className="w-px h-5 bg-border mx-1" />
-
-      {/* Undo / Redo */}
-      <ToolbarTooltip label="Undo" shortcut="Ctrl+Z">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={undo}
-          disabled={historyIndex <= 0}
-          aria-label="Undo"
-        >
-          <Undo2 className="h-4 w-4" />
-        </Button>
-      </ToolbarTooltip>
-      <ToolbarTooltip label="Redo" shortcut="Ctrl+Y">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={redo}
-          disabled={historyIndex >= historyLength - 1}
-          aria-label="Redo"
-        >
-          <Redo2 className="h-4 w-4" />
-        </Button>
-      </ToolbarTooltip>
-
-      <div className="w-px h-5 bg-border mx-1" />
+      <div className="w-px h-5 bg-border" />
 
       {/* Test Chat (Chatflow only) */}
       {workflowMode === "CHATFLOW" && onToggleChatTest && (
@@ -565,68 +554,82 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
         </ToolbarTooltip>
       )}
 
-      {/* Run History */}
-      <ToolbarTooltip label="Run History">
-        <Button
-          variant={showRunHistory ? "secondary" : "ghost"}
-          size="icon"
-          className="h-7 w-7"
-          onClick={toggleRunHistory}
-          aria-label="Run History"
-        >
-          <History className="h-4 w-4" />
-        </Button>
-      </ToolbarTooltip>
+      {/* Run group: History + Deploy + Run */}
+      <ButtonGroup data-tour="toolbar-actions">
+        <ToolbarTooltip label="Run History">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={onOpenRunHistory}
+          >
+            <History className="h-4 w-4" />
+          </Button>
+        </ToolbarTooltip>
+        {onToggleStatus && (
+          <ToolbarTooltip label={workflowStatus === "ACTIVE" ? "Deactivate" : "Deploy"}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={`h-7 text-xs gap-1 ${
+                workflowStatus === "ACTIVE"
+                  ? "text-emerald-600 hover:text-emerald-700"
+                  : ""
+              }`}
+              onClick={onToggleStatus}
+            >
+              <Rocket className="h-3.5 w-3.5" />
+              {workflowStatus === "ACTIVE" ? "Active" : "Deploy"}
+            </Button>
+          </ToolbarTooltip>
+        )}
+        <ToolbarTooltip label="Run Workflow">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={onRun}
+            disabled={isRunning}
+          >
+            {isRunning ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+            {isRunning ? "Running..." : "Run"}
+          </Button>
+        </ToolbarTooltip>
+      </ButtonGroup>
 
-      {/* Run */}
-      <ToolbarTooltip label="Run Workflow">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-          onClick={onRun}
-          disabled={isRunning}
-          aria-label="Run Workflow"
-        >
-          {isRunning ? (
-            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-          ) : (
-            <Play className="h-3.5 w-3.5 mr-1" />
-          )}
-          {isRunning ? "Running..." : "Run"}
-        </Button>
-      </ToolbarTooltip>
-
-      {/* Save */}
-      <ToolbarTooltip label="Save" shortcut="Ctrl+S">
-        <Button
-          size="sm"
-          className="h-7 text-xs"
-          onClick={onSave}
-          disabled={!isDirty || isSaving}
-          aria-label="Save Workflow"
-        >
-          {isSaving ? (
-            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-          ) : (
-            <Save className="h-3.5 w-3.5 mr-1" />
-          )}
-          {isSaving ? "Saving..." : "Save"}
-        </Button>
-      </ToolbarTooltip>
-
-      {/* Delete */}
-      <ToolbarTooltip label="Delete Workflow">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-destructive hover:text-destructive"
-          onClick={onDelete}
-          aria-label="Delete Workflow"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </ToolbarTooltip>
+      {/* Persist group: Save + Delete */}
+      <ButtonGroup>
+        <ToolbarTooltip label="Save" shortcut="Ctrl+S">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={onSave}
+            disabled={!isDirty || isSaving}
+          >
+            {isSaving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            {isSaving ? "Saving..." : "Save"}
+          </Button>
+        </ToolbarTooltip>
+        <ToolbarTooltip label="Delete Workflow">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </ToolbarTooltip>
+      </ButtonGroup>
     </div>
     </TooltipProvider>
   )
