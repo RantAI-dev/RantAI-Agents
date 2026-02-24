@@ -154,7 +154,7 @@ export function RunDetail({ run, onResume }: RunDetailProps) {
             </button>
 
             {expanded && (
-              <div className="px-2.5 pb-2.5 pt-1.5 space-y-1.5 border-t">
+              <div className="p-2.5 space-y-1.5 border-t">
                 {step.input !== undefined && (
                   <div>
                     <span className="text-xs font-semibold text-muted-foreground">
@@ -270,7 +270,7 @@ export function RunDetail({ run, onResume }: RunDetailProps) {
       {/* Output for completed runs */}
       {run.status === "COMPLETED" && run.output != null && (
         <div className="mt-2">
-          <span className="text-[10px] font-semibold text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             Final Output:
           </span>
           <pre className="text-[10px] bg-muted/50 rounded p-2 overflow-auto max-h-32">

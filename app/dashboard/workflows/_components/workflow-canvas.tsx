@@ -73,9 +73,10 @@ const edgeTypes: EdgeTypes = {
 
 interface WorkflowCanvasInnerProps {
   showGrid?: boolean
+  showMinimap?: boolean
 }
 
-function WorkflowCanvasInner({ showGrid = true }: WorkflowCanvasInnerProps) {
+function WorkflowCanvasInner({ showGrid = true, showMinimap = true }: WorkflowCanvasInnerProps) {
   const rfInstance = useRef<ReactFlowInstance<Node<WorkflowNodeData>, Edge> | null>(null)
   const nodes = useWorkflowEditor((s) => s.nodes)
   const edges = useWorkflowEditor((s) => s.edges)
@@ -151,7 +152,7 @@ function WorkflowCanvasInner({ showGrid = true }: WorkflowCanvasInnerProps) {
   const isEmpty = nodes.length === 0
 
   return (
-    <div ref={wrapperRef} className="w-full h-full relative">
+    <div ref={wrapperRef} data-tour="canvas" className="w-full h-full relative">
     {/* Empty canvas state */}
     {isEmpty && (
       <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
@@ -209,14 +210,17 @@ function WorkflowCanvasInner({ showGrid = true }: WorkflowCanvasInnerProps) {
       selectionMode={SelectionMode.Partial}
       multiSelectionKeyCode="Shift"
       className="bg-muted/20"
+      proOptions={{ hideAttribution: true }}
     >
       {showGrid && <Background gap={16} size={1} />}
       <Controls className="!bg-background !border-border !shadow-sm [&>button]:!bg-background [&>button]:!border-border [&>button]:!text-foreground" />
-      <MiniMap
-        className="!bg-background !border-border"
-        nodeColor="#64748b"
-        maskColor="rgba(0,0,0,0.1)"
-      />
+      {showMinimap && (
+        <MiniMap
+          className="!bg-background !border-border"
+          nodeColor="#64748b"
+          maskColor="rgba(0,0,0,0.1)"
+        />
+      )}
     </ReactFlow>
     </div>
   )
@@ -224,12 +228,13 @@ function WorkflowCanvasInner({ showGrid = true }: WorkflowCanvasInnerProps) {
 
 interface WorkflowCanvasProps {
   showGrid?: boolean
+  showMinimap?: boolean
 }
 
-export function WorkflowCanvas({ showGrid }: WorkflowCanvasProps) {
+export function WorkflowCanvas({ showGrid, showMinimap }: WorkflowCanvasProps) {
   return (
     <ReactFlowProvider>
-      <WorkflowCanvasInner showGrid={showGrid} />
+      <WorkflowCanvasInner showGrid={showGrid} showMinimap={showMinimap} />
     </ReactFlowProvider>
   )
 }

@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef, use } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
-import { ArrowLeft, Loader2, GitBranch, Monitor } from "lucide-react"
+import { ArrowLeft, Loader2, GitBranch, Monitor, Copy, Check, Code2, FormInput, Clock, CheckCircle2, XCircle, PauseCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -15,17 +15,17 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { useWorkflows } from "@/hooks/use-workflows"
 import { useWorkflowRuns } from "@/hooks/use-workflow-runs"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
-import { useWorkflowExecution } from "@/hooks/use-workflow-execution"
 import { WorkflowCanvas } from "../_components/workflow-canvas"
 import { WorkflowToolbar } from "../_components/workflow-toolbar"
 import { NodePalette } from "../_components/node-palette"
 import { PropertiesPanel } from "../_components/properties-panel"
-import { VariablesPanel } from "../_components/variables-panel"
-import { RunHistory } from "../_components/run-history"
-import { RunDetail } from "../_components/run-detail"
+import { RunHistoryDialog } from "../_components/run-history-dialog"
 import { KeyboardShortcutsDialog } from "../_components/keyboard-shortcuts-dialog"
 import { QuickAddDialog } from "../_components/quick-add-dialog"
 import { ChatTestPanel } from "../_components/chat-test-panel"
@@ -44,6 +44,7 @@ export default function WorkflowEditorPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const {
     workflows,
@@ -66,21 +67,32 @@ export default function WorkflowEditorPage({
 
   const editor = useWorkflowEditor()
 
-  // Real-time execution visualization via Socket.io
-  const activeRunId = activeRun?.status === "RUNNING" || activeRun?.status === "PENDING"
-    ? activeRun.id
-    : null
-  useWorkflowExecution(activeRunId)
 
   const [runDialogOpen, setRunDialogOpen] = useState(false)
   const [runInputJson, setRunInputJson] = useState("{}")
+  const [runFormValues, setRunFormValues] = useState<Record<string, unknown>>({})
+  const [jsonMode, setJsonMode] = useState(false)
+  const [resultDialogOpen, setResultDialogOpen] = useState(false)
+  const [runHistoryOpen, setRunHistoryOpen] = useState(false)
+  const [resultCopied, setResultCopied] = useState(false)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [chatTestOpen, setChatTestOpen] = useState(false)
   const [showGrid, setShowGrid] = useState(true)
+  const [showMinimap, setShowMinimap] = useState(true)
   const [showPalette, setShowPalette] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(false)
   const prevRunStatusRef = useRef<string | null>(null)
+
+  // Auto-show tutorial when created from "New Workflow" or template (?tour=true)
+  useEffect(() => {
+    if (searchParams.get("tour") === "true") {
+      setShowTutorial(true)
+      // Clean the URL without triggering navigation
+      router.replace(`/dashboard/workflows/${id}`, { scroll: false })
+    }
+  }, [searchParams, id, router])
 
   // Responsive: hide palette on smaller screens, show mobile warning
   useEffect(() => {
@@ -97,7 +109,7 @@ export default function WorkflowEditorPage({
     return () => window.removeEventListener("resize", checkSize)
   }, [])
 
-  // Sync node execution status and step outputs from activeRun steps
+  // Sync node execution status from activeRun steps (shows success/failed icons on nodes)
   useEffect(() => {
     if (!activeRun?.steps) {
       editor.clearNodeExecutionStatus()
@@ -105,15 +117,10 @@ export default function WorkflowEditorPage({
     }
     const steps = activeRun.steps as StepLogEntry[]
     const statusMap: Record<string, "pending" | "running" | "success" | "failed" | "suspended"> = {}
-    const outputMap: Record<string, unknown> = {}
     for (const step of steps) {
       statusMap[step.nodeId] = step.status
-      if (step.output !== null && step.output !== undefined) {
-        outputMap[step.nodeId] = step.output
-      }
     }
     editor.setNodeExecutionStatus(statusMap)
-    editor.setNodeOutputs(outputMap)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRun?.steps])
 
@@ -128,9 +135,11 @@ export default function WorkflowEditorPage({
     if (currentStatus === "COMPLETED") {
       toast.success("Workflow completed successfully")
       editor.setRunning(false)
+      setResultDialogOpen(true)
     } else if (currentStatus === "FAILED") {
       toast.error("Workflow execution failed")
       editor.setRunning(false)
+      setResultDialogOpen(true)
     } else if (currentStatus === "PAUSED") {
       toast.info("Workflow paused — waiting for human input")
       editor.setRunning(false)
@@ -231,7 +240,6 @@ export default function WorkflowEditorPage({
       for (const err of validation.errors) {
         toast.error(err.message)
       }
-      // Highlight first errored node
       const firstNodeErr = validation.errors.find((e) => e.nodeId)
       if (firstNodeErr?.nodeId) {
         editor.selectNode(firstNodeErr.nodeId)
@@ -240,50 +248,52 @@ export default function WorkflowEditorPage({
     }
 
     const inputs = editor.variables?.inputs || []
-    if (inputs.length > 0) {
-      // Build a template from defined input variables
-      const template: Record<string, unknown> = {}
-      for (const v of inputs) {
-        if (v.defaultValue !== undefined) {
-          template[v.name] = v.defaultValue
-        } else if (v.type === "string") {
-          template[v.name] = ""
-        } else if (v.type === "number") {
-          template[v.name] = 0
-        } else if (v.type === "boolean") {
-          template[v.name] = false
-        } else if (v.type === "object") {
-          template[v.name] = {}
-        } else if (v.type === "array") {
-          template[v.name] = []
-        } else {
-          template[v.name] = null
-        }
+    const template: Record<string, unknown> = {}
+    for (const v of inputs) {
+      if (v.defaultValue !== undefined) {
+        template[v.name] = v.defaultValue
+      } else if (v.type === "string") {
+        template[v.name] = ""
+      } else if (v.type === "number") {
+        template[v.name] = 0
+      } else if (v.type === "boolean") {
+        template[v.name] = false
+      } else if (v.type === "object") {
+        template[v.name] = {}
+      } else if (v.type === "array") {
+        template[v.name] = []
+      } else {
+        template[v.name] = null
       }
-      setRunInputJson(JSON.stringify(template, null, 2))
-    } else {
-      setRunInputJson("{}")
     }
+
+    setRunFormValues(template)
+    setRunInputJson(JSON.stringify(template, null, 2))
+    // Use form mode when input variables are defined, JSON mode otherwise
+    setJsonMode(inputs.length === 0)
     setRunDialogOpen(true)
   }, [editor.variables])
 
   const handleRunExecute = useCallback(async () => {
     let input: unknown = {}
-    try {
-      input = JSON.parse(runInputJson)
-    } catch {
-      return // invalid JSON, don't execute
+    if (jsonMode) {
+      try {
+        input = JSON.parse(runInputJson)
+      } catch {
+        return
+      }
+    } else {
+      input = { ...runFormValues }
     }
     setRunDialogOpen(false)
     editor.setRunning(true)
-    editor.setShowRunHistory(true)
     try {
       await executeWorkflow(input)
       fetchRuns()
     } catch {
       editor.setRunning(false)
     }
-  }, [runInputJson, executeWorkflow, fetchRuns, editor])
+  }, [jsonMode, runInputJson, runFormValues, executeWorkflow, fetchRuns, editor])
 
   const handleDelete = useCallback(async () => {
     await deleteWorkflow(id)
@@ -458,7 +468,7 @@ export default function WorkflowEditorPage({
         {/* Skeleton body */}
         <div className="flex flex-1 overflow-hidden">
           {/* Skeleton palette */}
-          <div className="w-[220px] border-r bg-background shrink-0 p-2 space-y-3">
+          <div className="w-[240px] border-r bg-background shrink-0 p-2 space-y-3">
             <div className="h-7 rounded bg-muted" />
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="space-y-1.5">
@@ -473,7 +483,7 @@ export default function WorkflowEditorPage({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
           {/* Skeleton properties */}
-          <div className="w-[280px] border-l bg-background shrink-0 p-3 space-y-3">
+          <div className="w-[320px] border-l bg-background shrink-0 p-3 space-y-3">
             <div className="h-5 w-28 rounded bg-muted" />
             <div className="h-4 w-full rounded bg-muted" />
             <div className="h-20 w-full rounded bg-muted" />
@@ -517,7 +527,10 @@ export default function WorkflowEditorPage({
   return (
     <div className="flex flex-col h-full">
       {/* Onboarding overlay for first-time users */}
-      <OnboardingOverlay />
+      <OnboardingOverlay
+        forceShow={showTutorial}
+        onComplete={() => setShowTutorial(false)}
+      />
 
       {/* Top bar */}
       <div className="flex items-center gap-3 min-h-14 border-b bg-background pl-12 pr-3 py-2 shrink-0">
@@ -553,6 +566,10 @@ export default function WorkflowEditorPage({
           onAutoLayout={handleAutoLayout}
           showGrid={showGrid}
           onToggleGrid={() => setShowGrid((v) => !v)}
+          showMinimap={showMinimap}
+          onToggleMinimap={() => setShowMinimap((v) => !v)}
+          onShowTutorial={() => setShowTutorial(true)}
+          onOpenRunHistory={() => setRunHistoryOpen(true)}
         />
       </div>
 
@@ -575,45 +592,9 @@ export default function WorkflowEditorPage({
           </div>
         )}
 
-        {/* Canvas + bottom panels */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 relative">
-            <WorkflowCanvas showGrid={showGrid} />
-          </div>
-
-          {/* Variables Panel */}
-          <VariablesPanel />
-
-          {/* Run History (collapsible) */}
-          {editor.showRunHistory && (
-            <div className="border-t max-h-[250px] overflow-y-auto">
-              <div className="px-3 py-1.5 border-b bg-muted/30">
-                <span className="text-xs font-semibold">Run History</span>
-              </div>
-              {activeRun ? (
-                <RunDetail run={activeRun} onResume={handleResume} />
-              ) : (
-                <RunHistory
-                  runs={runs}
-                  activeRunId={null}
-                  onSelectRun={(run) => setActiveRun(run)}
-                  isLoading={runsLoading}
-                />
-              )}
-              {activeRun && (
-                <div className="px-3 py-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 text-[10px]"
-                    onClick={() => setActiveRun(null)}
-                  >
-                    Back to list
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+        {/* Canvas */}
+        <div className="flex-1 relative overflow-hidden">
+          <WorkflowCanvas showGrid={showGrid} showMinimap={showMinimap} />
         </div>
 
         {/* Properties Panel */}
@@ -633,51 +614,163 @@ export default function WorkflowEditorPage({
       <Dialog open={runDialogOpen} onOpenChange={setRunDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Run Workflow</DialogTitle>
-            <DialogDescription>
-              {(editor.variables?.inputs?.length ?? 0) > 0
-                ? `Provide input for: ${editor.variables.inputs.map((v) => v.name).join(", ")}`
-                : "Provide JSON input for this workflow execution."}
-            </DialogDescription>
+            <div className="flex items-center justify-between pr-6">
+              <div>
+                <DialogTitle>Run Workflow</DialogTitle>
+                <DialogDescription>
+                  {(editor.variables?.inputs?.length ?? 0) > 0
+                    ? `Provide input for: ${editor.variables.inputs.map((v) => v.name).join(", ")}`
+                    : "Provide JSON input for this workflow execution."}
+                </DialogDescription>
+              </div>
+              {(editor.variables?.inputs?.length ?? 0) > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5 shrink-0"
+                  onClick={() => {
+                    if (!jsonMode) {
+                      // Sync form values to JSON before switching
+                      setRunInputJson(JSON.stringify(runFormValues, null, 2))
+                    } else {
+                      // Sync JSON to form values before switching
+                      try {
+                        setRunFormValues(JSON.parse(runInputJson))
+                      } catch { /* keep current form values */ }
+                    }
+                    setJsonMode((v) => !v)
+                  }}
+                >
+                  {jsonMode ? <FormInput className="h-3.5 w-3.5" /> : <Code2 className="h-3.5 w-3.5" />}
+                  {jsonMode ? "Form" : "JSON"}
+                </Button>
+              )}
+            </div>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="run-input">Input JSON</Label>
-            <Textarea
-              id="run-input"
-              value={runInputJson}
-              onChange={(e) => setRunInputJson(e.target.value)}
-              className="font-mono text-xs min-h-[200px]"
-              placeholder='{ "key": "value" }'
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                  handleRunExecute()
-                }
-              }}
-            />
-            {(() => {
-              try {
-                JSON.parse(runInputJson)
-                return null
-              } catch {
-                return (
-                  <p className="text-xs text-destructive">Invalid JSON</p>
-                )
-              }
-            })()}
+
+          <div className="space-y-3 py-2">
+            {jsonMode ? (
+              /* ── JSON Mode ── */
+              <div className="space-y-2">
+                <Label htmlFor="run-input">Input JSON</Label>
+                <Textarea
+                  id="run-input"
+                  value={runInputJson}
+                  onChange={(e) => setRunInputJson(e.target.value)}
+                  className="font-mono text-xs min-h-[200px]"
+                  placeholder='{ "key": "value" }'
+                />
+                {(() => {
+                  try {
+                    JSON.parse(runInputJson)
+                    return null
+                  } catch {
+                    return <p className="text-xs text-destructive">Invalid JSON</p>
+                  }
+                })()}
+              </div>
+            ) : (
+              /* ── Form Mode ── */
+              <div className="space-y-4">
+                {(editor.variables?.inputs || []).map((variable) => (
+                  <div key={variable.name} className="space-y-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <Label htmlFor={`input-${variable.name}`} className="text-xs font-medium">
+                        {variable.name}
+                      </Label>
+                      {variable.required && (
+                        <span className="text-destructive text-[10px]">*</span>
+                      )}
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        {variable.type}
+                      </span>
+                    </div>
+
+                    {variable.description && (
+                      <p className="text-[10px] text-muted-foreground">{variable.description}</p>
+                    )}
+
+                    {variable.type === "string" && (
+                      <Input
+                        id={`input-${variable.name}`}
+                        value={String(runFormValues[variable.name] ?? "")}
+                        onChange={(e) =>
+                          setRunFormValues((prev) => ({ ...prev, [variable.name]: e.target.value }))
+                        }
+                        className="text-xs"
+                        placeholder={`Enter ${variable.name}...`}
+                      />
+                    )}
+
+                    {variable.type === "number" && (
+                      <Input
+                        id={`input-${variable.name}`}
+                        type="number"
+                        value={String(runFormValues[variable.name] ?? 0)}
+                        onChange={(e) =>
+                          setRunFormValues((prev) => ({
+                            ...prev,
+                            [variable.name]: e.target.value === "" ? 0 : Number(e.target.value),
+                          }))
+                        }
+                        className="text-xs"
+                      />
+                    )}
+
+                    {variable.type === "boolean" && (
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          id={`input-${variable.name}`}
+                          checked={Boolean(runFormValues[variable.name])}
+                          onCheckedChange={(checked) =>
+                            setRunFormValues((prev) => ({ ...prev, [variable.name]: checked }))
+                          }
+                        />
+                        <Label htmlFor={`input-${variable.name}`} className="text-xs text-muted-foreground">
+                          {runFormValues[variable.name] ? "true" : "false"}
+                        </Label>
+                      </div>
+                    )}
+
+                    {(variable.type === "object" || variable.type === "array") && (
+                      <Textarea
+                        id={`input-${variable.name}`}
+                        value={
+                          typeof runFormValues[variable.name] === "string"
+                            ? String(runFormValues[variable.name])
+                            : JSON.stringify(runFormValues[variable.name] ?? (variable.type === "array" ? [] : {}), null, 2)
+                        }
+                        onChange={(e) => {
+                          try {
+                            setRunFormValues((prev) => ({ ...prev, [variable.name]: JSON.parse(e.target.value) }))
+                          } catch {
+                            // Keep raw string while user is editing
+                            setRunFormValues((prev) => ({ ...prev, [variable.name]: e.target.value }))
+                          }
+                        }}
+                        className="font-mono text-xs min-h-[80px]"
+                        placeholder={variable.type === "array" ? "[]" : "{}"}
+                      />
+                    )}
+                  </div>
+                ))}
+                {(editor.variables?.inputs?.length ?? 0) === 0 && (
+                  <p className="text-xs text-muted-foreground italic py-4 text-center">
+                    No input variables defined. Use the Variables Panel to add inputs.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setRunDialogOpen(false)}>
               Cancel
             </Button>
             <Button
               onClick={handleRunExecute}
-              disabled={(() => {
-                try {
-                  JSON.parse(runInputJson)
-                  return false
-                } catch {
-                  return true
-                }
+              disabled={jsonMode && (() => {
+                try { JSON.parse(runInputJson); return false } catch { return true }
               })()}
             >
               Run
@@ -685,6 +778,153 @@ export default function WorkflowEditorPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Run Result Dialog */}
+      <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {activeRun?.status === "COMPLETED" ? (
+                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              ) : activeRun?.status === "FAILED" ? (
+                <XCircle className="h-5 w-5 text-destructive" />
+              ) : activeRun?.status === "PAUSED" ? (
+                <PauseCircle className="h-5 w-5 text-amber-500" />
+              ) : null}
+              Workflow Result
+            </DialogTitle>
+          </DialogHeader>
+
+          {(() => {
+            // Extract clean final output from the last executed node
+            const cleanOutput = (() => {
+              if (!activeRun?.output || typeof activeRun.output !== "object") return activeRun?.output ?? null
+              const steps = (activeRun.steps ?? []) as StepLogEntry[]
+              const successSteps = steps.filter((s) => s.status === "success")
+              if (successSteps.length === 0) return null
+
+              // Get the last successful step's output
+              const lastStep = successSteps[successSteps.length - 1]
+              const lastOutput = lastStep.output as Record<string, unknown> | null
+
+              if (!lastOutput || typeof lastOutput !== "object") return lastOutput
+
+              // If it's an LLM-style output (has text + usage/finishReason), extract just the meaningful fields
+              if ("text" in lastOutput && ("usage" in lastOutput || "finishReason" in lastOutput)) {
+                return lastOutput.text
+              }
+
+              // For other outputs, strip internal metadata keys
+              const metaKeys = new Set(["usage", "finishReason", "raw", "cost", "is_byok", "cost_details", "inputTokens", "outputTokens", "totalTokens", "reasoningTokens", "cachedInputTokens", "inputTokenDetails", "completionTokenDetails", "noCacheReadTokens", "cacheReadTokens"])
+              const cleaned: Record<string, unknown> = {}
+              let hasCleanedKeys = false
+              for (const [key, value] of Object.entries(lastOutput)) {
+                if (!metaKeys.has(key)) {
+                  cleaned[key] = value
+                  hasCleanedKeys = true
+                }
+              }
+              return hasCleanedKeys ? cleaned : lastOutput
+            })()
+
+            const outputText = cleanOutput == null ? null
+              : typeof cleanOutput === "string" ? cleanOutput
+              : JSON.stringify(cleanOutput, null, 2)
+
+            return (
+              <div className="space-y-4 py-2">
+                {/* Status + Duration */}
+                <div className="flex items-center gap-3">
+                  <Badge
+                    variant="secondary"
+                    className={
+                      activeRun?.status === "COMPLETED"
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
+                        : activeRun?.status === "FAILED"
+                          ? "bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300"
+                          : "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
+                    }
+                  >
+                    {activeRun?.status}
+                  </Badge>
+                  {activeRun?.startedAt && activeRun?.completedAt && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {(() => {
+                        const ms = new Date(activeRun.completedAt).getTime() - new Date(activeRun.startedAt).getTime()
+                        return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`
+                      })()}
+                    </span>
+                  )}
+                  {activeRun?.error && (
+                    <span className="text-xs text-destructive truncate flex-1">{activeRun.error}</span>
+                  )}
+                </div>
+
+                {/* Output */}
+                {outputText != null && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold">Output</Label>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          navigator.clipboard.writeText(outputText)
+                          setResultCopied(true)
+                          setTimeout(() => setResultCopied(false), 2000)
+                        }}
+                      >
+                        {resultCopied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                      </Button>
+                    </div>
+                    <ScrollArea className="max-h-[300px]">
+                      <pre className="bg-muted/50 rounded-md p-3 text-xs font-mono whitespace-pre-wrap break-words">
+                        {outputText}
+                      </pre>
+                    </ScrollArea>
+                  </div>
+                )}
+
+                {outputText == null && activeRun?.status === "COMPLETED" && (
+                  <p className="text-xs text-muted-foreground italic text-center py-4">
+                    Workflow completed with no output.
+                  </p>
+                )}
+              </div>
+            )
+          })()}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setResultDialogOpen(false)
+                setRunHistoryOpen(true)
+              }}
+            >
+              View Run Details
+            </Button>
+            <Button size="sm" onClick={() => setResultDialogOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Run History Dialog */}
+      <RunHistoryDialog
+        open={runHistoryOpen}
+        onOpenChange={setRunHistoryOpen}
+        runs={runs}
+        runsLoading={runsLoading}
+        activeRun={activeRun}
+        onSelectRun={setActiveRun}
+        onClearRun={() => setActiveRun(null)}
+        onResume={handleResume}
+      />
 
       {/* Keyboard Shortcuts Dialog */}
       <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />

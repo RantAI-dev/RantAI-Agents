@@ -273,7 +273,7 @@ export function ChatTestPanel({ workflowId, onClose, onExecuteComplete }: ChatTe
               <button
                 key={i}
                 onClick={() => handleSend(prompt)}
-                className="text-[11px] px-2.5 py-1.5 rounded-full border bg-background hover:bg-muted transition-colors text-foreground"
+                className="text-xs px-2.5 py-1.5 rounded-full border bg-background hover:bg-muted transition-colors text-foreground"
               >
                 {prompt}
               </button>

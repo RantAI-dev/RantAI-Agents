@@ -351,7 +351,7 @@ export const ExpressionEditor = forwardRef<HTMLTextAreaElement, ExpressionEditor
           >
             {[...grouped.entries()].map(([category, items]) => (
               <div key={category}>
-                <div className="px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 sticky top-0">
+                <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/30 sticky top-0">
                   <span className={CATEGORY_COLORS[category]}>
                     {CATEGORY_LABELS[category] || category}
                   </span>
@@ -371,14 +371,14 @@ export const ExpressionEditor = forwardRef<HTMLTextAreaElement, ExpressionEditor
                       onClick={() => insertReference(item)}
                       onMouseEnter={() => setSelectedIndex(idx)}
                     >
-                      <span className="text-[11px] font-mono">
+                      <span className="text-xs font-mono">
                         {"{{ "}
                         <span className={CATEGORY_COLORS[item.category]}>
                           {item.label}
                         </span>
                         {" }}"}
                       </span>
-                      <span className="text-[9px] text-muted-foreground truncate">
+                      <span className="text-[10px] text-muted-foreground truncate">
                         {item.description}
                       </span>
                     </button>
