@@ -49,13 +49,16 @@ export async function GET(
       id: server.id,
       name: server.name,
       description: server.description,
+      icon: server.icon,
       transport: server.transport,
       url: server.url,
-      command: server.command,
-      args: server.args,
+      isBuiltIn: server.isBuiltIn,
+      envKeys: server.envKeys,
+      docsUrl: server.docsUrl,
       hasEnv: !!server.env && Object.keys(server.env as Record<string, unknown>).length > 0,
       hasHeaders: !!server.headers && Object.keys(server.headers as Record<string, unknown>).length > 0,
       enabled: server.enabled,
+      configured: server.configured,
       lastConnectedAt: server.lastConnectedAt?.toISOString() ?? null,
       lastError: server.lastError,
       tools: server.tools,
@@ -104,11 +107,10 @@ export async function PUT(
       description,
       transport,
       url,
-      command,
-      args,
       env,
       headers,
       enabled,
+      configured,
     } = body
 
     const server = await prisma.mcpServerConfig.update({
@@ -118,11 +120,10 @@ export async function PUT(
         ...(description !== undefined && { description }),
         ...(transport !== undefined && { transport }),
         ...(url !== undefined && { url }),
-        ...(command !== undefined && { command }),
-        ...(args !== undefined && { args }),
-        ...(env !== undefined && { env: encryptJsonField(env) || null }),
-        ...(headers !== undefined && { headers: encryptJsonField(headers) || null }),
+        ...(env !== undefined && { env: encryptJsonField(env) ?? undefined }),
+        ...(headers !== undefined && { headers: encryptJsonField(headers) ?? undefined }),
         ...(enabled !== undefined && { enabled }),
+        ...(configured !== undefined && { configured }),
       },
     })
 
@@ -160,6 +161,14 @@ export async function DELETE(
       return NextResponse.json(
         { error: "MCP server not found" },
         { status: 404 }
+      )
+    }
+
+    // Reject deletion of built-in servers
+    if (server.isBuiltIn) {
+      return NextResponse.json(
+        { error: "Cannot delete a built-in MCP server" },
+        { status: 403 }
       )
     }
 

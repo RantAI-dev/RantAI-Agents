@@ -1,14 +1,12 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
-import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 
 export interface McpServerOptions {
   id: string
   name: string
-  transport: "stdio" | "sse" | "streamable-http"
+  transport: "sse" | "streamable-http"
   url?: string | null
-  command?: string | null
-  args?: string[]
   env?: Record<string, string> | null
   headers?: Record<string, string> | null
 }
@@ -17,6 +15,20 @@ export interface McpToolInfo {
   name: string
   description?: string
   inputSchema: object
+}
+
+/**
+ * Replace `{ENV_KEY}` placeholders in a URL with values from `env`.
+ * E.g. `https://mcp.firecrawl.dev/{FIRECRAWL_API_KEY}/sse` → resolved URL.
+ */
+export function resolveUrl(
+  url: string,
+  env?: Record<string, string> | null
+): string {
+  if (!env) return url
+  return url.replace(/\{([A-Z_][A-Z0-9_]*)\}/g, (_match, key: string) => {
+    return env[key] ?? `{${key}}`
+  })
 }
 
 /**
@@ -36,29 +48,28 @@ class McpClientManager {
       { capabilities: {} }
     )
 
+    if (!config.url) {
+      throw new Error(
+        `Invalid MCP config: transport=${config.transport}, url is required`
+      )
+    }
+
+    const resolvedUrl = resolveUrl(config.url, config.env)
+    const requestInit = config.headers
+      ? { headers: config.headers }
+      : undefined
+
     let transport
 
-    if (config.transport === "stdio" && config.command) {
-      transport = new StdioClientTransport({
-        command: config.command,
-        args: config.args || [],
-        env: config.env
-          ? { ...process.env, ...config.env }
-          : undefined,
-      })
-    } else if (
-      (config.transport === "sse" || config.transport === "streamable-http") &&
-      config.url
-    ) {
-      transport = new SSEClientTransport(new URL(config.url), {
-        requestInit: config.headers
-          ? { headers: config.headers }
-          : undefined,
+    if (config.transport === "streamable-http") {
+      transport = new StreamableHTTPClientTransport(new URL(resolvedUrl), {
+        requestInit,
       })
     } else {
-      throw new Error(
-        `Invalid MCP config: transport=${config.transport}, url=${config.url}, command=${config.command}`
-      )
+      // SSE transport
+      transport = new SSEClientTransport(new URL(resolvedUrl), {
+        requestInit,
+      })
     }
 
     await client.connect(transport)

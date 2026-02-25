@@ -260,10 +260,8 @@ export async function executeTool(
       const serverConfig: McpServerOptions = {
         id: toolRecord.mcpServer.id,
         name: toolRecord.mcpServer.name,
-        transport: toolRecord.mcpServer.transport as "stdio" | "sse" | "streamable-http",
+        transport: toolRecord.mcpServer.transport as "sse" | "streamable-http",
         url: toolRecord.mcpServer.url,
-        command: toolRecord.mcpServer.command,
-        args: (toolRecord.mcpServer.args as string[]) || undefined,
         env: toolRecord.mcpServer.env as Record<string, string> | null,
         headers: toolRecord.mcpServer.headers as Record<string, string> | null,
       }

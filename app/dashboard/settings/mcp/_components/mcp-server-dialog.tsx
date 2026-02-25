@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   Dialog,
   DialogContent,
@@ -19,9 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { useMcpServers, type McpServerItem } from "@/hooks/use-mcp-servers"
-import type { McpServerTemplate } from "@/lib/mcp/templates"
+import { useMcpServers, type McpServerItem, type EnvKeyDef } from "@/hooks/use-mcp-servers"
 import { toast } from "sonner"
 import { ExternalLink, Loader2 } from "lucide-react"
 
@@ -29,25 +27,29 @@ interface McpServerDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   editServer?: McpServerItem | null
-  template?: McpServerTemplate | null
 }
 
 export function McpServerDialog({
   open,
   onOpenChange,
   editServer,
-  template,
 }: McpServerDialogProps) {
   const { createServer, updateServer } = useMcpServers()
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [transport, setTransport] = useState<string>("sse")
+  const [transport, setTransport] = useState<string>("streamable-http")
   const [url, setUrl] = useState("")
-  const [command, setCommand] = useState("")
-  const [args, setArgs] = useState("")
-  const [envJson, setEnvJson] = useState("{}")
   const [headersJson, setHeadersJson] = useState("{}")
+  // envValues maps env key names → user-entered values
+  const [envValues, setEnvValues] = useState<Record<string, string>>({})
+
+  const isBuiltIn = editServer?.isBuiltIn ?? false
+  const envKeys: EnvKeyDef[] = useMemo(
+    () => (editServer?.envKeys as EnvKeyDef[] | null) ?? [],
+    [editServer]
+  )
+  const docsUrl = editServer?.docsUrl ?? null
 
   useEffect(() => {
     if (editServer) {
@@ -55,39 +57,22 @@ export function McpServerDialog({
       setDescription(editServer.description || "")
       setTransport(editServer.transport)
       setUrl(editServer.url || "")
-      setCommand(editServer.command || "")
-      setArgs(editServer.args?.join(" ") || "")
-      setEnvJson("{}")
       setHeadersJson("{}")
-    } else if (template) {
-      setName(template.name)
-      setDescription(template.description)
-      setTransport(template.transport)
-      setUrl(template.url || "")
-      setCommand(template.command || "")
-      setArgs(template.args?.join(" ") || "")
-      // Build env JSON from template envKeys
-      if (template.envKeys && template.envKeys.length > 0) {
-        const envObj: Record<string, string> = {}
-        for (const ek of template.envKeys) {
-          envObj[ek.key] = ""
-        }
-        setEnvJson(JSON.stringify(envObj, null, 2))
-      } else {
-        setEnvJson("{}")
+      // Initialize env values from envKeys (blank by default, user must re-enter)
+      const initEnv: Record<string, string> = {}
+      for (const ek of envKeys) {
+        initEnv[ek.key] = ""
       }
-      setHeadersJson("{}")
+      setEnvValues(initEnv)
     } else {
       setName("")
       setDescription("")
-      setTransport("sse")
+      setTransport("streamable-http")
       setUrl("")
-      setCommand("")
-      setArgs("")
-      setEnvJson("{}")
       setHeadersJson("{}")
+      setEnvValues({})
     }
-  }, [editServer, template, open])
+  }, [editServer, envKeys, open])
 
   const handleSubmit = async () => {
     if (!name.trim()) {
@@ -95,27 +80,22 @@ export function McpServerDialog({
       return
     }
 
-    if (transport === "stdio" && !command.trim()) {
-      toast.error("Command is required for stdio transport")
+    if (!url.trim()) {
+      toast.error("URL is required")
       return
     }
 
-    if ((transport === "sse" || transport === "streamable-http") && !url.trim()) {
-      toast.error("URL is required for SSE/HTTP transport")
-      return
-    }
-
+    // Build env from labeled fields
     let env: Record<string, string> | undefined
-    let headers: Record<string, string> | undefined
-
-    try {
-      const parsedEnv = JSON.parse(envJson)
-      if (Object.keys(parsedEnv).length > 0) env = parsedEnv
-    } catch {
-      toast.error("Invalid JSON for environment variables")
-      return
+    const filledEnv: Record<string, string> = {}
+    for (const [key, value] of Object.entries(envValues)) {
+      if (value.trim()) {
+        filledEnv[key] = value.trim()
+      }
     }
+    if (Object.keys(filledEnv).length > 0) env = filledEnv
 
+    let headers: Record<string, string> | undefined
     try {
       const parsedHeaders = JSON.parse(headersJson)
       if (Object.keys(parsedHeaders).length > 0) headers = parsedHeaders
@@ -124,17 +104,24 @@ export function McpServerDialog({
       return
     }
 
+    // Determine configured status:
+    // configured = true when envKeys is empty OR all env keys have values
+    const needsEnv = envKeys.length > 0
+    const allFilled = needsEnv
+      ? envKeys.every((ek) => filledEnv[ek.key])
+      : true
+    const configured = allFilled
+
     setSaving(true)
     try {
       const data = {
         name: name.trim(),
         description: description.trim() || undefined,
         transport,
-        url: url.trim() || undefined,
-        command: command.trim() || undefined,
-        args: args.trim() ? args.trim().split(/\s+/) : undefined,
+        url: url.trim(),
         env,
         headers,
+        configured,
       }
 
       if (editServer) {
@@ -154,33 +141,24 @@ export function McpServerDialog({
     }
   }
 
-  const isRemote = transport === "sse" || transport === "streamable-http"
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[550px]">
         <DialogHeader>
           <DialogTitle>
-            {editServer
-              ? "Edit MCP Server"
-              : template
-                ? `Add ${template.name} Server`
-                : "Add MCP Server"}
+            {editServer ? `Edit ${editServer.name}` : "Add MCP Server"}
           </DialogTitle>
-          {template && (
+          {docsUrl && (
             <div className="flex items-center gap-2 pt-1">
-              <Badge variant="secondary">{template.tags[0]}</Badge>
-              {template.docsUrl && (
-                <a
-                  href={template.docsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Documentation
-                </a>
-              )}
+              <a
+                href={docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Documentation
+              </a>
             </div>
           )}
         </DialogHeader>
@@ -193,6 +171,8 @@ export function McpServerDialog({
               placeholder="My MCP Server"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              readOnly={isBuiltIn}
+              className={isBuiltIn ? "bg-muted" : ""}
             />
           </div>
 
@@ -208,81 +188,63 @@ export function McpServerDialog({
 
           <div className="space-y-2">
             <Label>Transport</Label>
-            <Select value={transport} onValueChange={setTransport}>
-              <SelectTrigger>
+            <Select
+              value={transport}
+              onValueChange={setTransport}
+              disabled={isBuiltIn}
+            >
+              <SelectTrigger className={isBuiltIn ? "bg-muted" : ""}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="sse">SSE (Server-Sent Events)</SelectItem>
                 <SelectItem value="streamable-http">
                   Streamable HTTP
                 </SelectItem>
-                <SelectItem value="stdio">Stdio (Local Process)</SelectItem>
+                <SelectItem value="sse">SSE (Server-Sent Events)</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {isRemote && (
-            <div className="space-y-2">
-              <Label htmlFor="url">Server URL</Label>
-              <Input
-                id="url"
-                placeholder="https://mcp-server.example.com/sse"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-              />
+          <div className="space-y-2">
+            <Label htmlFor="url">Server URL</Label>
+            <Input
+              id="url"
+              placeholder="https://mcp-server.example.com/mcp"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              readOnly={isBuiltIn}
+              className={isBuiltIn ? "bg-muted" : ""}
+            />
+          </div>
+
+          {/* Labeled env key fields (from envKeys) */}
+          {envKeys.length > 0 && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Configuration</Label>
+              {envKeys.map((ek) => (
+                <div key={ek.key} className="space-y-1">
+                  <Label htmlFor={`env-${ek.key}`} className="text-xs">
+                    {ek.label}
+                  </Label>
+                  <Input
+                    id={`env-${ek.key}`}
+                    type="password"
+                    placeholder={ek.placeholder}
+                    value={envValues[ek.key] || ""}
+                    onChange={(e) =>
+                      setEnvValues((prev) => ({
+                        ...prev,
+                        [ek.key]: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+              ))}
             </div>
           )}
 
-          {transport === "stdio" && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="command">Command</Label>
-                <Input
-                  id="command"
-                  placeholder="npx"
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="args">Arguments (space-separated)</Label>
-                <Input
-                  id="args"
-                  placeholder="-y @modelcontextprotocol/server-filesystem /tmp"
-                  value={args}
-                  onChange={(e) => setArgs(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="env">
-                  Environment Variables (JSON)
-                </Label>
-                <Textarea
-                  id="env"
-                  className="font-mono text-xs"
-                  value={envJson}
-                  onChange={(e) => setEnvJson(e.target.value)}
-                  rows={3}
-                  placeholder='{"API_KEY": "..."}'
-                />
-                {template?.envKeys && template.envKeys.length > 0 && (
-                  <div className="space-y-1">
-                    {template.envKeys.map((ek) => (
-                      <p key={ek.key} className="text-xs text-muted-foreground">
-                        <code className="bg-muted px-1 rounded">{ek.key}</code>{" "}
-                        — {ek.label}
-                      </p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {isRemote && (
+          {/* Raw headers field (for advanced users / non-built-in) */}
+          {!isBuiltIn && (
             <div className="space-y-2">
               <Label htmlFor="headers">HTTP Headers (JSON)</Label>
               <Textarea

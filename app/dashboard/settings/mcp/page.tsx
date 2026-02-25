@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState } from "react"
 import {
   Plug,
   Plus,
@@ -10,19 +10,13 @@ import {
   RefreshCw,
   Wifi,
   WifiOff,
-  Terminal,
   Globe,
   ChevronDown,
   ChevronRight,
   Wrench,
-  Check,
-  FolderOpen,
-  Database,
-  MessageSquare,
-  Search,
-  Brain,
-  HardDrive,
-  Github,
+  Store,
+  AlertTriangle,
+  Settings2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -45,24 +39,17 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { useMcpServers, type McpServerItem } from "@/hooks/use-mcp-servers"
+import { useOrgFetch } from "@/hooks/use-organization"
+import { DynamicIcon } from "@/components/ui/dynamic-icon"
 import { McpServerDialog } from "./_components/mcp-server-dialog"
 import { McpServerConfig } from "./_components/mcp-server-config"
-import { MCP_SERVER_TEMPLATES, type McpServerTemplate } from "@/lib/mcp/templates"
 import { toast } from "sonner"
-
-const TEMPLATE_ICONS: Record<string, React.ElementType> = {
-  FolderOpen,
-  Github,
-  Database,
-  MessageSquare,
-  Search,
-  Brain,
-  HardDrive,
-}
+import Link from "next/link"
 
 export default function McpSettingsPage() {
   const { servers, isLoading, updateServer, deleteServer, discoverTools } =
     useMcpServers()
+  const orgFetch = useOrgFetch()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingServer, setEditingServer] = useState<McpServerItem | null>(null)
   const [deletingServer, setDeletingServer] = useState<string | null>(null)
@@ -72,17 +59,6 @@ export default function McpSettingsPage() {
     Record<string, Array<{ id: string; name: string; displayName: string; description: string }>>
   >({})
   const [activeTab, setActiveTab] = useState("clients")
-  const [selectedTemplate, setSelectedTemplate] = useState<McpServerTemplate | null>(null)
-
-  // Check which templates are already added (by matching name)
-  const addedTemplateIds = useMemo(() => {
-    const names = new Set(servers.map((s) => s.name.toLowerCase()))
-    return new Set(
-      MCP_SERVER_TEMPLATES.filter((t) => names.has(t.name.toLowerCase())).map(
-        (t) => t.id
-      )
-    )
-  }, [servers])
 
   const handleToggle = async (id: string, enabled: boolean) => {
     try {
@@ -131,7 +107,7 @@ export default function McpSettingsPage() {
     setExpandedServer(id)
     if (!serverTools[id]) {
       try {
-        const res = await fetch(`/api/dashboard/mcp-servers/${id}`)
+        const res = await orgFetch(`/api/dashboard/mcp-servers/${id}`)
         if (res.ok) {
           const data = await res.json()
           setServerTools((prev) => ({ ...prev, [id]: data.tools }))
@@ -142,20 +118,8 @@ export default function McpSettingsPage() {
     }
   }
 
-  const handleTemplateClick = (template: McpServerTemplate) => {
-    if (addedTemplateIds.has(template.id)) return
-    setSelectedTemplate(template)
-  }
-
   const transportBadge = (transport: string) => {
     switch (transport) {
-      case "stdio":
-        return (
-          <Badge variant="secondary">
-            <Terminal className="h-3 w-3 mr-1" />
-            Stdio
-          </Badge>
-        )
       case "sse":
         return (
           <Badge variant="outline">
@@ -176,6 +140,14 @@ export default function McpSettingsPage() {
   }
 
   const statusIndicator = (server: McpServerItem) => {
+    if (!server.configured) {
+      return (
+        <Badge variant="outline" className="text-amber-600 border-amber-300 dark:text-amber-400 dark:border-amber-800">
+          <AlertTriangle className="h-3 w-3 mr-1" />
+          Needs Configuration
+        </Badge>
+      )
+    }
     if (server.lastError) {
       return (
         <span className="flex items-center gap-1 text-xs text-destructive">
@@ -210,10 +182,18 @@ export default function McpSettingsPage() {
           </p>
         </div>
         {activeTab === "clients" && (
-          <Button onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            Add Server
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/marketplace/mcp">
+                <Store className="h-4 w-4 mr-1" />
+                Browse Marketplace
+              </Link>
+            </Button>
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              Add Server
+            </Button>
+          </div>
         )}
       </div>
 
@@ -226,48 +206,6 @@ export default function McpSettingsPage() {
 
             {/* MCP Clients Tab */}
             <TabsContent value="clients" className="space-y-6">
-              {/* Template Gallery */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-muted-foreground">
-                  Quick Add — Popular MCP Servers
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {MCP_SERVER_TEMPLATES.map((template) => {
-                    const Icon = TEMPLATE_ICONS[template.icon] || Plug
-                    const isAdded = addedTemplateIds.has(template.id)
-                    return (
-                      <button
-                        key={template.id}
-                        onClick={() => handleTemplateClick(template)}
-                        disabled={isAdded}
-                        className={`flex flex-col items-center gap-2 p-4 rounded-lg border text-center transition-colors ${
-                          isAdded
-                            ? "bg-muted/50 border-muted cursor-default"
-                            : "hover:bg-accent hover:border-accent-foreground/20 cursor-pointer"
-                        }`}
-                      >
-                        <div className="relative">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                            <Icon className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                          {isAdded && (
-                            <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-green-500 flex items-center justify-center">
-                              <Check className="h-3 w-3 text-white" />
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium">{template.name}</p>
-                          <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
-                            {template.description}
-                          </p>
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
               {/* Server List */}
               <div className="space-y-4">
                 {isLoading ? (
@@ -283,13 +221,21 @@ export default function McpSettingsPage() {
                       </h3>
                       <p className="text-sm text-muted-foreground mb-4 text-center max-w-md">
                         Connect external tool providers to extend your assistants
-                        with additional capabilities via MCP. Use a template above
-                        or add a custom server.
+                        with additional capabilities via MCP. Install from the
+                        Marketplace or add a custom server.
                       </p>
-                      <Button size="sm" onClick={() => setDialogOpen(true)}>
-                        <Plus className="h-4 w-4 mr-1" />
-                        Add MCP Server
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href="/dashboard/marketplace/mcp">
+                            <Store className="h-4 w-4 mr-1" />
+                            Browse Marketplace
+                          </Link>
+                        </Button>
+                        <Button size="sm" onClick={() => setDialogOpen(true)}>
+                          <Plus className="h-4 w-4 mr-1" />
+                          Add Custom Server
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ) : (
@@ -315,13 +261,25 @@ export default function McpSettingsPage() {
                                 )}
                               </Button>
                             </CollapsibleTrigger>
-                            <Plug className="h-5 w-5 text-muted-foreground shrink-0" />
+                            <div className="h-7 w-7 rounded-md bg-muted flex items-center justify-center shrink-0">
+                              <DynamicIcon
+                                icon={server.icon ?? undefined}
+                                fallback={Plug}
+                                className="h-4 w-4 text-muted-foreground"
+                                emojiClassName="text-base leading-none"
+                              />
+                            </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
                                 <h3 className="font-medium truncate">
                                   {server.name}
                                 </h3>
                                 {transportBadge(server.transport)}
+                                {server.isBuiltIn && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    Built-in
+                                  </Badge>
+                                )}
                                 {statusIndicator(server)}
                               </div>
                               {server.description && (
@@ -332,6 +290,20 @@ export default function McpSettingsPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
+                            {!server.configured && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setEditingServer(server)
+                                }}
+                              >
+                                <Settings2 className="h-3.5 w-3.5 mr-1" />
+                                Configure
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
@@ -362,17 +334,19 @@ export default function McpSettingsPage() {
                             >
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setDeletingServer(server.id)
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                            {!server.isBuiltIn && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setDeletingServer(server.id)
+                                }}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
                             <Switch
                               checked={server.enabled}
                               onCheckedChange={(checked) =>
@@ -392,11 +366,6 @@ export default function McpSettingsPage() {
                             {server.url && (
                               <span className="truncate font-mono">
                                 {server.url}
-                              </span>
-                            )}
-                            {server.command && (
-                              <span className="truncate font-mono">
-                                {server.command} {server.args?.join(" ")}
                               </span>
                             )}
                           </div>
@@ -454,16 +423,14 @@ export default function McpSettingsPage() {
       </div>
 
       <McpServerDialog
-        open={dialogOpen || !!editingServer || !!selectedTemplate}
+        open={dialogOpen || !!editingServer}
         onOpenChange={(open) => {
           if (!open) {
             setDialogOpen(false)
             setEditingServer(null)
-            setSelectedTemplate(null)
           }
         }}
         editServer={editingServer}
-        template={selectedTemplate}
       />
 
       <AlertDialog

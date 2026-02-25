@@ -20,8 +20,6 @@ export async function discoverAndSyncTools(serverId: string) {
     name: serverConfig.name,
     transport: serverConfig.transport as McpServerOptions["transport"],
     url: serverConfig.url,
-    command: serverConfig.command,
-    args: serverConfig.args,
     env: decryptJsonField(serverConfig.env),
     headers: decryptJsonField(serverConfig.headers),
   }

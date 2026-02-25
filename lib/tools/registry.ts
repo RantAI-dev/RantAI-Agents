@@ -5,7 +5,13 @@ import { AVAILABLE_MODELS } from "@/lib/models"
 import { BUILTIN_TOOLS } from "./builtin"
 import { adaptMcpToolsToAiSdk } from "@/lib/mcp/tool-adapter"
 import type { McpServerOptions, McpToolInfo } from "@/lib/mcp/client"
+import { decryptJsonField } from "@/lib/workflow/credentials"
 import type { ToolContext, ResolvedTools, ExecutionConfig } from "./types"
+import {
+  getCommunityTool,
+  executeCommunityTool,
+} from "@/lib/skills/gateway"
+import type { CommunityToolContext } from "@/lib/skill-sdk"
 
 function getModelById(modelId: string) {
   return AVAILABLE_MODELS.find((m) => m.id === modelId)
@@ -89,10 +95,8 @@ export async function resolveToolsForAssistant(
         name: toolDef.mcpServer.name,
         transport: toolDef.mcpServer.transport as McpServerOptions["transport"],
         url: toolDef.mcpServer.url,
-        command: toolDef.mcpServer.command,
-        args: toolDef.mcpServer.args,
-        env: toolDef.mcpServer.env as Record<string, string> | null,
-        headers: toolDef.mcpServer.headers as Record<string, string> | null,
+        env: decryptJsonField(toolDef.mcpServer.env),
+        headers: decryptJsonField(toolDef.mcpServer.headers),
       }
 
       const mcpToolInfo: McpToolInfo = {
@@ -179,6 +183,124 @@ export async function resolveToolsForAssistant(
         },
       })
       toolNames.push(toolDef.name)
+    }
+
+    if (toolDef.category === "community") {
+      const communityTool = await getCommunityTool(toolDef.name)
+      if (!communityTool) {
+        console.warn(
+          `[Tools] Community tool "${toolDef.name}" not found in registry, skipping`
+        )
+        continue
+      }
+
+      // Load user config from InstalledSkill that references this tool
+      let userConfig: Record<string, unknown> | undefined
+      const skillsUsingTool = await prisma.skill.findMany({
+        where: {
+          assistantSkills: { some: { assistantId, enabled: true } },
+        },
+        select: { metadata: true, installedSkill: { select: { config: true } } },
+      })
+      for (const skill of skillsUsingTool) {
+        const meta = (skill.metadata ?? {}) as Record<string, unknown>
+        const toolIds = Array.isArray(meta.toolIds) ? meta.toolIds : []
+        if (toolIds.includes(toolDef.id) && skill.installedSkill?.config) {
+          userConfig = skill.installedSkill.config as Record<string, unknown>
+          break
+        }
+      }
+
+      const communityCtx: CommunityToolContext = {
+        ...context,
+        config: userConfig,
+      }
+
+      tools[toolDef.name] = aiTool({
+        description: toolDef.description,
+        inputSchema: communityTool.parameters,
+        execute: async (params) => {
+          const startTime = Date.now()
+          try {
+            const result = await executeCommunityTool(
+              toolDef.name,
+              params as Record<string, unknown>,
+              communityCtx
+            )
+            logToolExecution(
+              toolDef.name,
+              toolDef.id,
+              params,
+              result,
+              context,
+              Date.now() - startTime
+            ).catch(() => {})
+            return result
+          } catch (error) {
+            logToolExecution(
+              toolDef.name,
+              toolDef.id,
+              params,
+              null,
+              context,
+              Date.now() - startTime,
+              error
+            ).catch(() => {})
+            return {
+              error: `Tool execution failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            }
+          }
+        },
+      })
+      toolNames.push(toolDef.name)
+    }
+  }
+
+  // Resolve MCP servers bound at the assistant level (AssistantMcpServer)
+  const assistantMcpServers = await prisma.assistantMcpServer.findMany({
+    where: { assistantId, enabled: true },
+    include: {
+      mcpServer: {
+        include: { tools: true },
+      },
+    },
+  })
+
+  for (const binding of assistantMcpServers) {
+    const server = binding.mcpServer
+    if (!server.enabled) continue
+
+    const serverConfig: McpServerOptions = {
+      id: server.id,
+      name: server.name,
+      transport: server.transport as McpServerOptions["transport"],
+      url: server.url,
+      env: decryptJsonField(server.env),
+      headers: decryptJsonField(server.headers),
+    }
+
+    // Build tool infos from the server's discovered tools
+    const mcpToolInfos: McpToolInfo[] = server.tools
+      .filter((t) => t.enabled)
+      .map((t) => ({
+        name: t.name,
+        description: t.description,
+        inputSchema: t.parameters as object,
+      }))
+
+    if (mcpToolInfos.length === 0) continue
+
+    try {
+      const adapted = adaptMcpToolsToAiSdk(serverConfig, mcpToolInfos)
+      // Skip tools already added from AssistantTool to avoid duplicates
+      for (const [name, tool] of Object.entries(adapted)) {
+        if (!tools[name]) {
+          tools[name] = tool
+          toolNames.push(name)
+        }
+      }
+    } catch {
+      // MCP server unavailable, skip silently
     }
   }
 

@@ -1,16 +1,26 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
+
+export interface EnvKeyDef {
+  key: string
+  label: string
+  placeholder: string
+}
 
 export interface McpServerItem {
   id: string
   name: string
   description: string | null
-  transport: "stdio" | "sse" | "streamable-http"
+  icon: string | null
+  transport: "sse" | "streamable-http"
   url: string | null
-  command: string | null
-  args: string[]
+  isBuiltIn: boolean
+  envKeys: EnvKeyDef[] | null
+  docsUrl: string | null
   enabled: boolean
+  configured: boolean
   lastConnectedAt: string | null
   lastError: string | null
   toolCount: number
@@ -33,12 +43,13 @@ export function useMcpServers() {
   const [servers, setServers] = useState<McpServerItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const orgFetch = useOrgFetch()
 
   const fetchServers = useCallback(async () => {
     try {
       setIsLoading(true)
       setError(null)
-      const res = await fetch("/api/dashboard/mcp-servers")
+      const res = await orgFetch("/api/dashboard/mcp-servers")
       if (!res.ok) throw new Error("Failed to fetch MCP servers")
       const data = await res.json()
       setServers(data)
@@ -47,7 +58,7 @@ export function useMcpServers() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [orgFetch])
 
   const createServer = useCallback(
     async (data: {
@@ -55,12 +66,10 @@ export function useMcpServers() {
       description?: string
       transport: string
       url?: string
-      command?: string
-      args?: string[]
       env?: Record<string, string>
       headers?: Record<string, string>
     }) => {
-      const res = await fetch("/api/dashboard/mcp-servers", {
+      const res = await orgFetch("/api/dashboard/mcp-servers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -72,7 +81,7 @@ export function useMcpServers() {
       await fetchServers()
       return res.json()
     },
-    [fetchServers]
+    [orgFetch, fetchServers]
   )
 
   const updateServer = useCallback(
@@ -83,14 +92,13 @@ export function useMcpServers() {
         description: string
         transport: string
         url: string
-        command: string
-        args: string[]
         env: Record<string, string>
         headers: Record<string, string>
         enabled: boolean
+        configured: boolean
       }>
     ) => {
-      const res = await fetch(`/api/dashboard/mcp-servers/${id}`, {
+      const res = await orgFetch(`/api/dashboard/mcp-servers/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -98,12 +106,12 @@ export function useMcpServers() {
       if (!res.ok) throw new Error("Failed to update MCP server")
       await fetchServers()
     },
-    [fetchServers]
+    [orgFetch, fetchServers]
   )
 
   const deleteServer = useCallback(
     async (id: string) => {
-      const res = await fetch(`/api/dashboard/mcp-servers/${id}`, {
+      const res = await orgFetch(`/api/dashboard/mcp-servers/${id}`, {
         method: "DELETE",
       })
       if (!res.ok) {
@@ -112,12 +120,12 @@ export function useMcpServers() {
       }
       await fetchServers()
     },
-    [fetchServers]
+    [orgFetch, fetchServers]
   )
 
   const discoverTools = useCallback(
     async (id: string) => {
-      const res = await fetch(
+      const res = await orgFetch(
         `/api/dashboard/mcp-servers/${id}/discover`,
         { method: "POST" }
       )
@@ -128,7 +136,7 @@ export function useMcpServers() {
       await fetchServers()
       return res.json()
     },
-    [fetchServers]
+    [orgFetch, fetchServers]
   )
 
   useEffect(() => {

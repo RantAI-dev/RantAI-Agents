@@ -29,11 +29,14 @@ export async function GET(req: Request) {
         id: s.id,
         name: s.name,
         description: s.description,
+        icon: s.icon,
         transport: s.transport,
         url: s.url,
-        command: s.command,
-        args: s.args,
+        isBuiltIn: s.isBuiltIn,
+        envKeys: s.envKeys,
+        docsUrl: s.docsUrl,
         enabled: s.enabled,
+        configured: s.configured,
         lastConnectedAt: s.lastConnectedAt?.toISOString() ?? null,
         lastError: s.lastError,
         toolCount: s._count.tools,
@@ -60,8 +63,7 @@ export async function POST(req: Request) {
     const orgContext = await getOrganizationContext(req, session.user.id)
     const body = await req.json()
 
-    const { name, description, transport, url, command, args, env, headers } =
-      body
+    const { name, description, transport, url, env, headers, envKeys, docsUrl, isBuiltIn } = body
 
     if (!name || !transport) {
       return NextResponse.json(
@@ -70,19 +72,9 @@ export async function POST(req: Request) {
       )
     }
 
-    if (
-      (transport === "sse" || transport === "streamable-http") &&
-      !url
-    ) {
+    if (!url) {
       return NextResponse.json(
-        { error: "url is required for SSE/HTTP transport" },
-        { status: 400 }
-      )
-    }
-
-    if (transport === "stdio" && !command) {
-      return NextResponse.json(
-        { error: "command is required for stdio transport" },
+        { error: "url is required for remote MCP servers" },
         { status: 400 }
       )
     }
@@ -92,11 +84,12 @@ export async function POST(req: Request) {
         name,
         description: description || null,
         transport,
-        url: url || null,
-        command: command || null,
-        args: args || [],
-        env: encryptJsonField(env) || null,
-        headers: encryptJsonField(headers) || null,
+        url,
+        env: encryptJsonField(env) ?? undefined,
+        headers: encryptJsonField(headers) ?? undefined,
+        isBuiltIn: isBuiltIn ?? false,
+        envKeys: envKeys ?? undefined,
+        docsUrl: docsUrl ?? undefined,
         enabled: true,
         organizationId: orgContext?.organizationId || null,
         createdBy: session.user.id,
