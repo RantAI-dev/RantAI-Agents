@@ -169,6 +169,7 @@ export default function WorkflowEditorPage({
         assistantId: (workflow as unknown as { assistantId?: string | null }).assistantId || null,
         apiEnabled: (workflow as unknown as { apiEnabled?: boolean }).apiEnabled || false,
         apiKey: (workflow as unknown as { apiKey?: string | null }).apiKey || null,
+        tags: (workflow as unknown as { tags?: string[] }).tags || [],
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,6 +205,7 @@ export default function WorkflowEditorPage({
         chatflowConfig: editor.chatflowConfig as unknown as { welcomeMessage?: string; starterPrompts?: string[] },
         apiEnabled: editor.apiEnabled as unknown as boolean,
         assistantId: editor.assistantId,
+        tags: editor.tags,
       } as Partial<import("@/hooks/use-workflows").WorkflowItem>)
       editor.setDirty(false)
       // Sync API key from server (auto-generated on first apiEnabled save)
@@ -222,6 +224,7 @@ export default function WorkflowEditorPage({
           assistantId: updated.assistantId,
           apiEnabled: updated.apiEnabled,
           apiKey: updated.apiKey,
+          tags: updated.tags,
         })
       }
     } finally {

@@ -16,6 +16,7 @@ export interface WorkflowItem {
   apiKey: string | null
   status: "DRAFT" | "ACTIVE" | "PAUSED" | "ARCHIVED"
   version: number
+  tags: string[]
   assistantId: string | null
   createdBy: string
   _count: { runs: number }

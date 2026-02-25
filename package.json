@@ -37,6 +37,7 @@
     "migrate:s3:dry-run": "bun scripts/migrate-files-to-s3.ts --dry-run"
   },
   "dependencies": {
+    "@rantai/community-skills": "file:packages/community-skills",
     "@ai-sdk/react": "3.0.41",
     "@aws-sdk/client-s3": "^3.982.0",
     "@aws-sdk/s3-request-presigner": "^3.982.0",

@@ -14,7 +14,21 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkles } from "lucide-react"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command"
+import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkles, ChevronsUpDown, X } from "lucide-react"
 import { CategoryDialog, Category } from "./category-dialog"
 import { cn } from "@/lib/utils"
 
@@ -267,50 +281,88 @@ export function UploadDialog({
           {/* Categories */}
           <div className="space-y-2">
             <Label>Categories</Label>
-            <div className="flex gap-2 flex-wrap">
-              {availableCategories.map((cat) => {
-                const isSelected = selectedCategories.includes(cat.name)
-                return (
-                  <Badge
-                    key={cat.name}
-                    variant={isSelected ? "default" : "outline"}
-                    role="button"
-                    tabIndex={0}
-                    className="cursor-pointer"
-                    style={
-                      isSelected
-                        ? { backgroundColor: cat.color, borderColor: cat.color }
-                        : { borderColor: cat.color, color: cat.color }
-                    }
-                    onClick={() => toggleCategory(cat.name)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault()
-                        toggleCategory(cat.name)
-                      }
-                    }}
-                  >
-                    {cat.label}
-                  </Badge>
-                )
-              })}
-              <Badge
-                variant="outline"
-                role="button"
-                tabIndex={0}
-                className="cursor-pointer border-dashed"
-                onClick={() => setCategoryDialogOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    setCategoryDialogOpen(true)
-                  }
-                }}
-              >
-                <Plus className="h-3 w-3 mr-1" />
-                New
-              </Badge>
-            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  className="w-full justify-between h-auto min-h-9 font-normal"
+                >
+                  {selectedCategories.length > 0 ? (
+                    <div className="flex gap-1 flex-wrap">
+                      {selectedCategories.map((name) => {
+                        const cat = availableCategories.find((c) => c.name === name)
+                        return (
+                          <Badge
+                            key={name}
+                            variant="default"
+                            className="text-xs"
+                            style={cat ? { backgroundColor: cat.color, borderColor: cat.color } : undefined}
+                          >
+                            {cat?.label ?? name}
+                            <button
+                              type="button"
+                              className="ml-1 hover:opacity-70"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleCategory(name)
+                              }}
+                            >
+                              <X className="h-2.5 w-2.5" />
+                            </button>
+                          </Badge>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">Select categories...</span>
+                  )}
+                  <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                <Command>
+                  <CommandInput placeholder="Search categories..." />
+                  <CommandList className="max-h-[180px] overflow-y-auto">
+                    <CommandEmpty>No category found.</CommandEmpty>
+                    <CommandGroup>
+                      {availableCategories.map((cat) => {
+                        const isSelected = selectedCategories.includes(cat.name)
+                        return (
+                          <CommandItem
+                            key={cat.name}
+                            value={cat.label}
+                            onSelect={() => toggleCategory(cat.name)}
+                            className="cursor-pointer"
+                          >
+                            <div
+                              className="h-4 w-4 rounded border shrink-0 mr-2 flex items-center justify-center"
+                              style={{
+                                borderColor: cat.color,
+                                backgroundColor: isSelected ? `${cat.color}30` : "transparent",
+                              }}
+                            >
+                              {isSelected && <Check className="h-3 w-3" style={{ color: cat.color }} />}
+                            </div>
+                            <span>{cat.label}</span>
+                          </CommandItem>
+                        )
+                      })}
+                    </CommandGroup>
+                    <CommandSeparator />
+                    <CommandGroup>
+                      <CommandItem
+                        onSelect={() => setCategoryDialogOpen(true)}
+                        className="cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                        <span>New category</span>
+                      </CommandItem>
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <CategoryDialog

@@ -22,6 +22,7 @@ import {
   X as XIcon,
   HelpCircle,
   Map,
+  Tag,
 } from "lucide-react"
 import { useState, useCallback, useRef, useEffect } from "react"
 import { toast } from "sonner"
@@ -48,7 +49,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { cn } from "@/lib/utils"
+import { cn, getTagColor } from "@/lib/utils"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
 
 function ToolbarTooltip({ children, label, shortcut }: { children: React.ReactNode; label: string; shortcut?: string }) {
@@ -100,6 +101,7 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
   const assistantId = useWorkflowEditor((s) => s.assistantId)
   const apiEnabled = useWorkflowEditor((s) => s.apiEnabled)
   const apiKey = useWorkflowEditor((s) => s.apiKey)
+  const tags = useWorkflowEditor((s) => s.tags)
   const chatflowConfig = useWorkflowEditor((s) => s.chatflowConfig)
   const setWorkflowMeta = useWorkflowEditor((s) => s.setWorkflowMeta)
   const isDirty = useWorkflowEditor((s) => s.isDirty)
@@ -113,6 +115,7 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
   const [copiedKey, setCopiedKey] = useState(false)
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([])
   const [newStarterPrompt, setNewStarterPrompt] = useState("")
+  const [tagInput, setTagInput] = useState("")
   const importInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -426,6 +429,65 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
                 Save the workflow to generate an API key.
               </p>
             )}
+
+            {/* Tags */}
+            <div className="border-t pt-3 space-y-1">
+              <h4 className="text-sm font-semibold flex items-center gap-1.5">
+                <Tag className="h-3.5 w-3.5" />
+                Tags
+              </h4>
+              <p className="text-[11px] text-muted-foreground">
+                Add tags to organize and filter workflows.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5 min-h-[32px] rounded-md border px-2 py-1.5 items-center">
+              {tags.map((tag) => {
+                const color = getTagColor(tag)
+                return (
+                  <Badge
+                    key={tag}
+                    variant="outline"
+                    className="text-[10px] gap-0.5 h-5 shrink-0"
+                    style={{ borderColor: color, color }}
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      className="hover:opacity-70"
+                      onClick={() => setWorkflowMeta({ tags: tags.filter((t) => t !== tag) })}
+                    >
+                      <XIcon className="h-2.5 w-2.5" />
+                    </button>
+                  </Badge>
+                )
+              })}
+              <input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    const trimmed = tagInput.trim()
+                    if (trimmed && !tags.includes(trimmed)) {
+                      setWorkflowMeta({ tags: [...tags, trimmed] })
+                    }
+                    setTagInput("")
+                  }
+                  if (e.key === "Backspace" && !tagInput && tags.length > 0) {
+                    setWorkflowMeta({ tags: tags.slice(0, -1) })
+                  }
+                }}
+                onBlur={() => {
+                  const trimmed = tagInput.trim()
+                  if (trimmed && !tags.includes(trimmed)) {
+                    setWorkflowMeta({ tags: [...tags, trimmed] })
+                  }
+                  setTagInput("")
+                }}
+                placeholder={tags.length === 0 ? "Add tags..." : ""}
+                className="flex-1 min-w-[60px] bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+              />
+            </div>
           </div>
         </PopoverContent>
       </Popover>

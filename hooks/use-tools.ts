@@ -1,14 +1,17 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 
 export interface ToolItem {
   id: string
   name: string
   displayName: string
   description: string
-  category: "builtin" | "custom" | "mcp"
+  category: "builtin" | "custom" | "mcp" | "openapi" | "community"
   parameters: object
+  icon?: string | null
+  tags: string[]
   executionConfig?: {
     url?: string
     method?: string
@@ -26,6 +29,7 @@ export interface ToolItem {
 }
 
 export function useTools() {
+  const orgFetch = useOrgFetch()
   const [tools, setTools] = useState<ToolItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -34,7 +38,7 @@ export function useTools() {
     try {
       setIsLoading(true)
       setError(null)
-      const res = await fetch("/api/dashboard/tools")
+      const res = await orgFetch("/api/dashboard/tools")
       if (!res.ok) throw new Error("Failed to fetch tools")
       const data = await res.json()
       setTools(data)
@@ -43,7 +47,7 @@ export function useTools() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [orgFetch])
 
   const createTool = useCallback(
     async (data: {
@@ -53,7 +57,7 @@ export function useTools() {
       parameters?: object
       executionConfig?: object
     }) => {
-      const res = await fetch("/api/dashboard/tools", {
+      const res = await orgFetch("/api/dashboard/tools", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -65,7 +69,7 @@ export function useTools() {
       await fetchTools()
       return res.json()
     },
-    [fetchTools]
+    [orgFetch, fetchTools]
   )
 
   const updateTool = useCallback(
@@ -79,7 +83,7 @@ export function useTools() {
         enabled: boolean
       }>
     ) => {
-      const res = await fetch(`/api/dashboard/tools/${id}`, {
+      const res = await orgFetch(`/api/dashboard/tools/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -87,12 +91,12 @@ export function useTools() {
       if (!res.ok) throw new Error("Failed to update tool")
       await fetchTools()
     },
-    [fetchTools]
+    [orgFetch, fetchTools]
   )
 
   const deleteTool = useCallback(
     async (id: string) => {
-      const res = await fetch(`/api/dashboard/tools/${id}`, {
+      const res = await orgFetch(`/api/dashboard/tools/${id}`, {
         method: "DELETE",
       })
       if (!res.ok) {
@@ -101,7 +105,7 @@ export function useTools() {
       }
       await fetchTools()
     },
-    [fetchTools]
+    [orgFetch, fetchTools]
   )
 
   useEffect(() => {

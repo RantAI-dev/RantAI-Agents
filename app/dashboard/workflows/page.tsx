@@ -17,6 +17,10 @@ import {
   MessageSquare,
   Zap,
   Rocket,
+  SlidersHorizontal,
+  X,
+  Check,
+  Tag,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,6 +32,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +73,7 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { cn } from "@/lib/utils"
+import { cn, getTagColor, setTagColor, TAG_COLORS } from "@/lib/utils"
 import { useWorkflows, type WorkflowItem } from "@/hooks/use-workflows"
 import { DashboardPageHeader } from "../_components/dashboard-page-header"
 import { WorkflowTemplateGallery } from "./_components/workflow-template-gallery"
@@ -103,7 +121,39 @@ export default function WorkflowsPage() {
   // Search, filter, sort state
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("ALL")
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
+  const [customTags, setCustomTags] = useState<Set<string>>(new Set())
+  const [newFilterTag, setNewFilterTag] = useState("")
+  const [selectedColor, setSelectedColor] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState("updated")
+
+  const allTags = useMemo(() => {
+    const tagSet = new Set(workflows.flatMap((w) => w.tags ?? []))
+    for (const t of customTags) tagSet.add(t)
+    return [...tagSet].sort()
+  }, [workflows, customTags])
+
+  const addFilterTag = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return
+    if (selectedColor) setTagColor(trimmed, selectedColor)
+    setCustomTags((prev) => new Set(prev).add(trimmed))
+    setSelectedTags((prev) => new Set(prev).add(trimmed))
+    setNewFilterTag("")
+    setSelectedColor(null)
+  }
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
+  }
+
+  const hasActiveFilters =
+    search.trim().length > 0 || statusFilter !== "ALL" || selectedTags.size > 0
 
   // Filtered and sorted workflows
   const filteredWorkflows = useMemo(() => {
@@ -124,6 +174,13 @@ export default function WorkflowsPage() {
       result = result.filter((w) => w.status === statusFilter)
     }
 
+    // Tag filter
+    if (selectedTags.size > 0) {
+      result = result.filter((w) =>
+        (w.tags ?? []).some((t) => selectedTags.has(t))
+      )
+    }
+
     // Sort
     result.sort((a, b) => {
       switch (sortBy) {
@@ -139,7 +196,7 @@ export default function WorkflowsPage() {
     })
 
     return result
-  }, [workflows, search, statusFilter, sortBy])
+  }, [workflows, search, statusFilter, selectedTags, sortBy])
 
   const handleCreate = useCallback(async () => {
     const workflow = await createWorkflow({
@@ -179,6 +236,7 @@ export default function WorkflowsPage() {
               outputs: unknown[]
             },
             mode: template.mode || "STANDARD",
+            tags: template.tags ?? [],
           } as Partial<WorkflowItem>)
 
           // Small delay to ensure state is synced before navigation
@@ -332,6 +390,140 @@ export default function WorkflowsPage() {
               </Button>
             ))}
           </div>
+
+          {/* Tag filter popover */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 text-xs shrink-0"
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Filter
+                {selectedTags.size > 0 && (
+                  <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[10px] font-medium text-background">
+                    {selectedTags.size}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[220px] p-0">
+              <Command>
+                <CommandInput placeholder="Search tags..." />
+                <CommandList className="max-h-[240px] overflow-y-auto">
+                  <CommandEmpty>No tag found.</CommandEmpty>
+                  {allTags.length > 0 ? (
+                    <CommandGroup heading="Tags">
+                      {allTags.map((tag) => {
+                        const active = selectedTags.has(tag)
+                        const color = getTagColor(tag)
+                        return (
+                          <CommandItem
+                            key={tag}
+                            value={tag}
+                            onSelect={() => toggleTag(tag)}
+                            className="cursor-pointer"
+                          >
+                            <div
+                              className="h-4 w-4 rounded border shrink-0 mr-2 flex items-center justify-center"
+                              style={{
+                                borderColor: color,
+                                backgroundColor: active ? `${color}30` : "transparent",
+                              }}
+                            >
+                              {active && (
+                                <Check className="h-3 w-3" style={{ color }} />
+                              )}
+                            </div>
+                            <span className="truncate">{tag}</span>
+                          </CommandItem>
+                        )
+                      })}
+                    </CommandGroup>
+                  ) : (
+                    <CommandGroup>
+                      <div className="px-2 py-3 text-center">
+                        <p className="text-xs text-muted-foreground">No tags yet</p>
+                      </div>
+                    </CommandGroup>
+                  )}
+                  {selectedTags.size > 0 && (
+                    <>
+                      <CommandSeparator />
+                      <CommandGroup>
+                        <CommandItem
+                          onSelect={() => setSelectedTags(new Set())}
+                          className="cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                          <span className="text-muted-foreground">Clear filter</span>
+                        </CommandItem>
+                      </CommandGroup>
+                    </>
+                  )}
+                </CommandList>
+                <div className="border-t px-2 py-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <input
+                      value={newFilterTag}
+                      onChange={(e) => setNewFilterTag(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault()
+                          addFilterTag(newFilterTag)
+                        }
+                        e.stopPropagation()
+                      }}
+                      placeholder="Add new tag..."
+                      className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    />
+                    {newFilterTag.trim() && (
+                      <button
+                        onClick={() => addFilterTag(newFilterTag)}
+                        className="text-xs text-primary hover:text-primary/80 font-medium shrink-0"
+                      >
+                        Add
+                      </button>
+                    )}
+                  </div>
+                  {newFilterTag.trim() && (
+                    <div className="flex flex-wrap gap-1.5 px-5">
+                      {TAG_COLORS.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => setSelectedColor(selectedColor === c ? null : c)}
+                          className="h-4 w-4 rounded-full border-2 transition-transform hover:scale-110"
+                          style={{
+                            backgroundColor: c,
+                            borderColor: selectedColor === c ? "var(--foreground)" : "transparent",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground"
+              onClick={() => {
+                setSearch("")
+                setStatusFilter("ALL")
+                setSelectedTags(new Set())
+              }}
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              Clear
+            </Button>
+          )}
+
           <Select value={sortBy} onValueChange={setSortBy}>
             <SelectTrigger className="h-8 w-[150px] text-xs">
               <SelectValue />
@@ -375,6 +567,7 @@ export default function WorkflowsPage() {
               onClick={() => {
                 setSearch("")
                 setStatusFilter("ALL")
+                setSelectedTags(new Set())
               }}
             >
               Clear Filters
@@ -465,6 +658,19 @@ export default function WorkflowsPage() {
                         API
                       </Badge>
                     )}
+                    {(workflow.tags ?? []).map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="outline"
+                        className="text-[10px] px-1.5 py-0 h-5"
+                        style={{
+                          borderColor: `${getTagColor(tag)}40`,
+                          color: getTagColor(tag),
+                        }}
+                      >
+                        {tag}
+                      </Badge>
+                    ))}
                   </div>
 
                   {/* Footer stats */}

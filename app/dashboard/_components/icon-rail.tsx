@@ -1,5 +1,6 @@
 "use client"
 
+import React from "react"
 import { useSession, signOut } from "next-auth/react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
@@ -16,7 +17,7 @@ import {
   Building2,
   Store,
 } from "lucide-react"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Tooltip,
   TooltipContent,
@@ -33,6 +34,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useFeaturesContext } from "@/components/providers/features-provider"
 import { useOrganization } from "@/hooks/use-organization"
+import { useProfileStore } from "@/hooks/use-profile"
 
 type FeatureKey = "AGENT" | null
 
@@ -103,6 +105,12 @@ export function IconRail() {
   const pathname = usePathname()
   const { isAgentEnabled } = useFeaturesContext()
   const { activeOrganization, isOwner, isAdmin } = useOrganization()
+  const { avatarUrl, fetchProfile } = useProfileStore()
+
+  // Fetch profile on mount to get avatar URL
+  React.useEffect(() => {
+    fetchProfile()
+  }, [fetchProfile])
 
   const showOrgSection = !!activeOrganization && (isOwner || isAdmin)
 
@@ -134,6 +142,7 @@ export function IconRail() {
             <DropdownMenuTrigger asChild>
               <button className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md" aria-label="User menu">
                 <Avatar className="h-9 w-9 cursor-pointer hover:ring-2 hover:ring-sidebar-ring transition-all">
+                  {avatarUrl && <AvatarImage src={avatarUrl} alt={session?.user?.name || "User"} />}
                   <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground text-sm font-medium">
                     {initials}
                   </AvatarFallback>

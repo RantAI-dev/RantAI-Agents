@@ -29,6 +29,7 @@ interface WorkflowEditorState {
   trigger: TriggerConfig
   variables: WorkflowVariables
   chatflowConfig: { welcomeMessage?: string; starterPrompts?: string[]; enableFollowUps?: boolean }
+  tags: string[]
 
   // Canvas state
   nodes: Node<WorkflowNodeData>[]
@@ -65,6 +66,7 @@ interface WorkflowEditorState {
     assistantId?: string | null
     apiEnabled?: boolean
     apiKey?: string | null
+    tags?: string[]
   }) => void
   resetEditor: () => void
 
@@ -78,6 +80,7 @@ interface WorkflowEditorState {
     apiEnabled: boolean
     status: string
     assistantId: string | null
+    tags: string[]
   }>) => void
 
   // Node/Edge ops
@@ -137,6 +140,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   trigger: { type: "manual" },
   variables: { inputs: [], outputs: [] },
   chatflowConfig: {},
+  tags: [],
   nodes: [],
   edges: [],
   selectedNodeId: null,
@@ -188,6 +192,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       assistantId: data.assistantId || null,
       apiEnabled: data.apiEnabled || false,
       apiKey: data.apiKey || null,
+      tags: data.tags || [],
       nodes: data.nodes,
       edges: data.edges,
       trigger: data.trigger,
@@ -207,6 +212,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       workflowStatus: "DRAFT",
       workflowMode: "STANDARD",
       chatflowConfig: {},
+      tags: [],
       assistantId: null,
       apiEnabled: false,
       apiKey: null,
@@ -236,6 +242,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       assistantId: meta.assistantId !== undefined ? meta.assistantId : state.assistantId,
       apiEnabled: meta.apiEnabled ?? state.apiEnabled,
       workflowStatus: meta.status ?? state.workflowStatus,
+      tags: meta.tags ?? state.tags,
     }))
   },
 

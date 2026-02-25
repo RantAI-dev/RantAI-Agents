@@ -167,9 +167,15 @@ export async function POST(request: Request) {
       })
     }
 
+    // For avatar uploads, return proxy URL instead of presigned S3 URL
+    // so the browser doesn't need direct S3 access
+    const responseUrl = type === "avatar"
+      ? `/api/admin/profile/avatar?t=${Date.now()}`
+      : result.url
+
     return NextResponse.json({
       key: result.key,
-      url: result.url,
+      url: responseUrl,
       filename: file.name,
       contentType: file.type,
       size: result.size,

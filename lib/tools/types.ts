@@ -5,7 +5,7 @@ export interface ToolDefinition {
   name: string
   displayName: string
   description: string
-  category: "builtin" | "custom" | "openapi" | "mcp"
+  category: "builtin" | "custom" | "openapi" | "mcp" | "community"
   parameters: z.ZodSchema
   execute: (
     params: Record<string, unknown>,

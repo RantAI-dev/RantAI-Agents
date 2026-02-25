@@ -19,27 +19,37 @@ export async function GET(req: Request) {
       },
       include: {
         _count: { select: { assistantSkills: true } },
+        installedSkill: { select: { icon: true } },
       },
       orderBy: [{ category: "asc" }, { displayName: "asc" }],
     })
 
     return NextResponse.json(
-      skills.map((s) => ({
-        id: s.id,
-        name: s.name,
-        displayName: s.displayName,
-        description: s.description,
-        content: s.content,
-        source: s.source,
-        sourceUrl: s.sourceUrl,
-        version: s.version,
-        category: s.category,
-        tags: s.tags,
-        metadata: s.metadata,
-        enabled: s.enabled,
-        assistantCount: s._count.assistantSkills,
-        createdAt: s.createdAt.toISOString(),
-      }))
+      skills.map((s) => {
+        const meta = (s.metadata ?? {}) as Record<string, unknown>
+        const toolIds = Array.isArray(meta.toolIds)
+          ? (meta.toolIds as string[])
+          : []
+
+        return {
+          id: s.id,
+          name: s.name,
+          displayName: s.displayName,
+          description: s.description,
+          content: s.content,
+          source: s.source,
+          sourceUrl: s.sourceUrl,
+          version: s.version,
+          category: s.category,
+          tags: s.tags,
+          icon: s.icon || s.installedSkill?.icon || null,
+          metadata: s.metadata,
+          relatedToolIds: toolIds,
+          enabled: s.enabled,
+          assistantCount: s._count.assistantSkills,
+          createdAt: s.createdAt.toISOString(),
+        }
+      })
     )
   } catch (error) {
     console.error("[Skills API] GET error:", error)

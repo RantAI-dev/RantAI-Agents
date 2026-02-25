@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 
 export interface SkillItem {
   id: string
@@ -11,21 +12,25 @@ export interface SkillItem {
   source: string
   sourceUrl?: string
   version?: string
+  icon?: string | null
   category: string
   tags: string[]
+  metadata?: Record<string, unknown> | null
+  relatedToolIds?: string[]
   enabled: boolean
   assistantCount: number
   createdAt: string
 }
 
 export function useSkills() {
+  const orgFetch = useOrgFetch()
   const [skills, setSkills] = useState<SkillItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchSkills = useCallback(async () => {
     try {
       setIsLoading(true)
-      const res = await fetch("/api/dashboard/skills")
+      const res = await orgFetch("/api/dashboard/skills")
       if (!res.ok) throw new Error("Failed to fetch skills")
       const data = await res.json()
       setSkills(data)
@@ -34,7 +39,7 @@ export function useSkills() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [orgFetch])
 
   const createSkill = useCallback(
     async (input: {
@@ -45,7 +50,7 @@ export function useSkills() {
       category?: string
       tags?: string[]
     }) => {
-      const res = await fetch("/api/dashboard/skills", {
+      const res = await orgFetch("/api/dashboard/skills", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -55,12 +60,12 @@ export function useSkills() {
       setSkills((prev) => [...prev, skill])
       return skill
     },
-    []
+    [orgFetch]
   )
 
   const updateSkill = useCallback(
     async (id: string, updates: Partial<SkillItem>) => {
-      const res = await fetch(`/api/dashboard/skills/${id}`, {
+      const res = await orgFetch(`/api/dashboard/skills/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -70,14 +75,14 @@ export function useSkills() {
       setSkills((prev) => prev.map((s) => (s.id === id ? { ...s, ...updated } : s)))
       return updated
     },
-    []
+    [orgFetch]
   )
 
   const deleteSkill = useCallback(async (id: string) => {
-    const res = await fetch(`/api/dashboard/skills/${id}`, { method: "DELETE" })
+    const res = await orgFetch(`/api/dashboard/skills/${id}`, { method: "DELETE" })
     if (!res.ok) throw new Error("Failed to delete skill")
     setSkills((prev) => prev.filter((s) => s.id !== id))
-  }, [])
+  }, [orgFetch])
 
   useEffect(() => {
     fetchSkills()

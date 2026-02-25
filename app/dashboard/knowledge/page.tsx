@@ -36,7 +36,6 @@ import { DocumentEditDialog } from "./_components/document-edit-dialog"
 import { CategoryDialog, Category } from "./_components/category-dialog"
 import { KnowledgeHeader } from "./_components/knowledge-header"
 import { KnowledgeToolbar, type SortOption } from "./_components/knowledge-toolbar"
-import { CategoryFilterRow } from "./_components/category-filter-row"
 import { FiltersPanel } from "./_components/filters-panel"
 import { cn } from "@/lib/utils"
 
@@ -340,12 +339,6 @@ function KnowledgePageContent() {
   // Create category map for quick lookup
   const categoryMap = new Map(categories.map((cat) => [cat.name, cat]))
 
-  // Count documents per category (in current view)
-  const categoryCounts = categories.reduce((acc, cat) => {
-    acc[cat.name] = documents.filter((d) => d.categories.includes(cat.name)).length
-    return acc
-  }, {} as Record<string, number>)
-
   return (
     <div className="flex flex-col h-full">
       <KnowledgeHeader
@@ -369,7 +362,12 @@ function KnowledgePageContent() {
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" aria-label="Open filters">
                   <SlidersHorizontal className="h-4 w-4 mr-2" />
-                  Filters
+                  Filter
+                  {selectedCategories.length > 0 && (
+                    <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[10px] font-medium text-background">
+                      {selectedCategories.length}
+                    </span>
+                  )}
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="start" className="p-0" aria-label="Filter by category">
@@ -377,19 +375,12 @@ function KnowledgePageContent() {
                   categories={categories}
                   selectedCategories={selectedCategories}
                   onToggleCategory={toggleCategory}
+                  onNewCategory={handleCreateCategory}
+                  onClearFilters={() => setSelectedCategories([])}
                 />
               </PopoverContent>
             </Popover>
           }
-        />
-
-        <CategoryFilterRow
-          categories={categories}
-          categoryCounts={categoryCounts}
-          selectedCategories={selectedCategories}
-          onToggleCategory={toggleCategory}
-          onNewCategory={handleCreateCategory}
-          onClearFilters={() => setSelectedCategories([])}
         />
 
         <div className="flex-1 overflow-auto p-6" role="region" aria-label="Documents">

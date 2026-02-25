@@ -43,7 +43,7 @@ export async function POST(req: Request) {
 
     const orgContext = await getOrganizationContext(req, session.user.id)
     const body = await req.json()
-    const { name, description, assistantId } = body
+    const { name, description, assistantId, tags } = body
 
     if (!name) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 })
@@ -53,6 +53,7 @@ export async function POST(req: Request) {
       data: {
         name,
         description: description || null,
+        ...(tags !== undefined && { tags }),
         assistantId: assistantId || null,
         organizationId: orgContext?.organizationId || null,
         createdBy: session.user.id,

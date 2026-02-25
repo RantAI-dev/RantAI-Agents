@@ -1,5 +1,11 @@
 import type { z } from "zod"
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ZodDef = { _def: Record<string, any> }
+function asDef(schema: z.ZodSchema): ZodDef["_def"] {
+  return (schema as unknown as ZodDef)._def
+}
+
 /**
  * Convert a Zod schema to a JSON Schema-compatible object for database storage.
  * Stores enough information to describe the tool's parameters.
@@ -15,17 +21,27 @@ export function zodToJsonSchema(schema: z.ZodSchema): object {
       const required: string[] = []
 
       for (const [key, fieldSchema] of Object.entries(shape)) {
-        const fieldDef = (fieldSchema as { _def: Record<string, unknown> })._def
+        const fieldDef = asDef(fieldSchema)
         const isOptional = fieldDef.typeName === "ZodOptional" || fieldDef.typeName === "ZodDefault"
 
         if (!isOptional) {
           required.push(key)
         }
 
-        properties[key] = {
+        const prop: Record<string, unknown> = {
           type: getZodTypeName(fieldSchema),
-          description: fieldDef.description || (fieldDef.innerType as { _def?: { description?: string } })?._def?.description || undefined,
+          description: fieldDef.description || fieldDef.innerType?._def?.description || undefined,
         }
+
+        // Extract enum values
+        const enumValues = getZodEnumValues(fieldSchema)
+        if (enumValues) prop.enum = enumValues
+
+        // Extract default value
+        const defaultValue = getZodDefault(fieldSchema)
+        if (defaultValue !== undefined) prop.default = defaultValue
+
+        properties[key] = prop
       }
 
       return { type: "object", properties, required }
@@ -35,8 +51,34 @@ export function zodToJsonSchema(schema: z.ZodSchema): object {
   return { type: "object", properties: {} }
 }
 
+function getZodEnumValues(schema: z.ZodSchema): string[] | undefined {
+  const def = asDef(schema)
+  const typeName = def.typeName as string
+
+  if (typeName === "ZodEnum") return def.values as string[]
+  if (typeName === "ZodDefault" || typeName === "ZodOptional") {
+    const inner = (def.innerType || def.type) as z.ZodSchema | undefined
+    if (inner) return getZodEnumValues(inner)
+  }
+  return undefined
+}
+
+function getZodDefault(schema: z.ZodSchema): unknown {
+  const def = asDef(schema)
+  if (def.typeName === "ZodDefault") {
+    return typeof def.defaultValue === "function"
+      ? (def.defaultValue as () => unknown)()
+      : def.defaultValue
+  }
+  if (def.typeName === "ZodOptional") {
+    const inner = (def.innerType || def.type) as z.ZodSchema | undefined
+    if (inner) return getZodDefault(inner)
+  }
+  return undefined
+}
+
 function getZodTypeName(schema: z.ZodSchema): string {
-  const def = (schema as { _def: Record<string, unknown> })._def
+  const def = asDef(schema)
   const typeName = def.typeName as string
 
   switch (typeName) {
