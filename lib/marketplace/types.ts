@@ -4,7 +4,7 @@ export interface MarketplaceCatalogItem {
   displayName: string
   description: string
   category: string
-  type: "tool" | "skill"
+  type: "tool" | "skill" | "workflow" | "assistant" | "mcp"
   icon: string // Lucide icon name or emoji
   tags: string[]
   featured?: boolean
@@ -28,6 +28,31 @@ export interface MarketplaceCatalogItem {
     category: string
     tags: string[]
   }
+  workflowTemplate?: object // WorkflowExportFormat (version 1 JSON)
+  assistantTemplate?: {
+    name: string
+    description: string
+    emoji: string
+    systemPrompt: string
+    model: string
+    suggestedToolNames: string[]
+    suggestedSkillNames?: string[]
+    useKnowledgeBase: boolean
+    memoryConfig: object
+    tags: string[]
+  }
+  mcpTemplate?: {
+    name: string
+    description: string
+    transport: "sse" | "streamable-http"
+    url: string
+    envKeys?: Array<{ key: string; label: string; placeholder: string }>
+    docsUrl?: string
+  }
+  // Community package references
+  communitySkillName?: string // Maps to CommunitySkillDefinition.name in registry
+  communityToolName?: string // Maps to CommunityToolDefinition.name in registry
+  configSchema?: object // JSON Schema for skill config form on install
 }
 
 export interface MarketplaceInstallInfo {

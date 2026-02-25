@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { catalogItemId, authConfig } = body
+    const { catalogItemId, authConfig, config } = body
 
     if (!catalogItemId) {
       return NextResponse.json(
@@ -33,7 +33,8 @@ export async function POST(req: Request) {
       catalogItemId,
       orgContext.organizationId,
       session.user.id,
-      authConfig
+      authConfig,
+      config
     )
 
     if (!result.success) {

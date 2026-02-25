@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 
 export interface MarketplaceItem {
   id: string
@@ -8,10 +9,34 @@ export interface MarketplaceItem {
   displayName: string
   description: string
   category: string
-  type: "tool" | "skill"
+  type: "tool" | "skill" | "workflow" | "assistant" | "mcp"
   icon: string
   tags: string[]
   installed: boolean
+  installedId?: string
+  skillId?: string
+  isBuiltIn?: boolean
+  communitySkillName?: string
+  communityToolName?: string
+  configSchema?: object
+}
+
+export interface ToolSchemaInfo {
+  name: string
+  displayName: string
+  description: string
+  parameters: object
+  tags?: string[]
+}
+
+export interface MarketplaceItemDetail extends MarketplaceItem {
+  version?: string
+  author?: string
+  skillPrompt?: string
+  tools?: ToolSchemaInfo[]
+  sharedToolNames?: string[]
+  toolParameters?: object
+  toolTags?: string[]
 }
 
 interface MarketplaceResponse {
@@ -21,9 +46,12 @@ interface MarketplaceResponse {
 }
 
 export function useMarketplace() {
+  const orgFetch = useOrgFetch()
   const [items, setItems] = useState<MarketplaceItem[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [selectedItem, setSelectedItem] = useState<MarketplaceItemDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
 
   const fetchItems = useCallback(async (filters?: {
     category?: string
@@ -37,7 +65,7 @@ export function useMarketplace() {
       if (filters?.type) params.set("type", filters.type)
       if (filters?.search) params.set("q", filters.search)
 
-      const res = await fetch(`/api/dashboard/marketplace?${params}`)
+      const res = await orgFetch(`/api/dashboard/marketplace?${params}`)
       if (!res.ok) throw new Error("Failed to fetch")
       const data: MarketplaceResponse = await res.json()
       setItems(data.items)
@@ -47,32 +75,62 @@ export function useMarketplace() {
     } finally {
       setIsLoading(false)
     }
+  }, [orgFetch])
+
+  const fetchItemDetail = useCallback(async (id: string) => {
+    try {
+      setDetailLoading(true)
+      const res = await orgFetch(`/api/dashboard/marketplace/${id}`)
+      if (!res.ok) throw new Error("Failed to fetch detail")
+      const data: MarketplaceItemDetail = await res.json()
+      setSelectedItem(data)
+    } catch {
+      setSelectedItem(null)
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [orgFetch])
+
+  const clearSelectedItem = useCallback(() => {
+    setSelectedItem(null)
   }, [])
 
   const installItem = useCallback(
-    async (catalogItemId: string, authConfig?: object) => {
-      const res = await fetch("/api/dashboard/marketplace/install", {
+    async (catalogItemId: string, config?: Record<string, unknown>) => {
+      const res = await orgFetch("/api/dashboard/marketplace/install", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ catalogItemId, authConfig }),
+        body: JSON.stringify({ catalogItemId, config }),
       })
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Failed to install")
+        const errData = await res.json()
+        throw new Error(errData.error || "Failed to install")
+      }
+      const result = await res.json() as {
+        success: boolean
+        installedId?: string
+        skillId?: string
+        toolIds?: string[]
       }
       // Update local state
       setItems((prev) =>
         prev.map((i) =>
-          i.id === catalogItemId ? { ...i, installed: true } : i
+          i.id === catalogItemId
+            ? { ...i, installed: true, installedId: result.installedId, skillId: result.skillId }
+            : i
         )
       )
-      return await res.json()
+      // Also update detail view if open
+      setSelectedItem((prev) =>
+        prev?.id === catalogItemId ? { ...prev, installed: true } : prev
+      )
+      return result
     },
-    []
+    [orgFetch]
   )
 
   const uninstallItem = useCallback(async (catalogItemId: string) => {
-    const res = await fetch(
+    const res = await orgFetch(
       `/api/dashboard/marketplace/install?catalogItemId=${catalogItemId}`,
       { method: "DELETE" }
     )
@@ -85,17 +143,20 @@ export function useMarketplace() {
         i.id === catalogItemId ? { ...i, installed: false } : i
       )
     )
-  }, [])
-
-  useEffect(() => {
-    fetchItems()
-  }, [fetchItems])
+    setSelectedItem((prev) =>
+      prev?.id === catalogItemId ? { ...prev, installed: false } : prev
+    )
+  }, [orgFetch])
 
   return {
     items,
     categories,
     isLoading,
+    selectedItem,
+    detailLoading,
     fetchItems,
+    fetchItemDetail,
+    clearSelectedItem,
     installItem,
     uninstallItem,
   }

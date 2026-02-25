@@ -1,10 +1,19 @@
 import { prisma } from "@/lib/prisma"
 import { getCatalogItemById } from "./catalog"
+import { importWorkflow } from "@/lib/workflow/import-export"
+import {
+  getCommunitySkill,
+  getCommunityTool,
+  getToolSchemasForSkill,
+} from "@/lib/skills/gateway"
+import { communityToolToJsonSchema, configSchemaToJsonSchema } from "@/lib/skill-sdk"
 import type { MarketplaceCatalogItem } from "./types"
 
 export interface InstallResult {
   success: boolean
   installedId?: string
+  skillId?: string    // Skill.id for AssistantSkill binding (community skills)
+  toolIds?: string[]  // Tool IDs created (community skills create tools)
   error?: string
 }
 
@@ -16,7 +25,8 @@ export async function installMarketplaceItem(
   catalogItemId: string,
   organizationId: string,
   userId: string,
-  authConfig?: { type: string; token: string; headerName?: string }
+  authConfig?: { type: string; token: string; headerName?: string },
+  config?: Record<string, unknown>
 ): Promise<InstallResult> {
   const item = await getCatalogItemById(catalogItemId)
   if (!item) {
@@ -37,7 +47,16 @@ export async function installMarketplaceItem(
     return { success: false, error: "Already installed" }
   }
 
+  // Route to community install if applicable
+  if (item.communitySkillName) {
+    return installCommunitySkill(catalogItemId, item, organizationId, userId, config)
+  }
+  if (item.communityToolName) {
+    return installCommunityTool(catalogItemId, item, organizationId, userId)
+  }
+
   let installedId: string
+  let skillId: string | undefined
 
   if (item.type === "tool" && item.toolTemplate) {
     const template = item.toolTemplate
@@ -61,6 +80,8 @@ export async function installMarketplaceItem(
         description: template.description,
         category: "custom",
         parameters: template.parameters,
+        icon: item.icon,
+        tags: item.tags ?? [],
         executionConfig,
         isBuiltIn: false,
         enabled: true,
@@ -81,12 +102,103 @@ export async function installMarketplaceItem(
         source: "marketplace",
         category: template.category,
         tags: template.tags,
+        icon: item.icon,
         enabled: true,
         organizationId,
         createdBy: userId,
       },
     })
     installedId = skill.id
+    skillId = skill.id
+  } else if (item.type === "workflow" && item.workflowTemplate) {
+    const imported = importWorkflow(item.workflowTemplate)
+    const workflow = await prisma.workflow.create({
+      data: {
+        name: imported.name,
+        description: imported.description,
+        nodes: imported.nodes as object[],
+        edges: imported.edges as object[],
+        trigger: imported.trigger as object,
+        variables: imported.variables as object,
+        mode: imported.mode,
+        tags: item.tags ?? [],
+        status: "DRAFT",
+        organizationId,
+        createdBy: userId,
+      },
+    })
+    installedId = workflow.id
+  } else if (item.type === "mcp" && item.mcpTemplate) {
+    const tpl = item.mcpTemplate
+    const needsConfig = Array.isArray(tpl.envKeys) && tpl.envKeys.length > 0
+
+    const mcpServer = await prisma.mcpServerConfig.create({
+      data: {
+        name: tpl.name,
+        description: tpl.description,
+        icon: item.icon,
+        transport: tpl.transport,
+        url: tpl.url,
+        envKeys: tpl.envKeys ?? undefined,
+        docsUrl: tpl.docsUrl ?? undefined,
+        enabled: true,
+        configured: !needsConfig,
+        organizationId,
+        createdBy: userId,
+      },
+    })
+    installedId = mcpServer.id
+  } else if (item.type === "assistant" && item.assistantTemplate) {
+    const tpl = item.assistantTemplate
+    const assistant = await prisma.assistant.create({
+      data: {
+        name: tpl.name,
+        description: tpl.description,
+        emoji: tpl.emoji,
+        systemPrompt: tpl.systemPrompt,
+        model: tpl.model,
+        useKnowledgeBase: tpl.useKnowledgeBase,
+        memoryConfig: tpl.memoryConfig as object,
+        tags: tpl.tags ?? item.tags ?? [],
+        isBuiltIn: false,
+        organizationId,
+        createdBy: userId,
+      },
+    })
+
+    // Auto-bind tools by name (built-in or org-scoped)
+    for (const toolName of tpl.suggestedToolNames) {
+      const tool = await prisma.tool.findFirst({
+        where: {
+          name: toolName,
+          OR: [{ organizationId }, { isBuiltIn: true }],
+        },
+      })
+      if (tool) {
+        await prisma.assistantTool.create({
+          data: { assistantId: assistant.id, toolId: tool.id },
+        })
+      }
+    }
+
+    // Auto-bind community skills if installed in this org
+    if (tpl.suggestedSkillNames) {
+      for (const skillName of tpl.suggestedSkillNames) {
+        const skill = await prisma.skill.findFirst({
+          where: {
+            name: { startsWith: `community-${skillName}` },
+            organizationId,
+          },
+        })
+        if (skill) {
+          await prisma.assistantSkill.create({
+            data: { assistantId: assistant.id, skillId: skill.id },
+          })
+        }
+      }
+    }
+
+    installedId = assistant.id
   } else {
     return { success: false, error: "Invalid catalog item: missing template" }
   }
@@ -102,7 +214,186 @@ export async function installMarketplaceItem(
     },
   })
 
-  return { success: true, installedId }
+  return { success: true, installedId, ...(skillId && { skillId }) }
+}
+
+/**
+ * Install a community skill from the marketplace.
+ * Creates InstalledSkill + Skill (for prompt) + Tool records (for each tool in skill).
+ */
+async function installCommunitySkill(
+  catalogItemId: string,
+  item: MarketplaceCatalogItem,
+  organizationId: string,
+  userId: string,
+  userConfig?: Record<string, unknown>
+): Promise<InstallResult> {
+  const skillDef = await getCommunitySkill(item.communitySkillName!)
+  if (!skillDef) {
+    return {
+      success: false,
+      error: `Community skill "${item.communitySkillName}" not found in registry`,
+    }
+  }
+
+  // Check if already installed
+  const existingSkill = await prisma.installedSkill.findFirst({
+    where: { name: skillDef.name, organizationId },
+  })
+  if (existingSkill) {
+    return { success: false, error: "Community skill already installed" }
+  }
+
+  // 1. Create Skill record for prompt injection (reuses existing skill resolver)
+  const skillRecord = await prisma.skill.create({
+    data: {
+      name: `community-${skillDef.name}`,
+      displayName: skillDef.displayName,
+      description: skillDef.description,
+      content: skillDef.skillPrompt,
+      source: "community",
+      category: skillDef.category.toLowerCase(),
+      tags: skillDef.tags,
+      icon: item.icon || skillDef.icon,
+      enabled: true,
+      organizationId,
+      createdBy: userId,
+    },
+  })
+
+  // 2. Create InstalledSkill record
+  const installedSkill = await prisma.installedSkill.create({
+    data: {
+      name: skillDef.name,
+      displayName: skillDef.displayName,
+      description: skillDef.description,
+      version: skillDef.version,
+      category: skillDef.category,
+      tags: skillDef.tags,
+      icon: item.icon || skillDef.icon || "✨",
+      skillPrompt: skillDef.skillPrompt,
+      configSchema: skillDef.configSchema
+        ? configSchemaToJsonSchema(skillDef.configSchema)
+        : undefined,
+      config: (userConfig as object) ?? undefined,
+      enabled: true,
+      organizationId,
+      installedBy: userId,
+      skillId: skillRecord.id,
+    },
+  })
+
+  // 3. Create Tool records for each tool in skill
+  //    Shared tools may already exist (installed standalone or by another skill),
+  //    so check first and only create if missing.
+  const createdToolIds: string[] = []
+  const toolSchemas = await getToolSchemasForSkill(skillDef.name)
+  for (const schema of toolSchemas) {
+    const existing = await prisma.tool.findUnique({
+      where: {
+        name_organizationId: {
+          name: schema.name,
+          organizationId,
+        },
+      },
+    })
+    if (existing) {
+      createdToolIds.push(existing.id)
+    } else {
+      const tool = await prisma.tool.create({
+        data: {
+          name: schema.name,
+          displayName: schema.displayName,
+          description: schema.description,
+          category: "community",
+          parameters: schema.parameters,
+          icon: item.icon || skillDef.icon,
+          tags: schema.tags ?? skillDef.tags ?? [],
+          isBuiltIn: false,
+          enabled: true,
+          organizationId,
+          createdBy: userId,
+        },
+      })
+      createdToolIds.push(tool.id)
+    }
+  }
+
+  // 3b. Store created tool IDs on the Skill metadata so frontend can resolve them
+  if (createdToolIds.length > 0) {
+    const existingMeta = (skillRecord.metadata as Record<string, unknown>) ?? {}
+    await prisma.skill.update({
+      where: { id: skillRecord.id },
+      data: {
+        metadata: { ...existingMeta, toolIds: createdToolIds },
+      },
+    })
+  }
+
+  // 4. Record marketplace install
+  await prisma.marketplaceInstall.create({
+    data: {
+      catalogItemId,
+      itemType: "skill",
+      installedId: installedSkill.id,
+      organizationId,
+      installedBy: userId,
+    },
+  })
+
+  return {
+    success: true,
+    installedId: installedSkill.id,
+    skillId: skillRecord.id,
+    toolIds: createdToolIds,
+  }
+}
+
+/**
+ * Install a standalone community tool from the marketplace.
+ * Creates a Tool record with category="community".
+ */
+async function installCommunityTool(
+  catalogItemId: string,
+  item: MarketplaceCatalogItem,
+  organizationId: string,
+  userId: string
+): Promise<InstallResult> {
+  const toolDef = await getCommunityTool(item.communityToolName!)
+  if (!toolDef) {
+    return {
+      success: false,
+      error: `Community tool "${item.communityToolName}" not found in registry`,
+    }
+  }
+
+  const tool = await prisma.tool.create({
+    data: {
+      name: toolDef.name,
+      displayName: toolDef.displayName,
+      description: toolDef.description,
+      category: "community",
+      parameters: communityToolToJsonSchema(toolDef),
+      icon: item.icon,
+      tags: toolDef.tags ?? item.tags ?? [],
+      isBuiltIn: false,
+      enabled: true,
+      organizationId,
+      createdBy: userId,
+    },
+  })
+
+  await prisma.marketplaceInstall.create({
+    data: {
+      catalogItemId,
+      itemType: "tool",
+      installedId: tool.id,
+      organizationId,
+      installedBy: userId,
+    },
+  })
+
+  return { success: true, installedId: tool.id }
 }
 
 /**
@@ -128,9 +419,90 @@ export async function uninstallMarketplaceItem(
 
   // Delete the installed resource
   if (install.itemType === "tool") {
-    await prisma.tool.delete({ where: { id: install.installedId } }).catch(() => {})
+    await prisma.tool
+      .delete({ where: { id: install.installedId } })
+      .catch(() => {})
   } else if (install.itemType === "skill") {
-    await prisma.skill.delete({ where: { id: install.installedId } }).catch(() => {})
+    // Check if this is a community skill (InstalledSkill)
+    const installedSkill = await prisma.installedSkill
+      .findUnique({ where: { id: install.installedId } })
+      .catch(() => null)
+
+    if (installedSkill) {
+      // Delete tools that belong to this skill (from metadata.toolIds)
+      // Only delete tools not referenced by any other skill
+      if (installedSkill.skillId) {
+        const skill = await prisma.skill.findUnique({
+          where: { id: installedSkill.skillId },
+          select: { metadata: true },
+        })
+        const meta = (skill?.metadata ?? {}) as Record<string, unknown>
+        const toolIds = Array.isArray(meta.toolIds) ? (meta.toolIds as string[]) : []
+
+        if (toolIds.length > 0) {
+          // Check which tools are referenced by other skills
+          const otherSkills = await prisma.skill.findMany({
+            where: {
+              id: { not: installedSkill.skillId },
+              organizationId: install.organizationId,
+            },
+            select: { metadata: true },
+          })
+          const referencedByOthers = new Set<string>()
+          for (const other of otherSkills) {
+            const otherMeta = (other.metadata ?? {}) as Record<string, unknown>
+            if (Array.isArray(otherMeta.toolIds)) {
+              for (const tid of otherMeta.toolIds) {
+                if (typeof tid === "string") referencedByOthers.add(tid)
+              }
+            }
+          }
+
+          // Delete tools not referenced by any other skill
+          for (const tid of toolIds) {
+            if (!referencedByOthers.has(tid)) {
+              await prisma.tool.delete({ where: { id: tid } }).catch(() => {})
+            }
+          }
+        }
+
+        await prisma.skill
+          .delete({ where: { id: installedSkill.skillId } })
+          .catch(() => {})
+      }
+      // Delete InstalledSkill record
+      await prisma.installedSkill
+        .delete({ where: { id: install.installedId } })
+        .catch(() => {})
+    } else {
+      // Regular marketplace skill (behavior-only)
+      await prisma.skill
+        .delete({ where: { id: install.installedId } })
+        .catch(() => {})
+    }
+  } else if (install.itemType === "workflow") {
+    await prisma.workflow
+      .delete({ where: { id: install.installedId } })
+      .catch(() => {})
+  } else if (install.itemType === "mcp") {
+    // Guard: cannot uninstall built-in MCP servers
+    const mcpServer = await prisma.mcpServerConfig
+      .findUnique({ where: { id: install.installedId }, select: { isBuiltIn: true } })
+      .catch(() => null)
+    if (mcpServer?.isBuiltIn) {
+      return { success: false, error: "Cannot uninstall a built-in MCP server" }
+    }
+    // Delete discovered tools first (they cascade via mcpServerId FK, but be explicit)
+    await prisma.tool
+      .deleteMany({ where: { mcpServerId: install.installedId } })
+      .catch(() => {})
+    await prisma.mcpServerConfig
+      .delete({ where: { id: install.installedId } })
+      .catch(() => {})
+  } else if (install.itemType === "assistant") {
+    await prisma.assistant
+      .delete({ where: { id: install.installedId } })
+      .catch(() => {})
   }
 
   // Delete the install record
