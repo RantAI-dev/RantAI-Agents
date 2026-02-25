@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import Link from "next/link"
 import {
   Wrench,
   Plus,
@@ -8,28 +9,43 @@ import {
   Trash2,
   Pencil,
   Package,
-  Plug,
   Search,
-  Globe,
-  Calculator,
-  Clock,
-  FileText,
-  Type,
-  BookOpen,
-  Users,
-  Send,
-  FileDown,
-  Code,
   HelpCircle,
   ChevronDown,
   AlertTriangle,
+  Users,
+  Store,
+  SlidersHorizontal,
+  Check,
+  X,
 } from "lucide-react"
+import { DynamicIcon } from "@/components/ui/dynamic-icon"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,17 +66,20 @@ import { ToolDialog } from "./_components/tool-dialog"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
-const TOOL_ICONS: Record<string, React.ElementType> = {
-  knowledge_search: BookOpen,
-  customer_lookup: Users,
-  channel_dispatch: Send,
-  document_analysis: FileText,
-  file_operations: FileDown,
-  web_search: Globe,
-  calculator: Calculator,
-  date_time: Clock,
-  json_transform: Code,
-  text_utilities: Type,
+// Emoji icons for built-in tools
+const BUILTIN_TOOL_ICONS: Record<string, string> = {
+  knowledge_search: "📚",
+  customer_lookup: "👥",
+  channel_dispatch: "📤",
+  document_analysis: "📄",
+  file_operations: "📁",
+  web_search: "🔍",
+  calculator: "🧮",
+  date_time: "⏰",
+  json_transform: "🔄",
+  text_utilities: "🔤",
+  create_artifact: "🎨",
+  update_artifact: "✏️",
 }
 
 export default function ToolsSettingsPage() {
@@ -69,34 +88,99 @@ export default function ToolsSettingsPage() {
   const [editingTool, setEditingTool] = useState<string | null>(null)
   const [deletingTool, setDeletingTool] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [activeTab, setActiveTab] = useState("all")
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set())
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
+  const [sortOption, setSortOption] = useState<"az" | "recent" | "enabled">("recent")
   const [helpOpen, setHelpOpen] = useState(false)
 
+  // Exclude MCP tools — they have their own settings page
+  const nonMcpTools = useMemo(() => tools.filter((t) => t.category !== "mcp"), [tools])
+
+  const TOOL_CATEGORY_LABELS: Record<string, string> = {
+    builtin: "Built-in",
+    custom: "Custom",
+    community: "Community",
+    openapi: "OpenAPI",
+  }
+
+  // Distinct categories and tags from installed tools
+  const toolCategories = useMemo(() => {
+    const cats = new Set(nonMcpTools.map((t) => t.category))
+    return [...cats].sort()
+  }, [nonMcpTools])
+
+  const allTags = useMemo(() => {
+    const tags = new Set<string>()
+    nonMcpTools.forEach((t) => t.tags.forEach((tag) => tags.add(tag)))
+    return [...tags].sort()
+  }, [nonMcpTools])
+
+  const toggleCategory = (cat: string) => {
+    setSelectedCategories((prev) => {
+      const next = new Set(prev)
+      if (next.has(cat)) next.delete(cat)
+      else next.add(cat)
+      return next
+    })
+  }
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags((prev) => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
+  }
+
+  const activeFilterCount = selectedCategories.size + selectedTags.size
+  const hasActiveFilters = searchQuery.trim().length > 0 || activeFilterCount > 0
+
+  const clearAllFilters = () => {
+    setSearchQuery("")
+    setSelectedCategories(new Set())
+    setSelectedTags(new Set())
+  }
+
   const filteredTools = useMemo(() => {
-    let filtered = tools
-    if (activeTab !== "all") {
-      filtered = filtered.filter((t) => t.category === activeTab)
-    }
+    let result = [...nonMcpTools]
+
+    // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
-      filtered = filtered.filter(
+      result = result.filter(
         (t) =>
           t.displayName.toLowerCase().includes(q) ||
           t.name.toLowerCase().includes(q) ||
-          t.description.toLowerCase().includes(q)
+          t.description.toLowerCase().includes(q) ||
+          t.tags.some((tag) => tag.toLowerCase().includes(q))
       )
     }
-    return filtered
-  }, [tools, activeTab, searchQuery])
 
-  const counts = useMemo(() => {
-    return {
-      all: tools.length,
-      builtin: tools.filter((t) => t.category === "builtin").length,
-      custom: tools.filter((t) => t.category === "custom").length,
-      mcp: tools.filter((t) => t.category === "mcp").length,
+    // Category filter
+    if (selectedCategories.size > 0) {
+      result = result.filter((t) => selectedCategories.has(t.category))
     }
-  }, [tools])
+
+    // Tag filter
+    if (selectedTags.size > 0) {
+      result = result.filter((t) => t.tags.some((tag) => selectedTags.has(tag)))
+    }
+
+    // Sort
+    if (sortOption === "az") {
+      result.sort((a, b) => a.displayName.localeCompare(b.displayName))
+    } else if (sortOption === "enabled") {
+      result.sort((a, b) => {
+        if (a.enabled && !b.enabled) return -1
+        if (!a.enabled && b.enabled) return 1
+        return 0
+      })
+    }
+    // "recent" keeps API order
+
+    return result
+  }, [nonMcpTools, searchQuery, selectedCategories, selectedTags, sortOption])
 
   const handleToggle = async (id: string, enabled: boolean) => {
     try {
@@ -130,11 +214,11 @@ export default function ToolsSettingsPage() {
             Built-in
           </Badge>
         )
-      case "mcp":
+      case "community":
         return (
-          <Badge variant="outline">
-            <Plug className="h-3 w-3 mr-1" />
-            MCP
+          <Badge variant="outline" className="text-indigo-600 border-indigo-200 dark:text-indigo-400 dark:border-indigo-800">
+            <Users className="h-3 w-3 mr-1" />
+            Community
           </Badge>
         )
       default:
@@ -147,34 +231,64 @@ export default function ToolsSettingsPage() {
     }
   }
 
-  const getToolIcon = (tool: ToolItem) => {
-    const Icon = TOOL_ICONS[tool.name] || Wrench
-    return Icon
-  }
-
   const renderToolCard = (tool: ToolItem) => {
-    const Icon = getToolIcon(tool)
+    // Use icon from DB first (marketplace/community), then fallback to hardcoded builtin map
+    const emojiIcon =
+      tool.icon || (tool.category === "builtin" ? BUILTIN_TOOL_ICONS[tool.name] : undefined)
+
     return (
-      <Card key={tool.id} className={!tool.enabled ? "opacity-60" : ""}>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted shrink-0">
-              <Icon className="h-4.5 w-4.5 text-muted-foreground" />
+      <Card key={tool.id} className={cn(!tool.enabled && "opacity-60")}>
+        <CardContent className="p-4 flex items-start gap-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted shrink-0">
+            <DynamicIcon
+              icon={emojiIcon}
+              fallback={Wrench}
+              className="h-4 w-4 text-muted-foreground"
+              emojiClassName="text-lg"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-medium">{tool.displayName}</span>
+              {categoryBadge(tool.category)}
+              {tool.assistantCount > 0 && (
+                <span className="text-[10px] text-muted-foreground">
+                  {tool.assistantCount} agent{tool.assistantCount !== 1 ? "s" : ""}
+                </span>
+              )}
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="font-medium truncate">
-                  {tool.displayName}
-                </h3>
-                {categoryBadge(tool.category)}
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+              {tool.description}
+            </p>
+            {tool.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {tool.tags.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant={selectedTags.has(tag) ? "default" : "outline"}
+                    className="text-[10px] px-1.5 py-0 cursor-pointer hover:bg-muted"
+                    onClick={() => toggleTag(tag)}
+                  >
+                    {tag}
+                  </Badge>
+                ))}
               </div>
-              <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                {tool.name}
-              </p>
-            </div>
+            )}
+            {tool.category === "custom" && !tool.executionConfig?.url && (
+              <div className="flex items-center gap-1 mt-2 text-xs text-amber-500">
+                <AlertTriangle className="h-3 w-3" />
+                No endpoint configured
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            {!tool.isBuiltIn && (
+            <Switch
+              checked={tool.enabled}
+              onCheckedChange={(checked) =>
+                handleToggle(tool.id, checked)
+              }
+            />
+            {!tool.isBuiltIn && tool.category !== "community" && (
               <>
                 <Button
                   variant="ghost"
@@ -187,43 +301,12 @@ export default function ToolsSettingsPage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-destructive"
+                  className="h-8 w-8 text-destructive hover:text-destructive"
                   onClick={() => setDeletingTool(tool.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </>
-            )}
-            <Switch
-              checked={tool.enabled}
-              onCheckedChange={(checked) =>
-                handleToggle(tool.id, checked)
-              }
-            />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground line-clamp-2">
-            {tool.description}
-          </p>
-          <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-            {tool.assistantCount > 0 && (
-              <span>
-                Used by {tool.assistantCount} assistant
-                {tool.assistantCount !== 1 && "s"}
-              </span>
-            )}
-            {tool.mcpServer && (
-              <span className="flex items-center gap-1">
-                <Plug className="h-3 w-3" />
-                {tool.mcpServer.name}
-              </span>
-            )}
-            {tool.category === "custom" && !tool.executionConfig?.url && (
-              <span className="flex items-center gap-1 text-amber-500">
-                <AlertTriangle className="h-3 w-3" />
-                No endpoint configured
-              </span>
             )}
           </div>
         </CardContent>
@@ -232,47 +315,21 @@ export default function ToolsSettingsPage() {
   }
 
   const renderEmptyState = () => {
-    if (searchQuery.trim()) {
+    if (hasActiveFilters) {
       return (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Search className="h-10 w-10 text-muted-foreground mb-3" />
           <h3 className="text-sm font-medium mb-1">No tools found</h3>
           <p className="text-sm text-muted-foreground">
-            No tools match &quot;{searchQuery}&quot;
+            Try a different search term or clear filters.
           </p>
+          <button
+            onClick={clearAllFilters}
+            className="mt-3 text-xs font-medium text-foreground/70 hover:text-foreground transition-colors cursor-pointer"
+          >
+            Clear all filters
+          </button>
         </div>
-      )
-    }
-
-    if (activeTab === "custom") {
-      return (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Wrench className="h-10 w-10 text-muted-foreground mb-3" />
-            <h3 className="text-sm font-medium mb-1">No custom tools</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Create custom tools to extend your assistants.
-            </p>
-            <Button size="sm" onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4 mr-1" />
-              Create Tool
-            </Button>
-          </CardContent>
-        </Card>
-      )
-    }
-
-    if (activeTab === "mcp") {
-      return (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Plug className="h-10 w-10 text-muted-foreground mb-3" />
-            <h3 className="text-sm font-medium mb-1">No MCP tools</h3>
-            <p className="text-sm text-muted-foreground">
-              Connect an MCP server and discover tools in Settings &gt; MCP.
-            </p>
-          </CardContent>
-        </Card>
       )
     }
 
@@ -282,7 +339,7 @@ export default function ToolsSettingsPage() {
           <Wrench className="h-10 w-10 text-muted-foreground mb-3" />
           <h3 className="text-sm font-medium mb-1">No tools yet</h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Tools will appear here once the system seeds built-in tools.
+            Create a custom tool or install from the Marketplace.
           </p>
           <Button size="sm" onClick={() => setDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-1" />
@@ -302,10 +359,18 @@ export default function ToolsSettingsPage() {
             Manage agent tools that assistants can use during conversations
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-1" />
-          Create Tool
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/marketplace/tools">
+              <Store className="h-4 w-4 mr-1" />
+              Browse Marketplace
+            </Link>
+          </Button>
+          <Button onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-1" />
+            Create Tool
+          </Button>
+        </div>
       </div>
 
       {/* In-app documentation */}
@@ -394,64 +459,150 @@ Response: { "temperature": 32, "condition": "Sunny" }`}</pre>
         </div>
       </Collapsible>
 
-      <div className="space-y-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <>
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search tools..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
-              </div>
-
-              {/* Category Tabs */}
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList>
-                  <TabsTrigger value="all">
-                    All
-                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">
-                      {counts.all}
-                    </Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="builtin">
-                    Built-in
-                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">
-                      {counts.builtin}
-                    </Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="custom">
-                    Custom
-                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">
-                      {counts.custom}
-                    </Badge>
-                  </TabsTrigger>
-                  <TabsTrigger value="mcp">
-                    MCP
-                    <Badge variant="secondary" className="ml-1.5 h-5 px-1.5 text-[10px]">
-                      {counts.mcp}
-                    </Badge>
-                  </TabsTrigger>
-                </TabsList>
-
-                {/* All tabs render the same filtered list */}
-                {["all", "builtin", "custom", "mcp"].map((tab) => (
-                  <TabsContent key={tab} value={tab} className="space-y-3 mt-4">
-                    {filteredTools.length === 0
-                      ? renderEmptyState()
-                      : filteredTools.map(renderToolCard)}
-                  </TabsContent>
-                ))}
-              </Tabs>
-            </>
+      {/* Search + Filter + Sort */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search tools..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 h-9"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-foreground transition-colors cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           )}
+        </div>
+
+        {/* Filter popover (categories + tags) */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 shrink-0">
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="ml-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-foreground text-[10px] font-medium text-background">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-[240px] p-0">
+            <Command>
+              <CommandInput placeholder="Search filters..." />
+              <CommandList className="max-h-[300px] overflow-y-auto">
+                <CommandEmpty>No match found.</CommandEmpty>
+                {toolCategories.length > 1 && (
+                  <CommandGroup heading="Category">
+                    {toolCategories.map((cat) => {
+                      const active = selectedCategories.has(cat)
+                      const label = TOOL_CATEGORY_LABELS[cat] ?? cat
+                      return (
+                        <CommandItem
+                          key={`cat-${cat}`}
+                          value={`category: ${label}`}
+                          onSelect={() => toggleCategory(cat)}
+                          className="cursor-pointer"
+                        >
+                          <div
+                            className={cn(
+                              "h-4 w-4 rounded border shrink-0 mr-2 flex items-center justify-center",
+                              active ? "border-primary bg-primary/10" : "border-border"
+                            )}
+                          >
+                            {active && <Check className="h-3 w-3 text-primary" />}
+                          </div>
+                          <span className="truncate">{label}</span>
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                )}
+                {allTags.length > 0 && (
+                  <>
+                    <CommandSeparator />
+                    <CommandGroup heading="Tags">
+                      {allTags.map((tag) => {
+                        const active = selectedTags.has(tag)
+                        return (
+                          <CommandItem
+                            key={`tag-${tag}`}
+                            value={`tag: ${tag}`}
+                            onSelect={() => toggleTag(tag)}
+                            className="cursor-pointer"
+                          >
+                            <div
+                              className={cn(
+                                "h-4 w-4 rounded border shrink-0 mr-2 flex items-center justify-center",
+                                active ? "border-primary bg-primary/10" : "border-border"
+                              )}
+                            >
+                              {active && <Check className="h-3 w-3 text-primary" />}
+                            </div>
+                            <span className="truncate">{tag}</span>
+                          </CommandItem>
+                        )
+                      })}
+                    </CommandGroup>
+                  </>
+                )}
+                {activeFilterCount > 0 && (
+                  <>
+                    <CommandSeparator />
+                    <CommandGroup>
+                      <CommandItem
+                        onSelect={() => { setSelectedCategories(new Set()); setSelectedTags(new Set()) }}
+                        className="cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                        <span className="text-muted-foreground">Clear all filters</span>
+                      </CommandItem>
+                    </CommandGroup>
+                  </>
+                )}
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+
+        {/* Sort */}
+        <Select value={sortOption} onValueChange={(v) => setSortOption(v as typeof sortOption)}>
+          <SelectTrigger className="h-9 w-[140px] text-sm shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="end">
+            <SelectItem value="recent">Recent</SelectItem>
+            <SelectItem value="az">A &ndash; Z</SelectItem>
+            <SelectItem value="enabled">Enabled first</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Tools list */}
+      <div className="space-y-3">
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredTools.length === 0 ? (
+          renderEmptyState()
+        ) : (
+          <>
+            {hasActiveFilters && (
+              <p className="text-xs text-muted-foreground">
+                Showing{" "}
+                <span className="font-semibold text-foreground">{filteredTools.length}</span>
+                {" "}of {nonMcpTools.length} tools
+              </p>
+            )}
+            {filteredTools.map(renderToolCard)}
+          </>
+        )}
       </div>
 
       <ToolDialog
