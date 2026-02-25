@@ -49,6 +49,7 @@ export interface Assistant {
   chatConfig?: ChatConfig
   guardRails?: GuardRailsConfig
   memoryConfig?: MemoryConfig
+  tags?: string[]
   isDefault?: boolean
   isEditable?: boolean
   toolCount?: number
@@ -72,4 +73,5 @@ export interface AssistantInput {
   chatConfig?: ChatConfig
   guardRails?: GuardRailsConfig
   memoryConfig?: MemoryConfig
+  tags?: string[]
 }

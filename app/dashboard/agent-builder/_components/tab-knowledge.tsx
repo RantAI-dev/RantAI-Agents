@@ -59,7 +59,7 @@ export function TabKnowledge({
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-6">
+    <div className="p-6 space-y-6">
       <div>
         <h2 className="text-sm font-semibold text-foreground">Knowledge Base</h2>
         <p className="text-xs text-muted-foreground mt-1">

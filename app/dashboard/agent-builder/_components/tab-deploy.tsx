@@ -46,7 +46,7 @@ Content-Type: application/json
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-8">
+    <div className="p-6 space-y-8">
       <div>
         <h2 className="text-sm font-semibold text-foreground">Deploy</h2>
         <p className="text-xs text-muted-foreground mt-1">

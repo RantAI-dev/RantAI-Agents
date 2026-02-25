@@ -84,7 +84,7 @@ export async function POST(request: Request) {
 
     const {
       name, description, emoji, systemPrompt, model, useKnowledgeBase, knowledgeBaseGroupIds,
-      memoryConfig, liveChatEnabled, modelConfig, openingMessage, openingQuestions, chatConfig, guardRails, avatarS3Key,
+      memoryConfig, liveChatEnabled, modelConfig, openingMessage, openingQuestions, chatConfig, guardRails, avatarS3Key, tags,
     } = body
 
     if (!name || !systemPrompt) {
@@ -120,6 +120,7 @@ export async function POST(request: Request) {
         ...(chatConfig !== undefined && { chatConfig }),
         ...(guardRails !== undefined && { guardRails }),
         ...(avatarS3Key !== undefined && { avatarS3Key }),
+        ...(tags !== undefined && { tags }),
         isSystemDefault: false,
         isBuiltIn: false,
         organizationId: orgContext?.organizationId || null,

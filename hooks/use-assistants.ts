@@ -25,6 +25,7 @@ interface DbAssistant {
   openingQuestions?: string[]
   isSystemDefault: boolean
   isBuiltIn: boolean
+  tags?: string[]
   liveChatEnabled?: boolean
   createdAt: string
   _count?: { tools: number }
@@ -48,6 +49,7 @@ function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
     avatarS3Key: dbAssistant.avatarS3Key || undefined,
     openingMessage: dbAssistant.openingMessage || undefined,
     openingQuestions: dbAssistant.openingQuestions || undefined,
+    tags: dbAssistant.tags || [],
     isDefault: dbAssistant.isSystemDefault,
     isEditable: true, // All assistants are editable
     liveChatEnabled: dbAssistant.liveChatEnabled ?? false,

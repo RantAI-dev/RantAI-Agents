@@ -17,7 +17,7 @@ export function TabMemory({ memoryConfig, onMemoryConfigChange }: TabMemoryProps
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-6">
+    <div className="p-6 space-y-6">
       <div>
         <h2 className="text-sm font-semibold text-foreground">Memory</h2>
         <p className="text-xs text-muted-foreground mt-1">

@@ -34,6 +34,7 @@ export function AgentTemplateGallery({
         useKnowledgeBase: template.useKnowledgeBase,
         knowledgeBaseGroupIds: template.knowledgeBaseGroupIds,
         memoryConfig: template.memoryConfig,
+        tags: template.tags,
       })
 
       if (created) {

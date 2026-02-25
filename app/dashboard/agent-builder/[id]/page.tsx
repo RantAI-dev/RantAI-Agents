@@ -6,6 +6,7 @@ import { useAssistants } from "@/hooks/use-assistants"
 import { useDefaultAssistant } from "@/hooks/use-default-assistant"
 import { useAssistantTools } from "@/hooks/use-assistant-tools"
 import { useAssistantSkills } from "@/hooks/use-assistant-skills"
+import { useAssistantMcpServers } from "@/hooks/use-assistant-mcp-servers"
 import { getModelById, DEFAULT_MODEL_ID } from "@/lib/models"
 import { AgentEditorLayout, type TabId } from "../_components/agent-editor-layout"
 import { TabConfigure } from "../_components/tab-configure"
@@ -17,6 +18,7 @@ import { TabMemory } from "../_components/tab-memory"
 import { TabChatPreferences } from "../_components/tab-chat-preferences"
 import { GuardRailsSettings } from "../_components/guard-rails-settings"
 import { TabTest } from "../_components/tab-test"
+import { TabMcp } from "../_components/tab-mcp"
 import { TabDeploy } from "../_components/tab-deploy"
 import type { Assistant, MemoryConfig, ModelConfig, ChatConfig, GuardRailsConfig } from "@/lib/types/assistant"
 
@@ -50,6 +52,7 @@ interface FormState {
   systemPrompt: string
   selectedToolIds: string[]
   selectedSkillIds: string[]
+  selectedMcpServerIds: string[]
   useKnowledgeBase: boolean
   knowledgeBaseGroupIds: string[]
   memoryConfig: MemoryConfig
@@ -59,6 +62,7 @@ interface FormState {
   liveChatEnabled: boolean
   openingMessage: string
   openingQuestions: string[]
+  tags: string[]
 }
 
 function getInitialState(agent?: Assistant | null): FormState {
@@ -72,6 +76,7 @@ function getInitialState(agent?: Assistant | null): FormState {
     systemPrompt: agent?.systemPrompt ?? "",
     selectedToolIds: [],
     selectedSkillIds: [],
+    selectedMcpServerIds: [],
     useKnowledgeBase: agent?.useKnowledgeBase ?? false,
     knowledgeBaseGroupIds: agent?.knowledgeBaseGroupIds ?? [],
     memoryConfig: agent?.memoryConfig ?? DEFAULT_MEMORY_CONFIG,
@@ -81,6 +86,7 @@ function getInitialState(agent?: Assistant | null): FormState {
     liveChatEnabled: agent?.liveChatEnabled ?? false,
     openingMessage: agent?.openingMessage ?? "",
     openingQuestions: agent?.openingQuestions ?? [],
+    tags: agent?.tags ?? [],
   }
 }
 
@@ -122,6 +128,12 @@ export default function AgentEditorPage({
     isLoading: skillsLoading,
   } = useAssistantSkills(isNew ? null : id)
 
+  const {
+    enabledMcpServerIds,
+    updateAssistantMcpServers,
+    isLoading: mcpLoading,
+  } = useAssistantMcpServers(isNew ? null : id)
+
   const [activeTab, setActiveTab] = useState<TabId>("configure")
   const [form, setForm] = useState<FormState>(getInitialState())
   const [isSaving, setIsSaving] = useState(false)
@@ -152,6 +164,13 @@ export default function AgentEditorPage({
     }
   }, [isNew, skillsLoading, enabledSkillIds])
 
+  // Sync MCP server IDs from the server
+  useEffect(() => {
+    if (!isNew && !mcpLoading && initializedRef.current) {
+      setForm((prev) => ({ ...prev, selectedMcpServerIds: enabledMcpServerIds }))
+    }
+  }, [isNew, mcpLoading, enabledMcpServerIds])
+
   // Track dirty state
   const updateField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }))
@@ -174,14 +193,39 @@ export default function AgentEditorPage({
   )
 
   const handleToggleSkill = useCallback(
-    (skillId: string) => {
+    (skillId: string, autoEnableToolIds?: string[]) => {
       setForm((prev) => {
         const current = prev.selectedSkillIds
         const isEnabled = current.includes(skillId)
-        const next = isEnabled
+        const nextSkills = isEnabled
           ? current.filter((sid) => sid !== skillId)
           : [...current, skillId]
-        return { ...prev, selectedSkillIds: next }
+
+        // When toggling ON with auto-enable tool IDs, add them in one atomic update
+        let nextTools = prev.selectedToolIds
+        if (!isEnabled && autoEnableToolIds && autoEnableToolIds.length > 0) {
+          const toAdd = autoEnableToolIds.filter((tid) => !nextTools.includes(tid))
+          if (toAdd.length > 0) {
+            nextTools = [...nextTools, ...toAdd]
+          }
+        }
+
+        return { ...prev, selectedSkillIds: nextSkills, selectedToolIds: nextTools }
+      })
+      setIsDirty(true)
+    },
+    []
+  )
+
+  const handleToggleMcpServer = useCallback(
+    (serverId: string) => {
+      setForm((prev) => {
+        const current = prev.selectedMcpServerIds
+        const isEnabled = current.includes(serverId)
+        const next = isEnabled
+          ? current.filter((sid) => sid !== serverId)
+          : [...current, serverId]
+        return { ...prev, selectedMcpServerIds: next }
       })
       setIsDirty(true)
     },
@@ -219,6 +263,7 @@ export default function AgentEditorPage({
         openingMessage: form.openingMessage || undefined,
         openingQuestions: form.openingQuestions.filter((q) => q.trim()),
         avatarS3Key: form.avatarS3Key || undefined,
+        tags: form.tags,
       }
 
       if (isNew) {
@@ -244,6 +289,15 @@ export default function AgentEditorPage({
               }).catch(() => {})
             )
           }
+          if (form.selectedMcpServerIds.length > 0) {
+            promises.push(
+              fetch(`/api/assistants/${created.id}/mcp-servers`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mcpServerIds: form.selectedMcpServerIds }),
+              }).catch(() => {})
+            )
+          }
           await Promise.all(promises)
           refetch()
           router.replace(`/dashboard/agent-builder/${created.id}`)
@@ -251,10 +305,11 @@ export default function AgentEditorPage({
       } else {
         const success = await updateAssistant(id, input)
         if (success) {
-          // Update tool and skill bindings
+          // Update tool, skill, and MCP server bindings
           await Promise.all([
             updateAssistantTools(form.selectedToolIds),
             updateAssistantSkills(form.selectedSkillIds),
+            updateAssistantMcpServers(form.selectedMcpServerIds),
           ])
           refetch()
           setIsDirty(false)
@@ -263,7 +318,7 @@ export default function AgentEditorPage({
     } finally {
       setIsSaving(false)
     }
-  }, [form, isNew, id, addAssistant, updateAssistant, updateAssistantTools, updateAssistantSkills, refetch, router])
+  }, [form, isNew, id, addAssistant, updateAssistant, updateAssistantTools, updateAssistantSkills, updateAssistantMcpServers, refetch, router])
 
   // Actions
   const handleDuplicate = useCallback(async () => {
@@ -372,6 +427,8 @@ export default function AgentEditorPage({
           onLiveChatEnabledChange={(v) => updateField("liveChatEnabled", v)}
           onOpeningMessageChange={(v) => updateField("openingMessage", v)}
           onOpeningQuestionsChange={(v) => updateField("openingQuestions", v)}
+          tags={form.tags}
+          onTagsChange={(v) => updateField("tags", v)}
         />
       )}
       {activeTab === "model" && (
@@ -394,8 +451,18 @@ export default function AgentEditorPage({
         <TabSkills
           selectedSkillIds={form.selectedSkillIds}
           onToggleSkill={handleToggleSkill}
+          selectedToolIds={form.selectedToolIds}
+          onToggleTool={handleToggleTool}
           isNew={isNew}
           assistantId={isNew ? null : id}
+        />
+      )}
+      {activeTab === "mcp" && (
+        <TabMcp
+          selectedMcpServerIds={form.selectedMcpServerIds}
+          onToggleMcpServer={handleToggleMcpServer}
+          modelSupportsFunctionCalling={modelSupportsFunctionCalling}
+          isNew={isNew}
         />
       )}
       {activeTab === "knowledge" && (

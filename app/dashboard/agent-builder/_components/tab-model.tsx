@@ -48,7 +48,7 @@ export function TabModel({
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-8">
+    <div className="p-6 space-y-8">
       {/* Model Selection */}
       <section className="space-y-4">
         <div>

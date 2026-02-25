@@ -89,6 +89,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       chatConfig,
       guardRails,
       avatarS3Key,
+      tags,
     } = body
 
     // Built-in assistants: only allow updating a whitelist of fields (e.g. Live Chat, prompt, model)
@@ -115,6 +116,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       if (chatConfig !== undefined) allowedData.chatConfig = chatConfig
       if (guardRails !== undefined) allowedData.guardRails = guardRails
       if (avatarS3Key !== undefined) allowedData.avatarS3Key = avatarS3Key
+      if (tags !== undefined) allowedData.tags = tags
       // name, useKnowledgeBase, knowledgeBaseGroupIds are not allowed for built-in
 
       const assistant = await prisma.assistant.update({
@@ -167,6 +169,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
         ...(chatConfig !== undefined && { chatConfig }),
         ...(guardRails !== undefined && { guardRails }),
         ...(avatarS3Key !== undefined && { avatarS3Key }),
+        ...(tags !== undefined && { tags }),
         updatedBy: session.user.id,
       },
     })

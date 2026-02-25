@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { cn } from "@/lib/utils"
+import { cn, getTagColor } from "@/lib/utils"
 import { getModelName, getModelById } from "@/lib/models"
 import type { Assistant } from "@/lib/types/assistant"
 
@@ -126,6 +126,19 @@ export function AgentCard({
             KB
           </Badge>
         )}
+        {(agent.tags ?? []).map((tag) => (
+          <Badge
+            key={tag}
+            variant="outline"
+            className="text-[10px] px-1.5 py-0 h-5"
+            style={{
+              borderColor: `${getTagColor(tag)}40`,
+              color: getTagColor(tag),
+            }}
+          >
+            {tag}
+          </Badge>
+        ))}
       </div>
     </div>
   )

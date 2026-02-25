@@ -20,6 +20,7 @@ import {
   Star,
   Trash2,
   Loader2,
+  Plug,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -41,13 +42,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
-export type TabId = "configure" | "model" | "tools" | "skills" | "knowledge" | "memory" | "guardrails" | "chat" | "test" | "deploy"
+export type TabId = "configure" | "model" | "tools" | "skills" | "mcp" | "knowledge" | "memory" | "guardrails" | "chat" | "test" | "deploy"
 
 const TABS: { id: TabId; label: string; icon: typeof Settings }[] = [
   { id: "configure", label: "Configure", icon: Settings },
   { id: "model", label: "Model", icon: Cpu },
   { id: "tools", label: "Tools", icon: Wrench },
   { id: "skills", label: "Skills", icon: Sparkles },
+  { id: "mcp", label: "MCP", icon: Plug },
   { id: "knowledge", label: "Knowledge", icon: BookOpen },
   { id: "memory", label: "Memory", icon: Brain },
   { id: "guardrails", label: "Guard Rails", icon: Shield },

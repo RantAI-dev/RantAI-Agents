@@ -42,7 +42,7 @@ export function GuardRailsSettings({ config, onChange }: GuardRailsSettingsProps
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-8">
+    <div className="p-6 space-y-8">
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-muted-foreground" />
