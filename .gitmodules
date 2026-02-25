@@ -1,0 +1,3 @@
+[submodule "packages/community-skills"]
+	path = packages/community-skills
+	url = https://github.com/RantAI-dev/RantAI-Agents-Community.git

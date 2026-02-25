@@ -539,6 +539,7 @@ async function seedWorkflows(createdByUserId: string) {
       trigger: template.trigger as object,
       variables: template.variables as object,
       mode: (template.mode === "CHATFLOW" ? "CHATFLOW" : "STANDARD") as "STANDARD" | "CHATFLOW",
+      tags: template.tags ?? [],
     }
 
     const apiKey = workflowApiKeys[templateId]
@@ -572,6 +573,24 @@ async function seedWorkflows(createdByUserId: string) {
       console.log(`  + ${workflow.name} (${workflowData.mode}, API enabled)`)
     }
   }
+
+  // Backfill tags on ALL existing workflows that match any template name
+  const allWorkflows = await prisma.workflow.findMany({ select: { id: true, name: true, tags: true } })
+  let backfilled = 0
+  for (const wf of allWorkflows) {
+    if (wf.tags && wf.tags.length > 0) continue // already has tags
+    const matchingTemplate = WORKFLOW_TEMPLATES.find((t) => t.name === wf.name)
+    if (matchingTemplate) {
+      await prisma.workflow.update({
+        where: { id: wf.id },
+        data: { tags: matchingTemplate.tags },
+      })
+      backfilled++
+    }
+  }
+  if (backfilled > 0) {
+    console.log(`  ↻ Backfilled tags on ${backfilled} existing workflow(s)`)
+  }
 }
 
 // All built-in assistants — single source of truth for seeding
@@ -587,6 +606,7 @@ const BUILT_IN_ASSISTANTS = [
     isSystemDefault: true,
     isBuiltIn: true,
     liveChatEnabled: true,
+    tags: ["Insurance", "Support", "RAG"],
   },
   {
     id: "general",
@@ -599,6 +619,7 @@ const BUILT_IN_ASSISTANTS = [
     knowledgeBaseGroupIds: [],
     isSystemDefault: false,
     isBuiltIn: true,
+    tags: ["Productivity"],
   },
   {
     id: "code-assistant",
@@ -618,6 +639,7 @@ Guidelines:
     knowledgeBaseGroupIds: [],
     isSystemDefault: false,
     isBuiltIn: true,
+    tags: ["Development"],
   },
   {
     id: "creative-writer",
@@ -637,6 +659,7 @@ Guidelines:
     knowledgeBaseGroupIds: [],
     isSystemDefault: false,
     isBuiltIn: true,
+    tags: ["Creative", "Marketing"],
   },
   {
     id: "data-analyst",
@@ -656,6 +679,7 @@ Guidelines:
     knowledgeBaseGroupIds: [],
     isSystemDefault: false,
     isBuiltIn: true,
+    tags: ["Analytics"],
   },
   {
     id: "research-assistant",
@@ -676,6 +700,7 @@ Guidelines:
     knowledgeBaseGroupIds: [],
     isSystemDefault: false,
     isBuiltIn: true,
+    tags: ["Research", "RAG"],
   },
 ]
 
@@ -685,7 +710,12 @@ async function seedAssistants() {
   for (const assistant of BUILT_IN_ASSISTANTS) {
     const existing = await prisma.assistant.findUnique({ where: { id: assistant.id } })
     if (existing) {
-      console.log(`  ~ ${assistant.name} (${assistant.id}) — already exists, skipped`)
+      // Update tags and other fields that may have changed
+      await prisma.assistant.update({
+        where: { id: assistant.id },
+        data: { tags: assistant.tags ?? [] },
+      })
+      console.log(`  ~ ${assistant.name} (${assistant.id}) — updated tags`)
     } else {
       await prisma.assistant.create({ data: assistant })
       console.log(`  ${assistant.isSystemDefault ? "★" : "+"} ${assistant.name} (${assistant.id})`)
@@ -740,41 +770,87 @@ async function forceReseedCleanup() {
 }
 
 async function seedCatalogItems() {
-  console.log("\n--- Seeding Marketplace Catalog ---")
+  console.log("\n--- Seeding Marketplace Catalog (Community) ---")
 
-  const { STATIC_CATALOG } = await import("../lib/marketplace/catalog")
-
-  for (const item of STATIC_CATALOG) {
-    await prisma.catalogItem.upsert({
-      where: { id: item.id },
-      update: {
-        displayName: item.displayName,
-        description: item.description,
-        category: item.category,
-        type: item.type,
-        icon: item.icon,
-        tags: item.tags,
-        skillContent: item.skillTemplate?.content || null,
-        skillCategory: item.skillTemplate?.category || null,
-        toolTemplate: item.toolTemplate ? (item.toolTemplate as object) : null,
-      },
-      create: {
-        id: item.id,
-        name: item.name,
-        displayName: item.displayName,
-        description: item.description,
-        category: item.category,
-        type: item.type,
-        icon: item.icon,
-        tags: item.tags,
-        skillContent: item.skillTemplate?.content || null,
-        skillCategory: item.skillTemplate?.category || null,
-        toolTemplate: item.toolTemplate ? (item.toolTemplate as object) : null,
-      },
-    })
+  // Remove old non-community catalog items (legacy static catalog)
+  // Preserve MCP catalog items (seeded by scripts/seed-mcp.ts)
+  const deleted = await prisma.catalogItem.deleteMany({
+    where: {
+      communitySkillName: null,
+      communityToolName: null,
+      type: { not: "mcp" },
+    },
+  })
+  if (deleted.count > 0) {
+    console.log(`  Removed ${deleted.count} legacy catalog items`)
   }
 
-  console.log(`Seeded ${STATIC_CATALOG.length} catalog items`)
+  // Seed from community-skills package
+  let pkg: { tools?: Record<string, unknown>; skills?: Record<string, unknown> }
+  try {
+    pkg = await import("@rantai/community-skills")
+  } catch {
+    console.warn("  @rantai/community-skills not installed, skipping marketplace seed")
+    return
+  }
+
+  const TOOL_ICONS: Record<string, string> = {
+    yahoo_finance_quote: "💹",
+    yahoo_finance_search: "🔎",
+    weather_lookup: "🌦️",
+    qr_code_generator: "📱",
+    url_metadata_extract: "🔗",
+    crypto_price: "🪙",
+    crypto_search: "🔍",
+    wikipedia_search: "📚",
+    dictionary_lookup: "📖",
+  }
+
+  const tools = pkg.tools ?? {}
+  const skills = pkg.skills ?? {}
+  let count = 0
+
+  for (const [name, toolDef] of Object.entries(tools)) {
+    const def = toolDef as { name: string; displayName: string; description: string; tags?: string[] }
+    const toolIcon = TOOL_ICONS[def.name] || "🔧"
+    await prisma.catalogItem.upsert({
+      where: { name: `community-tool-${name}` },
+      update: { displayName: def.displayName, description: def.description, icon: toolIcon, tags: def.tags ?? [] },
+      create: {
+        name: `community-tool-${name}`,
+        displayName: def.displayName,
+        description: def.description,
+        category: "Community",
+        type: "tool",
+        icon: toolIcon,
+        tags: def.tags ?? [],
+        communityToolName: name,
+      },
+    })
+    count++
+  }
+
+  for (const [name, skillDef] of Object.entries(skills)) {
+    const def = skillDef as { name: string; displayName: string; description: string; category: string; tags: string[]; icon?: string; configSchema?: unknown }
+    await prisma.catalogItem.upsert({
+      where: { name: `community-skill-${name}` },
+      update: { displayName: def.displayName, description: def.description, icon: def.icon || "✨", tags: def.tags },
+      create: {
+        name: `community-skill-${name}`,
+        displayName: def.displayName,
+        description: def.description,
+        category: def.category,
+        type: "skill",
+        icon: def.icon || "Sparkles",
+        tags: def.tags,
+        communitySkillName: name,
+        configSchema: def.configSchema ? JSON.parse(JSON.stringify(def.configSchema)) : undefined,
+      },
+    })
+    count++
+  }
+
+  console.log(`  Seeded ${count} community catalog items (${Object.keys(tools).length} tools + ${Object.keys(skills).length} skills)`)
 }
 
 async function main() {
@@ -788,12 +864,13 @@ async function main() {
 
   const user1 = await prisma.user.upsert({
     where: { email: "agent@rantai.com" },
-    update: {},
+    update: { role: "ADMIN" },
     create: {
       email: "agent@rantai.com",
       name: "Sarah Johnson",
       passwordHash,
       status: "OFFLINE",
+      role: "ADMIN",
     },
   })
 
@@ -829,6 +906,20 @@ async function main() {
   await seedEmbedKey()
 
   // Insurance data now managed by HorizonLife-Demo directly
+
+  // Seed default Feature Configurations
+  console.log("\n[Feature Configuration]")
+  const defaultFeatures = [
+    { feature: "AGENT", enabled: true },
+  ]
+  for (const feat of defaultFeatures) {
+    await prisma.featureConfig.upsert({
+      where: { feature: feat.feature },
+      update: {},
+      create: { feature: feat.feature, enabled: feat.enabled, config: {} },
+    })
+    console.log(`  ✓ ${feat.feature} (enabled: ${feat.enabled})`)
+  }
 
   console.log("\n✅ Seed complete!")
   console.log(`  Users:      2 (agent / admin @rantai.com)`)

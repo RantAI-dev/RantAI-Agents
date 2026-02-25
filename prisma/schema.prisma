@@ -133,6 +133,7 @@ model Organization {
   credentials       Credential[]
   openApiSpecs      OpenApiSpec[]
   marketplaceInstalls MarketplaceInstall[]
+  installedSkills     InstalledSkill[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -221,11 +222,17 @@ model Assistant {
   // Memory configuration per-assistant
   memoryConfig Json? // { enabled, workingMemory, semanticRecall, longTermProfile, memoryInstructions }
 
+  // User-defined tags for filtering
+  tags String[]
+
   // Tool bindings
   tools AssistantTool[]
 
   // Skill bindings
   skills AssistantSkill[]
+
+  // MCP server bindings
+  mcpServers AssistantMcpServer[]
 
   // Workflows
   workflows Workflow[]
@@ -454,6 +461,8 @@ model Tool {
   description     String   @db.Text               // LLM-facing description
   category        String   @default("builtin")    // "builtin" | "custom" | "mcp"
   parameters      Json                            // Zod-compatible JSON schema
+  icon            String?                         // Emoji or Lucide icon name for display
+  tags            String[]                        // Tags for filtering/discovery
   isBuiltIn       Boolean  @default(false)
   enabled         Boolean  @default(true)
   executionConfig Json?                           // For custom: { type, url, method, headers }
@@ -497,23 +506,44 @@ model AssistantTool {
   @@index([toolId])
 }
 
-// MCP Server configuration for external tool providers
+// Junction table: which MCP servers are enabled for which assistant
+model AssistantMcpServer {
+  id          String          @id @default(cuid())
+  assistantId String
+  assistant   Assistant       @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  mcpServerId String
+  mcpServer   McpServerConfig @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+  enabled     Boolean         @default(true)
+  createdAt   DateTime        @default(now())
+
+  @@unique([assistantId, mcpServerId])
+  @@index([assistantId])
+  @@index([mcpServerId])
+}
+
+// MCP Server configuration for external tool providers (remote-only: SSE or streamable-http)
 model McpServerConfig {
   id              String    @id @default(cuid())
   name            String
   description     String?
-  transport       String                          // "stdio" | "sse" | "streamable-http"
-  url             String?                         // For SSE/HTTP transports
-  command         String?                         // For stdio transport
-  args            String[]                        // For stdio transport
-  env             Json?                           // Environment variables
-  headers         Json?                           // HTTP auth headers
+  transport       String                          // "sse" | "streamable-http"
+  url             String?                         // Server endpoint URL
+  env             Json?                           // Environment variables (encrypted)
+  headers         Json?                           // HTTP auth headers (encrypted)
+  icon            String?                         // Emoji or Lucide icon name or image URL
+  isBuiltIn       Boolean   @default(false)       // Pre-installed = non-deletable
+  envKeys         Json?                           // Array<{key, label, placeholder}> for config UI
+  docsUrl         String?                         // Link to provider documentation
   enabled         Boolean   @default(true)
+  configured      Boolean   @default(true)        // false = needs env/config from user
   lastConnectedAt DateTime?
   lastError       String?
 
   // Discovered tools
   tools Tool[]
+
+  // Assistant bindings
+  assistantMcpServers AssistantMcpServer[]
 
   // Organization scope
   organizationId String?
@@ -608,6 +638,9 @@ model Workflow {
   status          WorkflowStatus @default(DRAFT)
   version         Int            @default(1)
 
+  // User-defined tags for filtering
+  tags            String[]
+
   // Relations
   organizationId  String?
   organization    Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -682,12 +715,14 @@ model Skill {
   version        String?
   category       String   @default("general")  // "productivity", "coding", "writing", etc.
   tags           String[]
+  icon           String?                       // Emoji or Lucide icon name for display
   metadata       Json?                         // OpenClaw frontmatter
   enabled        Boolean  @default(true)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy      String?
   assistantSkills AssistantSkill[]
+  installedSkill InstalledSkill?        // Reverse relation if linked from InstalledSkill
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   @@unique([name, organizationId])
@@ -706,6 +741,38 @@ model AssistantSkill {
   @@unique([assistantId, skillId])
   @@index([assistantId])
   @@index([skillId])
+}
+
+// ─── Installed Community Skills ──────────────────────────────
+
+model InstalledSkill {
+  id             String   @id @default(cuid())
+  name           String                          // Community skill registry key: "neko-finance"
+  displayName    String
+  description    String   @db.Text
+  version        String                          // Installed version: "1.0.0"
+  category       String   @default("general")
+  tags           String[]
+  icon           String   @default("Sparkles")
+  skillPrompt    String   @db.Text               // SKILL.md content snapshot
+  configSchema   Json?                           // JSON Schema for user config form
+  config         Json?                           // User-provided config values (API keys, etc.)
+  enabled        Boolean  @default(true)
+
+  // Organization scope
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  installedBy    String?
+
+  // Linked Skill record for prompt injection
+  skillId        String?  @unique
+  skill          Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([name, organizationId])
+  @@index([organizationId])
 }
 
 // ─── OpenAPI Spec Import ────────────────────────────────────
@@ -748,15 +815,24 @@ model CatalogItem {
   displayName   String
   description   String   @db.Text
   category      String
-  type          String   // "tool" | "skill"
+  type          String   // "tool" | "skill" | "workflow" | "assistant"
   icon          String   @default("Sparkles")
   tags          String[]
   featured      Boolean  @default(false)
   skillContent  String?  @db.Text
   skillCategory String?
   toolTemplate  Json?
+  workflowTemplate Json?
+  assistantTemplate Json?
+  mcpTemplate   Json?
   sourceUrl     String?
   sourceSlug    String?  @unique
+
+  // Community package references
+  communitySkillName String?               // Maps to CommunitySkillDefinition.name in registry
+  communityToolName  String?               // Maps to CommunityToolDefinition.name in registry
+  configSchema       Json?                 // JSON Schema for skill config form on install
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
