@@ -5,10 +5,15 @@ import { prisma } from "@/lib/prisma"
  * into a single prompt section to append to the system prompt.
  */
 export async function resolveSkillsForAssistant(
-  assistantId: string
+  assistantId: string,
+  skillIds?: string[]
 ): Promise<string | null> {
   const bindings = await prisma.assistantSkill.findMany({
-    where: { assistantId, enabled: true },
+    where: {
+      assistantId,
+      enabled: true,
+      ...(skillIds && { skillId: { in: skillIds } }),
+    },
     include: { skill: true },
     orderBy: { priority: "asc" },
   })

@@ -15,17 +15,24 @@ export async function GET(
 
     const { id } = await params
     const bindings = await prisma.assistantSkill.findMany({
-      where: { assistantId: id },
-      select: {
-        id: true,
-        skillId: true,
-        enabled: true,
-        priority: true,
+      where: { assistantId: id, enabled: true },
+      include: {
+        skill: {
+          select: { displayName: true, description: true, icon: true },
+        },
       },
       orderBy: { priority: "asc" },
     })
 
-    return NextResponse.json(bindings)
+    return NextResponse.json(
+      bindings.map((b) => ({
+        id: b.skillId,
+        displayName: b.skill.displayName,
+        description: b.skill.description,
+        icon: b.skill.icon,
+        enabled: b.enabled,
+      }))
+    )
   } catch (error) {
     console.error("[Assistant Skills API] GET error:", error)
     return NextResponse.json(
@@ -57,25 +64,26 @@ export async function PUT(
       )
     }
 
+    // Filter out null/undefined/empty values
+    const validSkillIds = skillIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+
     const assistant = await prisma.assistant.findUnique({ where: { id } })
     if (!assistant) {
       return NextResponse.json({ error: "Assistant not found" }, { status: 404 })
     }
 
-    await prisma.$transaction([
-      prisma.assistantSkill.deleteMany({ where: { assistantId: id } }),
-      ...(skillIds.length > 0
-        ? [
-            prisma.assistantSkill.createMany({
-              data: skillIds.map((skillId, index) => ({
-                assistantId: id,
-                skillId,
-                priority: index,
-              })),
-            }),
-          ]
-        : []),
-    ])
+    await prisma.$transaction(async (tx) => {
+      await tx.assistantSkill.deleteMany({ where: { assistantId: id } })
+      if (validSkillIds.length > 0) {
+        await tx.assistantSkill.createMany({
+          data: validSkillIds.map((skillId: string, index: number) => ({
+            assistantId: id,
+            skillId,
+            priority: index,
+          })),
+        })
+      }
+    })
 
     const updated = await prisma.assistantSkill.findMany({
       where: { assistantId: id },

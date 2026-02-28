@@ -64,6 +64,17 @@ export async function GET(request: Request) {
         const chunkCount = await getDocumentChunkCount(doc.id)
         // Use new schema field or fallback to metadata for backward compat
         const fileType = doc.fileType || (doc.metadata as { fileType?: string } | null)?.fileType || "markdown"
+
+        // Generate thumbnail URL for image files stored in S3
+        let thumbnailUrl: string | undefined
+        if (fileType === "image" && doc.s3Key) {
+          try {
+            thumbnailUrl = await getPresignedDownloadUrl(doc.s3Key, 3600)
+          } catch {
+            // Ignore thumbnail URL generation errors
+          }
+        }
+
         return {
           id: doc.id,
           title: doc.title,
@@ -73,6 +84,7 @@ export async function GET(request: Request) {
           artifactType: doc.artifactType || null,
           fileSize: doc.fileSize,
           hasS3File: !!doc.s3Key,
+          thumbnailUrl,
           chunkCount,
           groups: doc.groups.map((dg) => dg.group),
           createdAt: doc.createdAt.toISOString(),
@@ -252,8 +264,21 @@ export async function POST(request: Request) {
           console.error("OCR processing error:", ocrError)
           content = `[Image: ${file.name}]\n\nFailed to process image with OCR.`
         }
+      } else if (detectedType === "document" || detectedType === "text") {
+        // Office docs, structured data, code, config, etc.
+        fileType = "markdown" // treat extracted text as markdown for chunking
+        try {
+          const { EXT_TO_MIME } = await import("@/lib/files/mime-types")
+          const { extractTextFromBuffer } = await import("@/lib/files/parsers")
+          const detectedMime = EXT_TO_MIME[path.extname(file.name).toLowerCase()] || file.type || "text/plain"
+          console.log(`[Knowledge API] Extracting text from ${detectedType} file: ${file.name}`)
+          content = await extractTextFromBuffer(fileBuffer, detectedMime, file.name)
+        } catch (extractError) {
+          console.error("File extraction error:", extractError)
+          content = `[${file.name}]\n\nFailed to extract text from file.`
+        }
       } else {
-        // Markdown or text file
+        // Markdown or plain text
         fileType = "markdown"
         content = fileBuffer.toString("utf-8")
       }
@@ -281,11 +306,11 @@ export async function POST(request: Request) {
     // Generate document ID first so we can use it for S3 path
     const documentId = crypto.randomUUID()
 
-    // Upload file to S3 if present (PDF or image)
+    // Upload original file to S3 (all file types)
     let s3Key: string | undefined
     let fileSize: number | undefined
 
-    if (fileBuffer && (fileType === "pdf" || fileType === "image")) {
+    if (fileBuffer) {
       try {
         s3Key = S3Paths.document(
           orgContext?.organizationId || null,

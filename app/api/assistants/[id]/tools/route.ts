@@ -24,6 +24,7 @@ export async function GET(
             displayName: true,
             description: true,
             category: true,
+            icon: true,
             isBuiltIn: true,
             enabled: true,
           },

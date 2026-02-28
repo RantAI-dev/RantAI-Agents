@@ -21,7 +21,7 @@ export interface ChatMessage {
     content: string
     similarity?: number
   }>
-  metadata?: { artifactIds?: string[] } | null
+  metadata?: { artifactIds?: string[]; attachments?: Array<{ fileName: string; mimeType: string; type: string; text?: string; pageCount?: number; chunkCount?: number; fileId?: string }> } | null
 }
 
 export interface PersistedArtifactData {
@@ -37,6 +37,8 @@ export interface PersistedArtifactData {
 
 export interface ChatSession {
   id: string
+  /** Real database ID — set after createSession persists to DB. Use for API calls. */
+  dbId?: string
   title: string
   assistantId: string
   createdAt: Date
@@ -98,15 +100,12 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false)
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const loadedSessionsRef = useRef<Set<string>>(new Set())
+  const sessionsRef = useRef(sessions)
+  sessionsRef.current = sessions
 
   // Load session list (metadata only) from API
   useEffect(() => {
     const loadSessions = async () => {
-      // Restore active session ID from localStorage
-      const lastActive = localStorage.getItem(`${STORAGE_KEY}-active`)
-      if (lastActive) {
-        setActiveSessionId(lastActive)
-      }
       setIsLoaded(true)
 
       try {
@@ -124,13 +123,6 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     loadSessions()
   }, [])
 
-  // Save active session ID
-  useEffect(() => {
-    if (isLoaded && activeSessionId) {
-      localStorage.setItem(`${STORAGE_KEY}-active`, activeSessionId)
-    }
-  }, [activeSessionId, isLoaded])
-
   // Lazy-load messages when active session changes
   useEffect(() => {
     if (!activeSessionId) return
@@ -141,9 +133,12 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     // Skip if already loaded (has messages or was loaded before)
     if (session.messages.length > 0 || loadedSessionsRef.current.has(activeSessionId)) return
 
+    // Use dbId for API call if available (handles tempId → dbId mapping)
+    const apiId = session.dbId || activeSessionId
+
     const loadMessages = async () => {
       try {
-        const response = await fetch(`/api/dashboard/chat/sessions/${activeSessionId}`)
+        const response = await fetch(`/api/dashboard/chat/sessions/${apiId}`)
         if (response.ok) {
           const data = await response.json()
           const fullSession = parseFullSession(data)
@@ -190,27 +185,32 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
 
       if (response.ok) {
         const data = await response.json()
-        const dbSession: ChatSession = {
-          id: data.id,
+        // Keep tempId as the local session ID to avoid remounting ChatWorkspace.
+        // Store the real DB ID in `dbId` for API calls.
+        const persistedSession: ChatSession = {
+          ...newSession,
+          dbId: data.id,
           title: data.title,
-          assistantId: data.assistantId,
-          createdAt: new Date(data.createdAt),
-          messages: [],
         }
 
-        loadedSessionsRef.current.delete(tempId)
-        loadedSessionsRef.current.add(dbSession.id)
+        loadedSessionsRef.current.add(data.id)
         setSessions((prev) =>
-          prev.map((s) => (s.id === tempId ? dbSession : s))
+          prev.map((s) => (s.id === tempId ? persistedSession : s))
         )
-        setActiveSessionId(dbSession.id)
-        return dbSession
+        // Don't call setActiveSessionId — keep tempId to avoid key change & remount
+        return persistedSession
       }
     } catch (error) {
       console.error("[ChatSessions] Failed to create session in database:", error)
     }
 
     return newSession
+  }, [])
+
+  // Resolve the DB-persisted ID for a session (handles tempId → dbId mapping)
+  // Uses sessionsRef to always get the latest state (important for debounced callbacks)
+  const resolveDbId = useCallback((sessionId: string): string => {
+    return sessionsRef.current.find((s) => s.id === sessionId)?.dbId || sessionId
   }, [])
 
   // Update a session (title, messages, etc.)
@@ -220,15 +220,18 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
     )
 
     if (updates.title) {
-      fetch(`/api/dashboard/chat/sessions/${sessionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: updates.title }),
-      }).catch((error) => {
-        console.error("[ChatSessions] Failed to update session title:", error)
-      })
+      const apiId = resolveDbId(sessionId)
+      if (apiId) {
+        fetch(`/api/dashboard/chat/sessions/${apiId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: updates.title }),
+        }).catch((error) => {
+          console.error("[ChatSessions] Failed to update session title:", error)
+        })
+      }
     }
-  }, [])
+  }, [resolveDbId])
 
   // Sync messages to database (debounced)
   const syncMessages = useCallback((sessionId: string, messages: ChatMessage[]) => {
@@ -242,8 +245,10 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
 
     setIsSyncing(true)
     syncTimeoutRef.current = setTimeout(async () => {
+      // Resolve DB ID lazily (after debounce) so createSession has time to set dbId
+      const apiId = resolveDbId(sessionId)
       try {
-        const response = await fetch(`/api/dashboard/chat/sessions/${sessionId}`)
+        const response = await fetch(`/api/dashboard/chat/sessions/${apiId}`)
         if (!response.ok) {
           setIsSyncing(false)
           return
@@ -255,7 +260,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
         const newMessages = messages.filter((m) => !existingMessageIds.has(m.id))
 
         if (newMessages.length > 0) {
-          await fetch(`/api/dashboard/chat/sessions/${sessionId}/messages`, {
+          await fetch(`/api/dashboard/chat/sessions/${apiId}/messages`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -282,7 +287,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
             msg.content !== dbMsg.content ||
             JSON.stringify(msg.editHistory) !== JSON.stringify(dbMsg.editHistory)
           )) {
-            await fetch(`/api/dashboard/chat/sessions/${sessionId}/messages`, {
+            await fetch(`/api/dashboard/chat/sessions/${apiId}/messages`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -302,27 +307,27 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
         setIsSyncing(false)
       }
     }, 1000)
-  }, [])
+  }, [resolveDbId])
 
-  // Delete a session — uses functional state to avoid stale closures (#23)
+  // Delete a session — caller is responsible for navigation after deletion
   const deleteSession = useCallback((sessionId: string) => {
-    setSessions((prev) => {
-      const filtered = prev.filter((s) => s.id !== sessionId)
-      // Derive next active session from the filtered list
-      setActiveSessionId((current) =>
-        current === sessionId ? (filtered[0]?.id ?? null) : current
-      )
-      return filtered
-    })
+    const apiId = resolveDbId(sessionId)
+
+    setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+
+    // Clear active session if it was the deleted one
+    setActiveSessionId((current) =>
+      current === sessionId ? null : current
+    )
 
     loadedSessionsRef.current.delete(sessionId)
 
-    fetch(`/api/dashboard/chat/sessions/${sessionId}`, {
+    fetch(`/api/dashboard/chat/sessions/${apiId}`, {
       method: "DELETE",
     }).catch((error) => {
       console.error("[ChatSessions] Failed to delete session:", error)
     })
-  }, [])
+  }, [resolveDbId])
 
   // Cleanup debounce timeout on unmount
   useEffect(() => {

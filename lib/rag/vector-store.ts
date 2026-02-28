@@ -327,6 +327,68 @@ export async function getDocumentChunkCount(documentId: string): Promise<number>
 }
 
 /**
+ * Search for similar chunks scoped to specific document IDs
+ * Used for RAG retrieval on chat file attachments
+ */
+export async function searchByDocumentIds(
+  query: string,
+  documentIds: string[],
+  limit: number = 5,
+  minSimilarity: number = 0.3
+): Promise<SearchResult[]> {
+  if (documentIds.length === 0) return [];
+
+  const queryEmbedding = await generateEmbedding(query);
+  const surrealClient = await getSurrealClient();
+
+  const sql = `
+    SELECT
+      id,
+      document_id,
+      content,
+      metadata,
+      vector::similarity::cosine(embedding, $embedding) AS similarity
+    FROM document_chunk
+    WHERE document_id IN $document_ids
+    ORDER BY similarity DESC
+    LIMIT $limit
+  `;
+
+  const surrealResults = await surrealClient.query<SurrealChunk>(sql, {
+    embedding: queryEmbedding,
+    document_ids: documentIds,
+    limit,
+  });
+  const chunks = surrealResults[0]?.result || [];
+
+  if (chunks.length === 0) return [];
+
+  // Fetch document metadata from PostgreSQL
+  const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
+  const documents = await prisma.document.findMany({
+    where: { id: { in: resultDocIds } },
+    select: { id: true, title: true, categories: true, subcategory: true },
+  });
+  const docMap = new Map(documents.map((d) => [d.id, d]));
+
+  return chunks
+    .filter((chunk) => chunk.similarity >= minSimilarity)
+    .map((chunk) => {
+      const doc = docMap.get(chunk.document_id);
+      return {
+        id: chunk.id,
+        content: chunk.content,
+        documentId: chunk.document_id,
+        documentTitle: doc?.title || "Unknown",
+        categories: doc?.categories || [],
+        subcategory: doc?.subcategory || null,
+        section: (chunk.metadata as { section?: string } | null)?.section || null,
+        similarity: chunk.similarity,
+      };
+    });
+}
+
+/**
  * Store chunks for an existing document (used by knowledge API)
  */
 export async function storeChunks(
