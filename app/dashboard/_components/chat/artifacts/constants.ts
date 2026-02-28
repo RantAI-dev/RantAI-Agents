@@ -9,6 +9,7 @@ import {
   Sigma,
   Presentation,
   Terminal,
+  Box,
 } from "lucide-react"
 import type { ArtifactType } from "./types"
 
@@ -23,6 +24,7 @@ export const TYPE_ICONS: Record<ArtifactType, typeof Globe> = {
   "text/latex": Sigma,
   "application/slides": Presentation,
   "application/python": Terminal,
+  "application/3d": Box,
 }
 
 export const TYPE_LABELS: Record<ArtifactType, string> = {
@@ -36,6 +38,7 @@ export const TYPE_LABELS: Record<ArtifactType, string> = {
   "text/latex": "LaTeX / Math",
   "application/slides": "Slides",
   "application/python": "Python Script",
+  "application/3d": "3D Scene",
 }
 
 export const TYPE_COLORS: Record<ArtifactType, string> = {
@@ -49,4 +52,5 @@ export const TYPE_COLORS: Record<ArtifactType, string> = {
   "text/latex": "text-rose-500 bg-rose-500/10 border-rose-500/20",
   "application/slides": "text-indigo-500 bg-indigo-500/10 border-indigo-500/20",
   "application/python": "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
+  "application/3d": "text-pink-500 bg-pink-500/10 border-pink-500/20",
 }

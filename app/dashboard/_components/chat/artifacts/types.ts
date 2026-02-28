@@ -9,6 +9,7 @@ export type ArtifactType =
   | "text/latex"
   | "application/slides"
   | "application/python"
+  | "application/3d"
 
 export interface ArtifactVersion {
   content: string
