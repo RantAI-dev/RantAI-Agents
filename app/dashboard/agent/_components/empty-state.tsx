@@ -1,6 +1,6 @@
 "use client"
 
-import { Headphones, Users, Power } from "lucide-react"
+import { Headphones, Users, Power } from "@/lib/icons"
 
 interface EmptyStateProps {
   isOnline: boolean

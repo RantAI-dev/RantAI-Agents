@@ -1,73 +1,17 @@
-import {
-  BarChart,
-  Calculator,
-  Clock,
-  Cloud,
-  Code,
-  FileText,
-  GitBranch,
-  Globe,
-  Heart,
-  Languages,
-  Mail,
-  PenTool,
-  Search,
-  Sparkles,
-  TrendingUp,
-  Wrench,
-  Zap,
-  Workflow,
-  Box,
-  Shield,
-  Database,
-  MessageSquare,
-  BookOpen,
-  type LucideIcon,
-} from "lucide-react"
+import { ICON_MAP, Sparkles, type IconComponent } from "@/lib/icons"
 import { cn } from "@/lib/utils"
-
-/**
- * Static map of Lucide icon names to components.
- * Covers all icons used by community skills/tools + common marketplace icons.
- */
-const LUCIDE_MAP: Record<string, LucideIcon> = {
-  BarChart,
-  Calculator,
-  Clock,
-  Cloud,
-  Code,
-  FileText,
-  GitBranch,
-  Globe,
-  Heart,
-  Languages,
-  Mail,
-  PenTool,
-  Search,
-  Sparkles,
-  TrendingUp,
-  Wrench,
-  Zap,
-  Workflow,
-  Box,
-  Shield,
-  Database,
-  MessageSquare,
-  BookOpen,
-}
 
 /** Detect if a string is an emoji (non-ASCII, not a URL, not a known icon name) */
 function isEmoji(str: string): boolean {
   if (!str || str.startsWith("http") || str.startsWith("/")) return false
-  if (LUCIDE_MAP[str]) return false
-  // Check if first char is outside basic ASCII range (emoji / unicode)
+  if (ICON_MAP[str]) return false
   const code = str.codePointAt(0)
   return !!code && code > 255
 }
 
 interface DynamicIconProps {
   icon?: string
-  fallback?: LucideIcon
+  fallback?: IconComponent
   className?: string
   emojiClassName?: string
 }
@@ -102,10 +46,10 @@ export function DynamicIcon({
     )
   }
 
-  // Lucide icon name
-  const LucideComponent = LUCIDE_MAP[icon]
-  if (LucideComponent) {
-    return <LucideComponent className={className} />
+  // Icon name from map
+  const IconComponent = ICON_MAP[icon]
+  if (IconComponent) {
+    return <IconComponent className={className} />
   }
 
   // Fallback

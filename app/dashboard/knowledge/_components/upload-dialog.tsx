@@ -28,7 +28,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkles, ChevronsUpDown, X, FileCode, FileSpreadsheet, BookOpen, Info, Box } from "lucide-react"
+import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkles, ChevronsUpDown, X, FileCode, FileSpreadsheet, BookOpen, Info, Box } from "@/lib/icons"
 import { CategoryDialog, Category } from "./category-dialog"
 import { cn } from "@/lib/utils"
 

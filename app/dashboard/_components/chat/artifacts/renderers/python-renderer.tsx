@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { Loader2, Play, Square, RotateCcw, AlertTriangle, Terminal } from "lucide-react"
+import { Loader2, Play, Square, RotateCcw, AlertTriangle, Terminal } from "@/lib/icons"
 import { StreamdownContent } from "../../streamdown-content"
 
 interface PythonRendererProps {

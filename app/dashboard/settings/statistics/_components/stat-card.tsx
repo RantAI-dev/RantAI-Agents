@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, TrendingDown, type LucideIcon } from "lucide-react"
+import { TrendingUp, TrendingDown, type IconComponent } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 type AccentColor = "primary" | "amber" | "cyan" | "violet" | "chart-1" | "chart-2" | "chart-3"
@@ -48,7 +48,7 @@ interface StatCardProps {
   title: string
   value: string | number
   subtitle?: string
-  icon: LucideIcon
+  icon: IconComponent
   trend?: number
   accent?: AccentColor
   className?: string

@@ -13,7 +13,7 @@ import {
   Mail,
   Package,
   ArrowLeft,
-} from "lucide-react"
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { TypingIndicator } from "@/components/chat/typing-indicator"
 

@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/chart"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { MessageSquare } from "lucide-react"
+import { MessageSquare } from "@/lib/icons"
 
 const chartConfig = {
   count: {

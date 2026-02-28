@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { Loader2, AlertTriangle, RotateCcw, Code } from "lucide-react"
+import { Loader2, AlertTriangle, RotateCcw, Code } from "@/lib/icons"
 import { useTheme } from "next-themes"
 
 interface MermaidRendererProps {

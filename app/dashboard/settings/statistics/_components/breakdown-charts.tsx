@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/chart"
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Radio, Bot } from "lucide-react"
+import { Radio, Bot } from "@/lib/icons"
 
 const COLORS = [
   "var(--chart-1)",

@@ -19,7 +19,7 @@ import {
   MessageSquare,
   ToggleLeft,
   ToggleRight,
-} from "lucide-react"
+} from "@/lib/icons"
 import { useEmbedKeys } from "@/hooks/use-embed-keys"
 import { EmbedKeyDialog } from "./_components/embed-key-dialog"
 import { EmbedCodeDialog } from "./_components/embed-code-dialog"

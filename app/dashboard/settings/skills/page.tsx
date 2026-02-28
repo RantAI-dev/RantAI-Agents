@@ -19,7 +19,7 @@ import {
   X,
   SlidersHorizontal,
   Check,
-} from "lucide-react"
+} from "@/lib/icons"
 import Picker from "@emoji-mart/react"
 import data from "@emoji-mart/data"
 import { DynamicIcon } from "@/components/ui/dynamic-icon"

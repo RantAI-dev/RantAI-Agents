@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2 } from "lucide-react"
+import { Loader2 } from "@/lib/icons"
 import type { MarketplaceItem } from "@/hooks/use-marketplace"
 
 interface JsonSchemaProperty {

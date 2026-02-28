@@ -3,7 +3,7 @@
 import { memo, useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { X, FileText, Image as ImageIcon, File } from "lucide-react"
+import { X, FileText, Image as ImageIcon, File } from "@/lib/icons"
 
 interface FilePreviewProps {
   files: File[]

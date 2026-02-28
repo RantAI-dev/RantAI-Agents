@@ -1,6 +1,6 @@
 "use client"
 
-import { Loader2 } from "lucide-react"
+import { Loader2 } from "@/lib/icons"
 import { Badge } from "@/components/ui/badge"
 import {
   WORKFLOW_TEMPLATES,

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { FileText, AlignLeft } from "lucide-react"
+import { FileText, AlignLeft } from "@/lib/icons"
 
 interface StructuredPromptEditorProps {
   systemPrompt: string

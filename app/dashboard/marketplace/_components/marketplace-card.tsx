@@ -13,8 +13,8 @@ import {
   Bot,
   Plug,
   Plus,
-  type LucideIcon,
-} from "lucide-react"
+  type IconComponent,
+} from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { DynamicIcon } from "@/components/ui/dynamic-icon"
 import { cn } from "@/lib/utils"
@@ -29,7 +29,7 @@ const TYPE_STYLES: Record<
     accentBorder: string
     glowClass: string
     badgeBg: string
-    icon: LucideIcon
+    icon: IconComponent
   }
 > = {
   skill: {

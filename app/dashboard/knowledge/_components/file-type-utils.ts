@@ -1,7 +1,7 @@
-import { FileText, FileType, Image, Globe, FileCode, GitBranch, Code, Table2, Sigma, Presentation, Terminal, type LucideIcon } from "lucide-react"
+import { FileText, FileType, Image, Globe, FileCode, GitBranch, Code, Table2, Sigma, Presentation, Terminal, type IconComponent } from "@/lib/icons"
 
 interface FileTypeInfo {
-  Icon: LucideIcon
+  Icon: IconComponent
   bgColor: string
   iconColor: string
   accentColor: string

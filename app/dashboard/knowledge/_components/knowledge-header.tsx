@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Plus, MoreHorizontal, Pencil, Trash2, Folder } from "lucide-react"
+import { Plus, MoreHorizontal, Pencil, Trash2, Folder } from "@/lib/icons"
 import { DashboardPageHeader } from "../../_components/dashboard-page-header"
 
 export interface KnowledgeBaseHeader {

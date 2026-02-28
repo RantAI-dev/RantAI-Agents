@@ -1,6 +1,6 @@
 import Image from "next/image"
 import Link from "next/link"
-import { Bot, BookOpen, Globe, Users, Zap, FileSearch } from "lucide-react"
+import { Bot, BookOpen, Globe, Users, Zap, FileSearch } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import {
   Card,

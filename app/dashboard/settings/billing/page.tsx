@@ -1,6 +1,6 @@
 "use client"
 
-import { CreditCard, Sparkles, Check, Building2, Wallet, Receipt, Plus, MoreHorizontal } from "lucide-react"
+import { CreditCard, Sparkles, Check, Building2, Wallet, Receipt, Plus, MoreHorizontal } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"

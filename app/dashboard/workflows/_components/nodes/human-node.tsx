@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { UserCheck, HandHelping, ArrowRightLeft } from "lucide-react"
+import { UserCheck, HandHelping, ArrowRightLeft } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import { NodeType, type HumanInputNodeData } from "@/lib/workflow/types"
 

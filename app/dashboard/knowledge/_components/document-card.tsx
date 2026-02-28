@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { MoreVertical, Trash2, Eye, Pencil } from "lucide-react"
+import { MoreVertical, Trash2, Eye, Pencil } from "@/lib/icons"
 import { useState } from "react"
 import { getFileTypeIcon, formatFileSize } from "./file-type-utils"
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Check, ChevronsUpDown, Plus, Building2, Settings } from "lucide-react"
+import { Check, ChevronsUpDown, Plus, Building2, Settings } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {

@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { GitBranch, Merge } from "lucide-react"
+import { GitBranch, Merge } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import { NodeType, type ParallelNodeData, type MergeNodeData } from "@/lib/workflow/types"
 

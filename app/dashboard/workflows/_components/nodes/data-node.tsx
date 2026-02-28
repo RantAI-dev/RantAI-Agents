@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { Shuffle, Filter, Layers, Braces } from "lucide-react"
+import { Shuffle, Filter, Layers, Braces } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import {
   NodeType,

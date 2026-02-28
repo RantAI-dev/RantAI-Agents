@@ -1,4 +1,4 @@
-import { Settings, Info, ToggleLeft, Code, Wrench, Sparkles, Plug, KeyRound, Brain, BarChart3, CreditCard } from "lucide-react"
+import { Settings, Info, ToggleLeft, Code, Wrench, Sparkles, Plug, KeyRound, Brain, BarChart3, CreditCard } from "@/lib/icons"
 
 export const SETTINGS_NAV_ITEMS = [
   {
@@ -68,4 +68,3 @@ export const SETTINGS_NAV_ITEMS = [
     description: "System information",
   },
 ] as const
-

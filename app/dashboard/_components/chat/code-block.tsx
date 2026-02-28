@@ -5,7 +5,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
-import { Check, Copy } from "lucide-react"
+import { Check, Copy } from "@/lib/icons"
 
 interface CodeBlockProps {
   language?: string

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useEffect, useState, useCallback, useRef } from "react"
-import { AlertTriangle, RotateCcw, Code, Loader2 } from "lucide-react"
+import { AlertTriangle, RotateCcw, Code, Loader2 } from "@/lib/icons"
 
 interface ReactRendererProps {
   content: string

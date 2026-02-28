@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { MessageSquare, ArrowRight } from "lucide-react"
+import { MessageSquare, ArrowRight } from "@/lib/icons"
 
 const settingsItems = [
   {

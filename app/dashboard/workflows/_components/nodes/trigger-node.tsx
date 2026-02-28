@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { Zap, Webhook, Clock, Radio } from "lucide-react"
+import { Zap, Webhook, Clock, Radio } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import { NodeType, type TriggerNodeData } from "@/lib/workflow/types"
 

@@ -15,7 +15,7 @@ import {
   Check,
   ArrowDown,
   Info,
-} from "lucide-react"
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
 import { formatDistanceToNow } from "date-fns"

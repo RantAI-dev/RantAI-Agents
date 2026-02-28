@@ -3,7 +3,7 @@
 import { memo } from "react"
 import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
-import { CornerDownRight, X } from "lucide-react"
+import { CornerDownRight, X } from "@/lib/icons"
 
 interface ThreadIndicatorProps {
   parentContent: string

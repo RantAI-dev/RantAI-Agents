@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { Search, ChevronDown, ChevronRight } from "lucide-react"
+import { Search, ChevronDown, ChevronRight } from "@/lib/icons"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import {

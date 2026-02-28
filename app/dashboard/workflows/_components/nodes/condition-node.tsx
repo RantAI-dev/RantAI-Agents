@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { GitFork, ArrowRightLeft } from "lucide-react"
+import { GitFork, ArrowRightLeft } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import { NodeType, type ConditionNodeData, type SwitchNodeData } from "@/lib/workflow/types"
 

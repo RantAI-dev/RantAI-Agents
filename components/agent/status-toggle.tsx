@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Power, Wifi, WifiOff } from "lucide-react"
+import { Power, Wifi, WifiOff } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 interface StatusToggleProps {

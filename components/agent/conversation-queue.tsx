@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Users, Clock, Package, Mail, MessageSquare } from "lucide-react"
+import { Users, Clock, Package, Mail, MessageSquare } from "@/lib/icons"
 import { formatDistanceToNow } from "date-fns"
 import type { QueueConversation } from "@/types/socket"
 

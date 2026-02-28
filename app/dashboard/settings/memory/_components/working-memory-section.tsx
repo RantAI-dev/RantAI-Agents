@@ -15,7 +15,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Trash2, ChevronDown, Cpu } from "lucide-react"
+import { Trash2, ChevronDown, Cpu } from "@/lib/icons"
 import type { MemoryItem } from "@/hooks/use-memory"
 import type { WorkingMemoryData } from "@/lib/memory/types"
 

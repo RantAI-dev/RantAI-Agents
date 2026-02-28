@@ -2,7 +2,7 @@
 
 import { useRef, memo } from "react"
 import { Button } from "@/components/ui/button"
-import { Paperclip } from "lucide-react"
+import { Paperclip } from "@/lib/icons"
 import {
   Tooltip,
   TooltipContent,

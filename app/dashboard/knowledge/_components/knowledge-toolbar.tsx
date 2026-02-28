@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, X, LayoutGrid, List } from "lucide-react"
+import { Search, X, LayoutGrid, List } from "@/lib/icons"
 import type { ViewMode } from "./document-list"
 import {
   Select,

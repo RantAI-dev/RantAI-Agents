@@ -17,7 +17,7 @@ import {
   Store,
   AlertTriangle,
   Settings2,
-} from "lucide-react"
+} from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"

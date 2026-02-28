@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback } from "react"
-import { RotateCcw, AlertTriangle } from "lucide-react"
+import { RotateCcw, AlertTriangle } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { ChatWorkspace } from "@/app/dashboard/_components/chat/chat-workspace"
 import { useAssistantTestSessions } from "@/hooks/use-assistant-test-sessions"

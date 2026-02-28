@@ -18,7 +18,7 @@ import {
   SlidersHorizontal,
   Check,
   X,
-} from "lucide-react"
+} from "@/lib/icons"
 import { DynamicIcon } from "@/components/ui/dynamic-icon"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"

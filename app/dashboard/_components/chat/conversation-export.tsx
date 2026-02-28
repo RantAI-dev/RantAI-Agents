@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Download, FileText, FileJson } from "lucide-react"
+import { Download, FileText, FileJson } from "@/lib/icons"
 
 interface Message {
   id: string

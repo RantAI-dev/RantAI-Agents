@@ -12,7 +12,7 @@ import {
   MessageSquare,
   LogOut,
   ChevronRight,
-} from "lucide-react"
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { brand } from "@/lib/branding"
 

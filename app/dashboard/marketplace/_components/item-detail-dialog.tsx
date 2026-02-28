@@ -28,7 +28,7 @@ import {
   FileText,
   Settings,
   Plus,
-} from "lucide-react"
+} from "@/lib/icons"
 import { DynamicIcon } from "@/components/ui/dynamic-icon"
 import type {
   MarketplaceItemDetail,

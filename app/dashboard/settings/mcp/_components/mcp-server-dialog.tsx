@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select"
 import { useMcpServers, type McpServerItem, type EnvKeyDef } from "@/hooks/use-mcp-servers"
 import { toast } from "sonner"
-import { ExternalLink, Loader2 } from "lucide-react"
+import { ExternalLink, Loader2 } from "@/lib/icons"
 
 interface McpServerDialogProps {
   open: boolean

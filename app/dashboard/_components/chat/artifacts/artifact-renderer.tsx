@@ -1,7 +1,7 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { Loader2 } from "lucide-react"
+import { Loader2 } from "@/lib/icons"
 import type { Artifact } from "./types"
 import { StreamdownContent } from "../streamdown-content"
 

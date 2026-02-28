@@ -1,4 +1,4 @@
-import { Bot, Sparkles, Wrench, Plug, Workflow } from "lucide-react"
+import { Bot, Sparkles, Wrench, Plug, Workflow } from "@/lib/icons"
 
 export const MARKETPLACE_NAV_ITEMS = [
   { title: "Assistants", href: "/dashboard/marketplace", icon: Bot },

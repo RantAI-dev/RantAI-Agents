@@ -10,7 +10,7 @@ import {
   Presentation,
   Terminal,
   Box,
-} from "lucide-react"
+} from "@/lib/icons"
 import type { ArtifactType } from "./types"
 
 export const TYPE_ICONS: Record<ArtifactType, typeof Globe> = {

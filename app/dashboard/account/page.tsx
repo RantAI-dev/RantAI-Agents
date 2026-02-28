@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, Save, User, Mail, CheckCircle } from "lucide-react"
+import { Loader2, Save, User, Mail, CheckCircle } from "@/lib/icons"
 import { AvatarUpload } from "./_components/avatar-upload"
 import { useProfileStore } from "@/hooks/use-profile"
 

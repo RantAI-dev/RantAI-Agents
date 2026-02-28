@@ -62,7 +62,18 @@
       "Bash(docker compose up -d --force-recreate piston)",
       "Bash(head -5 ls node_modules/officeparser/*.d.ts)",
       "Bash(docker exec rantai-agents-searxng cat /etc/searxng/settings.yml)",
-      "Bash(docker compose up -d searxng)"
+      "Bash(docker compose up -d searxng)",
+      "Bash(git push origin main)",
+      "Bash(git config --global credential.helper)",
+      "Bash(ssh -T git@github.com)",
+      "WebFetch(domain:lineicons.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(node:*)",
+      "WebFetch(domain:reactbits.dev)",
+      "Bash(gh api:*)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:reactscript.com)",
+      "Bash(npx jsrepo:*)"
     ]
   }
 }

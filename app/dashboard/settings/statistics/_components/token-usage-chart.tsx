@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/chart"
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Coins } from "lucide-react"
+import { Coins } from "@/lib/icons"
 
 const chartConfig = {
   input: {

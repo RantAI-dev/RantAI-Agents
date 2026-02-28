@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { Repeat } from "lucide-react"
+import { Repeat } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import type { LoopNodeData } from "@/lib/workflow/types"
 

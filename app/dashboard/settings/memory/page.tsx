@@ -2,7 +2,7 @@
 
 import { DashboardPageHeader } from "../../_components/dashboard-page-header"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Brain, Cpu, Search, UserCircle } from "lucide-react"
+import { Brain, Cpu, Search, UserCircle } from "@/lib/icons"
 import { useMemory } from "@/hooks/use-memory"
 import { WorkingMemorySection } from "./_components/working-memory-section"
 import { SemanticMemorySection } from "./_components/semantic-memory-section"

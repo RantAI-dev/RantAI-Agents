@@ -1,7 +1,7 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { Plus } from "lucide-react"
+import { Plus } from "@/lib/icons"
 import type { Category } from "./category-dialog"
 
 interface CategoryFilterRowProps {

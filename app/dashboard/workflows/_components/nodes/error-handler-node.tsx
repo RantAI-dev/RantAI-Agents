@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { ShieldAlert } from "lucide-react"
+import { ShieldAlert } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import type { ErrorHandlerNodeData } from "@/lib/workflow/types"
 

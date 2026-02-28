@@ -2,7 +2,7 @@
 
 import { memo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight, Copy, Pencil, Check } from "lucide-react"
+import { ChevronLeft, ChevronRight, Copy, Pencil, Check } from "@/lib/icons"
 import {
   Tooltip,
   TooltipContent,

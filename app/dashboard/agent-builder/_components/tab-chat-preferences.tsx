@@ -3,7 +3,7 @@
 import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
-import { MessageSquareText } from "lucide-react"
+import { MessageSquareText } from "@/lib/icons"
 import type { ChatConfig } from "@/lib/types/assistant"
 
 interface TabChatPreferencesProps {

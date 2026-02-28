@@ -2,7 +2,7 @@
 
 import { memo, useState, useCallback, type ReactNode } from "react"
 import { Handle, Position } from "@xyflow/react"
-import { X, StickyNote, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
+import { X, StickyNote, CheckCircle2, XCircle, AlertCircle } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { getNodeHeaderColor, type WorkflowNodeData } from "@/lib/workflow/types"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"

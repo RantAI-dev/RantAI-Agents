@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
-import { ChevronLeft, ChevronRight, Download, Loader2 } from "lucide-react"
+import { ChevronLeft, ChevronRight, Download, Loader2 } from "@/lib/icons"
 import type { PresentationData } from "@/lib/slides/types"
 import { DEFAULT_THEME } from "@/lib/slides/types"
 import { slidesToHtml } from "@/lib/slides/render-html"

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { Database, Trash2, Folder, Check, Wrench, AlertTriangle, Search, Package, Plug, ChevronDown, ChevronRight, Cpu } from "lucide-react"
+import { Database, Trash2, Folder, Check, Wrench, AlertTriangle, Search, Package, Plug, ChevronDown, ChevronRight, Cpu } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"

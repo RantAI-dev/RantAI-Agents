@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, SlidersHorizontal } from "lucide-react"
+import { Loader2, SlidersHorizontal } from "@/lib/icons"
 import {
   Popover,
   PopoverContent,

@@ -10,7 +10,7 @@ import {
   type SortingState,
   type ColumnDef,
 } from "@tanstack/react-table"
-import { ArrowUpDown, Download, Search, AlertTriangle } from "lucide-react"
+import { ArrowUpDown, Download, Search, AlertTriangle } from "@/lib/icons"
 
 interface SheetRendererProps {
   content: string

@@ -23,7 +23,7 @@ import {
   Headphones,
   Loader2,
   FileText,
-} from "lucide-react"
+} from "@/lib/icons"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { cn } from "@/lib/utils"

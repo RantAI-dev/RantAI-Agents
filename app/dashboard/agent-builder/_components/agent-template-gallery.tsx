@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2 } from "lucide-react"
+import { Loader2 } from "@/lib/icons"
 import { Badge } from "@/components/ui/badge"
 import { AGENT_TEMPLATES, type AgentTemplate } from "@/lib/templates/agent-templates"
 import { resolveToolNameToIds } from "@/lib/templates/utils"

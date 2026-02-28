@@ -17,7 +17,7 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
-} from "lucide-react"
+} from "@/lib/icons"
 import { brand } from "@/lib/branding"
 
 interface ChannelConfig {

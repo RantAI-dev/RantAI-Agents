@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2 } from "lucide-react"
+import { Loader2 } from "@/lib/icons"
 import { useAssistants } from "@/hooks/use-assistants"
 import type { EmbedApiKeyResponse, EmbedApiKeyInput, WidgetConfig } from "@/lib/embed/types"
 import { DEFAULT_WIDGET_CONFIG } from "@/lib/embed/types"

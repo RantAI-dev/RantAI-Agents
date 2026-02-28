@@ -4,7 +4,7 @@ import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { HelpCircle } from "lucide-react"
+import { HelpCircle } from "@/lib/icons"
 import {
   Tooltip,
   TooltipContent,

@@ -6,7 +6,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { Calendar } from "lucide-react"
+import { Calendar } from "@/lib/icons"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
 import type { StatisticsFilters } from "@/hooks/use-statistics"

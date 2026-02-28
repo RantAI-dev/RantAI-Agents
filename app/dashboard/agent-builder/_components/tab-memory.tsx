@@ -3,7 +3,7 @@
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Brain } from "lucide-react"
+import { Brain } from "@/lib/icons"
 import type { MemoryConfig } from "@/lib/types/assistant"
 
 interface TabMemoryProps {

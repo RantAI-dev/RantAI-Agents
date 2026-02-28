@@ -29,7 +29,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Folder, MoreHorizontal, Pencil, Trash2, Plus, ChevronRight } from "lucide-react"
+import { Folder, MoreHorizontal, Pencil, Trash2, Plus, ChevronRight } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 export interface KnowledgeGroup {

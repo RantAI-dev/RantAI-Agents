@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, useEffect, useCallback } from "react"
-import { AlertTriangle, Wand2, Copy, Check, MonitorCog } from "lucide-react"
+import { AlertTriangle, Wand2, Copy, Check, MonitorCog } from "@/lib/icons"
 
 /* ── Sanitize AI-generated scene code ──────────────────────── */
 

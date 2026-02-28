@@ -10,7 +10,7 @@ import {
   Globe,
   ExternalLink,
   Sparkles,
-} from "lucide-react"
+} from "@/lib/icons"
 import { brand } from "@/lib/branding"
 
 const features = [

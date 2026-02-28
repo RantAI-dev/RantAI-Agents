@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Trash2, Search } from "lucide-react"
+import { Trash2, Search } from "@/lib/icons"
 import type { MemoryItem } from "@/hooks/use-memory"
 
 interface SemanticMemorySectionProps {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Headphones, X } from "lucide-react"
+import { Headphones, X } from "@/lib/icons"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"

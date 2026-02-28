@@ -39,7 +39,7 @@ import {
   Edit,
   Search,
   ShieldCheck,
-} from "lucide-react"
+} from "@/lib/icons"
 
 interface Credential {
   id: string

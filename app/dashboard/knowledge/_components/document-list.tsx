@@ -3,7 +3,7 @@
 import { DocumentCard } from "./document-card"
 import { DocumentRow } from "./document-row"
 import { Button } from "@/components/ui/button"
-import { FileText, Plus, FilterX } from "lucide-react"
+import { FileText, Plus, FilterX } from "@/lib/icons"
 
 interface DocumentGroup {
   id: string

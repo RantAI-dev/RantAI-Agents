@@ -23,7 +23,7 @@ import {
   HelpCircle,
   Map,
   Tag,
-} from "lucide-react"
+} from "@/lib/icons"
 import { useState, useCallback, useRef, useEffect } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"

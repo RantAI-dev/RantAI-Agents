@@ -1,6 +1,6 @@
 "use client"
 
-import { Eye, Wrench, Zap } from "lucide-react"
+import { Eye, Wrench, Zap } from "@/lib/icons"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import {

@@ -11,7 +11,7 @@ import {
   Play,
   Sparkles,
   PanelRight,
-} from "lucide-react"
+} from "@/lib/icons"
 
 const STORAGE_KEY = "workflow-onboarding-completed"
 

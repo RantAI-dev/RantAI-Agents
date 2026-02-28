@@ -1,6 +1,6 @@
 "use client"
 
-import { MoreHorizontal, Star, Copy, Trash2, Wrench, Database, Eye } from "lucide-react"
+import { MoreHorizontal, Star, Copy, Trash2, Wrench, Database, Eye } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {

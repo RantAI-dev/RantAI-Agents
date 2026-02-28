@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
-import { Upload, X, Loader2 } from "lucide-react"
+import { Upload, X, Loader2 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import {
   Popover,

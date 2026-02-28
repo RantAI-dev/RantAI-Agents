@@ -4,7 +4,7 @@ import { memo, useMemo, useCallback, useRef, useEffect, useState } from "react"
 import { useTheme } from "next-themes"
 import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
-import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react"
+import { ZoomIn, ZoomOut, Maximize2 } from "@/lib/icons"
 
 // Dynamic import to avoid SSR issues
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {

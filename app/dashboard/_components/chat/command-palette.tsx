@@ -17,7 +17,7 @@ import {
   Sun,
   Moon,
   Command,
-} from "lucide-react"
+} from "@/lib/icons"
 import { useTheme } from "next-themes"
 
 interface CommandPaletteProps {

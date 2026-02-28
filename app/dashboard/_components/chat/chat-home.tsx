@@ -16,7 +16,7 @@ import {
   Send,
   Loader2,
   Square,
-} from "lucide-react"
+} from "@/lib/icons"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"

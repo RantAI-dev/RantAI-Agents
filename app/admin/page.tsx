@@ -11,7 +11,7 @@ import {
   Clock,
   ArrowRight,
   Zap,
-} from "lucide-react"
+} from "@/lib/icons"
 
 interface Stats {
   totalConversations: number

@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import { motion } from "framer-motion"
-import { ArrowUpRight } from "lucide-react"
+import { ArrowUpRight } from "@/lib/icons"
 import type { Assistant } from "@/lib/types/assistant"
 
 interface QuickSuggestionsProps {

@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { Search, Database, HardDrive } from "lucide-react"
+import { Search, Database, HardDrive } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import {
   NodeType,

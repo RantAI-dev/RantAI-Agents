@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef, use } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { toast } from "sonner"
-import { ArrowLeft, Loader2, GitBranch, Monitor, Copy, Check, Code2, FormInput, Clock, CheckCircle2, XCircle, PauseCircle } from "lucide-react"
+import { ArrowLeft, Loader2, GitBranch, Monitor, Copy, Check, Code2, FormInput, Clock, CheckCircle2, XCircle, PauseCircle } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,

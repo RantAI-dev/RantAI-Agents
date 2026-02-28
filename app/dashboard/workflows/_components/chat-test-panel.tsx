@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { X, Send, Trash2, Loader2, Bot, User, ThumbsUp, ThumbsDown } from "lucide-react"
+import { X, Send, Trash2, Loader2, Bot, User, ThumbsUp, ThumbsDown } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"

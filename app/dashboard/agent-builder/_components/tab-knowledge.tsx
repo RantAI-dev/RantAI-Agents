@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Database, ExternalLink, Check, Folder } from "lucide-react"
+import { Database, ExternalLink, Check, Folder } from "@/lib/icons"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"

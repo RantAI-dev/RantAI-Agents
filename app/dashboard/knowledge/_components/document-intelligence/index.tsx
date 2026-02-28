@@ -2,7 +2,7 @@
 
 import { memo, useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Users, Link2, Network, Loader2 } from "lucide-react"
+import { Users, Link2, Network, Loader2 } from "@/lib/icons"
 import EntityList from "./entity-list"
 import RelationList from "./relation-list"
 import KnowledgeGraph from "./knowledge-graph"

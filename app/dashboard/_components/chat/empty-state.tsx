@@ -1,6 +1,6 @@
 "use client"
 
-import { MessageSquare, Plus } from "lucide-react"
+import { MessageSquare, Plus } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 
 interface EmptyStateProps {

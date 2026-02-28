@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Code, ExternalLink } from "lucide-react"
+import { Code, ExternalLink } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import type { ArtifactType } from "./types"
 import { TYPE_ICONS, TYPE_COLORS } from "./constants"

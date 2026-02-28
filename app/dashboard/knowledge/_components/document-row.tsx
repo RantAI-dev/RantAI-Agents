@@ -18,7 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { MoreVertical, Trash2, Eye, Pencil, CircleDot, RefreshCw, Loader2 } from "lucide-react"
+import { MoreVertical, Trash2, Eye, Pencil, CircleDot, RefreshCw, Loader2 } from "@/lib/icons"
 import { formatDistanceToNow, format } from "date-fns"
 import { useState } from "react"
 import { getFileTypeIcon, formatFileSize } from "./file-type-utils"

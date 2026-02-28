@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback } from "react"
-import { AlertTriangle, RotateCcw, Code } from "lucide-react"
+import { AlertTriangle, RotateCcw, Code } from "@/lib/icons"
 import katex from "katex"
 import "katex/dist/katex.min.css"
 

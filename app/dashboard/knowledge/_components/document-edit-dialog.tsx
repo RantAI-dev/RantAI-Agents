@@ -27,7 +27,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Loader2, Check, Folder, Plus, ChevronsUpDown, X } from "lucide-react"
+import { Loader2, Check, Folder, Plus, ChevronsUpDown, X } from "@/lib/icons"
 import { CategoryDialog, Category } from "./category-dialog"
 import { cn } from "@/lib/utils"
 

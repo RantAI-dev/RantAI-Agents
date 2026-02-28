@@ -26,11 +26,11 @@ import {
   ShieldAlert,
   Workflow,
   Braces,
-  type LucideIcon,
-} from "lucide-react"
+  type IconComponent,
+} from "@/lib/icons"
 import { NodeType } from "@/lib/workflow/types"
 
-export const NODE_ICON_MAP: Record<string, LucideIcon> = {
+export const NODE_ICON_MAP: Record<string, IconComponent> = {
   [NodeType.TRIGGER_MANUAL]: Zap,
   [NodeType.TRIGGER_WEBHOOK]: Webhook,
   [NodeType.TRIGGER_SCHEDULE]: Clock,

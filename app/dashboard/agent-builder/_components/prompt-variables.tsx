@@ -1,7 +1,7 @@
 "use client"
 
 import { memo } from "react"
-import { Variable } from "lucide-react"
+import { Variable } from "@/lib/icons"
 import { Label } from "@/components/ui/label"
 import {
   Tooltip,

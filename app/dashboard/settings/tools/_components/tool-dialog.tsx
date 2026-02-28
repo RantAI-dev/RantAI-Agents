@@ -29,7 +29,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { useTools } from "@/hooks/use-tools"
 import { toast } from "sonner"
-import { Loader2, Plus, Trash2, ChevronDown, Globe } from "lucide-react"
+import { Loader2, Plus, Trash2, ChevronDown, Globe } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 interface ParameterRow {

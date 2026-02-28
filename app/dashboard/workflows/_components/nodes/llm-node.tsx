@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { Sparkles, Airplay } from "lucide-react"
+import { Sparkles, Airplay } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import { NodeType, type LlmNodeData, type StreamOutputNodeData } from "@/lib/workflow/types"
 

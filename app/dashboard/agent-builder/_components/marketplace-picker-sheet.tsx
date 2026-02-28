@@ -23,7 +23,7 @@ import {
   Users,
   Download,
   Plus,
-} from "lucide-react"
+} from "@/lib/icons"
 import { useMarketplace, type MarketplaceItem } from "@/hooks/use-marketplace"
 import { ConfigFormDialog } from "../../marketplace/_components/config-form-dialog"
 import { toast } from "sonner"

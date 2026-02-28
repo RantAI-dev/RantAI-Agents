@@ -20,7 +20,7 @@ import {
   AlertTriangle,
   DollarSign,
   BarChart3,
-} from "lucide-react"
+} from "@/lib/icons"
 import { useStatistics } from "@/hooks/use-statistics"
 import { StatCard } from "./_components/stat-card"
 import { DateRangePicker } from "./_components/date-range-picker"

@@ -10,7 +10,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Filter, ArrowRight, ChevronDown } from "lucide-react"
+import { Filter, ArrowRight, ChevronDown } from "@/lib/icons"
 
 interface Entity {
   id: string

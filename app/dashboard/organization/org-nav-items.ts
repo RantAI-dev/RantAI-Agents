@@ -1,4 +1,4 @@
-import { Building2, Users } from "lucide-react"
+import { Building2, Users } from "@/lib/icons"
 
 export const ORG_NAV_ITEMS = [
   {

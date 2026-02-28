@@ -9,7 +9,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Check, Plus, X } from "lucide-react"
+import { Check, Plus, X } from "@/lib/icons"
 import type { Category } from "./category-dialog"
 
 interface FiltersPanelProps {

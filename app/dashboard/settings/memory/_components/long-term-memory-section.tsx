@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Trash2, UserCircle } from "lucide-react"
+import { Trash2, UserCircle } from "@/lib/icons"
 import type { MemoryItem } from "@/hooks/use-memory"
 import type { UserProfile } from "@/lib/memory/types"
 

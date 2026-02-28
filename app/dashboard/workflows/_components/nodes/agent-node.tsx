@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { Bot } from "lucide-react"
+import { Bot } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import type { AgentNodeData } from "@/lib/workflow/types"
 

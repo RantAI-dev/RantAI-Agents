@@ -1,7 +1,7 @@
 "use client"
 
 import { useOrganization } from "@/hooks/use-organization"
-import { Building2, Sparkles, ShieldAlert } from "lucide-react"
+import { Building2, Sparkles, ShieldAlert } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 

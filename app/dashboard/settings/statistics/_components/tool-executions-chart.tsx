@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/chart"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Wrench } from "lucide-react"
+import { Wrench } from "@/lib/icons"
 
 const chartConfig = {
   count: {

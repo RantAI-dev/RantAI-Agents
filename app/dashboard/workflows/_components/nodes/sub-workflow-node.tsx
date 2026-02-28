@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import type { NodeProps } from "@xyflow/react"
-import { Workflow } from "lucide-react"
+import { Workflow } from "@/lib/icons"
 import { BaseNode } from "./base-node"
 import type { SubWorkflowNodeData } from "@/lib/workflow/types"
 

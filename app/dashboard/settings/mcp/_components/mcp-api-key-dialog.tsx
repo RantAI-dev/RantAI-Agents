@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useMcpApiKeys, type McpApiKeyItem } from "@/hooks/use-mcp-api-keys"
 import { useTools } from "@/hooks/use-tools"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2 } from "@/lib/icons"
 
 interface McpApiKeyDialogProps {
   open: boolean

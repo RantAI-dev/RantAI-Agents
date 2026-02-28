@@ -1,7 +1,7 @@
 "use client"
 
 import { memo } from "react"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink } from "@/lib/icons"
 
 export interface Source {
   title: string

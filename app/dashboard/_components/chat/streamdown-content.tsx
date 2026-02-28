@@ -8,7 +8,7 @@ import "katex/dist/katex.min.css"
 import remarkMath from "remark-math"
 import rehypeKatex from "rehype-katex"
 import { useTheme } from "next-themes"
-import { AlertTriangle, RotateCcw, Code } from "lucide-react"
+import { AlertTriangle, RotateCcw, Code } from "@/lib/icons"
 
 function MermaidError({ error, chart, retry }: MermaidErrorComponentProps) {
   const [showSource, setShowSource] = useState(false)

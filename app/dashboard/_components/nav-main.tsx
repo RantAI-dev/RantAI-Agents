@@ -5,7 +5,7 @@ import {
   Headphones,
   BookOpen,
   Settings,
-} from "lucide-react"
+} from "@/lib/icons"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { cn } from "@/lib/utils"

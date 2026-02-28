@@ -6,7 +6,7 @@ import {
   ChevronsUpDown,
   LogOut,
   User,
-} from "lucide-react"
+} from "@/lib/icons"
 
 import {
   Avatar,

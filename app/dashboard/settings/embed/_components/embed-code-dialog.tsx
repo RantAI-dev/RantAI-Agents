@@ -10,7 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Copy, Check, ExternalLink } from "lucide-react"
+import { Copy, Check, ExternalLink } from "@/lib/icons"
 import type { EmbedApiKeyResponse } from "@/lib/embed/types"
 import { brand } from "@/lib/branding"
 

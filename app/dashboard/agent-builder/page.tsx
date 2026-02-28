@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Search, Bot, SlidersHorizontal, X, Check, Tag } from "lucide-react"
+import { Plus, Search, Bot, SlidersHorizontal, X, Check, Tag } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {

@@ -25,7 +25,7 @@ import {
   AlertCircle,
   ChevronDown,
   Settings2,
-} from "lucide-react"
+} from "@/lib/icons"
 import { brand } from "@/lib/branding"
 
 /* ── Feature types ─────────────────────────────────────────── */

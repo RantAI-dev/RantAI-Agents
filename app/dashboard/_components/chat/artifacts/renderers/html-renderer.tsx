@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useRef, useCallback, useEffect, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2 } from "@/lib/icons"
 
 interface HtmlRendererProps {
   content: string

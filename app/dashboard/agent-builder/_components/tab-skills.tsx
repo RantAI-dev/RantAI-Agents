@@ -16,7 +16,7 @@ import {
   Zap,
   SlidersHorizontal,
   X,
-} from "lucide-react"
+} from "@/lib/icons"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"

@@ -23,7 +23,7 @@ import {
   Terminal,
   Copy,
   Check,
-} from "lucide-react"
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 // Tool display names for nicer UI
