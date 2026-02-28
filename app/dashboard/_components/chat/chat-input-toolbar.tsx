@@ -20,6 +20,7 @@ import {
   Check,
   Sparkles,
   X,
+  Zap,
 } from "lucide-react"
 import {
   Tooltip,
@@ -45,16 +46,27 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { DynamicIcon } from "@/components/ui/dynamic-icon"
 import { TYPE_ICONS, TYPE_LABELS, TYPE_COLORS } from "./artifacts/constants"
 import type { Artifact, ArtifactType } from "./artifacts/types"
 
 export type CanvasMode = false | "auto" | ArtifactType
+export type ToolMode = "auto" | "off" | "select"
+export type SkillMode = "auto" | "off" | "select"
 
 export interface AssistantToolInfo {
   name: string
   displayName: string
   description: string
   category: string
+  icon?: string | null
+}
+
+export interface AssistantSkillInfo {
+  id: string
+  displayName: string
+  description: string
+  icon?: string | null
 }
 
 export interface KBGroup {
@@ -65,16 +77,25 @@ export interface KBGroup {
 }
 
 interface ChatInputToolbarProps {
-  onFileSelect: (file: File) => void
+  onFileSelect: (files: File[]) => void
   fileAttached: boolean
   webSearchEnabled: boolean
   onToggleWebSearch: () => void
+  codeInterpreterEnabled: boolean
+  onToggleCodeInterpreter: () => void
   knowledgeBaseGroupIds: string[]
   onKBGroupsChange: (groupIds: string[]) => void
   kbGroups: KBGroup[]
-  toolsEnabled: boolean
-  onToggleTools: () => void
+  toolMode: ToolMode
+  onSetToolMode: (mode: ToolMode) => void
+  selectedToolNames: string[]
+  onSetSelectedToolNames: (names: string[]) => void
   assistantTools: AssistantToolInfo[]
+  skillMode: SkillMode
+  onSetSkillMode: (mode: SkillMode) => void
+  selectedSkillIds: string[]
+  onSetSelectedSkillIds: (ids: string[]) => void
+  assistantSkills: AssistantSkillInfo[]
   onImportGithub: () => void
   canvasMode: CanvasMode
   onSetCanvasMode: (mode: CanvasMode) => void
@@ -93,6 +114,22 @@ const CATEGORY_ICONS: Record<string, typeof Package> = {
   mcp: Plug,
 }
 
+/** Fallback emoji icons for built-in tools (used when DB icon is null) */
+const BUILTIN_TOOL_ICON_NAMES: Record<string, string> = {
+  knowledge_search: "\uD83D\uDD0D",
+  customer_lookup: "\uD83D\uDCCA",
+  channel_dispatch: "\uD83D\uDCE8",
+  document_analysis: "\uD83D\uDCC4",
+  file_operations: "\uD83D\uDCC1",
+  web_search: "\uD83C\uDF10",
+  calculator: "\uD83E\uDDEE",
+  date_time: "\uD83D\uDD52",
+  json_transform: "\uD83D\uDD00",
+  text_utilities: "\u270F\uFE0F",
+  create_artifact: "\u2728",
+  update_artifact: "\uD83D\uDD27",
+}
+
 const ARTIFACT_TYPES: ArtifactType[] = [
   "text/html",
   "application/react",
@@ -104,6 +141,7 @@ const ARTIFACT_TYPES: ArtifactType[] = [
   "text/latex",
   "application/slides",
   "application/python",
+  "application/3d",
 ]
 
 function getCanvasLabel(mode: CanvasMode): string {
@@ -112,17 +150,38 @@ function getCanvasLabel(mode: CanvasMode): string {
   return `Canvas: ${TYPE_LABELS[mode] || mode}`
 }
 
+function getToolsLabel(mode: ToolMode, selectedCount: number, totalCount: number): string {
+  if (mode === "off") return "Tools: Off"
+  if (mode === "select") return `Tools: ${selectedCount}/${totalCount}`
+  return `Tools: Auto (${totalCount})`
+}
+
+function getSkillsLabel(mode: SkillMode, selectedCount: number, totalCount: number): string {
+  if (mode === "off") return "Skills: Off"
+  if (mode === "select") return `Skills: ${selectedCount}/${totalCount}`
+  return `Skills: Auto (${totalCount})`
+}
+
 export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
   onFileSelect,
   fileAttached,
   webSearchEnabled,
   onToggleWebSearch,
+  codeInterpreterEnabled,
+  onToggleCodeInterpreter,
   knowledgeBaseGroupIds,
   onKBGroupsChange,
   kbGroups,
-  toolsEnabled,
-  onToggleTools,
+  toolMode,
+  onSetToolMode,
+  selectedToolNames,
+  onSetSelectedToolNames,
   assistantTools,
+  skillMode,
+  onSetSkillMode,
+  selectedSkillIds,
+  onSetSelectedSkillIds,
+  assistantSkills,
   onImportGithub,
   canvasMode,
   onSetCanvasMode,
@@ -135,12 +194,16 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [kbOpen, setKBOpen] = useState(false)
   const toolCount = assistantTools.length
+  const skillCount = assistantSkills.length
   const artifactCount = artifacts.size
   const kbCount = knowledgeBaseGroupIds.length
 
+  const toolsActive = toolMode !== "off"
+  const skillsActive = skillMode !== "off"
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) onFileSelect(file)
+    const files = e.target.files
+    if (files && files.length > 0) onFileSelect(Array.from(files))
     e.target.value = ""
   }
 
@@ -152,6 +215,26 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
     }
   }
 
+  const handleToolCheckbox = (toolName: string, checked: boolean) => {
+    const next = checked
+      ? [...selectedToolNames, toolName]
+      : selectedToolNames.filter((n) => n !== toolName)
+    onSetSelectedToolNames(next)
+    if (toolMode !== "select") onSetToolMode("select")
+  }
+
+  const handleSkillCheckbox = (skillId: string, checked: boolean) => {
+    const next = checked
+      ? [...selectedSkillIds, skillId]
+      : selectedSkillIds.filter((id) => id !== skillId)
+    onSetSelectedSkillIds(next)
+    if (skillMode !== "select") onSetSkillMode("select")
+  }
+
+  // Badge count for tools
+  const toolBadgeCount = toolMode === "auto" ? toolCount : toolMode === "select" ? selectedToolNames.length : 0
+  const skillBadgeCount = skillMode === "auto" ? skillCount : skillMode === "select" ? selectedSkillIds.length : 0
+
   return (
     <div className="flex items-center gap-0.5">
       {/* Hidden file input */}
@@ -159,6 +242,7 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
         ref={fileInputRef}
         type="file"
         accept={SUPPORTED_EXTENSIONS}
+        multiple
         onChange={handleFileChange}
         className="hidden"
         aria-hidden="true"
@@ -176,7 +260,7 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                 className={cn(
                   "h-8 w-8 rounded-lg transition-colors text-muted-foreground hover:text-foreground relative",
                   (fileAttached || kbCount > 0) &&
-                    "bg-primary/10 text-primary hover:bg-primary/20"
+                  "bg-primary/10 text-primary hover:bg-primary/20"
                 )}
                 disabled={disabled}
               >
@@ -292,81 +376,187 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
         </TooltipContent>
       </Tooltip>
 
-      {/* Tools toggle + popover */}
+      {/* Code interpreter toggle */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-8 w-8 rounded-lg transition-colors",
+              codeInterpreterEnabled
+                ? "bg-primary/10 text-primary hover:bg-primary/20"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            onClick={onToggleCodeInterpreter}
+            disabled={disabled}
+          >
+            <Code className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p>{codeInterpreterEnabled ? "Code interpreter enabled" : "Enable code interpreter"}</p>
+        </TooltipContent>
+      </Tooltip>
+
+      {/* Tools dropdown (Auto / Off / Select) */}
       {toolCount > 0 && (
-        <Popover>
+        <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
-              <PopoverTrigger asChild>
+              <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   className={cn(
                     "h-8 w-8 rounded-lg transition-colors relative",
-                    toolsEnabled
+                    toolsActive
                       ? "bg-primary/10 text-primary hover:bg-primary/20"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                   disabled={disabled}
                 >
                   <Wrench className="h-4 w-4" />
-                  <span className={cn(
-                    "absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full text-[9px] flex items-center justify-center font-medium",
-                    toolsEnabled
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted-foreground/30 text-muted-foreground"
-                  )}>
-                    {toolCount}
-                  </span>
+                  {toolBadgeCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full text-[9px] flex items-center justify-center font-medium bg-primary text-primary-foreground">
+                      {toolBadgeCount}
+                    </span>
+                  )}
                 </Button>
-              </PopoverTrigger>
+              </DropdownMenuTrigger>
             </TooltipTrigger>
             <TooltipContent side="top">
-              <p>{toolsEnabled ? `${toolCount} tool${toolCount !== 1 ? "s" : ""} active` : "Tools disabled"}</p>
+              <p>{getToolsLabel(toolMode, selectedToolNames.length, toolCount)}</p>
             </TooltipContent>
           </Tooltip>
-          <PopoverContent side="top" align="start" className="w-72 p-3">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                Tools ({toolCount})
-              </p>
-              <Button
-                type="button"
-                variant={toolsEnabled ? "default" : "outline"}
-                size="sm"
-                className="h-6 text-[10px] px-2"
-                onClick={onToggleTools}
-              >
-                {toolsEnabled ? "Enabled" : "Disabled"}
-              </Button>
-            </div>
-            <div className={cn(
-              "space-y-2 max-h-[240px] overflow-y-auto transition-opacity",
-              !toolsEnabled && "opacity-40"
-            )}>
-              {assistantTools.map((tool) => {
-                const CatIcon = CATEGORY_ICONS[tool.category] || Package
-                return (
-                  <div key={tool.name} className="flex items-start gap-2 text-sm">
-                    <CatIcon className="h-3.5 w-3.5 mt-0.5 text-muted-foreground shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-xs">{tool.displayName}</span>
-                        <Badge variant="secondary" className="text-[9px] px-1 py-0 h-3.5">
-                          {tool.category}
-                        </Badge>
-                      </div>
-                      <p className="text-[11px] text-muted-foreground line-clamp-2">
-                        {tool.description}
-                      </p>
-                    </div>
+          <DropdownMenuContent side="top" align="start" className="w-64">
+            {/* Auto */}
+            <DropdownMenuItem onClick={() => { onSetToolMode("auto"); onSetSelectedToolNames([]) }}>
+              <Sparkles className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+              <span className="flex-1">Auto</span>
+              <span className="text-[10px] text-muted-foreground mr-2">AI decides</span>
+              {toolMode === "auto" && <Check className="h-3.5 w-3.5 text-primary" />}
+            </DropdownMenuItem>
+
+            {/* Off */}
+            <DropdownMenuItem onClick={() => { onSetToolMode("off"); onSetSelectedToolNames([]) }}>
+              <X className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+              <span className="flex-1">Off</span>
+              {toolMode === "off" && <Check className="h-3.5 w-3.5 text-primary" />}
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground font-normal">
+              Select tools
+            </DropdownMenuLabel>
+
+            {assistantTools.map((t) => {
+              const FallbackIcon = CATEGORY_ICONS[t.category] || Package
+              const isSelected = toolMode === "select" ? selectedToolNames.includes(t.name) : toolMode === "auto"
+              return (
+                <DropdownMenuItem
+                  key={t.name}
+                  onSelect={(e) => e.preventDefault()}
+                  onClick={() => handleToolCheckbox(t.name, !selectedToolNames.includes(t.name))}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    className="mr-2"
+                    onCheckedChange={(checked) => handleToolCheckbox(t.name, !!checked)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <DynamicIcon icon={t.icon || BUILTIN_TOOL_ICON_NAMES[t.name] || undefined} fallback={FallbackIcon} className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+                  <span className="flex-1 text-xs truncate">{t.displayName}</span>
+                  <Badge variant="secondary" className="text-[8px] px-1 py-0 h-3.5 ml-1">
+                    {t.category}
+                  </Badge>
+                </DropdownMenuItem>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      {/* Skills dropdown (Auto / Off / Select) */}
+      {skillCount > 0 && (
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 rounded-lg transition-colors relative",
+                    skillsActive
+                      ? "bg-primary/10 text-primary hover:bg-primary/20"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  disabled={disabled}
+                >
+                  <Zap className="h-4 w-4" />
+                  {skillBadgeCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full text-[9px] flex items-center justify-center font-medium bg-primary text-primary-foreground">
+                      {skillBadgeCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>{getSkillsLabel(skillMode, selectedSkillIds.length, skillCount)}</p>
+            </TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent side="top" align="start" className="w-64">
+            {/* Auto */}
+            <DropdownMenuItem onClick={() => { onSetSkillMode("auto"); onSetSelectedSkillIds([]) }}>
+              <Sparkles className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+              <span className="flex-1">Auto</span>
+              <span className="text-[10px] text-muted-foreground mr-2">All active</span>
+              {skillMode === "auto" && <Check className="h-3.5 w-3.5 text-primary" />}
+            </DropdownMenuItem>
+
+            {/* Off */}
+            <DropdownMenuItem onClick={() => { onSetSkillMode("off"); onSetSelectedSkillIds([]) }}>
+              <X className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+              <span className="flex-1">Off</span>
+              {skillMode === "off" && <Check className="h-3.5 w-3.5 text-primary" />}
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground font-normal">
+              Select skills
+            </DropdownMenuLabel>
+
+            {assistantSkills.map((s) => {
+              const isSelected = skillMode === "select" ? selectedSkillIds.includes(s.id) : skillMode === "auto"
+              return (
+                <DropdownMenuItem
+                  key={s.id}
+                  onSelect={(e) => e.preventDefault()}
+                  onClick={() => handleSkillCheckbox(s.id, !selectedSkillIds.includes(s.id))}
+                >
+                  <Checkbox
+                    checked={isSelected}
+                    className="mr-2"
+                    onCheckedChange={(checked) => handleSkillCheckbox(s.id, !!checked)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <DynamicIcon icon={s.icon || undefined} fallback={Zap} className="h-3.5 w-3.5 mr-1.5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs truncate block">{s.displayName}</span>
+                    {s.description && (
+                      <span className="text-[10px] text-muted-foreground line-clamp-1 block">{s.description}</span>
+                    )}
                   </div>
-                )
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
+                </DropdownMenuItem>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
 
       {/* Canvas / Artifacts dropdown */}

@@ -62,6 +62,13 @@ const PythonRenderer = dynamic(
   }
 )
 
+const R3FRenderer = dynamic(
+  () => import("./renderers/r3f-renderer").then((m) => ({ default: m.R3FRenderer })),
+  {
+    loading: () => <RendererLoading />,
+  }
+)
+
 function RendererLoading() {
   return (
     <div className="flex items-center justify-center p-8 text-muted-foreground">
@@ -73,9 +80,10 @@ function RendererLoading() {
 
 interface ArtifactRendererProps {
   artifact: Artifact
+  onFixWithAI?: (error: string) => void
 }
 
-export function ArtifactRenderer({ artifact }: ArtifactRendererProps) {
+export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProps) {
   switch (artifact.type) {
     case "text/html":
       return <HtmlRenderer content={artifact.content} />
@@ -93,6 +101,8 @@ export function ArtifactRenderer({ artifact }: ArtifactRendererProps) {
       return <SlidesRenderer content={artifact.content} />
     case "application/python":
       return <PythonRenderer content={artifact.content} />
+    case "application/3d":
+      return <R3FRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
     case "application/code":
       return (
         <StreamdownContent

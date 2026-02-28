@@ -6,16 +6,26 @@ import { Button } from "@/components/ui/button"
 import { X, FileText, Image as ImageIcon, File } from "lucide-react"
 
 interface FilePreviewProps {
-  file: File
-  onRemove: () => void
+  files: File[]
+  onRemove: (index: number) => void
 }
 
-export const FilePreview = memo<FilePreviewProps>(({ file, onRemove }) => {
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function FileIcon({ file }: { file: File }) {
+  if (file.type.startsWith("image/")) return <ImageIcon className="h-4 w-4 text-chart-3" />
+  if (file.type === "application/pdf") return <FileText className="h-4 w-4 text-destructive" />
+  return <File className="h-4 w-4 text-muted-foreground" />
+}
+
+function FilePreviewItem({ file, onRemove }: { file: File; onRemove: () => void }) {
   const [preview, setPreview] = useState<string | null>(null)
   const isImage = file.type.startsWith("image/")
-  const isPdf = file.type === "application/pdf"
 
-  // Generate preview for images
   useEffect(() => {
     if (isImage) {
       const reader = new FileReader()
@@ -27,18 +37,6 @@ export const FilePreview = memo<FilePreviewProps>(({ file, onRemove }) => {
     return () => setPreview(null)
   }, [file, isImage])
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  const getFileIcon = () => {
-    if (isImage) return <ImageIcon className="h-4 w-4 text-chart-3" />
-    if (isPdf) return <FileText className="h-4 w-4 text-destructive" />
-    return <File className="h-4 w-4 text-muted-foreground" />
-  }
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -47,7 +45,6 @@ export const FilePreview = memo<FilePreviewProps>(({ file, onRemove }) => {
       transition={{ duration: 0.2 }}
       className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border"
     >
-      {/* Image preview or icon */}
       {isImage && preview ? (
         <div className="h-12 w-12 rounded overflow-hidden bg-muted flex-shrink-0">
           <img
@@ -58,11 +55,10 @@ export const FilePreview = memo<FilePreviewProps>(({ file, onRemove }) => {
         </div>
       ) : (
         <div className="h-12 w-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
-          {getFileIcon()}
+          <FileIcon file={file} />
         </div>
       )}
 
-      {/* File info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{file.name}</p>
         <p className="text-xs text-muted-foreground">
@@ -70,7 +66,6 @@ export const FilePreview = memo<FilePreviewProps>(({ file, onRemove }) => {
         </p>
       </div>
 
-      {/* Remove button */}
       <Button
         type="button"
         variant="ghost"
@@ -81,6 +76,20 @@ export const FilePreview = memo<FilePreviewProps>(({ file, onRemove }) => {
         <X className="h-4 w-4" />
       </Button>
     </motion.div>
+  )
+}
+
+export const FilePreview = memo<FilePreviewProps>(({ files, onRemove }) => {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {files.map((file, index) => (
+        <FilePreviewItem
+          key={`${file.name}-${file.size}-${index}`}
+          file={file}
+          onRemove={() => onRemove(index)}
+        />
+      ))}
+    </div>
   )
 })
 

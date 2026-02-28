@@ -22,6 +22,7 @@ import {
   X,
   Headphones,
   Loader2,
+  FileText,
 } from "lucide-react"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
@@ -38,7 +39,7 @@ import { MessageSources, Source } from "./message-sources"
 import { ConversationExport } from "./conversation-export"
 import { CommandPalette } from "./command-palette"
 import { FilePreview } from "./file-preview"
-import { ChatInputToolbar, type AssistantToolInfo, type CanvasMode } from "./chat-input-toolbar"
+import { ChatInputToolbar, type AssistantToolInfo, type AssistantSkillInfo, type CanvasMode, type ToolMode, type SkillMode } from "./chat-input-toolbar"
 import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
 import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } from "./edit-version-indicator"
 import { ToolCallIndicator } from "./tool-call-indicator"
@@ -70,9 +71,24 @@ const AGENT_HANDOFF_MARKER = "[AGENT_HANDOFF]"
 // Handoff state type
 type HandoffState = "idle" | "requesting" | "waiting" | "connected" | "resolved"
 
+/** Settings from ChatHome toolbar to apply on initial message send */
+interface InitialChatSettings {
+  files?: File[]
+  webSearchEnabled?: boolean
+  codeInterpreterEnabled?: boolean
+  knowledgeBaseGroupIds?: string[]
+  toolMode?: ToolMode
+  selectedToolNames?: string[]
+  skillMode?: SkillMode
+  selectedSkillIds?: string[]
+  canvasMode?: CanvasMode
+}
+
 interface ChatWorkspaceProps {
   session?: ChatSession
   assistant: Assistant
+  initialMessage?: string
+  initialSettings?: InitialChatSettings
   onBack?: () => void
   onUpdateSession?: (sessionId: string, updates: Partial<ChatSession>) => void
   onNewChat?: () => void
@@ -94,6 +110,18 @@ interface ChatMessage {
   sources?: Source[]
   replyTo?: string
   editHistory?: EditHistoryEntry[] // Previous versions of the message
+}
+
+// Attachment info for file uploads displayed on user messages
+interface AttachmentInfo {
+  fileName: string
+  mimeType: string
+  type: "inline" | "rag"
+  text?: string
+  pageCount?: number
+  chunkCount?: number
+  fileUrl?: string // blob URL for native file preview (session-only)
+  fileId?: string  // persistent server-stored file ID
 }
 
 // Helper to extract text content from UIMessage parts
@@ -260,6 +288,8 @@ function MessagesArea({
   isStreaming,
   assistant,
   messageSources,
+  messageAttachments,
+  onViewAttachment,
   editingMessageId,
   editContent,
   viewingVersions,
@@ -294,6 +324,8 @@ function MessagesArea({
   isStreaming: boolean
   assistant: Assistant
   messageSources: Record<string, Source[]>
+  messageAttachments: Record<string, AttachmentInfo[]>
+  onViewAttachment: (att: AttachmentInfo) => void
   editingMessageId: string | null
   editContent: string
   viewingVersions: Record<string, number>
@@ -362,6 +394,7 @@ function MessagesArea({
           ref={virtuosoRef}
           data={allMessages}
           className="h-full"
+          initialTopMostItemIndex={allMessages.length - 1}
           atBottomStateChange={setAtBottom}
           atBottomThreshold={100}
           overscan={200}
@@ -587,6 +620,23 @@ function MessagesArea({
                             }
                             return null
                           })()}
+                          {/* Attachment badges for user messages */}
+                          {isUser && messageAttachments?.[message.id]?.map((att, i) => {
+                            const ext = att.mimeType === "application/pdf" ? "PDF"
+                              : att.mimeType?.startsWith("image/") ? "IMG"
+                                : att.mimeType === "text/markdown" ? "MD" : "TXT"
+                            return (
+                              <button
+                                key={`${att.fileName}-${i}`}
+                                onClick={() => onViewAttachment(att)}
+                                className="flex items-center gap-2 mb-1 p-2 rounded-lg bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 transition-colors w-full text-left"
+                              >
+                                <FileText className="h-4 w-4 shrink-0 opacity-60" />
+                                <span className="text-xs truncate flex-1">{att.fileName}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/10 dark:bg-white/10 font-medium uppercase">{ext}</span>
+                              </button>
+                            )
+                          })}
                           <MarkdownContent content={content} isStreaming={isStreamingMessage} />
                         </>
                       )}
@@ -772,6 +822,8 @@ function MessagesArea({
 export function ChatWorkspace({
   session,
   assistant,
+  initialMessage,
+  initialSettings,
   onBack,
   onUpdateSession,
   onNewChat,
@@ -780,6 +832,9 @@ export function ChatWorkspace({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const { toast } = useToast()
+
+  // Resolve DB-persisted session ID for API calls (handles temp → db ID mapping)
+  const apiSessionId = session?.dbId || session?.id
 
   // State
   const [input, setInput] = useState("")
@@ -791,6 +846,10 @@ export function ChatWorkspace({
   const [messageSources, setMessageSources] = useState<
     Record<string, Source[]>
   >({})
+  const [messageAttachments, setMessageAttachments] = useState<
+    Record<string, AttachmentInfo[]>
+  >({})
+  const [viewingAttachment, setViewingAttachment] = useState<AttachmentInfo | null>(null)
 
   // Edit state
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
@@ -803,7 +862,8 @@ export function ChatWorkspace({
   } | null>(null)
 
   // File attachment state
-  const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([])
+  const [isUploading, setIsUploading] = useState(false)
 
   // Error state
   const [error, setError] = useState<{
@@ -823,9 +883,14 @@ export function ChatWorkspace({
 
   // Toolbar: per-message overrides for web search, knowledge base & tools
   const [webSearchOverride, setWebSearchOverride] = useState<boolean | null>(null)
+  const [codeInterpreterOverride, setCodeInterpreterOverride] = useState<boolean | null>(null)
   const [selectedKBGroupIds, setSelectedKBGroupIds] = useState<string[] | null>(null)
-  const [toolsOverride, setToolsOverride] = useState<boolean | null>(null)
+  const [toolMode, setToolMode] = useState<ToolMode>("auto")
+  const [selectedToolNames, setSelectedToolNames] = useState<string[]>([])
+  const [skillMode, setSkillMode] = useState<SkillMode>("auto")
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
   const [assistantTools, setAssistantTools] = useState<AssistantToolInfo[]>([])
+  const [assistantSkills, setAssistantSkills] = useState<AssistantSkillInfo[]>([])
 
   // Knowledge base groups for picker
   const [kbGroups, setKBGroups] = useState<{ id: string; name: string; color: string | null; documentCount: number }[]>([])
@@ -867,7 +932,7 @@ export function ChatWorkspace({
         const title =
           session.title === "New Chat" && updatedMessages.length >= 1
             ? updatedMessages[0].content.slice(0, 50) +
-              (updatedMessages[0].content.length > 50 ? "..." : "")
+            (updatedMessages[0].content.length > 50 ? "..." : "")
             : session.title
 
         onUpdateSession(session.id, {
@@ -878,7 +943,7 @@ export function ChatWorkspace({
     },
   })
 
-  // Reset messages when session changes
+  // Reset state and load messages when session changes
   useEffect(() => {
     if (session?.messages && session.messages.length > 0) {
       chat.setMessages(
@@ -889,6 +954,17 @@ export function ChatWorkspace({
           metadata: m.metadata || undefined,
         })) as any
       )
+      // Restore attachments from persisted message metadata
+      const restoredAttachments: Record<string, AttachmentInfo[]> = {}
+      for (const m of session.messages) {
+        const meta = m.metadata as { attachments?: AttachmentInfo[] } | null
+        if (meta?.attachments && meta.attachments.length > 0) {
+          restoredAttachments[m.id] = meta.attachments
+        }
+      }
+      if (Object.keys(restoredAttachments).length > 0) {
+        setMessageAttachments(prev => ({ ...prev, ...restoredAttachments }))
+      }
     } else {
       chat.setMessages([] as any)
     }
@@ -899,7 +975,7 @@ export function ChatWorkspace({
       if (session.artifacts && session.artifacts.length > 0) {
         loadFromPersisted(session.artifacts)
       }
-      fetch(`/api/dashboard/chat/sessions/${session.id}`)
+      fetch(`/api/dashboard/chat/sessions/${apiSessionId}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data?.artifacts?.length > 0) {
@@ -929,13 +1005,45 @@ export function ChatWorkspace({
     }
   }, [session?.id])
 
+  // Handle lazy-loaded messages (session messages populated after initial mount)
+  useEffect(() => {
+    if (!session?.id || !session.messages || session.messages.length === 0) return
+    // Only sync if chat has no messages yet (lazy-load case)
+    if (chat.messages.length > 0) return
+
+    chat.setMessages(
+      session.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        metadata: m.metadata || undefined,
+      })) as any
+    )
+    // Restore attachments from persisted message metadata
+    const restoredAttachments: Record<string, AttachmentInfo[]> = {}
+    for (const m of session.messages) {
+      const meta = m.metadata as { attachments?: AttachmentInfo[] } | null
+      if (meta?.attachments && meta.attachments.length > 0) {
+        restoredAttachments[m.id] = meta.attachments
+      }
+    }
+    if (Object.keys(restoredAttachments).length > 0) {
+      setMessageAttachments(prev => ({ ...prev, ...restoredAttachments }))
+    }
+  }, [session?.messages?.length])
+
   // Fetch assistant tools for toolbar display
   useEffect(() => {
     if (!assistant?.id || assistant.id === "general") {
       setAssistantTools([])
+      setAssistantSkills([])
       setWebSearchOverride(null)
+      setCodeInterpreterOverride(null)
       setSelectedKBGroupIds(null)
-      setToolsOverride(null)
+      setToolMode("auto")
+      setSelectedToolNames([])
+      setSkillMode("auto")
+      setSelectedSkillIds([])
       return
     }
     fetch(`/api/assistants/${assistant.id}/tools`)
@@ -945,11 +1053,12 @@ export function ChatWorkspace({
           setAssistantTools(
             tools
               .filter((t: { enabledForAssistant?: boolean }) => t.enabledForAssistant !== false)
-              .map((t: { name: string; displayName: string; description: string; category: string }) => ({
+              .map((t: { name: string; displayName: string; description: string; category: string; icon?: string | null }) => ({
                 name: t.name,
                 displayName: t.displayName,
                 description: t.description,
                 category: t.category,
+                icon: t.icon,
               }))
           )
         } else {
@@ -957,10 +1066,19 @@ export function ChatWorkspace({
         }
       })
       .catch(() => setAssistantTools([]))
+    // Fetch assistant skills
+    fetch(`/api/assistants/${assistant.id}/skills`)
+      .then((res) => res.json())
+      .then((skills) => setAssistantSkills(Array.isArray(skills) ? skills : []))
+      .catch(() => setAssistantSkills([]))
     // Reset overrides when assistant changes
     setWebSearchOverride(null)
+    setCodeInterpreterOverride(null)
     setSelectedKBGroupIds(null)
-    setToolsOverride(null)
+    setToolMode("auto")
+    setSelectedToolNames([])
+    setSkillMode("auto")
+    setSelectedSkillIds([])
   }, [assistant?.id])
 
   // Fetch knowledge base groups for picker
@@ -974,11 +1092,16 @@ export function ChatWorkspace({
   // Derived toolbar values
   const webSearchAvailable = assistantTools.some((t) => t.name === "web_search")
   const effectiveWebSearch = webSearchOverride ?? webSearchAvailable
+  const codeInterpreterAvailable = assistantTools.some((t) => t.name === "code_interpreter")
+  const effectiveCodeInterpreter = codeInterpreterOverride ?? codeInterpreterAvailable
   const effectiveKBGroupIds = selectedKBGroupIds ?? (assistant.knowledgeBaseGroupIds || [])
   const effectiveKnowledgeBase = selectedKBGroupIds !== null
     ? selectedKBGroupIds.length > 0
     : (assistant.useKnowledgeBase ?? false)
-  const effectiveToolsEnabled = toolsOverride ?? (assistantTools.length > 0)
+  const effectiveToolsEnabled = toolMode !== "off"
+  const effectiveToolNames = toolMode === "select" ? selectedToolNames : undefined
+  const effectiveSkillsEnabled = skillMode !== "off"
+  const effectiveSkillIds = skillMode === "select" ? selectedSkillIds : undefined
 
   // Track if we should auto-scroll (only when user sends a message or during streaming)
   const shouldAutoScroll = useRef(false)
@@ -1057,11 +1180,27 @@ export function ChatWorkspace({
       userInput: string,
       baseMessages: typeof chat.messages,
       replyToId?: string,
-      editHistory?: EditHistoryEntry[]
+      editHistory?: EditHistoryEntry[],
+      fileCtx?: { fileContext?: string; fileDocumentIds?: string[] },
+      attachments?: AttachmentInfo[],
+      toolOverrides?: {
+        enableWebSearch?: boolean
+        enableCodeInterpreter?: boolean
+        useKnowledgeBase?: boolean
+        knowledgeBaseGroupIds?: string[]
+        enableTools?: boolean
+        enabledToolNames?: string[]
+        enableSkills?: boolean
+        enabledSkillIds?: string[]
+        canvasMode?: CanvasMode
+      }
     ) => {
       setIsLoading(true)
       setIsStreaming(false)
       setError(null)
+
+      // Strip transient fileUrl (blob URLs) before persisting, keep fileId
+      const persistableAttachments = attachments?.map(({ fileUrl, ...rest }) => rest)
 
       const userMessage = {
         id: crypto.randomUUID(),
@@ -1069,6 +1208,14 @@ export function ChatWorkspace({
         content: userInput,
         ...(replyToId && { replyTo: replyToId }),
         ...(editHistory && editHistory.length > 0 && { editHistory }),
+        ...(persistableAttachments && persistableAttachments.length > 0 && {
+          metadata: { attachments: persistableAttachments },
+        }),
+      }
+
+      // Store attachment info for display on user message bubble
+      if (attachments && attachments.length > 0) {
+        setMessageAttachments(prev => ({ ...prev, [userMessage.id]: attachments }))
       }
 
       // Placeholder ID for the assistant message (will be replaced when streaming starts)
@@ -1130,14 +1277,20 @@ export function ChatWorkspace({
           body: JSON.stringify({
             messages: normalizedMessages,
             assistantId: assistant.id,
-            sessionId: session?.id,
+            sessionId: apiSessionId,
             systemPrompt: assistant.systemPrompt,
-            useKnowledgeBase: effectiveKnowledgeBase,
-            knowledgeBaseGroupIds: effectiveKBGroupIds,
-            enableWebSearch: effectiveWebSearch,
-            enableTools: effectiveToolsEnabled,
-            canvasMode: canvasMode || undefined,
+            useKnowledgeBase: toolOverrides?.useKnowledgeBase ?? effectiveKnowledgeBase,
+            knowledgeBaseGroupIds: toolOverrides?.knowledgeBaseGroupIds ?? effectiveKBGroupIds,
+            enableWebSearch: toolOverrides?.enableWebSearch ?? effectiveWebSearch,
+            enableCodeInterpreter: toolOverrides?.enableCodeInterpreter ?? effectiveCodeInterpreter,
+            enableTools: toolOverrides?.enableTools ?? effectiveToolsEnabled,
+            enabledToolNames: toolOverrides?.enabledToolNames ?? effectiveToolNames,
+            enableSkills: toolOverrides?.enableSkills ?? effectiveSkillsEnabled,
+            enabledSkillIds: toolOverrides?.enabledSkillIds ?? effectiveSkillIds,
+            canvasMode: toolOverrides?.canvasMode ?? canvasMode,
             targetArtifactId: activeArtifactId || undefined,
+            ...(fileCtx?.fileContext && { fileContext: fileCtx.fileContext }),
+            ...(fileCtx?.fileDocumentIds && { fileDocumentIds: fileCtx.fileDocumentIds }),
           }),
         })
 
@@ -1502,12 +1655,133 @@ export function ChatWorkspace({
         abortControllerRef.current = null
         // Reset toolbar overrides back to defaults (keep activeArtifactId for iteration)
         setWebSearchOverride(null)
+        setCodeInterpreterOverride(null)
         setSelectedKBGroupIds(null)
-        setToolsOverride(null)
+        setToolMode("auto")
+        setSelectedToolNames([])
+        setSkillMode("auto")
+        setSelectedSkillIds([])
       }
     },
-    [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, canvasMode, activeArtifactId]
+    [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, effectiveToolNames, effectiveSkillsEnabled, effectiveSkillIds, canvasMode, activeArtifactId, apiSessionId]
   )
+
+  // Auto-send initial message from ChatHome (runs once on mount).
+  // No ref guard — React Strict Mode re-runs the effect after cleanup clears the
+  // timer, so the second run naturally starts a fresh timer that fires correctly.
+  useEffect(() => {
+    if (!initialMessage) return
+
+    // Apply toolbar overrides to ChatWorkspace state so the toolbar UI reflects them
+    if (initialSettings) {
+      if (initialSettings.webSearchEnabled !== undefined) {
+        setWebSearchOverride(initialSettings.webSearchEnabled)
+      }
+      if (initialSettings.codeInterpreterEnabled !== undefined) {
+        setCodeInterpreterOverride(initialSettings.codeInterpreterEnabled)
+      }
+      if (initialSettings.knowledgeBaseGroupIds !== undefined) {
+        setSelectedKBGroupIds(initialSettings.knowledgeBaseGroupIds)
+      }
+      if (initialSettings.toolMode) {
+        setToolMode(initialSettings.toolMode)
+      }
+      if (initialSettings.selectedToolNames) {
+        setSelectedToolNames(initialSettings.selectedToolNames)
+      }
+      if (initialSettings.skillMode) {
+        setSkillMode(initialSettings.skillMode)
+      }
+      if (initialSettings.selectedSkillIds) {
+        setSelectedSkillIds(initialSettings.selectedSkillIds)
+      }
+      if (initialSettings.canvasMode) {
+        setCanvasMode(initialSettings.canvasMode)
+      }
+    }
+
+    // Build overrides to pass directly to sendMessage (state updates above won't
+    // be visible until the next render, but sendMessage needs the values NOW)
+    const overrides = initialSettings ? {
+      enableWebSearch: initialSettings.webSearchEnabled,
+      enableCodeInterpreter: initialSettings.codeInterpreterEnabled,
+      useKnowledgeBase: initialSettings.knowledgeBaseGroupIds
+        ? initialSettings.knowledgeBaseGroupIds.length > 0
+        : undefined,
+      knowledgeBaseGroupIds: initialSettings.knowledgeBaseGroupIds,
+      enableTools: initialSettings.toolMode ? initialSettings.toolMode !== "off" : undefined,
+      enabledToolNames: initialSettings.toolMode === "select" ? initialSettings.selectedToolNames : undefined,
+      enableSkills: initialSettings.skillMode ? initialSettings.skillMode !== "off" : undefined,
+      enabledSkillIds: initialSettings.skillMode === "select" ? initialSettings.selectedSkillIds : undefined,
+      canvasMode: initialSettings.canvasMode,
+    } : undefined
+
+    const timer = setTimeout(async () => {
+      // Handle file uploads from ChatHome if present
+      let fileCtx: { fileContext?: string; fileDocumentIds?: string[] } | undefined
+      const uploadAttachments: AttachmentInfo[] = []
+
+      if (initialSettings?.files && initialSettings.files.length > 0) {
+        for (const file of initialSettings.files) {
+          try {
+            const formData = new FormData()
+            formData.append("file", file)
+            if (apiSessionId) formData.append("sessionId", apiSessionId)
+
+            const uploadRes = await fetch("/api/chat/upload", {
+              method: "POST",
+              body: formData,
+            })
+
+            if (uploadRes.ok) {
+              const uploadData = await uploadRes.json()
+              if (uploadData.result) {
+                if (uploadData.result.type === "inline" && uploadData.result.text) {
+                  const ctx = `[Attached file: ${uploadData.result.fileName}]\n${uploadData.result.text}`
+                  fileCtx = {
+                    fileContext: fileCtx?.fileContext
+                      ? `${fileCtx.fileContext}\n\n${ctx}`
+                      : ctx,
+                    fileDocumentIds: fileCtx?.fileDocumentIds,
+                  }
+                } else if (uploadData.result.type === "rag" && uploadData.result.documentId) {
+                  fileCtx = {
+                    fileContext: fileCtx?.fileContext,
+                    fileDocumentIds: [
+                      ...(fileCtx?.fileDocumentIds || []),
+                      uploadData.result.documentId,
+                    ],
+                  }
+                }
+                uploadAttachments.push({
+                  fileName: uploadData.result.fileName,
+                  mimeType: uploadData.result.mimeType,
+                  type: uploadData.result.type,
+                  text: uploadData.result.text,
+                  pageCount: uploadData.result.pageCount,
+                  chunkCount: uploadData.result.chunkCount,
+                  fileId: uploadData.result.fileId,
+                })
+              }
+            }
+          } catch (err) {
+            console.error("[ChatWorkspace] Initial file upload error:", err)
+          }
+        }
+      }
+
+      sendMessage(
+        initialMessage,
+        [],
+        undefined,
+        undefined,
+        fileCtx,
+        uploadAttachments.length > 0 ? uploadAttachments : undefined,
+        overrides
+      )
+    }, 150)
+    return () => clearTimeout(timer)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStop = useCallback(() => {
     abortControllerRef.current?.abort()
@@ -1609,6 +1883,27 @@ export function ChatWorkspace({
     textareaRef.current?.focus()
   }, [])
 
+  // Fix with AI handler — sends a repair prompt when a 3D artifact has a runtime error
+  const handleFixWithAI = useCallback(
+    (artifactId: string, errorMessage: string) => {
+      const repairPrompt = `The 3D scene artifact has a runtime error that needs to be fixed.
+
+Error: ${errorMessage}
+
+Please fix the Scene component code to resolve this error. Remember:
+- Do NOT use <Canvas>, <OrbitControls>, or <Environment> — these are provided by the wrapper.
+- Do NOT import Canvas from @react-three/fiber.
+- Do NOT load external fonts, textures, or 3D models via URL.
+- Only export default a scene component that returns 3D elements like <mesh>, <group>, Drei helpers, etc.
+- Use useFrame for animations.
+
+Use update_artifact with id="${artifactId}" to update the existing artifact with the fixed code.`
+
+      sendMessage(repairPrompt, chat.messages)
+    },
+    [sendMessage, chat.messages]
+  )
+
   // Clear chat handler
   const handleClearChat = useCallback(() => {
     chat.setMessages([] as any)
@@ -1619,6 +1914,7 @@ export function ChatWorkspace({
       })
     }
     setMessageSources({})
+    setMessageAttachments({})
     setError(null)
     setHandoffState("idle")
     setHandoffConversationId(null)
@@ -1836,7 +2132,7 @@ export function ChatWorkspace({
   // Submit handler
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || isLoading) return
+    if (!input.trim() || isLoading || isUploading) return
 
     const userInput = input.trim()
     setInput("")
@@ -1861,8 +2157,72 @@ export function ChatWorkspace({
     const replyContext = replyingTo
     setReplyingTo(null)
 
+    // Upload attached files if present
+    let fileCtx: { fileContext?: string; fileDocumentIds?: string[] } | undefined
+    const uploadAttachments: AttachmentInfo[] = []
+    if (attachedFiles.length > 0) {
+      try {
+        setIsUploading(true)
+        const filesToUpload = [...attachedFiles]
+
+        for (const file of filesToUpload) {
+          try {
+            const formData = new FormData()
+            formData.append("file", file)
+            if (apiSessionId) formData.append("sessionId", apiSessionId)
+
+            const uploadRes = await fetch("/api/chat/upload", {
+              method: "POST",
+              body: formData,
+            })
+
+            if (uploadRes.ok) {
+              const uploadData = await uploadRes.json()
+              if (uploadData.result) {
+                // Merge file contexts
+                if (uploadData.result.type === "inline" && uploadData.result.text) {
+                  const ctx = `[Attached file: ${uploadData.result.fileName}]\n${uploadData.result.text}`
+                  fileCtx = {
+                    fileContext: fileCtx?.fileContext
+                      ? `${fileCtx.fileContext}\n\n${ctx}`
+                      : ctx,
+                    fileDocumentIds: fileCtx?.fileDocumentIds,
+                  }
+                } else if (uploadData.result.type === "rag" && uploadData.result.documentId) {
+                  fileCtx = {
+                    fileContext: fileCtx?.fileContext,
+                    fileDocumentIds: [
+                      ...(fileCtx?.fileDocumentIds || []),
+                      uploadData.result.documentId,
+                    ],
+                  }
+                }
+                // Capture attachment info with persistent file ID
+                uploadAttachments.push({
+                  fileName: uploadData.result.fileName,
+                  mimeType: uploadData.result.mimeType,
+                  type: uploadData.result.type,
+                  text: uploadData.result.text,
+                  pageCount: uploadData.result.pageCount,
+                  chunkCount: uploadData.result.chunkCount,
+                  fileId: uploadData.result.fileId,
+                })
+              }
+            } else {
+              console.error("[Chat] File upload failed:", uploadRes.status, file.name)
+            }
+          } catch (uploadError) {
+            console.error("[Chat] File upload error:", uploadError, file.name)
+          }
+        }
+      } finally {
+        setIsUploading(false)
+        setAttachedFiles([])
+      }
+    }
+
     // Send the message using shared logic
-    await sendMessage(userInput, chat.messages, replyContext?.id)
+    await sendMessage(userInput, chat.messages, replyContext?.id, undefined, fileCtx, uploadAttachments.length > 0 ? uploadAttachments : undefined)
   }
 
   // Keyboard handler
@@ -1928,7 +2288,7 @@ export function ChatWorkspace({
         <div className="flex items-center gap-1">
           <ConversationExport title={session.title} messages={session.messages} />
           <CommandPalette
-            onNewChat={onNewChat || (() => {})}
+            onNewChat={onNewChat || (() => { })}
             onExportMarkdown={exportAsMarkdown}
             onExportJson={exportAsJson}
             onClearChat={handleClearChat}
@@ -1938,92 +2298,97 @@ export function ChatWorkspace({
 
       {/* Messages with Virtuoso + optional Artifact Panel */}
       <div className="flex-1 relative flex overflow-hidden">
-      {activeArtifact ? (
-        <ResizablePanelGroup direction="horizontal">
-          <ResizablePanel defaultSize={55} minSize={30}>
-            <MessagesArea
-              chat={chat}
-              allMessages={allMessages}
-              isLoading={isLoading}
-              isStreaming={isStreaming}
-              assistant={assistant}
-              messageSources={messageSources}
-              editingMessageId={editingMessageId}
-              editContent={editContent}
-              viewingVersions={viewingVersions}
-              copiedId={copiedId}
-              error={error}
-              showScrollButton={showScrollButton}
-              atBottom={atBottom}
-              handoffState={handoffState}
-              handoffTriggeredMsgId={handoffTriggeredMsgId}
-              virtuosoRef={virtuosoRef}
-              setAtBottom={setAtBottom}
-              setEditContent={setEditContent}
-              setViewingVersions={setViewingVersions}
-              setError={setError}
-              handleSuggestionSelect={handleSuggestionSelect}
-              handleSaveEdit={handleSaveEdit}
-              handleCancelEdit={handleCancelEdit}
-              handleCopy={handleCopy}
-              handleEditMessage={handleEditMessage}
-              handleRegenerate={handleRegenerate}
-              handleDeleteMessage={handleDeleteMessage}
-              handleReply={handleReply}
-              scrollToBottom={scrollToBottom}
-              scrollToMessage={scrollToMessage}
-              requestHandoff={requestHandoff}
-              openArtifact={openArtifact}
-              artifacts={artifacts}
-            />
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={45} minSize={25}>
-            <ArtifactPanel
-              artifact={activeArtifact}
-              onClose={closeArtifact}
-              onUpdateArtifact={addOrUpdateArtifact}
-              sessionId={session?.id}
-            />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      ) : (
-        <MessagesArea
-          chat={chat}
-          allMessages={allMessages}
-          isLoading={isLoading}
-          isStreaming={isStreaming}
-          assistant={assistant}
-          messageSources={messageSources}
-          editingMessageId={editingMessageId}
-          editContent={editContent}
-          viewingVersions={viewingVersions}
-          copiedId={copiedId}
-          error={error}
-          showScrollButton={showScrollButton}
-          atBottom={atBottom}
-          handoffState={handoffState}
-          handoffTriggeredMsgId={handoffTriggeredMsgId}
-          virtuosoRef={virtuosoRef}
-          setAtBottom={setAtBottom}
-          setEditContent={setEditContent}
-          setViewingVersions={setViewingVersions}
-          setError={setError}
-          handleSuggestionSelect={handleSuggestionSelect}
-          handleSaveEdit={handleSaveEdit}
-          handleCancelEdit={handleCancelEdit}
-          handleCopy={handleCopy}
-          handleEditMessage={handleEditMessage}
-          handleRegenerate={handleRegenerate}
-          handleDeleteMessage={handleDeleteMessage}
-          handleReply={handleReply}
-          scrollToBottom={scrollToBottom}
-          scrollToMessage={scrollToMessage}
-          requestHandoff={requestHandoff}
-          openArtifact={openArtifact}
-          artifacts={artifacts}
-        />
-      )}
+        {activeArtifact ? (
+          <ResizablePanelGroup direction="horizontal">
+            <ResizablePanel defaultSize={55} minSize={30}>
+              <MessagesArea
+                chat={chat}
+                allMessages={allMessages}
+                isLoading={isLoading}
+                isStreaming={isStreaming}
+                assistant={assistant}
+                messageSources={messageSources}
+                messageAttachments={messageAttachments}
+                onViewAttachment={setViewingAttachment}
+                editingMessageId={editingMessageId}
+                editContent={editContent}
+                viewingVersions={viewingVersions}
+                copiedId={copiedId}
+                error={error}
+                showScrollButton={showScrollButton}
+                atBottom={atBottom}
+                handoffState={handoffState}
+                handoffTriggeredMsgId={handoffTriggeredMsgId}
+                virtuosoRef={virtuosoRef}
+                setAtBottom={setAtBottom}
+                setEditContent={setEditContent}
+                setViewingVersions={setViewingVersions}
+                setError={setError}
+                handleSuggestionSelect={handleSuggestionSelect}
+                handleSaveEdit={handleSaveEdit}
+                handleCancelEdit={handleCancelEdit}
+                handleCopy={handleCopy}
+                handleEditMessage={handleEditMessage}
+                handleRegenerate={handleRegenerate}
+                handleDeleteMessage={handleDeleteMessage}
+                handleReply={handleReply}
+                scrollToBottom={scrollToBottom}
+                scrollToMessage={scrollToMessage}
+                requestHandoff={requestHandoff}
+                openArtifact={openArtifact}
+                artifacts={artifacts}
+              />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize={45} minSize={25}>
+              <ArtifactPanel
+                artifact={activeArtifact}
+                onClose={closeArtifact}
+                onUpdateArtifact={addOrUpdateArtifact}
+                onFixWithAI={handleFixWithAI}
+                sessionId={apiSessionId}
+              />
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        ) : (
+          <MessagesArea
+            chat={chat}
+            allMessages={allMessages}
+            isLoading={isLoading}
+            isStreaming={isStreaming}
+            assistant={assistant}
+            messageSources={messageSources}
+            messageAttachments={messageAttachments}
+            onViewAttachment={setViewingAttachment}
+            editingMessageId={editingMessageId}
+            editContent={editContent}
+            viewingVersions={viewingVersions}
+            copiedId={copiedId}
+            error={error}
+            showScrollButton={showScrollButton}
+            atBottom={atBottom}
+            handoffState={handoffState}
+            handoffTriggeredMsgId={handoffTriggeredMsgId}
+            virtuosoRef={virtuosoRef}
+            setAtBottom={setAtBottom}
+            setEditContent={setEditContent}
+            setViewingVersions={setViewingVersions}
+            setError={setError}
+            handleSuggestionSelect={handleSuggestionSelect}
+            handleSaveEdit={handleSaveEdit}
+            handleCancelEdit={handleCancelEdit}
+            handleCopy={handleCopy}
+            handleEditMessage={handleEditMessage}
+            handleRegenerate={handleRegenerate}
+            handleDeleteMessage={handleDeleteMessage}
+            handleReply={handleReply}
+            scrollToBottom={scrollToBottom}
+            scrollToMessage={scrollToMessage}
+            requestHandoff={requestHandoff}
+            openArtifact={openArtifact}
+            artifacts={artifacts}
+          />
+        )}
       </div>
 
       {/* Input area */}
@@ -2041,11 +2406,11 @@ export function ChatWorkspace({
 
           {/* File preview */}
           <AnimatePresence>
-            {attachedFile && (
+            {attachedFiles.length > 0 && (
               <div className="mb-2">
                 <FilePreview
-                  file={attachedFile}
-                  onRemove={() => setAttachedFile(null)}
+                  files={attachedFiles}
+                  onRemove={(index) => setAttachedFiles(prev => prev.filter((_, i) => i !== index))}
                 />
               </div>
             )}
@@ -2067,17 +2432,19 @@ export function ChatWorkspace({
                       : "Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
                 }
                 className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none"
-                disabled={isLoading || handoffState === "waiting" || handoffState === "requesting" || handoffState === "resolved"}
+                disabled={isLoading || isUploading || handoffState === "waiting" || handoffState === "requesting" || handoffState === "resolved"}
                 rows={1}
               />
               <Button
                 type={isStreaming ? "button" : "submit"}
                 size="icon"
                 className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
-                disabled={isStreaming ? false : (!input.trim() || isLoading)}
+                disabled={isStreaming ? false : (!input.trim() || isLoading || isUploading)}
                 onClick={isStreaming ? handleStop : undefined}
               >
-                {isLoading ? (
+                {isUploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isLoading ? (
                   isStreaming ? (
                     <Square className="h-3.5 w-3.5 fill-current" />
                   ) : (
@@ -2092,16 +2459,25 @@ export function ChatWorkspace({
             {/* Toolbar inside container */}
             <div className="px-2 pb-2">
               <ChatInputToolbar
-                onFileSelect={setAttachedFile}
-                fileAttached={!!attachedFile}
+                onFileSelect={(files) => setAttachedFiles(prev => [...prev, ...files])}
+                fileAttached={attachedFiles.length > 0}
                 webSearchEnabled={effectiveWebSearch}
                 onToggleWebSearch={() => setWebSearchOverride((prev) => !(prev ?? webSearchAvailable))}
+                codeInterpreterEnabled={effectiveCodeInterpreter}
+                onToggleCodeInterpreter={() => setCodeInterpreterOverride((prev) => !(prev ?? codeInterpreterAvailable))}
                 knowledgeBaseGroupIds={effectiveKBGroupIds}
                 onKBGroupsChange={setSelectedKBGroupIds}
                 kbGroups={kbGroups}
-                toolsEnabled={effectiveToolsEnabled}
-                onToggleTools={() => setToolsOverride((prev) => !(prev ?? (assistantTools.length > 0)))}
+                toolMode={toolMode}
+                onSetToolMode={setToolMode}
+                selectedToolNames={selectedToolNames}
+                onSetSelectedToolNames={setSelectedToolNames}
                 assistantTools={assistantTools}
+                skillMode={skillMode}
+                onSetSkillMode={setSkillMode}
+                selectedSkillIds={selectedSkillIds}
+                onSetSelectedSkillIds={setSelectedSkillIds}
+                assistantSkills={assistantSkills}
                 onImportGithub={() => {
                   setGithubUrl("")
                   setGithubDialogOpen(true)
@@ -2121,12 +2497,53 @@ export function ChatWorkspace({
             {handoffState === "connected"
               ? "You are chatting with a live agent · Enter to send"
               : <>
-                  <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[9px]">Enter</kbd> to send · <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[9px]">Shift+Enter</kbd> new line · <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[9px]">⌘K</kbd> commands
-                </>
+                <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[9px]">Enter</kbd> to send · <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[9px]">Shift+Enter</kbd> new line · <kbd className="px-1 py-0.5 rounded bg-muted font-mono text-[9px]">⌘K</kbd> commands
+              </>
             }
           </p>
         </form>
       </div>
+
+      {/* Attachment Content Modal */}
+      <Dialog open={!!viewingAttachment} onOpenChange={() => setViewingAttachment(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              {viewingAttachment?.fileName}
+            </DialogTitle>
+            <DialogDescription>
+              {viewingAttachment?.type === "inline" ? "Inline attachment" : "Processed for RAG search"}
+              {viewingAttachment?.pageCount ? ` · ${viewingAttachment.pageCount} pages` : ""}
+              {viewingAttachment?.chunkCount ? ` · ${viewingAttachment.chunkCount} chunks` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-auto max-h-[60vh] rounded-md border bg-muted/30">
+            {(() => {
+              const att = viewingAttachment
+              if (!att) return null
+              const src = att.fileId ? `/api/chat/upload/file/${att.fileId}` : att.fileUrl
+              if (src && att.mimeType === "application/pdf") {
+                return <iframe src={src} className="w-full h-[60vh] rounded-md" title={att.fileName} />
+              }
+              if (src && att.mimeType?.startsWith("image/")) {
+                return <img src={src} alt={att.fileName} className="w-full h-auto rounded-md object-contain max-h-[60vh]" />
+              }
+              if (att.text) {
+                return <pre className="whitespace-pre-wrap text-sm font-mono p-4">{att.text}</pre>
+              }
+              return (
+                <p className="text-sm text-muted-foreground p-4">
+                  Processed for search
+                  {att.chunkCount ? ` (${att.chunkCount} chunks)` : ""}
+                  {att.pageCount ? ` across ${att.pageCount} pages` : ""}
+                  . Content is indexed and available for AI retrieval.
+                </p>
+              )
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* GitHub Import Dialog */}
       <Dialog open={githubDialogOpen} onOpenChange={setGithubDialogOpen}>

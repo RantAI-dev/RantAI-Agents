@@ -31,6 +31,7 @@ interface ArtifactPanelProps {
   artifact: Artifact
   onClose: () => void
   onUpdateArtifact?: (artifact: ArtifactInput) => void
+  onFixWithAI?: (artifactId: string, error: string) => void
   sessionId?: string
 }
 
@@ -45,12 +46,14 @@ const TYPE_LABELS: Record<string, string> = {
   "text/latex": "LaTeX",
   "application/slides": "Slides",
   "application/python": "Python",
+  "application/3d": "R3F Scene",
 }
 
 export function ArtifactPanel({
   artifact,
   onClose,
   onUpdateArtifact,
+  onFixWithAI,
   sessionId,
 }: ArtifactPanelProps) {
   const [tab, setTab] = useState<"preview" | "code" | "edit">("preview")
@@ -73,6 +76,7 @@ export function ArtifactPanel({
   const displayArtifact = useMemo<Artifact>(() => {
     if (viewingVersionIdx === null) return artifact
     const ver = artifact.previousVersions[viewingVersionIdx]
+    if (!ver) return artifact
     return { ...artifact, content: ver.content, title: ver.title }
   }, [artifact, viewingVersionIdx])
 
@@ -352,7 +356,10 @@ export function ArtifactPanel({
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {tab === "preview" ? (
-          <ArtifactRenderer artifact={displayArtifact} />
+          <ArtifactRenderer
+            artifact={displayArtifact}
+            onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+          />
         ) : tab === "code" ? (
           <StreamdownContent
             content={`\`\`\`${getCodeLanguage(displayArtifact)}\n${displayArtifact.content}\n\`\`\``}
@@ -426,6 +433,8 @@ function getExtension(artifact: Artifact): string {
       return ".pptx"
     case "application/python":
       return ".py"
+    case "application/3d":
+      return ".tsx"
     default:
       return ".txt"
   }
@@ -453,6 +462,8 @@ function getCodeLanguage(artifact: Artifact): string {
       return "json"
     case "application/python":
       return "python"
+    case "application/3d":
+      return "tsx"
     default:
       return ""
   }
