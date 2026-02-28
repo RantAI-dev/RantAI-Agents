@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { useTheme } from "next-themes"
+import { OrganizationSwitcher } from "@/app/dashboard/_components/organization-switcher"
 
 export default function GeneralSettingsPage() {
   const { theme, setTheme } = useTheme()
@@ -16,6 +17,18 @@ export default function GeneralSettingsPage() {
           Manage your application preferences.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Organization</CardTitle>
+          <CardDescription>
+            Switch between your organizations.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <OrganizationSwitcher className="w-full max-w-sm" />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
