@@ -1,29 +1,36 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useSession } from "next-auth/react"
+import React from "react"
+import { useSession, signOut } from "next-auth/react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
-  Search,
-  Plus,
   MessageSquare,
+  Blocks,
+  GitBranch,
   Headphones,
   BookOpen,
+  Store,
+  Building2,
   Settings,
-  ChevronRight,
-  ChevronDown,
-  Database,
+  Bell,
+  Search,
+  Plus,
+  Trash2,
   Pencil,
+  ChevronDown,
+  ChevronRight,
+  Database,
   Folder,
   Star,
-  Trash2,
-  Blocks,
   Wrench,
-  GitBranch,
-  Building2,
-  Store,
-} from "lucide-react"
+  User,
+  LogOut,
+  PanelLeft,
+  PanelLeftClose,
+  type IconComponent,
+} from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -32,6 +39,20 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { brand } from "@/lib/branding"
 import { useAssistants } from "@/hooks/use-assistants"
@@ -41,10 +62,14 @@ import { useChatSessions } from "@/hooks/use-chat-sessions"
 import { AssistantEditor } from "@/app/dashboard/_components/chat/assistant-editor"
 import { formatDistanceToNow } from "date-fns"
 import type { Assistant, AssistantInput } from "@/lib/types/assistant"
-import { OrganizationSwitcher } from "./organization-switcher"
+import { useFeaturesContext } from "@/components/providers/features-provider"
+import { useOrganization } from "@/hooks/use-organization"
+import { useProfileStore } from "@/hooks/use-profile"
 import { SETTINGS_NAV_ITEMS } from "../settings/settings-nav-items"
 import { ORG_NAV_ITEMS } from "../organization/org-nav-items"
 import { MARKETPLACE_NAV_ITEMS } from "../marketplace/marketplace-nav-items"
+
+// ─── Types ───────────────────────────────────────────────────────────
 
 interface KnowledgeBase {
   id: string
@@ -55,67 +80,46 @@ interface KnowledgeBase {
 
 interface AppSidebarProps {
   isOpen: boolean
+  onToggle: () => void
 }
 
-// Navigation sections with their content panels
+type FeatureKey = "AGENT" | null
+
+interface NavItem {
+  title: string
+  url: string
+  icon: IconComponent
+  feature: FeatureKey
+}
+
+// ─── Navigation Items ────────────────────────────────────────────────
+
+const allNavItems: NavItem[] = [
+  { title: "Chat", url: "/dashboard/chat", icon: MessageSquare, feature: null },
+  { title: "Agent Builder", url: "/dashboard/agent-builder", icon: Blocks, feature: null },
+  { title: "Workflows", url: "/dashboard/workflows", icon: GitBranch, feature: null },
+  { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
+  { title: "Knowledge", url: "/dashboard/knowledge", icon: BookOpen, feature: null },
+  { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },
+  { title: "Organization", url: "/dashboard/organization", icon: Building2, feature: null },
+]
+
+// ─── Sections Config ─────────────────────────────────────────────────
+
 const sections = {
-  chat: {
-    title: "Chat",
-    subtitle: "AI Conversations",
-    icon: MessageSquare,
-    path: "/dashboard/chat",
-  },
-  agentBuilder: {
-    title: "Agent Builder",
-    subtitle: "Build & Configure",
-    icon: Blocks,
-    path: "/dashboard/agent-builder",
-  },
-  workflows: {
-    title: "Workflows",
-    subtitle: "Visual Automations",
-    icon: GitBranch,
-    path: "/dashboard/workflows",
-  },
-  agent: {
-    title: "Live Chat",
-    subtitle: "Customer Support",
-    icon: Headphones,
-    path: "/dashboard/agent",
-  },
-  knowledge: {
-    title: "Knowledge",
-    subtitle: "RAG Documents",
-    icon: BookOpen,
-    path: "/dashboard/knowledge",
-  },
-  marketplace: {
-    title: "Marketplace",
-    subtitle: "Skills, Tools & More",
-    icon: Store,
-    path: "/dashboard/marketplace",
-  },
-  organization: {
-    title: "Organization",
-    subtitle: "Team & Settings",
-    icon: Building2,
-    path: "/dashboard/organization",
-  },
-  settings: {
-    title: "Settings",
-    subtitle: "Preferences",
-    icon: Settings,
-    path: "/dashboard/settings",
-  },
-  account: {
-    title: "Account",
-    subtitle: "Profile",
-    icon: null,
-    path: "/dashboard/account",
-  },
+  chat: { title: "Chat", subtitle: "AI Conversations", icon: MessageSquare, path: "/dashboard/chat" },
+  agentBuilder: { title: "Agent Builder", subtitle: "Build & Configure", icon: Blocks, path: "/dashboard/agent-builder" },
+  workflows: { title: "Workflows", subtitle: "Visual Automations", icon: GitBranch, path: "/dashboard/workflows" },
+  agent: { title: "Live Chat", subtitle: "Customer Support", icon: Headphones, path: "/dashboard/agent" },
+  knowledge: { title: "Knowledge", subtitle: "RAG Documents", icon: BookOpen, path: "/dashboard/knowledge" },
+  marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
+  organization: { title: "Organization", subtitle: "Team & Settings", icon: Building2, path: "/dashboard/organization" },
+  settings: { title: "Settings", subtitle: "Preferences", icon: Settings, path: "/dashboard/settings" },
+  account: { title: "Account", subtitle: "Profile", icon: User, path: "/dashboard/account" },
 }
 
-// Assistant Selector Header Component
+// ─── Assistant Selector Header ───────────────────────────────────────
+
 function AssistantSelectorHeader({
   assistants,
   selectedAssistant,
@@ -154,13 +158,13 @@ function AssistantSelectorHeader({
                 </h3>
                 {defaultAssistant?.id === selectedAssistant.id && (
                   <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 gap-0.5 shrink-0">
-                    <Star className="h-2 w-2 fill-chart-1 text-chart-1" />
+                    <Star className="h-2 w-2" />
                   </Badge>
                 )}
               </div>
               <p className="text-xs text-sidebar-muted truncate">{selectedAssistant.description}</p>
             </div>
-            <ChevronDown className="h-4 w-4 text-sidebar-muted shrink-0" />
+            <ChevronDown className="h-4 w-4" />
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-64 p-2" align="start" side="bottom">
@@ -173,25 +177,16 @@ function AssistantSelectorHeader({
                   key={assistant.id}
                   className={cn(
                     "group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all",
-                    isSelected
-                      ? "bg-sidebar-accent"
-                      : "hover:bg-sidebar-hover"
+                    isSelected ? "bg-sidebar-accent" : "hover:bg-sidebar-hover"
                   )}
-                  onClick={() => {
-                    onSelectAssistant(assistant)
-                    setOpen(false)
-                  }}
+                  onClick={() => { onSelectAssistant(assistant); setOpen(false) }}
                 >
                   <span className="text-lg shrink-0">{assistant.emoji}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1">
                       <span className="text-sm font-medium truncate">{assistant.name}</span>
-                      {isDefault && (
-                        <Star className="h-3 w-3 fill-amber-500 text-amber-500 shrink-0" />
-                      )}
-                      {assistant.useKnowledgeBase && (
-                        <Database className="h-3 w-3 text-muted-foreground shrink-0" />
-                      )}
+                      {isDefault && <Star className="h-3 w-3" />}
+                      {assistant.useKnowledgeBase && <Database className="h-3 w-3" />}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{assistant.description}</p>
                   </div>
@@ -200,11 +195,7 @@ function AssistantSelectorHeader({
                       variant="ghost"
                       size="icon"
                       className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onEditAssistant(assistant)
-                        setOpen(false)
-                      }}
+                      onClick={(e) => { e.stopPropagation(); onEditAssistant(assistant); setOpen(false) }}
                       aria-label={`Edit ${assistant.name}`}
                     >
                       <Pencil className="h-3 w-3" />
@@ -218,10 +209,7 @@ function AssistantSelectorHeader({
             <Button
               variant="ghost"
               className="w-full justify-start gap-2 text-muted-foreground"
-              onClick={() => {
-                onCreateAssistant()
-                setOpen(false)
-              }}
+              onClick={() => { onCreateAssistant(); setOpen(false) }}
             >
               <Plus className="h-4 w-4" />
               New Assistant
@@ -233,7 +221,8 @@ function AssistantSelectorHeader({
   )
 }
 
-// Chat Section Content Component with session history
+// ─── Chat Section Content ────────────────────────────────────────────
+
 function ChatSectionContent({
   assistants,
   selectedAssistant,
@@ -251,11 +240,7 @@ function ChatSectionContent({
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const {
-    sessions,
-    createSession,
-    deleteSession,
-  } = useChatSessions()
+  const { sessions, createSession, deleteSession } = useChatSessions()
 
   const handleNewChat = async () => {
     if (selectedAssistant) {
@@ -265,11 +250,8 @@ function ChatSectionContent({
     }
   }
 
-  // Prevent hydration mismatch by only rendering sessions after mount
   const [mounted, setMounted] = useState(false)
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  useEffect(() => { setMounted(true) }, [])
 
   if (!mounted) {
     return (
@@ -288,7 +270,6 @@ function ChatSectionContent({
 
   return (
     <div className="space-y-1">
-      {/* New Chat Button */}
       <Button
         variant="ghost"
         className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-hover mb-2"
@@ -298,7 +279,6 @@ function ChatSectionContent({
         New Chat
       </Button>
 
-      {/* Session History */}
       {sessions.length > 0 && (
         <div className="space-y-1">
           <p className="px-3 py-1 text-xs font-medium text-sidebar-muted uppercase tracking-wider">
@@ -343,9 +323,7 @@ function ChatSectionContent({
                     e.stopPropagation()
                     const wasActive = isActive
                     deleteSession(session.id)
-                    if (wasActive) {
-                      router.push("/dashboard/chat")
-                    }
+                    if (wasActive) router.push("/dashboard/chat")
                   }}
                 >
                   <Trash2 className="h-3 w-3" />
@@ -359,18 +337,33 @@ function ChatSectionContent({
   )
 }
 
-export function AppSidebar({ isOpen }: AppSidebarProps) {
+// ─── Main Sidebar Component ──────────────────────────────────────────
+
+export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
   const [searchQuery, setSearchQuery] = useState("")
+  const { isAgentEnabled } = useFeaturesContext()
+  const { activeOrganization, isOwner, isAdmin } = useOrganization()
+  const { avatarUrl, fetchProfile } = useProfileStore()
+
+  React.useEffect(() => { fetchProfile() }, [fetchProfile])
+
+  const showOrgSection = !!activeOrganization && (isOwner || isAdmin)
+
+  // Filter nav items based on enabled features and permissions
+  const mainNavItems = allNavItems.filter((item) => {
+    if (item.feature === "AGENT") return isAgentEnabled
+    if (item.url === "/dashboard/organization") return showOrgSection
+    return true
+  })
 
   // Knowledge Base state
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
   const [selectedKBId, setSelectedKBId] = useState<string | null>(null)
 
-  // Fetch knowledge bases
   const fetchKnowledgeBases = useCallback(async () => {
     try {
       const response = await fetch("/api/dashboard/knowledge/groups")
@@ -385,14 +378,11 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
 
   useEffect(() => {
     fetchKnowledgeBases()
-
-    // Listen for updates from the knowledge page
     const handleUpdate = () => fetchKnowledgeBases()
     window.addEventListener("knowledge-bases-updated", handleUpdate)
     return () => window.removeEventListener("knowledge-bases-updated", handleUpdate)
   }, [fetchKnowledgeBases])
 
-  // Sync selectedKBId with URL
   useEffect(() => {
     const kbId = searchParams.get("kb")
     setSelectedKBId(kbId)
@@ -409,55 +399,32 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
 
   // Assistant management
   const {
-    assistants,
-    selectedAssistant,
-    selectAssistant,
-    addAssistant,
-    updateAssistant,
-    deleteAssistant,
-    getAssistantById,
+    assistants, selectedAssistant, selectAssistant,
+    addAssistant, updateAssistant, deleteAssistant, getAssistantById,
   } = useAssistants()
 
-  // Default assistant
   const { assistant: defaultAssistant } = useDefaultAssistant()
-
-  // Workflows
   const { workflows } = useWorkflows()
 
-  // Assistant editor dialog state
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null)
 
-  const handleSelectAssistant = (assistant: Assistant) => {
-    selectAssistant(assistant.id)
-  }
-
-  const handleCreateAssistant = () => {
-    setEditingAssistant(null)
-    setEditorOpen(true)
-  }
-
-  const handleEditAssistant = (assistant: Assistant) => {
-    setEditingAssistant(assistant)
-    setEditorOpen(true)
-  }
+  const handleSelectAssistant = (assistant: Assistant) => selectAssistant(assistant.id)
+  const handleCreateAssistant = () => { setEditingAssistant(null); setEditorOpen(true) }
+  const handleEditAssistant = (assistant: Assistant) => { setEditingAssistant(assistant); setEditorOpen(true) }
 
   const handleSaveAssistant = async (input: AssistantInput) => {
     if (editingAssistant) {
       await updateAssistant(editingAssistant.id, input)
     } else {
       const newAssistant = await addAssistant(input)
-      if (newAssistant) {
-        selectAssistant(newAssistant.id)
-      }
+      if (newAssistant) selectAssistant(newAssistant.id)
     }
   }
 
-  const handleDeleteAssistant = (id: string) => {
-    deleteAssistant(id)
-  }
+  const handleDeleteAssistant = (id: string) => deleteAssistant(id)
 
-  // Determine current section based on pathname
+  // Current section detection
   const getCurrentSection = () => {
     if (pathname.startsWith("/dashboard/chat")) return sections.chat
     if (pathname.startsWith("/dashboard/agent-builder")) return sections.agentBuilder
@@ -468,36 +435,200 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
     if (pathname.startsWith("/dashboard/organization")) return sections.organization
     if (pathname.startsWith("/dashboard/settings")) return sections.settings
     if (pathname.startsWith("/dashboard/account")) return sections.account
-    if (pathname === "/dashboard") return sections.chat
     return sections.chat
   }
 
   const currentSection = getCurrentSection()
 
+  const isActive = (url: string) => pathname === url || pathname.startsWith(url + "/")
+
+  const initials = session?.user?.name
+    ?.split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2) || "U"
+
+  // Keyboard shortcut: Cmd/Ctrl+B
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        e.preventDefault()
+        onToggle()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [onToggle])
+
+  // ─── Collapsed Sidebar (icon-only) ─────────────────────────────────
+
   if (!isOpen) {
-    return null
+    return (
+      <TooltipProvider delayDuration={0}>
+        <div className="flex flex-col h-full w-[56px] bg-sidebar border-r border-sidebar-border transition-all duration-200">
+          {/* Logo */}
+          <div className="flex items-center justify-center py-3">
+            <Link href="/dashboard/chat">
+              <img
+                src={brand.logoMain}
+                alt={brand.productName}
+                className="h-8 w-8 rounded-lg"
+              />
+            </Link>
+          </div>
+
+          {/* Toggle button */}
+          <div className="flex items-center justify-center pb-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={onToggle}
+                  className="flex items-center justify-center w-8 h-8 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+                  aria-label="Expand sidebar"
+                >
+                  <PanelLeft className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Expand sidebar</TooltipContent>
+            </Tooltip>
+          </div>
+
+          {/* Search icon */}
+          <div className="flex items-center justify-center pb-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all">
+                  <Search className="h-5 w-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Search</TooltipContent>
+            </Tooltip>
+          </div>
+
+          {/* Main Navigation */}
+          <nav className="flex-1 flex flex-col items-center gap-1 py-2">
+            {mainNavItems.map((item) => {
+              const active = isActive(item.url)
+              return (
+                <Tooltip key={item.url}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      href={item.url}
+                      className={cn(
+                        "flex items-center justify-center w-10 h-10 rounded-lg transition-all",
+                        active
+                          ? "bg-sidebar-accent text-sidebar-foreground"
+                          : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                      )}
+                    >
+                      <item.icon className="h-5 w-5" />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{item.title}</TooltipContent>
+                </Tooltip>
+              )
+            })}
+          </nav>
+
+          {/* Bottom: Settings + Notifications */}
+          <div className="flex flex-col items-center gap-1 py-2 border-t border-sidebar-border">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href="/dashboard/settings"
+                  className={cn(
+                    "flex items-center justify-center w-10 h-10 rounded-lg transition-all",
+                    isActive("/dashboard/settings")
+                      ? "bg-sidebar-accent text-sidebar-foreground"
+                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                  )}
+                >
+                  <Settings className="h-5 w-5" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">Settings</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all">
+                  <Bell className="h-5 w-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Notifications</TooltipContent>
+            </Tooltip>
+          </div>
+
+          {/* User Avatar */}
+          <div className="flex items-center justify-center py-3 border-t border-sidebar-border">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md" aria-label="User menu">
+                  <Avatar className="h-9 w-9 cursor-pointer hover:ring-2 hover:ring-sidebar-ring transition-all">
+                    {avatarUrl && <AvatarImage src={avatarUrl} alt={session?.user?.name || "User"} />}
+                    <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground text-sm font-medium">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="right" align="end" className="w-48">
+                <div className="px-2 py-1.5 text-sm">
+                  <p className="font-medium">{session?.user?.name || "Agent"}</p>
+                  <p className="text-xs text-muted-foreground truncate">{session?.user?.email}</p>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/account" className="cursor-pointer">
+                    <User className="mr-2 h-4 w-4" />
+                    Account
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                  className="cursor-pointer text-destructive focus:text-destructive"
+                >
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+      </TooltipProvider>
+    )
   }
 
+  // ─── Expanded Sidebar ──────────────────────────────────────────────
+
   return (
-    <div className="flex flex-col h-full w-[260px] bg-sidebar border-r border-sidebar-border">
-      {/* Header */}
-      <div className="p-3 border-b border-sidebar-border space-y-3">
-        <Link href="/dashboard/chat" className="flex items-center gap-2">
-          <img
-            src={brand.logoMain}
-            alt={brand.productName}
-            className="h-8 w-8 rounded-lg"
-          />
-          <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
-        </Link>
-        {/* Organization Switcher */}
-        <OrganizationSwitcher className="w-full" />
+    <div className="flex flex-col h-full w-[260px] bg-sidebar border-r border-sidebar-border transition-all duration-200">
+      {/* Header: Logo + toggle */}
+      <div className="p-3 border-b border-sidebar-border">
+        <div className="flex items-center justify-between">
+          <Link href="/dashboard/chat" className="flex items-center gap-2">
+            <img
+              src={brand.logoMain}
+              alt={brand.productName}
+              className="h-8 w-8 rounded-lg"
+            />
+            <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
+          </Link>
+          <button
+            onClick={onToggle}
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+            aria-label="Collapse sidebar"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Search */}
       <div className="p-3">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-sidebar-muted" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" />
           <Input
             placeholder="Search..."
             value={searchQuery}
@@ -510,9 +641,31 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
         </div>
       </div>
 
-      {/* Current Section Content */}
-      <div className="flex-1 flex flex-col overflow-hidden p-2">
-        {/* Section Header (pinned) */}
+      {/* Primary Navigation */}
+      <nav className="px-2 space-y-0.5">
+        {mainNavItems.map((item) => {
+          const active = isActive(item.url)
+          return (
+            <Link
+              key={item.url}
+              href={item.url}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all",
+                active
+                  ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+              )}
+            >
+              <item.icon className="h-5 w-5" />
+              <span>{item.title}</span>
+            </Link>
+          )
+        })}
+      </nav>
+
+      {/* Contextual Panel */}
+      <div className="flex-1 flex flex-col overflow-hidden p-2 mt-2 border-t border-sidebar-border">
+        {/* Section Header */}
         <div className="shrink-0">
           {currentSection === sections.chat ? (
             <AssistantSelectorHeader
@@ -530,260 +683,301 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
           )}
         </div>
 
-        {/* Scrollable content area */}
+        {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
-        {/* Quick Actions based on section */}
-        {currentSection === sections.chat && (
-          <ChatSectionContent
-            assistants={assistants}
-            selectedAssistant={selectedAssistant}
-            onSelectAssistant={handleSelectAssistant}
-            onCreateAssistant={handleCreateAssistant}
-            onEditAssistant={handleEditAssistant}
-            getAssistantById={getAssistantById}
-          />
-        )}
+          {currentSection === sections.chat && (
+            <ChatSectionContent
+              assistants={assistants}
+              selectedAssistant={selectedAssistant}
+              onSelectAssistant={handleSelectAssistant}
+              onCreateAssistant={handleCreateAssistant}
+              onEditAssistant={handleEditAssistant}
+              getAssistantById={getAssistantById}
+            />
+          )}
 
-        {currentSection === sections.agent && (
-          <div className="space-y-1">
-            <div className="px-3 py-2 rounded-lg bg-sidebar-hover">
-              <div className="flex items-center gap-2 text-sm text-sidebar-foreground">
-                <div className="h-2 w-2 rounded-full bg-chart-2" />
-                <span>Queue Status</span>
+          {currentSection === sections.agent && (
+            <div className="space-y-1">
+              <div className="px-3 py-2 rounded-lg bg-sidebar-hover">
+                <div className="flex items-center gap-2 text-sm text-sidebar-foreground">
+                  <div className="h-2 w-2 rounded-full bg-chart-2" />
+                  <span>Queue Status</span>
+                </div>
+                <p className="text-xs text-sidebar-muted mt-1">Ready for customers</p>
               </div>
-              <p className="text-xs text-sidebar-muted mt-1">Ready for customers</p>
             </div>
-          </div>
-        )}
+          )}
 
-        {currentSection === sections.knowledge && (
-          <div className="space-y-1">
-            {/* All Documents */}
-            <div
-              className={cn(
-                "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer",
-                selectedKBId === null && pathname === "/dashboard/knowledge"
-                  ? "bg-sidebar-accent text-sidebar-foreground"
-                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-              )}
-              onClick={() => handleSelectKB(null)}
-            >
+          {currentSection === sections.knowledge && (
+            <div className="space-y-1">
               <div
                 className={cn(
-                  "absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-sm bg-sidebar-foreground",
-                  "transition-all duration-150 ease-in-out",
+                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer",
                   selectedKBId === null && pathname === "/dashboard/knowledge"
-                    ? "h-8 opacity-100"
-                    : "h-2 opacity-0 group-hover:h-5 group-hover:opacity-100"
+                    ? "bg-sidebar-accent text-sidebar-foreground"
+                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
                 )}
-              />
-              <Database className="h-4 w-4" />
-              <span className="flex-1">All Documents</span>
-              <span className="text-xs text-sidebar-muted">
-                {knowledgeBases.reduce((sum, kb) => sum + kb.documentCount, 0)}
-              </span>
-            </div>
-
-            {/* Knowledge Bases List */}
-            {knowledgeBases.map((kb) => {
-              const isSelected = selectedKBId === kb.id
-              return (
+                onClick={() => handleSelectKB(null)}
+              >
                 <div
-                  key={kb.id}
                   className={cn(
-                    "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer",
-                    isSelected
-                      ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                    "absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-sm bg-sidebar-foreground",
+                    "transition-all duration-150 ease-in-out",
+                    selectedKBId === null && pathname === "/dashboard/knowledge"
+                      ? "h-8 opacity-100"
+                      : "h-2 opacity-0 group-hover:h-5 group-hover:opacity-100"
                   )}
-                  onClick={() => handleSelectKB(kb.id)}
-                >
+                />
+                <Database className="h-4 w-4" />
+                <span className="flex-1">All Documents</span>
+                <span className="text-xs text-sidebar-muted">
+                  {knowledgeBases.reduce((sum, kb) => sum + kb.documentCount, 0)}
+                </span>
+              </div>
+
+              {knowledgeBases.map((kb) => {
+                const isSelected = selectedKBId === kb.id
+                return (
                   <div
+                    key={kb.id}
                     className={cn(
-                      "absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-sm",
-                      "transition-all duration-150 ease-in-out",
+                      "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer",
                       isSelected
-                        ? "h-8 opacity-100"
-                        : "h-2 opacity-0 group-hover:h-5 group-hover:opacity-100"
+                        ? "bg-sidebar-accent text-sidebar-foreground"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
                     )}
-                    style={{ backgroundColor: kb.color ?? "var(--chart-3)" }}
-                  />
-                  <div
-                    className="h-4 w-4 rounded flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: kb.color ?? "var(--chart-3)" }}
+                    onClick={() => handleSelectKB(kb.id)}
                   >
-                    <Folder className="h-2.5 w-2.5 text-white" />
+                    <div
+                      className={cn(
+                        "absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-sm",
+                        "transition-all duration-150 ease-in-out",
+                        isSelected
+                          ? "h-8 opacity-100"
+                          : "h-2 opacity-0 group-hover:h-5 group-hover:opacity-100"
+                      )}
+                      style={{ backgroundColor: kb.color ?? "var(--chart-3)" }}
+                    />
+                    <div
+                      className="h-4 w-4 rounded flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: kb.color ?? "var(--chart-3)" }}
+                    >
+                      <Folder className="h-2.5 w-2.5" />
+                    </div>
+                    <span className="flex-1 truncate">{kb.name}</span>
+                    <span className="text-xs text-sidebar-muted">{kb.documentCount}</span>
                   </div>
-                  <span className="flex-1 truncate">{kb.name}</span>
-                  <span className="text-xs text-sidebar-muted">{kb.documentCount}</span>
-                </div>
-              )
-            })}
+                )
+              })}
 
-            {/* Add New Knowledge Base - links to the page where KB creation happens */}
-            <Link
-              href="/dashboard/knowledge?action=new-kb"
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              <span>New Knowledge Base</span>
-            </Link>
-          </div>
-        )}
-
-        {currentSection === sections.agentBuilder && (
-          <div className="space-y-1">
-            {assistants.map((assistant) => (
               <Link
-                key={assistant.id}
-                href={`/dashboard/agent-builder/${assistant.id}`}
-                className={cn(
-                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
-                  pathname === `/dashboard/agent-builder/${assistant.id}`
-                    ? "bg-sidebar-accent text-sidebar-foreground"
-                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                )}
+                href="/dashboard/knowledge?action=new-kb"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
               >
-                <span className="text-lg">{assistant.emoji}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium truncate">{assistant.name}</span>
-                    {assistant.useKnowledgeBase && (
-                      <Database className="h-3 w-3 text-sidebar-muted shrink-0" />
-                    )}
-                    {(assistant.toolCount ?? 0) > 0 && (
-                      <Wrench className="h-3 w-3 text-sidebar-muted shrink-0" />
-                    )}
+                <Plus className="h-4 w-4" />
+                <span>New Knowledge Base</span>
+              </Link>
+            </div>
+          )}
+
+          {currentSection === sections.agentBuilder && (
+            <div className="space-y-1">
+              {assistants.map((assistant) => (
+                <Link
+                  key={assistant.id}
+                  href={`/dashboard/agent-builder/${assistant.id}`}
+                  className={cn(
+                    "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+                    pathname === `/dashboard/agent-builder/${assistant.id}`
+                      ? "bg-sidebar-accent text-sidebar-foreground"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                  )}
+                >
+                  <span className="text-lg">{assistant.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium truncate">{assistant.name}</span>
+                      {assistant.useKnowledgeBase && <Database className="h-3 w-3" />}
+                      {(assistant.toolCount ?? 0) > 0 && <Wrench className="h-3 w-3" />}
+                    </div>
                   </div>
-                </div>
-              </Link>
-            ))}
-            <Link
-              href="/dashboard/agent-builder/new"
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Create Agent</span>
-            </Link>
-          </div>
-        )}
-
-        {currentSection === sections.workflows && (
-          <div className="space-y-1">
-            {workflows.map((workflow) => (
+                </Link>
+              ))}
               <Link
-                key={workflow.id}
-                href={`/dashboard/workflows/${workflow.id}`}
-                className={cn(
-                  "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
-                  pathname === `/dashboard/workflows/${workflow.id}`
-                    ? "bg-sidebar-accent text-sidebar-foreground"
-                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                )}
+                href="/dashboard/agent-builder/new"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
               >
-                <GitBranch className="h-4 w-4 shrink-0" />
-                <span className="flex-1 truncate font-medium">{workflow.name}</span>
+                <Plus className="h-4 w-4" />
+                <span>Create Agent</span>
               </Link>
-            ))}
-            <Link
-              href="/dashboard/workflows"
-              className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
-            >
-              <Plus className="h-4 w-4" />
-              <span>New Workflow</span>
-            </Link>
-          </div>
-        )}
+            </div>
+          )}
 
-        {currentSection === sections.marketplace && (
-          <div className="space-y-1 overflow-y-auto">
-            {MARKETPLACE_NAV_ITEMS.map((item) => {
-              const isActive = pathname === item.href
-              const Icon = item.icon
-              return (
+          {currentSection === sections.workflows && (
+            <div className="space-y-1">
+              {workflows.map((workflow) => (
                 <Link
-                  key={item.href}
-                  href={item.href}
+                  key={workflow.id}
+                  href={`/dashboard/workflows/${workflow.id}`}
                   className={cn(
-                    "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
-                    isActive
+                    "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+                    pathname === `/dashboard/workflows/${workflow.id}`
                       ? "bg-sidebar-accent text-sidebar-foreground"
                       : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
                   )}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="flex-1 truncate">{item.title}</span>
-                  {isActive && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
+                  <GitBranch className="h-4 w-4 shrink-0" />
+                  <span className="flex-1 truncate font-medium">{workflow.name}</span>
                 </Link>
-              )
-            })}
-          </div>
-        )}
+              ))}
+              <Link
+                href="/dashboard/workflows"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                <span>New Workflow</span>
+              </Link>
+            </div>
+          )}
 
-        {currentSection === sections.organization && (
-          <div className="space-y-1 overflow-y-auto">
-            {ORG_NAV_ITEMS.map((item) => {
-              const isActive = pathname === item.href
-              const Icon = item.icon
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="flex-1 truncate">{item.title}</span>
-                  {isActive && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
-                </Link>
-              )
-            })}
-          </div>
-        )}
+          {currentSection === sections.marketplace && (
+            <div className="space-y-1 overflow-y-auto">
+              {MARKETPLACE_NAV_ITEMS.map((item) => {
+                const active = pathname === item.href
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-foreground"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 truncate">{item.title}</span>
+                    {active && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
 
-        {currentSection === sections.settings && (
-          <div className="space-y-1 overflow-y-auto">
-            {SETTINGS_NAV_ITEMS.map((item) => {
-              const isActive = pathname === item.href
-              const Icon = item.icon
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
-                    isActive
-                      ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                  )}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span className="flex-1 truncate">{item.title}</span>
-                  {isActive && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
-                </Link>
-              )
-            })}
-          </div>
-        )}
+          {currentSection === sections.organization && (
+            <div className="space-y-1 overflow-y-auto">
+              {ORG_NAV_ITEMS.map((item) => {
+                const active = pathname === item.href
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-foreground"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 truncate">{item.title}</span>
+                    {active && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+
+          {currentSection === sections.settings && (
+            <div className="space-y-1 overflow-y-auto">
+              {SETTINGS_NAV_ITEMS.map((item) => {
+                const active = pathname === item.href
+                const Icon = item.icon
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-foreground"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                    )}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="flex-1 truncate">{item.title}</span>
+                    {active && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Footer */}
+      {/* Bottom: Settings + Notifications */}
+      <div className="px-2 py-2 border-t border-sidebar-border space-y-0.5">
+        <Link
+          href="/dashboard/settings"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all",
+            isActive("/dashboard/settings")
+              ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+          )}
+        >
+          <Settings className="h-5 w-5" />
+          <span>Settings</span>
+        </Link>
+        <button
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+        >
+          <Bell className="h-5 w-5" />
+          <span>Notifications</span>
+        </button>
+      </div>
+
+      {/* User section */}
       <div className="p-3 border-t border-sidebar-border">
-        <div className="flex items-center gap-2 px-2">
-          <div className="flex-1 min-w-0" suppressHydrationWarning>
-            <p className="text-sm font-medium text-sidebar-foreground truncate" suppressHydrationWarning>
-              {session?.user?.name || "Agent"}
-            </p>
-            <p className="text-xs text-sidebar-muted truncate" suppressHydrationWarning>
-              {session?.user?.email}
-            </p>
-          </div>
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="w-full flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-sidebar-hover transition-colors focus:outline-none" aria-label="User menu">
+              <Avatar className="h-8 w-8 shrink-0">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt={session?.user?.name || "User"} />}
+                <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground text-xs font-medium">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0 text-left" suppressHydrationWarning>
+                <p className="text-sm font-medium text-sidebar-foreground truncate" suppressHydrationWarning>
+                  {session?.user?.name || "Agent"}
+                </p>
+                <p className="text-xs text-sidebar-muted truncate" suppressHydrationWarning>
+                  {session?.user?.email}
+                </p>
+              </div>
+              <ChevronDown className="h-4 w-4 text-sidebar-muted shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="start" className="w-48">
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/account" className="cursor-pointer">
+                <User className="mr-2 h-4 w-4" />
+                Account
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="cursor-pointer text-destructive focus:text-destructive"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {/* Assistant Editor Dialog */}

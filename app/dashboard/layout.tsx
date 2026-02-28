@@ -1,12 +1,9 @@
 "use client"
 
-import { useState, Suspense, useEffect } from "react"
+import { useState, Suspense, useEffect, useCallback } from "react"
 import { usePathname } from "next/navigation"
 import { SessionProvider } from "next-auth/react"
-import { PanelLeft, PanelLeftClose } from "lucide-react"
-import { IconRail } from "./_components/icon-rail"
 import { AppSidebar } from "./_components/app-sidebar"
-import { Button } from "@/components/ui/button"
 import { FeaturesProvider } from "@/components/providers/features-provider"
 import { ChatSessionsProvider } from "@/hooks/use-chat-sessions"
 import { OrganizationProvider } from "@/hooks/use-organization"
@@ -50,7 +47,7 @@ export default function DashboardLayout({
     document.title = title ? `${title} | ${brand.productName}` : brand.productName
   }, [pathname])
 
-  const toggleSidebar = () => setSidebarOpen(!sidebarOpen)
+  const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), [])
 
   return (
     <SessionProvider>
@@ -58,30 +55,13 @@ export default function DashboardLayout({
         <OrganizationProvider>
         <ChatSessionsProvider>
           <div className="flex h-screen w-full overflow-hidden">
-          {/* Icon Rail - always visible */}
-          <IconRail />
-
-          {/* Expandable Content Sidebar */}
+          {/* Single Unified Sidebar */}
           <Suspense fallback={null}>
-            <AppSidebar isOpen={sidebarOpen} />
+            <AppSidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
           </Suspense>
 
           {/* Main Content */}
           <main className="relative flex-1 flex flex-col h-full overflow-hidden bg-background">
-            {/* Sidebar Toggle - positioned in the header area */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebar}
-              className="absolute top-3 left-4 z-10 h-8 w-8 text-foreground/60 hover:text-foreground hover:bg-accent"
-              aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-            >
-              {sidebarOpen ? (
-                <PanelLeftClose className="h-4 w-4" />
-              ) : (
-                <PanelLeft className="h-4 w-4" />
-              )}
-            </Button>
             <ErrorBoundary>
               {children}
             </ErrorBoundary>
