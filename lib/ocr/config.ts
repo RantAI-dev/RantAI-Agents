@@ -24,7 +24,7 @@ import type {
 const DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434";
 const DEFAULT_OLLAMA_TIMEOUT = 120000; // 2 minutes
 const DEFAULT_MODEL = "glm-ocr";
-const DEFAULT_FALLBACK_MODEL = "openai/gpt-4o-mini";
+const DEFAULT_FALLBACK_MODEL = "google/gemini-2.0-flash-001";
 
 // ============================================
 // Configuration Loader

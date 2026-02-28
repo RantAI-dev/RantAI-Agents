@@ -2,7 +2,7 @@
  * OpenRouter OCR Provider (Fallback)
  *
  * Uses OpenRouter API for OCR when local Ollama is unavailable.
- * Default model: openai/gpt-4o-mini
+ * Default model: google/gemini-2.0-flash-001
  */
 
 import { BaseOCRProvider } from "./base-provider";
@@ -184,10 +184,10 @@ Be thorough and accurate. Extract all visible text exactly as it appears.`;
    */
   getSupportedModels(): string[] {
     return [
-      "openai/gpt-4o-mini",
-      "openai/gpt-4o",
-      "anthropic/claude-3-5-sonnet",
-      "google/gemini-2.0-flash",
+      "google/gemini-2.0-flash-001",
+      "google/gemini-2.5-flash",
+      "qwen/qwen3-vl-8b-instruct",
+      "qwen/qwen2.5-vl-72b-instruct",
     ];
   }
 }

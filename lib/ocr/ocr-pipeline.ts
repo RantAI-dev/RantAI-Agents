@@ -143,7 +143,61 @@ export class OCRPipeline {
 
     // Scanned PDF - convert to images and OCR
     console.log("[OCRPipeline] Detected scanned PDF, converting to images...");
-    const pages = await convertPDFToImages(pdfBuffer);
+    let pages;
+    try {
+      pages = await convertPDFToImages(pdfBuffer);
+    } catch (error) {
+      // pdf-img-convert depends on 'canvas' native module which crashes under Bun.
+      // Fallback: send the PDF directly to OpenRouter vision model (Gemini supports PDFs natively)
+      console.warn("[OCRPipeline] PDF-to-image conversion failed, trying OpenRouter direct PDF OCR...");
+      if (this.openrouterProvider) {
+        try {
+          const result = await this.openrouterProvider.processImage(
+            pdfBuffer,
+            "application/pdf",
+            options
+          );
+          const pageCount = await getPDFPageCount(pdfBuffer);
+          return {
+            pages: [{
+              ...result,
+              metadata: {
+                ...result.metadata,
+                pageNumber: 1,
+                totalPages: pageCount,
+              },
+            }],
+            combinedText: result.text,
+            totalProcessingTimeMs: Date.now() - startTime,
+            successCount: 1,
+            failureCount: 0,
+          };
+        } catch (orError) {
+          console.warn("[OCRPipeline] OpenRouter PDF OCR also failed:", orError);
+        }
+      }
+
+      // Final fallback: text extraction (may return empty for scanned PDFs)
+      const text = await extractPDFText(pdfBuffer);
+      const pageCount = await getPDFPageCount(pdfBuffer);
+      return {
+        pages: [{
+          text: text || "(Scanned PDF — OCR unavailable)",
+          format: "plain_text" as const,
+          provider: "ollama" as const,
+          model: "fallback",
+          metadata: {
+            processingTimeMs: Date.now() - startTime,
+            pageNumber: 1,
+            totalPages: pageCount,
+          },
+        }],
+        combinedText: text || "(Scanned PDF — OCR unavailable)",
+        totalProcessingTimeMs: Date.now() - startTime,
+        successCount: text ? 1 : 0,
+        failureCount: text ? 0 : 1,
+      };
+    }
 
     return this.processBatch(
       pages.map((p) => ({

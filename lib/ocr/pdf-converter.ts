@@ -55,6 +55,25 @@ export async function extractPDFText(pdfBuffer: Buffer): Promise<string> {
 }
 
 /**
+ * Check if the canvas native module is usable.
+ * pdf-img-convert depends on canvas, which crashes the process
+ * with a symbol lookup error under Bun (native addon incompatibility).
+ */
+function isCanvasAvailable(): boolean {
+  // Bun's runtime cannot load the canvas native addon — skip entirely
+  if (typeof (globalThis as Record<string, unknown>).Bun !== "undefined") {
+    return false
+  }
+  try {
+    // Check if the .node file exists (doesn't load it)
+    require.resolve("canvas")
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * Convert PDF pages to images
  *
  * Uses pdf-img-convert for PDF to image conversion.
@@ -65,6 +84,11 @@ export async function convertPDFToImages(
   options: PDFConversionOptions = {}
 ): Promise<ConvertedPage[]> {
   const { dpi = 300, format = "png", pages, maxDimension = 3000 } = options;
+
+  // Pre-check canvas availability to avoid fatal process crash
+  if (!isCanvasAvailable()) {
+    throw new Error("canvas native module is not available (Bun runtime detected) — cannot convert scanned PDF to images")
+  }
 
   try {
     // Dynamic import to avoid issues if package not installed
