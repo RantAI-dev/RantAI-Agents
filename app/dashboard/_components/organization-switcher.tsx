@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Check, ChevronsUpDown, Plus, Building2, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -46,10 +46,13 @@ export function OrganizationSwitcher({ className }: OrganizationSwitcherProps) {
     isLoading,
   } = useOrganization()
 
+  const [mounted, setMounted] = useState(false)
   const [open, setOpen] = useState(false)
   const [showNewOrgDialog, setShowNewOrgDialog] = useState(false)
   const [newOrgName, setNewOrgName] = useState("")
   const [isCreating, setIsCreating] = useState(false)
+
+  useEffect(() => { setMounted(true) }, [])
 
   const handleSelect = (org: Organization) => {
     setActiveOrganization(org)
@@ -80,7 +83,7 @@ export function OrganizationSwitcher({ className }: OrganizationSwitcherProps) {
     }
   }
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return (
       <Button
         variant="outline"

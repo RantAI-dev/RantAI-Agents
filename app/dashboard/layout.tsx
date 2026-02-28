@@ -15,6 +15,7 @@ import { ErrorBoundary } from "@/components/error-boundary"
 
 const DASHBOARD_TITLES: Record<string, string> = {
   "/dashboard": "Chat",
+  "/dashboard/chat": "Chat",
   "/dashboard/agent-builder": "Agent Builder",
   "/dashboard/workflows": "Workflows",
   "/dashboard/agent": "Live Chat",
@@ -27,6 +28,7 @@ const DASHBOARD_TITLES: Record<string, string> = {
 
 function getPageTitle(pathname: string): string {
   if (DASHBOARD_TITLES[pathname]) return DASHBOARD_TITLES[pathname]
+  if (pathname.startsWith("/dashboard/chat/")) return "Chat"
   if (pathname.startsWith("/dashboard/agent-builder/")) return "Agent Builder"
   if (pathname.startsWith("/dashboard/workflows/")) return "Workflows"
   if (pathname.startsWith("/dashboard/marketplace/")) return "Marketplace"

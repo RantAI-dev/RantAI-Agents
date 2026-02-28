@@ -63,8 +63,7 @@ const sections = {
     title: "Chat",
     subtitle: "AI Conversations",
     icon: MessageSquare,
-    path: "/dashboard",
-    exact: true,
+    path: "/dashboard/chat",
   },
   agentBuilder: {
     title: "Agent Builder",
@@ -250,17 +249,19 @@ function ChatSectionContent({
   onEditAssistant: (assistant: Assistant) => void
   getAssistantById: (id: string) => Assistant | undefined
 }) {
+  const pathname = usePathname()
+  const router = useRouter()
   const {
     sessions,
-    activeSessionId,
-    setActiveSessionId,
     createSession,
     deleteSession,
   } = useChatSessions()
 
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
     if (selectedAssistant) {
-      createSession(selectedAssistant.id)
+      const newSession = await createSession(selectedAssistant.id)
+      const urlId = newSession.dbId || newSession.id
+      router.push(`/dashboard/chat/${urlId}`)
     }
   }
 
@@ -305,7 +306,8 @@ function ChatSectionContent({
           </p>
           {sessions.map((session) => {
             const sessionAssistant = getAssistantById(session.assistantId)
-            const isActive = activeSessionId === session.id
+            const sessionUrlId = session.dbId || session.id
+            const isActive = pathname === `/dashboard/chat/${sessionUrlId}`
             return (
               <div
                 key={session.id}
@@ -315,7 +317,7 @@ function ChatSectionContent({
                     ? "bg-sidebar-accent text-sidebar-foreground"
                     : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
                 )}
-                onClick={() => setActiveSessionId(session.id)}
+                onClick={() => router.push(`/dashboard/chat/${sessionUrlId}`)}
               >
                 <div
                   className={cn(
@@ -339,7 +341,11 @@ function ChatSectionContent({
                   className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-sidebar-foreground/60 hover:text-destructive hover:bg-sidebar-hover"
                   onClick={(e) => {
                     e.stopPropagation()
+                    const wasActive = isActive
                     deleteSession(session.id)
+                    if (wasActive) {
+                      router.push("/dashboard/chat")
+                    }
                   }}
                 >
                   <Trash2 className="h-3 w-3" />
@@ -453,6 +459,7 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
 
   // Determine current section based on pathname
   const getCurrentSection = () => {
+    if (pathname.startsWith("/dashboard/chat")) return sections.chat
     if (pathname.startsWith("/dashboard/agent-builder")) return sections.agentBuilder
     if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
@@ -475,7 +482,7 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
     <div className="flex flex-col h-full w-[260px] bg-sidebar border-r border-sidebar-border">
       {/* Header */}
       <div className="p-3 border-b border-sidebar-border space-y-3">
-        <Link href="/dashboard" className="flex items-center gap-2">
+        <Link href="/dashboard/chat" className="flex items-center gap-2">
           <img
             src={brand.logoMain}
             alt={brand.productName}
@@ -768,11 +775,11 @@ export function AppSidebar({ isOpen }: AppSidebarProps) {
       {/* Footer */}
       <div className="p-3 border-t border-sidebar-border">
         <div className="flex items-center gap-2 px-2">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">
+          <div className="flex-1 min-w-0" suppressHydrationWarning>
+            <p className="text-sm font-medium text-sidebar-foreground truncate" suppressHydrationWarning>
               {session?.user?.name || "Agent"}
             </p>
-            <p className="text-xs text-sidebar-muted truncate">
+            <p className="text-xs text-sidebar-muted truncate" suppressHydrationWarning>
               {session?.user?.email}
             </p>
           </div>

@@ -2,6 +2,20 @@ import { z } from "zod"
 import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile, S3Paths, getArtifactExtension } from "@/lib/s3"
+import { chunkDocument, generateEmbeddings, storeChunks } from "@/lib/rag"
+
+async function chunkAndEmbed(documentId: string, title: string, content: string) {
+  const chunks = chunkDocument(content, title, "ARTIFACT", undefined, {
+    chunkSize: 1000,
+    chunkOverlap: 200,
+  })
+  if (chunks.length === 0) return
+
+  const chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)
+  const embeddings = await generateEmbeddings(chunkTexts)
+  await storeChunks(documentId, chunks, embeddings)
+  console.log(`[create_artifact] Indexed ${chunks.length} chunks for "${title}"`)
+}
 
 export const createArtifactTool: ToolDefinition = {
   name: "create_artifact",
@@ -23,9 +37,10 @@ export const createArtifactTool: ToolDefinition = {
         "text/latex",
         "application/slides",
         "application/python",
+        "application/3d",
       ])
       .describe(
-        "The content type: text/html for HTML pages, application/react for React components, image/svg+xml for SVG graphics, application/mermaid for Mermaid diagrams, application/code for code files, text/markdown for documents, application/sheet for CSV tabular data, text/latex for LaTeX math documents, application/slides for markdown presentations, application/python for executable Python scripts"
+        "The content type: text/html for HTML pages, application/react for React components, image/svg+xml for SVG graphics, application/mermaid for Mermaid diagrams, application/code for code files, text/markdown for documents, application/sheet for CSV tabular data, text/latex for LaTeX math documents, application/slides for markdown presentations, application/python for executable Python scripts, application/3d for interactive 3D R3F scenes"
       ),
     content: z
       .string()
@@ -79,6 +94,10 @@ export const createArtifactTool: ToolDefinition = {
           metadata: { artifactLanguage: language },
         },
       })
+      // Background: chunk + embed so it's searchable in RAG
+      chunkAndEmbed(id, title, content).catch((err) =>
+        console.error("[create_artifact] Background indexing error:", err)
+      )
     } catch (err) {
       // Log but don't fail the tool — artifact still works in-memory
       console.error("[create_artifact] Persistence error:", err)

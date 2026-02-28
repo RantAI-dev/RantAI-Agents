@@ -49,9 +49,8 @@ interface NavItem {
 const allNavItems: NavItem[] = [
   {
     title: "Chat",
-    url: "/dashboard",
+    url: "/dashboard/chat",
     icon: MessageSquare,
-    exact: true,
     feature: null,
   },
   {
@@ -106,7 +105,6 @@ export function IconRail() {
   const { isAgentEnabled } = useFeaturesContext()
   const { activeOrganization, isOwner, isAdmin } = useOrganization()
   const { avatarUrl, fetchProfile } = useProfileStore()
-
   // Fetch profile on mount to get avatar URL
   React.useEffect(() => {
     fetchProfile()
