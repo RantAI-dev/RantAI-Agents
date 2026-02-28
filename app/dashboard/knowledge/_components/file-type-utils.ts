@@ -153,6 +153,13 @@ export function getFileExtensionLabel(fileType?: string, artifactType?: string |
   }
 }
 
+export function formatFileSize(bytes?: number | null): string {
+  if (bytes == null || bytes === 0) return "—"
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export const CATEGORY_LABELS: Record<string, string> = {
   LIFE_INSURANCE: "Life Insurance",
   HEALTH_INSURANCE: "Health Insurance",

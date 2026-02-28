@@ -1,6 +1,7 @@
 "use client"
 
 import { DocumentCard } from "./document-card"
+import { DocumentRow } from "./document-row"
 import { Button } from "@/components/ui/button"
 import { FileText, Plus, FilterX } from "lucide-react"
 
@@ -15,12 +16,14 @@ interface Document {
   title: string
   categories: string[]
   subcategory: string | null
-  fileType?: "markdown" | "pdf"
+  fileType?: string
   artifactType?: string | null
   chunkCount: number
   groups: DocumentGroup[]
   createdAt: string
   updatedAt: string
+  fileSize?: number
+  thumbnailUrl?: string
 }
 
 interface Category {
@@ -31,6 +34,8 @@ interface Category {
   isSystem: boolean
 }
 
+export type ViewMode = "grid" | "list"
+
 interface DocumentListProps {
   documents: Document[]
   loading: boolean
@@ -40,6 +45,7 @@ interface DocumentListProps {
   categoryMap: Map<string, Category>
   onAddDocument?: () => void
   onClearFilters?: () => void
+  viewMode?: ViewMode
 }
 
 export function DocumentList({
@@ -51,8 +57,36 @@ export function DocumentList({
   categoryMap,
   onAddDocument,
   onClearFilters,
+  viewMode = "grid",
 }: DocumentListProps) {
   if (loading) {
+    if (viewMode === "list") {
+      return (
+        <div className="rounded-lg border overflow-hidden">
+          <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-muted/30">
+            <div className="h-3 w-8 rounded bg-muted animate-pulse" />
+            <div className="flex-1" />
+            <div className="h-3 w-16 rounded bg-muted animate-pulse hidden sm:block" />
+            <div className="h-3 w-12 rounded bg-muted animate-pulse hidden sm:block" />
+            <div className="w-7" />
+          </div>
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-3 px-4 py-3 border-b last:border-b-0"
+              aria-hidden
+            >
+              <div className="h-7 w-7 rounded-lg bg-muted animate-pulse shrink-0" />
+              <div className="h-4 rounded bg-muted animate-pulse flex-1 max-w-[300px]" />
+              <div className="h-4 w-16 rounded bg-muted animate-pulse hidden sm:block" />
+              <div className="h-4 w-12 rounded bg-muted animate-pulse hidden sm:block" />
+              <div className="w-7" />
+            </div>
+          ))}
+        </div>
+      )
+    }
+
     return (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {[...Array(6)].map((_, i) => (
@@ -96,8 +130,33 @@ export function DocumentList({
     )
   }
 
+  if (viewMode === "list") {
+    return (
+      <div className="rounded-lg border overflow-hidden">
+        {/* Table header */}
+        <div className="flex items-center gap-3 px-4 py-2 border-b bg-muted/30 text-xs font-medium text-muted-foreground">
+          <div className="w-7 shrink-0" />
+          <div className="flex-1">File</div>
+          <div className="w-[100px] text-right hidden sm:block">Created At</div>
+          <div className="w-[70px] text-right hidden sm:block">Size</div>
+          <div className="w-7 shrink-0" />
+        </div>
+        {documents.map((doc) => (
+          <DocumentRow
+            key={doc.id}
+            document={doc}
+            onDelete={onDelete}
+            onView={onView}
+            onEdit={onEdit}
+            categoryMap={categoryMap}
+          />
+        ))}
+      </div>
+    )
+  }
+
   return (
-    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 stagger-grid">
+    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 [&>div]:mb-4 [&>div]:break-inside-avoid">
       {documents.map((doc) => (
         <div key={doc.id} className="animate-fade-in-up">
           <DocumentCard

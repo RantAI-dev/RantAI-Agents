@@ -30,7 +30,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { DocumentList } from "./_components/document-list"
+import { DocumentList, type ViewMode } from "./_components/document-list"
 import { UploadDialog } from "./_components/upload-dialog"
 import { DocumentEditDialog } from "./_components/document-edit-dialog"
 import { CategoryDialog, Category } from "./_components/category-dialog"
@@ -63,12 +63,14 @@ interface Document {
   title: string
   categories: string[]
   subcategory: string | null
-  fileType?: "markdown" | "pdf"
+  fileType?: string
   artifactType?: string | null
   chunkCount: number
   groups: DocumentGroup[]
   createdAt: string
   updatedAt: string
+  fileSize?: number
+  thumbnailUrl?: string
 }
 
 interface KnowledgeBase {
@@ -103,6 +105,7 @@ function KnowledgePageContent() {
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [sortOption, setSortOption] = useState<SortOption>("newest")
+  const [viewMode, setViewMode] = useState<ViewMode>("grid")
 
   // Categories state
   const [categories, setCategories] = useState<Category[]>([])
@@ -357,6 +360,8 @@ function KnowledgePageContent() {
           onClearFilters={clearAllFilters}
           sortOption={sortOption}
           onSortChange={setSortOption}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
           filtersPopover={
             <Popover>
               <PopoverTrigger asChild>
@@ -393,6 +398,7 @@ function KnowledgePageContent() {
             categoryMap={categoryMap}
             onAddDocument={() => setUploadDialogOpen(true)}
             onClearFilters={hasActiveFilters ? clearAllFilters : undefined}
+            viewMode={viewMode}
           />
         </div>
       </div>

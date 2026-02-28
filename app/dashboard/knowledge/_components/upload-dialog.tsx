@@ -28,9 +28,152 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkles, ChevronsUpDown, X } from "lucide-react"
+import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkles, ChevronsUpDown, X, FileCode, FileSpreadsheet, BookOpen, Info, Box } from "lucide-react"
 import { CategoryDialog, Category } from "./category-dialog"
 import { cn } from "@/lib/utils"
+
+// ─── Supported formats data ────────────────────────────────────────────────────
+const SUPPORTED_FORMAT_GROUPS = [
+  {
+    label: "Documents",
+    icon: FileType,
+    color: "text-red-500",
+    formats: [
+      { ext: ".pdf", desc: "PDF" },
+      { ext: ".docx", desc: "Word" },
+      { ext: ".doc", desc: "Word (Legacy)" },
+      { ext: ".pptx", desc: "PowerPoint" },
+      { ext: ".ppt", desc: "PowerPoint (Legacy)" },
+      { ext: ".rtf", desc: "Rich Text" },
+      { ext: ".epub", desc: "eBook" },
+      { ext: ".odt", desc: "OpenDocument Text" },
+    ],
+  },
+  {
+    label: "Spreadsheets & Data",
+    icon: FileSpreadsheet,
+    color: "text-green-500",
+    formats: [
+      { ext: ".xlsx", desc: "Excel" },
+      { ext: ".xls", desc: "Excel (Legacy)" },
+      { ext: ".ods", desc: "OpenDocument Sheet" },
+      { ext: ".csv", desc: "CSV" },
+      { ext: ".tsv", desc: "TSV" },
+      { ext: ".json", desc: "JSON" },
+      { ext: ".jsonl", desc: "JSONL" },
+    ],
+  },
+  {
+    label: "Text & Markup",
+    icon: FileText,
+    color: "text-blue-500",
+    formats: [
+      { ext: ".md", desc: "Markdown" },
+      { ext: ".txt", desc: "Plain Text" },
+      { ext: ".log", desc: "Log File" },
+      { ext: ".html", desc: "HTML" },
+      { ext: ".xml", desc: "XML" },
+      { ext: ".yaml", desc: "YAML" },
+      { ext: ".toml", desc: "TOML" },
+      { ext: ".ini", desc: "INI Config" },
+      { ext: ".env", desc: "Env File" },
+    ],
+  },
+  {
+    label: "3D Models",
+    icon: Box,
+    color: "text-cyan-500",
+    formats: [
+      { ext: ".gltf", desc: "glTF" },
+      { ext: ".glb", desc: "glTF Binary" },
+    ],
+  },
+  {
+    label: "Code",
+    icon: FileCode,
+    color: "text-purple-500",
+    formats: [
+      { ext: ".py", desc: "Python" },
+      { ext: ".ts", desc: "TypeScript" },
+      { ext: ".js", desc: "JavaScript" },
+      { ext: ".go", desc: "Go" },
+      { ext: ".rs", desc: "Rust" },
+      { ext: ".java", desc: "Java" },
+      { ext: ".rb", desc: "Ruby" },
+      { ext: ".php", desc: "PHP" },
+      { ext: ".sh", desc: "Shell" },
+      { ext: ".sql", desc: "SQL" },
+      { ext: ".swift", desc: "Swift" },
+      { ext: ".kt", desc: "Kotlin" },
+      { ext: ".c", desc: "C" },
+      { ext: ".cpp", desc: "C++" },
+    ],
+  },
+  {
+    label: "Images (OCR)",
+    icon: Image,
+    color: "text-amber-500",
+    formats: [
+      { ext: ".png", desc: "PNG" },
+      { ext: ".jpg", desc: "JPEG" },
+      { ext: ".webp", desc: "WebP" },
+      { ext: ".gif", desc: "GIF" },
+      { ext: ".heic", desc: "HEIC" },
+    ],
+  },
+]
+
+function SupportedFormatsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Supported File Formats</DialogTitle>
+          <DialogDescription>
+            All formats are extracted to text and indexed for semantic search.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 pt-1">
+          {SUPPORTED_FORMAT_GROUPS.map((group) => (
+            <div key={group.label}>
+              <div className="flex items-center gap-1.5 mb-2">
+                <group.icon className={cn("h-3.5 w-3.5", group.color)} />
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  {group.label}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {group.formats.map((f) => (
+                  <Badge key={f.ext} variant="secondary" className="text-xs font-mono gap-1">
+                    {f.ext}
+                    <span className="text-muted-foreground font-sans">{f.desc}</span>
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── All accepted extensions (for validation + input accept attr) ─────────────
+const VALID_EXTENSIONS = [
+  // Documents
+  ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".rtf", ".epub", ".odt",
+  // Spreadsheets & data
+  ".xlsx", ".xls", ".ods", ".csv", ".tsv", ".json", ".jsonl",
+  // Text & markup
+  ".md", ".markdown", ".txt", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".toml", ".ini", ".env",
+  // Code
+  ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java",
+  ".c", ".cpp", ".h", ".rb", ".php", ".sh", ".sql", ".r", ".swift", ".kt",
+  // Images
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic",
+  // 3D Models
+  ".gltf", ".glb",
+]
 
 interface KnowledgeBase {
   id: string
@@ -54,10 +197,22 @@ function getFileIcon(fileName: string) {
   const ext = fileName.toLowerCase().slice(fileName.lastIndexOf("."))
 
   if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"].includes(ext)) {
-    return { Icon: Image, color: "text-green-500" }
+    return { Icon: Image, color: "text-amber-500" }
   }
   if (ext === ".pdf") {
     return { Icon: FileType, color: "text-red-500" }
+  }
+  if ([".docx", ".doc", ".pptx", ".ppt", ".rtf", ".epub", ".odt"].includes(ext)) {
+    return { Icon: BookOpen, color: "text-red-400" }
+  }
+  if ([".xlsx", ".xls", ".ods", ".csv", ".tsv", ".json", ".jsonl"].includes(ext)) {
+    return { Icon: FileSpreadsheet, color: "text-green-500" }
+  }
+  if ([".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".rb", ".php", ".sh", ".sql", ".swift", ".kt"].includes(ext)) {
+    return { Icon: FileCode, color: "text-purple-500" }
+  }
+  if ([".gltf", ".glb"].includes(ext)) {
+    return { Icon: Box, color: "text-cyan-500" }
   }
   return { Icon: FileText, color: "text-blue-500" }
 }
@@ -82,6 +237,7 @@ export function UploadDialog({
   const [enableEnhanced, setEnableEnhanced] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const [formatsDialogOpen, setFormatsDialogOpen] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -117,11 +273,10 @@ export function UploadDialog({
   }
 
   const handleFileSelect = (file: File) => {
-    const validExtensions = [".md", ".pdf", ".txt", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"]
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."))
 
-    if (!validExtensions.includes(ext)) {
-      setError("Please upload a supported file (Markdown, PDF, Text, or Image)")
+    if (!VALID_EXTENSIONS.includes(ext)) {
+      setError("Unsupported file type. Click \"Supported formats\" to see what's accepted.")
       return
     }
 
@@ -223,7 +378,7 @@ export function UploadDialog({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".md,.pdf,.txt,.png,.jpg,.jpeg,.gif,.webp,.heic"
+              accept={VALID_EXTENSIONS.join(",")}
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0]
@@ -260,9 +415,17 @@ export function UploadDialog({
                 <p className="text-muted-foreground">
                   Drag and drop or <span className="text-primary">browse</span>
                 </p>
-                <p className="text-xs text-muted-foreground">
-                  Markdown, PDF, Text, or Images
-                </p>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setFormatsDialogOpen(true)
+                  }}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+                >
+                  <Info className="h-3 w-3" />
+                  Supported formats
+                </button>
               </div>
             )}
           </div>
@@ -300,16 +463,23 @@ export function UploadDialog({
                             style={cat ? { backgroundColor: cat.color, borderColor: cat.color } : undefined}
                           >
                             {cat?.label ?? name}
-                            <button
-                              type="button"
-                              className="ml-1 hover:opacity-70"
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              className="ml-1 hover:opacity-70 cursor-pointer"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 toggleCategory(name)
                               }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.stopPropagation()
+                                  toggleCategory(name)
+                                }
+                              }}
                             >
                               <X className="h-2.5 w-2.5" />
-                            </button>
+                            </span>
                           </Badge>
                         )
                       })}
@@ -369,6 +539,11 @@ export function UploadDialog({
             open={categoryDialogOpen}
             onOpenChange={setCategoryDialogOpen}
             onSuccess={handleCategoryCreated}
+          />
+
+          <SupportedFormatsDialog
+            open={formatsDialogOpen}
+            onOpenChange={setFormatsDialogOpen}
           />
 
           {/* Subcategory */}

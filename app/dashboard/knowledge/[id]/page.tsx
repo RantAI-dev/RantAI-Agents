@@ -363,8 +363,9 @@ export default function DocumentViewerPage({
                 title={document.title}
               />
             </div>
-          ) : isImage && (hasS3File || hasBase64) ? (
+          ) : isImage ? (
             <div className="h-full rounded-lg overflow-hidden flex items-center justify-center bg-neutral-900">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={document.fileUrl || (document.metadata?.fileData ? `data:${document.mimeType || "image/png"};base64,${document.metadata.fileData}` : "")}
                 alt={document.title}

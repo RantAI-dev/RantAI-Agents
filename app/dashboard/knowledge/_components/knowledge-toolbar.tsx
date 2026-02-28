@@ -2,7 +2,8 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, X } from "lucide-react"
+import { Search, X, LayoutGrid, List } from "lucide-react"
+import type { ViewMode } from "./document-list"
 import {
   Select,
   SelectContent,
@@ -21,6 +22,8 @@ interface KnowledgeToolbarProps {
   sortOption: SortOption
   onSortChange: (value: SortOption) => void
   filtersPopover?: React.ReactNode
+  viewMode?: ViewMode
+  onViewModeChange?: (mode: ViewMode) => void
 }
 
 export function KnowledgeToolbar({
@@ -31,6 +34,8 @@ export function KnowledgeToolbar({
   sortOption,
   onSortChange,
   filtersPopover,
+  viewMode = "grid",
+  onViewModeChange,
 }: KnowledgeToolbarProps) {
   return (
     <div className="flex flex-col sm:flex-row gap-3 sm:items-center border-b px-4 py-3 bg-background">
@@ -69,6 +74,30 @@ export function KnowledgeToolbar({
             <SelectItem value="title">Title A–Z</SelectItem>
           </SelectContent>
         </Select>
+        {onViewModeChange && (
+          <div className="flex items-center rounded-md border bg-muted/30 p-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 rounded-sm ${viewMode === "grid" ? "bg-background shadow-sm" : "hover:bg-transparent"}`}
+              onClick={() => onViewModeChange("grid")}
+              aria-label="Grid view"
+              aria-pressed={viewMode === "grid"}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-7 w-7 rounded-sm ${viewMode === "list" ? "bg-background shadow-sm" : "hover:bg-transparent"}`}
+              onClick={() => onViewModeChange("list")}
+              aria-label="List view"
+              aria-pressed={viewMode === "list"}
+            >
+              <List className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )

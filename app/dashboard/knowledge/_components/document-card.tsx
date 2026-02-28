@@ -1,7 +1,5 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -19,16 +17,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Separator } from "@/components/ui/separator"
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip"
-import { MoreVertical, Trash2, Layers, Eye, Pencil } from "lucide-react"
-import { formatDistanceToNow } from "date-fns"
+import { MoreVertical, Trash2, Eye, Pencil } from "lucide-react"
 import { useState } from "react"
-import { getFileTypeIcon, getCategoryDisplay, getFileExtensionLabel } from "./file-type-utils"
+import { getFileTypeIcon, formatFileSize } from "./file-type-utils"
 
 interface DocumentGroup {
   id: string
@@ -41,12 +32,14 @@ interface Document {
   title: string
   categories: string[]
   subcategory: string | null
-  fileType?: "markdown" | "pdf" | "image"
+  fileType?: string
   artifactType?: string | null
   chunkCount: number
   groups: DocumentGroup[]
   createdAt: string
   updatedAt: string
+  fileSize?: number
+  thumbnailUrl?: string
 }
 
 interface Category {
@@ -65,109 +58,49 @@ interface DocumentCardProps {
   categoryMap: Map<string, Category>
 }
 
-export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }: DocumentCardProps) {
+export function DocumentCard({ document, onDelete, onView, onEdit }: DocumentCardProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const { Icon: FileIcon, bgColor, iconColor, accentColor } = getFileTypeIcon(document.fileType, document.artifactType)
+  const [imgError, setImgError] = useState(false)
+  const { Icon: FileIcon, iconColor, bgColor } = getFileTypeIcon(document.fileType, document.artifactType)
 
   const handleDelete = () => {
     onDelete(document.id)
     setDeleteDialogOpen(false)
   }
 
+  const hasThumbnail = document.thumbnailUrl && !imgError
+
   return (
     <>
-      <Card
-        className="group relative cursor-pointer transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/50 hover:-translate-y-1 flex flex-col min-h-[180px] overflow-hidden"
-        style={{ borderTop: `2.5px solid ${accentColor}` }}
+      <div
+        className="group relative cursor-pointer rounded-lg border bg-card overflow-hidden transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/30 hover:-translate-y-0.5"
         onClick={() => onView(document.id)}
       >
-        <span
-          className="absolute bottom-2.5 right-3 text-[11px] font-mono font-bold opacity-80"
-          style={{ color: accentColor }}
-        >
-          {getFileExtensionLabel(document.fileType, document.artifactType)}
-        </span>
-        <CardHeader className="flex flex-row items-start justify-between space-y-0 pt-4 pb-2">
-          <div className="flex items-start gap-3 min-w-0 flex-1">
-            <div
-              className={`rounded-xl p-2.5 shrink-0 ring-1 ring-inset ring-black/5 dark:ring-white/5 ${bgColor}`}
-              aria-hidden
-            >
-              <FileIcon className={`h-5 w-5 ${iconColor}`} />
-            </div>
-            <div className="space-y-1.5 min-w-0">
-              <CardTitle className="text-sm font-semibold leading-snug line-clamp-2">
-                {document.title}
-              </CardTitle>
-              <div className="flex gap-1.5 flex-wrap items-center">
-                {document.categories.slice(0, 2).map((cat) => {
-                  const { label, color } = getCategoryDisplay(cat, categoryMap)
-                  return (
-                    <Badge
-                      key={cat}
-                      className="text-[10px] font-medium h-5 px-1.5 border-0 shrink-0"
-                      style={{
-                        backgroundColor: `color-mix(in oklch, ${color} 12%, transparent)`,
-                        color,
-                      }}
-                    >
-                      {label}
-                    </Badge>
-                  )
-                })}
-                {document.categories.length > 2 && (
-                  <Badge variant="outline" className="text-[10px] h-5 px-1.5 shrink-0">
-                    +{document.categories.length - 2}
-                  </Badge>
-                )}
-                {document.groups.length > 0 && (
-                  <>
-                    {document.groups.slice(0, 3).map((group) => (
-                      <Tooltip key={group.id}>
-                        <TooltipTrigger asChild>
-                          <div
-                            className="h-3 w-3 rounded-sm shrink-0"
-                            style={{ backgroundColor: group.color ?? "var(--chart-3)" }}
-                          />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs">
-                          {group.name}
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                    {document.groups.length > 3 && (
-                      <span className="text-[10px] text-muted-foreground">
-                        +{document.groups.length - 3}
-                      </span>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+        {/* Actions dropdown - top right, appears on hover */}
+        <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="icon"
-                className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-7 w-7 shadow-sm"
                 onClick={(e) => e.stopPropagation()}
                 aria-label="Document actions"
               >
-                <MoreVertical className="h-4 w-4" />
+                <MoreVertical className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onView(document.id); }}>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onView(document.id) }}>
                 <Eye className="h-4 w-4 mr-2" />
                 View
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(document.id); }}>
+              <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEdit(document.id) }}>
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={(e) => { e.stopPropagation(); setDeleteDialogOpen(true); }}
+                onClick={(e) => { e.stopPropagation(); setDeleteDialogOpen(true) }}
                 className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="h-4 w-4 mr-2" />
@@ -175,22 +108,45 @@ export function DocumentCard({ document, onDelete, onView, onEdit, categoryMap }
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </CardHeader>
-        <CardContent className="mt-auto pt-0">
-          <Separator className="mb-3" />
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <Layers className="h-3 w-3" />
-              <span>{document.chunkCount} chunks</span>
-            </div>
-            <span>
-              {formatDistanceToNow(new Date(document.createdAt), {
-                addSuffix: true,
-              })}
-            </span>
+        </div>
+
+        {/* Preview area */}
+        {hasThumbnail ? (
+          /* Image thumbnail - fills card width, aspect ratio preserved */
+          <div className="relative bg-muted/30">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={document.thumbnailUrl}
+              alt={document.title}
+              className="w-full h-auto block"
+              onError={() => setImgError(true)}
+              loading="lazy"
+            />
           </div>
-        </CardContent>
-      </Card>
+        ) : (
+          /* Icon placeholder for non-image files */
+          <div className="flex items-center justify-center py-8 bg-muted/20">
+            <div
+              className={`rounded-2xl p-4 ${bgColor}`}
+              aria-hidden
+            >
+              <FileIcon className={`h-10 w-10 ${iconColor}`} />
+            </div>
+          </div>
+        )}
+
+        {/* Footer: title + file size */}
+        <div className="px-3 py-2.5 border-t border-border/50">
+          <p className="text-sm font-medium leading-snug line-clamp-2 text-center">
+            {document.title}
+          </p>
+          {document.fileSize != null && document.fileSize > 0 && (
+            <p className="text-xs text-muted-foreground text-center mt-1">
+              {formatFileSize(document.fileSize)}
+            </p>
+          )}
+        </div>
+      </div>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
