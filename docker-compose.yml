@@ -71,8 +71,56 @@ services:
       timeout: 10s
       retries: 3
 
+  # Piston - Sandboxed code execution for AI Code Interpreter
+  # Install runtimes after first start:
+  #   curl -sX POST http://localhost:2000/api/v2/packages -H "Content-Type: application/json" -d '{"language":"python","version":"3.10.0"}'
+  #   curl -sX POST http://localhost:2000/api/v2/packages -H "Content-Type: application/json" -d '{"language":"javascript","version":"18.15.0"}'
+  #   curl -sX POST http://localhost:2000/api/v2/packages -H "Content-Type: application/json" -d '{"language":"typescript","version":"5.0.3"}'
+  # Scale with: docker compose up -d --scale piston=3
+  piston:
+    image: ghcr.io/engineer-man/piston
+    container_name: rantai-agents-piston
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "2000:2000"
+    environment:
+      - PISTON_RUN_TIMEOUT=15000
+      - PISTON_COMPILE_TIMEOUT=15000
+      - PISTON_RUN_MEMORY_LIMIT=256000000
+      - PISTON_OUTPUT_MAX_SIZE=4194304  # 4MB — allow base64-encoded images
+    volumes:
+      - piston_packages:/piston/packages
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:2000/api/v2/runtimes || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # SearXNG - Private meta-search engine for AI Web Search tool
+  # Admin: http://localhost:8080
+  # Used by web_search tool via SEARCH_API_URL env var
+  searxng:
+    image: searxng/searxng:latest
+    container_name: rantai-agents-searxng
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - searxng_data:/etc/searxng
+      - ./docker/searxng-settings.yml:/etc/searxng/settings.yml:ro
+    environment:
+      - SEARXNG_BASE_URL=http://localhost:8080/
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   postgres_data:
   surrealdb_data:
   rustfs_data:
   ollama_data:
+  piston_packages:
+  searxng_data:

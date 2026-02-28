@@ -1,0 +1,23 @@
+# SearXNG settings for RantAI Agents
+# Uses default settings as base, only overrides what we need.
+# Docs: https://docs.searxng.org/admin/settings/settings.html
+
+use_default_settings: true
+
+general:
+  instance_name: "RantAI Search"
+
+search:
+  safe_search: 0
+  autocomplete: "google"
+  default_lang: "auto"
+  # IMPORTANT: json must be enabled for the web_search tool API access
+  formats:
+    - html
+    - json
+
+server:
+  port: 8080
+  bind_address: "0.0.0.0"
+  secret_key: "rantai-searxng-secret-change-in-production"
+  limiter: false
