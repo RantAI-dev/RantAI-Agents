@@ -10,6 +10,7 @@ import { jsonTransformTool } from "./json-transform"
 import { textUtilitiesTool } from "./text-utilities"
 import { createArtifactTool } from "./create-artifact"
 import { updateArtifactTool } from "./update-artifact"
+import { codeInterpreterTool } from "./code-interpreter"
 import type { ToolDefinition } from "../types"
 
 export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
@@ -25,6 +26,7 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
   text_utilities: textUtilitiesTool,
   create_artifact: createArtifactTool,
   update_artifact: updateArtifactTool,
+  code_interpreter: codeInterpreterTool,
 }
 
 export function getBuiltinTool(name: string): ToolDefinition | undefined {

@@ -2,6 +2,23 @@ import { prisma } from "@/lib/prisma"
 import { BUILTIN_TOOLS } from "./builtin"
 import { zodToJsonSchema } from "./utils"
 
+/** Emoji icons for built-in tools */
+const BUILTIN_TOOL_ICONS: Record<string, string> = {
+  knowledge_search: "\uD83D\uDD0D",
+  customer_lookup: "\uD83D\uDCCA",
+  channel_dispatch: "\uD83D\uDCE8",
+  document_analysis: "\uD83D\uDCC4",
+  file_operations: "\uD83D\uDCC1",
+  web_search: "\uD83C\uDF10",
+  calculator: "\uD83E\uDDEE",
+  date_time: "\uD83D\uDD52",
+  json_transform: "\uD83D\uDD00",
+  text_utilities: "\u270F\uFE0F",
+  create_artifact: "\u2728",
+  update_artifact: "\uD83D\uDD27",
+  code_interpreter: "\uD83D\uDCBB",
+}
+
 /**
  * Ensure all built-in tools exist in the database.
  * Creates missing tools, updates existing ones.
@@ -17,6 +34,7 @@ export async function ensureBuiltinTools(): Promise<void> {
       displayName: def.displayName,
       description: def.description,
       parameters: zodToJsonSchema(def.parameters),
+      icon: BUILTIN_TOOL_ICONS[name] || null,
     }
 
     if (existing) {
