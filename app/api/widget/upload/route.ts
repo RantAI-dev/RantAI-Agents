@@ -6,17 +6,11 @@ import {
   validateApiKeyFormat,
   checkRateLimit,
 } from "@/lib/embed"
+import { processChatFile, type FileProcessingResult } from "@/lib/chat/file-processor"
+import { CHAT_ATTACHMENT_MIME_TYPES } from "@/lib/files/mime-types"
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
-const ALLOWED_TYPES = [
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-  "text/plain",
-  "text/markdown",
-]
+const ALLOWED_TYPES: readonly string[] = CHAT_ATTACHMENT_MIME_TYPES
 
 // POST /api/widget/upload - Handle temporary file uploads
 export async function POST(req: NextRequest) {
@@ -115,22 +109,32 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    // For text files, extract content directly
+    // Process file through the shared file processor
+    let result: FileProcessingResult | undefined
+    try {
+      result = await processChatFile(buffer, file.type, file.name)
+    } catch (processingError) {
+      console.error("[Widget Upload API] File processing error:", processingError)
+      // Fall through to legacy response if processing fails
+    }
+
+    // Legacy fields for backward compatibility
     let extractedContent = ""
     if (file.type === "text/plain" || file.type === "text/markdown") {
       extractedContent = buffer.toString("utf-8")
     }
-
-    // For images, we'll return base64 for client to include in message
-    const base64Data = buffer.toString("base64")
+    const base64Data = file.type.startsWith("image/")
+      ? buffer.toString("base64")
+      : undefined
 
     return NextResponse.json({
       success: true,
       fileName: file.name,
       fileType: file.type,
       fileSize: file.size,
-      base64: file.type.startsWith("image/") ? base64Data : undefined,
+      base64: base64Data,
       content: extractedContent || undefined,
+      result: result || undefined,
       message:
         file.type.startsWith("image/")
           ? "Image uploaded. Include in your next message."

@@ -10,6 +10,7 @@ import {
   checkRateLimit,
 } from "@/lib/embed"
 import { smartRetrieve, formatContextForPrompt } from "@/lib/rag"
+import { searchByDocumentIds } from "@/lib/rag/vector-store"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
 import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow"
 import {
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
 
     // Parse request body
     const body = await req.json()
-    const { messages: rawMessages, visitorId, customerId } = body
+    const { messages: rawMessages, visitorId, customerId, fileContext, fileDocumentIds } = body
 
     if (!rawMessages || !Array.isArray(rawMessages)) {
       return NextResponse.json(
@@ -334,6 +335,30 @@ export async function POST(req: NextRequest) {
 
     // Build system prompt
     let systemPrompt = assistant.systemPrompt
+
+    // ===== FILE ATTACHMENT CONTEXT =====
+    if (fileContext && typeof fileContext === "string") {
+      systemPrompt += `\n\n## Attached File Content\n${fileContext}`;
+      console.log("[Widget Chat] Inline file context appended to system prompt");
+    }
+
+    if (fileDocumentIds && Array.isArray(fileDocumentIds) && fileDocumentIds.length > 0) {
+      try {
+        const fileQuery = lastUserMsg || "";
+        if (fileQuery) {
+          const fileChunks = await searchByDocumentIds(fileQuery, fileDocumentIds, 8, 0.25);
+          if (fileChunks.length > 0) {
+            const fileContextText = fileChunks
+              .map((c) => `[From: ${c.documentTitle}]\n${c.content}`)
+              .join("\n\n");
+            systemPrompt += `\n\n## Attached File Context\nThe user attached file(s) to this conversation. Here are the most relevant sections:\n\n${fileContextText}`;
+            console.log(`[Widget Chat] File RAG: retrieved ${fileChunks.length} chunks from ${fileDocumentIds.length} documents`);
+          }
+        }
+      } catch (error) {
+        console.error("[Widget Chat] File RAG retrieval error:", error);
+      }
+    }
 
     // Store RAG sources to send with response (match dashboard behavior)
     let ragSources: Array<{ title: string; section: string | null }> = []

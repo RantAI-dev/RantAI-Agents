@@ -1,5 +1,15 @@
 import type { WidgetPublicConfig, Message } from "./types"
 
+export interface FileProcessingResult {
+  type: "inline" | "rag"
+  fileName: string
+  mimeType: string
+  text?: string
+  documentId?: string
+  pageCount?: number
+  chunkCount?: number
+}
+
 export class WidgetAPI {
   private apiKey: string
   private baseUrl: string
@@ -26,7 +36,8 @@ export class WidgetAPI {
     messages: Message[],
     onChunk: (chunk: string) => void,
     visitorId?: string,
-    threadId?: string
+    threadId?: string,
+    fileCtx?: { fileContext?: string; fileDocumentIds?: string[] }
   ): Promise<string> {
     const response = await fetch(`${this.baseUrl}/api/widget/chat`, {
       method: "POST",
@@ -41,6 +52,8 @@ export class WidgetAPI {
         })),
         visitorId,
         threadId,
+        ...(fileCtx?.fileContext && { fileContext: fileCtx.fileContext }),
+        ...(fileCtx?.fileDocumentIds && { fileDocumentIds: fileCtx.fileDocumentIds }),
       }),
     })
 
@@ -145,7 +158,7 @@ export class WidgetAPI {
     return response.json()
   }
 
-  async uploadFile(file: File): Promise<{ base64?: string; content?: string }> {
+  async uploadFile(file: File): Promise<{ base64?: string; content?: string; result?: FileProcessingResult }> {
     const formData = new FormData()
     formData.append("file", file)
 

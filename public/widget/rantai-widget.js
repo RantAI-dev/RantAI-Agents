@@ -1,22 +1,22 @@
-"use strict";var RantAIWidget=(()=>{var f=Object.defineProperty;var M=Object.getOwnPropertyDescriptor;var H=Object.getOwnPropertyNames;var A=Object.prototype.hasOwnProperty;var B=(s,t)=>{for(var e in t)f(s,e,{get:t[e],enumerable:!0})},P=(s,t,e,a)=>{if(t&&typeof t=="object"||typeof t=="function")for(let i of H(t))!A.call(s,i)&&i!==e&&f(s,i,{get:()=>t[i],enumerable:!(a=M(t,i))||a.enumerable});return s};var W=s=>P(f({},"__esModule",{value:!0}),s);var L={};B(L,{RantAIWidgetInstance:()=>m,initWidget:()=>x});var u=class{constructor(t,e){this.apiKey=t,this.baseUrl=e}async getConfig(){let t=await fetch(`${this.baseUrl}/api/widget/config?key=${encodeURIComponent(this.apiKey)}`);if(!t.ok){let e=await t.json().catch(()=>({error:"Failed to load config"}));throw new Error(e.error||`HTTP ${t.status}`)}return t.json()}async sendMessage(t,e,a,i){let r=await fetch(`${this.baseUrl}/api/widget/chat`,{method:"POST",headers:{"Content-Type":"application/json","X-Widget-Api-Key":this.apiKey},body:JSON.stringify({messages:t.map(c=>({role:c.role,content:c.content})),visitorId:a,threadId:i})});if(!r.ok){let c=await r.json().catch(()=>({error:"Failed to send message"}));throw new Error(c.error||`HTTP ${r.status}`)}let o=r.body?.getReader();if(!o)throw new Error("No response body");let l=new TextDecoder,n="";for(;;){let{done:c,value:h}=await o.read();if(c)break;let I=l.decode(h,{stream:!0});n+=I;let v=n.indexOf(`
+"use strict";var RantAIWidget=(()=>{var m=Object.defineProperty;var P=Object.getOwnPropertyDescriptor;var H=Object.getOwnPropertyNames;var A=Object.prototype.hasOwnProperty;var R=(n,t)=>{for(var i in t)m(n,i,{get:t[i],enumerable:!0})},L=(n,t,i,e)=>{if(t&&typeof t=="object"||typeof t=="function")for(let a of H(t))!A.call(n,a)&&a!==i&&m(n,a,{get:()=>t[a],enumerable:!(e=P(t,a))||e.enumerable});return n};var B=n=>L(m({},"__esModule",{value:!0}),n);var O={};R(O,{RantAIWidgetInstance:()=>f,initWidget:()=>x});var u=class{constructor(t,i){this.apiKey=t,this.baseUrl=i}async getConfig(){let t=await fetch(`${this.baseUrl}/api/widget/config?key=${encodeURIComponent(this.apiKey)}`);if(!t.ok){let i=await t.json().catch(()=>({error:"Failed to load config"}));throw new Error(i.error||`HTTP ${t.status}`)}return t.json()}async sendMessage(t,i,e,a,s){let r=await fetch(`${this.baseUrl}/api/widget/chat`,{method:"POST",headers:{"Content-Type":"application/json","X-Widget-Api-Key":this.apiKey},body:JSON.stringify({messages:t.map(p=>({role:p.role,content:p.content})),visitorId:e,threadId:a,...s?.fileContext&&{fileContext:s.fileContext},...s?.fileDocumentIds&&{fileDocumentIds:s.fileDocumentIds}})});if(!r.ok){let p=await r.json().catch(()=>({error:"Failed to send message"}));throw new Error(p.error||`HTTP ${r.status}`)}let o=r.body?.getReader();if(!o)throw new Error("No response body");let l=new TextDecoder,c="";for(;;){let{done:p,value:$}=await o.read();if(p)break;let M=l.decode($,{stream:!0});c+=M;let v=c.indexOf(`
 
 ---SOURCES---
-`);e(v>=0?n.substring(0,v):n)}let g=n.indexOf(`
+`);i(v>=0?c.substring(0,v):c)}let g=c.indexOf(`
 
 ---SOURCES---
-`);return g>=0?n.substring(0,g):n}async requestHandoff(t){let e=await fetch(`${this.baseUrl}/api/widget/handoff`,{method:"POST",headers:{"Content-Type":"application/json","X-Widget-Api-Key":this.apiKey},body:JSON.stringify(t)});if(!e.ok){let a=await e.json().catch(()=>({error:"Handoff request failed"}));throw new Error(a.error||`HTTP ${e.status}`)}return e.json()}async pollHandoff(t,e){let a=new URLSearchParams({conversationId:t});e&&a.set("after",e);let i=await fetch(`${this.baseUrl}/api/widget/handoff?${a.toString()}`,{headers:{"X-Widget-Api-Key":this.apiKey}});if(!i.ok){let r=await i.json().catch(()=>({error:"Poll failed"}));throw new Error(r.error||`HTTP ${i.status}`)}return i.json()}async sendHandoffMessage(t,e){let a=await fetch(`${this.baseUrl}/api/widget/handoff/message`,{method:"POST",headers:{"Content-Type":"application/json","X-Widget-Api-Key":this.apiKey},body:JSON.stringify({conversationId:t,content:e})});if(!a.ok){let i=await a.json().catch(()=>({error:"Send failed"}));throw new Error(i.error||`HTTP ${a.status}`)}return a.json()}async uploadFile(t){let e=new FormData;e.append("file",t);let a=await fetch(`${this.baseUrl}/api/widget/upload`,{method:"POST",headers:{"X-Widget-Api-Key":this.apiKey},body:e});if(!a.ok){let i=await a.json().catch(()=>({error:"Upload failed"}));throw new Error(i.error||`HTTP ${a.status}`)}return a.json()}};function p(s,t){return!s||typeof s!="string"?t:/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(s)||/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+))?\s*\)$/.test(s)||["white","black","red","green","blue","gray","transparent"].includes(s.toLowerCase())?s:t}function w(s){let{theme:t,position:e}=s,a={primaryColor:p(t.primaryColor,"#3b82f6"),backgroundColor:p(t.backgroundColor,"#ffffff"),textColor:p(t.textColor,"#1f2937"),userBubbleColor:p(t.userBubbleColor,"#3b82f6"),assistantBubbleColor:p(t.assistantBubbleColor,"#f3f4f6")},i={"bottom-right":"bottom: 20px; right: 20px;","bottom-left":"bottom: 20px; left: 20px;","top-right":"top: 20px; right: 20px;","top-left":"top: 20px; left: 20px;"},r={"bottom-right":"bottom: 80px; right: 0;","bottom-left":"bottom: 80px; left: 0;","top-right":"top: 80px; right: 0;","top-left":"top: 80px; left: 0;"};return`
+`);return g>=0?c.substring(0,g):c}async requestHandoff(t){let i=await fetch(`${this.baseUrl}/api/widget/handoff`,{method:"POST",headers:{"Content-Type":"application/json","X-Widget-Api-Key":this.apiKey},body:JSON.stringify(t)});if(!i.ok){let e=await i.json().catch(()=>({error:"Handoff request failed"}));throw new Error(e.error||`HTTP ${i.status}`)}return i.json()}async pollHandoff(t,i){let e=new URLSearchParams({conversationId:t});i&&e.set("after",i);let a=await fetch(`${this.baseUrl}/api/widget/handoff?${e.toString()}`,{headers:{"X-Widget-Api-Key":this.apiKey}});if(!a.ok){let s=await a.json().catch(()=>({error:"Poll failed"}));throw new Error(s.error||`HTTP ${a.status}`)}return a.json()}async sendHandoffMessage(t,i){let e=await fetch(`${this.baseUrl}/api/widget/handoff/message`,{method:"POST",headers:{"Content-Type":"application/json","X-Widget-Api-Key":this.apiKey},body:JSON.stringify({conversationId:t,content:i})});if(!e.ok){let a=await e.json().catch(()=>({error:"Send failed"}));throw new Error(a.error||`HTTP ${e.status}`)}return e.json()}async uploadFile(t){let i=new FormData;i.append("file",t);let e=await fetch(`${this.baseUrl}/api/widget/upload`,{method:"POST",headers:{"X-Widget-Api-Key":this.apiKey},body:i});if(!e.ok){let a=await e.json().catch(()=>({error:"Upload failed"}));throw new Error(a.error||`HTTP ${e.status}`)}return e.json()}};function h(n,t){return!n||typeof n!="string"?t:/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(n)||/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*(0|1|0?\.\d+))?\s*\)$/.test(n)||["white","black","red","green","blue","gray","transparent"].includes(n.toLowerCase())?n:t}function w(n){let{theme:t,position:i}=n,e={primaryColor:h(t.primaryColor,"#3b82f6"),backgroundColor:h(t.backgroundColor,"#ffffff"),textColor:h(t.textColor,"#1f2937"),userBubbleColor:h(t.userBubbleColor,"#3b82f6"),assistantBubbleColor:h(t.assistantBubbleColor,"#f3f4f6")},a={"bottom-right":"bottom: 20px; right: 20px;","bottom-left":"bottom: 20px; left: 20px;","top-right":"top: 20px; right: 20px;","top-left":"top: 20px; left: 20px;"},s={"bottom-right":"bottom: 80px; right: 0;","bottom-left":"bottom: 80px; left: 0;","top-right":"top: 80px; right: 0;","top-left":"top: 80px; left: 0;"};return`
     .rantai-widget-container {
       position: fixed;
       z-index: 999999;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      ${i[e]}
+      ${a[i]}
     }
 
     .rantai-launcher {
       width: 60px;
       height: 60px;
       border-radius: 30px;
-      background: ${a.primaryColor};
+      background: ${e.primaryColor};
       color: white;
       border: none;
       cursor: pointer;
@@ -56,13 +56,13 @@
       height: 540px;
       max-height: calc(100vh - 100px);
       max-width: calc(100vw - 32px);
-      background: ${a.backgroundColor};
+      background: ${e.backgroundColor};
       border-radius: 20px;
       border: 1px solid rgba(0, 0, 0, 0.06);
       box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15), 0 8px 20px rgba(0, 0, 0, 0.06);
       overflow: hidden;
       position: absolute;
-      ${r[e]}
+      ${s[i]}
     }
 
     .rantai-chat-window.open {
@@ -70,7 +70,7 @@
     }
 
     .rantai-header {
-      background: ${a.primaryColor};
+      background: ${e.primaryColor};
       color: white;
       padding: 14px 16px;
       display: flex;
@@ -153,7 +153,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      background: ${a.backgroundColor};
+      background: ${e.backgroundColor};
       scroll-behavior: smooth;
     }
 
@@ -189,7 +189,7 @@
 
     .rantai-msg-avatar-assistant {
       background: rgba(0, 0, 0, 0.06);
-      color: ${a.textColor};
+      color: ${e.textColor};
     }
 
     .rantai-msg-avatar-agent {
@@ -198,7 +198,7 @@
     }
 
     .rantai-msg-avatar-user {
-      background: ${a.userBubbleColor};
+      background: ${e.userBubbleColor};
       color: white;
     }
 
@@ -272,7 +272,7 @@
     }
 
     .rantai-message-bubble a {
-      color: ${a.primaryColor};
+      color: ${e.primaryColor};
       text-decoration: none;
       border-bottom: 1px solid currentColor;
       transition: opacity 0.2s;
@@ -342,13 +342,13 @@
     }
 
     .rantai-message.assistant .rantai-message-bubble {
-      background: ${a.assistantBubbleColor};
-      color: ${a.textColor};
+      background: ${e.assistantBubbleColor};
+      color: ${e.textColor};
       border-bottom-left-radius: 6px;
     }
 
     .rantai-message.user .rantai-message-bubble {
-      background: ${a.userBubbleColor};
+      background: ${e.userBubbleColor};
       color: white;
       border-bottom-right-radius: 6px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
@@ -358,7 +358,7 @@
       display: flex;
       gap: 5px;
       padding: 14px 18px;
-      background: ${a.assistantBubbleColor};
+      background: ${e.assistantBubbleColor};
       border-radius: 18px;
       border-bottom-left-radius: 6px;
       width: fit-content;
@@ -369,7 +369,7 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: ${a.textColor};
+      background: ${e.textColor};
       opacity: 0.4;
       animation: rantai-typing 1.4s infinite;
     }
@@ -396,7 +396,7 @@
     .rantai-input-area {
       padding: 14px 16px 16px;
       border-top: 1px solid rgba(0, 0, 0, 0.06);
-      background: ${a.backgroundColor};
+      background: ${e.backgroundColor};
       flex-shrink: 0;
     }
 
@@ -425,12 +425,12 @@
       max-height: 120px;
       font-family: inherit;
       overflow-y: auto;
-      background: ${a.backgroundColor};
+      background: ${e.backgroundColor};
     }
 
     .rantai-input:focus {
-      border-color: ${a.primaryColor};
-      box-shadow: 0 0 0 2px ${a.primaryColor}30;
+      border-color: ${e.primaryColor};
+      box-shadow: 0 0 0 2px ${e.primaryColor}30;
     }
 
     .rantai-input::placeholder {
@@ -441,7 +441,7 @@
       width: 44px;
       height: 44px;
       padding: 0;
-      background: ${a.primaryColor};
+      background: ${e.primaryColor};
       color: white;
       border: none;
       border-radius: 50%;
@@ -478,13 +478,13 @@
       padding: 8px 12px;
       font-size: 11px;
       color: #94a3b8;
-      background: ${a.backgroundColor};
+      background: ${e.backgroundColor};
       border-top: 1px solid rgba(0, 0, 0, 0.05);
       flex-shrink: 0;
     }
 
     .rantai-powered a {
-      color: ${a.primaryColor};
+      color: ${e.primaryColor};
       text-decoration: none;
       font-weight: 500;
       opacity: 0.9;
@@ -580,7 +580,7 @@
       width: fit-content;
       margin: 8px auto;
       padding: 10px 20px;
-      background: ${a.primaryColor};
+      background: ${e.primaryColor};
       color: white;
       border: none;
       border-radius: 20px;
@@ -609,7 +609,7 @@
       padding: 10px 16px;
       margin: 4px auto;
       font-size: 13px;
-      color: ${a.textColor};
+      color: ${e.textColor};
       opacity: 0.7;
       animation: rantai-fade-in 0.25s ease-out;
     }
@@ -618,7 +618,7 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: ${a.primaryColor};
+      background: ${e.primaryColor};
       animation: rantai-pulse 1.4s infinite;
     }
 
@@ -649,7 +649,7 @@
 
     .rantai-message.agent .rantai-message-bubble {
       background: #ecfdf5;
-      color: ${a.textColor};
+      color: ${e.textColor};
       border-bottom-left-radius: 6px;
     }
 
@@ -697,7 +697,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
   <path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>
 </svg>
-`,S=`
+`,I=`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
   <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/>
   <circle cx="12" cy="7" r="4"/>
@@ -706,7 +706,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
   <path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3"/>
 </svg>
-`,$=`
+`,S=`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
   <path d="M12 8V4H8"/>
   <rect width="16" height="12" x="4" y="8" rx="2"/>
@@ -715,12 +715,12 @@
   <path d="M15 13v2"/>
   <path d="M9 13v2"/>
 </svg>
-`;var d=class d{constructor(t,e){this.config=null;this.container=null;this.chatWindow=null;this.messagesContainer=null;this.input=null;this.sendButton=null;this.pollInterval=null;this.lastPollTimestamp=null;this.state={isOpen:!1,isLoading:!1,messages:[],error:null,handoffState:"idle",conversationId:null,visitorId:"",threadId:""};this.api=new u(t,e)}generateId(t){return`${t}_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,8)}`}loadOrCreateVisitorId(){try{let t=localStorage.getItem(d.STORAGE_KEY_VISITOR);if(t)return t;let e=this.generateId("vis");return localStorage.setItem(d.STORAGE_KEY_VISITOR,e),e}catch{return this.generateId("vis")}}loadOrCreateThreadId(){try{let t=localStorage.getItem(d.STORAGE_KEY_THREAD);if(t)return t;let e=this.generateId("thread");return localStorage.setItem(d.STORAGE_KEY_THREAD,e),e}catch{return this.generateId("thread")}}resetThreadId(){let t=this.generateId("thread");try{localStorage.setItem(d.STORAGE_KEY_THREAD,t)}catch{}return t}persistMessages(){try{let t=this.state.messages.slice(-d.MAX_PERSISTED_MESSAGES).map(e=>({id:e.id,role:e.role,content:e.content,timestamp:e.timestamp}));localStorage.setItem(d.STORAGE_KEY_MESSAGES,JSON.stringify(t))}catch{}}loadPersistedMessages(){try{let t=localStorage.getItem(d.STORAGE_KEY_MESSAGES);if(!t)return!1;let e=JSON.parse(t);if(!e.length)return!1;for(let a of e)a.timestamp=new Date(a.timestamp),this.state.messages.push(a),this.renderMessage(a);return this.scrollToBottom(),!0}catch{return!1}}async init(){try{this.state.visitorId=this.loadOrCreateVisitorId(),this.state.threadId=this.loadOrCreateThreadId(),this.config=await this.api.getConfig(),this.injectStyles(),this.createUI(),this.loadPersistedMessages()||this.addMessage("assistant",this.config.config.welcomeMessage),console.log(`[RantAI Widget] Initialized (visitor: ${this.state.visitorId}, thread: ${this.state.threadId})`)}catch(t){throw console.error("[RantAI Widget] Failed to initialize:",t),t}}injectStyles(){if(!this.config)return;let t="rantai-widget-styles";if(document.getElementById(t))return;let e=document.createElement("style");e.id=t,e.textContent=w(this.config.config),document.head.appendChild(e)}createUI(){if(!this.config)return;this.container=document.createElement("div"),this.container.id="rantai-widget",this.container.className=`rantai-widget-container ${this.config.config.customCssClass||""}`;let t=document.createElement("button");t.className="rantai-launcher",t.setAttribute("aria-label","Open chat"),t.innerHTML=y,t.onclick=()=>this.toggle(),this.chatWindow=document.createElement("div"),this.chatWindow.className="rantai-chat-window",this.chatWindow.innerHTML=this.createChatWindowHTML(),this.container.appendChild(t),this.container.appendChild(this.chatWindow),document.body.appendChild(this.container),this.messagesContainer=this.chatWindow.querySelector(".rantai-messages"),this.input=this.chatWindow.querySelector(".rantai-input"),this.sendButton=this.chatWindow.querySelector(".rantai-send-btn"),this.bindEvents()}createChatWindowHTML(){if(!this.config)return"";let{config:t,assistantName:e,assistantEmoji:a}=this.config,i=t.avatar||a,r=c=>c.replace(/[&<>"']/g,h=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[h]||h),o=this.escapeHtml(t.headerTitle||e),l=r(t.placeholderText);return`
+`;var W='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',d=class d{constructor(t,i){this.config=null;this.container=null;this.chatWindow=null;this.messagesContainer=null;this.input=null;this.sendButton=null;this.fileInput=null;this.pendingFileResult=null;this.filePreviewEl=null;this.pollInterval=null;this.lastPollTimestamp=null;this.state={isOpen:!1,isLoading:!1,messages:[],error:null,handoffState:"idle",conversationId:null,visitorId:"",threadId:""};this.api=new u(t,i)}generateId(t){return`${t}_${Date.now().toString(36)}_${Math.random().toString(36).substr(2,8)}`}loadOrCreateVisitorId(){try{let t=localStorage.getItem(d.STORAGE_KEY_VISITOR);if(t)return t;let i=this.generateId("vis");return localStorage.setItem(d.STORAGE_KEY_VISITOR,i),i}catch{return this.generateId("vis")}}loadOrCreateThreadId(){try{let t=localStorage.getItem(d.STORAGE_KEY_THREAD);if(t)return t;let i=this.generateId("thread");return localStorage.setItem(d.STORAGE_KEY_THREAD,i),i}catch{return this.generateId("thread")}}resetThreadId(){let t=this.generateId("thread");try{localStorage.setItem(d.STORAGE_KEY_THREAD,t)}catch{}return t}persistMessages(){try{let t=this.state.messages.slice(-d.MAX_PERSISTED_MESSAGES).map(i=>({id:i.id,role:i.role,content:i.content,timestamp:i.timestamp}));localStorage.setItem(d.STORAGE_KEY_MESSAGES,JSON.stringify(t))}catch{}}loadPersistedMessages(){try{let t=localStorage.getItem(d.STORAGE_KEY_MESSAGES);if(!t)return!1;let i=JSON.parse(t);if(!i.length)return!1;for(let e of i)e.timestamp=new Date(e.timestamp),this.state.messages.push(e),this.renderMessage(e);return this.scrollToBottom(),!0}catch{return!1}}async init(){try{this.state.visitorId=this.loadOrCreateVisitorId(),this.state.threadId=this.loadOrCreateThreadId(),this.config=await this.api.getConfig(),this.injectStyles(),this.createUI(),this.loadPersistedMessages()||this.addMessage("assistant",this.config.config.welcomeMessage),console.log(`[RantAI Widget] Initialized (visitor: ${this.state.visitorId}, thread: ${this.state.threadId})`)}catch(t){throw console.error("[RantAI Widget] Failed to initialize:",t),t}}injectStyles(){if(!this.config)return;let t="rantai-widget-styles";if(document.getElementById(t))return;let i=document.createElement("style");i.id=t,i.textContent=w(this.config.config),document.head.appendChild(i)}createUI(){if(!this.config)return;this.container=document.createElement("div"),this.container.id="rantai-widget",this.container.className=`rantai-widget-container ${this.config.config.customCssClass||""}`;let t=document.createElement("button");t.className="rantai-launcher",t.setAttribute("aria-label","Open chat"),t.innerHTML=y,t.onclick=()=>this.toggle(),this.chatWindow=document.createElement("div"),this.chatWindow.className="rantai-chat-window",this.chatWindow.innerHTML=this.createChatWindowHTML(),this.container.appendChild(t),this.container.appendChild(this.chatWindow),document.body.appendChild(this.container),this.messagesContainer=this.chatWindow.querySelector(".rantai-messages"),this.input=this.chatWindow.querySelector(".rantai-input"),this.sendButton=this.chatWindow.querySelector(".rantai-send-btn"),this.fileInput=this.chatWindow.querySelector(".rantai-file-input"),this.filePreviewEl=this.chatWindow.querySelector(".rantai-file-preview"),this.bindEvents()}createChatWindowHTML(){if(!this.config)return"";let{config:t,assistantName:i,assistantEmoji:e}=this.config,a=t.avatar||e,s=g=>g.replace(/[&<>"']/g,p=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[p]||p),r=this.escapeHtml(t.headerTitle||i),o=s(t.placeholderText);return`
       <div class="rantai-header">
         <div class="rantai-header-info">
-          <div class="rantai-header-avatar">${i.startsWith("http://")||i.startsWith("https://")?`<img src="${r(i)}" alt="" style="width: 100%; height: 100%; border-radius: 50%;">`:this.escapeHtml(i)}</div>
+          <div class="rantai-header-avatar">${a.startsWith("http://")||a.startsWith("https://")?`<img src="${s(a)}" alt="" style="width: 100%; height: 100%; border-radius: 50%;">`:this.escapeHtml(a)}</div>
           <div>
-            <div class="rantai-header-title">${o}</div>
+            <div class="rantai-header-title">${r}</div>
             <div class="rantai-header-subtitle">Online</div>
           </div>
         </div>
@@ -729,12 +729,17 @@
 
       <div class="rantai-messages"></div>
 
+      <div class="rantai-file-preview" style="display:none;"></div>
       <div class="rantai-input-area">
         <form class="rantai-input-form">
+          <input type="file" class="rantai-file-input" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown" style="display:none;" />
+          <button type="button" class="rantai-attach-btn" aria-label="Attach file" style="background:none;border:none;cursor:pointer;padding:4px 6px;opacity:0.6;display:flex;align-items:center;">
+            ${W}
+          </button>
           <div class="rantai-input-wrapper">
             <textarea
               class="rantai-input"
-              placeholder="${l}"
+              placeholder="${o}"
               rows="1"
               aria-label="Message input"
             ></textarea>
@@ -745,4 +750,5 @@
         </form>
       </div>
 
-    `}bindEvents(){if(!this.chatWindow||!this.input)return;let t=this.chatWindow.querySelector(".rantai-close");t&&t.addEventListener("click",()=>this.close());let e=this.chatWindow.querySelector(".rantai-input-form");e&&e.addEventListener("submit",a=>{a.preventDefault(),this.sendMessage()}),this.input.addEventListener("input",()=>{this.input&&(this.input.style.height="auto",this.input.style.height=Math.min(this.input.scrollHeight,120)+"px")}),this.input.addEventListener("keydown",a=>{a.key==="Enter"&&!a.shiftKey&&(a.preventDefault(),this.sendMessage())})}toggle(){this.state.isOpen?this.close():this.open()}open(){this.state.isOpen=!0,this.container?.classList.add("rantai-chat-open"),this.chatWindow?.classList.add("open"),this.input?.focus()}close(){this.state.isOpen=!1,this.container?.classList.remove("rantai-chat-open"),this.chatWindow?.classList.remove("open")}addMessage(t,e,a){let i={id:a||`msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,role:t,content:e,timestamp:new Date};return this.state.messages.push(i),this.renderMessage(i),this.scrollToBottom(),this.persistMessages(),i}renderMessage(t,e){if(!this.messagesContainer)return;let a=document.createElement("div");a.className=`rantai-message ${t.role}`,a.id=t.id;let r=e?.isThinking&&t.role==="assistant"&&!t.content.trim()?'<div class="rantai-typing"><span></span><span></span><span></span></div>':this.formatMessageContent(t.content),o="";if(t.role==="assistant"){let n=this.config?.config.avatar||this.config?.assistantEmoji||"";o=`<div class="rantai-msg-avatar rantai-msg-avatar-assistant">${n.startsWith("http://")||n.startsWith("https://")?`<img src="${n}" alt="" style="width: 100%; height: 100%; border-radius: 50%;">`:n?`<span class="rantai-msg-avatar-emoji">${this.escapeHtml(n)}</span>`:$}</div>`}else t.role==="agent"?o=`<div class="rantai-msg-avatar rantai-msg-avatar-agent">${T}</div>`:t.role==="user"&&(o=`<div class="rantai-msg-avatar rantai-msg-avatar-user">${S}</div>`);let l=t.role==="agent"?'<div class="rantai-agent-label">Agent</div>':"";a.innerHTML=`${o}<div class="rantai-msg-content">${l}<div class="rantai-message-bubble">${r}</div></div>`,this.messagesContainer.appendChild(a)}updateMessage(t,e){let a=document.getElementById(t);if(!a)return;let i=a.querySelector(".rantai-message-bubble");i&&(i.innerHTML=this.formatMessageContent(e))}showError(t){if(!this.messagesContainer)return;let e=this.messagesContainer.querySelector(".rantai-error");e&&e.remove();let a=document.createElement("div");a.className="rantai-error";let i=document.createElement("span");i.className="rantai-error-text",i.textContent=t,a.appendChild(i);let r=document.createElement("button");r.type="button",r.className="rantai-error-retry",r.textContent="Try again",r.addEventListener("click",()=>{a.remove(),this.input?.focus()}),a.appendChild(r),this.messagesContainer.appendChild(a),this.scrollToBottom(),setTimeout(()=>a.remove(),8e3)}scrollToBottom(){this.messagesContainer&&(this.messagesContainer.scrollTop=this.messagesContainer.scrollHeight)}async sendMessage(){if(!this.input||this.state.isLoading)return;let t=this.input.value.trim();if(!t)return;if(this.input.value="",this.input.style.height="auto",this.state.handoffState==="connected"&&this.state.conversationId){this.addMessage("user",t);try{await this.api.sendHandoffMessage(this.state.conversationId,t)}catch(a){console.error("[RantAI Widget] Handoff message error:",a),this.showError("Failed to send message to agent")}return}this.addMessage("user",t),this.state.isLoading=!0,this.sendButton&&(this.sendButton.disabled=!0),this.input&&(this.input.disabled=!0);let e={id:`msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,role:"assistant",content:"",timestamp:new Date};this.state.messages.push(e),this.renderMessage(e,{isThinking:!0});try{await this.api.sendMessage(this.state.messages.slice(0,-1),i=>{e.content=i;let r=i.replace(/\[AGENT_HANDOFF\]/g,"").trim();this.updateMessage(e.id,r),this.scrollToBottom()},this.state.visitorId,this.state.threadId);let a=e.content;a.includes("[AGENT_HANDOFF]")&&(e.content=a.replace(/\[AGENT_HANDOFF\]/g,"").trim(),this.updateMessage(e.id,e.content),this.config?.liveChatEnabled&&this.showHandoffButton())}catch(a){console.error("[RantAI Widget] Send message error:",a),this.state.messages.pop();let i=document.getElementById(e.id);i&&i.remove(),this.showError(a instanceof Error?a.message:"Failed to send message")}finally{this.state.isLoading=!1,this.sendButton&&(this.sendButton.disabled=!1),this.input&&(this.input.disabled=!1),this.updateMessage(e.id,e.content),this.persistMessages()}}showHandoffButton(){if(!this.messagesContainer)return;let t=document.createElement("button");t.className="rantai-handoff-btn",t.innerHTML=`${E} Connect with Agent`,t.addEventListener("click",()=>{t.remove(),this.requestHandoff()}),this.messagesContainer.appendChild(t),this.scrollToBottom()}async requestHandoff(){if(!this.messagesContainer)return;this.state.handoffState="requesting";let t=document.createElement("div");t.className="rantai-waiting-indicator",t.id="rantai-waiting",t.innerHTML='<div class="rantai-waiting-dot"></div> Waiting for an agent...',this.messagesContainer.appendChild(t),this.scrollToBottom();try{let e=this.state.messages.filter(i=>i.role==="user"||i.role==="assistant").map(i=>({role:i.role,content:i.content})),a=await this.api.requestHandoff({chatHistory:e,visitorId:this.state.visitorId});this.state.conversationId=a.conversationId,this.state.handoffState="waiting",this.startPolling()}catch(e){console.error("[RantAI Widget] Handoff request error:",e),this.state.handoffState="idle";let a=document.getElementById("rantai-waiting");a&&a.remove(),this.showError("Failed to connect with an agent. Please try again.")}}startPolling(){this.pollInterval||(this.lastPollTimestamp=null,this.pollInterval=setInterval(async()=>{if(this.state.conversationId)try{let t=await this.api.pollHandoff(this.state.conversationId,this.lastPollTimestamp||void 0);if(t.status==="AGENT_CONNECTED"&&this.state.handoffState!=="connected"){this.state.handoffState="connected";let e=document.getElementById("rantai-waiting");e&&e.remove(),this.showBanner(`${t.agentName||"An agent"} joined the chat`)}t.status==="RESOLVED"&&this.state.handoffState!=="resolved"&&(this.state.handoffState="resolved",this.stopPolling(),this.showBanner("Conversation resolved",!0),setTimeout(()=>this.resetToFreshChat(),3e3));for(let e of t.messages)this.state.messages.some(a=>a.id===e.id)||e.role!=="system"&&e.role==="agent"&&this.addMessage("agent",e.content,e.id);t.messages.length>0&&(this.lastPollTimestamp=t.messages[t.messages.length-1].timestamp)}catch(t){console.error("[RantAI Widget] Poll error:",t)}},3e3))}stopPolling(){this.pollInterval&&(clearInterval(this.pollInterval),this.pollInterval=null)}resetToFreshChat(){this.state.messages=[],this.state.handoffState="idle",this.state.conversationId=null,this.state.isLoading=!1,this.state.error=null,this.state.threadId=this.resetThreadId(),this.lastPollTimestamp=null;try{localStorage.removeItem(d.STORAGE_KEY_MESSAGES)}catch{}this.messagesContainer&&(this.messagesContainer.innerHTML=""),this.config&&this.addMessage("assistant",this.config.config.welcomeMessage)}showBanner(t,e){if(!this.messagesContainer)return;let a=document.createElement("div");a.className=`rantai-agent-banner${e?" resolved":""}`,a.textContent=t,this.messagesContainer.appendChild(a),this.scrollToBottom()}escapeHtml(t){let e=document.createElement("div");return e.textContent=t,e.innerHTML}safeLinkHref(t){let e=t.trim();return!e.startsWith("http://")&&!e.startsWith("https://")?"#":e.replace(/"/g,"&quot;")}formatMessageContent(t){if(!t)return"";let e=[],a=o=>{let l=e.length;return e.push(o),`\0B${l}\0`},i=t.replace(/```(\w*)\n?([\s\S]*?)```/g,(o,l,n)=>a(`<pre><code class="language-${l||"text"}">${this.escapeHtml(n.trim())}</code></pre>`));i=i.replace(/`([^`]+?)`/g,(o,l)=>a(`<code>${this.escapeHtml(l)}</code>`)),i=this.escapeHtml(i);let r=[[/^### (.+)$/gm,"<h3>$1</h3>"],[/^## (.+)$/gm,"<h2>$1</h2>"],[/^# (.+)$/gm,"<h1>$1</h1>"],[/^&gt; (.+)$/gm,"<blockquote>$1</blockquote>"],[/^[*-] (.+)$/gm,"\0L$1\0"],[/^\d+\. (.+)$/gm,"\0L$1\0"]];for(let[o,l]of r)i=i.replace(o,l);return i=i.replace(/(\x00L[^\x00]+\x00(?:\n?))+/g,o=>`<ul>${o.split(/\x00L|\x00/).filter(Boolean).map(n=>n.trim()).filter(Boolean).map(n=>`<li>${n}</li>`).join("")}</ul>`),i=i.replace(/\*\*([^*]+?)\*\*/g,"<strong>$1</strong>"),i=i.replace(/__([^_]+?)__/g,"<strong>$1</strong>"),i=i.replace(/\*([^*\n]+?)\*/g,"<em>$1</em>"),i=i.replace(/_([^_\n]+?)_/g,"<em>$1</em>"),i=i.replace(/\[([^\]]+?)\]\(([^)]+?)\)/g,(o,l,n)=>`<a href="${this.safeLinkHref(n)}" target="_blank" rel="noopener noreferrer">${l}</a>`),i=i.replace(/\n/g,"<br/>"),i.replace(/\x00B(\d+)\x00/g,(o,l)=>e[parseInt(l,10)]??"")}};d.STORAGE_KEY_VISITOR="rantai_visitor_id",d.STORAGE_KEY_THREAD="rantai_thread_id",d.STORAGE_KEY_MESSAGES="rantai_messages",d.MAX_PERSISTED_MESSAGES=50;var m=d,b=null;function x(){if(b){console.warn("[RantAI Widget] Already initialized");return}let s=document.getElementsByTagName("script"),t=null,e="";for(let a=0;a<s.length;a++){let i=s[a];if(i.src.includes("rantai-widget")){t=i.getAttribute("data-api-key"),e=new URL(i.src).origin;break}}if(!t){console.error("[RantAI Widget] Missing data-api-key attribute");return}b=new m(t,e),b.init().catch(a=>{console.error("[RantAI Widget] Initialization failed:",a)})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",x):x();return W(L);})();
+    `}bindEvents(){if(!this.chatWindow||!this.input)return;let t=this.chatWindow.querySelector(".rantai-close");t&&t.addEventListener("click",()=>this.close());let i=this.chatWindow.querySelector(".rantai-input-form");i&&i.addEventListener("submit",a=>{a.preventDefault(),this.sendMessage()});let e=this.chatWindow.querySelector(".rantai-attach-btn");e&&this.fileInput&&(e.addEventListener("click",()=>{this.fileInput?.click()}),this.fileInput.addEventListener("change",async()=>{let a=this.fileInput?.files?.[0];if(a){if(this.fileInput.value="",this.filePreviewEl){this.filePreviewEl.style.display="flex",this.filePreviewEl.style.padding="4px 12px",this.filePreviewEl.style.alignItems="center",this.filePreviewEl.style.gap="8px",this.filePreviewEl.style.fontSize="12px",this.filePreviewEl.style.color="#6b7280",this.filePreviewEl.style.borderTop="1px solid #e5e7eb",this.filePreviewEl.innerHTML=`<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\u{1F4CE} ${this.escapeHtml(a.name)}</span><button type="button" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px;">\u2715</button>`;let s=this.filePreviewEl.querySelector("button");s&&s.addEventListener("click",()=>{this.pendingFileResult=null,this.filePreviewEl&&(this.filePreviewEl.style.display="none",this.filePreviewEl.innerHTML="")})}try{let s=await this.api.uploadFile(a);s.result&&(this.pendingFileResult=s.result)}catch(s){console.error("[RantAI Widget] File upload error:",s),this.pendingFileResult=null,this.filePreviewEl&&(this.filePreviewEl.style.display="none",this.filePreviewEl.innerHTML=""),this.showError("Failed to upload file")}}})),this.input.addEventListener("input",()=>{this.input&&(this.input.style.height="auto",this.input.style.height=Math.min(this.input.scrollHeight,120)+"px")}),this.input.addEventListener("keydown",a=>{a.key==="Enter"&&!a.shiftKey&&(a.preventDefault(),this.sendMessage())})}toggle(){this.state.isOpen?this.close():this.open()}open(){this.state.isOpen=!0,this.container?.classList.add("rantai-chat-open"),this.chatWindow?.classList.add("open"),this.input?.focus()}close(){this.state.isOpen=!1,this.container?.classList.remove("rantai-chat-open"),this.chatWindow?.classList.remove("open")}addMessage(t,i,e){let a={id:e||`msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,role:t,content:i,timestamp:new Date};return this.state.messages.push(a),this.renderMessage(a),this.scrollToBottom(),this.persistMessages(),a}renderMessage(t,i){if(!this.messagesContainer)return;let e=document.createElement("div");e.className=`rantai-message ${t.role}`,e.id=t.id;let s=i?.isThinking&&t.role==="assistant"&&!t.content.trim()?'<div class="rantai-typing"><span></span><span></span><span></span></div>':this.formatMessageContent(t.content),r="";if(t.role==="assistant"){let l=this.config?.config.avatar||this.config?.assistantEmoji||"";r=`<div class="rantai-msg-avatar rantai-msg-avatar-assistant">${l.startsWith("http://")||l.startsWith("https://")?`<img src="${l}" alt="" style="width: 100%; height: 100%; border-radius: 50%;">`:l?`<span class="rantai-msg-avatar-emoji">${this.escapeHtml(l)}</span>`:S}</div>`}else t.role==="agent"?r=`<div class="rantai-msg-avatar rantai-msg-avatar-agent">${T}</div>`:t.role==="user"&&(r=`<div class="rantai-msg-avatar rantai-msg-avatar-user">${I}</div>`);let o=t.role==="agent"?'<div class="rantai-agent-label">Agent</div>':"";e.innerHTML=`${r}<div class="rantai-msg-content">${o}<div class="rantai-message-bubble">${s}</div></div>`,this.messagesContainer.appendChild(e)}updateMessage(t,i){let e=document.getElementById(t);if(!e)return;let a=e.querySelector(".rantai-message-bubble");a&&(a.innerHTML=this.formatMessageContent(i))}showError(t){if(!this.messagesContainer)return;let i=this.messagesContainer.querySelector(".rantai-error");i&&i.remove();let e=document.createElement("div");e.className="rantai-error";let a=document.createElement("span");a.className="rantai-error-text",a.textContent=t,e.appendChild(a);let s=document.createElement("button");s.type="button",s.className="rantai-error-retry",s.textContent="Try again",s.addEventListener("click",()=>{e.remove(),this.input?.focus()}),e.appendChild(s),this.messagesContainer.appendChild(e),this.scrollToBottom(),setTimeout(()=>e.remove(),8e3)}scrollToBottom(){this.messagesContainer&&(this.messagesContainer.scrollTop=this.messagesContainer.scrollHeight)}async sendMessage(){if(!this.input||this.state.isLoading)return;let t=this.input.value.trim();if(!t)return;if(this.input.value="",this.input.style.height="auto",this.state.handoffState==="connected"&&this.state.conversationId){this.addMessage("user",t);try{await this.api.sendHandoffMessage(this.state.conversationId,t)}catch(a){console.error("[RantAI Widget] Handoff message error:",a),this.showError("Failed to send message to agent")}return}this.addMessage("user",t);let i;this.pendingFileResult&&(this.pendingFileResult.type==="inline"&&this.pendingFileResult.text?i={fileContext:`[Attached file: ${this.pendingFileResult.fileName}]
+${this.pendingFileResult.text}`}:this.pendingFileResult.type==="rag"&&this.pendingFileResult.documentId&&(i={fileDocumentIds:[this.pendingFileResult.documentId]}),this.pendingFileResult=null,this.filePreviewEl&&(this.filePreviewEl.style.display="none",this.filePreviewEl.innerHTML="")),this.state.isLoading=!0,this.sendButton&&(this.sendButton.disabled=!0),this.input&&(this.input.disabled=!0);let e={id:`msg-${Date.now()}-${Math.random().toString(36).slice(2)}`,role:"assistant",content:"",timestamp:new Date};this.state.messages.push(e),this.renderMessage(e,{isThinking:!0});try{await this.api.sendMessage(this.state.messages.slice(0,-1),s=>{e.content=s;let r=s.replace(/\[AGENT_HANDOFF\]/g,"").trim();this.updateMessage(e.id,r),this.scrollToBottom()},this.state.visitorId,this.state.threadId,i);let a=e.content;a.includes("[AGENT_HANDOFF]")&&(e.content=a.replace(/\[AGENT_HANDOFF\]/g,"").trim(),this.updateMessage(e.id,e.content),this.config?.liveChatEnabled&&this.showHandoffButton())}catch(a){console.error("[RantAI Widget] Send message error:",a),this.state.messages.pop();let s=document.getElementById(e.id);s&&s.remove(),this.showError(a instanceof Error?a.message:"Failed to send message")}finally{this.state.isLoading=!1,this.sendButton&&(this.sendButton.disabled=!1),this.input&&(this.input.disabled=!1),this.updateMessage(e.id,e.content),this.persistMessages()}}showHandoffButton(){if(!this.messagesContainer)return;let t=document.createElement("button");t.className="rantai-handoff-btn",t.innerHTML=`${E} Connect with Agent`,t.addEventListener("click",()=>{t.remove(),this.requestHandoff()}),this.messagesContainer.appendChild(t),this.scrollToBottom()}async requestHandoff(){if(!this.messagesContainer)return;this.state.handoffState="requesting";let t=document.createElement("div");t.className="rantai-waiting-indicator",t.id="rantai-waiting",t.innerHTML='<div class="rantai-waiting-dot"></div> Waiting for an agent...',this.messagesContainer.appendChild(t),this.scrollToBottom();try{let i=this.state.messages.filter(a=>a.role==="user"||a.role==="assistant").map(a=>({role:a.role,content:a.content})),e=await this.api.requestHandoff({chatHistory:i,visitorId:this.state.visitorId});this.state.conversationId=e.conversationId,this.state.handoffState="waiting",this.startPolling()}catch(i){console.error("[RantAI Widget] Handoff request error:",i),this.state.handoffState="idle";let e=document.getElementById("rantai-waiting");e&&e.remove(),this.showError("Failed to connect with an agent. Please try again.")}}startPolling(){this.pollInterval||(this.lastPollTimestamp=null,this.pollInterval=setInterval(async()=>{if(this.state.conversationId)try{let t=await this.api.pollHandoff(this.state.conversationId,this.lastPollTimestamp||void 0);if(t.status==="AGENT_CONNECTED"&&this.state.handoffState!=="connected"){this.state.handoffState="connected";let i=document.getElementById("rantai-waiting");i&&i.remove(),this.showBanner(`${t.agentName||"An agent"} joined the chat`)}t.status==="RESOLVED"&&this.state.handoffState!=="resolved"&&(this.state.handoffState="resolved",this.stopPolling(),this.showBanner("Conversation resolved",!0),setTimeout(()=>this.resetToFreshChat(),3e3));for(let i of t.messages)this.state.messages.some(e=>e.id===i.id)||i.role!=="system"&&i.role==="agent"&&this.addMessage("agent",i.content,i.id);t.messages.length>0&&(this.lastPollTimestamp=t.messages[t.messages.length-1].timestamp)}catch(t){console.error("[RantAI Widget] Poll error:",t)}},3e3))}stopPolling(){this.pollInterval&&(clearInterval(this.pollInterval),this.pollInterval=null)}resetToFreshChat(){this.state.messages=[],this.state.handoffState="idle",this.state.conversationId=null,this.state.isLoading=!1,this.state.error=null,this.state.threadId=this.resetThreadId(),this.lastPollTimestamp=null;try{localStorage.removeItem(d.STORAGE_KEY_MESSAGES)}catch{}this.messagesContainer&&(this.messagesContainer.innerHTML=""),this.config&&this.addMessage("assistant",this.config.config.welcomeMessage)}showBanner(t,i){if(!this.messagesContainer)return;let e=document.createElement("div");e.className=`rantai-agent-banner${i?" resolved":""}`,e.textContent=t,this.messagesContainer.appendChild(e),this.scrollToBottom()}escapeHtml(t){let i=document.createElement("div");return i.textContent=t,i.innerHTML}safeLinkHref(t){let i=t.trim();return!i.startsWith("http://")&&!i.startsWith("https://")?"#":i.replace(/"/g,"&quot;")}formatMessageContent(t){if(!t)return"";let i=[],e=r=>{let o=i.length;return i.push(r),`\0B${o}\0`},a=t.replace(/```(\w*)\n?([\s\S]*?)```/g,(r,o,l)=>e(`<pre><code class="language-${o||"text"}">${this.escapeHtml(l.trim())}</code></pre>`));a=a.replace(/`([^`]+?)`/g,(r,o)=>e(`<code>${this.escapeHtml(o)}</code>`)),a=this.escapeHtml(a);let s=[[/^### (.+)$/gm,"<h3>$1</h3>"],[/^## (.+)$/gm,"<h2>$1</h2>"],[/^# (.+)$/gm,"<h1>$1</h1>"],[/^&gt; (.+)$/gm,"<blockquote>$1</blockquote>"],[/^[*-] (.+)$/gm,"\0L$1\0"],[/^\d+\. (.+)$/gm,"\0L$1\0"]];for(let[r,o]of s)a=a.replace(r,o);return a=a.replace(/(\x00L[^\x00]+\x00(?:\n?))+/g,r=>`<ul>${r.split(/\x00L|\x00/).filter(Boolean).map(l=>l.trim()).filter(Boolean).map(l=>`<li>${l}</li>`).join("")}</ul>`),a=a.replace(/\*\*([^*]+?)\*\*/g,"<strong>$1</strong>"),a=a.replace(/__([^_]+?)__/g,"<strong>$1</strong>"),a=a.replace(/\*([^*\n]+?)\*/g,"<em>$1</em>"),a=a.replace(/_([^_\n]+?)_/g,"<em>$1</em>"),a=a.replace(/\[([^\]]+?)\]\(([^)]+?)\)/g,(r,o,l)=>`<a href="${this.safeLinkHref(l)}" target="_blank" rel="noopener noreferrer">${o}</a>`),a=a.replace(/\n/g,"<br/>"),a.replace(/\x00B(\d+)\x00/g,(r,o)=>i[parseInt(o,10)]??"")}};d.STORAGE_KEY_VISITOR="rantai_visitor_id",d.STORAGE_KEY_THREAD="rantai_thread_id",d.STORAGE_KEY_MESSAGES="rantai_messages",d.MAX_PERSISTED_MESSAGES=50;var f=d,b=null;function x(){if(b){console.warn("[RantAI Widget] Already initialized");return}let n=document.getElementsByTagName("script"),t=null,i="";for(let e=0;e<n.length;e++){let a=n[e];if(a.src.includes("rantai-widget")){t=a.getAttribute("data-api-key"),i=new URL(a.src).origin;break}}if(!t){console.error("[RantAI Widget] Missing data-api-key attribute");return}b=new f(t,i),b.init().catch(e=>{console.error("[RantAI Widget] Initialization failed:",e)})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",x):x();return B(O);})();

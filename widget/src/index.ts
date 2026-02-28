@@ -1,7 +1,9 @@
-import { WidgetAPI } from "./api"
+import { WidgetAPI, type FileProcessingResult } from "./api"
 import { generateStyles } from "./styles"
 import { chatIcon, closeIcon, sendIcon, headphonesIcon, userIcon, agentIcon, botIcon } from "./icons"
 import type { WidgetPublicConfig, WidgetConfig, Message, WidgetState } from "./types"
+
+const paperclipIcon = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
 
 class RantAIWidgetInstance {
   private static STORAGE_KEY_VISITOR = "rantai_visitor_id"
@@ -16,6 +18,9 @@ class RantAIWidgetInstance {
   private messagesContainer: HTMLDivElement | null = null
   private input: HTMLTextAreaElement | null = null
   private sendButton: HTMLButtonElement | null = null
+  private fileInput: HTMLInputElement | null = null
+  private pendingFileResult: FileProcessingResult | null = null
+  private filePreviewEl: HTMLDivElement | null = null
   private pollInterval: ReturnType<typeof setInterval> | null = null
   private lastPollTimestamp: string | null = null
   private state: WidgetState = {
@@ -162,6 +167,8 @@ class RantAIWidgetInstance {
     this.messagesContainer = this.chatWindow.querySelector(".rantai-messages")
     this.input = this.chatWindow.querySelector(".rantai-input")
     this.sendButton = this.chatWindow.querySelector(".rantai-send-btn")
+    this.fileInput = this.chatWindow.querySelector(".rantai-file-input")
+    this.filePreviewEl = this.chatWindow.querySelector(".rantai-file-preview")
 
     // Bind events
     this.bindEvents()
@@ -201,8 +208,13 @@ class RantAIWidgetInstance {
 
       <div class="rantai-messages"></div>
 
+      <div class="rantai-file-preview" style="display:none;"></div>
       <div class="rantai-input-area">
         <form class="rantai-input-form">
+          <input type="file" class="rantai-file-input" accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown" style="display:none;" />
+          <button type="button" class="rantai-attach-btn" aria-label="Attach file" style="background:none;border:none;cursor:pointer;padding:4px 6px;opacity:0.6;display:flex;align-items:center;">
+            ${paperclipIcon}
+          </button>
           <div class="rantai-input-wrapper">
             <textarea
               class="rantai-input"
@@ -235,6 +247,58 @@ class RantAIWidgetInstance {
       form.addEventListener("submit", (e) => {
         e.preventDefault()
         this.sendMessage()
+      })
+    }
+
+    // Attach button
+    const attachBtn = this.chatWindow.querySelector(".rantai-attach-btn")
+    if (attachBtn && this.fileInput) {
+      attachBtn.addEventListener("click", () => {
+        this.fileInput?.click()
+      })
+
+      this.fileInput.addEventListener("change", async () => {
+        const file = this.fileInput?.files?.[0]
+        if (!file) return
+        this.fileInput!.value = "" // reset for re-selection
+
+        // Show preview
+        if (this.filePreviewEl) {
+          this.filePreviewEl.style.display = "flex"
+          this.filePreviewEl.style.padding = "4px 12px"
+          this.filePreviewEl.style.alignItems = "center"
+          this.filePreviewEl.style.gap = "8px"
+          this.filePreviewEl.style.fontSize = "12px"
+          this.filePreviewEl.style.color = "#6b7280"
+          this.filePreviewEl.style.borderTop = "1px solid #e5e7eb"
+          this.filePreviewEl.innerHTML = `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📎 ${this.escapeHtml(file.name)}</span><button type="button" style="background:none;border:none;cursor:pointer;font-size:14px;padding:2px;">✕</button>`
+          const removeBtn = this.filePreviewEl.querySelector("button")
+          if (removeBtn) {
+            removeBtn.addEventListener("click", () => {
+              this.pendingFileResult = null
+              if (this.filePreviewEl) {
+                this.filePreviewEl.style.display = "none"
+                this.filePreviewEl.innerHTML = ""
+              }
+            })
+          }
+        }
+
+        // Upload file
+        try {
+          const uploadResult = await this.api.uploadFile(file)
+          if (uploadResult.result) {
+            this.pendingFileResult = uploadResult.result
+          }
+        } catch (error) {
+          console.error("[RantAI Widget] File upload error:", error)
+          this.pendingFileResult = null
+          if (this.filePreviewEl) {
+            this.filePreviewEl.style.display = "none"
+            this.filePreviewEl.innerHTML = ""
+          }
+          this.showError("Failed to upload file")
+        }
       })
     }
 
@@ -402,6 +466,25 @@ class RantAIWidgetInstance {
     // Normal AI chat flow
     this.addMessage("user", content)
 
+    // Build file context from pending upload
+    let fileCtx: { fileContext?: string; fileDocumentIds?: string[] } | undefined
+    if (this.pendingFileResult) {
+      if (this.pendingFileResult.type === "inline" && this.pendingFileResult.text) {
+        fileCtx = {
+          fileContext: `[Attached file: ${this.pendingFileResult.fileName}]\n${this.pendingFileResult.text}`,
+        }
+      } else if (this.pendingFileResult.type === "rag" && this.pendingFileResult.documentId) {
+        fileCtx = {
+          fileDocumentIds: [this.pendingFileResult.documentId],
+        }
+      }
+      this.pendingFileResult = null
+      if (this.filePreviewEl) {
+        this.filePreviewEl.style.display = "none"
+        this.filePreviewEl.innerHTML = ""
+      }
+    }
+
     this.state.isLoading = true
     if (this.sendButton) this.sendButton.disabled = true
     if (this.input) this.input.disabled = true
@@ -426,7 +509,8 @@ class RantAIWidgetInstance {
           this.scrollToBottom()
         },
         this.state.visitorId,
-        this.state.threadId
+        this.state.threadId,
+        fileCtx
       )
 
       // After streaming completes, check for handoff marker
