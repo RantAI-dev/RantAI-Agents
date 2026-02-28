@@ -1,6 +1,7 @@
 /**
  * File processor module for handling different file types
- * Supports: Markdown (.md), PDF (.pdf), Images (.png, .jpg, .jpeg, .gif, .webp)
+ * Supports: Markdown, PDF, Images, Office (docx/xlsx/pptx), Structured data,
+ *           Code, RTF, EPUB, HTML/XML, CSV, JSON, YAML, TOML
  */
 
 import * as fs from "fs";
@@ -9,7 +10,7 @@ import * as path from "path";
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const VISION_MODEL = "openai/gpt-4o-mini"; // Cost-effective vision model
 
-export type SupportedFileType = "markdown" | "pdf" | "image";
+export type SupportedFileType = "markdown" | "pdf" | "image" | "document" | "text";
 
 export interface ProcessedFile {
   content: string;
@@ -42,6 +43,21 @@ export interface ProcessingOptions {
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"];
 const MARKDOWN_EXTENSIONS = [".md", ".markdown"];
 const PDF_EXTENSIONS = [".pdf"];
+// Office documents (modern + legacy + OpenDocument)
+const DOCUMENT_EXTENSIONS = [
+  ".docx", ".xlsx", ".pptx", ".rtf", ".epub",
+  ".doc", ".xls", ".ppt",
+  ".odt", ".ods",
+  ".gltf", ".glb",
+];
+// Structured text, code, config
+const TEXT_EXTENSIONS = [
+  ".csv", ".tsv", ".json", ".jsonl", ".html", ".htm", ".xml",
+  ".yaml", ".yml", ".toml",
+  ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java",
+  ".c", ".cpp", ".h", ".rb", ".php", ".sh", ".sql", ".r", ".swift", ".kt",
+  ".txt", ".log", ".ini", ".env",
+];
 
 /**
  * Detect file type based on extension
@@ -52,6 +68,8 @@ export function detectFileType(filePath: string): SupportedFileType | null {
   if (MARKDOWN_EXTENSIONS.includes(ext)) return "markdown";
   if (PDF_EXTENSIONS.includes(ext)) return "pdf";
   if (IMAGE_EXTENSIONS.includes(ext)) return "image";
+  if (DOCUMENT_EXTENSIONS.includes(ext)) return "document";
+  if (TEXT_EXTENSIONS.includes(ext)) return "text";
 
   return null;
 }
@@ -67,7 +85,13 @@ export function isSupportedFile(filePath: string): boolean {
  * Get all supported file extensions
  */
 export function getSupportedExtensions(): string[] {
-  return [...MARKDOWN_EXTENSIONS, ...PDF_EXTENSIONS, ...IMAGE_EXTENSIONS];
+  return [
+    ...MARKDOWN_EXTENSIONS,
+    ...PDF_EXTENSIONS,
+    ...IMAGE_EXTENSIONS,
+    ...DOCUMENT_EXTENSIONS,
+    ...TEXT_EXTENSIONS,
+  ];
 }
 
 /**
@@ -246,6 +270,16 @@ export async function processFile(
     case "image":
       content = await processImage(filePath, options);
       break;
+    case "document":
+    case "text": {
+      const fileBuffer = fs.readFileSync(filePath);
+      const { EXT_TO_MIME } = await import("@/lib/files/mime-types");
+      const { extractTextFromBuffer } = await import("@/lib/files/parsers");
+      const ext2 = path.extname(filePath).toLowerCase();
+      const mimeType = EXT_TO_MIME[ext2] || "text/plain";
+      content = await extractTextFromBuffer(fileBuffer, mimeType, path.basename(filePath));
+      break;
+    }
   }
 
   return {

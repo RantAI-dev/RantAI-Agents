@@ -122,6 +122,7 @@ export function getArtifactExtension(type: string): string {
     "text/latex": ".tex",
     "application/slides": ".pptx",
     "application/python": ".py",
+    "application/3d": ".tsx",
   }
   return map[type] || ".txt"
 }
@@ -386,6 +387,7 @@ export const UPLOAD_LIMITS = {
   document: {
     maxSize: 50 * 1024 * 1024, // 50MB
     allowedTypes: [
+      // Existing
       "application/pdf",
       "image/png",
       "image/jpeg",
@@ -394,6 +396,37 @@ export const UPLOAD_LIMITS = {
       "image/heic",
       "text/markdown",
       "text/plain",
+      // Office (Tier 1)
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      // Structured data (Tier 1)
+      "text/csv",
+      "text/tab-separated-values",
+      "application/json",
+      "application/x-ndjson",
+      "text/html",
+      "application/xml",
+      "text/xml",
+      // Rich text & ebooks (Tier 2)
+      "application/rtf",
+      "application/epub+zip",
+      // Config / code (Tier 2)
+      "text/yaml",
+      "application/toml",
+      "text/x-python",
+      "text/javascript",
+      "text/typescript",
+      // Legacy Office (Tier 3)
+      "application/msword",
+      "application/vnd.ms-excel",
+      "application/vnd.ms-powerpoint",
+      // OpenDocument (Tier 3)
+      "application/vnd.oasis.opendocument.text",
+      "application/vnd.oasis.opendocument.spreadsheet",
+      // 3D models (Tier 3)
+      "model/gltf+json",
+      "model/gltf-binary",
     ],
   },
   logo: {
@@ -407,6 +440,7 @@ export const UPLOAD_LIMITS = {
   attachment: {
     maxSize: 10 * 1024 * 1024, // 10MB
     allowedTypes: [
+      // Existing (no HEIC — browsers can't produce it)
       "image/png",
       "image/jpeg",
       "image/gif",
@@ -414,6 +448,37 @@ export const UPLOAD_LIMITS = {
       "application/pdf",
       "text/plain",
       "text/markdown",
+      // Office (Tier 1)
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      // Structured data (Tier 1)
+      "text/csv",
+      "text/tab-separated-values",
+      "application/json",
+      "application/x-ndjson",
+      "text/html",
+      "application/xml",
+      "text/xml",
+      // Rich text & ebooks (Tier 2)
+      "application/rtf",
+      "application/epub+zip",
+      // Config / code (Tier 2)
+      "text/yaml",
+      "application/toml",
+      "text/x-python",
+      "text/javascript",
+      "text/typescript",
+      // Legacy Office (Tier 3)
+      "application/msword",
+      "application/vnd.ms-excel",
+      "application/vnd.ms-powerpoint",
+      // OpenDocument (Tier 3)
+      "application/vnd.oasis.opendocument.text",
+      "application/vnd.oasis.opendocument.spreadsheet",
+      // 3D models (Tier 3)
+      "model/gltf+json",
+      "model/gltf-binary",
     ],
   },
 } as const
