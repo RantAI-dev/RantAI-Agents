@@ -20,6 +20,7 @@ export async function GET() {
       preferences || {
         userId: session.user.id,
         defaultAssistantId: null,
+        sidebarConfig: null,
       }
     )
   } catch (error) {
@@ -41,7 +42,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json()
-    const { defaultAssistantId } = body
+    const { defaultAssistantId, sidebarConfig } = body
 
     // If defaultAssistantId provided, verify it exists
     if (defaultAssistantId) {
@@ -56,14 +57,22 @@ export async function PUT(request: Request) {
       }
     }
 
+    // Build update data
+    const updateData: Record<string, unknown> = {}
+    if ("defaultAssistantId" in body) {
+      updateData.defaultAssistantId = defaultAssistantId || null
+    }
+    if ("sidebarConfig" in body) {
+      updateData.sidebarConfig = sidebarConfig ?? null
+    }
+
     const preferences = await prisma.userPreference.upsert({
       where: { userId: session.user.id },
-      update: {
-        defaultAssistantId: defaultAssistantId || null,
-      },
+      update: updateData,
       create: {
         userId: session.user.id,
         defaultAssistantId: defaultAssistantId || null,
+        sidebarConfig: sidebarConfig ?? null,
       },
     })
 

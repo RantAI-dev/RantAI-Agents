@@ -248,6 +248,7 @@ model UserPreference {
   id                 String   @id @default(cuid())
   userId             String   @unique // From NextAuth session
   defaultAssistantId String?  // User's chosen default (overrides system default)
+  sidebarConfig      Json?    // { hiddenItems: string[], sidebarCollapsed: boolean }
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
