@@ -71,14 +71,13 @@ interface TabToolsProps {
   selectedToolIds: string[]
   onToggleTool: (toolId: string) => void
   modelSupportsFunctionCalling: boolean
-  isNew: boolean
+  isNew?: boolean
 }
 
 export function TabTools({
   selectedToolIds,
   onToggleTool,
   modelSupportsFunctionCalling,
-  isNew,
 }: TabToolsProps) {
   const { tools, isLoading, fetchTools } = useTools()
   const [search, setSearch] = useState("")
@@ -204,13 +203,6 @@ export function TabTools({
           Enable tools this agent can use during conversations.
         </p>
       </div>
-
-      {isNew && (
-        <p className="text-xs text-amber-600 flex items-center gap-1">
-          <AlertTriangle className="h-3 w-3" />
-          Save the agent first, then configure tools.
-        </p>
-      )}
 
       {!modelSupportsFunctionCalling && selectedToolIds.length > 0 && (
         <p className="text-xs text-destructive flex items-center gap-1">
@@ -348,7 +340,6 @@ export function TabTools({
           size="sm"
           onClick={() => setMarketplaceOpen(true)}
           className="shrink-0 h-9"
-          disabled={isNew}
         >
           <Store className="h-3.5 w-3.5 mr-1.5" />
           Marketplace
@@ -398,13 +389,11 @@ export function TabTools({
                   key={tool.id}
                   type="button"
                   onClick={() => onToggleTool(tool.id)}
-                  disabled={isNew}
                   className={cn(
                     "flex items-start gap-4 p-4 rounded-lg text-left transition-all w-full border",
                     isSelected
                       ? "bg-primary/5 border-primary ring-1 ring-primary/20"
-                      : "border-border hover:bg-muted/50",
-                    isNew && "opacity-50 cursor-not-allowed"
+                      : "border-border hover:bg-muted/50"
                   )}
                 >
                   <div

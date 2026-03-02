@@ -32,14 +32,13 @@ interface TabMcpProps {
   selectedMcpServerIds: string[]
   onToggleMcpServer: (serverId: string) => void
   modelSupportsFunctionCalling: boolean
-  isNew: boolean
+  isNew?: boolean
 }
 
 export function TabMcp({
   selectedMcpServerIds,
   onToggleMcpServer,
   modelSupportsFunctionCalling,
-  isNew,
 }: TabMcpProps) {
   const { servers, isLoading } = useMcpServers()
 
@@ -64,13 +63,6 @@ export function TabMcp({
           available during conversations.
         </p>
       </div>
-
-      {isNew && (
-        <p className="text-xs text-amber-600 flex items-center gap-1">
-          <AlertTriangle className="h-3 w-3" />
-          Save the agent first, then configure MCP servers.
-        </p>
-      )}
 
       {!modelSupportsFunctionCalling && selectedMcpServerIds.length > 0 && (
         <p className="text-xs text-destructive flex items-center gap-1">
@@ -121,13 +113,11 @@ export function TabMcp({
                 key={server.id}
                 type="button"
                 onClick={() => onToggleMcpServer(server.id)}
-                disabled={isNew}
                 className={cn(
                   "flex items-start gap-4 p-4 rounded-lg text-left transition-all w-full border",
                   isSelected
                     ? "bg-primary/5 border-primary ring-1 ring-primary/20"
-                    : "border-border hover:bg-muted/50",
-                  isNew && "opacity-50 cursor-not-allowed"
+                    : "border-border hover:bg-muted/50"
                 )}
               >
                 <div

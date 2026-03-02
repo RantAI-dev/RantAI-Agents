@@ -64,7 +64,7 @@ interface TabSkillsProps {
   onToggleSkill: (skillId: string, autoEnableToolIds?: string[]) => void
   selectedToolIds?: string[]
   onToggleTool?: (toolId: string) => void
-  isNew: boolean
+  isNew?: boolean
   assistantId?: string | null
 }
 
@@ -148,7 +148,6 @@ export function TabSkills({
   onToggleSkill,
   selectedToolIds,
   onToggleTool,
-  isNew,
   assistantId,
 }: TabSkillsProps) {
   const { skills, isLoading, fetchSkills } = useSkills()
@@ -317,13 +316,6 @@ export function TabSkills({
         </p>
       </div>
 
-      {isNew && (
-        <p className="text-xs text-amber-600 flex items-center gap-1">
-          <AlertTriangle className="h-3 w-3" />
-          Save the agent first, then configure skills.
-        </p>
-      )}
-
       {/* Search + Filter + Sort + Actions */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1 min-w-0">
@@ -452,7 +444,6 @@ export function TabSkills({
           size="sm"
           className="shrink-0 h-9"
           onClick={() => setMarketplaceOpen(true)}
-          disabled={isNew}
         >
           <Store className="h-3.5 w-3.5 mr-1.5" />
           Marketplace
@@ -502,13 +493,11 @@ export function TabSkills({
                   <button
                     type="button"
                     onClick={() => handleSkillToggle(skill.id)}
-                    disabled={isNew}
                     className={cn(
                       "flex items-start gap-4 p-4 rounded-lg text-left transition-all w-full border",
                       isSelected
                         ? "bg-primary/5 border-primary ring-1 ring-primary/20"
-                        : "border-border hover:bg-muted/50",
-                      isNew && "opacity-50 cursor-not-allowed"
+                        : "border-border hover:bg-muted/50"
                     )}
                   >
                     <div
