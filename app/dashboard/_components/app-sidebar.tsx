@@ -12,7 +12,6 @@ import {
   Headphones,
   BookOpen,
   Store,
-  Building2,
   Settings,
   Bell,
   Search,
@@ -63,10 +62,8 @@ import { AssistantEditor } from "@/app/dashboard/_components/chat/assistant-edit
 import { formatDistanceToNow } from "date-fns"
 import type { Assistant, AssistantInput } from "@/lib/types/assistant"
 import { useFeaturesContext } from "@/components/providers/features-provider"
-import { useOrganization } from "@/hooks/use-organization"
 import { useProfileStore } from "@/hooks/use-profile"
 import { SETTINGS_NAV_ITEMS } from "../settings/settings-nav-items"
-import { ORG_NAV_ITEMS } from "../organization/org-nav-items"
 import { MARKETPLACE_NAV_ITEMS } from "../marketplace/marketplace-nav-items"
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -101,7 +98,6 @@ const allNavItems: NavItem[] = [
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
   { title: "Knowledge", url: "/dashboard/knowledge", icon: BookOpen, feature: null },
   { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },
-  { title: "Organization", url: "/dashboard/organization", icon: Building2, feature: null },
 ]
 
 // ─── Sections Config ─────────────────────────────────────────────────
@@ -113,7 +109,6 @@ const sections = {
   agent: { title: "Live Chat", subtitle: "Customer Support", icon: Headphones, path: "/dashboard/agent" },
   knowledge: { title: "Knowledge", subtitle: "RAG Documents", icon: BookOpen, path: "/dashboard/knowledge" },
   marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
-  organization: { title: "Organization", subtitle: "Team & Settings", icon: Building2, path: "/dashboard/organization" },
   settings: { title: "Settings", subtitle: "Preferences", icon: Settings, path: "/dashboard/settings" },
   account: { title: "Account", subtitle: "Profile", icon: User, path: "/dashboard/account" },
 }
@@ -346,17 +341,14 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   const searchParams = useSearchParams()
   const [searchQuery, setSearchQuery] = useState("")
   const { isAgentEnabled } = useFeaturesContext()
-  const { activeOrganization, isOwner, isAdmin } = useOrganization()
+
   const { avatarUrl, fetchProfile } = useProfileStore()
 
   React.useEffect(() => { fetchProfile() }, [fetchProfile])
 
-  const showOrgSection = !!activeOrganization && (isOwner || isAdmin)
-
-  // Filter nav items based on enabled features and permissions
+  // Filter nav items based on enabled features
   const mainNavItems = allNavItems.filter((item) => {
     if (item.feature === "AGENT") return isAgentEnabled
-    if (item.url === "/dashboard/organization") return showOrgSection
     return true
   })
 
@@ -432,7 +424,6 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/knowledge")) return sections.knowledge
     if (pathname.startsWith("/dashboard/marketplace")) return sections.marketplace
-    if (pathname.startsWith("/dashboard/organization")) return sections.organization
     if (pathname.startsWith("/dashboard/settings")) return sections.settings
     if (pathname.startsWith("/dashboard/account")) return sections.account
     return sections.chat
@@ -843,31 +834,6 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
           {currentSection === sections.marketplace && (
             <div className="space-y-1 overflow-y-auto">
               {MARKETPLACE_NAV_ITEMS.map((item) => {
-                const active = pathname === item.href
-                const Icon = item.icon
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
-                      active
-                        ? "bg-sidebar-accent text-sidebar-foreground"
-                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 truncate">{item.title}</span>
-                    {active && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
-                  </Link>
-                )
-              })}
-            </div>
-          )}
-
-          {currentSection === sections.organization && (
-            <div className="space-y-1 overflow-y-auto">
-              {ORG_NAV_ITEMS.map((item) => {
                 const active = pathname === item.href
                 const Icon = item.icon
                 return (

@@ -1,4 +1,4 @@
-import { Settings, Info, ToggleLeft, Code, Wrench, Sparkles, Plug, KeyRound, Brain, BarChart3, CreditCard } from "@/lib/icons"
+import { Settings, Info, ToggleLeft, Code, Wrench, Sparkles, Plug, KeyRound, Brain, BarChart3, CreditCard, Building2, Users } from "@/lib/icons"
 
 export const SETTINGS_NAV_ITEMS = [
   {
@@ -8,12 +8,24 @@ export const SETTINGS_NAV_ITEMS = [
     description: "Basic preferences",
   },
   {
+    title: "Organization",
+    href: "/dashboard/settings/organization",
+    icon: Building2,
+    description: "Organization settings & info",
+  },
+  {
+    title: "Members",
+    href: "/dashboard/settings/members",
+    icon: Users,
+    description: "Team members & invitations",
+  },
+  {
     title: "Features",
     href: "/dashboard/settings/features",
     icon: ToggleLeft,
     description: "Enable/disable capabilities",
   },
-{
+  {
     title: "Tools",
     href: "/dashboard/settings/tools",
     icon: Wrench,
