@@ -2,7 +2,8 @@
 
 import { useState, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Search, Bot, SlidersHorizontal, X, Check, Tag } from "@/lib/icons"
+import { motion } from "framer-motion"
+import { Plus, Search, Bot, SlidersHorizontal, X, Check, Tag, Database, Wrench } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -38,13 +39,32 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useAssistants } from "@/hooks/use-assistants"
 import { useDefaultAssistant } from "@/hooks/use-default-assistant"
-import { DashboardPageHeader } from "../_components/dashboard-page-header"
 import { AgentCard } from "./_components/agent-card"
 import { AgentTemplateGallery } from "./_components/agent-template-gallery"
+import { BlurText } from "@/components/reactbits/blur-text"
+import { CountUp } from "@/components/reactbits/count-up"
+import { Squares } from "@/components/reactbits/squares"
 import { getTagColor, setTagColor, TAG_COLORS } from "@/lib/utils"
 import type { Assistant } from "@/lib/types/assistant"
 
 type SortOption = "newest" | "oldest" | "name"
+
+// Animation variants matching chat-home.tsx
+const stagger = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.06, delayChildren: 0.15 },
+  },
+}
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring", stiffness: 260, damping: 24 },
+  },
+}
 
 export default function AgentBuilderPage() {
   const router = useRouter()
@@ -107,6 +127,14 @@ export default function AgentBuilderPage() {
     setSelectedTags(new Set())
     setSortOption("newest")
   }
+
+  // Compute stats
+  const agentStats = useMemo(() => {
+    const total = assistants.length
+    const withKB = assistants.filter((a) => a.useKnowledgeBase).length
+    const withTools = assistants.filter((a) => (a.toolCount ?? 0) > 0).length
+    return { total, withKB, withTools }
+  }, [assistants])
 
   // Filter and sort
   const displayedAgents = useMemo(() => {
@@ -196,7 +224,6 @@ export default function AgentBuilderPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col h-full">
-        <DashboardPageHeader title="Agent Builder" />
         <div className="flex-1 flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
@@ -206,22 +233,63 @@ export default function AgentBuilderPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <DashboardPageHeader
-        title="Agent Builder"
-        actions={
-          <Button onClick={handleCreate} size="sm">
-            <Plus className="h-4 w-4 mr-1.5" />
-            Create Agent
-          </Button>
-        }
-      />
+      {/* Animated Header */}
+      <motion.div
+        className="px-6 pt-6 pb-4 space-y-3"
+        initial="hidden"
+        animate="visible"
+        variants={stagger}
+      >
+        <motion.div variants={fadeUp}>
+          <BlurText
+            text="Agent Builder"
+            className="text-3xl font-bold tracking-tight"
+            delay={40}
+          />
+        </motion.div>
+        <motion.p
+          className="text-sm text-muted-foreground"
+          variants={fadeUp}
+        >
+          Build and manage your AI agents
+        </motion.p>
+        {assistants.length > 0 && (
+          <motion.div
+            className="flex items-center gap-4 text-sm text-muted-foreground"
+            variants={fadeUp}
+          >
+            <span className="flex items-center gap-1.5">
+              <Bot className="h-3.5 w-3.5" />
+              <CountUp to={agentStats.total} duration={1.2} />
+              <span>agents</span>
+            </span>
+            <span className="text-muted-foreground/30">·</span>
+            <span className="flex items-center gap-1.5">
+              <Database className="h-3.5 w-3.5" />
+              <CountUp to={agentStats.withKB} duration={1.2} />
+              <span>with KB</span>
+            </span>
+            <span className="text-muted-foreground/30">·</span>
+            <span className="flex items-center gap-1.5">
+              <Wrench className="h-3.5 w-3.5" />
+              <CountUp to={agentStats.withTools} duration={1.2} />
+              <span>with tools</span>
+            </span>
+          </motion.div>
+        )}
+      </motion.div>
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto px-6 pb-6">
         {/* Template Gallery */}
         <AgentTemplateGallery addAssistant={addAssistant} refetch={refetch} />
 
         {/* Search + Filter + Sort Toolbar */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:items-center mb-6">
+        <motion.div
+          className="flex flex-col sm:flex-row gap-3 sm:items-center mb-6"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, type: "spring", stiffness: 260, damping: 24 }}
+        >
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
@@ -366,27 +434,47 @@ export default function AgentBuilderPage() {
               <SelectContent>
                 <SelectItem value="newest">Newest first</SelectItem>
                 <SelectItem value="oldest">Oldest first</SelectItem>
-                <SelectItem value="name">Name A–Z</SelectItem>
+                <SelectItem value="name">Name A-Z</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-        </div>
 
-        {/* Grid */}
-        {assistants.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="rounded-full bg-muted p-4 mb-4">
-              <Bot className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <h2 className="text-lg font-semibold mb-1">No agents yet</h2>
-            <p className="text-sm text-muted-foreground max-w-md mb-4">
-              Create your first agent to get started with the Agent Builder.
-            </p>
-            <Button onClick={handleCreate}>
+            {/* Create button */}
+            <Button onClick={handleCreate} size="sm">
               <Plus className="h-4 w-4 mr-1.5" />
               Create Agent
             </Button>
           </div>
+        </motion.div>
+
+        {/* Grid */}
+        {assistants.length === 0 ? (
+          <motion.div
+            className="relative flex flex-col items-center justify-center py-16 text-center rounded-xl border border-dashed overflow-hidden"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3, type: "spring", stiffness: 260, damping: 24 }}
+          >
+            <Squares
+              speed={0.3}
+              squareSize={48}
+              borderColor="rgba(127,127,127,0.08)"
+              hoverFillColor="rgba(127,127,127,0.04)"
+              direction="diagonal"
+            />
+            <div className="relative z-10">
+              <div className="rounded-full bg-muted p-4 mb-4 mx-auto w-fit">
+                <Bot className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h2 className="text-lg font-semibold mb-1">No agents yet</h2>
+              <p className="text-sm text-muted-foreground max-w-md mb-4">
+                Create your first agent to get started with the Agent Builder.
+              </p>
+              <Button onClick={handleCreate}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                Create Agent
+              </Button>
+            </div>
+          </motion.div>
         ) : displayedAgents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="rounded-full bg-muted p-3 mb-4">
@@ -401,19 +489,28 @@ export default function AgentBuilderPage() {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: { transition: { staggerChildren: 0.06, delayChildren: 0.35 } },
+            }}
+          >
             {displayedAgents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                isDefault={isDefault(agent)}
-                onClick={() => handleClick(agent)}
-                onDuplicate={() => handleDuplicate(agent)}
-                onSetDefault={() => handleSetDefault(agent)}
-                onDelete={() => setDeleteTarget(agent)}
-              />
+              <motion.div key={agent.id} variants={fadeUp}>
+                <AgentCard
+                  agent={agent}
+                  isDefault={isDefault(agent)}
+                  onClick={() => handleClick(agent)}
+                  onDuplicate={() => handleDuplicate(agent)}
+                  onSetDefault={() => handleSetDefault(agent)}
+                  onDelete={() => setDeleteTarget(agent)}
+                />
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
 

@@ -7,6 +7,7 @@ import { useDefaultAssistant } from "@/hooks/use-default-assistant"
 import { useAssistantTools } from "@/hooks/use-assistant-tools"
 import { useAssistantSkills } from "@/hooks/use-assistant-skills"
 import { useAssistantMcpServers } from "@/hooks/use-assistant-mcp-servers"
+import { useAssistantWorkflows } from "@/hooks/use-assistant-workflows"
 import { getModelById, DEFAULT_MODEL_ID } from "@/lib/models"
 import { AgentEditorLayout, type TabId } from "../_components/agent-editor-layout"
 import { TabConfigure } from "../_components/tab-configure"
@@ -18,6 +19,7 @@ import { TabMemory } from "../_components/tab-memory"
 import { TabChatPreferences } from "../_components/tab-chat-preferences"
 import { GuardRailsSettings } from "../_components/guard-rails-settings"
 import { TabTest } from "../_components/tab-test"
+import { TabWorkflows } from "../_components/tab-workflows"
 import { TabMcp } from "../_components/tab-mcp"
 import { TabDeploy } from "../_components/tab-deploy"
 import type { Assistant, MemoryConfig, ModelConfig, ChatConfig, GuardRailsConfig } from "@/lib/types/assistant"
@@ -53,6 +55,7 @@ interface FormState {
   selectedToolIds: string[]
   selectedSkillIds: string[]
   selectedMcpServerIds: string[]
+  selectedWorkflowIds: string[]
   useKnowledgeBase: boolean
   knowledgeBaseGroupIds: string[]
   memoryConfig: MemoryConfig
@@ -77,6 +80,7 @@ function getInitialState(agent?: Assistant | null): FormState {
     selectedToolIds: [],
     selectedSkillIds: [],
     selectedMcpServerIds: [],
+    selectedWorkflowIds: [],
     useKnowledgeBase: agent?.useKnowledgeBase ?? false,
     knowledgeBaseGroupIds: agent?.knowledgeBaseGroupIds ?? [],
     memoryConfig: agent?.memoryConfig ?? DEFAULT_MEMORY_CONFIG,
@@ -134,6 +138,12 @@ export default function AgentEditorPage({
     isLoading: mcpLoading,
   } = useAssistantMcpServers(isNew ? null : id)
 
+  const {
+    enabledWorkflowIds,
+    updateAssistantWorkflows,
+    isLoading: workflowsLoading,
+  } = useAssistantWorkflows(isNew ? null : id)
+
   const [activeTab, setActiveTab] = useState<TabId>("configure")
   const [form, setForm] = useState<FormState>(getInitialState())
   const [isSaving, setIsSaving] = useState(false)
@@ -170,6 +180,13 @@ export default function AgentEditorPage({
       setForm((prev) => ({ ...prev, selectedMcpServerIds: enabledMcpServerIds }))
     }
   }, [isNew, mcpLoading, enabledMcpServerIds])
+
+  // Sync workflow IDs from the server
+  useEffect(() => {
+    if (!isNew && !workflowsLoading && initializedRef.current) {
+      setForm((prev) => ({ ...prev, selectedWorkflowIds: enabledWorkflowIds }))
+    }
+  }, [isNew, workflowsLoading, enabledWorkflowIds])
 
   // Track dirty state
   const updateField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -226,6 +243,21 @@ export default function AgentEditorPage({
           ? current.filter((sid) => sid !== serverId)
           : [...current, serverId]
         return { ...prev, selectedMcpServerIds: next }
+      })
+      setIsDirty(true)
+    },
+    []
+  )
+
+  const handleToggleWorkflow = useCallback(
+    (workflowId: string) => {
+      setForm((prev) => {
+        const current = prev.selectedWorkflowIds
+        const isEnabled = current.includes(workflowId)
+        const next = isEnabled
+          ? current.filter((wid) => wid !== workflowId)
+          : [...current, workflowId]
+        return { ...prev, selectedWorkflowIds: next }
       })
       setIsDirty(true)
     },
@@ -298,6 +330,15 @@ export default function AgentEditorPage({
               }).catch(() => {})
             )
           }
+          if (form.selectedWorkflowIds.length > 0) {
+            promises.push(
+              fetch(`/api/assistants/${created.id}/workflows`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ workflowIds: form.selectedWorkflowIds }),
+              }).catch(() => {})
+            )
+          }
           await Promise.all(promises)
           refetch()
           router.replace(`/dashboard/agent-builder/${created.id}`)
@@ -310,6 +351,7 @@ export default function AgentEditorPage({
             updateAssistantTools(form.selectedToolIds),
             updateAssistantSkills(form.selectedSkillIds),
             updateAssistantMcpServers(form.selectedMcpServerIds),
+            updateAssistantWorkflows(form.selectedWorkflowIds),
           ])
           refetch()
           setIsDirty(false)
@@ -318,7 +360,7 @@ export default function AgentEditorPage({
     } finally {
       setIsSaving(false)
     }
-  }, [form, isNew, id, addAssistant, updateAssistant, updateAssistantTools, updateAssistantSkills, updateAssistantMcpServers, refetch, router])
+  }, [form, isNew, id, addAssistant, updateAssistant, updateAssistantTools, updateAssistantSkills, updateAssistantMcpServers, updateAssistantWorkflows, refetch, router])
 
   // Actions
   const handleDuplicate = useCallback(async () => {
@@ -455,6 +497,13 @@ export default function AgentEditorPage({
           onToggleTool={handleToggleTool}
           isNew={isNew}
           assistantId={isNew ? null : id}
+        />
+      )}
+      {activeTab === "workflows" && (
+        <TabWorkflows
+          selectedWorkflowIds={form.selectedWorkflowIds}
+          onToggleWorkflow={handleToggleWorkflow}
+          isNew={isNew}
         />
       )}
       {activeTab === "mcp" && (
