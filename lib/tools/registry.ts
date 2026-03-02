@@ -12,6 +12,8 @@ import {
   executeCommunityTool,
 } from "@/lib/skills/gateway"
 import type { CommunityToolContext } from "@/lib/skill-sdk"
+import { workflowEngine } from "@/lib/workflow"
+import type { WorkflowVariables } from "@/lib/workflow/types"
 
 function getModelById(modelId: string) {
   return AVAILABLE_MODELS.find((m) => m.id === modelId)
@@ -304,7 +306,100 @@ export async function resolveToolsForAssistant(
     }
   }
 
+  // ── Resolve TASK workflows bound to this assistant as callable tools ──
+  const assistantWorkflows = await prisma.assistantWorkflow.findMany({
+    where: { assistantId, enabled: true },
+    include: { workflow: true },
+  })
+
+  for (const binding of assistantWorkflows) {
+    const wf = binding.workflow
+    if (wf.category !== "TASK" || wf.status !== "ACTIVE") continue
+
+    const toolName = `workflow_${wf.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`
+    if (tools[toolName]) continue // avoid duplicates
+
+    const variables = (wf.variables as unknown as WorkflowVariables) || null
+    const schema = buildWorkflowToolSchema(variables)
+
+    tools[toolName] = aiTool({
+      description: `Execute workflow: ${wf.name}. ${wf.description || ""}`.trim(),
+      inputSchema: jsonSchema(schema),
+      execute: async (params) => {
+        const startTime = Date.now()
+        try {
+          const runId = await workflowEngine.execute(
+            wf.id,
+            params as Record<string, unknown>,
+            { userId: context.userId, organizationId: context.organizationId }
+          )
+          const run = await prisma.workflowRun.findUnique({
+            where: { id: runId },
+            select: { status: true, output: true },
+          })
+          const result = {
+            runId,
+            status: run?.status ?? "UNKNOWN",
+            output: run?.output ?? null,
+          }
+          logToolExecution(toolName, wf.id, params, result, context, Date.now() - startTime).catch(() => {})
+          if (run?.status === "PAUSED") {
+            return {
+              ...result,
+              message: "Workflow is awaiting human input. The user will need to provide input or approval before it can continue.",
+            }
+          }
+          return result
+        } catch (error) {
+          logToolExecution(toolName, wf.id, params, null, context, Date.now() - startTime, error).catch(() => {})
+          return {
+            error: `Workflow execution failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+          }
+        }
+      },
+    })
+    toolNames.push(toolName)
+  }
+
   return { tools, toolNames }
+}
+
+function buildWorkflowToolSchema(
+  variables: WorkflowVariables | null
+): Record<string, unknown> {
+  const typeMap: Record<string, string> = {
+    string: "string",
+    number: "number",
+    boolean: "boolean",
+  }
+
+  if (!variables?.inputs?.length) {
+    return {
+      type: "object" as const,
+      properties: {
+        input: { type: "string", description: "Input for the workflow" },
+      },
+    }
+  }
+
+  const properties: Record<string, Record<string, unknown>> = {}
+  const required: string[] = []
+
+  for (const v of variables.inputs) {
+    properties[v.name] = {
+      type: typeMap[v.type] || "string",
+      ...(v.description && { description: v.description }),
+    }
+    if (v.required) {
+      required.push(v.name)
+    }
+  }
+
+  return {
+    type: "object" as const,
+    properties,
+    ...(required.length > 0 && { required }),
+  }
 }
 
 async function logToolExecution(
