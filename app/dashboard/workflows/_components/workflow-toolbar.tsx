@@ -98,6 +98,7 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
   const workflowName = useWorkflowEditor((s) => s.workflowName)
   const workflowStatus = useWorkflowEditor((s) => s.workflowStatus)
   const workflowMode = useWorkflowEditor((s) => s.workflowMode)
+  const workflowCategory = useWorkflowEditor((s) => s.workflowCategory)
   const assistantId = useWorkflowEditor((s) => s.assistantId)
   const apiEnabled = useWorkflowEditor((s) => s.apiEnabled)
   const apiKey = useWorkflowEditor((s) => s.apiKey)
@@ -244,6 +245,28 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
                   setWorkflowMeta({ mode: checked ? "CHATFLOW" : "STANDARD" })
                 }
               />
+            </div>
+
+            <div className="border-t pt-3 space-y-2">
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold">Category</h4>
+                <p className="text-[10px] text-muted-foreground">
+                  Task workflows can be attached to agents. Automation runs standalone.
+                </p>
+              </div>
+              <Select
+                value={workflowCategory}
+                onValueChange={(v) => setWorkflowMeta({ category: v as "TASK" | "CHATFLOW" | "AUTOMATION" })}
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="AUTOMATION">Automation</SelectItem>
+                  <SelectItem value="TASK">Task</SelectItem>
+                  <SelectItem value="CHATFLOW">Chatflow</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {workflowMode === "CHATFLOW" && (

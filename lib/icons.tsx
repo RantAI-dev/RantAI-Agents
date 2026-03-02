@@ -51,6 +51,48 @@ import {
   CheckSolid,
   Pencil1Solid,
   Bolt2Solid,
+  // Workflow-specific icons
+  PlaySolid,
+  Link2AngularRightSolid,
+  Alarm1Solid,
+  TowerBroadcast1Solid,
+  Bulb2Solid,
+  Hierarchy1Solid,
+  ArrowBothDirectionHorizontal1Solid,
+  RefreshCircle1ClockwiseSolid,
+  VectorNodes6Solid,
+  VectorNodes7Solid,
+  Bug1Solid,
+  HandMicSolid,
+  StampSolid,
+  HandShakeSolid,
+  ShuffleSolid,
+  Funnel1Solid,
+  Layers1Solid,
+  StorageHdd2Solid,
+  DirectionLtrSolid,
+  // Toolbar & general-purpose icon fixes
+  ArrowAngularTopRightSolid,
+  ArrowLeftSolid,
+  CalendarDaysSolid,
+  PauseSolid,
+  Download1Solid,
+  Upload1Solid,
+  DashboardSquare1Solid,
+  Layout9Solid,
+  MapPin5Solid,
+  PreviousStep2Solid,
+  NextStep2Solid,
+  HourglassSolid,
+  Rocket5Solid,
+  FloppyDisk1Solid,
+  QuestionMarkCircleSolid,
+  Spinner3Solid,
+  ClipboardSolid,
+  // Agent editor tab icons
+  Gauge1Solid,
+  BoxArchive1Solid,
+  SlidersHorizontalSquare2Solid,
 } from "@lineiconshq/free-icons"
 
 // ─── Types ───────────────────────────────────────────────────────────
@@ -185,27 +227,27 @@ export const Sparkles = createIcon(Bolt2Solid, "Sparkles")
 export const Bot = createIcon(BricksSolid, "Bot")
 export const Workflow = createIcon(Route1Solid, "Workflow")
 export const ToggleLeft = createIcon(Gear1Solid, "ToggleLeft")
-export const Brain = createIcon(Gear1Solid, "Brain")
+export const Brain = createIcon(BoxArchive1Solid, "Brain")
 export const Info = createIcon(CheckCircle1Solid, "Info")
 export const Zap = createIcon(Bolt2Solid, "Zap")
 export const Box = createIcon(BricksSolid, "Box")
-export const Clock = createIcon(Gear1Solid, "Clock")
+export const Clock = createIcon(Alarm1Solid, "Clock")
 export const Languages = createIcon(Globe1Solid, "Languages")
 
 // ─── Extended aliases (used across 150+ files) ──────────────────────
 // Maps every Lucide icon name used in the project to the closest LineIcons solid variant
 
 // Arrows / Navigation
-export const ArrowLeft = createIcon(ChevronLeftSolid, "ArrowLeft")
+export const ArrowLeft = createIcon(ArrowLeftSolid, "ArrowLeft")
 export const ArrowUpRight = createIcon(ArrowRightSolid, "ArrowUpRight")
 export const ArrowUpDown = createIcon(ChevronDownSolid, "ArrowUpDown")
-export const ArrowRightLeft = createIcon(ArrowRightSolid, "ArrowRightLeft")
+export const ArrowRightLeft = createIcon(ArrowBothDirectionHorizontal1Solid, "ArrowRightLeft")
 export const CornerDownRight = createIcon(AngleDoubleRightSolid, "CornerDownRight")
 export const ChevronsUpDown = createIcon(ChevronDownSolid, "ChevronsUpDown")
 export const RotateCcw = createIcon(ArrowRightSolid, "RotateCcw")
-export const RefreshCw = createIcon(ArrowRightSolid, "RefreshCw")
-export const Repeat = createIcon(ArrowRightSolid, "Repeat")
-export const Shuffle = createIcon(Route1Solid, "Shuffle")
+export const RefreshCw = createIcon(RefreshCircle1ClockwiseSolid, "RefreshCw")
+export const Repeat = createIcon(RefreshCircle1ClockwiseSolid, "Repeat")
+export const Shuffle = createIcon(ShuffleSolid, "Shuffle")
 
 // Files / Documents
 export const File = createIcon(Book1Solid, "File")
@@ -217,37 +259,37 @@ export const FileType = createIcon(Book1Solid, "FileType")
 export const StickyNote = createIcon(Book1Solid, "StickyNote")
 
 // UI Elements
-export const Copy = createIcon(PlusSolid, "Copy")
-export const Download = createIcon(ChevronDownSolid, "Download")
-export const Upload = createIcon(ChevronUpSolid, "Upload")
-export const Save = createIcon(CheckSolid, "Save")
-export const Send = createIcon(ArrowRightSolid, "Send")
-export const Filter = createIcon(Search1Solid, "Filter")
+export const Copy = createIcon(ClipboardSolid, "Copy")
+export const Download = createIcon(Download1Solid, "Download")
+export const Upload = createIcon(Upload1Solid, "Upload")
+export const Save = createIcon(FloppyDisk1Solid, "Save")
+export const Send = createIcon(DirectionLtrSolid, "Send")
+export const Filter = createIcon(Funnel1Solid, "Filter")
 export const FilterX = createIcon(XmarkSolid, "FilterX")
 export const MoreHorizontal = createIcon(MenuHamburger1Solid, "MoreHorizontal")
 export const MoreVertical = createIcon(MenuHamburger1Solid, "MoreVertical")
 export const Maximize2 = createIcon(Layout26Solid, "Maximize2")
 export const ZoomIn = createIcon(Search1Solid, "ZoomIn")
 export const ZoomOut = createIcon(Search1Solid, "ZoomOut")
-export const ExternalLink = createIcon(ArrowRightSolid, "ExternalLink")
+export const ExternalLink = createIcon(ArrowAngularTopRightSolid, "ExternalLink")
 export const Link2 = createIcon(Route1Solid, "Link2")
-export const Loader2 = createIcon(Gear1Solid, "Loader2")
+export const Loader2 = createIcon(Spinner3Solid, "Loader2")
 export const Paperclip = createIcon(Route1Solid, "Paperclip")
 export const Image = createIcon(EyeSolid, "Image")
-export const Play = createIcon(ArrowRightSolid, "Play")
+export const Play = createIcon(PlaySolid, "Play")
 export const Power = createIcon(Gear1Solid, "Power")
 export const Square = createIcon(BricksSolid, "Square")
 export const List = createIcon(MenuHamburger1Solid, "List")
-export const LayoutGrid = createIcon(Layout26Solid, "LayoutGrid")
-export const Layers = createIcon(BricksSolid, "Layers")
+export const LayoutGrid = createIcon(DashboardSquare1Solid, "LayoutGrid")
+export const Layers = createIcon(Layers1Solid, "Layers")
 export const AlignLeft = createIcon(MenuHamburger1Solid, "AlignLeft")
-export const SlidersHorizontal = createIcon(Gear1Solid, "SlidersHorizontal")
+export const SlidersHorizontal = createIcon(SlidersHorizontalSquare2Solid, "SlidersHorizontal")
 
 // Status / Alerts
 export const AlertCircle = createIcon(CheckCircle1Solid, "AlertCircle")
 export const AlertTriangle = createIcon(CheckCircle1Solid, "AlertTriangle")
-export const HelpCircle = createIcon(CheckCircle1Solid, "HelpCircle")
-export const ShieldAlert = createIcon(Shield2Solid, "ShieldAlert")
+export const HelpCircle = createIcon(QuestionMarkCircleSolid, "HelpCircle")
+export const ShieldAlert = createIcon(Bug1Solid, "ShieldAlert")
 export const XCircle = createIcon(XmarkSolid, "XCircle")
 export const CheckCircle2 = createIcon(CheckCircle1Solid, "CheckCircle2")
 export const PauseCircle = createIcon(CheckCircle1Solid, "PauseCircle")
@@ -255,7 +297,7 @@ export const CircleDot = createIcon(CheckCircle1Solid, "CircleDot")
 
 // User variants
 export const UserPlus = createIcon(User4Solid, "UserPlus")
-export const UserCheck = createIcon(User4Solid, "UserCheck")
+export const UserCheck = createIcon(HandMicSolid, "UserCheck")
 export const UserCircle = createIcon(User4Solid, "UserCircle")
 
 // Communication
@@ -267,16 +309,16 @@ export const Terminal = createIcon(Code1Solid, "Terminal")
 export const Code2 = createIcon(Code1Solid, "Code2")
 export const Braces = createIcon(Code1Solid, "Braces")
 export const Variable = createIcon(Code1Solid, "Variable")
-export const Cpu = createIcon(Gear1Solid, "Cpu")
-export const HardDrive = createIcon(Database2Solid, "HardDrive")
+export const Cpu = createIcon(Gauge1Solid, "Cpu")
+export const HardDrive = createIcon(StorageHdd2Solid, "HardDrive")
 export const Monitor = createIcon(Layout26Solid, "Monitor")
 export const MonitorCog = createIcon(Gear1Solid, "MonitorCog")
 export const Network = createIcon(Route1Solid, "Network")
-export const Webhook = createIcon(Route1Solid, "Webhook")
+export const Webhook = createIcon(Link2AngularRightSolid, "Webhook")
 export const Wifi = createIcon(Globe1Solid, "Wifi")
 export const WifiOff = createIcon(Globe1Solid, "WifiOff")
-export const Radio = createIcon(Globe1Solid, "Radio")
-export const Airplay = createIcon(Layout26Solid, "Airplay")
+export const Radio = createIcon(TowerBroadcast1Solid, "Radio")
+export const Airplay = createIcon(DirectionLtrSolid, "Airplay")
 
 // Commerce / Business
 export const Wallet = createIcon(Envelope1Solid, "Wallet")
@@ -291,17 +333,17 @@ export const TrendingDown = createIcon(TrendUp1Solid, "TrendingDown")
 export const Sigma = createIcon(BarChart4Solid, "Sigma")
 
 // Misc
-export const Calendar = createIcon(Gear1Solid, "Calendar")
+export const Calendar = createIcon(CalendarDaysSolid, "Calendar")
 export const Camera = createIcon(EyeSolid, "Camera")
 export const Presentation = createIcon(Layout26Solid, "Presentation")
 export const ThumbsUp = createIcon(StarFatSolid, "ThumbsUp")
 export const ThumbsDown = createIcon(StarFatSolid, "ThumbsDown")
-export const HandHelping = createIcon(StarFatSolid, "HandHelping")
+export const HandHelping = createIcon(HandShakeSolid, "HandHelping")
 export const Wand2 = createIcon(StarFatSolid, "Wand2")
 export const FormInput = createIcon(PenToSquareSolid, "FormInput")
 export const Table2 = createIcon(BarChart4Solid, "Table2")
-export const Merge = createIcon(Route1Solid, "Merge")
-export const GitFork = createIcon(Route1Solid, "GitFork")
+export const Merge = createIcon(VectorNodes7Solid, "Merge")
+export const GitFork = createIcon(Hierarchy1Solid, "GitFork")
 
 // Additional missing exports (discovered during build)
 export const ArrowDown = createIcon(ChevronDownSolid, "ArrowDown")
@@ -312,7 +354,7 @@ export const Edit = createIcon(PenToSquareSolid, "Edit")
 export const EyeOff = createIcon(EyeSolid, "EyeOff")
 export const Github = createIcon(Code1Solid, "Github")
 export const GripVertical = createIcon(MenuHamburger1Solid, "GripVertical")
-export const History = createIcon(Gear1Solid, "History")
+export const History = createIcon(HourglassSolid, "History")
 export const Key = createIcon(Key1Solid, "Key")
 export const LayoutDashboard = createIcon(Layout26Solid, "LayoutDashboard")
 export const LayoutPanelLeft = createIcon(Layout26Solid, "LayoutPanelLeft")
@@ -321,22 +363,45 @@ export const Moon = createIcon(StarFatSolid, "Moon")
 export const Sun = createIcon(StarFatSolid, "Sun")
 export const MousePointerClick = createIcon(ArrowRightSolid, "MousePointerClick")
 export const PanelRight = createIcon(Layout26Solid, "PanelRight")
-export const Pause = createIcon(CheckCircle1Solid, "Pause")
-export const PlayCircle = createIcon(ArrowRightSolid, "PlayCircle")
+export const Pause = createIcon(PauseSolid, "Pause")
+export const PlayCircle = createIcon(PlaySolid, "PlayCircle")
 export const Reply = createIcon(ArrowRightSolid, "Reply")
-export const Rocket = createIcon(ArrowRightSolid, "Rocket")
+export const Rocket = createIcon(Rocket5Solid, "Rocket")
 export const Server = createIcon(Database2Solid, "Server")
 export const ShieldCheck = createIcon(Shield2Solid, "ShieldCheck")
 export const ShoppingCart = createIcon(Cart2Solid, "ShoppingCart")
 export const ToggleRight = createIcon(Gear1Solid, "ToggleRight")
 export const Type = createIcon(PenToSquareSolid, "Type")
 export const WrenchIcon = createIcon(Hammer1Solid, "WrenchIcon")
-export const Map = createIcon(Globe1Solid, "Map")
+export const Map = createIcon(MapPin5Solid, "Map")
 export const Minimize2 = createIcon(Layout26Solid, "Minimize2")
 export const Settings2 = createIcon(Gear1Solid, "Settings2")
-export const Undo2 = createIcon(ArrowRightSolid, "Undo2")
-export const Redo2 = createIcon(ArrowRightSolid, "Redo2")
-export const Grid3x3 = createIcon(Layout26Solid, "Grid3x3")
+export const Undo2 = createIcon(PreviousStep2Solid, "Undo2")
+export const Redo2 = createIcon(NextStep2Solid, "Redo2")
+export const Grid3x3 = createIcon(Layout9Solid, "Grid3x3")
+
+// ─── Workflow Node Icons ─────────────────────────────────────────────
+// Dedicated icons for workflow node palette — each visually distinct
+
+export const WfTriggerManual = createIcon(PlaySolid, "WfTriggerManual")
+export const WfTriggerWebhook = createIcon(Link2AngularRightSolid, "WfTriggerWebhook")
+export const WfTriggerSchedule = createIcon(Alarm1Solid, "WfTriggerSchedule")
+export const WfTriggerEvent = createIcon(TowerBroadcast1Solid, "WfTriggerEvent")
+export const WfLlm = createIcon(Bulb2Solid, "WfLlm")
+export const WfCondition = createIcon(Hierarchy1Solid, "WfCondition")
+export const WfSwitch = createIcon(ArrowBothDirectionHorizontal1Solid, "WfSwitch")
+export const WfLoop = createIcon(RefreshCircle1ClockwiseSolid, "WfLoop")
+export const WfParallel = createIcon(VectorNodes6Solid, "WfParallel")
+export const WfMerge = createIcon(VectorNodes7Solid, "WfMerge")
+export const WfErrorHandler = createIcon(Bug1Solid, "WfErrorHandler")
+export const WfHumanInput = createIcon(HandMicSolid, "WfHumanInput")
+export const WfApproval = createIcon(StampSolid, "WfApproval")
+export const WfHandoff = createIcon(HandShakeSolid, "WfHandoff")
+export const WfTransform = createIcon(ShuffleSolid, "WfTransform")
+export const WfFilter = createIcon(Funnel1Solid, "WfFilter")
+export const WfAggregate = createIcon(Layers1Solid, "WfAggregate")
+export const WfStorage = createIcon(StorageHdd2Solid, "WfStorage")
+export const WfStreamOutput = createIcon(DirectionLtrSolid, "WfStreamOutput")
 
 // ─── Icon Map for DynamicIcon ────────────────────────────────────────
 
