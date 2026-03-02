@@ -11,6 +11,7 @@ export interface WorkflowItem {
   trigger: { type: string }
   variables: { inputs: unknown[]; outputs: unknown[] }
   mode: "STANDARD" | "CHATFLOW"
+  category: "TASK" | "CHATFLOW" | "AUTOMATION"
   chatflowConfig: { welcomeMessage?: string; starterPrompts?: string[]; enableFollowUps?: boolean }
   apiEnabled: boolean
   apiKey: string | null
@@ -46,7 +47,7 @@ export function useWorkflows(assistantId?: string | null) {
   }, [assistantId])
 
   const createWorkflow = useCallback(
-    async (data: { name: string; description?: string; assistantId?: string }) => {
+    async (data: { name: string; description?: string; assistantId?: string; category?: string }) => {
       const res = await fetch("/api/dashboard/workflows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

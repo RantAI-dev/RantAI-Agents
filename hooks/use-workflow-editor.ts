@@ -23,6 +23,7 @@ interface WorkflowEditorState {
   workflowDescription: string
   workflowStatus: string
   workflowMode: "STANDARD" | "CHATFLOW"
+  workflowCategory: "TASK" | "CHATFLOW" | "AUTOMATION"
   assistantId: string | null
   apiEnabled: boolean
   apiKey: string | null
@@ -62,6 +63,7 @@ interface WorkflowEditorState {
     variables: WorkflowVariables
     status: string
     mode?: "STANDARD" | "CHATFLOW"
+    category?: "TASK" | "CHATFLOW" | "AUTOMATION"
     chatflowConfig?: { welcomeMessage?: string; starterPrompts?: string[] }
     assistantId?: string | null
     apiEnabled?: boolean
@@ -76,6 +78,7 @@ interface WorkflowEditorState {
     trigger: TriggerConfig
     variables: WorkflowVariables
     mode: "STANDARD" | "CHATFLOW"
+    category: "TASK" | "CHATFLOW" | "AUTOMATION"
     chatflowConfig: { welcomeMessage?: string; starterPrompts?: string[]; enableFollowUps?: boolean }
     apiEnabled: boolean
     status: string
@@ -134,6 +137,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
   workflowDescription: "",
   workflowStatus: "DRAFT",
   workflowMode: "STANDARD",
+  workflowCategory: "AUTOMATION",
   assistantId: null,
   apiEnabled: false,
   apiKey: null,
@@ -188,6 +192,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       workflowDescription: data.description || "",
       workflowStatus: data.status,
       workflowMode: data.mode || "STANDARD",
+      workflowCategory: data.category || "AUTOMATION",
       chatflowConfig: data.chatflowConfig || {},
       assistantId: data.assistantId || null,
       apiEnabled: data.apiEnabled || false,
@@ -211,6 +216,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       workflowDescription: "",
       workflowStatus: "DRAFT",
       workflowMode: "STANDARD",
+      workflowCategory: "AUTOMATION",
       chatflowConfig: {},
       tags: [],
       assistantId: null,
@@ -238,6 +244,7 @@ export const useWorkflowEditor = create<WorkflowEditorState>((set, get) => ({
       trigger: meta.trigger ?? state.trigger,
       variables: meta.variables ?? state.variables,
       workflowMode: meta.mode ?? state.workflowMode,
+      workflowCategory: meta.category ?? state.workflowCategory,
       chatflowConfig: meta.chatflowConfig ?? state.chatflowConfig,
       assistantId: meta.assistantId !== undefined ? meta.assistantId : state.assistantId,
       apiEnabled: meta.apiEnabled ?? state.apiEnabled,

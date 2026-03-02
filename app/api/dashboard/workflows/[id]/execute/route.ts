@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { getOrganizationContext } from "@/lib/organization"
 import { workflowEngine } from "@/lib/workflow"
 import { emitWorkflowEvent } from "@/lib/workflow/engine"
 import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow"
@@ -201,7 +202,8 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     // STANDARD mode — execute async so client gets runId before steps start
-    const runId = await workflowEngine.executeAsync(id, input)
+    const orgContext = await getOrganizationContext(req, userId)
+    const runId = await workflowEngine.executeAsync(id, input, { userId, organizationId: orgContext?.organizationId })
 
     // Return the run record immediately (status: RUNNING)
     const run = await prisma.workflowRun.findUnique({

@@ -234,7 +234,10 @@ model Assistant {
   // MCP server bindings
   mcpServers AssistantMcpServer[]
 
-  // Workflows
+  // Workflow bindings (many-to-many via junction table)
+  assistantWorkflows AssistantWorkflow[]
+
+  // Workflows (legacy direct FK)
   workflows Workflow[]
 
   createdAt DateTime @default(now())
@@ -522,6 +525,20 @@ model AssistantMcpServer {
   @@index([mcpServerId])
 }
 
+model AssistantWorkflow {
+  id          String    @id @default(cuid())
+  assistantId String
+  assistant   Assistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  workflowId  String
+  workflow    Workflow  @relation("AssistantWorkflows", fields: [workflowId], references: [id], onDelete: Cascade)
+  enabled     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  @@unique([assistantId, workflowId])
+  @@index([assistantId])
+  @@index([workflowId])
+}
+
 // MCP Server configuration for external tool providers (remote-only: SSE or streamable-http)
 model McpServerConfig {
   id              String    @id @default(cuid())
@@ -629,6 +646,7 @@ model Workflow {
 
   // Execution mode
   mode            WorkflowMode   @default(STANDARD)
+  category        WorkflowCategory @default(AUTOMATION)
   chatflowConfig  Json           @default("{}")
 
   // Public API access
@@ -650,6 +668,7 @@ model Workflow {
   assistant       Assistant?     @relation(fields: [assistantId], references: [id], onDelete: SetNull)
 
   runs            WorkflowRun[]
+  assistantWorkflows AssistantWorkflow[] @relation("AssistantWorkflows")
 
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -688,6 +707,12 @@ enum WorkflowStatus {
   ACTIVE
   PAUSED
   ARCHIVED
+}
+
+enum WorkflowCategory {
+  TASK        // Attachable to agents as jobs they execute
+  CHATFLOW    // Conversation flow (existing CHATFLOW mode)
+  AUTOMATION  // Standalone pipeline (existing STANDARD mode)
 }
 
 enum RunStatus {

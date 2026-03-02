@@ -42,7 +42,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
     const { id } = await params
     const body = await req.json()
-    const { name, description, nodes, edges, trigger, variables, status, mode, chatflowConfig, apiEnabled, assistantId, tags } = body
+    const { name, description, nodes, edges, trigger, variables, status, mode, category, chatflowConfig, apiEnabled, assistantId, tags } = body
 
     // Auto-generate API key when enabling API access
     let apiKey: string | undefined
@@ -64,6 +64,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
         ...(variables !== undefined && { variables }),
         ...(status !== undefined && { status }),
         ...(mode !== undefined && { mode }),
+        ...(category !== undefined && { category }),
         ...(chatflowConfig !== undefined && { chatflowConfig }),
         ...(apiEnabled !== undefined && { apiEnabled }),
         ...(tags !== undefined && { tags }),

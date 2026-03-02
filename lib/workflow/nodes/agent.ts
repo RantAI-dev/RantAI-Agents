@@ -1,6 +1,9 @@
-import { generateText } from "ai"
+import { generateText, stepCountIs } from "ai"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { prisma } from "@/lib/prisma"
+import { resolveToolsForAssistant } from "@/lib/tools/registry"
+import { resolveSkillsForAssistant } from "@/lib/skills/resolver"
+import type { ToolContext } from "@/lib/tools/types"
 import type { WorkflowNodeData, AgentNodeData } from "../types"
 import type { ExecutionContext } from "../engine"
 import { buildTemplateContext } from "../engine"
@@ -8,7 +11,8 @@ import { resolveTemplate } from "../template-engine"
 import { extractPrompt } from "./llm"
 
 /**
- * Agent node handler — loads an assistant and generates text using its config.
+ * Agent node handler — loads an assistant and generates text using its config,
+ * including tools, skills, and knowledge base when available.
  */
 export async function executeAgent(
   data: WorkflowNodeData,
@@ -41,11 +45,41 @@ export async function executeAgent(
     ? resolveTemplate(nodeData.promptTemplate, tctx)
     : extractPrompt(input)
 
+  // Build system prompt with skills
+  let systemPrompt = assistant.systemPrompt || undefined
+  const skillsPrompt = await resolveSkillsForAssistant(nodeData.assistantId)
+  if (skillsPrompt) {
+    systemPrompt = systemPrompt ? `${systemPrompt}\n\n${skillsPrompt}` : skillsPrompt
+  }
+
+  // Resolve tools for the assistant
+  const toolContext: ToolContext = {
+    assistantId: nodeData.assistantId,
+    userId: context.userId,
+    organizationId: context.organizationId,
+    sessionId: context.runId,
+  }
+  const { tools } = await resolveToolsForAssistant(
+    nodeData.assistantId, assistant.model || "openai/gpt-4o-mini", toolContext
+  )
+
+  const hasTools = Object.keys(tools).length > 0
+  const maxSteps = nodeData.maxSteps ?? 5
+
   const result = await generateText({
     model,
-    system: assistant.systemPrompt || undefined,
+    system: systemPrompt,
     prompt,
+    ...(hasTools ? { tools, stopWhen: stepCountIs(maxSteps) } : {}),
   })
 
-  return { output: { text: result.text, model: assistant.model, usage: result.usage } }
+  return {
+    output: {
+      text: result.text,
+      model: assistant.model,
+      usage: result.usage,
+      toolCalls: result.steps?.flatMap(s => s.toolCalls || []) || [],
+      stepCount: result.steps?.length || 1,
+    },
+  }
 }

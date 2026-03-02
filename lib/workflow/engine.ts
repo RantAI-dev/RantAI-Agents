@@ -57,6 +57,8 @@ export interface ExecutionContext {
   variables: Record<string, unknown>
   stepOutputs: Map<string, unknown>
   flow: FlowState
+  userId?: string
+  organizationId?: string
 }
 
 type NodeHandler = (
@@ -102,9 +104,10 @@ export class WorkflowEngine {
    */
   async execute(
     workflowId: string,
-    input: Record<string, unknown> = {}
+    input: Record<string, unknown> = {},
+    options?: { userId?: string; organizationId?: string }
   ): Promise<string> {
-    const run = await this.prepareRun(workflowId, input)
+    const run = await this.prepareRun(workflowId, input, options)
     await this.runToCompletion(run.id, run.compiled, run.context, run.stepLogs, run.startTime, run.input)
     return run.id
   }
@@ -115,9 +118,10 @@ export class WorkflowEngine {
    */
   async executeAsync(
     workflowId: string,
-    input: Record<string, unknown> = {}
+    input: Record<string, unknown> = {},
+    options?: { userId?: string; organizationId?: string }
   ): Promise<string> {
-    const run = await this.prepareRun(workflowId, input)
+    const run = await this.prepareRun(workflowId, input, options)
 
     // Fire-and-forget: execution runs in background, client gets runId immediately
     this.runToCompletion(run.id, run.compiled, run.context, run.stepLogs, run.startTime, run.input)
@@ -130,7 +134,7 @@ export class WorkflowEngine {
    * Prepare a workflow run: validate, compile, create DB record, build context.
    * Shared between execute() and executeAsync().
    */
-  private async prepareRun(workflowId: string, input: Record<string, unknown>) {
+  private async prepareRun(workflowId: string, input: Record<string, unknown>, options?: { userId?: string; organizationId?: string }) {
     const workflow = await prisma.workflow.findUnique({
       where: { id: workflowId },
     })
@@ -167,6 +171,8 @@ export class WorkflowEngine {
       variables: { ...input },
       stepOutputs: new Map(),
       flow,
+      userId: options?.userId,
+      organizationId: options?.organizationId,
     }
 
     return {
