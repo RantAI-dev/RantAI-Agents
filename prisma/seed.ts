@@ -539,6 +539,7 @@ async function seedWorkflows(createdByUserId: string) {
       trigger: template.trigger as object,
       variables: template.variables as object,
       mode: (template.mode === "CHATFLOW" ? "CHATFLOW" : "STANDARD") as "STANDARD" | "CHATFLOW",
+      category: (template.category ?? "AUTOMATION") as "TASK" | "CHATFLOW" | "AUTOMATION",
       tags: template.tags ?? [],
     }
 

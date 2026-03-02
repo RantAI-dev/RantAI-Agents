@@ -23,6 +23,7 @@ export interface WorkflowTemplate {
   description: string
   icon: string
   mode?: "STANDARD" | "CHATFLOW"
+  category?: "TASK" | "CHATFLOW" | "AUTOMATION"
   nodes: Node<WorkflowNodeData>[]
   edges: Edge[]
   trigger: TriggerConfig
@@ -1206,6 +1207,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     name: "Simple Chat Pipeline",
     description: "Basic linear pipeline: trigger → LLM → transform. The simplest workflow to understand the basics.",
     icon: "💬",
+    category: "TASK",
     nodes: simpleChatNodes,
     edges: simpleChatEdges,
     trigger: { type: "manual" },
@@ -1220,6 +1222,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     name: "RAG Question Answering",
     description: "Search a knowledge base, pass context to an LLM, and return a sourced answer.",
     icon: "📚",
+    category: "TASK",
     nodes: ragQANodes,
     edges: ragQAEdges,
     trigger: { type: "manual" },
@@ -1235,6 +1238,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "Intent classification → routing: product FAQ, claim info, or auto-escalate complaints to human agent. For widget/customer-facing.",
     icon: "🎧",
     mode: "CHATFLOW",
+    category: "CHATFLOW",
     nodes: customerServiceNodes,
     edges: customerServiceEdges,
     trigger: { type: "manual" },
@@ -1250,6 +1254,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "Parallel search across policy + underwriting KBs, merge results, and answer with combined context. For internal agents.",
     icon: "🔎",
     mode: "CHATFLOW",
+    category: "CHATFLOW",
     nodes: agentPolicyNodes,
     edges: agentPolicyEdges,
     trigger: { type: "manual" },
@@ -1265,6 +1270,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "Classify claim intent → route: process inquiry, guided filing, or status tracking. Each path uses dedicated KB and prompts. For widget/customer-facing.",
     icon: "📋",
     mode: "CHATFLOW",
+    category: "CHATFLOW",
     nodes: claimFilingNodes,
     edges: claimFilingEdges,
     trigger: { type: "manual" },
@@ -1279,6 +1285,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     name: "Health Insurance Fraud Detection",
     description: "Parallel AI fraud analysis for health insurance claims: narrative analysis, rule engine (8 rules), and pattern matching with RAG. Routes by risk level (auto-approve / review / escalate).",
     icon: "🔍",
+    category: "TASK",
     nodes: fraudDetectionNodes,
     edges: fraudDetectionEdges,
     trigger: { type: "manual" },
@@ -1305,6 +1312,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
     description: "Interactive chatflow for fraud investigators. Search claim history, policy rules, fraud patterns, and medical benchmarks to assist investigation. For internal investigator use.",
     icon: "🕵️",
     mode: "CHATFLOW",
+    category: "CHATFLOW",
     nodes: fraudInvestigationNodes,
     edges: fraudInvestigationEdges,
     trigger: { type: "manual" },
