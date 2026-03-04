@@ -10,6 +10,7 @@ import type {
   MergeNodeData,
   SwitchNodeData,
   CodeNodeData,
+  ToolNodeData,
   StreamOutputNodeData,
   OutputParserNodeData,
   TriggerConfig,
@@ -184,6 +185,7 @@ const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
   procedures: input.procedures || [],
   claim_history: input.claim_history || [],
   history_count: (input.claim_history || []).length,
+  documents: input.documents || [],
   receivedAt: new Date().toISOString()
 };`,
     } as TransformNodeData,
@@ -194,7 +196,7 @@ const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
     position: { x: 400, y: 300 },
     data: {
       label: "Parallel Fraud Analysis",
-      description: "Run narrative analysis, rule engine, and pattern matching simultaneously",
+      description: "Run narrative analysis, rule engine, pattern matching, and document OCR verification simultaneously",
       nodeType: NodeType.PARALLEL,
     } as ParallelNodeData,
   },
@@ -470,6 +472,25 @@ Respond ONLY with JSON:
       temperature: 0.1,
     } as LlmNodeData,
   },
+  // ── Branch 4: Document Verification via OCR ──
+  {
+    id: "tool-ocr-doc",
+    type: NodeType.TOOL,
+    position: { x: 1100, y: 450 },
+    data: {
+      label: "OCR Document Verification",
+      description: "Extract text from uploaded documents (receipts, medical letters) to verify authenticity",
+      nodeType: NodeType.TOOL,
+      toolId: "",
+      toolName: "ocr_document",
+      inputMapping: {
+        s3_key: "{{ input.documents[0].s3Key }}",
+        filename: "{{ input.documents[0].filename }}",
+        mime_type: "{{ input.documents[0].mimeType }}",
+        document_type: "medical",
+      },
+    } as ToolNodeData,
+  },
   // ── Merge + Synthesize ──
   {
     id: "merge-results",
@@ -477,15 +498,31 @@ Respond ONLY with JSON:
     position: { x: 400, y: 750 },
     data: {
       label: "Merge Analysis Results",
-      description: "Combine results from all three parallel fraud analysis branches",
+      description: "Combine results from all four parallel fraud analysis branches",
       nodeType: NodeType.MERGE,
       mergeStrategy: "all",
     } as MergeNodeData,
   },
   {
+    id: "transform-label",
+    type: NodeType.TRANSFORM,
+    position: { x: 400, y: 825 },
+    data: {
+      label: "Label Branch Results",
+      description: "Label each parallel branch output by name so the synthesize LLM can identify them",
+      nodeType: NodeType.TRANSFORM,
+      expression: `return {
+  narrative_analysis: $flow.nodeOutputs['llm-narrative'] || {},
+  rule_engine: $flow.nodeOutputs['code-rules'] || {},
+  pattern_analysis: $flow.nodeOutputs['llm-patterns'] || {},
+  document_verification: $flow.nodeOutputs['tool-ocr-doc'] || {}
+};`,
+    } as TransformNodeData,
+  },
+  {
     id: "llm-synthesize",
     type: NodeType.LLM,
-    position: { x: 400, y: 900 },
+    position: { x: 400, y: 975 },
     data: {
       label: "Synthesize Assessment",
       description: "Produce final weighted risk score and recommendation",
@@ -493,12 +530,26 @@ Respond ONLY with JSON:
       model: "xiaomi/mimo-v2-flash",
       systemPrompt: `Kamu adalah analis fraud senior asuransi yang menghasilkan penilaian akhir.
 
-Kamu menerima hasil gabungan dari 3 metode analisis:
-1. Narrative Analysis (25% bobot) - analisis AI terhadap data klaim
-2. Rule Engine (40% bobot) - aturan bisnis dan red flags
-3. Pattern Analysis (35% bobot) - pencocokan pola fraud dan benchmark biaya
+Input yang kamu terima adalah JSON object dengan 4 key:
+- "narrative_analysis": hasil LLM analysis (field .text berisi JSON dengan narrative_score, summary, findings)
+- "rule_engine": hasil rule engine (field .rule_score dan .flags)
+- "pattern_analysis": hasil LLM pattern matching (field .text berisi JSON dengan pattern_score, matched_patterns)
+- "document_verification": hasil OCR dokumen (field .success, .text berisi teks OCR, .has_documents)
+
+Bobot penilaian:
+1. Narrative Analysis = 20%
+2. Rule Engine = 35%
+3. Pattern Analysis = 30%
+4. Document Verification = 15%
 
 Hitung skor risiko keseluruhan berdasarkan bobot di atas.
+
+Untuk Document Verification:
+- Cek field "success" dan "text" dari document_verification
+- Jika success=true: bandingkan teks dokumen dengan data klaim (jumlah/amount, provider, tanggal)
+  - Cocok semua → doc_score rendah (0-20)
+  - Ada inkonsistensi → doc_score tinggi (50-80)
+- Jika success=false atau has_documents=false → set doc_has_documents=false, doc_score=null, hitung dari 3 branch lain saja (tanpa doc weight)
 
 Respond ONLY with valid JSON:
 {
@@ -507,7 +558,14 @@ Respond ONLY with valid JSON:
   "confidence": <0-100>,
   "summary": "Ringkasan 2-3 kalimat dalam bahasa Indonesia",
   "key_findings": ["5 temuan utama dalam bahasa Indonesia"],
-  "recommendation": "AUTO_APPROVE" | "REVIEW" | "ESCALATE"
+  "recommendation": "AUTO_APPROVE" | "REVIEW" | "ESCALATE",
+  "doc_score": <0-100 atau null jika tidak ada dokumen>,
+  "doc_findings": ["temuan dari verifikasi dokumen, atau kosong jika tidak ada dokumen"],
+  "doc_amount_match": <true/false/null>,
+  "doc_provider_match": <true/false/null>,
+  "doc_date_match": <true/false/null>,
+  "doc_summary": "ringkasan verifikasi dokumen",
+  "doc_has_documents": <true/false>
 }
 
 Threshold risk level: LOW < 30, MEDIUM 30-69, HIGH >= 70`,
@@ -532,10 +590,17 @@ Threshold risk level: LOW < 30, MEDIUM 30-69, HIGH >= 70`,
     confidence: parsed.confidence || 50,
     summary: parsed.summary || '',
     key_findings: parsed.key_findings || [],
-    recommendation: parsed.recommendation || 'REVIEW'
+    recommendation: parsed.recommendation || 'REVIEW',
+    doc_score: parsed.doc_score !== undefined ? parsed.doc_score : null,
+    doc_findings: parsed.doc_findings || [],
+    doc_amount_match: parsed.doc_amount_match !== undefined ? parsed.doc_amount_match : null,
+    doc_provider_match: parsed.doc_provider_match !== undefined ? parsed.doc_provider_match : null,
+    doc_date_match: parsed.doc_date_match !== undefined ? parsed.doc_date_match : null,
+    doc_summary: parsed.doc_summary || '',
+    doc_has_documents: parsed.doc_has_documents === true
   };
 } catch(e) {
-  return { risk_level: 'MEDIUM', overall_risk_score: 50, confidence: 30, summary: text || 'Parse error', key_findings: [], recommendation: 'REVIEW' };
+  return { risk_level: 'MEDIUM', overall_risk_score: 50, confidence: 30, summary: text || 'Parse error', key_findings: [], recommendation: 'REVIEW', doc_score: null, doc_findings: [], doc_amount_match: null, doc_provider_match: null, doc_date_match: null, doc_summary: '', doc_has_documents: false };
 }`,
     } as TransformNodeData,
   },
@@ -611,10 +676,14 @@ const fraudDetectionEdges: Edge[] = [
   // Branch 3: RAG fraud patterns → LLM patterns
   { id: "e-parallel-rag-fraud",   source: "parallel-split",       target: "rag-fraud-patterns" },
   { id: "e-rag-fraud-patterns",   source: "rag-fraud-patterns",   target: "llm-patterns" },
+  // Branch 4: OCR document verification
+  { id: "e-parallel-ocr",        source: "parallel-split",       target: "tool-ocr-doc" },
   { id: "e-narrative-merge",    source: "llm-narrative",        target: "merge-results" },
   { id: "e-rules-merge",        source: "code-rules",           target: "merge-results" },
   { id: "e-patterns-merge",     source: "llm-patterns",         target: "merge-results" },
-  { id: "e-merge-synthesize",   source: "merge-results",        target: "llm-synthesize" },
+  { id: "e-ocr-merge",          source: "tool-ocr-doc",         target: "merge-results" },
+  { id: "e-merge-label",        source: "merge-results",        target: "transform-label" },
+  { id: "e-label-synthesize",   source: "transform-label",      target: "llm-synthesize" },
   { id: "e-synthesize-parse",   source: "llm-synthesize",       target: "transform-parse" },
   { id: "e-parse-switch",       source: "transform-parse",      target: "switch-risk" },
   { id: "e-switch-approve",     source: "switch-risk", sourceHandle: "low",    target: "transform-approve" },

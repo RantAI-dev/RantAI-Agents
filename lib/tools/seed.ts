@@ -17,6 +17,7 @@ const BUILTIN_TOOL_ICONS: Record<string, string> = {
   create_artifact: "\u2728",
   update_artifact: "\uD83D\uDD27",
   code_interpreter: "\uD83D\uDCBB",
+  ocr_document: "\uD83D\uDDCE",
 }
 
 /**
