@@ -188,12 +188,24 @@ function trySimpleReference(expr: string, ctx: TemplateContext): unknown {
   return resolveReference(expr, ctx.flow)
 }
 
+// Matches "items[0]", "docs[2]", etc. — used to handle array index access in dot-paths
+const ARRAY_KEY_RE = /^(\w+)\[(\d+)\]$/
+
 function getNestedFromInput(obj: unknown, path: string[]): unknown {
   let current = obj
   for (const key of path) {
     if (current === null || current === undefined) return undefined
     if (typeof current !== "object") return undefined
-    current = (current as Record<string, unknown>)[key]
+
+    const arrayMatch = ARRAY_KEY_RE.exec(key)
+    if (arrayMatch) {
+      // e.g. "documents[0]" → access current["documents"][0]
+      const arr = (current as Record<string, unknown>)[arrayMatch[1]]
+      if (!Array.isArray(arr)) return undefined
+      current = arr[parseInt(arrayMatch[2], 10)]
+    } else {
+      current = (current as Record<string, unknown>)[key]
+    }
   }
   return current
 }

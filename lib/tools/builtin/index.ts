@@ -11,6 +11,7 @@ import { textUtilitiesTool } from "./text-utilities"
 import { createArtifactTool } from "./create-artifact"
 import { updateArtifactTool } from "./update-artifact"
 import { codeInterpreterTool } from "./code-interpreter"
+import { ocrDocumentTool } from "./ocr-document"
 import type { ToolDefinition } from "../types"
 
 export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
@@ -27,6 +28,7 @@ export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
   create_artifact: createArtifactTool,
   update_artifact: updateArtifactTool,
   code_interpreter: codeInterpreterTool,
+  ocr_document: ocrDocumentTool,
 }
 
 export function getBuiltinTool(name: string): ToolDefinition | undefined {

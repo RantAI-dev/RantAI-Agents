@@ -17,6 +17,9 @@
 8. [Seed Data (Data Demo)](#8-seed-data-data-demo)
 9. [Integrasi Antar Sistem](#9-integrasi-antar-sistem)
 10. [Urutan Implementasi](#10-urutan-implementasi)
+    - Fase 1–8: Selesai
+    - [Fase 9: OCR Document Verification](#fase-9-ocr-document-verification) ⚠️ HAMPIR SELESAI (2 bug blocking — lihat §9.8)
+    - [Fase 10: Fitur Lanjutan](#fase-10-fitur-lanjutan-opsional)
 
 ---
 
@@ -44,27 +47,32 @@
 │  • Lihat hasil + skor         │          │                               │
 │  • Approve / Reject           │          │  Stack: Next.js 16 + Socket.io │
 │  • Chat AI investigasi        │          │  DB: PostgreSQL + SurrealDB    │
-│                               │          │                               │
-│  Own DB (PostgreSQL):         │          │  ❌ TIDAK ada data insurance    │
-│  • Customer (merged +NIK,    │          │  ❌ TIDAK ada claims API        │
-│    gender, DOB)               │          │  ❌ TIDAK ada rule engine       │
-│  • Policy (merged +limit)    │          │                               │
-│  • Provider (baru)           │          │  ✅ Pure workflow service       │
-│  • Claim (baru)              │          │  ✅ Generic, reusable          │
-│  • Rule engine (local)        │          │                               │
-│                               │          │                               │
+│                               │          │  Storage: RustFS (shared)      │
+│  Own DB (PostgreSQL):         │          │                               │
+│  • Customer (merged +NIK,    │          │  ❌ TIDAK ada data insurance    │
+│    gender, DOB)               │          │  ❌ TIDAK ada claims API        │
+│  • Policy (merged +limit)    │          │  ❌ TIDAK ada rule engine       │
+│  • Provider (baru)           │          │                               │
+│  • Claim (baru)              │          │  ✅ Pure workflow service       │
+│  • Rule engine (local)        │          │  ✅ Generic, reusable          │
+│                               │          │  ✅ Shared RustFS (namespaced) │
 │  Stack: Next.js 16            │          │                               │
 │  UI: shadcn/ui, Tailwind v4   │          │                               │
 └──────────────────────────────┘          └──────────────────────────────┘
+                        │                           │
+                        └──────── RustFS ───────────┘
+                              rantai-files bucket
+                              horizonlife/claims/*  ← dokumen klaim
+                              documents/*           ← knowledge base RantAI
 ```
 
-> **Catatan arsitektur (Updated Fase 8 — Merge)**:
+> **Catatan arsitektur (Updated Fase 9 — Storage)**:
 > - Model `Customer` dan `Policy` yang sudah ada di HorizonLife **di-extend** dengan field fraud detection (NIK, gender, DOB, annualLimit, remainingLimit). Bukan model terpisah.
 > - Model baru: `Provider` (RS/klinik) dan `Claim` (klaim + hasil analisis).
 > - Rule engine (8 rules deterministik) jalan **lokal** di HorizonLife — pure function, 0 DB dependency ke RantAI.
-> - RantAI-Agents = **"tukang jasa" murni** — hanya menyediakan workflow execution via API.
+> - RantAI-Agents = **"tukang jasa" murni** — hanya menyediakan workflow execution + shared infrastructure.
 > - HorizonLife hanya butuh 2 workflow API call: fraud detection (STANDARD) + investigation (CHATFLOW).
-> - Tidak ada Claims API, tidak ada data insurance di RantAI-Agents.
+> - **Storage**: HorizonLife menggunakan RustFS yang sama dengan RantAI-Agents, namespaced di `horizonlife/claims/*`. Ini valid karena HorizonLife adalah **full client** RantAI (chatbot, live agent, workflow) — bukan sekadar API consumer. Kalau HorizonLife hanya pakai workflow API tanpa infrastruktur RantAI lainnya, storage sebaiknya terpisah.
 
 ### Bagaimana Klaim Bekerja di Dunia Nyata
 
@@ -96,7 +104,7 @@ Customer pilih profil demo (Budi/Siti/Rudi/Dewi)
   → "Klaim berhasil dikirim! ID: CLM-2026-001234"
 ```
 
-### Act 2: Klaim Masuk ke Dashboard CS (RantAI-Agents)
+### Act 2: Klaim Masuk ke Dashboard Staff (HorizonLife-Demo)
 
 Presenter: *"Sekarang kita pindah ke sisi CS/investigator Anda"*
 
@@ -120,6 +128,7 @@ Progress bar real-time:
      ✅ Rule Engine ................ 0.5s
      ⏳ AI Narrative Analysis ...... berjalan...
      ✅ Pattern Analysis ........... 3.2s
+     ✅ Document Verification ....... 4.7s
   ⬜ Scoring
   ⬜ Keputusan
 ```
@@ -130,14 +139,19 @@ Progress bar real-time:
 Risk Score: 67/100 ⚠️ MEDIUM
 
 Breakdown:
-  Rule Engine:     55/100  ██████
-  AI Narrative:    45/100  █████
-  Pattern Match:   85/100  █████████
+  Rule Engine (35%):      55/100  ██████
+  AI Narrative (20%):     45/100  █████
+  Pattern Match (30%):    85/100  █████████
+  Doc Verification (15%): 70/100  ███████
 
-Temuan:
+Temuan Dokumen:
+  ✓ Jumlah cocok
+  ✗ Tanggal di kuitansi berbeda dari tanggal yang diklaim
+  ✗ Nama provider sedikit berbeda
+
+Temuan Lain:
   • [HIGH] Provider ini punya 12 klaim serupa dalam 3 bulan
   • [MEDIUM] Biaya 40% di atas rata-rata Jakarta
-  • [LOW] Klaim 5 hari setelah layanan
 
   [✅ Approve] [❌ Reject] [🔍 Investigasi]
 ```
@@ -352,9 +366,9 @@ Session: Cookie-based (hlf_staff_session)
 
 ### Detail Klaim — 3 Tab
 
-**Tab 1 — Data Klaim**: Info peserta, polis, provider, diagnosis, prosedur + biaya, dokumen, riwayat klaim
+**Tab 1 — Data Klaim**: Info peserta, polis, provider, diagnosis, prosedur + biaya, dokumen (dengan tombol Lihat/Unduh via presigned URL), riwayat klaim
 
-**Tab 2 — Hasil Analisis**: Risk score bar, breakdown 3 komponen (Rule Engine 40%, AI Narrative 25%, Pattern 35%), fraud flags, tombol Approve/Reject/Investigasi
+**Tab 2 — Hasil Analisis**: Risk score bar, breakdown 4 komponen (Rule Engine 35%, AI Narrative 20%, Pattern 30%, Doc Verification 15%), verifikasi dokumen (amount/provider/date match), fraud flags, tombol Approve/Reject/Investigasi
 
 **Tab 3 — Investigasi AI**: Chat streaming dengan chatflow workflow. AI punya akses ke data klaim, riwayat, provider profile, dan knowledge base fraud patterns
 
@@ -373,7 +387,12 @@ MANUAL_TRIGGER (klaim masuk)
   → PARALLEL:
       ├── CODE: Rule engine (8 aturan)
       ├── LLM: Analisis naratif
-      └── AGENT: Analisis pola (RAG + history)
+      ├── AGENT: Analisis pola (RAG + history)
+      └── CONDITION: Ada dokumen?
+            YES → TOOL: ocr_document (fetch dari RustFS via s3_key)
+                  LLM: verifikasi dokumen vs klaim
+                  → { doc_score, doc_findings, amount_match, ... }
+            NO  → { doc_score: 50, has_documents: false }
   → MERGE: Gabungkan hasil
   → TRANSFORM: Hitung risk score (weighted average)
   → SWITCH: Routing berdasarkan level
@@ -448,6 +467,9 @@ Riwayat (4 klaim, 2 tahun, semua APPROVED):
 
 Total klaim: Rp 57.800.000 (wajar)
 Expected score klaim baru: < 30 (LOW → AUTO APPROVE)
+
+Demo dokumen: kuitansi_budi.pdf + surat_dokter_budi.pdf
+  → Semua data cocok: jumlah Rp 45.000.000 ✓, tanggal 10 Agt 2025 ✓, provider RS Medika Jakarta ✓
 ```
 
 #### Siti Rahmawati — Agak Mencurigakan ⚠️
@@ -471,6 +493,9 @@ Riwayat (6 klaim, 8 bulan — frekuensi tinggi):
 Total klaim: Rp 102.000.000 (tinggi, semua di provider yang sama)
 Expected score klaim baru: 30-69 (MEDIUM → REVIEW)
 Red flags: frekuensi tinggi, provider sama, diagnosis berulang
+
+Demo dokumen: kuitansi_siti.pdf + surat_dokter_siti.pdf
+  → Data cocok TAPI pola mencurigakan: kunjungan ke-5 dari 6, akumulasi 70jt, watchlist provider
 ```
 
 #### Rudi Hartono — Fraud 🔴
@@ -496,11 +521,12 @@ Total klaim: Rp 135.000.000 (melebihi limit — sisa cuma 15jt!)
 Expected score klaim baru: > 70 (HIGH → ESKALASI)
 Red flags: polis baru, frekuensi gila, 2 provider watchlist, hampir habis limit
 
-Klaim demo yang akan di-submit:
-  Diagnosa: N83.2 Kista ovarium ← GENDER MISMATCH (laki-laki!)
-  Provider: RS Watchlist
-  Total: Rp 95.000.000
-  → Ini pasti HIGH risk
+Demo dokumen: kuitansi_rudi.pdf + surat_dokter_rudi.pdf
+  → INKONSISTENSI DISENGAJA untuk demonstrasi OCR:
+    ✗ Jumlah di kuitansi: Rp 28.000.000 (klaim: Rp 35.000.000) — selisih 7 juta!
+    ✗ Tanggal di kuitansi: 15 Oktober 2025 (klaim: 8 November 2025) — date mismatch!
+    ✗ Spesialisasi dokter: Sp.An (anestesiologi) untuk kasus nyeri punggung (seharusnya Sp.OT/Sp.KFR)
+  → OCR verification: amount_match: false, date_match: false
 ```
 
 #### Dewi Kusuma — Klaim Asuransi Jiwa 💀
@@ -509,13 +535,17 @@ Polis: POL-AJ-00123
 Produk: Asuransi Jiwa
 Mulai: 1 November 2025 (3 bulan aktif!)
 Uang pertanggungan: Rp 2.000.000.000
-Tertanggung: Hendra Kusuma (suami, meninggal)
-Gender: Perempuan (ahli waris)
+Gender: Perempuan
+DOB: 1990-04-25
 
 Riwayat: Tidak ada klaim sebelumnya
-Klaim demo: Kematian karena kecelakaan
-Expected score: > 80 (CRITICAL — polis baru 3 bulan + klaim 2M)
+Expected score: > 80 (CRITICAL — LF-06: polis < 24 bulan + klaim > 500jt)
 Red flags: polis sangat baru, nilai sangat besar, perlu investigasi mendalam
+
+Demo dokumen: kuitansi_dewi.pdf + surat_dokter_dewi.pdf
+  → Klaim cacat tetap total (G82.5 Tetraplegia) Rp 625.000.000
+  → Polis baru Nov 2025, klaim Des 2025 (1 bulan) — LF-06 terpicu
+  → Dokumen valid, tapi rule engine otomatis flag HIGH
 ```
 
 ### 8.2 Provider Data
@@ -539,6 +569,26 @@ Red flags: polis sangat baru, nilai sangat besar, perlu investigasi mendalam
 | Fisioterapi (per sesi) | Rp 300.000 | Rp 150.000 - 500.000 |
 | MRI | Rp 4.000.000 | Rp 3.000.000 - 6.000.000 |
 | Operasi kista (laparoskopi) | Rp 35.000.000 | Rp 25.000.000 - 50.000.000 |
+
+### 8.4 Demo PDF Documents
+
+File demo tersedia di `HorizonLife-Demo/public/demo-docs/`. Generator script: `scripts/generate-demo-pdfs.ts`.
+
+```bash
+# Generate ulang semua 8 PDF
+pnpm tsx scripts/generate-demo-pdfs.ts
+```
+
+| File | Customer | Jenis | Fraud Signal |
+|------|----------|-------|--------------|
+| `kuitansi_budi.pdf` | Budi Santoso | Kuitansi RS Medika Jakarta | Tidak ada — semua cocok |
+| `surat_dokter_budi.pdf` | Budi Santoso | Surat Dokter (S52.5, ORIF) | Tidak ada |
+| `kuitansi_siti.pdf` | Siti Rahmawati | Kuitansi Klinik Sehat Jaya | Isi valid, tapi dari watchlist provider |
+| `surat_dokter_siti.pdf` | Siti Rahmawati | Surat Dokter (M54.5, fisioterapi) | Akumulasi 70jt dicantumkan |
+| `kuitansi_rudi.pdf` | Rudi Hartono | Kuitansi RS Watchlist Medika | ⚠️ Rp 28jt (klaim: 35jt) + tanggal 15 Okt (klaim: 8 Nov) |
+| `surat_dokter_rudi.pdf` | Rudi Hartono | Surat Dokter (M54.5, Sp.An) | ⚠️ Jumlah sama 28jt + tanggal sama 15 Okt + Sp.An untuk nyeri punggung |
+| `kuitansi_dewi.pdf` | Dewi Kusuma | Kuitansi RS Premier Bintaro | Rp 625jt valid, LF-06 dari rule engine |
+| `surat_dokter_dewi.pdf` | Dewi Kusuma | Surat Keterangan Cacat Tetap Total | G82.5, polis baru Nov 2025 dicantumkan |
 
 ---
 
@@ -568,6 +618,10 @@ Staff Dashboard:
 
 Workflow Discovery:
   ──────────────────────────────────────►  GET /api/workflows/discover?name=fraud&mode=STANDARD
+
+Storage (shared):
+  /api/portal/claims/upload ────────────► RustFS (horizonlife/claims/{id}/file)
+  /api/staff/claims/[id]/documents ─────► RustFS (presigned URL / proxy)
 ```
 
 ### API Keys (di .env)
@@ -575,12 +629,18 @@ Workflow Discovery:
 ```bash
 # RantAI-Agents .env
 # (tidak perlu CLAIMS_SERVICE_API_KEY lagi)
-# Workflow API keys di-set di seed atau via UI
 
 # HorizonLife-Demo .env
 RANTAI_API_URL="http://localhost:3000"
 FRAUD_DETECTION_WORKFLOW_API_KEY="wf_fraud_detect_demo_key_2026"
 FRAUD_INVESTIGATION_WORKFLOW_API_KEY="wf_fraud_investigate_demo_key_2026"
+
+# S3 / RustFS (shared dengan RantAI-Agents — copy dari RantAI-Agents .env)
+S3_ENDPOINT="http://localhost:9000"
+S3_ACCESS_KEY_ID=""
+S3_SECRET_ACCESS_KEY=""
+S3_BUCKET="rantai-files"
+S3_REGION="us-east-1"
 ```
 
 ### RantAI-Agents API Endpoints (yang dipakai HorizonLife)
@@ -600,11 +660,12 @@ FRAUD_INVESTIGATION_WORKFLOW_API_KEY="wf_fraud_investigate_demo_key_2026"
 | `POST` | `/api/portal/claims` | Own DB | customerId |
 | `GET` | `/api/portal/claims` | Own DB | customerId |
 | `GET` | `/api/portal/claims/[id]` | Own DB | - |
+| `POST` | `/api/portal/claims/upload` | RustFS upload | - |
 | `GET` | `/api/staff/claims` | Own DB | Staff cookie |
 | `GET` | `/api/staff/claims/[id]` | Own DB | Staff cookie |
 | `POST` | `/api/staff/claims/[id]/analyze` | Own DB + Workflow API | Staff cookie |
 | `POST` | `/api/staff/claims/[id]/decide` | Own DB | Staff cookie |
-| `POST` | `/api/staff/claims/[id]/investigate` | Workflow API (streaming) | Staff cookie |
+| `GET` | `/api/staff/claims/[id]/documents/[index]` | RustFS (presigned URL) | Staff cookie |
 
 ---
 
@@ -652,7 +713,7 @@ FRAUD_INVESTIGATION_WORKFLOW_API_KEY="wf_fraud_investigate_demo_key_2026"
 **Tujuan**: Pindahkan claims management UI dari RantAI-Agents ke HorizonLife-Demo. RantAI-Agents hanya jadi backend API + workflow platform.
 
 > **Arsitektur**: Proxy/BFF pattern — HorizonLife proxy ke RantAI-Agents via `x-api-key`. Claims data tetap di DB RantAI-Agents.
-> Claims dihapus dari sidebar RantAI-Agents (`app-sidebar.tsx` + `icon-rail.tsx`).
+> Claims dihapus dari sidebar RantAI-Agents (`app-sidebar.tsx`, `icon-rail.tsx`).
 
 #### 7.1 RantAI-Agents: Service API Key ✅
 
@@ -707,24 +768,9 @@ FRAUD_INVESTIGATION_WORKFLOW_API_KEY="wf_fraud_investigate_demo_key_2026"
 | `middleware.ts` | EDIT | Protect `/staff/*` routes |
 | `.env` / `.env.example` | EDIT | API keys |
 
-#### 7.5 Urutan Implementasi Fase 7
-
-1. ✅ RantAI: `lib/claims-auth.ts` + env vars
-2. ✅ RantAI: Extract `lib/fraud-analysis.ts` dari analyze route
-3. ✅ RantAI: Enhance public claims API (analyze, decide, list-all, enriched-get)
-4. ✅ RantAI: Seed workflow API keys
-5. ✅ HorizonLife: Staff auth (lib + API routes)
-6. ✅ HorizonLife: Staff proxy routes (6 files)
-7. ✅ HorizonLife: Hook + types
-8. ✅ HorizonLife: Login page + staff layout
-9. ✅ HorizonLife: Claims list page
-10. ✅ HorizonLife: Claim detail page (3 tabs)
-11. ✅ HorizonLife: Middleware
-12. ✅ RantAI: Hapus Claims dari sidebar (`app-sidebar.tsx`, `icon-rail.tsx`)
-
 ---
 
-### Fase 8: Arsitektur Migration — RantAI Jadi Pure Workflow Service ✅ COMPLETED
+### Fase 8: Arsitektur Migration — RantAI Jadi Pure Workflow Service ✅ SELESAI
 
 **Tujuan**: Pindahkan semua data insurance ke HorizonLife-Demo. RantAI-Agents menjadi "tukang jasa" murni — hanya menyediakan workflow execution via API.
 
@@ -744,91 +790,379 @@ HorizonLife sudah punya `Customer` + `Policy`. Daripada buat `InsuranceCustomer`
 | *(tidak ada)* | `Provider` | Model baru (RS/klinik) |
 | *(tidak ada)* | `Claim` | Model baru (klaim + hasil analisis) |
 
-#### 8.1 HorizonLife: Merge Schema + Tambah Models ✅
+#### 8.1–8.10 (lengkap, semua ✅)
 
-| File | Aksi |
-|------|------|
-| `prisma/schema.prisma` | EDIT — Extend `Customer` (+`idNumber?`, `gender?`, `dateOfBirth?`, relasi `claims`), extend `Policy` (+`annualLimit?`, `remainingLimit?`, relasi `claims`), tambah model `Provider` + `Claim` |
+Semua sub-langkah Fase 8 selesai. Lihat commit history atau versi sebelumnya dokumen ini untuk detail per langkah.
 
-#### 8.2 HorizonLife: Seed Data (Merge) ✅
-
-| File | Aksi |
-|------|------|
-| `prisma/seed-insurance.ts` | BARU — Upsert existing customers (+NIK, gender, DOB), upsert policies (+limits), create 5 providers, create 17 claims |
-| `package.json` | EDIT — Tambah script `db:seed-insurance` |
-
-#### 8.3 HorizonLife: Prisma Client Singleton ✅
-
-| File | Aksi |
-|------|------|
-| `lib/prisma.ts` | BARU — Singleton pattern untuk API routes |
-
-#### 8.4 HorizonLife: Fraud Analysis Module (Local) ✅
-
-| File | Aksi |
-|------|------|
-| `lib/fraud-analysis.ts` | BARU — Copy `runRuleEngine` + `computeFraudScore` (1:1, adjust `customer.name` → `firstName+lastName`), ubah `tryWorkflowAnalysis` → HTTP call ke workflow API |
-
-#### 8.5 RantAI: Generic Workflow Discovery Endpoint ✅
-
-| File | Aksi |
-|------|------|
-| `app/api/workflows/discover/route.ts` | BARU — `GET /api/workflows/discover?name=X&mode=X` (generic, API key auth) |
-
-#### 8.6 HorizonLife: Rewrite Staff API Routes (Direct DB) ✅
-
-| File | Aksi |
-|------|------|
-| `lib/staff-claim-types.ts` | EDIT — Update types to match merged Customer/Policy |
-| `app/api/staff/claims/route.ts` | EDIT — Proxy → direct `prisma.claim.findMany()` |
-| `app/api/staff/claims/[id]/route.ts` | EDIT — Proxy → direct query + claimHistory |
-| `app/api/staff/claims/[id]/analyze/route.ts` | EDIT — Proxy → local rule engine + workflow HTTP |
-| `app/api/staff/claims/[id]/decide/route.ts` | EDIT — Proxy → direct `prisma.claim.update()` |
-| `app/api/staff/claims/[id]/investigate/route.ts` | EDIT — Discovery via `/api/workflows/discover` |
-
-#### 8.7 HorizonLife: Rewrite Portal API Routes (Direct DB) ✅
-
-| File | Aksi |
-|------|------|
-| `app/api/portal/lookup/route.ts` | EDIT — Proxy → direct DB (`prisma.customer.findFirst({ where: { idNumber } })`) |
-| `app/api/portal/claims/route.ts` | EDIT — Proxy → direct DB |
-| `app/api/portal/claims/[id]/route.ts` | EDIT — Proxy → direct DB |
-
-#### 8.8 RantAI: Cleanup ✅
-
-| File | Aksi |
-|------|------|
-| `app/api/claims/` | HAPUS — Seluruh folder |
-| `app/api/dashboard/claims/` | HAPUS — Seluruh folder |
-| `app/dashboard/claims/` | HAPUS — Seluruh folder |
-| `lib/fraud-analysis.ts` | HAPUS |
-| `lib/claims-auth.ts` | HAPUS |
-| `lib/customer-context.ts` | HAPUS |
-| `hooks/use-claims.ts` | HAPUS |
-| `prisma/schema.prisma` | EDIT — Hapus 4 insurance models (InsuranceCustomer, InsurancePolicy, Provider, Claim) |
-| `prisma/seed.ts` | EDIT — Hapus `seedInsuranceData()` |
-
-> `lib/templates/workflow-templates.ts` — Fraud workflow templates **tetap ada** (template generic)
-
-#### 8.9 HorizonLife: Cleanup Env Vars ✅
-
-Hapus `CLAIMS_SERVICE_API_KEY`. Tetap: `RANTAI_API_URL`, `FRAUD_DETECTION_WORKFLOW_API_KEY`, `FRAUD_INVESTIGATION_WORKFLOW_API_KEY`.
-
-#### 8.10 Update Dokumen ✅
-
-Update file ini (`FRAUD-DETECTION-IMPLEMENTATION-PLAN.md`) agar mencerminkan arsitektur baru + merge models.
-
-#### Catatan Implementasi
-
-- **Docker**: HorizonLife PostgreSQL menggunakan port **5433** (bukan 5432) agar tidak konflik dengan RantAI PostgreSQL
-- **Seed**: `seedInsuranceData()` ditambahkan ke `prisma/seed.ts` existing (bukan file terpisah), dipanggil di akhir `main()`
-- **Budi Santoso**: Customer portal (email: `customer@example.com`) di-merge dengan data fraud (NIK, gender, DOB). Polis POL-HK-00567 ditambahkan sebagai polis terpisah dari polis portal existing
-- **3 Customer baru**: Siti, Rudi, Dewi dibuat sebagai customer baru dengan `passwordHash` (bisa login portal)
-- **Investigate route**: Tetap streaming via HTTP ke RantAI workflow API, hanya ganti discovery endpoint dari `/api/claims/workflows` ke `/api/workflows/discover`
+**Catatan penting**:
+- Docker: HorizonLife PostgreSQL port **5433** (bukan 5432) — hindari konflik dengan RantAI
+- `FORCE_RESEED=true bun run db:seed` — hapus semua data + re-seed ulang
+- Setelah Fase 8, RantAI-Agents = platform generic (seperti Flowise/n8n) — nol kode insurance-specific
 
 ---
 
-### Fase 9: Fitur Lanjutan (Opsional)
+### Fase 9: OCR Document Verification ⚠️ HAMPIR SELESAI
+**Effort: Sedang | Prioritas: P1**
+
+**Tujuan**: Customer mengupload dokumen klaim (kuitansi, surat dokter). Dokumen disimpan di RustFS yang dishare dengan RantAI-Agents. OCR berjalan di dalam workflow RantAI — RantAI fetch dokumen dari RustFS sendiri via s3Key, extract teks, LLM verifikasi kesesuaian dengan data klaim. Hasil verifikasi menjadi Branch ke-4 di fraud detection workflow.
+
+---
+
+#### Keputusan Arsitektur Storage
+
+> **Konteks**: HorizonLife adalah **full client** RantAI — menggunakan chatbot widget, live agent, workflow, dan shared infrastructure. Dalam konteks ini, berbagi RustFS **valid dan direkomendasikan**.
+
+**Pertimbangan yang digunakan untuk keputusan ini:**
+
+| Skenario | Keputusan Storage |
+|----------|-------------------|
+| HorizonLife hanya pakai workflow API (tidak ada integrasi lain) | Storage terpisah (S3 sendiri) |
+| HorizonLife sebagai full client RantAI (chatbot, live agent, workflow) | **Shared RustFS dengan namespace prefix** ← kasus kita |
+| RantAI sebagai SaaS multi-tenant (banyak client berbeda) | Storage terpisah per tenant, wajib |
+
+**Kenapa base64-in-PostgreSQL TIDAK dipilih untuk production:**
+- 33% size overhead dari encoding base64
+- PostgreSQL bukan object store — `SELECT *` menarik seluruh bytes tiap query
+- Backup size explode (50 klaim × 5 dokumen × 5MB = 1.25GB)
+- Connection pool cepat habis dengan payload besar
+
+**Solusi yang diimplementasikan:**
+```
+Upload  → file → RustFS bucket "rantai-files"
+                 key: horizonlife/claims/{nanoid}/{filename}
+         → simpan hanya s3Key di Claim.documents (PostgreSQL)
+
+OCR     → RantAI tool menerima s3_key
+         → downloadFile(s3_key) dari RustFS (in-process, tidak lewat HTTP)
+         → processDocumentOCR(buffer) in-memory
+         → return ocr_text
+
+Viewer  → GET /api/staff/claims/[id]/documents/[index]
+         → ambil s3Key dari DB
+         → getPresignedUrl(s3Key) → redirect 302 ke S3
+         → browser ambil langsung dari S3 (server tidak proxy bytes)
+```
+
+---
+
+#### Arsitektur Lengkap
+
+```
+HorizonLife-Demo                         RantAI Agents + RustFS
+────────────────                         ──────────────────────
+Step 3 form klaim:
+  user pilih file
+  → POST /api/portal/claims/upload
+    → uploadToS3(buffer, key, mimeType)
+    → return { s3Key, filename, mimeType, type, size }
+  → simpan ke Claim.documents:
+    [{ s3Key, filename, mimeType, type, size }]  ← bukan base64!
+
+POST /api/staff/claims/[id]/analyze
+  ambil Claim.documents dari DB (cuma s3Key)
+  kirim ke workflow input:
+  { ...claim_data, documents: [{ s3Key, mimeType, filename }] }
+         ↓
+  ──────────────────────────────────────▶  Fraud Detection Workflow
+                                              Branch 4: Document Verification
+                                                → OCR Tool (s3_key input):
+                                                  downloadFile(s3Key) ← fetch dari RustFS
+                                                  → processDocumentOCR(buffer)
+                                                  → return ocr_text
+                                                → LLM: verifikasi konten vs klaim
+                                                → return doc_score + doc_findings
+                                         ◀──────────────────────────────────────
+  simpan doc_score ke Claim.analysisResult
+
+Staff lihat dokumen:
+  GET /api/staff/claims/[id]/documents/[index]
+  → ambil s3Key dari DB
+  → getPresignedUrl(s3Key, 3600)
+  → 302 redirect → browser ambil langsung dari S3
+```
+
+---
+
+#### 9.1 RantAI: OCR Builtin Tool ✅
+
+| File | Aksi | Deskripsi |
+|------|------|-----------|
+| `lib/tools/builtin/ocr.ts` | BARU | Tool `ocr_document`: terima `s3_key` + `mime_type`, `downloadFile(s3_key)` dari `lib/s3/index.ts`, jalankan `processDocumentOCR()`, return `{ text, page_count, provider, model, processing_ms }` |
+| `lib/tools/builtin/index.ts` | EDIT | Import + registrasi `ocr_document` di `BUILTIN_TOOLS` |
+| `lib/tools/seed.ts` | EDIT | Tambah icon emoji untuk `ocr_document` (📷) |
+
+**Interface tool:**
+
+```typescript
+// Input
+{
+  s3_key: string,           // S3 key di RustFS, contoh: "horizonlife/claims/{id}/kuitansi.pdf"
+  mime_type: string,        // "application/pdf" | "image/jpeg" | "image/png" | "image/heic"
+  document_type?: string,   // "printed_text" | "handwritten" | "table" (opsional)
+  filename?: string,        // untuk context di output (opsional)
+}
+
+// Output
+{
+  text: string,             // teks hasil OCR (combined jika multi-page)
+  page_count: number,
+  provider: string,         // "ollama" | "openrouter"
+  model: string,
+  processing_ms: number,
+  success: boolean,
+  error?: string,
+}
+```
+
+**Cara kerja internal `ocr.ts`:**
+1. `downloadFile(s3_key)` dari `lib/s3/index.ts` → Buffer (fetch dari RustFS in-process)
+2. `processDocumentOCR(buffer, mimeType, { outputFormat: "markdown" })` dari `lib/ocr`
+3. Return combined text
+4. Buffer di-GC setelah selesai — tidak ada data yang tersisa di memori
+
+---
+
+#### 9.2 RantAI: Workflow Fraud Detection — Branch 4 ✅
+
+Modifikasi di `lib/templates/workflow-templates.ts`:
+
+```
+MANUAL_TRIGGER
+  → PARALLEL:
+      ├── Branch 1: Narrative Analysis (LLM)        [existing]
+      ├── Branch 2: Rule Engine (LLM)                [existing]
+      ├── Branch 3: Pattern Analysis (LLM)           [existing]
+      └── Branch 4: Document Verification (BARU)
+            → CONDITION: ada dokumen? (input.documents?.length > 0)
+                YES → TOOL: ocr_document (s3_key dari input.documents[0].s3Key)
+                      LLM: verifikasi dokumen vs klaim data
+                      TRANSFORM: parse JSON output
+                      → { doc_score, doc_findings, amount_match, provider_match, date_match }
+                NO  → TRANSFORM: { doc_score: 50, has_documents: false }
+  → MERGE (strategy: "all" — selalu 4 hasil)
+  → LLM synthesize (dynamic weights)
+  → SWITCH → AUTO_APPROVED / REVIEW / ESCALATED
+```
+
+**Bobot scoring:**
+```
+Tanpa dokumen:  40% rule + 25% narrative + 35% pattern
+Dengan dokumen: 35% rule + 20% narrative + 30% pattern + 15% doc_score
+```
+
+---
+
+#### 9.3 HorizonLife: S3 Utility + Upload Route ✅
+
+| File | Aksi | Deskripsi |
+|------|------|-----------|
+| `lib/s3.ts` | BARU | Minimal S3 client: `uploadToS3()`, `downloadFromS3()`, `getPresignedUrl()`, `claimDocKey()`. Env vars sama dengan RantAI-Agents (`S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, dll). Namespace key: `horizonlife/claims/{nanoid}/{filename}` |
+| `app/api/portal/claims/upload/route.ts` | EDIT | POST: terima file (multipart) → `uploadToS3()` → return `{ s3Key, filename, mimeType, size, type }`. Tidak ada base64 — tidak ada konversi ke PostgreSQL |
+| `components/portal/claim-form.tsx` | EDIT | `UploadedDocument.base64` → `s3Key`. Form state menyimpan s3Key bukan base64 |
+
+**Format `Claim.documents` di HorizonLife DB (PostgreSQL JSON field):**
+```json
+[
+  { "s3Key": "horizonlife/claims/abc123/kuitansi.pdf", "filename": "kuitansi.pdf", "mimeType": "application/pdf", "type": "receipt", "size": 142876 },
+  { "s3Key": "horizonlife/claims/abc123/surat_dokter.jpg", "filename": "surat_dokter.jpg", "mimeType": "image/jpeg", "type": "doctor_letter", "size": 89432 }
+]
+```
+
+**Tipe dokumen yang bisa diupload:**
+
+| Tipe | Label | Keterangan |
+|------|-------|------------|
+| `receipt` | Kuitansi pembayaran | PDF atau foto |
+| `doctor_letter` | Surat dokter / diagnosa | PDF atau foto |
+| `medical_resume` | Resume medis | PDF |
+| `prescription` | Resep obat | PDF atau foto |
+| `other` | Dokumen lain | PDF atau foto |
+
+---
+
+#### 9.4 HorizonLife: Analyze + Fraud Score ✅
+
+| File | Aksi | Deskripsi |
+|------|------|-----------|
+| `app/api/staff/claims/[id]/analyze/route.ts` | EDIT | Ambil `claim.documents` (ada s3Key), kirim ke workflow input sebagai `documents: [{ s3Key, mimeType, filename, type }]`. OCR tool di RantAI fetch dari RustFS sendiri |
+| `lib/fraud-analysis.ts` | EDIT | `DocVerificationResult` interface, `computeFraudScore()` terima `doc_score` opsional, dynamic weights (dengan/tanpa dokumen) |
+
+---
+
+#### 9.5 HorizonLife: Document Viewer + Staff UI ✅
+
+| File | Aksi | Deskripsi |
+|------|------|-----------|
+| `app/api/staff/claims/[id]/documents/[index]/route.ts` | BARU | GET: ambil s3Key dari DB → `getPresignedUrl(s3Key, 3600)` → 302 redirect ke S3 (inline view). Untuk `?download=true`: proxy bytes dari S3 agar bisa set `Content-Disposition: attachment` |
+| `components/staff/analysis-result.tsx` | EDIT | Section "Verifikasi Dokumen": doc_score bar, doc_findings list, amount/provider/date match indicators dengan ikon FileCheck/FileX/FileQuestion |
+| `components/staff/claim-detail.tsx` | EDIT | Tab "Data Klaim": daftar dokumen (filename, type, size) dengan tombol "Lihat" (redirect presigned URL) dan "Unduh" (proxy download) |
+
+**Cara staff melihat dokumen:**
+
+```tsx
+{/* Inline view — browser buka dari S3 langsung */}
+<a href={`/api/staff/claims/${id}/documents/0`} target="_blank">
+  Lihat
+</a>
+
+{/* Download — proxy dengan Content-Disposition: attachment */}
+<a href={`/api/staff/claims/${id}/documents/0?download=true`} download={doc.filename}>
+  Unduh
+</a>
+```
+
+---
+
+#### 9.6 Demo PDF Generator ✅
+
+| File | Aksi | Deskripsi |
+|------|------|-----------|
+| `scripts/generate-demo-pdfs.ts` | BARU | Generator 8 PDF demo menggunakan `pdf-lib`. Dokumen Indonesia yang realistis: header provider, data pasien, rincian biaya, tanda tangan |
+| `public/demo-docs/` | BARU | Output 8 PDF — siap diupload saat demo |
+
+```bash
+# Regenerate PDF demo
+pnpm tsx scripts/generate-demo-pdfs.ts
+```
+
+Inkonsistensi disengaja di dokumen Rudi (untuk demonstrasi deteksi OCR):
+- **Jumlah**: Rp 28.000.000 di dokumen vs Rp 35.000.000 yang diklaim
+- **Tanggal**: 15 Oktober 2025 di dokumen vs 8 November 2025 yang diklaim
+- **Spesialisasi dokter**: Sp.An (anestesiologi) untuk kasus nyeri punggung
+
+---
+
+#### 9.7 Urutan Implementasi Fase 9
+
+```
+1.  ✅ RantAI: Buat lib/tools/builtin/ocr.ts (input: s3_key, downloadFile dari lib/s3)
+2.  ✅ RantAI: Registrasi di index.ts + seed.ts (icon 📷)
+       ↳ FIXED: ensureBuiltinTools() tadinya tidak dipanggil di prisma/seed.ts
+                → ocr_document tidak ada di DB → workflow throw "tool not found"
+3.  ⚠️ RantAI: Branch 4 ada di DB workflow, TAPI tidak ada di workflow-templates.ts
+       ↳ Template source sudah tidak punya OCR branch (perlu ditambahkan kembali)
+       ↳ Lihat §9.8 Bug #2 untuk fix
+4.  ✅ HorizonLife: Install @aws-sdk/client-s3 + @aws-sdk/s3-request-presigner
+5.  ✅ HorizonLife: Buat lib/s3.ts (uploadToS3, downloadFromS3, getPresignedUrl, claimDocKey)
+6.  ✅ HorizonLife: Upload route → uploadToS3, return s3Key (bukan base64)
+7.  ✅ HorizonLife: claim-form.tsx → UploadedDocument.s3Key (bukan base64)
+8.  ✅ HorizonLife: Document viewer endpoint → presigned URL redirect
+9.  ✅ HorizonLife: analyze route → kirim s3Key ke workflow (bukan base64)
+10. ✅ HorizonLife: computeFraudScore() → dynamic weights dengan/tanpa doc_score
+11. ✅ HorizonLife: UI staff → daftar dokumen + verifikasi OCR section
+12. ✅ HorizonLife: Buat scripts/generate-demo-pdfs.ts + generate 8 PDF demo
+13. ✅ Env vars: S3_* di HorizonLife-Demo .env.example
+```
+
+---
+
+#### Catatan Fase 9
+
+- **Setup wajib**: Copy nilai `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` dari RantAI-Agents `.env` ke HorizonLife-Demo `.env`
+- **Jika tidak ada dokumen**: Branch 4 return `doc_score: 50` (netral) — tidak pengaruhi scoring
+- **Jika OCR gagal** (Ollama tidak jalan): Tool return `success: false`, workflow lanjut dengan `doc_score: 50`
+- **Format dokumen**: PDF, JPG, PNG, HEIC — semua didukung `processDocumentOCR()`
+- **Ukuran file**: Batasi 5MB per file, max 5 file per klaim
+- **Namespace S3**: `horizonlife/claims/{nanoid}/{filename}` — tidak konflik dengan data RantAI lainnya
+- **Presigned URL**: expire 1 jam (3600 detik) — cukup untuk review staff normal
+
+---
+
+#### § 9.8 — Bug Yang Ditemukan (Blocking)
+
+Dua bug ditemukan yang mencegah OCR node berjalan. Status DB sudah benar (tidak perlu diubah).
+
+---
+
+**Bug #1 — `getNestedFromInput` tidak handle array notation**
+
+*File*: `lib/workflow/template-engine.ts`
+
+*Gejala*: OCR node menerima `s3_key = undefined` meski DB sudah punya `{{ input.documents[0].s3Key }}`
+
+*Penyebab*:
+```typescript
+// getNestedFromInput split path by "." → ["documents[0]", "s3Key"]
+// Lalu lakukan: obj["documents[0]"] → undefined (literal key lookup, bukan array index)
+function getNestedFromInput(obj: unknown, path: string[]): unknown {
+  let current = obj
+  for (const key of path) {
+    current = (current as Record<string, unknown>)[key]  // ← BUG
+  }
+  return current
+}
+```
+
+*Fix*:
+```typescript
+function getNestedFromInput(obj: unknown, path: string[]): unknown {
+  let current = obj
+  for (const key of path) {
+    if (current === null || current === undefined) return undefined
+    if (typeof current !== "object") return undefined
+    // Handle array notation: "documents[0]" → obj.documents[0]
+    const arrayMatch = key.match(/^(\w+)\[(\d+)\]$/)
+    if (arrayMatch) {
+      const [, arrKey, idx] = arrayMatch
+      current = (current as Record<string, unknown>)[arrKey]
+      if (!Array.isArray(current)) return undefined
+      current = current[parseInt(idx, 10)]
+    } else {
+      current = (current as Record<string, unknown>)[key]
+    }
+  }
+  return current
+}
+```
+
+*Setelah fix ini*: `{{ input.documents[0].s3Key }}` akan resolve ke nilai S3 key yang benar. DB tidak perlu diubah.
+
+---
+
+**Bug #2 — OCR branch tidak ada di `workflow-templates.ts`**
+
+*File*: `lib/templates/workflow-templates.ts`
+
+*Gejala*: Ketika workflow di-reseed (`bun run db:seed`), OCR node hilang dari template. Namun karena DB sudah di-patch manual (lihat §9.7), workflow di DB saat ini sudah benar — bug ini hanya relevan jika DB di-reset ulang.
+
+*Penyebab*: Saat refactor template, Branch 4 (Document Verification via OCR) tidak disertakan dalam source template.
+
+*Fix*: Tambahkan kembali TOOL node untuk `ocr_document` ke Branch 4 di template "Health Insurance Fraud Detection" dengan inputMapping menggunakan `{{ }}`:
+```typescript
+{
+  id: "ocr_document",
+  type: "TOOL",
+  data: {
+    toolName: "ocr_document",
+    label: "OCR Document",
+    inputMapping: {
+      s3_key: "{{ input.documents[0].s3Key }}",
+      filename: "{{ input.documents[0].filename }}",
+      mime_type: "{{ input.documents[0].mimeType }}"
+    }
+  },
+  position: { x: 1200, y: 600 }
+}
+```
+
+*Catatan*: `resolveObjectTemplates` hanya memproses string yang mengandung `{{ }}`. Tanpa tanda kurung kurawal ganda, string akan diteruskan sebagai literal ke S3 → `NoSuchKey` error.
+
+---
+
+**Status per komponen (setelah revert)**
+
+| Komponen | Status | Action |
+|----------|--------|--------|
+| `lib/ocr/ocr-pipeline.ts` | ✅ Benar — jangan diubah | - |
+| `lib/tools/builtin/ocr.ts` | ✅ Benar | - |
+| DB: OCR node inputMapping | ✅ Sudah ada `{{ }}` (tidak di-revert) | - |
+| `template-engine.ts` → `getNestedFromInput` | ❌ Array notation tidak di-handle | **Fix Bug #1** |
+| `workflow-templates.ts` → Branch 4 | ❌ OCR node tidak ada di source | **Fix Bug #2** |
+| `workflow_enhanced: false` | ⚠️ Bukan code bug — pastikan RantAI server running | Verifikasi runtime |
+
+---
+
+### Fase 10: Fitur Lanjutan (Opsional)
 **Effort: bervariasi | Prioritas: P2-P3**
 
 1. Dashboard statistik fraud (chart, trend, pie chart per risk level)
@@ -845,3 +1179,4 @@ Update file ini (`FRAUD-DETECTION-IMPLEMENTATION-PLAN.md`) agar mencerminkan ars
 - Widget chat tetap ada di HorizonLife-Demo — untuk bantuan/tanya jawab, bukan untuk submit klaim
 - Semua data demo bersifat fiktif, dirancang agar setiap skenario menghasilkan risk level yang berbeda
 - Setelah Fase 8, RantAI-Agents = platform generic (seperti Flowise/n8n) — tidak ada kode insurance-specific
+- Setelah Fase 9, HorizonLife = full client RantAI yang memanfaatkan shared RustFS, workflow API, dan akan menggunakan chatbot + live agent dari platform RantAI

@@ -531,10 +531,24 @@ async function seedWorkflows(createdByUserId: string) {
       style: { stroke: "#64748b", strokeWidth: 2 },
     }))
 
+    // Resolve toolName → toolId for TOOL/MCP_TOOL nodes so workflow has direct DB references
+    const resolvedNodes = await Promise.all(
+      (template.nodes as Array<{ data?: { nodeType?: string; toolName?: string; toolId?: string } }>).map(async (node) => {
+        const d = node.data
+        if (d && (d.nodeType === "tool" || d.nodeType === "mcp_tool") && d.toolName && !d.toolId) {
+          const tool = await prisma.tool.findFirst({ where: { name: d.toolName, enabled: true } })
+          if (tool) {
+            return { ...node, data: { ...d, toolId: tool.id } }
+          }
+        }
+        return node
+      })
+    )
+
     const workflowData = {
       name: template.name,
       description: template.description,
-      nodes: template.nodes as unknown as object[],
+      nodes: resolvedNodes as unknown as object[],
       edges: enhancedEdges as unknown as object[],
       trigger: template.trigger as object,
       variables: template.variables as object,
@@ -857,6 +871,14 @@ async function seedCatalogItems() {
 async function main() {
   console.log("\n🌱 RantAI Agents — Database Seed\n")
 
+  // Ensure S3 bucket exists (safe to call repeatedly — no-op if already exists)
+  try {
+    const { ensureBucket } = await import("../lib/s3")
+    await ensureBucket()
+  } catch (e) {
+    console.warn("  [S3] Could not ensure bucket (RustFS may not be ready):", e instanceof Error ? e.message : e)
+  }
+
   // FORCE_RESEED: clean up memory + assistants BEFORE seeding
   await forceReseedCleanup()
 
@@ -897,6 +919,12 @@ async function main() {
   // Seed Knowledge Base
   const kbGroupId = await seedKnowledgeBase()
 
+  // Seed Built-in Tools
+  const { ensureBuiltinTools } = await import("../lib/tools/seed")
+  const { BUILTIN_TOOLS } = await import("../lib/tools/builtin")
+  await ensureBuiltinTools()
+  console.log(`\n[Tools]\n  ✓ ${Object.keys(BUILTIN_TOOLS).length} built-in tools upserted`)
+
   // Seed Marketplace Catalog
   await seedCatalogItems()
 
@@ -925,6 +953,7 @@ async function main() {
   console.log("\n✅ Seed complete!")
   console.log(`  Users:      2 (agent / admin @rantai.com)`)
   console.log(`  Assistants: ${BUILT_IN_ASSISTANTS.length} built-in`)
+  console.log(`  Tools:      ${Object.keys(BUILTIN_TOOLS).length} built-in`)
   console.log(`  KB Group:   ${kbGroupId}`)
   console.log(`  Workflows:  2 (Fraud Detection + Investigation)`)
   console.log(`  Widget:     1 embed API key (HorizonLife)`)
