@@ -278,7 +278,31 @@ export const Paperclip = createIcon(Route1Solid, "Paperclip")
 export const Image = createIcon(EyeSolid, "Image")
 export const Play = createIcon(PlaySolid, "Play")
 export const Power = createIcon(Gear1Solid, "Power")
-export const Square = createIcon(BricksSolid, "Square")
+// Stop icon — filled square (not BricksSolid which is a grid pattern)
+export const Square: IconComponent = ({ className, size, style }) => {
+  let resolvedSize: string | number = size || 24
+  if (!size && className) {
+    const match = className.match(/(?:^|\s)(?:h|w)-(\[([^\]]+)\]|(\d+(?:\.\d+)?))/)
+    if (match) {
+      const num = match[3]
+      if (num) resolvedSize = parseFloat(num) * 4
+    }
+  }
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={resolvedSize}
+      height={resolvedSize}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      className={className}
+      style={style}
+    >
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+    </svg>
+  )
+}
+Square.displayName = "Square"
 export const List = createIcon(MenuHamburger1Solid, "List")
 export const LayoutGrid = createIcon(DashboardSquare1Solid, "LayoutGrid")
 export const Layers = createIcon(Layers1Solid, "Layers")

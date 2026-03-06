@@ -87,6 +87,8 @@ interface InitialChatSettings {
 interface ChatWorkspaceProps {
   session?: ChatSession
   assistant: Assistant
+  digitalEmployeeId?: string
+  apiEndpoint?: string
   initialMessage?: string
   initialSettings?: InitialChatSettings
   onBack?: () => void
@@ -822,6 +824,8 @@ function MessagesArea({
 export function ChatWorkspace({
   session,
   assistant,
+  digitalEmployeeId,
+  apiEndpoint,
   initialMessage,
   initialSettings,
   onBack,
@@ -1270,28 +1274,32 @@ export function ChatWorkspace({
         const abortController = new AbortController()
         abortControllerRef.current = abortController
 
-        const response = await fetch("/api/chat", {
+        const endpoint = apiEndpoint || "/api/chat"
+        const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: abortController.signal,
-          body: JSON.stringify({
-            messages: normalizedMessages,
-            assistantId: assistant.id,
-            sessionId: apiSessionId,
-            systemPrompt: assistant.systemPrompt,
-            useKnowledgeBase: toolOverrides?.useKnowledgeBase ?? effectiveKnowledgeBase,
-            knowledgeBaseGroupIds: toolOverrides?.knowledgeBaseGroupIds ?? effectiveKBGroupIds,
-            enableWebSearch: toolOverrides?.enableWebSearch ?? effectiveWebSearch,
-            enableCodeInterpreter: toolOverrides?.enableCodeInterpreter ?? effectiveCodeInterpreter,
-            enableTools: toolOverrides?.enableTools ?? effectiveToolsEnabled,
-            enabledToolNames: toolOverrides?.enabledToolNames ?? effectiveToolNames,
-            enableSkills: toolOverrides?.enableSkills ?? effectiveSkillsEnabled,
-            enabledSkillIds: toolOverrides?.enabledSkillIds ?? effectiveSkillIds,
-            canvasMode: toolOverrides?.canvasMode ?? canvasMode,
-            targetArtifactId: activeArtifactId || undefined,
-            ...(fileCtx?.fileContext && { fileContext: fileCtx.fileContext }),
-            ...(fileCtx?.fileDocumentIds && { fileDocumentIds: fileCtx.fileDocumentIds }),
-          }),
+          body: apiEndpoint
+            ? JSON.stringify({ message: userInput })
+            : JSON.stringify({
+                messages: normalizedMessages,
+                assistantId: assistant.id,
+                sessionId: apiSessionId,
+                systemPrompt: assistant.systemPrompt,
+                useKnowledgeBase: toolOverrides?.useKnowledgeBase ?? effectiveKnowledgeBase,
+                knowledgeBaseGroupIds: toolOverrides?.knowledgeBaseGroupIds ?? effectiveKBGroupIds,
+                enableWebSearch: toolOverrides?.enableWebSearch ?? effectiveWebSearch,
+                enableCodeInterpreter: toolOverrides?.enableCodeInterpreter ?? effectiveCodeInterpreter,
+                enableTools: toolOverrides?.enableTools ?? effectiveToolsEnabled,
+                enabledToolNames: toolOverrides?.enabledToolNames ?? effectiveToolNames,
+                enableSkills: toolOverrides?.enableSkills ?? effectiveSkillsEnabled,
+                enabledSkillIds: toolOverrides?.enabledSkillIds ?? effectiveSkillIds,
+                canvasMode: toolOverrides?.canvasMode ?? canvasMode,
+                targetArtifactId: activeArtifactId || undefined,
+                ...(fileCtx?.fileContext && { fileContext: fileCtx.fileContext }),
+                ...(fileCtx?.fileDocumentIds && { fileDocumentIds: fileCtx.fileDocumentIds }),
+                ...(digitalEmployeeId && { digitalEmployeeId }),
+              }),
         })
 
         if (!response.ok) {

@@ -15,6 +15,7 @@ import {
   buildToolInstruction,
 } from "@/lib/prompts/instructions";
 import { resolveSkillsForAssistant } from "@/lib/skills/resolver";
+import { getMemoryContext } from "@/lib/digital-employee/memory";
 import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow";
 import { extractAndSaveFacts, stripSources } from "@/lib/workflow/chatflow-memory";
 import {

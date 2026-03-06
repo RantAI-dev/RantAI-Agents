@@ -28,6 +28,8 @@ import {
   LogOut,
   PanelLeft,
   PanelLeftClose,
+  Bot,
+  Users,
   type IconComponent,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -56,6 +58,7 @@ import { cn } from "@/lib/utils"
 import { brand } from "@/lib/branding"
 import { useAssistants } from "@/hooks/use-assistants"
 import { useWorkflows } from "@/hooks/use-workflows"
+import { useDigitalEmployees } from "@/hooks/use-digital-employees"
 import { useDefaultAssistant } from "@/hooks/use-default-assistant"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import { AssistantEditor } from "@/app/dashboard/_components/chat/assistant-editor"
@@ -95,6 +98,7 @@ const allNavItems: NavItem[] = [
   { title: "Chat", url: "/dashboard/chat", icon: MessageSquare, feature: null },
   { title: "Agent Builder", url: "/dashboard/agent-builder", icon: Blocks, feature: null },
   { title: "Workflows", url: "/dashboard/workflows", icon: GitBranch, feature: null },
+  { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: null },
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
   { title: "Knowledge", url: "/dashboard/knowledge", icon: BookOpen, feature: null },
   { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },
@@ -106,6 +110,7 @@ const sections = {
   chat: { title: "Chat", subtitle: "AI Conversations", icon: MessageSquare, path: "/dashboard/chat" },
   agentBuilder: { title: "Agent Builder", subtitle: "Build & Configure", icon: Blocks, path: "/dashboard/agent-builder" },
   workflows: { title: "Workflows", subtitle: "Visual Automations", icon: GitBranch, path: "/dashboard/workflows" },
+  digitalEmployees: { title: "Digital Employees", subtitle: "Autonomous Workers", icon: Users, path: "/dashboard/digital-employees" },
   agent: { title: "Live Chat", subtitle: "Customer Support", icon: Headphones, path: "/dashboard/agent" },
   knowledge: { title: "Knowledge", subtitle: "RAG Documents", icon: BookOpen, path: "/dashboard/knowledge" },
   marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
@@ -397,6 +402,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
 
   const { assistant: defaultAssistant } = useDefaultAssistant()
   const { workflows } = useWorkflows()
+  const { employees: digitalEmployees } = useDigitalEmployees()
 
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null)
@@ -421,6 +427,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     if (pathname.startsWith("/dashboard/chat")) return sections.chat
     if (pathname.startsWith("/dashboard/agent-builder")) return sections.agentBuilder
     if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
+    if (pathname.startsWith("/dashboard/digital-employees")) return sections.digitalEmployees
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/knowledge")) return sections.knowledge
     if (pathname.startsWith("/dashboard/marketplace")) return sections.marketplace
@@ -827,6 +834,44 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
               >
                 <Plus className="h-4 w-4" />
                 <span>New Workflow</span>
+              </Link>
+            </div>
+          )}
+
+          {currentSection === sections.digitalEmployees && (
+            <div className="space-y-1">
+              {digitalEmployees.map((emp) => {
+                const statusColors: Record<string, string> = {
+                  ACTIVE: "bg-chart-2",
+                  PAUSED: "bg-chart-4",
+                  DRAFT: "bg-sidebar-muted",
+                  SUSPENDED: "bg-destructive",
+                }
+                return (
+                  <Link
+                    key={emp.id}
+                    href={`/dashboard/digital-employees/${emp.id}`}
+                    className={cn(
+                      "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
+                      pathname === `/dashboard/digital-employees/${emp.id}`
+                        ? "bg-sidebar-accent text-sidebar-foreground"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                    )}
+                  >
+                    <div className="relative">
+                      <Bot className="h-4 w-4 shrink-0" />
+                      <div className={cn("absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-sidebar", statusColors[emp.status] || "bg-sidebar-muted")} />
+                    </div>
+                    <span className="flex-1 truncate font-medium">{emp.name}</span>
+                  </Link>
+                )
+              })}
+              <Link
+                href="/dashboard/digital-employees/new"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+              >
+                <Plus className="h-4 w-4" />
+                <span>New Employee</span>
               </Link>
             </div>
           )}
