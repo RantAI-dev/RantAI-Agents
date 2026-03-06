@@ -1,0 +1,7 @@
+# Only include what the employee Dockerfile needs
+*
+!packages/rantaiclaw/
+!docker/employee/agent-runner/
+
+# Exclude build artifacts (rebuild in Docker)
+packages/rantaiclaw/target/

@@ -1,0 +1,11 @@
+{
+  "name": "rantai-agent-runner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RantAI Agent Runner — bridges Employee Package with RantaiClaw",
+  "main": "index.js",
+  "scripts": {
+    "start": "bun run index.js"
+  },
+  "dependencies": {}
+}

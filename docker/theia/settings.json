@@ -1,0 +1,5 @@
+{
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.cwd": "/workspace",
+  "workbench.colorTheme": "dark"
+}

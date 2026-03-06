@@ -1,0 +1,28 @@
+{
+  "private": true,
+  "name": "rantai-theia",
+  "version": "1.0.0",
+  "theia": {
+    "target": "browser"
+  },
+  "dependencies": {
+    "@theia/core": "latest",
+    "@theia/editor": "latest",
+    "@theia/filesystem": "latest",
+    "@theia/markers": "latest",
+    "@theia/messages": "latest",
+    "@theia/monaco": "latest",
+    "@theia/navigator": "latest",
+    "@theia/preferences": "latest",
+    "@theia/process": "latest",
+    "@theia/terminal": "latest",
+    "@theia/workspace": "latest"
+  },
+  "devDependencies": {
+    "@theia/cli": "latest"
+  },
+  "scripts": {
+    "build": "theia build --mode production",
+    "start": "theia start --hostname=0.0.0.0 --port=3000"
+  }
+}
