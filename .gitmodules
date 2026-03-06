@@ -1,3 +1,6 @@
 [submodule "packages/community-skills"]
 	path = packages/community-skills
 	url = https://github.com/RantAI-dev/RantAI-Agents-Community.git
+[submodule "packages/rantaiclaw"]
+	path = packages/rantaiclaw
+	url = https://github.com/openagen/zeroclaw.git

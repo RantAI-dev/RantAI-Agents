@@ -134,6 +134,7 @@ model Organization {
   openApiSpecs      OpenApiSpec[]
   marketplaceInstalls MarketplaceInstall[]
   installedSkills     InstalledSkill[]
+  digitalEmployees    DigitalEmployee[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -239,6 +240,9 @@ model Assistant {
 
   // Workflows (legacy direct FK)
   workflows Workflow[]
+
+  // Digital Employee bindings
+  digitalEmployees DigitalEmployee[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -861,4 +865,190 @@ model CatalogItem {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// ─── Digital Employee System ──────────────────────────────────
+
+enum EmployeeStatus {
+  DRAFT
+  ONBOARDING
+  ACTIVE
+  PAUSED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ApprovalStatus {
+  PENDING
+  DELIVERED
+  APPROVED
+  REJECTED
+  EDITED
+  EXPIRED
+  CANCELLED
+}
+
+model DigitalEmployee {
+  id               String          @id @default(cuid())
+  name             String
+  description      String?
+  avatar           String?
+  status           EmployeeStatus  @default(DRAFT)
+  assistantId      String
+  assistant        Assistant       @relation(fields: [assistantId], references: [id])
+  deploymentConfig Json            @default("{}")
+  resourceLimits   Json?
+  autonomyLevel    String          @default("supervised") // "supervised" | "autonomous"
+  runtimeId        String?
+  lastActiveAt     DateTime?
+  lastRunId        String?
+  supervisorId     String?
+  gatewayConfig    Json?
+  totalRuns        Int             @default(0)
+  successfulRuns   Int             @default(0)
+  failedRuns       Int             @default(0)
+  totalTokensUsed  BigInt          @default(0)
+  containerId      String?         // Docker container ID when running
+  containerPort    Int?            // Mapped host port for RantaiClaw gateway
+  gatewayToken     String?         // Runtime JWT for gateway proxy
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy        String
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  runs             EmployeeRun[]
+  approvals        EmployeeApproval[]
+  files            EmployeeFile[]
+  customTools      EmployeeCustomTool[]
+  installedSkills  EmployeeInstalledSkill[]
+  memoryEntries    EmployeeMemory[]
+  chatMessages     EmployeeChatMessage[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([assistantId])
+}
+
+model EmployeeRun {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  trigger           String          // "schedule" | "webhook" | "manual" | "event"
+  triggerData       Json?
+  workflowId        String?
+  workflowRunId     String?
+  status            RunStatus
+  output            Json?
+  error             String?
+  promptTokens      Int             @default(0)
+  completionTokens  Int             @default(0)
+  executionTimeMs   Int?
+  startedAt         DateTime        @default(now())
+  completedAt       DateTime?
+
+  @@index([digitalEmployeeId, startedAt])
+}
+
+model EmployeeApproval {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  employeeRunId     String
+  workflowStepId    String?
+  requestType       String
+  title             String
+  description       String?
+  content           Json
+  options           Json
+  channel           String          @default("dashboard")
+  status            ApprovalStatus  @default(PENDING)
+  respondedBy       String?
+  response          String?
+  responseData      Json?
+  respondedAt       DateTime?
+  expiresAt         DateTime?
+  timeoutAction     String?
+  createdAt         DateTime        @default(now())
+
+  @@index([digitalEmployeeId, status])
+  @@index([status, expiresAt])
+}
+
+model EmployeeFile {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  filename          String
+  content           String          @db.Text
+  updatedBy         String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([digitalEmployeeId, filename])
+  @@index([digitalEmployeeId])
+}
+
+model EmployeeCustomTool {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  name              String
+  description       String?
+  parameters        Json
+  code              String          @db.Text
+  language          String          @default("javascript")
+  enabled           Boolean         @default(true)
+  approved          Boolean         @default(false)
+  createdBy         String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([digitalEmployeeId])
+}
+
+model EmployeeInstalledSkill {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  slug              String
+  name              String
+  version           String
+  description       String?
+  content           String          @db.Text
+  metadata          Json?
+  source            String          @default("clawhub")
+  enabled           Boolean         @default(true)
+  installedBy       String
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([digitalEmployeeId, slug])
+  @@index([digitalEmployeeId])
+}
+
+model EmployeeMemory {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  type              String
+  date              String?
+  content           String          @db.Text
+  embedding         Float[]
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([digitalEmployeeId, type])
+  @@index([digitalEmployeeId, date])
+}
+
+model EmployeeChatMessage {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  role              String          // "user" | "assistant"
+  content           String          @db.Text
+  toolCalls         Json?           // Parsed tool call metadata
+  createdAt         DateTime        @default(now())
+
+  @@index([digitalEmployeeId, createdAt])
 }
