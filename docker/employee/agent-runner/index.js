@@ -304,6 +304,24 @@ async function gatewayMode() {
   const tools = registerTools(pkg, PLATFORM_API_URL, RUNTIME_TOKEN)
   console.log(`[Gateway] Registered ${tools.length} tools`)
 
+  // Sandbox mode: wrap platform/custom tool executions with mock responses
+  if (pkg.employee.sandboxMode) {
+    console.log(`[Gateway] Sandbox mode enabled — external tool calls will be simulated`)
+    for (const tool of tools) {
+      if (tool.type === "platform" || tool.type === "custom") {
+        const originalExecute = tool.execute
+        tool.execute = async (input) => {
+          console.log(`[SANDBOX] Simulating ${tool.type} tool: ${tool.name}`)
+          return {
+            _sandbox: true,
+            message: `[SANDBOX] Tool "${tool.name}" was called with input: ${JSON.stringify(input).substring(0, 500)}. In sandbox mode, no real action was taken.`,
+            simulatedResult: { success: true },
+          }
+        }
+      }
+    }
+  }
+
   // 6. Bootstrap config via onboard
   const zcHome = CLAW_HOME
 
@@ -918,6 +936,23 @@ async function main() {
     // 3. Register tools + load memory + check resume state
     const tools = registerTools(pkg, PLATFORM_API_URL, RUNTIME_TOKEN)
     console.log(`[Agent Runner] Registered ${tools.length} tools`)
+
+    // Sandbox mode: wrap platform/custom tool executions with mock responses
+    if (pkg.employee.sandboxMode) {
+      console.log(`[Agent Runner] Sandbox mode enabled — external tool calls will be simulated`)
+      for (const tool of tools) {
+        if (tool.type === "platform" || tool.type === "custom") {
+          tool.execute = async (input) => {
+            console.log(`[SANDBOX] Simulating ${tool.type} tool: ${tool.name}`)
+            return {
+              _sandbox: true,
+              message: `[SANDBOX] Tool "${tool.name}" was called with input: ${JSON.stringify(input).substring(0, 500)}. In sandbox mode, no real action was taken.`,
+              simulatedResult: { success: true },
+            }
+          }
+        }
+      }
+    }
 
     const memoryContext = loadMemory(DATA_DIR, pkg.memory)
 

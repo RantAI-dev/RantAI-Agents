@@ -19,6 +19,7 @@ import {
 import { GoalTracker } from "./goal-tracker"
 import { ErrorPatternsCard } from "./error-patterns-card"
 import { OnboardingChecklist } from "./onboarding-checklist"
+import { SandboxBanner } from "./sandbox-banner"
 
 interface TabActivityProps {
   employee: {
@@ -29,6 +30,7 @@ interface TabActivityProps {
     lastActiveAt: string | null
     assistant: { model: string }
     deploymentConfig: Record<string, unknown> | null
+    sandboxMode?: boolean
   }
   containerRunning: boolean
   pendingApprovals: Array<{
@@ -49,6 +51,7 @@ interface TabActivityProps {
   onDeploy: () => void
   onStart: () => void
   onStop: () => void
+  onRefresh?: () => void
 }
 
 export function TabActivity({
@@ -61,6 +64,7 @@ export function TabActivity({
   onDeploy,
   onStart,
   onStop,
+  onRefresh,
 }: TabActivityProps) {
   const { events, dailySummary, isLoading } = useEmployeeActivity(employee.id)
   const [expandedEvents, setExpandedEvents] = useState<Set<string>>(new Set())
@@ -150,6 +154,11 @@ export function TabActivity({
           </div>
         </div>
       </div>
+
+      {/* ─── Sandbox Banner ─── */}
+      {employee.sandboxMode && (
+        <SandboxBanner employeeId={employee.id} onGoLive={onRefresh} />
+      )}
 
       {/* ─── Onboarding Checklist ─── */}
       {employee.status === "ONBOARDING" && (

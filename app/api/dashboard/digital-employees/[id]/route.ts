@@ -86,7 +86,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
     const {
       name, description, avatar, assistantId, autonomyLevel,
       deploymentConfig, resourceLimits, gatewayConfig, supervisorId,
-      status,
+      status, sandboxMode,
     } = body
 
     // Map legacy autonomy values to L-codes
@@ -105,6 +105,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
         ...(resourceLimits !== undefined && { resourceLimits }),
         ...(gatewayConfig !== undefined && { gatewayConfig }),
         ...(supervisorId !== undefined && { supervisorId }),
+        ...(sandboxMode !== undefined && { sandboxMode }),
       },
       include: {
         assistant: { select: { id: true, name: true, emoji: true, model: true } },

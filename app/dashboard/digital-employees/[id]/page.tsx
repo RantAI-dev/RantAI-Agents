@@ -707,6 +707,7 @@ export default function DigitalEmployeeDetailPage() {
               onDeploy={handleDeploy}
               onStart={handleStart}
               onStop={handleStop}
+              onRefresh={fetchEmployee}
             />
           )}
 

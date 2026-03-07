@@ -187,6 +187,7 @@ export interface EmployeePackage {
     description?: string | null
     avatar?: string | null
     autonomyLevel: AutonomyLevel
+    sandboxMode?: boolean
   }
   agent: {
     systemPrompt: string

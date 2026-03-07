@@ -107,6 +107,7 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
       description: employee.description,
       avatar: employee.avatar,
       autonomyLevel: employee.autonomyLevel as AutonomyLevel,
+      sandboxMode: employee.sandboxMode,
     },
     agent: {
       systemPrompt: assistant.systemPrompt,

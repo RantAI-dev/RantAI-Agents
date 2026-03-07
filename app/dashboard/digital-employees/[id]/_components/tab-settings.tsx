@@ -249,6 +249,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { useCallback } from "react"
 
@@ -256,7 +257,7 @@ function SettingsIdentity({
   employee,
   fetchEmployee,
 }: {
-  employee: { id: string; name: string; description: string | null; avatar: string | null; autonomyLevel: string }
+  employee: { id: string; name: string; description: string | null; avatar: string | null; autonomyLevel: string; sandboxMode?: boolean }
   fetchEmployee: () => Promise<void>
 }) {
   const [settingsName, setSettingsName] = useState(employee.name)
@@ -313,6 +314,31 @@ function SettingsIdentity({
             <SelectItem value="L4">L4 — Autonomous (full authority)</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border bg-muted/30 p-3">
+        <div>
+          <Label className="text-sm">Sandbox Mode</Label>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Simulate external tool calls without real actions
+          </p>
+        </div>
+        <Switch
+          checked={employee.sandboxMode ?? false}
+          onCheckedChange={async (checked) => {
+            try {
+              const res = await fetch(`/api/dashboard/digital-employees/${employee.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sandboxMode: checked }),
+              })
+              if (!res.ok) throw new Error()
+              await fetchEmployee()
+              toast.success(checked ? "Sandbox mode enabled" : "Sandbox mode disabled")
+            } catch {
+              toast.error("Failed to update sandbox mode")
+            }
+          }}
+        />
       </div>
       <Button onClick={handleSave} disabled={isSaving}>
         {isSaving ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}
