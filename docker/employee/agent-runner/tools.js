@@ -718,6 +718,103 @@ function registerTools(pkg, platformApiUrl, runtimeToken) {
     },
   })
 
+  // ── Inter-employee messaging tools ──
+
+  tools.push({
+    name: "send_message",
+    description:
+      "Send a message, task, or handoff to another digital employee in your organization. " +
+      "Use list_employees first to find coworker IDs.",
+    parameters: {
+      type: "object",
+      properties: {
+        toEmployeeId: { type: "string", description: "Target employee ID" },
+        toGroup: { type: "string", description: "Tag group for broadcasts (alternative to toEmployeeId)" },
+        type: { type: "string", enum: ["message", "task", "handoff", "broadcast"], description: "Message type" },
+        subject: { type: "string", description: "Message subject" },
+        content: { type: "string", description: "Message body" },
+        priority: { type: "string", enum: ["low", "normal", "high", "urgent"], description: "Priority level (default: normal)" },
+        attachments: { type: "array", items: { type: "object" }, description: "Optional attachments" },
+        waitForResponse: { type: "boolean", description: "Whether to wait for a response" },
+      },
+      required: ["type", "subject", "content"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/messages/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${runtimeToken}` },
+        body: JSON.stringify({ employeeId: pkg.employee.id, ...input }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to send message" } }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "check_inbox",
+    description:
+      "Check your inbox for messages from other digital employees. " +
+      "Returns pending and delivered messages addressed to you.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+    type: "builtin",
+    execute: async () => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/messages/inbox?employeeId=${pkg.employee.id}`, {
+        headers: { Authorization: `Bearer ${runtimeToken}` },
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to check inbox" } }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "reply_message",
+    description:
+      "Reply to a message you received. This marks the original message as completed " +
+      "and sends your reply back to the sender.",
+    parameters: {
+      type: "object",
+      properties: {
+        messageId: { type: "string", description: "The ID of the message to reply to" },
+        content: { type: "string", description: "Reply content" },
+        data: { type: "object", description: "Optional structured data to include in the reply" },
+      },
+      required: ["messageId", "content"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/messages/${input.messageId}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${runtimeToken}` },
+        body: JSON.stringify({ employeeId: pkg.employee.id, content: input.content, data: input.data }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to reply" } }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "list_employees",
+    description:
+      "List other digital employees in your organization. " +
+      "Use this to discover coworkers you can message or delegate tasks to.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+    type: "builtin",
+    execute: async () => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/employees/list?employeeId=${pkg.employee.id}`, {
+        headers: { Authorization: `Bearer ${runtimeToken}` },
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to list employees" } }
+      return res.json()
+    },
+  })
+
   // Autonomy-gated tools
   const permissions = pkg.deploymentConfig?.permissions || {}
   if (permissions.canCreateTools) {

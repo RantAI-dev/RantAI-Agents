@@ -135,6 +135,9 @@ model Organization {
   marketplaceInstalls MarketplaceInstall[]
   installedSkills     InstalledSkill[]
   digitalEmployees    DigitalEmployee[]
+  employeeMessages    EmployeeMessage[]
+  auditLogs           AuditLog[]
+  sharedTemplates     EmployeeTemplateShare[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -929,6 +932,8 @@ model DigitalEmployee {
   webhooks         EmployeeWebhook[]
   goals            EmployeeGoal[]
   sandboxMode      Boolean         @default(false)
+  sentMessages     EmployeeMessage[] @relation("sentMessages")
+  receivedMessages EmployeeMessage[] @relation("receivedMessages")
 
   @@index([organizationId])
   @@index([status])
@@ -1129,4 +1134,76 @@ model EmployeeGoal {
   updatedAt         DateTime        @updatedAt
 
   @@index([digitalEmployeeId])
+}
+
+// ─── Phase C: Collaboration & Governance ──────────────────────────
+
+model EmployeeMessage {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fromEmployeeId   String
+  fromEmployee     DigitalEmployee  @relation("sentMessages", fields: [fromEmployeeId], references: [id], onDelete: Cascade)
+  toEmployeeId     String?
+  toEmployee       DigitalEmployee? @relation("receivedMessages", fields: [toEmployeeId], references: [id], onDelete: SetNull)
+  toGroup          String?          // tag group for broadcasts
+  type             String           // "message" | "task" | "handoff" | "broadcast"
+  subject          String
+  content          String           @db.Text
+  attachments      Json             @default("[]")
+  priority         String           @default("normal") // low|normal|high|urgent
+  status           String           @default("pending") // pending|delivered|in_progress|completed|failed|cancelled|pending_approval
+  requiresApproval Boolean          @default(false)
+  approvalStatus   String?          // pending|approved|rejected
+  responseContent  String?          @db.Text
+  responseData     Json?
+  respondedAt      DateTime?
+  parentMessageId  String?
+  parentMessage    EmployeeMessage? @relation("messageThread", fields: [parentMessageId], references: [id])
+  childMessages    EmployeeMessage[] @relation("messageThread")
+  runId            String?
+  metadata         Json             @default("{}")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([toEmployeeId, status])
+  @@index([fromEmployeeId])
+  @@index([organizationId, createdAt])
+}
+
+model AuditLog {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId      String?
+  userId          String?
+  action          String       // tool.execute|approval.respond|credential.access|message.send|employee.create
+  resource        String       // tool:gmail_send|employee:abc123|message:xyz
+  detail          Json         @default("{}")
+  ipAddress       String?
+  riskLevel       String       @default("low") // low|medium|high|critical
+  createdAt       DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([action])
+  @@index([riskLevel, createdAt])
+}
+
+model EmployeeTemplateShare {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  category        String
+  templateData    Json         // full EmployeeTemplate serialized
+  version         Int          @default(1)
+  isPublic        Boolean      @default(false)
+  createdBy       String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([isPublic, category])
 }
