@@ -923,6 +923,12 @@ model DigitalEmployee {
   installedSkills  EmployeeInstalledSkill[]
   memoryEntries    EmployeeMemory[]
   chatMessages     EmployeeChatMessage[]
+  integrations     EmployeeIntegration[]
+  trustEvents      EmployeeTrustEvent[]
+  trustScore       Float           @default(50.0)
+  webhooks         EmployeeWebhook[]
+  goals            EmployeeGoal[]
+  sandboxMode      Boolean         @default(false)
 
   @@index([organizationId])
   @@index([status])
@@ -943,6 +949,9 @@ model EmployeeRun {
   promptTokens      Int             @default(0)
   completionTokens  Int             @default(0)
   executionTimeMs   Int?
+  errorClassification String?       // transient|permanent|ambiguous
+  retryCount          Int          @default(0)
+  parentRunId         String?
   startedAt         DateTime        @default(now())
   completedAt       DateTime?
 
@@ -1051,4 +1060,73 @@ model EmployeeChatMessage {
   createdAt         DateTime        @default(now())
 
   @@index([digitalEmployeeId, createdAt])
+}
+
+model EmployeeIntegration {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  integrationId     String
+  status            String          @default("disconnected") // disconnected|connected|error|expired
+  encryptedData     String?         @db.Text // AES-256-GCM
+  metadata          Json            @default("{}")
+  connectedAt       DateTime?
+  expiresAt         DateTime?
+  lastTestedAt      DateTime?
+  lastError         String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([digitalEmployeeId, integrationId])
+  @@index([digitalEmployeeId])
+}
+
+model EmployeeTrustEvent {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  eventType         String          // approval_accepted|approval_rejected|run_success|run_failure|promotion|demotion
+  weight            Float           @default(1.0)
+  metadata          Json?
+  createdAt         DateTime        @default(now())
+
+  @@index([digitalEmployeeId, createdAt])
+}
+
+model EmployeeWebhook {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  type              String          // webhook|email|watch
+  name              String
+  token             String          @unique @default(cuid())
+  config            Json            @default("{}")
+  filterRules       Json            @default("[]")
+  enabled           Boolean         @default(true)
+  lastTriggeredAt   DateTime?
+  triggerCount      Int             @default(0)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([digitalEmployeeId])
+  @@index([token])
+}
+
+model EmployeeGoal {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  name              String
+  type              String          // counter|threshold|boolean|percentage
+  target            Float
+  unit              String
+  period            String          // daily|weekly|monthly|total
+  currentValue      Float           @default(0)
+  source            String          @default("manual")
+  autoTrackConfig   Json?
+  status            String          @default("active")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([digitalEmployeeId])
 }

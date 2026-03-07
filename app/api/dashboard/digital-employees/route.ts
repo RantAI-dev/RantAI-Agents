@@ -24,10 +24,11 @@ export async function GET(req: Request) {
       },
       include: {
         assistant: { select: { id: true, name: true, emoji: true, model: true } },
+        runs: { take: 1, orderBy: { startedAt: "desc" }, select: { status: true, output: true } },
         _count: {
           select: {
             runs: true,
-            approvals: true,
+            approvals: { where: { status: "PENDING" } },
             files: true,
             customTools: true,
             installedSkills: true,
@@ -37,11 +38,24 @@ export async function GET(req: Request) {
       orderBy: { updatedAt: "desc" },
     })
 
-    // Serialize BigInt
-    const serialized = employees.map((e) => ({
-      ...e,
-      totalTokensUsed: e.totalTokensUsed.toString(),
-    }))
+    // Serialize BigInt + flatten latest run
+    const serialized = employees.map((e: typeof employees[number]) => {
+      const { runs: latestRuns, ...rest } = e
+      // Truncate output preview to avoid sending huge payloads
+      const rawOutput = latestRuns[0]?.output
+      let latestOutputPreview: string | null = null
+      if (rawOutput != null) {
+        const str = typeof rawOutput === "string" ? rawOutput : JSON.stringify(rawOutput)
+        latestOutputPreview = str.length > 120 ? str.slice(0, 120) + "..." : str
+      }
+      return {
+        ...rest,
+        totalTokensUsed: e.totalTokensUsed.toString(),
+        latestRunStatus: latestRuns[0]?.status ?? null,
+        latestOutputPreview,
+        pendingApprovalCount: e._count.approvals,
+      }
+    })
 
     return NextResponse.json(serialized)
   } catch (error) {

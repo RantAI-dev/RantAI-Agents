@@ -37,13 +37,22 @@ RUN ln -sf /usr/local/bin/python3.12 /usr/local/bin/python3 && \
     ln -sf /usr/local/bin/pip3.12 /usr/local/bin/pip && \
     ldconfig
 
-# Install Bun + minimal system deps + tools needed by ClawHub skills
+# Install Node.js 22 LTS + Bun + minimal system deps + tools needed by ClawHub skills
+# Includes Playwright/headless browser system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl unzip libssl3 git jq && \
+    ca-certificates curl unzip libssl3 git jq sudo \
+    # Browser / Playwright system deps
+    libglib2.0-0 libnss3 libnspr4 libdbus-1-3 libatk1.0-0 \
+    libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libatspi2.0-0 \
+    libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 \
+    libcairo2 libasound2 libxshmfence1 fonts-liberation xdg-utils wget && \
+    # Install Node.js 22 LTS (real node/npm/npx for tool compatibility)
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
+    # Install Bun (as bun/bunx only, not aliased to node)
     curl -fsSL https://bun.sh/install | bash && \
     mv /root/.bun/bin/bun /usr/local/bin/bun && \
     ln -sf /usr/local/bin/bun /usr/local/bin/bunx && \
-    ln -sf /usr/local/bin/bun /usr/local/bin/node && \
     rm -rf /root/.bun && \
     rm -rf /var/lib/apt/lists/*
 

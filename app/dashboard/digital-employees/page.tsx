@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
@@ -15,6 +15,10 @@ import {
   Pause,
   Shield,
   Eye,
+  Zap,
+  LayoutGrid,
+  List,
+  AlertTriangle,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,20 +29,9 @@ import { BlurText } from "@/components/reactbits/blur-text"
 import { CountUp } from "@/components/reactbits/count-up"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"
 import { Squares } from "@/components/reactbits/squares"
-
-const STATUS_STYLES: Record<string, { label: string; className: string }> = {
-  DRAFT: { label: "Draft", className: "bg-muted text-muted-foreground" },
-  ONBOARDING: { label: "Onboarding", className: "bg-sky-500/10 text-sky-500" },
-  ACTIVE: { label: "Active", className: "bg-emerald-500/10 text-emerald-500" },
-  PAUSED: { label: "Paused", className: "bg-amber-500/10 text-amber-500" },
-  SUSPENDED: { label: "Suspended", className: "bg-red-500/10 text-red-500" },
-  ARCHIVED: { label: "Archived", className: "bg-muted text-muted-foreground" },
-}
-
-const AUTONOMY_STYLES: Record<string, { label: string; className: string }> = {
-  supervised: { label: "Supervised", className: "bg-blue-500/10 text-blue-500" },
-  autonomous: { label: "Autonomous", className: "bg-purple-500/10 text-purple-500" },
-}
+import { formatDistanceToNow } from "date-fns"
+import { STATUS_STYLES, AUTONOMY_STYLES } from "@/lib/digital-employee/shared-constants"
+import { toast } from "sonner"
 
 const STATUS_FILTERS = [
   { value: "ALL", label: "All" },
@@ -65,12 +58,25 @@ const fadeUp = {
   },
 }
 
+function getActivityText(emp: { status: string; lastActiveAt: string | null; latestRunStatus: string | null; pendingApprovalCount: number }): string {
+  if (emp.pendingApprovalCount > 0) return "Awaiting approval"
+  if (emp.latestRunStatus === "RUNNING") return "Running..."
+  if (emp.status === "PAUSED") return "Paused"
+  if (emp.status === "DRAFT") return "Draft"
+  if (emp.status === "ARCHIVED") return "Archived"
+  if (emp.lastActiveAt) {
+    return `Idle ${formatDistanceToNow(new Date(emp.lastActiveAt))}`
+  }
+  return "Idle"
+}
+
 export default function DigitalEmployeesPage() {
   const router = useRouter()
   const { employees, isLoading } = useDigitalEmployees()
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("ALL")
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
 
   const stats = useMemo(() => {
     const total = employees.length
@@ -95,6 +101,24 @@ export default function DigitalEmployeesPage() {
     }
     return result
   }, [employees, search, statusFilter])
+
+  const handleQuickRun = useCallback(async (empId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const res = await fetch(`/api/dashboard/digital-employees/${empId}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trigger: "manual" }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Run failed")
+      }
+      toast.success("Run triggered")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to trigger run")
+    }
+  }, [])
 
   if (isLoading) {
     return (
@@ -191,6 +215,26 @@ export default function DigitalEmployeesPage() {
             ))}
           </div>
 
+          {/* View toggle */}
+          <div className="flex items-center gap-0.5 border rounded-md p-0.5">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setViewMode("grid")}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setViewMode("table")}
+            >
+              <List className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
           <Button
             onClick={() => router.push("/dashboard/digital-employees/new")}
             size="sm"
@@ -252,7 +296,8 @@ export default function DigitalEmployeesPage() {
               Clear Filters
             </Button>
           </div>
-        ) : (
+        ) : viewMode === "grid" ? (
+          /* ─── Grid View ─── */
           <motion.div
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
             initial="hidden"
@@ -269,25 +314,45 @@ export default function DigitalEmployeesPage() {
                 emp.totalRuns > 0
                   ? Math.round((emp.successfulRuns / emp.totalRuns) * 100)
                   : 0
+              const activityText = getActivityText(emp)
 
               return (
                 <motion.div key={emp.id} variants={fadeUp}>
                   <SpotlightCard
-                    className="group h-[172px] rounded-lg border bg-card cursor-pointer transition-all hover:border-foreground/30 hover:shadow-sm"
+                    className="group h-[190px] rounded-lg border bg-card cursor-pointer transition-all hover:border-foreground/30 hover:shadow-sm"
                     spotlightColor="rgba(var(--primary-rgb, 124,58,237), 0.06)"
                     onClick={() => router.push(`/dashboard/digital-employees/${emp.id}`)}
                   >
                     <div className="flex flex-col h-full p-4">
                       {/* Top: name + avatar */}
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <div className="flex items-start justify-between gap-2 mb-1">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="text-lg shrink-0">{emp.avatar || "🤖"}</span>
                           <h3 className="text-sm font-medium truncate">{emp.name}</h3>
                         </div>
+                        {emp.pendingApprovalCount > 0 && (
+                          <Badge
+                            variant="secondary"
+                            className="bg-amber-500/10 text-amber-500 text-[10px] px-1.5 py-0 shrink-0"
+                          >
+                            <AlertTriangle className="h-3 w-3 mr-0.5" />
+                            {emp.pendingApprovalCount}
+                          </Badge>
+                        )}
                       </div>
 
-                      {/* Middle: assistant info */}
-                      <p className="text-xs text-muted-foreground/80 leading-relaxed line-clamp-2 flex-1">
+                      {/* Activity text */}
+                      <p className="text-xs text-muted-foreground/80 mb-0.5">{activityText}</p>
+
+                      {/* Last output preview */}
+                      {emp.latestOutputPreview && (
+                        <p className="text-[11px] text-muted-foreground/50 truncate mb-0.5 italic">
+                          {emp.latestOutputPreview}
+                        </p>
+                      )}
+
+                      {/* Description */}
+                      <p className="text-xs text-muted-foreground/60 leading-relaxed line-clamp-2 flex-1">
                         {emp.description || (
                           <span className="flex items-center gap-1">
                             <span>{emp.assistant.emoji}</span>
@@ -321,10 +386,21 @@ export default function DigitalEmployeesPage() {
                             <Eye className="h-3 w-3" />
                             {successRate}% success
                           </span>
-                          <span className="flex items-center gap-1 ml-auto">
-                            <Shield className="h-3 w-3" />
-                            {emp.assistant.emoji} {emp.assistant.name}
-                          </span>
+                          {emp.status === "ACTIVE" && (
+                            <button
+                              className="flex items-center gap-1 ml-auto text-primary hover:text-primary/80 transition-colors"
+                              onClick={(e) => handleQuickRun(emp.id, e)}
+                            >
+                              <Zap className="h-3 w-3" />
+                              Run
+                            </button>
+                          )}
+                          {emp.status !== "ACTIVE" && (
+                            <span className="flex items-center gap-1 ml-auto">
+                              <Shield className="h-3 w-3" />
+                              {emp.assistant.emoji} {emp.assistant.name}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -332,6 +408,88 @@ export default function DigitalEmployeesPage() {
                 </motion.div>
               )
             })}
+          </motion.div>
+        ) : (
+          /* ─── Table View ─── */
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, type: "spring", stiffness: 260, damping: 24 }}
+          >
+            <div className="rounded-lg border bg-card overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30">
+                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Name</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Status</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Activity</th>
+                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Runs</th>
+                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Pending</th>
+                    <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((emp) => {
+                    const status = STATUS_STYLES[emp.status] || STATUS_STYLES.DRAFT
+                    const activityText = getActivityText(emp)
+                    return (
+                      <tr
+                        key={emp.id}
+                        className="border-b last:border-b-0 hover:bg-muted/30 cursor-pointer transition-colors"
+                        onClick={() => router.push(`/dashboard/digital-employees/${emp.id}`)}
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{emp.avatar || "🤖"}</span>
+                            <div className="min-w-0">
+                              <span className="font-medium truncate block">{emp.name}</span>
+                              <span className="text-xs text-muted-foreground truncate block">
+                                {emp.assistant.emoji} {emp.assistant.name}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge
+                            variant="secondary"
+                            className={cn("text-[10px] px-1.5 py-0.5", status.className)}
+                          >
+                            {status.label}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">{activityText}</td>
+                        <td className="px-4 py-3 text-right text-muted-foreground">{emp.totalRuns}</td>
+                        <td className="px-4 py-3 text-right">
+                          {emp.pendingApprovalCount > 0 ? (
+                            <Badge
+                              variant="secondary"
+                              className="bg-amber-500/10 text-amber-500 text-[10px] px-1.5 py-0"
+                            >
+                              {emp.pendingApprovalCount}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {emp.status === "ACTIVE" && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={(e) => handleQuickRun(emp.id, e)}
+                            >
+                              <Zap className="h-3 w-3 mr-1" />
+                              Run
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </motion.div>
         )}
       </div>

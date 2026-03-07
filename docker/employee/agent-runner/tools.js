@@ -9,6 +9,48 @@
 
 const vm = require("vm")
 
+/**
+ * Intercept OAuth callback URLs (http://127.0.0.1:<port>/...) in tool output
+ * and rewrite them to go through the gateway's OAuth proxy.
+ *
+ * This enables OAuth flows from tools running inside the container to work
+ * when the user's browser can't reach 127.0.0.1 inside the container.
+ */
+const OAUTH_URL_RE = /https?:\/\/(?:127\.0\.0\.1|localhost):(\d+)(\/[^\s"'<>]*)/g
+
+async function rewriteOAuthUrls(text, gatewayUrl) {
+  if (typeof text !== "string") return text
+
+  const matches = [...text.matchAll(OAUTH_URL_RE)]
+  if (matches.length === 0) return text
+
+  let result = text
+  for (const match of matches) {
+    const port = parseInt(match[1], 10)
+    const pathAndQuery = match[2]
+
+    try {
+      // Register port with gateway OAuth proxy
+      const res = await fetch(`${gatewayUrl}/internal/oauth-proxy/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ port, path_prefix: pathAndQuery.split("?")[0] }),
+      })
+      if (!res.ok) continue
+
+      const data = await res.json()
+      const sessionId = data.session_id
+      // Rewrite: http://127.0.0.1:37785/oauth2/callback → <gatewayUrl>/oauth-proxy/<session_id>/oauth2/callback
+      const newUrl = `${gatewayUrl}/oauth-proxy/${sessionId}${pathAndQuery}`
+      result = result.replace(match[0], newUrl)
+    } catch {
+      // Registration failed, leave URL unchanged
+    }
+  }
+
+  return result
+}
+
 function registerTools(pkg, platformApiUrl, runtimeToken) {
   const tools = []
 
@@ -249,6 +291,211 @@ function registerTools(pkg, platformApiUrl, runtimeToken) {
       },
     })
 
+  // Package installation tool — allows the employee to install system & runtime packages on demand
+  tools.push({
+    name: "install_packages",
+    description:
+      "Install system (apt), runtime (npm/bun/pip), brew, or cargo packages. " +
+      "Use this when a skill or task requires tools that aren't pre-installed. " +
+      "Examples: install_packages({apt: ['ffmpeg']}), " +
+      "install_packages({brew: ['gog']}), " +
+      "install_packages({cargo: ['ripgrep']}), " +
+      "install_packages({npm: ['playwright']}), " +
+      "install_packages({pip: ['pandas']})",
+    parameters: {
+      type: "object",
+      properties: {
+        apt: {
+          type: "array",
+          items: { type: "string" },
+          description: "System packages to install via apt-get (e.g. ['libglib2.0-0', 'ffmpeg'])",
+        },
+        brew: {
+          type: "array",
+          items: { type: "string" },
+          description: "Homebrew packages to install (e.g. ['gog', 'gh']). Installs Homebrew first if needed.",
+        },
+        cargo: {
+          type: "array",
+          items: { type: "string" },
+          description: "Rust crates to install via cargo install (e.g. ['ripgrep', 'gog'])",
+        },
+        npm: {
+          type: "array",
+          items: { type: "string" },
+          description: "Node.js packages to install via bun/npm (e.g. ['playwright', 'cheerio'])",
+        },
+        pip: {
+          type: "array",
+          items: { type: "string" },
+          description: "Python packages to install via pip (e.g. ['pandas', 'requests'])",
+        },
+        global: {
+          type: "boolean",
+          description: "Install npm packages globally (default: true)",
+        },
+        playwright_browsers: {
+          type: "boolean",
+          description: "Also run 'bunx playwright install chromium' after installing playwright npm package",
+        },
+      },
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const { execSync } = require("child_process")
+      const results = { apt: null, brew: null, cargo: null, npm: null, pip: null, playwright: null }
+      const errors = []
+
+      // Blocklist: prevent installing packages that could compromise the container
+      const aptBlocklist = ["passwd", "login", "openssh-server"]
+
+      try {
+        // APT packages
+        if (input.apt && input.apt.length > 0) {
+          const blocked = input.apt.filter((p) => aptBlocklist.includes(p))
+          if (blocked.length > 0) {
+            errors.push(`Blocked apt packages: ${blocked.join(", ")}`)
+          }
+          const safe = input.apt.filter((p) => !aptBlocklist.includes(p))
+          if (safe.length > 0) {
+            // Sanitize: only allow alphanumeric, hyphens, dots, colons, plus signs
+            const sanitized = safe.filter((p) => /^[a-zA-Z0-9][a-zA-Z0-9.\-+:]*$/.test(p))
+            if (sanitized.length > 0) {
+              try {
+                execSync(`apt-get update -qq && apt-get install -y --no-install-recommends ${sanitized.join(" ")}`, {
+                  timeout: 120000,
+                  stdio: "pipe",
+                })
+                results.apt = { installed: sanitized }
+              } catch (e) {
+                errors.push(`apt install failed: ${e.message.slice(0, 200)}`)
+              }
+            }
+          }
+        }
+
+        // Homebrew packages — install Homebrew first if needed
+        if (input.brew && input.brew.length > 0) {
+          const sanitized = input.brew.filter((p) => /^[a-zA-Z0-9][a-zA-Z0-9.\-_/@]*$/.test(p))
+          if (sanitized.length > 0) {
+            try {
+              // Check if brew is installed, install it if not
+              try {
+                execSync("which brew", { stdio: "pipe", timeout: 5000 })
+              } catch {
+                // Install Homebrew (runs as root in container — use NONINTERACTIVE)
+                execSync(
+                  'NONINTERACTIVE=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+                  { timeout: 300000, stdio: "pipe", env: { ...process.env, NONINTERACTIVE: "1" } }
+                )
+                // Add brew to PATH for this session
+                const brewPaths = ["/home/linuxbrew/.linuxbrew/bin", "/opt/homebrew/bin", "/usr/local/bin"]
+                for (const bp of brewPaths) {
+                  try {
+                    execSync(`test -x ${bp}/brew`, { stdio: "pipe", timeout: 2000 })
+                    process.env.PATH = `${bp}:${process.env.PATH}`
+                    break
+                  } catch { /* try next */ }
+                }
+              }
+              execSync(`brew install ${sanitized.join(" ")}`, {
+                timeout: 300000,
+                stdio: "pipe",
+                env: process.env,
+              })
+              results.brew = { installed: sanitized }
+            } catch (e) {
+              errors.push(`brew install failed: ${e.message.slice(0, 300)}`)
+            }
+          }
+        }
+
+        // Cargo packages — uses the Rust toolchain already in the image
+        if (input.cargo && input.cargo.length > 0) {
+          const sanitized = input.cargo.filter((p) => /^[a-zA-Z0-9][a-zA-Z0-9.\-_]*$/.test(p))
+          if (sanitized.length > 0) {
+            try {
+              // Check if cargo is available (it's in the builder stage but not runtime by default)
+              try {
+                execSync("which cargo", { stdio: "pipe", timeout: 5000 })
+              } catch {
+                // Install minimal Rust toolchain
+                execSync(
+                  'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal',
+                  { timeout: 120000, stdio: "pipe" }
+                )
+                process.env.PATH = `/root/.cargo/bin:${process.env.PATH}`
+              }
+              execSync(`cargo install ${sanitized.join(" ")}`, {
+                timeout: 600000,
+                stdio: "pipe",
+                env: process.env,
+              })
+              results.cargo = { installed: sanitized }
+            } catch (e) {
+              errors.push(`cargo install failed: ${e.message.slice(0, 300)}`)
+            }
+          }
+        }
+
+        // NPM/Bun packages
+        if (input.npm && input.npm.length > 0) {
+          const sanitized = input.npm.filter((p) => /^[@a-zA-Z0-9][a-zA-Z0-9.\-_/@]*$/.test(p))
+          if (sanitized.length > 0) {
+            try {
+              const globalFlag = input.global !== false ? "-g" : ""
+              execSync(`bun install ${globalFlag} ${sanitized.join(" ")}`, {
+                timeout: 120000,
+                stdio: "pipe",
+                cwd: "/data/workspace",
+              })
+              results.npm = { installed: sanitized }
+            } catch (e) {
+              errors.push(`npm install failed: ${e.message.slice(0, 200)}`)
+            }
+          }
+        }
+
+        // Pip packages
+        if (input.pip && input.pip.length > 0) {
+          const sanitized = input.pip.filter((p) => /^[a-zA-Z0-9][a-zA-Z0-9.\-_\[\]]*$/.test(p))
+          if (sanitized.length > 0) {
+            try {
+              execSync(`pip install --break-system-packages ${sanitized.join(" ")}`, {
+                timeout: 120000,
+                stdio: "pipe",
+              })
+              results.pip = { installed: sanitized }
+            } catch (e) {
+              errors.push(`pip install failed: ${e.message.slice(0, 200)}`)
+            }
+          }
+        }
+
+        // Playwright browsers
+        if (input.playwright_browsers) {
+          try {
+            execSync("bunx playwright install chromium", {
+              timeout: 180000,
+              stdio: "pipe",
+            })
+            results.playwright = { installed: "chromium" }
+          } catch (e) {
+            errors.push(`Playwright browser install failed: ${e.message.slice(0, 200)}`)
+          }
+        }
+      } catch (e) {
+        errors.push(`Unexpected error: ${e.message}`)
+      }
+
+      return {
+        success: errors.length === 0,
+        results,
+        errors: errors.length > 0 ? errors : undefined,
+      }
+    },
+  })
+
   // Autonomy-gated tools
   const permissions = pkg.deploymentConfig?.permissions || {}
   if (permissions.canCreateTools) {
@@ -284,4 +531,4 @@ function registerTools(pkg, platformApiUrl, runtimeToken) {
   return tools
 }
 
-module.exports = { registerTools }
+module.exports = { registerTools, rewriteOAuthUrls }

@@ -9,6 +9,7 @@ import { ChatSessionsProvider } from "@/hooks/use-chat-sessions"
 import { OrganizationProvider } from "@/hooks/use-organization"
 import { brand } from "@/lib/branding"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { GlobalApprovalBanner } from "./_components/global-approval-banner"
 
 const DASHBOARD_TITLES: Record<string, string> = {
   "/dashboard": "Chat",
@@ -62,6 +63,7 @@ export default function DashboardLayout({
 
           {/* Main Content */}
           <main className="relative flex-1 flex flex-col h-full overflow-hidden bg-background">
+            <GlobalApprovalBanner />
             <ErrorBoundary>
               {children}
             </ErrorBoundary>

@@ -1,0 +1,66 @@
+"use client"
+
+import { MessageSquare } from "@/lib/icons"
+import { Button } from "@/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import { ChatWorkspace } from "@/app/dashboard/_components/chat/chat-workspace"
+import type { ChatSession } from "@/hooks/use-chat-sessions"
+import type { Assistant } from "@/lib/types/assistant"
+
+interface ChatDrawerProps {
+  employee: {
+    id: string
+    name: string
+    avatar: string | null
+  }
+  containerRunning: boolean
+  syntheticSession: ChatSession | null
+  employeeAssistant: Assistant
+  onUpdateSession: (sessionId: string, updates: Partial<ChatSession>) => void
+}
+
+export function ChatDrawer({
+  employee,
+  containerRunning,
+  syntheticSession,
+  employeeAssistant,
+  onUpdateSession,
+}: ChatDrawerProps) {
+  if (!containerRunning || !syntheticSession) return null
+
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button
+          size="icon"
+          className="fixed bottom-6 right-6 h-12 w-12 rounded-full shadow-lg z-50"
+        >
+          <MessageSquare className="h-5 w-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-[420px] sm:w-[480px] p-0 flex flex-col">
+        <SheetHeader className="px-4 py-3 border-b shrink-0">
+          <SheetTitle className="flex items-center gap-2 text-sm">
+            <span>{employee.avatar || "🤖"}</span>
+            Chat with {employee.name}
+          </SheetTitle>
+        </SheetHeader>
+        <div className="flex-1 min-h-0">
+          <ChatWorkspace
+            key={`emp-drawer-${employee.id}`}
+            session={syntheticSession}
+            assistant={employeeAssistant}
+            apiEndpoint={`/api/dashboard/digital-employees/${employee.id}/chat`}
+            onUpdateSession={onUpdateSession}
+          />
+        </div>
+      </SheetContent>
+    </Sheet>
+  )
+}

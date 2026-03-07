@@ -372,6 +372,7 @@ async function gatewayMode() {
     output.push(`paired_tokens = [${pairedTokensStr}]`)
     output.push("allow_public_bind = true")
     output.push("webhook_rate_limit_per_minute = 120")
+    output.push("request_timeout_secs = 600")
     output.push("")
     // Map platform autonomy levels to RantaiClaw values
     // Platform: "supervised" | "autonomous"

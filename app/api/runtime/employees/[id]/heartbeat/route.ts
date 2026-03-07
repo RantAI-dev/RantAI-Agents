@@ -21,10 +21,14 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Token mismatch" }, { status: 403 })
     }
 
-    await prisma.digitalEmployee.update({
+    const result = await prisma.digitalEmployee.updateMany({
       where: { id },
       data: { lastActiveAt: new Date() },
     })
+
+    if (result.count === 0) {
+      return NextResponse.json({ error: "Employee not found" }, { status: 404 })
+    }
 
     return NextResponse.json({ ok: true })
   } catch (error) {

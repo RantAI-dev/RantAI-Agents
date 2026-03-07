@@ -24,6 +24,9 @@ export interface DigitalEmployeeItem {
   lastActiveAt: string | null
   createdAt: string
   updatedAt: string
+  latestRunStatus: string | null
+  latestOutputPreview: string | null
+  pendingApprovalCount: number
   _count: {
     runs: number
     approvals: number
