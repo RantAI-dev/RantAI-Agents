@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     // Verify sender exists
     const sender = await prisma.digitalEmployee.findUnique({
       where: { id: employeeId },
-      select: { id: true, organizationId: true },
+      select: { id: true, organizationId: true, autonomyLevel: true, supervisorId: true },
     })
     if (!sender) return NextResponse.json({ error: "Sender not found" }, { status: 404 })
 
@@ -33,6 +33,56 @@ export async function POST(req: Request) {
         select: { id: true },
       })
       if (!recipient) return NextResponse.json({ error: "Recipient not found in organization" }, { status: 404 })
+    }
+
+    // C7: Supervisor message approval for L1/L2 employees on task/handoff messages
+    const requiresApproval = (sender.autonomyLevel === "L1" || sender.autonomyLevel === "L2") &&
+      (type === "task" || type === "handoff")
+
+    if (requiresApproval) {
+      // Create message in pending_approval status
+      const message = await prisma.employeeMessage.create({
+        data: {
+          organizationId: sender.organizationId,
+          fromEmployeeId: employeeId,
+          toEmployeeId: toEmployeeId || null,
+          toGroup: toGroup || null,
+          type,
+          subject,
+          content,
+          priority: priority && MESSAGE_PRIORITIES.includes(priority) ? priority : "normal",
+          attachments: attachments || [],
+          status: "pending_approval",
+          metadata: waitForResponse ? { waitForResponse: true } : {},
+        },
+      })
+
+      // Create approval request for supervisor
+      // Find the current active run for this employee to link the approval
+      const activeRun = await prisma.employeeRun.findFirst({
+        where: { digitalEmployeeId: employeeId, status: { in: ["RUNNING", "PAUSED"] } },
+        orderBy: { startedAt: "desc" },
+        select: { id: true },
+      })
+
+      if (activeRun) {
+        await prisma.employeeApproval.create({
+          data: {
+            digitalEmployeeId: employeeId,
+            employeeRunId: activeRun.id,
+            requestType: "message_send",
+            title: `Send ${type} to ${toEmployeeId ? "employee" : toGroup || "group"}`,
+            description: subject,
+            content: { messageId: message.id, type, subject, content, toEmployeeId, toGroup } as object,
+            options: [
+              { label: "Approve", value: "approved" },
+              { label: "Reject", value: "rejected" },
+            ] as object,
+          },
+        })
+      }
+
+      return NextResponse.json({ success: true, messageId: message.id, requiresApproval: true })
     }
 
     const validPriority = priority && MESSAGE_PRIORITIES.includes(priority) ? priority : "normal"
