@@ -87,6 +87,7 @@ interface TabSettingsProps {
   autoRedeploy: () => Promise<void>
   onArchiveOpen: () => void
   onDeleteOpen: () => void
+  onOpenChat?: (message: string) => void
 }
 
 interface SectionConfig {
@@ -179,7 +180,7 @@ export function TabSettings(props: TabSettingsProps) {
                   </div>
                 )}
                 {section.id === "integrations" && (
-                  <IntegrationGrid employeeId={props.employee.id} />
+                  <IntegrationGrid employeeId={props.employee.id} onOpenChat={props.onOpenChat} />
                 )}
                 {section.id === "tools-skills" && (
                   <ToolsSkillsCombined

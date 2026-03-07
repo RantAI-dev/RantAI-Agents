@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/collapsible"
 import { GoalTracker } from "./goal-tracker"
 import { ErrorPatternsCard } from "./error-patterns-card"
+import { OnboardingChecklist } from "./onboarding-checklist"
 
 interface TabActivityProps {
   employee: {
@@ -149,6 +150,11 @@ export function TabActivity({
           </div>
         </div>
       </div>
+
+      {/* ─── Onboarding Checklist ─── */}
+      {employee.status === "ONBOARDING" && (
+        <OnboardingChecklist employeeId={employee.id} />
+      )}
 
       {/* ─── Goal Tracker ─── */}
       <GoalTracker employeeId={employee.id} />

@@ -496,6 +496,189 @@ function registerTools(pkg, platformApiUrl, runtimeToken) {
     },
   })
 
+  // ── Integration tools ──
+
+  tools.push({
+    name: "request_credentials",
+    description:
+      "Request credentials for an integration. Creates an approval request that the supervisor must approve. " +
+      "Use this when you need API keys, tokens, or other credentials to connect to a service.",
+    parameters: {
+      type: "object",
+      properties: {
+        integrationId: { type: "string", description: "The integration ID (e.g. 'slack', 'github')" },
+        title: { type: "string", description: "Short description of what credentials are needed" },
+        description: { type: "string", description: "Detailed explanation of why these credentials are needed" },
+      },
+      required: ["integrationId", "title"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/integrations/credentials`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          integrationId: input.integrationId,
+          title: input.title,
+          description: input.description,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to request credentials" }
+      }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "test_integration",
+    description: "Test if an integration connection is working. Returns success/failure with details.",
+    parameters: {
+      type: "object",
+      properties: {
+        integrationId: { type: "string", description: "The integration ID to test" },
+      },
+      required: ["integrationId"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/integrations/test`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          integrationId: input.integrationId,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Test failed" }
+      }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "store_credentials",
+    description:
+      "Store OAuth tokens or credentials for an integration after completing an OAuth flow or receiving credentials. " +
+      "Credentials are encrypted at rest.",
+    parameters: {
+      type: "object",
+      properties: {
+        integrationId: { type: "string", description: "The integration ID" },
+        credentials: { type: "object", description: "The credentials object (access_token, refresh_token, etc.)" },
+        expiresIn: { type: "number", description: "Token expiry in seconds (optional)" },
+      },
+      required: ["integrationId", "credentials"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/integrations/store-credentials`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          integrationId: input.integrationId,
+          credentials: input.credentials,
+          expiresIn: input.expiresIn,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to store credentials" }
+      }
+      return res.json()
+    },
+  })
+
+  // ── Goal tracking tool ──
+
+  tools.push({
+    name: "update_goal",
+    description: "Report progress on a goal. Increments a counter, sets a value, or marks a boolean goal as complete.",
+    parameters: {
+      type: "object",
+      properties: {
+        goalId: { type: "string", description: "The goal ID to update" },
+        value: { type: "number", description: "The new value or increment amount" },
+        increment: { type: "boolean", description: "If true, add value to current. If false, set absolute value. Default: true" },
+      },
+      required: ["goalId", "value"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/goals/update`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          goalId: input.goalId,
+          value: input.value,
+          increment: input.increment !== false,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to update goal" }
+      }
+      return res.json()
+    },
+  })
+
+  // ── Onboarding tool ──
+
+  tools.push({
+    name: "report_onboarding_status",
+    description:
+      "Report the completion status of an onboarding step. " +
+      "Steps: read_soul, read_tools, test_tool, read_memory, write_memory, complete_task",
+    parameters: {
+      type: "object",
+      properties: {
+        step: { type: "string", description: "The onboarding step key" },
+        status: { type: "string", enum: ["completed", "failed", "in_progress"], description: "Step status" },
+        details: { type: "string", description: "Optional details about what was done" },
+      },
+      required: ["step", "status"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/onboarding/report`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          step: input.step,
+          status: input.status,
+          details: input.details,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to report status" }
+      }
+      return res.json()
+    },
+  })
+
   // Autonomy-gated tools
   const permissions = pkg.deploymentConfig?.permissions || {}
   if (permissions.canCreateTools) {

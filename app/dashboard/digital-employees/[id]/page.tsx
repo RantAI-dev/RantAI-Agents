@@ -142,6 +142,9 @@ export default function DigitalEmployeeDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // Chat drawer state (for chat-guided integration setup)
+  const [chatDrawerMessage, setChatDrawerMessage] = useState<string | null>(null)
+
   // Fetch container status when employee is active
   useEffect(() => {
     if (!employee || employee.status !== "ACTIVE") return
@@ -767,6 +770,7 @@ export default function DigitalEmployeeDetailPage() {
               autoRedeploy={autoRedeploy}
               onArchiveOpen={() => setArchiveOpen(true)}
               onDeleteOpen={() => setDeleteOpen(true)}
+              onOpenChat={(msg) => setChatDrawerMessage(msg)}
             />
           )}
         </div>
@@ -780,6 +784,8 @@ export default function DigitalEmployeeDetailPage() {
           syntheticSession={syntheticSession}
           employeeAssistant={employeeAssistant}
           onUpdateSession={handleUpdateSession}
+          initialMessage={chatDrawerMessage}
+          onInitialMessageSent={() => setChatDrawerMessage(null)}
         />
       )}
 

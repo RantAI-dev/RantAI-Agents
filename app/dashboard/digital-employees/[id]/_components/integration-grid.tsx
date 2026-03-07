@@ -12,6 +12,7 @@ import { CATEGORY_LABELS } from "@/lib/digital-employee/integrations"
 
 interface IntegrationGridProps {
   employeeId: string
+  onOpenChat?: (message: string) => void
 }
 
 const STATUS_STYLES: Record<string, { label: string; className: string; icon: React.ComponentType<{ className?: string }> }> = {
@@ -21,7 +22,7 @@ const STATUS_STYLES: Record<string, { label: string; className: string; icon: Re
   expired: { label: "Expired", className: "bg-amber-500/10 text-amber-500", icon: AlertCircle },
 }
 
-export function IntegrationGrid({ employeeId }: IntegrationGridProps) {
+export function IntegrationGrid({ employeeId, onOpenChat }: IntegrationGridProps) {
   const { integrations, isLoading, connectIntegration, disconnectIntegration, testIntegration } = useEmployeeIntegrations(employeeId)
   const [selectedIntegration, setSelectedIntegration] = useState<EmployeeIntegrationItem | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
@@ -141,6 +142,7 @@ export function IntegrationGrid({ employeeId }: IntegrationGridProps) {
         integration={selectedIntegration}
         onClose={() => setSelectedIntegration(null)}
         onConnect={connectIntegration}
+        onOpenChat={onOpenChat}
       />
     </div>
   )

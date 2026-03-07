@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect, useRef } from "react"
 import { MessageSquare } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,6 +24,9 @@ interface ChatDrawerProps {
   syntheticSession: ChatSession | null
   employeeAssistant: Assistant
   onUpdateSession: (sessionId: string, updates: Partial<ChatSession>) => void
+  /** When set, the drawer auto-opens and injects this message */
+  initialMessage?: string | null
+  onInitialMessageSent?: () => void
 }
 
 export function ChatDrawer({
@@ -31,11 +35,32 @@ export function ChatDrawer({
   syntheticSession,
   employeeAssistant,
   onUpdateSession,
+  initialMessage,
+  onInitialMessageSent,
 }: ChatDrawerProps) {
+  const [open, setOpen] = useState(false)
+  const initialMessageSentRef = useRef(false)
+
+  // Auto-open when an initial message is provided
+  useEffect(() => {
+    if (initialMessage && containerRunning && syntheticSession && !initialMessageSentRef.current) {
+      setOpen(true)
+      initialMessageSentRef.current = true
+      onInitialMessageSent?.()
+    }
+  }, [initialMessage, containerRunning, syntheticSession, onInitialMessageSent])
+
+  // Reset ref when initialMessage changes
+  useEffect(() => {
+    if (!initialMessage) {
+      initialMessageSentRef.current = false
+    }
+  }, [initialMessage])
+
   if (!containerRunning || !syntheticSession) return null
 
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button
           size="icon"
@@ -58,6 +83,7 @@ export function ChatDrawer({
             assistant={employeeAssistant}
             apiEndpoint={`/api/dashboard/digital-employees/${employee.id}/chat`}
             onUpdateSession={onUpdateSession}
+            initialMessage={initialMessage || undefined}
           />
         </div>
       </SheetContent>
