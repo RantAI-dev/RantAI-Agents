@@ -100,6 +100,7 @@ const allNavItems: NavItem[] = [
   { title: "Workflows", url: "/dashboard/workflows", icon: GitBranch, feature: null },
   { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: null },
   { title: "Messages", url: "/dashboard/messages", icon: MessageSquare, feature: null },
+  { title: "Pipelines", url: "/dashboard/pipelines", icon: GitBranch, feature: null },
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
   { title: "Knowledge", url: "/dashboard/knowledge", icon: BookOpen, feature: null },
   { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },
@@ -113,6 +114,7 @@ const sections = {
   workflows: { title: "Workflows", subtitle: "Visual Automations", icon: GitBranch, path: "/dashboard/workflows" },
   digitalEmployees: { title: "Digital Employees", subtitle: "Autonomous Workers", icon: Users, path: "/dashboard/digital-employees" },
   messages: { title: "Messages", subtitle: "Employee Communication", icon: MessageSquare, path: "/dashboard/messages" },
+  pipelines: { title: "Pipelines", subtitle: "Handoff Workflows", icon: GitBranch, path: "/dashboard/pipelines" },
   agent: { title: "Live Chat", subtitle: "Customer Support", icon: Headphones, path: "/dashboard/agent" },
   knowledge: { title: "Knowledge", subtitle: "RAG Documents", icon: BookOpen, path: "/dashboard/knowledge" },
   marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
@@ -431,6 +433,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
     if (pathname.startsWith("/dashboard/digital-employees")) return sections.digitalEmployees
     if (pathname.startsWith("/dashboard/messages")) return sections.messages
+    if (pathname.startsWith("/dashboard/pipelines")) return sections.pipelines
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/knowledge")) return sections.knowledge
     if (pathname.startsWith("/dashboard/marketplace")) return sections.marketplace

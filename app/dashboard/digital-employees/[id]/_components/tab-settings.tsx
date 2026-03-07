@@ -16,6 +16,7 @@ import { TabSkills } from "./tab-skills"
 import { ScheduleMonitor } from "./schedule-monitor"
 import { IntegrationGrid } from "./integration-grid"
 import { TriggerList } from "./trigger-list"
+import { CronBuilder } from "./cron-builder"
 import { TrustScoreCard } from "./trust-score-card"
 import type { ToolItem } from "@/hooks/use-tools"
 import type { SkillItem } from "@/hooks/use-skills"
@@ -177,6 +178,38 @@ export function TabSettings(props: TabSettingsProps) {
                         onLevelChange={props.fetchEmployee}
                       />
                     </div>
+                    <div className="px-5 max-w-lg">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch("/api/dashboard/templates", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                name: `${props.employee.name} Template`,
+                                description: props.employee.description || `Template based on ${props.employee.name}`,
+                                category: "custom",
+                                templateData: {
+                                  icon: props.employee.avatar,
+                                  autonomyLevel: props.employee.autonomyLevel,
+                                  assistantId: props.employee.assistantId,
+                                },
+                              }),
+                            })
+                            if (!res.ok) throw new Error("Failed")
+                            toast.success("Saved as template")
+                          } catch {
+                            toast.error("Failed to save template")
+                          }
+                        }}
+                      >
+                        <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                        Save as Template
+                      </Button>
+                    </div>
                   </div>
                 )}
                 {section.id === "integrations" && (
@@ -207,6 +240,18 @@ export function TabSettings(props: TabSettingsProps) {
                 {section.id === "triggers" && (
                   <div className="space-y-4">
                     <TriggerList employeeId={props.employee.id} />
+                    <div className="px-5">
+                      <div className="border-t pt-3 mb-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Cron Builder</p>
+                        <CronBuilder
+                          value=""
+                          onChange={(cron) => {
+                            // Copy to clipboard for use in trigger creation
+                            navigator.clipboard.writeText(cron).catch(() => {})
+                          }}
+                        />
+                      </div>
+                    </div>
                     <div className="px-5">
                       <div className="border-t pt-3">
                         <p className="text-xs font-medium text-muted-foreground mb-2">Heartbeat</p>

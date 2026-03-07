@@ -185,7 +185,11 @@ export function TabActivity({
             >
               <div className="flex items-start justify-between gap-2">
                 <div>
-                  <h4 className="text-sm font-medium">{approval.title}</h4>
+                  <h4 className="text-sm font-medium">
+                    {approval.requestType === "message_send"
+                      ? `\u{1F4E8} ${approval.title}`
+                      : approval.title}
+                  </h4>
                   {approval.description && (
                     <p className="text-xs text-muted-foreground mt-0.5">{approval.description}</p>
                   )}
@@ -375,6 +379,9 @@ function getEventDescription(event: { type: string; data: Record<string, unknown
     case "run_failed":
       return `Run failed${d.error ? `: ${d.error}` : ""}`
     case "approval_requested":
+      if (d.requestType === "message_send") {
+        return `Send ${(d as Record<string, unknown>).type || "message"} to employee: ${d.title}`
+      }
       return `Approval requested: ${d.title}`
     case "approval_responded":
       return `Approval ${(d.status as string).toLowerCase()}: ${d.title}`

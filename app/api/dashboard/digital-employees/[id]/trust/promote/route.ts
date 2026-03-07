@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
 import { AUTONOMY_LEVELS, mapLegacyAutonomy, computeTrustScore } from "@/lib/digital-employee/trust"
+import { logAudit, classifyActionRisk, AUDIT_ACTIONS } from "@/lib/digital-employee/audit"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -42,6 +43,16 @@ export async function POST(req: Request, { params }: RouteParams) {
         },
       }),
     ])
+
+    logAudit({
+      organizationId: employee.organizationId,
+      employeeId: id,
+      userId: session.user.id,
+      action: AUDIT_ACTIONS.EMPLOYEE_PROMOTE,
+      resource: `employee:${id}`,
+      detail: { fromLevel: currentLevel, toLevel: newLevel.code },
+      riskLevel: classifyActionRisk(AUDIT_ACTIONS.EMPLOYEE_PROMOTE),
+    }).catch(() => {})
 
     return NextResponse.json({ level: newLevel.code, label: newLevel.label })
   } catch (error) {

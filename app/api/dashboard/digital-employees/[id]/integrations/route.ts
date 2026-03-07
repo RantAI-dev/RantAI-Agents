@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
 import { getIntegrationDefinition, INTEGRATION_REGISTRY } from "@/lib/digital-employee/integrations"
 import { encryptCredential } from "@/lib/workflow/credentials"
+import { logAudit, classifyActionRisk, AUDIT_ACTIONS } from "@/lib/digital-employee/audit"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -82,6 +83,16 @@ export async function POST(req: Request, { params }: RouteParams) {
         lastError: null,
       },
     })
+
+    logAudit({
+      organizationId: employee.organizationId,
+      employeeId: id,
+      userId: session.user.id,
+      action: AUDIT_ACTIONS.INTEGRATION_CONNECT,
+      resource: `integration:${integrationId}`,
+      detail: { integrationId },
+      riskLevel: classifyActionRisk(AUDIT_ACTIONS.INTEGRATION_CONNECT),
+    }).catch(() => {})
 
     return NextResponse.json(integration)
   } catch (error) {

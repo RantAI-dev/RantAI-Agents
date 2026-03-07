@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
 import { mapLegacyAutonomy } from "@/lib/digital-employee/trust"
 import { hasPermission, canManageEmployee } from "@/lib/digital-employee/rbac"
+import { logAudit, classifyActionRisk, AUDIT_ACTIONS } from "@/lib/digital-employee/audit"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -126,6 +127,18 @@ export async function PUT(req: Request, { params }: RouteParams) {
       },
     })
 
+    if (orgContext) {
+      logAudit({
+        organizationId: orgContext.organizationId,
+        employeeId: id,
+        userId: session.user.id,
+        action: AUDIT_ACTIONS.EMPLOYEE_UPDATE,
+        resource: `employee:${id}`,
+        detail: { fields: Object.keys(body) },
+        riskLevel: classifyActionRisk(AUDIT_ACTIONS.EMPLOYEE_UPDATE),
+      }).catch(() => {})
+    }
+
     return NextResponse.json({
       ...employee,
       totalTokensUsed: employee.totalTokensUsed.toString(),
@@ -165,6 +178,18 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     await prisma.digitalEmployee.delete({
       where: { id },
     })
+
+    if (orgContext) {
+      logAudit({
+        organizationId: orgContext.organizationId,
+        employeeId: id,
+        userId: session.user.id,
+        action: AUDIT_ACTIONS.EMPLOYEE_DELETE,
+        resource: `employee:${id}`,
+        detail: { name: existing.name },
+        riskLevel: classifyActionRisk(AUDIT_ACTIONS.EMPLOYEE_DELETE),
+      }).catch(() => {})
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

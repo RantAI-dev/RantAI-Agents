@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
 import { MESSAGE_TYPES, MESSAGE_PRIORITIES } from "@/lib/digital-employee/messaging"
+import { logAudit, classifyActionRisk, AUDIT_ACTIONS } from "@/lib/digital-employee/audit"
 
 export async function POST(req: Request) {
   try {
@@ -82,6 +83,15 @@ export async function POST(req: Request) {
         })
       }
 
+      logAudit({
+        organizationId: sender.organizationId,
+        employeeId: employeeId,
+        action: AUDIT_ACTIONS.MESSAGE_SEND,
+        resource: `message:${message.id}`,
+        detail: { type, toEmployeeId, toGroup, subject, requiresApproval: true },
+        riskLevel: classifyActionRisk(AUDIT_ACTIONS.MESSAGE_SEND),
+      }).catch(() => {})
+
       return NextResponse.json({ success: true, messageId: message.id, requiresApproval: true })
     }
 
@@ -101,6 +111,15 @@ export async function POST(req: Request) {
         metadata: waitForResponse ? { waitForResponse: true } : {},
       },
     })
+
+    logAudit({
+      organizationId: sender.organizationId,
+      employeeId: employeeId,
+      action: AUDIT_ACTIONS.MESSAGE_SEND,
+      resource: `message:${message.id}`,
+      detail: { type, toEmployeeId, toGroup, subject },
+      riskLevel: classifyActionRisk(AUDIT_ACTIONS.MESSAGE_SEND),
+    }).catch(() => {})
 
     // For task messages with waitForResponse, indicate the agent should poll
     if (type === "task" && waitForResponse) {

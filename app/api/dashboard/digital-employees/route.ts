@@ -8,6 +8,7 @@ import {
   type WorkspaceFileContext,
 } from "@/lib/digital-employee/types"
 import { hasPermission } from "@/lib/digital-employee/rbac"
+import { logAudit, classifyActionRisk, AUDIT_ACTIONS } from "@/lib/digital-employee/audit"
 
 // GET /api/dashboard/digital-employees - List employees
 export async function GET(req: Request) {
@@ -181,6 +182,15 @@ export async function POST(req: Request) {
       })
     })
     await Promise.all(fileCreates)
+
+    logAudit({
+      organizationId: orgContext.organizationId,
+      userId: session.user.id,
+      action: AUDIT_ACTIONS.EMPLOYEE_CREATE,
+      resource: `employee:${employee.id}`,
+      detail: { name: employee.name },
+      riskLevel: classifyActionRisk(AUDIT_ACTIONS.EMPLOYEE_CREATE),
+    }).catch(() => {})
 
     return NextResponse.json(
       { ...employee, totalTokensUsed: employee.totalTokensUsed.toString() },
