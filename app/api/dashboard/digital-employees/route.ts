@@ -126,7 +126,7 @@ export async function POST(req: Request) {
         description: description || null,
         avatar: avatar || null,
         assistantId,
-        autonomyLevel: autonomyLevel || "supervised",
+        autonomyLevel: autonomyLevel || "L1",
         deploymentConfig: DEFAULT_DEPLOYMENT_CONFIG as object,
         organizationId: orgContext.organizationId,
         createdBy: session.user.id,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import { mapLegacyAutonomy } from "@/lib/digital-employee/trust"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -85,7 +86,11 @@ export async function PUT(req: Request, { params }: RouteParams) {
     const {
       name, description, avatar, assistantId, autonomyLevel,
       deploymentConfig, resourceLimits, gatewayConfig, supervisorId,
+      status,
     } = body
+
+    // Map legacy autonomy values to L-codes
+    const mappedAutonomy = autonomyLevel !== undefined ? mapLegacyAutonomy(autonomyLevel) : undefined
 
     const employee = await prisma.digitalEmployee.update({
       where: { id },
@@ -94,7 +99,8 @@ export async function PUT(req: Request, { params }: RouteParams) {
         ...(description !== undefined && { description }),
         ...(avatar !== undefined && { avatar }),
         ...(assistantId !== undefined && { assistantId }),
-        ...(autonomyLevel !== undefined && { autonomyLevel }),
+        ...(mappedAutonomy !== undefined && { autonomyLevel: mappedAutonomy }),
+        ...(status !== undefined && { status }),
         ...(deploymentConfig !== undefined && { deploymentConfig }),
         ...(resourceLimits !== undefined && { resourceLimits }),
         ...(gatewayConfig !== undefined && { gatewayConfig }),

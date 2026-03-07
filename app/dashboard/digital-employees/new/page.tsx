@@ -12,6 +12,7 @@ import {
   Loader2,
   Users,
   Zap,
+  Shield,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,18 +35,34 @@ const STEPS = [
 
 const AUTONOMY_LEVELS = [
   {
-    value: "supervised",
-    label: "Supervised",
+    value: "L1",
+    label: "L1 — Observer",
     icon: Eye,
-    description: "All actions require human approval before execution. Best for high-risk tasks and initial onboarding.",
+    description: "All actions require approval. Employee observes and learns. Best for initial onboarding.",
     className: "border-blue-500/30 hover:border-blue-500/60",
     badgeClass: "bg-blue-500/10 text-blue-500",
   },
   {
-    value: "autonomous",
-    label: "Autonomous",
+    value: "L2",
+    label: "L2 — Assistant",
+    icon: Shield,
+    description: "Low-risk actions auto-approved. Medium and high-risk actions need approval.",
+    className: "border-sky-500/30 hover:border-sky-500/60",
+    badgeClass: "bg-sky-500/10 text-sky-500",
+  },
+  {
+    value: "L3",
+    label: "L3 — Collaborator",
+    icon: Users,
+    description: "Low and medium-risk actions auto-approved. Only high-risk actions need approval.",
+    className: "border-emerald-500/30 hover:border-emerald-500/60",
+    badgeClass: "bg-emerald-500/10 text-emerald-500",
+  },
+  {
+    value: "L4",
+    label: "L4 — Autonomous",
     icon: Zap,
-    description: "Operates independently with full authority. Only escalates critical exceptions. Best for proven, low-risk workflows.",
+    description: "Full authority. Only escalates critical exceptions. Best for proven, low-risk workflows.",
     className: "border-purple-500/30 hover:border-purple-500/60",
     badgeClass: "bg-purple-500/10 text-purple-500",
   },
@@ -73,7 +90,7 @@ export default function NewDigitalEmployeePage() {
   const [avatar, setAvatar] = useState("🤖")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
-  const [autonomyLevel, setAutonomyLevel] = useState("supervised")
+  const [autonomyLevel, setAutonomyLevel] = useState("L1")
 
   const selectedAssistant = assistants.find((a) => a.id === selectedAssistantId)
 

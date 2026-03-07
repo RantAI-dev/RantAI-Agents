@@ -1,6 +1,6 @@
 // ─── Digital Employee Types ────────────────────────────────────────
 
-export type AutonomyLevel = "supervised" | "autonomous"
+export type AutonomyLevel = "L1" | "L2" | "L3" | "L4" | "supervised" | "autonomous"
 
 export interface EmployeeSchedule {
   id: string

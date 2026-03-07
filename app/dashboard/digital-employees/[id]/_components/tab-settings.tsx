@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import {
-  ChevronDown, Settings, Wrench, Sparkles, Calendar, Trash2, Plus,
+  ChevronDown, Settings, Wrench, Sparkles, Calendar, Trash2, Plus, Plug, Webhook,
 } from "@/lib/icons"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -14,6 +14,9 @@ import {
 import { TabTools } from "./tab-tools"
 import { TabSkills } from "./tab-skills"
 import { ScheduleMonitor } from "./schedule-monitor"
+import { IntegrationGrid } from "./integration-grid"
+import { TriggerList } from "./trigger-list"
+import { TrustScoreCard } from "./trust-score-card"
 import type { ToolItem } from "@/hooks/use-tools"
 import type { SkillItem } from "@/hooks/use-skills"
 import type { EmployeeSchedule, HeartbeatConfig } from "@/lib/digital-employee/types"
@@ -109,6 +112,7 @@ export function TabSettings(props: TabSettingsProps) {
   const totalEnabled = props.enabledToolIds.size + props.enabledSkillIds.size
   const sections: SectionConfig[] = [
     { id: "identity", label: "Identity", icon: Settings },
+    { id: "integrations", label: "Integrations", icon: Plug },
     {
       id: "tools-skills",
       label: "Tools & Skills",
@@ -116,9 +120,9 @@ export function TabSettings(props: TabSettingsProps) {
       badge: `${totalEnabled} enabled`,
     },
     {
-      id: "schedule",
-      label: "Schedule",
-      icon: Calendar,
+      id: "triggers",
+      label: "Triggers",
+      icon: Webhook,
       badge: props.schedules.length > 0 ? `${props.schedules.length} schedule${props.schedules.length !== 1 ? "s" : ""}` : undefined,
     },
     { id: "danger", label: "Danger Zone", icon: Trash2, danger: true },
@@ -161,10 +165,21 @@ export function TabSettings(props: TabSettingsProps) {
             <CollapsibleContent>
               <div className="pt-1 pb-3">
                 {section.id === "identity" && (
-                  <SettingsIdentity
-                    employee={props.employee}
-                    fetchEmployee={props.fetchEmployee}
-                  />
+                  <div className="space-y-4">
+                    <SettingsIdentity
+                      employee={props.employee}
+                      fetchEmployee={props.fetchEmployee}
+                    />
+                    <div className="px-5 max-w-lg">
+                      <TrustScoreCard
+                        employeeId={props.employee.id}
+                        onLevelChange={props.fetchEmployee}
+                      />
+                    </div>
+                  </div>
+                )}
+                {section.id === "integrations" && (
+                  <IntegrationGrid employeeId={props.employee.id} />
                 )}
                 {section.id === "tools-skills" && (
                   <ToolsSkillsCombined
@@ -188,13 +203,21 @@ export function TabSettings(props: TabSettingsProps) {
                     autoRedeploy={props.autoRedeploy}
                   />
                 )}
-                {section.id === "schedule" && (
-                  <ScheduleMonitor
-                    schedules={props.schedules}
-                    runs={props.runs}
-                    heartbeat={(props.employee.deploymentConfig as any)?.heartbeat}
-                    onUpdateHeartbeat={props.onUpdateHeartbeat}
-                  />
+                {section.id === "triggers" && (
+                  <div className="space-y-4">
+                    <TriggerList employeeId={props.employee.id} />
+                    <div className="px-5">
+                      <div className="border-t pt-3">
+                        <p className="text-xs font-medium text-muted-foreground mb-2">Heartbeat</p>
+                        <ScheduleMonitor
+                          schedules={props.schedules}
+                          runs={props.runs}
+                          heartbeat={(props.employee.deploymentConfig as any)?.heartbeat}
+                          onUpdateHeartbeat={props.onUpdateHeartbeat}
+                        />
+                      </div>
+                    </div>
+                  </div>
                 )}
                 {section.id === "danger" && (
                   <SettingsDanger
@@ -283,8 +306,10 @@ function SettingsIdentity({
         <Select value={settingsAutonomy} onValueChange={setSettingsAutonomy}>
           <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="supervised">Supervised</SelectItem>
-            <SelectItem value="autonomous">Autonomous</SelectItem>
+            <SelectItem value="L1">L1 — Observer (all actions need approval)</SelectItem>
+            <SelectItem value="L2">L2 — Assistant (low-risk auto-approved)</SelectItem>
+            <SelectItem value="L3">L3 — Collaborator (medium-risk auto-approved)</SelectItem>
+            <SelectItem value="L4">L4 — Autonomous (full authority)</SelectItem>
           </SelectContent>
         </Select>
       </div>
