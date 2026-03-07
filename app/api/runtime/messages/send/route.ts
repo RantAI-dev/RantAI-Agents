@@ -52,6 +52,11 @@ export async function POST(req: Request) {
       },
     })
 
+    // For task messages with waitForResponse, indicate the agent should poll
+    if (type === "task" && waitForResponse) {
+      return NextResponse.json({ success: true, messageId: message.id, waitingForResponse: true })
+    }
+
     return NextResponse.json({ success: true, messageId: message.id })
   } catch (error) {
     console.error("Failed to send message:", error)

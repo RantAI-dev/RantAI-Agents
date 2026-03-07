@@ -89,6 +89,7 @@ export interface WorkspaceFileContext {
   skillNames: string[]
   workflowNames: string[]
   schedules: EmployeeSchedule[]
+  coworkers?: Array<{ name: string; description?: string | null; avatar?: string | null; status: string }>
 }
 
 export const WORKSPACE_FILES: WorkspaceFileDefinition[] = [
@@ -137,6 +138,20 @@ export const WORKSPACE_FILES: WorkspaceFileDefinition[] = [
     defaultContent: (ctx) => {
       if (ctx.schedules.length === 0) return "# Heartbeat\n\n_No schedules configured._\n"
       return `# Heartbeat\n\n${ctx.schedules.map((s) => `- **${s.name}**: \`${s.cron}\` ${s.enabled ? "(active)" : "(disabled)"}`).join("\n")}\n`
+    },
+  },
+  {
+    filename: "TEAM.md",
+    purpose: "Coworkers and communication guide",
+    readOnly: true,
+    defaultContent: (ctx) => {
+      if (!ctx.coworkers || ctx.coworkers.length === 0) {
+        return "# Team\n\n_No coworkers in this organization._\n"
+      }
+      const list = ctx.coworkers
+        .map((c) => `- **${c.name}** (${c.avatar || "🤖"}) — ${c.description || "Digital employee"}. Status: ${c.status}.`)
+        .join("\n")
+      return `# Team\n\n## Coworkers\n${list}\n\n## Communication\n- Use \`send_message\` to message a coworker\n- Use \`check_inbox\` to see replies\n- Use \`list_employees\` to discover available team members\n`
     },
   },
   {

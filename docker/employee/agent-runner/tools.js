@@ -815,6 +815,26 @@ function registerTools(pkg, platformApiUrl, runtimeToken) {
     },
   })
 
+  tools.push({
+    name: "check_task_status",
+    description: "Check the status of a delegated task message. Returns the current status and response if completed.",
+    parameters: {
+      type: "object",
+      properties: {
+        messageId: { type: "string", description: "The task message ID to check" },
+      },
+      required: ["messageId"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/messages/${input.messageId}/status?employeeId=${pkg.employee.id}`, {
+        headers: { Authorization: `Bearer ${runtimeToken}` },
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to check status" } }
+      return res.json()
+    },
+  })
+
   // Autonomy-gated tools
   const permissions = pkg.deploymentConfig?.permissions || {}
   if (permissions.canCreateTools) {

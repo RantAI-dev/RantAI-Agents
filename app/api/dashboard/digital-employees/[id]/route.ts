@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
 import { mapLegacyAutonomy } from "@/lib/digital-employee/trust"
+import { hasPermission, canManageEmployee } from "@/lib/digital-employee/rbac"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -83,6 +84,10 @@ export async function PUT(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
+    if (orgContext && !canManageEmployee(orgContext.membership.role, session.user.id, existing)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    }
+
     const {
       name, description, avatar, assistantId, autonomyLevel,
       deploymentConfig, resourceLimits, gatewayConfig, supervisorId,
@@ -151,6 +156,10 @@ export async function DELETE(req: Request, { params }: RouteParams) {
 
     if (!existing) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
+    if (orgContext && !hasPermission(orgContext.membership.role, "employee.delete")) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
     await prisma.digitalEmployee.delete({

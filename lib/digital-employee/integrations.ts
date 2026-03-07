@@ -4,7 +4,7 @@ export interface IntegrationDefinition {
   description: string
   icon: string  // emoji
   category: "communication" | "development" | "productivity" | "custom"
-  setupType: "api-key" | "oauth" | "credentials" | "chat-guided" | "custom"
+  setupType: "api-key" | "oauth" | "credentials" | "chat-guided" | "custom" | "manual"
   fields: Array<{
     key: string
     label: string
@@ -24,7 +24,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     description: "Send and receive messages in Slack channels",
     icon: "\u{1F4AC}",
     category: "communication",
-    setupType: "oauth",
+    setupType: "api-key",
     fields: [
       { key: "botToken", label: "Bot Token", type: "password", required: true, placeholder: "xoxb-...", helpText: "Found in your Slack app settings" },
       { key: "signingSecret", label: "Signing Secret", type: "password", required: true },
@@ -53,6 +53,33 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     fields: [
       { key: "clientId", label: "Client ID", type: "text", required: true },
       { key: "clientSecret", label: "Client Secret", type: "password", required: true },
+      { key: "refreshToken", label: "Refresh Token", type: "password", required: true, helpText: "OAuth refresh token for offline access" },
+    ],
+  },
+  {
+    id: "google-calendar",
+    name: "Google Calendar",
+    description: "Manage events and schedules in Google Calendar",
+    icon: "\u{1F4C5}",
+    category: "productivity",
+    setupType: "oauth",
+    fields: [
+      { key: "clientId", label: "Client ID", type: "text", required: true },
+      { key: "clientSecret", label: "Client Secret", type: "password", required: true },
+      { key: "refreshToken", label: "Refresh Token", type: "password", required: true, helpText: "OAuth refresh token for offline access" },
+    ],
+  },
+  {
+    id: "google-drive",
+    name: "Google Drive",
+    description: "Access and manage files in Google Drive",
+    icon: "\u{1F4C1}",
+    category: "productivity",
+    setupType: "oauth",
+    fields: [
+      { key: "clientId", label: "Client ID", type: "text", required: true },
+      { key: "clientSecret", label: "Client Secret", type: "password", required: true },
+      { key: "refreshToken", label: "Refresh Token", type: "password", required: true, helpText: "OAuth refresh token for offline access" },
     ],
   },
   {
@@ -97,12 +124,13 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     description: "Send emails via any SMTP server",
     icon: "\u2709\uFE0F",
     category: "communication",
-    setupType: "credentials",
+    setupType: "manual",
     fields: [
-      { key: "host", label: "SMTP Host", type: "text", required: true, placeholder: "smtp.gmail.com" },
+      { key: "host", label: "Host", type: "text", required: true, placeholder: "smtp.gmail.com" },
       { key: "port", label: "Port", type: "text", required: true, placeholder: "587" },
       { key: "username", label: "Username", type: "text", required: true },
       { key: "password", label: "Password", type: "password", required: true },
+      { key: "fromAddress", label: "From Address", type: "text", required: true, placeholder: "noreply@example.com", helpText: "The email address to send from" },
     ],
   },
   {
@@ -111,7 +139,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     description: "Connect to any REST API with custom credentials",
     icon: "\u{1F50C}",
     category: "custom",
-    setupType: "credentials",
+    setupType: "manual",
     fields: [
       { key: "baseUrl", label: "Base URL", type: "url", required: true, placeholder: "https://api.example.com" },
       { key: "apiKey", label: "API Key", type: "password", required: false },

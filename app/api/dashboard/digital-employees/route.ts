@@ -7,6 +7,7 @@ import {
   DEFAULT_DEPLOYMENT_CONFIG,
   type WorkspaceFileContext,
 } from "@/lib/digital-employee/types"
+import { hasPermission } from "@/lib/digital-employee/rbac"
 
 // GET /api/dashboard/digital-employees - List employees
 export async function GET(req: Request) {
@@ -90,6 +91,10 @@ export async function POST(req: Request) {
 
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
+    }
+
+    if (!hasPermission(orgContext.membership.role, "employee.create")) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
     const body = await req.json()

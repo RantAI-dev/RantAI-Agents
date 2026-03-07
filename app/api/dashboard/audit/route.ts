@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import { hasPermission } from "@/lib/digital-employee/rbac"
 
 // GET /api/dashboard/audit — query audit logs with filters
 export async function GET(req: Request) {
@@ -14,6 +15,10 @@ export async function GET(req: Request) {
     const orgContext = await getOrganizationContext(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
+    }
+
+    if (!hasPermission(orgContext.membership.role, "audit.read")) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
     const { searchParams } = new URL(req.url)

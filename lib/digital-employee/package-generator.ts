@@ -51,6 +51,16 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
     orderBy: { updatedAt: "desc" },
   })
 
+  // Fetch coworkers for TEAM.md
+  const coworkers = await prisma.digitalEmployee.findMany({
+    where: {
+      organizationId: employee.organizationId,
+      id: { not: employeeId },
+      status: { in: ["ACTIVE", "PAUSED", "ONBOARDING"] },
+    },
+    select: { name: true, description: true, avatar: true, status: true },
+  })
+
   // Build workspace file context
   const ctx: WorkspaceFileContext = {
     employeeName: employee.name,
@@ -61,6 +71,7 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
     skillNames: assistant.skills.map((s) => s.skill.displayName || s.skill.name),
     workflowNames: assistant.assistantWorkflows.map((aw) => aw.workflow.name),
     schedules: deploymentConfig.schedules,
+    coworkers,
   }
 
   // Resolve workspace files: use DB files for user-editable ones,
