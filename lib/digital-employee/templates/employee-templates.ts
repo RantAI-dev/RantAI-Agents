@@ -1,3 +1,12 @@
+export interface TemplateBlueprint {
+  tools?: string[]
+  skills?: string[]
+  integrations?: string[]
+  schedules?: Array<{ name: string; cron: string }>
+  goals?: Array<{ name: string; type: string; target: number; unit: string; period: string }>
+  sampleTasks?: string[]
+}
+
 export interface EmployeeTemplate {
   id: string
   name: string
@@ -11,6 +20,7 @@ export interface EmployeeTemplate {
     avatar: string
   }
   tags: string[]
+  blueprint?: TemplateBlueprint
 }
 
 export const EMPLOYEE_TEMPLATES: EmployeeTemplate[] = [
@@ -27,6 +37,14 @@ export const EMPLOYEE_TEMPLATES: EmployeeTemplate[] = [
       avatar: "🎧",
     },
     tags: ["support", "tickets", "customer"],
+    blueprint: {
+      integrations: ["slack", "gmail"],
+      goals: [
+        { name: "Tickets Resolved", type: "counter", target: 20, unit: "tickets", period: "daily" },
+        { name: "Response Time", type: "threshold", target: 5, unit: "minutes", period: "daily" },
+      ],
+      sampleTasks: ["Respond to new support tickets", "Escalate complex issues to supervisor"],
+    },
   },
   {
     id: "code-reviewer",
@@ -41,6 +59,13 @@ export const EMPLOYEE_TEMPLATES: EmployeeTemplate[] = [
       avatar: "🔍",
     },
     tags: ["code", "review", "engineering"],
+    blueprint: {
+      integrations: ["github"],
+      goals: [
+        { name: "PRs Reviewed", type: "counter", target: 10, unit: "PRs", period: "weekly" },
+      ],
+      sampleTasks: ["Review new pull requests", "Check code quality and suggest improvements"],
+    },
   },
   {
     id: "content-writer",
@@ -55,6 +80,14 @@ export const EMPLOYEE_TEMPLATES: EmployeeTemplate[] = [
       avatar: "✍️",
     },
     tags: ["content", "writing", "marketing"],
+    blueprint: {
+      integrations: ["notion"],
+      schedules: [{ name: "Weekly Content Plan", cron: "0 9 * * 1" }],
+      goals: [
+        { name: "Articles Written", type: "counter", target: 3, unit: "articles", period: "weekly" },
+      ],
+      sampleTasks: ["Draft a blog post on a given topic", "Create social media copy for a campaign"],
+    },
   },
   {
     id: "data-analyst",
@@ -69,6 +102,13 @@ export const EMPLOYEE_TEMPLATES: EmployeeTemplate[] = [
       avatar: "📊",
     },
     tags: ["data", "analytics", "reports"],
+    blueprint: {
+      schedules: [{ name: "Daily Report", cron: "0 8 * * *" }],
+      goals: [
+        { name: "Reports Generated", type: "counter", target: 5, unit: "reports", period: "weekly" },
+      ],
+      sampleTasks: ["Generate a daily sales summary", "Identify trends in user engagement data"],
+    },
   },
   {
     id: "research-assistant",
@@ -83,6 +123,12 @@ export const EMPLOYEE_TEMPLATES: EmployeeTemplate[] = [
       avatar: "🔬",
     },
     tags: ["research", "analysis", "reports"],
+    blueprint: {
+      goals: [
+        { name: "Research Reports", type: "counter", target: 2, unit: "reports", period: "weekly" },
+      ],
+      sampleTasks: ["Research a given topic and summarize findings", "Compile a competitive analysis report"],
+    },
   },
   {
     id: "social-media-manager",
@@ -97,6 +143,15 @@ export const EMPLOYEE_TEMPLATES: EmployeeTemplate[] = [
       avatar: "📱",
     },
     tags: ["social", "media", "marketing"],
+    blueprint: {
+      integrations: ["slack", "discord"],
+      schedules: [{ name: "Daily Posting", cron: "0 10 * * *" }],
+      goals: [
+        { name: "Posts Published", type: "counter", target: 5, unit: "posts", period: "weekly" },
+        { name: "Engagement Rate", type: "percentage", target: 5, unit: "%", period: "weekly" },
+      ],
+      sampleTasks: ["Schedule social media posts", "Respond to comments and messages"],
+    },
   },
   {
     id: "devops-monitor",
@@ -111,6 +166,15 @@ export const EMPLOYEE_TEMPLATES: EmployeeTemplate[] = [
       avatar: "🖥️",
     },
     tags: ["devops", "monitoring", "infrastructure"],
+    blueprint: {
+      integrations: ["slack", "github"],
+      schedules: [{ name: "Health Check", cron: "*/15 * * * *" }],
+      goals: [
+        { name: "Incidents Detected", type: "counter", target: 0, unit: "incidents", period: "daily" },
+        { name: "Uptime", type: "percentage", target: 99.9, unit: "%", period: "monthly" },
+      ],
+      sampleTasks: ["Monitor service health endpoints", "Alert on anomalies and run basic remediation"],
+    },
   },
   {
     id: "meeting-assistant",
@@ -125,5 +189,12 @@ export const EMPLOYEE_TEMPLATES: EmployeeTemplate[] = [
       avatar: "📅",
     },
     tags: ["meetings", "notes", "productivity"],
+    blueprint: {
+      integrations: ["slack", "gmail"],
+      goals: [
+        { name: "Meetings Summarized", type: "counter", target: 10, unit: "meetings", period: "weekly" },
+      ],
+      sampleTasks: ["Summarize meeting notes and extract action items", "Send follow-up emails with action items"],
+    },
   },
 ]

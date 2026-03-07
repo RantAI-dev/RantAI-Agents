@@ -61,3 +61,76 @@ export const GOAL_PERIODS = [
   { value: "monthly", label: "Monthly" },
   { value: "total", label: "All time" },
 ] as const
+
+// ── Goal-Based Triggering ──
+
+export type GoalAction = "none" | "alert" | "increase_frequency" | "auto_schedule"
+
+export function getGoalTriggeredAction(goal: {
+  type: string
+  currentValue: number
+  target: number
+  period: string
+  status: string
+}): { action: GoalAction; reason: string } {
+  const { progress, status } = computeGoalProgress(goal)
+
+  // Already completed or exceeded — no action needed
+  if (status === "completed" || status === "exceeded") {
+    return { action: "none", reason: "Goal met" }
+  }
+
+  // Behind with less than 25% of period remaining — alert supervisor
+  if (status === "behind" && progress < 40) {
+    return { action: "alert", reason: `Only ${Math.round(progress)}% progress — may miss target` }
+  }
+
+  // Behind but recoverable — increase run frequency
+  if (status === "behind" && progress < 60) {
+    return { action: "increase_frequency", reason: `Behind at ${Math.round(progress)}% — more runs may help` }
+  }
+
+  // On track but close to deadline with low progress — schedule extra run
+  if (status === "on_track" && progress < 75) {
+    return { action: "auto_schedule", reason: `On track at ${Math.round(progress)}% — scheduling run to stay ahead` }
+  }
+
+  return { action: "none", reason: "On track" }
+}
+
+// ── Performance Summary ──
+
+export function computeGoalPerformanceSummary(goals: Array<{
+  name: string
+  type: string
+  currentValue: number
+  target: number
+  period: string
+  status: string
+}>): {
+  totalGoals: number
+  completed: number
+  onTrack: number
+  behind: number
+  completionRate: number
+} {
+  const total = goals.length
+  let completed = 0
+  let onTrack = 0
+  let behind = 0
+
+  for (const goal of goals) {
+    const { status } = computeGoalProgress(goal)
+    if (status === "completed" || status === "exceeded") completed++
+    else if (status === "on_track") onTrack++
+    else behind++
+  }
+
+  return {
+    totalGoals: total,
+    completed,
+    onTrack,
+    behind,
+    completionRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+  }
+}

@@ -603,6 +603,45 @@ function registerTools(pkg, platformApiUrl, runtimeToken) {
     },
   })
 
+  // ── Configure integration tool ──
+
+  tools.push({
+    name: "configure_integration",
+    description:
+      "Configure or update settings for an integration. Use this to set up webhooks, " +
+      "channels, notification preferences, or other integration-specific configuration.",
+    parameters: {
+      type: "object",
+      properties: {
+        integrationId: { type: "string", description: "The integration ID (e.g. 'slack', 'github')" },
+        config: { type: "object", description: "Configuration object (varies by integration)" },
+      },
+      required: ["integrationId", "config"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      // Update integration metadata with the provided config
+      const res = await fetch(`${platformApiUrl}/api/runtime/integrations/store-credentials`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          integrationId: input.integrationId,
+          credentials: {},
+          metadata: input.config,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to configure integration" }
+      }
+      return res.json()
+    },
+  })
+
   // ── Goal tracking tool ──
 
   tools.push({

@@ -127,6 +127,7 @@ export async function POST(req: Request) {
         avatar: avatar || null,
         assistantId,
         autonomyLevel: autonomyLevel || "L1",
+        sandboxMode: (autonomyLevel || "L1") === "L1",
         deploymentConfig: DEFAULT_DEPLOYMENT_CONFIG as object,
         organizationId: orgContext.organizationId,
         createdBy: session.user.id,

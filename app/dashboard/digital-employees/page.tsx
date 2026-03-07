@@ -376,7 +376,15 @@ export default function DigitalEmployeesPage() {
                           >
                             {autonomy.label}
                           </Badge>
-                          {(emp as Record<string, unknown>).sandboxMode && (
+                          {emp.status === "ONBOARDING" && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] px-1.5 py-0.5 shrink-0 bg-sky-500/10 text-sky-500"
+                            >
+                              Onboarding
+                            </Badge>
+                          )}
+                          {"sandboxMode" in emp && !!(emp as unknown as Record<string, unknown>).sandboxMode && (
                             <Badge
                               variant="secondary"
                               className="text-[10px] px-1.5 py-0.5 shrink-0 bg-amber-500/10 text-amber-500"

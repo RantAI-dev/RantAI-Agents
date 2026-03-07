@@ -9,13 +9,16 @@ export async function POST(req: Request) {
     if (!bearerToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     await verifyRuntimeToken(bearerToken)
 
-    const { employeeId, integrationId, credentials, expiresIn } = await req.json()
-    if (!employeeId || !integrationId || !credentials) {
+    const { employeeId, integrationId, credentials, expiresIn, metadata } = await req.json()
+    if (!employeeId || !integrationId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    // Encrypt the credentials
-    const encryptedData = encryptCredential(credentials as Record<string, unknown>)
+    // Encrypt the credentials (may be empty for config-only updates)
+    const hasCredentials = credentials && Object.keys(credentials).length > 0
+    const encryptedData = hasCredentials
+      ? encryptCredential(credentials as Record<string, unknown>)
+      : undefined
 
     const expiresAt = expiresIn
       ? new Date(Date.now() + expiresIn * 1000)
@@ -32,17 +35,17 @@ export async function POST(req: Request) {
       create: {
         digitalEmployeeId: employeeId,
         integrationId,
-        status: "connected",
-        encryptedData,
-        connectedAt: new Date(),
+        status: hasCredentials ? "connected" : "disconnected",
+        ...(encryptedData && { encryptedData }),
+        ...(hasCredentials && { connectedAt: new Date() }),
         expiresAt,
+        ...(metadata && { metadata }),
       },
       update: {
-        status: "connected",
-        encryptedData,
-        connectedAt: new Date(),
+        ...(hasCredentials && { status: "connected", encryptedData, connectedAt: new Date() }),
         expiresAt,
         lastError: null,
+        ...(metadata && { metadata }),
       },
     })
 

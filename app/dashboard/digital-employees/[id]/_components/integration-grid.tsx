@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Plug, Check, X, Loader2, AlertCircle } from "@/lib/icons"
+import { Plug, Check, X, Loader2, AlertCircle, Eye } from "@/lib/icons"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -26,6 +26,7 @@ export function IntegrationGrid({ employeeId, onOpenChat }: IntegrationGridProps
   const { integrations, isLoading, connectIntegration, disconnectIntegration, testIntegration } = useEmployeeIntegrations(employeeId)
   const [selectedIntegration, setSelectedIntegration] = useState<EmployeeIntegrationItem | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
+  const [revealedCreds, setRevealedCreds] = useState<Set<string>>(new Set())
 
   const handleTest = async (integrationId: string) => {
     setTestingId(integrationId)
@@ -83,6 +84,33 @@ export function IntegrationGrid({ employeeId, onOpenChat }: IntegrationGridProps
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{item.description}</p>
+                    {/* Masked credential display for connected integrations */}
+                    {item.status === "connected" && item.fields.length > 0 && (
+                      <div className="mt-1.5 space-y-0.5">
+                        {item.fields.slice(0, 2).map((field) => (
+                          <div key={field.key} className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <span className="w-16 truncate">{field.label}:</span>
+                            <span className="font-mono">
+                              {revealedCreds.has(`${item.id}:${field.key}`)
+                                ? (item.metadata?.[field.key] as string || "••••••••")
+                                : "••••••••"}
+                            </span>
+                            <button
+                              className="ml-0.5 hover:text-foreground transition-colors"
+                              onClick={() => setRevealedCreds((prev) => {
+                                const next = new Set(prev)
+                                const key = `${item.id}:${field.key}`
+                                if (next.has(key)) next.delete(key)
+                                else next.add(key)
+                                return next
+                              })}
+                            >
+                              <Eye className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 mt-2">
                       {item.status === "disconnected" ? (
                         <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => setSelectedIntegration(item)}>
