@@ -39,6 +39,22 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   json_transform: "Transforming JSON",
   text_utilities: "Processing text",
   code_interpreter: "Running code",
+  // RantaiClaw agent tools
+  shell: "Running command",
+  file_read: "Reading file",
+  file_write: "Writing file",
+  memory_store: "Saving to memory",
+  memory_recall: "Recalling memory",
+  browser: "Browsing web page",
+  install_packages: "Installing packages",
+  install_skill: "Installing skill",
+  search_skills: "Searching skills",
+  list_my_skills: "Listing skills",
+  list_my_tools: "Listing tools",
+  update_memory: "Updating memory",
+  write_note: "Writing note",
+  search_memory: "Searching memory",
+  create_tool: "Creating tool",
 }
 
 // Tool-specific icons
@@ -54,6 +70,22 @@ const TOOL_ICONS: Record<string, typeof Wrench> = {
   json_transform: Code,
   text_utilities: Type,
   code_interpreter: Terminal,
+  // RantaiClaw agent tools
+  shell: Terminal,
+  file_read: FileText,
+  file_write: FileText,
+  memory_store: Database,
+  memory_recall: Search,
+  browser: Globe,
+  install_packages: Download,
+  install_skill: Download,
+  search_skills: Search,
+  list_my_skills: BookOpen,
+  list_my_tools: Wrench,
+  update_memory: Database,
+  write_note: FileText,
+  search_memory: Search,
+  create_tool: Wrench,
 }
 
 type ToolState =

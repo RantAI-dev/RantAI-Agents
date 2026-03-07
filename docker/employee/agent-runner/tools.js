@@ -9,6 +9,48 @@
 
 const vm = require("vm")
 
+/**
+ * Intercept OAuth callback URLs (http://127.0.0.1:<port>/...) in tool output
+ * and rewrite them to go through the gateway's OAuth proxy.
+ *
+ * This enables OAuth flows from tools running inside the container to work
+ * when the user's browser can't reach 127.0.0.1 inside the container.
+ */
+const OAUTH_URL_RE = /https?:\/\/(?:127\.0\.0\.1|localhost):(\d+)(\/[^\s"'<>]*)/g
+
+async function rewriteOAuthUrls(text, gatewayUrl) {
+  if (typeof text !== "string") return text
+
+  const matches = [...text.matchAll(OAUTH_URL_RE)]
+  if (matches.length === 0) return text
+
+  let result = text
+  for (const match of matches) {
+    const port = parseInt(match[1], 10)
+    const pathAndQuery = match[2]
+
+    try {
+      // Register port with gateway OAuth proxy
+      const res = await fetch(`${gatewayUrl}/internal/oauth-proxy/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ port, path_prefix: pathAndQuery.split("?")[0] }),
+      })
+      if (!res.ok) continue
+
+      const data = await res.json()
+      const sessionId = data.session_id
+      // Rewrite: http://127.0.0.1:37785/oauth2/callback → <gatewayUrl>/oauth-proxy/<session_id>/oauth2/callback
+      const newUrl = `${gatewayUrl}/oauth-proxy/${sessionId}${pathAndQuery}`
+      result = result.replace(match[0], newUrl)
+    } catch {
+      // Registration failed, leave URL unchanged
+    }
+  }
+
+  return result
+}
+
 function registerTools(pkg, platformApiUrl, runtimeToken) {
   const tools = []
 
@@ -249,6 +291,550 @@ function registerTools(pkg, platformApiUrl, runtimeToken) {
       },
     })
 
+  // Package installation tool — allows the employee to install system & runtime packages on demand
+  tools.push({
+    name: "install_packages",
+    description:
+      "Install system (apt), runtime (npm/bun/pip), brew, or cargo packages. " +
+      "Use this when a skill or task requires tools that aren't pre-installed. " +
+      "Examples: install_packages({apt: ['ffmpeg']}), " +
+      "install_packages({brew: ['gog']}), " +
+      "install_packages({cargo: ['ripgrep']}), " +
+      "install_packages({npm: ['playwright']}), " +
+      "install_packages({pip: ['pandas']})",
+    parameters: {
+      type: "object",
+      properties: {
+        apt: {
+          type: "array",
+          items: { type: "string" },
+          description: "System packages to install via apt-get (e.g. ['libglib2.0-0', 'ffmpeg'])",
+        },
+        brew: {
+          type: "array",
+          items: { type: "string" },
+          description: "Homebrew packages to install (e.g. ['gog', 'gh']). Installs Homebrew first if needed.",
+        },
+        cargo: {
+          type: "array",
+          items: { type: "string" },
+          description: "Rust crates to install via cargo install (e.g. ['ripgrep', 'gog'])",
+        },
+        npm: {
+          type: "array",
+          items: { type: "string" },
+          description: "Node.js packages to install via bun/npm (e.g. ['playwright', 'cheerio'])",
+        },
+        pip: {
+          type: "array",
+          items: { type: "string" },
+          description: "Python packages to install via pip (e.g. ['pandas', 'requests'])",
+        },
+        global: {
+          type: "boolean",
+          description: "Install npm packages globally (default: true)",
+        },
+        playwright_browsers: {
+          type: "boolean",
+          description: "Also run 'bunx playwright install chromium' after installing playwright npm package",
+        },
+      },
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const { execSync } = require("child_process")
+      const results = { apt: null, brew: null, cargo: null, npm: null, pip: null, playwright: null }
+      const errors = []
+
+      // Blocklist: prevent installing packages that could compromise the container
+      const aptBlocklist = ["passwd", "login", "openssh-server"]
+
+      try {
+        // APT packages
+        if (input.apt && input.apt.length > 0) {
+          const blocked = input.apt.filter((p) => aptBlocklist.includes(p))
+          if (blocked.length > 0) {
+            errors.push(`Blocked apt packages: ${blocked.join(", ")}`)
+          }
+          const safe = input.apt.filter((p) => !aptBlocklist.includes(p))
+          if (safe.length > 0) {
+            // Sanitize: only allow alphanumeric, hyphens, dots, colons, plus signs
+            const sanitized = safe.filter((p) => /^[a-zA-Z0-9][a-zA-Z0-9.\-+:]*$/.test(p))
+            if (sanitized.length > 0) {
+              try {
+                execSync(`apt-get update -qq && apt-get install -y --no-install-recommends ${sanitized.join(" ")}`, {
+                  timeout: 120000,
+                  stdio: "pipe",
+                })
+                results.apt = { installed: sanitized }
+              } catch (e) {
+                errors.push(`apt install failed: ${e.message.slice(0, 200)}`)
+              }
+            }
+          }
+        }
+
+        // Homebrew packages — install Homebrew first if needed
+        if (input.brew && input.brew.length > 0) {
+          const sanitized = input.brew.filter((p) => /^[a-zA-Z0-9][a-zA-Z0-9.\-_/@]*$/.test(p))
+          if (sanitized.length > 0) {
+            try {
+              // Check if brew is installed, install it if not
+              try {
+                execSync("which brew", { stdio: "pipe", timeout: 5000 })
+              } catch {
+                // Install Homebrew (runs as root in container — use NONINTERACTIVE)
+                execSync(
+                  'NONINTERACTIVE=1 bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"',
+                  { timeout: 300000, stdio: "pipe", env: { ...process.env, NONINTERACTIVE: "1" } }
+                )
+                // Add brew to PATH for this session
+                const brewPaths = ["/home/linuxbrew/.linuxbrew/bin", "/opt/homebrew/bin", "/usr/local/bin"]
+                for (const bp of brewPaths) {
+                  try {
+                    execSync(`test -x ${bp}/brew`, { stdio: "pipe", timeout: 2000 })
+                    process.env.PATH = `${bp}:${process.env.PATH}`
+                    break
+                  } catch { /* try next */ }
+                }
+              }
+              execSync(`brew install ${sanitized.join(" ")}`, {
+                timeout: 300000,
+                stdio: "pipe",
+                env: process.env,
+              })
+              results.brew = { installed: sanitized }
+            } catch (e) {
+              errors.push(`brew install failed: ${e.message.slice(0, 300)}`)
+            }
+          }
+        }
+
+        // Cargo packages — uses the Rust toolchain already in the image
+        if (input.cargo && input.cargo.length > 0) {
+          const sanitized = input.cargo.filter((p) => /^[a-zA-Z0-9][a-zA-Z0-9.\-_]*$/.test(p))
+          if (sanitized.length > 0) {
+            try {
+              // Check if cargo is available (it's in the builder stage but not runtime by default)
+              try {
+                execSync("which cargo", { stdio: "pipe", timeout: 5000 })
+              } catch {
+                // Install minimal Rust toolchain
+                execSync(
+                  'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal',
+                  { timeout: 120000, stdio: "pipe" }
+                )
+                process.env.PATH = `/root/.cargo/bin:${process.env.PATH}`
+              }
+              execSync(`cargo install ${sanitized.join(" ")}`, {
+                timeout: 600000,
+                stdio: "pipe",
+                env: process.env,
+              })
+              results.cargo = { installed: sanitized }
+            } catch (e) {
+              errors.push(`cargo install failed: ${e.message.slice(0, 300)}`)
+            }
+          }
+        }
+
+        // NPM/Bun packages
+        if (input.npm && input.npm.length > 0) {
+          const sanitized = input.npm.filter((p) => /^[@a-zA-Z0-9][a-zA-Z0-9.\-_/@]*$/.test(p))
+          if (sanitized.length > 0) {
+            try {
+              const globalFlag = input.global !== false ? "-g" : ""
+              execSync(`bun install ${globalFlag} ${sanitized.join(" ")}`, {
+                timeout: 120000,
+                stdio: "pipe",
+                cwd: "/data/workspace",
+              })
+              results.npm = { installed: sanitized }
+            } catch (e) {
+              errors.push(`npm install failed: ${e.message.slice(0, 200)}`)
+            }
+          }
+        }
+
+        // Pip packages
+        if (input.pip && input.pip.length > 0) {
+          const sanitized = input.pip.filter((p) => /^[a-zA-Z0-9][a-zA-Z0-9.\-_\[\]]*$/.test(p))
+          if (sanitized.length > 0) {
+            try {
+              execSync(`pip install --break-system-packages ${sanitized.join(" ")}`, {
+                timeout: 120000,
+                stdio: "pipe",
+              })
+              results.pip = { installed: sanitized }
+            } catch (e) {
+              errors.push(`pip install failed: ${e.message.slice(0, 200)}`)
+            }
+          }
+        }
+
+        // Playwright browsers
+        if (input.playwright_browsers) {
+          try {
+            execSync("bunx playwright install chromium", {
+              timeout: 180000,
+              stdio: "pipe",
+            })
+            results.playwright = { installed: "chromium" }
+          } catch (e) {
+            errors.push(`Playwright browser install failed: ${e.message.slice(0, 200)}`)
+          }
+        }
+      } catch (e) {
+        errors.push(`Unexpected error: ${e.message}`)
+      }
+
+      return {
+        success: errors.length === 0,
+        results,
+        errors: errors.length > 0 ? errors : undefined,
+      }
+    },
+  })
+
+  // ── Integration tools ──
+
+  tools.push({
+    name: "request_credentials",
+    description:
+      "Request credentials for an integration. Creates an approval request that the supervisor must approve. " +
+      "Use this when you need API keys, tokens, or other credentials to connect to a service.",
+    parameters: {
+      type: "object",
+      properties: {
+        integrationId: { type: "string", description: "The integration ID (e.g. 'slack', 'github')" },
+        title: { type: "string", description: "Short description of what credentials are needed" },
+        description: { type: "string", description: "Detailed explanation of why these credentials are needed" },
+      },
+      required: ["integrationId", "title"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/integrations/credentials`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          integrationId: input.integrationId,
+          title: input.title,
+          description: input.description,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to request credentials" }
+      }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "test_integration",
+    description: "Test if an integration connection is working. Returns success/failure with details.",
+    parameters: {
+      type: "object",
+      properties: {
+        integrationId: { type: "string", description: "The integration ID to test" },
+      },
+      required: ["integrationId"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/integrations/test`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          integrationId: input.integrationId,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Test failed" }
+      }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "store_credentials",
+    description:
+      "Store OAuth tokens or credentials for an integration after completing an OAuth flow or receiving credentials. " +
+      "Credentials are encrypted at rest.",
+    parameters: {
+      type: "object",
+      properties: {
+        integrationId: { type: "string", description: "The integration ID" },
+        credentials: { type: "object", description: "The credentials object (access_token, refresh_token, etc.)" },
+        expiresIn: { type: "number", description: "Token expiry in seconds (optional)" },
+      },
+      required: ["integrationId", "credentials"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/integrations/store-credentials`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          integrationId: input.integrationId,
+          credentials: input.credentials,
+          expiresIn: input.expiresIn,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to store credentials" }
+      }
+      return res.json()
+    },
+  })
+
+  // ── Configure integration tool ──
+
+  tools.push({
+    name: "configure_integration",
+    description:
+      "Configure or update settings for an integration. Use this to set up webhooks, " +
+      "channels, notification preferences, or other integration-specific configuration.",
+    parameters: {
+      type: "object",
+      properties: {
+        integrationId: { type: "string", description: "The integration ID (e.g. 'slack', 'github')" },
+        config: { type: "object", description: "Configuration object (varies by integration)" },
+      },
+      required: ["integrationId", "config"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      // Update integration metadata with the provided config
+      const res = await fetch(`${platformApiUrl}/api/runtime/integrations/store-credentials`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          integrationId: input.integrationId,
+          credentials: {},
+          metadata: input.config,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to configure integration" }
+      }
+      return res.json()
+    },
+  })
+
+  // ── Goal tracking tool ──
+
+  tools.push({
+    name: "update_goal",
+    description: "Report progress on a goal. Increments a counter, sets a value, or marks a boolean goal as complete.",
+    parameters: {
+      type: "object",
+      properties: {
+        goalId: { type: "string", description: "The goal ID to update" },
+        value: { type: "number", description: "The new value or increment amount" },
+        increment: { type: "boolean", description: "If true, add value to current. If false, set absolute value. Default: true" },
+      },
+      required: ["goalId", "value"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/goals/update`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          goalId: input.goalId,
+          value: input.value,
+          increment: input.increment !== false,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to update goal" }
+      }
+      return res.json()
+    },
+  })
+
+  // ── Onboarding tool ──
+
+  tools.push({
+    name: "report_onboarding_status",
+    description:
+      "Report the completion status of an onboarding step. " +
+      "Steps: read_soul, read_tools, test_tool, read_memory, write_memory, complete_task",
+    parameters: {
+      type: "object",
+      properties: {
+        step: { type: "string", description: "The onboarding step key" },
+        status: { type: "string", enum: ["completed", "failed", "in_progress"], description: "Step status" },
+        details: { type: "string", description: "Optional details about what was done" },
+      },
+      required: ["step", "status"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/onboarding/report`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${runtimeToken}`,
+        },
+        body: JSON.stringify({
+          employeeId: pkg.employee.id,
+          step: input.step,
+          status: input.status,
+          details: input.details,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        return { success: false, error: err.error || "Failed to report status" }
+      }
+      return res.json()
+    },
+  })
+
+  // ── Inter-employee messaging tools ──
+
+  tools.push({
+    name: "send_message",
+    description:
+      "Send a message, task, or handoff to another digital employee in your organization. " +
+      "Use list_employees first to find coworker IDs.",
+    parameters: {
+      type: "object",
+      properties: {
+        toEmployeeId: { type: "string", description: "Target employee ID" },
+        toGroup: { type: "string", description: "Tag group for broadcasts (alternative to toEmployeeId)" },
+        type: { type: "string", enum: ["message", "task", "handoff", "broadcast"], description: "Message type" },
+        subject: { type: "string", description: "Message subject" },
+        content: { type: "string", description: "Message body" },
+        priority: { type: "string", enum: ["low", "normal", "high", "urgent"], description: "Priority level (default: normal)" },
+        attachments: { type: "array", items: { type: "object" }, description: "Optional attachments" },
+        waitForResponse: { type: "boolean", description: "Whether to wait for a response" },
+      },
+      required: ["type", "subject", "content"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/messages/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${runtimeToken}` },
+        body: JSON.stringify({ employeeId: pkg.employee.id, ...input }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to send message" } }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "check_inbox",
+    description:
+      "Check your inbox for messages from other digital employees. " +
+      "Returns pending and delivered messages addressed to you.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+    type: "builtin",
+    execute: async () => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/messages/inbox?employeeId=${pkg.employee.id}`, {
+        headers: { Authorization: `Bearer ${runtimeToken}` },
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to check inbox" } }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "reply_message",
+    description:
+      "Reply to a message you received. This marks the original message as completed " +
+      "and sends your reply back to the sender.",
+    parameters: {
+      type: "object",
+      properties: {
+        messageId: { type: "string", description: "The ID of the message to reply to" },
+        content: { type: "string", description: "Reply content" },
+        data: { type: "object", description: "Optional structured data to include in the reply" },
+      },
+      required: ["messageId", "content"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/messages/${input.messageId}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${runtimeToken}` },
+        body: JSON.stringify({ employeeId: pkg.employee.id, content: input.content, data: input.data }),
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to reply" } }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "list_employees",
+    description:
+      "List other digital employees in your organization. " +
+      "Use this to discover coworkers you can message or delegate tasks to.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+    type: "builtin",
+    execute: async () => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/employees/list?employeeId=${pkg.employee.id}`, {
+        headers: { Authorization: `Bearer ${runtimeToken}` },
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to list employees" } }
+      return res.json()
+    },
+  })
+
+  tools.push({
+    name: "check_task_status",
+    description: "Check the status of a delegated task message. Returns the current status and response if completed.",
+    parameters: {
+      type: "object",
+      properties: {
+        messageId: { type: "string", description: "The task message ID to check" },
+      },
+      required: ["messageId"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const res = await fetch(`${platformApiUrl}/api/runtime/messages/${input.messageId}/status?employeeId=${pkg.employee.id}`, {
+        headers: { Authorization: `Bearer ${runtimeToken}` },
+      })
+      if (!res.ok) { const err = await res.json().catch(() => ({})); return { success: false, error: err.error || "Failed to check status" } }
+      return res.json()
+    },
+  })
+
   // Autonomy-gated tools
   const permissions = pkg.deploymentConfig?.permissions || {}
   if (permissions.canCreateTools) {
@@ -284,4 +870,4 @@ function registerTools(pkg, platformApiUrl, runtimeToken) {
   return tools
 }
 
-module.exports = { registerTools }
+module.exports = { registerTools, rewriteOAuthUrls }

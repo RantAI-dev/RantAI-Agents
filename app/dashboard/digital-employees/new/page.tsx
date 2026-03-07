@@ -12,6 +12,7 @@ import {
   Loader2,
   Users,
   Zap,
+  Shield,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,8 +25,11 @@ import { useAssistants } from "@/hooks/use-assistants"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"
 import { toast } from "sonner"
+import { TemplateGallery } from "./_components/template-gallery"
+import type { EmployeeTemplate } from "@/lib/digital-employee/templates/employee-templates"
 
 const STEPS = [
+  { label: "Template", description: "Choose a starting point" },
   { label: "Identity", description: "Name and appearance" },
   { label: "Select Agent", description: "Choose an assistant" },
   { label: "Autonomy Level", description: "Set decision authority" },
@@ -34,18 +38,34 @@ const STEPS = [
 
 const AUTONOMY_LEVELS = [
   {
-    value: "supervised",
-    label: "Supervised",
+    value: "L1",
+    label: "L1 — Observer",
     icon: Eye,
-    description: "All actions require human approval before execution. Best for high-risk tasks and initial onboarding.",
+    description: "All actions require approval. Employee observes and learns. Best for initial onboarding.",
     className: "border-blue-500/30 hover:border-blue-500/60",
     badgeClass: "bg-blue-500/10 text-blue-500",
   },
   {
-    value: "autonomous",
-    label: "Autonomous",
+    value: "L2",
+    label: "L2 — Assistant",
+    icon: Shield,
+    description: "Low-risk actions auto-approved. Medium and high-risk actions need approval.",
+    className: "border-sky-500/30 hover:border-sky-500/60",
+    badgeClass: "bg-sky-500/10 text-sky-500",
+  },
+  {
+    value: "L3",
+    label: "L3 — Collaborator",
+    icon: Users,
+    description: "Low and medium-risk actions auto-approved. Only high-risk actions need approval.",
+    className: "border-emerald-500/30 hover:border-emerald-500/60",
+    badgeClass: "bg-emerald-500/10 text-emerald-500",
+  },
+  {
+    value: "L4",
+    label: "L4 — Autonomous",
     icon: Zap,
-    description: "Operates independently with full authority. Only escalates critical exceptions. Best for proven, low-risk workflows.",
+    description: "Full authority. Only escalates critical exceptions. Best for proven, low-risk workflows.",
     className: "border-purple-500/30 hover:border-purple-500/60",
     badgeClass: "bg-purple-500/10 text-purple-500",
   },
@@ -68,22 +88,38 @@ export default function NewDigitalEmployeePage() {
   const [isCreating, setIsCreating] = useState(false)
 
   // Form state
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [avatar, setAvatar] = useState("🤖")
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
-  const [autonomyLevel, setAutonomyLevel] = useState("supervised")
+  const [autonomyLevel, setAutonomyLevel] = useState("L1")
+
+  const handleTemplateSelect = (template: EmployeeTemplate | null) => {
+    if (template) {
+      setSelectedTemplateId(template.id)
+      setName(template.identity.name)
+      setDescription(template.identity.description)
+      setAvatar(template.identity.avatar)
+      setAvatarUrl(null)
+      setAutonomyLevel(template.suggestedAutonomy)
+    } else {
+      setSelectedTemplateId(null)
+    }
+  }
 
   const selectedAssistant = assistants.find((a) => a.id === selectedAssistantId)
 
   const canProceed = () => {
     switch (step) {
       case 0:
-        return name.trim().length > 0
+        return true // Template step — always can proceed
       case 1:
-        return selectedAssistantId !== null
+        return name.trim().length > 0
       case 2:
+        return selectedAssistantId !== null
+      case 3:
         return true
       default:
         return true
@@ -184,10 +220,24 @@ export default function NewDigitalEmployeePage() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 24 }}
-          className="max-w-2xl"
+          className={cn("max-w-2xl", step === 0 && "max-w-4xl")}
         >
-          {/* Step 0: Identity */}
+          {/* Step 0: Template */}
           {step === 0 && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold mb-1">Choose a Template</h2>
+                <p className="text-sm text-muted-foreground">Start from a template or build from scratch.</p>
+              </div>
+              <TemplateGallery
+                selectedTemplateId={selectedTemplateId}
+                onSelect={handleTemplateSelect}
+              />
+            </div>
+          )}
+
+          {/* Step 1: Identity */}
+          {step === 1 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Identity</h2>
@@ -227,8 +277,8 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 1: Select Agent */}
-          {step === 1 && (
+          {/* Step 2: Select Agent */}
+          {step === 2 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Select Agent</h2>
@@ -274,8 +324,8 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 2: Autonomy Level */}
-          {step === 2 && (
+          {/* Step 3: Autonomy Level */}
+          {step === 3 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Autonomy Level</h2>
@@ -318,8 +368,8 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 3: Review & Create */}
-          {step === 3 && (
+          {/* Step 4: Review & Create */}
+          {step === 4 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Review & Create</h2>

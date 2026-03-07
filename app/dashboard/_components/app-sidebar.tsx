@@ -62,7 +62,7 @@ import { useDigitalEmployees } from "@/hooks/use-digital-employees"
 import { useDefaultAssistant } from "@/hooks/use-default-assistant"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import { AssistantEditor } from "@/app/dashboard/_components/chat/assistant-editor"
-import { formatDistanceToNow } from "date-fns"
+import { formatDistanceToNow, differenceInMinutes } from "date-fns"
 import type { Assistant, AssistantInput } from "@/lib/types/assistant"
 import { useFeaturesContext } from "@/components/providers/features-provider"
 import { useProfileStore } from "@/hooks/use-profile"
@@ -99,6 +99,8 @@ const allNavItems: NavItem[] = [
   { title: "Agent Builder", url: "/dashboard/agent-builder", icon: Blocks, feature: null },
   { title: "Workflows", url: "/dashboard/workflows", icon: GitBranch, feature: null },
   { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: null },
+  { title: "Messages", url: "/dashboard/messages", icon: MessageSquare, feature: null },
+  { title: "Pipelines", url: "/dashboard/pipelines", icon: GitBranch, feature: null },
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
   { title: "Knowledge", url: "/dashboard/knowledge", icon: BookOpen, feature: null },
   { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },
@@ -111,6 +113,8 @@ const sections = {
   agentBuilder: { title: "Agent Builder", subtitle: "Build & Configure", icon: Blocks, path: "/dashboard/agent-builder" },
   workflows: { title: "Workflows", subtitle: "Visual Automations", icon: GitBranch, path: "/dashboard/workflows" },
   digitalEmployees: { title: "Digital Employees", subtitle: "Autonomous Workers", icon: Users, path: "/dashboard/digital-employees" },
+  messages: { title: "Messages", subtitle: "Employee Communication", icon: MessageSquare, path: "/dashboard/messages" },
+  pipelines: { title: "Pipelines", subtitle: "Handoff Workflows", icon: GitBranch, path: "/dashboard/pipelines" },
   agent: { title: "Live Chat", subtitle: "Customer Support", icon: Headphones, path: "/dashboard/agent" },
   knowledge: { title: "Knowledge", subtitle: "RAG Documents", icon: BookOpen, path: "/dashboard/knowledge" },
   marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
@@ -428,6 +432,8 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     if (pathname.startsWith("/dashboard/agent-builder")) return sections.agentBuilder
     if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
     if (pathname.startsWith("/dashboard/digital-employees")) return sections.digitalEmployees
+    if (pathname.startsWith("/dashboard/messages")) return sections.messages
+    if (pathname.startsWith("/dashboard/pipelines")) return sections.pipelines
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/knowledge")) return sections.knowledge
     if (pathname.startsWith("/dashboard/marketplace")) return sections.marketplace
@@ -840,32 +846,56 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
 
           {currentSection === sections.digitalEmployees && (
             <div className="space-y-1">
-              {digitalEmployees.map((emp) => {
-                const statusColors: Record<string, string> = {
-                  ACTIVE: "bg-chart-2",
-                  PAUSED: "bg-chart-4",
-                  DRAFT: "bg-sidebar-muted",
-                  SUSPENDED: "bg-destructive",
-                }
-                return (
-                  <Link
-                    key={emp.id}
-                    href={`/dashboard/digital-employees/${emp.id}`}
-                    className={cn(
-                      "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
-                      pathname === `/dashboard/digital-employees/${emp.id}`
-                        ? "bg-sidebar-accent text-sidebar-foreground"
-                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                    )}
-                  >
-                    <div className="relative">
-                      <Bot className="h-4 w-4 shrink-0" />
-                      <div className={cn("absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-sidebar", statusColors[emp.status] || "bg-sidebar-muted")} />
-                    </div>
-                    <span className="flex-1 truncate font-medium">{emp.name}</span>
-                  </Link>
-                )
-              })}
+              {[...digitalEmployees]
+                .sort((a, b) => {
+                  const order: Record<string, number> = { ACTIVE: 0, PAUSED: 1, DRAFT: 2, ONBOARDING: 3, SUSPENDED: 4, ARCHIVED: 5 }
+                  const diff = (order[a.status] ?? 9) - (order[b.status] ?? 9)
+                  if (diff !== 0) return diff
+                  // Within ACTIVE, sort by most recently active
+                  if (a.status === "ACTIVE" && b.status === "ACTIVE") {
+                    const aTime = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0
+                    const bTime = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0
+                    return bTime - aTime
+                  }
+                  return 0
+                })
+                .map((emp) => {
+                  const isRecent = emp.lastActiveAt && differenceInMinutes(new Date(), new Date(emp.lastActiveAt)) < 5
+                  const activityText = emp.status === "ACTIVE"
+                    ? (isRecent ? "Active now" : emp.lastActiveAt ? `Idle ${formatDistanceToNow(new Date(emp.lastActiveAt))}` : "Active")
+                    : emp.status === "PAUSED" ? "Paused"
+                    : emp.status === "DRAFT" ? "Draft"
+                    : emp.status.charAt(0) + emp.status.slice(1).toLowerCase()
+
+                  return (
+                    <Link
+                      key={emp.id}
+                      href={`/dashboard/digital-employees/${emp.id}`}
+                      className={cn(
+                        "group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all",
+                        pathname === `/dashboard/digital-employees/${emp.id}`
+                          ? "bg-sidebar-accent text-sidebar-foreground"
+                          : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                      )}
+                    >
+                      <div className="relative">
+                        <Bot className="h-4 w-4 shrink-0" />
+                        <div className={cn(
+                          "absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-sidebar",
+                          emp.status === "ACTIVE" && isRecent && "bg-chart-2 animate-pulse",
+                          emp.status === "ACTIVE" && !isRecent && "bg-chart-2",
+                          emp.status === "PAUSED" && "bg-chart-4",
+                          emp.status === "SUSPENDED" && "bg-destructive",
+                          !["ACTIVE", "PAUSED", "SUSPENDED"].includes(emp.status) && "bg-sidebar-muted",
+                        )} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="block truncate font-medium">{emp.name}</span>
+                        <span className="block text-[10px] text-sidebar-muted truncate">{activityText}</span>
+                      </div>
+                    </Link>
+                  )
+                })}
               <Link
                 href="/dashboard/digital-employees/new"
                 className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"

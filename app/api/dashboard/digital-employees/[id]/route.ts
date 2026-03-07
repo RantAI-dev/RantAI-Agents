@@ -2,6 +2,9 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import { mapLegacyAutonomy } from "@/lib/digital-employee/trust"
+import { hasPermission, canManageEmployee } from "@/lib/digital-employee/rbac"
+import { logAudit, classifyActionRisk, AUDIT_ACTIONS } from "@/lib/digital-employee/audit"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -82,10 +85,18 @@ export async function PUT(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
+    if (orgContext && !canManageEmployee(orgContext.membership.role, session.user.id, existing)) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    }
+
     const {
       name, description, avatar, assistantId, autonomyLevel,
       deploymentConfig, resourceLimits, gatewayConfig, supervisorId,
+      status, sandboxMode,
     } = body
+
+    // Map legacy autonomy values to L-codes
+    const mappedAutonomy = autonomyLevel !== undefined ? mapLegacyAutonomy(autonomyLevel) : undefined
 
     const employee = await prisma.digitalEmployee.update({
       where: { id },
@@ -94,11 +105,13 @@ export async function PUT(req: Request, { params }: RouteParams) {
         ...(description !== undefined && { description }),
         ...(avatar !== undefined && { avatar }),
         ...(assistantId !== undefined && { assistantId }),
-        ...(autonomyLevel !== undefined && { autonomyLevel }),
+        ...(mappedAutonomy !== undefined && { autonomyLevel: mappedAutonomy }),
+        ...(status !== undefined && { status }),
         ...(deploymentConfig !== undefined && { deploymentConfig }),
         ...(resourceLimits !== undefined && { resourceLimits }),
         ...(gatewayConfig !== undefined && { gatewayConfig }),
         ...(supervisorId !== undefined && { supervisorId }),
+        ...(sandboxMode !== undefined && { sandboxMode }),
       },
       include: {
         assistant: { select: { id: true, name: true, emoji: true, model: true } },
@@ -113,6 +126,18 @@ export async function PUT(req: Request, { params }: RouteParams) {
         },
       },
     })
+
+    if (orgContext) {
+      logAudit({
+        organizationId: orgContext.organizationId,
+        employeeId: id,
+        userId: session.user.id,
+        action: AUDIT_ACTIONS.EMPLOYEE_UPDATE,
+        resource: `employee:${id}`,
+        detail: { fields: Object.keys(body) },
+        riskLevel: classifyActionRisk(AUDIT_ACTIONS.EMPLOYEE_UPDATE),
+      }).catch(() => {})
+    }
 
     return NextResponse.json({
       ...employee,
@@ -146,9 +171,25 @@ export async function DELETE(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
+    if (orgContext && !hasPermission(orgContext.membership.role, "employee.delete")) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    }
+
     await prisma.digitalEmployee.delete({
       where: { id },
     })
+
+    if (orgContext) {
+      logAudit({
+        organizationId: orgContext.organizationId,
+        employeeId: id,
+        userId: session.user.id,
+        action: AUDIT_ACTIONS.EMPLOYEE_DELETE,
+        resource: `employee:${id}`,
+        detail: { name: existing.name },
+        riskLevel: classifyActionRisk(AUDIT_ACTIONS.EMPLOYEE_DELETE),
+      }).catch(() => {})
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

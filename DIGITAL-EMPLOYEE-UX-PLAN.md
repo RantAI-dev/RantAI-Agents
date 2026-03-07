@@ -906,38 +906,581 @@ model EmployeeMessage {
 
 ---
 
+## Phase 11: Employee Templates & Presets
+
+### 11.1 The Problem
+
+Every employee starts from scratch — pick a name, pick an agent, manually toggle tools. Too much friction. Leading platforms (Noca AI, Moveworks) let you deploy a working employee in one click.
+
+### 11.2 Template System
+
+A template is a complete employee blueprint:
+
+```typescript
+interface EmployeeTemplate {
+  id: string
+  name: string                    // "Customer Support Agent"
+  description: string
+  category: string                // "support", "engineering", "marketing", "operations"
+  icon: string
+  author: "platform" | "community" | "organization"
+
+  // Pre-configured employee settings
+  blueprint: {
+    soulPrompt: string            // Pre-written SOUL.md content
+    suggestedName: string         // "Support Bot"
+    suggestedAvatar: string
+    autonomyLevel: AutonomyLevel
+    tools: string[]               // Tool names to auto-enable
+    skills: string[]              // ClawHub skill slugs to auto-install
+    integrations: string[]        // Required integrations (shows setup wizard post-creation)
+    schedules: EmployeeSchedule[] // Default schedules
+    workspaceFiles: Record<string, string>  // Custom SOUL.md, MEMORY.md defaults
+    goals: GoalDefinition[]       // Suggested KPIs (see Phase 12)
+    sampleTasks: string[]         // "Try asking me to: resolve a ticket, draft a response, ..."
+  }
+}
+```
+
+### 11.3 Template Gallery UI
+
+Replace the current creation wizard's step 1 with a template picker:
+
+```
+Create Digital Employee
+
+  [Start from scratch ->]         (current flow, for power users)
+
+  ── or pick a template ──
+
+  [Search templates...]
+
+  Customer Facing
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+  │ Support Agent │  │ Sales SDR    │  │ Onboarding   │
+  │ Resolves      │  │ Qualifies    │  │ Guides new   │
+  │ tickets via   │  │ leads via    │  │ users through │
+  │ email & chat  │  │ email/LinkedIn│ │ setup steps  │
+  │               │  │              │  │              │
+  │ [Gmail,Slack] │  │ [LinkedIn,CRM]│ │ [Email,Docs] │
+  │ [Use ->]      │  │ [Use ->]     │  │ [Use ->]     │
+  └──────────────┘  └──────────────┘  └──────────────┘
+
+  Engineering
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+  │ Code Reviewer │  │ Triage Bot   │  │ CI Monitor   │
+  │ Reviews PRs   │  │ Labels and   │  │ Monitors     │
+  │ and suggests  │  │ prioritizes  │  │ builds and   │
+  │ improvements  │  │ GitHub issues│  │ alerts on    │
+  │               │  │              │  │ failures     │
+  │ [GitHub]      │  │ [GitHub]     │  │ [GitHub,Slack]│
+  │ [Use ->]      │  │ [Use ->]     │  │ [Use ->]     │
+  └──────────────┘  └──────────────┘  └──────────────┘
+```
+
+### 11.4 Post-Template Flow
+
+When user selects a template:
+
+1. **Pre-fill creation wizard** — name, description, avatar, tools, skills all pre-selected
+2. **User can customize** — change name, toggle tools, adjust prompt
+3. **Create** — employee is created with all config
+4. **Integration setup** — if template requires integrations (Gmail, GitHub), immediately show the integration setup wizard (Phase 9)
+5. **Employee onboarding** — triggers the self-onboarding flow (Phase 15)
+
+### 11.5 Community Templates
+
+- Organizations can save their custom employee configs as templates
+- Share templates within the org or publish to a public gallery
+- Template versioning: update a template and choose to propagate changes to employees using it
+
+---
+
+## Phase 12: Goal & Outcome Tracking
+
+### 12.1 The Problem
+
+The plan tracks activity (runs, tokens, approvals) but not outcomes. "5 runs today" doesn't answer "is this employee doing a good job?"
+
+### 12.2 Goal Model
+
+```typescript
+interface EmployeeGoal {
+  id: string
+  name: string                  // "Resolve 50 tickets per week"
+  type: "counter" | "threshold" | "boolean" | "percentage"
+  target: number                // 50
+  unit: string                  // "tickets"
+  period: "daily" | "weekly" | "monthly" | "total"
+  currentValue: number          // 37
+  source: "manual" | "auto"     // auto = derived from run outputs
+  autoTrackConfig?: {
+    runOutputField: string      // which field in run output to count
+    aggregation: "sum" | "count" | "avg" | "max"
+  }
+}
+```
+
+### 12.3 Goal UI on Activity Tab
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Goals This Week                                         │
+│                                                          │
+│  Resolve tickets    ████████████████░░░░  37/50 (74%)   │
+│  Avg response time  ████████████████████  2.3min < 5min  │
+│  Customer sat.      ██████████████░░░░░░  4.1/5.0       │
+│                                                          │
+│  [Manage Goals]                                          │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 12.4 Goal-Based Triggering
+
+- "Run until goal is met, then pause until next period"
+- "Alert supervisor when goal is at risk (< 50% at 80% through the period)"
+- "Auto-increase schedule frequency if falling behind"
+
+### 12.5 Performance Dashboard
+
+A new sub-view on the Activity tab or a separate "Performance" section:
+
+- Goal completion history (weekly/monthly trend charts)
+- Comparison across employees: "Support Bot resolved 200 tickets this month vs. 150 last month"
+- Cost per outcome: "$0.12 per ticket resolved" — the metric that matters
+
+---
+
+## Phase 13: Graduated Autonomy & Trust System
+
+### 13.1 The Problem
+
+Autonomy is binary (supervised/autonomous). Users should start with low autonomy and increase it as confidence grows.
+
+### 13.2 Autonomy Levels
+
+```
+L1 — Training Wheels
+  Every action needs approval before execution.
+  Employee proposes actions, supervisor approves each one.
+  Good for: new employees, sensitive domains.
+
+L2 — Guided
+  Routine actions auto-approved (read data, search, format).
+  Tool calls and external actions need approval.
+  Good for: employees with 10+ successful runs.
+
+L3 — Trusted
+  Most actions auto-approved.
+  Only high-risk actions need approval (delete, send external, spend money).
+  Good for: employees with 50+ runs, >90% approval rate.
+
+L4 — Autonomous
+  All actions auto-approved.
+  Supervisor notified of completed work, not asked permission.
+  Good for: proven employees with 200+ runs, >95% approval rate.
+```
+
+### 13.3 Trust Score
+
+Calculated automatically from:
+
+```
+trustScore = weighted average of:
+  - Approval acceptance rate (40%)     // how often supervisor approves vs rejects
+  - Run success rate (30%)             // completed vs failed runs
+  - Error frequency (15%)              // how often tools fail
+  - Uptime reliability (15%)           // does it run on schedule
+```
+
+Displayed on the employee detail page as a simple meter:
+
+```
+Trust Score: 87/100  [████████████████░░░░]  Level: L3 (Trusted)
+  Next level at: 92/100 (need 8 more successful runs)
+```
+
+### 13.4 Auto-Promotion & Demotion
+
+- **Promote**: When trust score crosses threshold AND minimum run count met → suggest promotion to supervisor
+- **Demote**: If trust score drops below threshold (3 consecutive failures, rejection spike) → auto-demote one level, notify supervisor
+- Supervisor can always manually override level
+
+### 13.5 Sandbox Mode
+
+New employees start in sandbox by default:
+
+- All tool calls are simulated — employee sees realistic mock responses
+- Outputs are tagged "[SANDBOX]" and not delivered externally
+- Supervisor reviews sandbox outputs before promoting to L1
+- "Go Live" button in the UI transitions from sandbox to L1
+
+### 13.6 Risk Classification for Actions
+
+Each tool/action has a risk level:
+
+```
+Low risk (auto-approve at L2+):   read data, search, format text, internal calculations
+Medium risk (auto-approve at L3+): send message, create file, update record, API calls
+High risk (always approve at L1-L3): delete data, send external email, financial transactions, deploy code
+Critical (always approve):         access credentials, modify other employees, change own permissions
+```
+
+---
+
+## Phase 14: Error Recovery & Self-Healing
+
+### 14.1 Smart Retry
+
+When a run fails:
+
+1. **Classify the failure**: transient (timeout, rate limit, network) vs. permanent (auth error, invalid input, logic bug)
+2. **Transient**: auto-retry with exponential backoff + context: "Previous attempt timed out after 30s. Increasing timeout to 60s."
+3. **Permanent**: don't retry. Store failure reason in MEMORY.md. Notify supervisor.
+4. **Ambiguous**: retry once. If fails again, escalate.
+
+### 14.2 Failure Pattern Detection
+
+Track failure patterns across runs:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Failure Patterns (last 7 days)                          │
+│                                                          │
+│  [!] Gmail API timeout — 4 occurrences                   │
+│      Suggestion: Check Gmail quota, increase timeout     │
+│                                                          │
+│  [!] "Permission denied" on GitHub — 2 occurrences       │
+│      Suggestion: Token may lack 'repo' scope             │
+│                                                          │
+│  Action: [Auto-fix suggestions] [Ignore] [Investigate]   │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 14.3 Fallback Strategies
+
+Per-tool fallback configuration:
+
+```
+If "gmail_send" fails → try "smtp_send" as fallback
+If "github_create_pr" fails → save draft locally and notify supervisor
+If "web_search" fails → use cached results from last successful search
+```
+
+### 14.4 Post-Failure Learning
+
+After each failure:
+- Store failure reason + context in employee memory
+- On next similar task, the employee's prompt includes: "Note: This task previously failed because [reason]. Avoid [specific mistake]."
+- Track if the employee successfully avoids repeat failures (feeds into trust score)
+
+---
+
+## Phase 15: Employee Self-Onboarding Journey
+
+### 15.1 The Problem
+
+We onboard the *user* but not the *employee*. Real employees go through orientation.
+
+### 15.2 First-Run Onboarding Mode
+
+When an employee is deployed for the first time, it runs a special onboarding sequence before taking real tasks:
+
+```
+Onboarding Checklist (visible in UI)
+
+  [x] Read identity files (SOUL.md, IDENTITY.md)
+  [x] Read team context (TEAM.md, USER.md)
+  [x] Test tool access
+      [x] web_search — working
+      [x] gmail_send — NOT CONNECTED (requesting setup)
+      [ ] github_create_pr — NOT CONNECTED
+  [ ] Introduce self to supervisor
+  [ ] Run sample task in sandbox
+  [ ] Supervisor approves go-live
+```
+
+### 15.3 Integration Health Check
+
+During onboarding, the employee tests every enabled tool:
+
+```
+Employee (in chat): "I've tested my tools. Here's what's working:
+  - web_search: OK
+  - gmail_send: FAILED — no credentials. Can you set up Gmail?
+  - github_create_pr: FAILED — token missing 'repo' scope.
+
+  I can start working on tasks that only need web_search.
+  Want to set up the others now, or later?"
+
+  [Set up Gmail]  [Set up GitHub]  [Skip for now]
+```
+
+This naturally triggers the integration setup flow (Phase 9, Surface B — chat-initiated).
+
+### 15.4 Self-Introduction
+
+The employee introduces itself in the supervisor's chat:
+
+```
+"Hi! I'm Support Bot. Here's what I'm set up to do:
+
+  - Monitor support emails and triage by priority
+  - Draft responses to common questions
+  - Escalate complex issues to you
+
+  I'm currently at Autonomy Level 1 (Training Wheels),
+  so I'll ask your approval before taking any action.
+
+  Ready when you are! Try: 'Check the latest support emails.'"
+```
+
+### 15.5 Onboarding Status in Dashboard
+
+On the list page, onboarding employees show a distinct state:
+
+```
+┌──────────────┐
+│ Support Bot   │
+│ [Onboarding]  │  blue badge, different from Draft/Active
+│ 3/6 steps     │
+│ ████░░ 50%    │
+│ [Continue ->] │
+└──────────────┘
+```
+
+---
+
+## Phase 16: Audit Trail & Compliance
+
+### 16.1 Immutable Audit Log
+
+Every action is logged to an append-only `AuditLog` table:
+
+```prisma
+model AuditLog {
+  id              String   @id @default(cuid())
+  organizationId  String
+  employeeId      String?
+  userId          String?          // human who triggered, if applicable
+  action          String           // "tool.execute", "approval.respond", "credential.access", "message.send"
+  resource        String           // "tool:gmail_send", "employee:abc123"
+  detail          Json             // action-specific context
+  ipAddress       String?
+  userAgent       String?
+  riskLevel       String           // "low", "medium", "high", "critical"
+  createdAt       DateTime         @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([action])
+}
+```
+
+### 16.2 Audit Dashboard
+
+```
+/dashboard/audit
+
+┌─────────────────────────────────────────────────────────┐
+│  Audit Log                   [Export CSV]  [Filter v]    │
+│                                                          │
+│  Filter: All employees | Last 7 days | All risk levels  │
+│                                                          │
+│  Mar 6, 2:15 PM  SupportBot  tool.execute  gmail_send   │
+│    Risk: Medium | Sent email to customer@example.com     │
+│                                                          │
+│  Mar 6, 2:14 PM  SupportBot  tool.execute  web_search   │
+│    Risk: Low | Searched "refund policy"                  │
+│                                                          │
+│  Mar 6, 2:10 PM  admin@co.co  approval.respond          │
+│    Risk: Low | Approved "Send refund email"              │
+│                                                          │
+│  Mar 6, 1:00 PM  WriterBot   credential.access  github  │
+│    Risk: High | Accessed GitHub token for PR creation    │
+└─────────────────────────────────────────────────────────┘
+```
+
+### 16.3 RBAC (Role-Based Access Control)
+
+```
+Roles:
+  Owner     — full access, manage billing, delete org
+  Admin     — create/delete employees, manage integrations, view audit
+  Manager   — configure employees they supervise, approve actions, view activity
+  Viewer    — read-only access to employee activity and outputs
+```
+
+Permission matrix:
+
+| Action | Owner | Admin | Manager | Viewer |
+|--------|-------|-------|---------|--------|
+| Create employee | x | x | | |
+| Delete employee | x | x | | |
+| Configure tools/skills | x | x | x (own) | |
+| Approve actions | x | x | x (own) | |
+| View activity | x | x | x (own) | x |
+| Manage credentials | x | x | | |
+| View audit log | x | x | | |
+| Export data | x | x | | |
+| Manage billing | x | | | |
+
+### 16.4 Data Retention & Compliance
+
+- Configurable retention: auto-archive runs/messages after X days (default: 90)
+- Right to delete: purge all data for a specific employee
+- Data export: full dump of employee activity, messages, outputs as JSON/CSV
+- Credential rotation alerts: "GitHub token for Support Bot expires in 7 days"
+
+---
+
+## Phase 17: Webhook & Event Triggers
+
+### 17.1 The Problem
+
+Employees can only be triggered by: cron, manual click, or another employee's message. No way for external systems to wake them up.
+
+### 17.2 Inbound Webhooks
+
+Each employee gets a unique webhook URL:
+
+```
+POST https://app.rantai.dev/api/webhooks/employees/{employeeId}
+Headers: Authorization: Bearer {webhookToken}
+Body: { "event": "...", "data": { ... } }
+```
+
+The employee receives the webhook payload as the trigger input:
+```
+TriggerContext: {
+  type: "webhook",
+  source: "github",
+  input: { event: "issues.opened", issue: { title: "Bug: login fails", ... } }
+}
+```
+
+### 17.3 Event Subscriptions
+
+Configure in Settings > Triggers:
+
+```
+Triggers
+  ┌─────────────────────────────────────────────────────┐
+  │  Schedules                                           │
+  │  [x] Daily at 9:00 AM — Morning triage              │
+  │  [ ] Every hour — Check for new tickets              │
+  │                                                      │
+  │  Webhooks                                            │
+  │  [x] GitHub — on issues.opened, issues.labeled       │
+  │      URL: https://app.rantai.dev/api/webhooks/e/abc  │
+  │      [Copy URL]  [Regenerate Token]                  │
+  │                                                      │
+  │  [ ] Slack — on message in #support channel          │
+  │  [ ] Custom — any POST to webhook URL                │
+  │                                                      │
+  │  Email Trigger                                       │
+  │  [ ] Forward emails to: support-bot@in.rantai.dev    │
+  │      Processes incoming email as trigger input        │
+  │                                                      │
+  │  Watch Mode                                          │
+  │  [ ] Monitor URL: https://api.example.com/status     │
+  │      Interval: every 5 min                           │
+  │      Trigger when: response changes or status != 200 │
+  │                                                      │
+  │  [+ Add Trigger]                                     │
+  └─────────────────────────────────────────────────────┘
+```
+
+### 17.4 Trigger Types
+
+| Trigger | How It Works | Use Case |
+|---------|-------------|----------|
+| **Cron** | Time-based schedule | Daily reports, periodic checks |
+| **Webhook** | External HTTP POST | GitHub events, Stripe payments, CI/CD |
+| **Email** | Inbound email forwarding | Support inbox, order confirmations |
+| **Watch** | Poll URL on interval, trigger on change | API monitoring, price tracking |
+| **Event** | Internal platform event | "When Employee A completes task X" |
+| **Manual** | Dashboard button click | Ad-hoc runs, testing |
+
+### 17.5 Webhook Management
+
+```prisma
+model EmployeeWebhook {
+  id              String   @id @default(cuid())
+  employeeId      String
+  employee        DigitalEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type            String           // "webhook", "email", "watch"
+  name            String
+  token           String   @unique  // bearer token for auth
+  config          Json              // type-specific config (URL to watch, email address, etc.)
+  filterRules     Json     @default("[]")  // only trigger on matching events
+  enabled         Boolean  @default(true)
+  lastTriggeredAt DateTime?
+  triggerCount    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([token])
+}
+```
+
+### 17.6 API Routes
+
+```
+POST /api/webhooks/employees/[id]             — inbound webhook (public, token-authed)
+POST /api/webhooks/email/[address]            — inbound email (from email provider)
+GET  /api/dashboard/digital-employees/[id]/triggers  — list all triggers
+POST /api/dashboard/digital-employees/[id]/triggers  — create trigger
+PUT  /api/dashboard/digital-employees/[id]/triggers/[triggerId]  — update
+DELETE /api/dashboard/digital-employees/[id]/triggers/[triggerId] — delete
+```
+
+---
+
 ## Implementation Order
 
 | Step | What | Effort | Impact |
 |------|------|--------|--------|
 | 1 | Activity tab (new default) | Medium | High |
 | 2 | Inline approvals on Activity | Small | High |
-| 3 | List page: live activity + approval badges | Small | High |
-| 4 | Consolidate tabs (9 -> 5) | Medium | Medium |
-| 5 | Integration registry + setup wizard UI | Large | High |
-| 6 | History timeline (replace Jobs) | Medium | Medium |
-| 7 | Settings merger (tools+skills+config+schedule+integrations) | Medium | Medium |
-| 8 | Global approval banner | Small | High |
-| 9 | Chat-guided setup (employee-assisted config) | Medium | High |
-| 10 | Chat offline support + drawer | Medium | Medium |
-| 11 | Cost display ($) everywhere | Small | Medium |
-| 12 | OAuth callback + credential storage | Medium | High |
-| 13 | Inter-employee messaging (send/receive/inbox runtime tools) | Large | High |
-| 14 | Inter-employee task delegation (wait-for-response + auto-start) | Large | High |
-| 15 | TEAM.md workspace file generation | Small | Medium |
-| 16 | Global message center dashboard page | Medium | Medium |
-| 17 | Supervisor message approval/blocking controls | Medium | Medium |
-| 18 | Heartbeat animation + sidebar presence | Small | Low |
-| 19 | List/Table view toggle | Small | Low |
-| 20 | Visual cron builder in Settings | Medium | Low |
-| 21 | Pre-built integration definitions (Gmail, Slack, GitHub, etc.) | Medium | Medium |
-| 22 | Handoff pipelines (visual pipeline builder) | Large | Medium |
+| 3 | Employee templates + template gallery | Large | High |
+| 4 | List page: live activity + approval badges | Small | High |
+| 5 | Consolidate tabs (9 -> 5) | Medium | Medium |
+| 6 | Integration registry + setup wizard UI | Large | High |
+| 7 | Graduated autonomy levels (L1-L4) + trust score | Large | High |
+| 8 | Webhook & event triggers | Medium | High |
+| 9 | History timeline (replace Jobs) | Medium | Medium |
+| 10 | Settings merger (tools+skills+config+schedule+integrations+triggers) | Medium | Medium |
+| 11 | Global approval banner | Small | High |
+| 12 | Chat-guided setup (employee-assisted config) | Medium | High |
+| 13 | Goal/outcome tracking + performance dashboard | Large | High |
+| 14 | Employee self-onboarding journey | Medium | High |
+| 15 | Chat offline support + drawer | Medium | Medium |
+| 16 | Cost display ($) everywhere | Small | Medium |
+| 17 | OAuth callback + credential storage | Medium | High |
+| 18 | Sandbox mode (dry-run for new employees) | Medium | High |
+| 19 | Error recovery + smart retry + failure patterns | Medium | Medium |
+| 20 | Inter-employee messaging (send/receive/inbox runtime tools) | Large | High |
+| 21 | Inter-employee task delegation (wait-for-response + auto-start) | Large | High |
+| 22 | TEAM.md workspace file generation | Small | Medium |
+| 23 | Global message center dashboard page | Medium | Medium |
+| 24 | Audit trail + immutable log | Medium | High |
+| 25 | RBAC (role-based access control) | Large | High |
+| 26 | Supervisor message approval/blocking controls | Medium | Medium |
+| 27 | Heartbeat animation + sidebar presence | Small | Low |
+| 28 | List/Table view toggle | Small | Low |
+| 29 | Visual cron builder in Settings | Medium | Low |
+| 30 | Pre-built integration definitions (Gmail, Slack, GitHub, etc.) | Medium | Medium |
+| 31 | Community template marketplace | Large | Medium |
+| 32 | Handoff pipelines (visual pipeline builder) | Large | Medium |
+| 33 | Data retention + export + compliance | Medium | Medium |
 
 ---
 
 ## Files to Create / Modify
 
-### New Files
+### New Files — UI Components
 - `app/dashboard/digital-employees/[id]/_components/activity-tab.tsx`
 - `app/dashboard/digital-employees/[id]/_components/activity-feed.tsx`
 - `app/dashboard/digital-employees/[id]/_components/daily-summary.tsx`
@@ -949,53 +1492,100 @@ model EmployeeMessage {
 - `app/dashboard/digital-employees/[id]/_components/chat-drawer.tsx`
 - `app/dashboard/digital-employees/[id]/_components/integration-setup-wizard.tsx`
 - `app/dashboard/digital-employees/[id]/_components/integration-status.tsx`
+- `app/dashboard/digital-employees/[id]/_components/goal-tracker.tsx`
+- `app/dashboard/digital-employees/[id]/_components/trust-score.tsx`
+- `app/dashboard/digital-employees/[id]/_components/onboarding-checklist.tsx`
+- `app/dashboard/digital-employees/[id]/_components/trigger-config.tsx`
+- `app/dashboard/digital-employees/[id]/_components/failure-patterns.tsx`
 - `app/dashboard/digital-employees/_components/employee-list-table.tsx`
+- `app/dashboard/digital-employees/_components/template-gallery.tsx`
+- `app/dashboard/digital-employees/_components/template-card.tsx`
 - `components/ui/approval-banner.tsx`
+- `app/dashboard/messages/page.tsx` — global message center
+- `app/dashboard/messages/_components/message-list.tsx`
+- `app/dashboard/messages/_components/message-detail.tsx`
+- `app/dashboard/audit/page.tsx` — audit log dashboard
+- `app/dashboard/audit/_components/audit-log-table.tsx`
+
+### New Files — Libraries
 - `lib/digital-employee/integrations/registry.ts` — integration definitions
 - `lib/digital-employee/integrations/definitions/` — per-integration configs (google.ts, slack.ts, github.ts, etc.)
 - `lib/digital-employee/integrations/oauth.ts` — OAuth flow helpers
 - `lib/digital-employee/integrations/credential-store.ts` — encrypted credential storage
-- `hooks/use-employee-integrations.ts` — React hook for integration management
-- `app/dashboard/messages/page.tsx` — global message center
-- `app/dashboard/messages/_components/message-list.tsx` — message list with filters
-- `app/dashboard/messages/_components/message-detail.tsx` — message detail + approval controls
-- `hooks/use-employee-messages.ts` — React hook for inter-employee messages
+- `lib/digital-employee/templates/registry.ts` — template definitions + resolver
+- `lib/digital-employee/templates/definitions/` — per-template blueprints (support-agent.ts, code-reviewer.ts, etc.)
+- `lib/digital-employee/trust.ts` — trust score calculation + autonomy level resolution
+- `lib/digital-employee/goals.ts` — goal tracking, progress calculation, alerts
+- `lib/digital-employee/audit.ts` — audit log writer + query helpers
+- `lib/digital-employee/webhooks.ts` — inbound webhook handler + event routing
+- `lib/digital-employee/error-recovery.ts` — failure classification, retry logic, pattern detection
+
+### New Files — Hooks
+- `hooks/use-employee-integrations.ts`
+- `hooks/use-employee-messages.ts`
+- `hooks/use-employee-goals.ts`
+- `hooks/use-employee-triggers.ts`
+- `hooks/use-audit-log.ts`
 
 ### Modify
-- `app/dashboard/digital-employees/page.tsx` — add live activity, approval badges, view toggle
-- `app/dashboard/digital-employees/[id]/page.tsx` — restructure tabs, default to Activity, add integration status to Settings
-- `app/dashboard/_components/app-sidebar.tsx` — enhanced employee presence
-- `hooks/use-digital-employee.ts` — add activity feed fetching, cost calculations
-- `lib/digital-employee/package-generator.ts` — inject integration credentials into deploymentConfig.env at deploy time
-- `lib/digital-employee/types.ts` — add IntegrationDefinition, SetupStep types
-- `docker/employee/agent-runner/tools.js` — add configure_integration, test_integration, send_message, check_inbox, reply_message, list_employees built-in tools
-- `lib/digital-employee/types.ts` — add TEAM.md to WORKSPACE_FILES, add message-related types
-- `lib/digital-employee/package-generator.ts` — generate TEAM.md from org employee list
+- `app/dashboard/digital-employees/page.tsx` — live activity, approval badges, view toggle, onboarding status
+- `app/dashboard/digital-employees/new/page.tsx` — template picker before wizard, pre-fill from template
+- `app/dashboard/digital-employees/[id]/page.tsx` — restructure tabs, default to Activity, trust score display, goal tracker
+- `app/dashboard/_components/app-sidebar.tsx` — enhanced employee presence, audit log nav item
+- `hooks/use-digital-employee.ts` — activity feed, cost calculations, trust score
+- `lib/digital-employee/package-generator.ts` — inject integration credentials, generate TEAM.md, include goal definitions
+- `lib/digital-employee/types.ts` — IntegrationDefinition, SetupStep, GoalDefinition, AutonomyLevel (L1-L4), TrustScore, TEAM.md in WORKSPACE_FILES
+- `lib/digital-employee/docker-orchestrator.ts` — sandbox mode support, onboarding sequence trigger
+- `docker/employee/agent-runner/tools.js` — add all new built-in tools: configure_integration, test_integration, send_message, check_inbox, reply_message, list_employees, update_goal, report_outcome
+- `docker/employee/agent-runner/index.js` — onboarding mode detection, health check on first run
 
-### New API Routes
-- `GET /api/dashboard/digital-employees/[id]/activity` — aggregated activity feed (runs + approvals + events)
+### New API Routes — Dashboard
+- `GET /api/dashboard/digital-employees/[id]/activity` — aggregated activity feed
 - `GET /api/dashboard/digital-employees/[id]/summary` — daily summary data
 - `GET /api/dashboard/digital-employees/[id]/integrations` — list integration statuses
 - `POST /api/dashboard/digital-employees/[id]/integrations/[integrationId]/setup` — start setup
 - `POST /api/dashboard/digital-employees/[id]/integrations/[integrationId]/credentials` — store credentials
 - `POST /api/dashboard/digital-employees/[id]/integrations/[integrationId]/test` — test connection
 - `DELETE /api/dashboard/digital-employees/[id]/integrations/[integrationId]` — disconnect
+- `GET /api/dashboard/digital-employees/[id]/goals` — list goals + progress
+- `POST /api/dashboard/digital-employees/[id]/goals` — create/update goal
+- `DELETE /api/dashboard/digital-employees/[id]/goals/[goalId]` — remove goal
+- `GET /api/dashboard/digital-employees/[id]/triggers` — list triggers
+- `POST /api/dashboard/digital-employees/[id]/triggers` — create trigger (webhook, watch, email)
+- `PUT /api/dashboard/digital-employees/[id]/triggers/[triggerId]` — update trigger
+- `DELETE /api/dashboard/digital-employees/[id]/triggers/[triggerId]` — delete trigger
+- `GET /api/dashboard/templates` — list employee templates
+- `POST /api/dashboard/templates` — create org template from existing employee
+- `GET /api/dashboard/messages` — all inter-employee messages
+- `GET /api/dashboard/messages/[id]` — message detail
+- `POST /api/dashboard/messages/[id]/block` — block pending message
+- `GET /api/dashboard/audit` — audit log with filters + pagination
+- `GET /api/dashboard/audit/export` — CSV/JSON export
+
+### New API Routes — OAuth & Webhooks
 - `GET /api/oauth/callback/[provider]` — OAuth callback handler
-- `POST /api/runtime/integrations/configure` — employee-side credential storage (chat-guided)
-- `POST /api/runtime/integrations/test` — employee-side connection test
-- `POST /api/runtime/messages/send` — employee sends message to another employee
-- `GET  /api/runtime/messages/inbox` — employee checks incoming messages
-- `POST /api/runtime/messages/[id]/reply` — employee replies to a message
-- `GET  /api/runtime/employees/list` — employee lists peers in the org
-- `GET  /api/dashboard/messages` — supervisor views all inter-employee messages
-- `GET  /api/dashboard/messages/[id]` — supervisor views message detail
-- `POST /api/dashboard/messages/[id]/block` — supervisor blocks a pending message
+- `POST /api/webhooks/employees/[id]` — inbound webhook (public, token-authed)
+- `POST /api/webhooks/email/[address]` — inbound email trigger
+
+### New API Routes — Runtime (container → platform)
+- `POST /api/runtime/integrations/configure` — employee stores credentials (chat-guided)
+- `POST /api/runtime/integrations/test` — employee tests connection
+- `POST /api/runtime/messages/send` — send to another employee
+- `GET  /api/runtime/messages/inbox` — check incoming messages
+- `POST /api/runtime/messages/[id]/reply` — reply to message
+- `GET  /api/runtime/employees/list` — list peers
+- `POST /api/runtime/goals/update` — employee reports goal progress
+- `POST /api/runtime/audit/log` — employee writes audit entry
 
 ### Prisma Schema Additions
-- `EmployeeEvent` model — generic event log for activity feed (type, data, timestamp)
+- `EmployeeEvent` model — generic event log for activity feed
 - `EmployeeIntegration` model — per-employee integration status + encrypted credentials
-- Add `lastOutput` field to `EmployeeRun` — store truncated output for preview
-- Add `costCents` field to `EmployeeRun` — calculated cost per run
 - `EmployeeMessage` model — inter-employee messages, tasks, handoffs, broadcasts
-- Add `allowAutoStart` to `EmployeeDeploymentConfig` permissions
-- Add `canMessageEmployees`, `canDelegateTasks`, `canHandoff`, `requireMessageApproval` to permissions
+- `EmployeeGoal` model — goals/KPIs per employee with progress tracking
+- `EmployeeTemplate` model — reusable employee blueprints (platform + org + community)
+- `EmployeeWebhook` model — inbound webhook/email/watch trigger configs
+- `AuditLog` model — immutable append-only action log
+- Add `lastOutput`, `costCents` fields to `EmployeeRun`
+- Add `trustScore`, `autonomyLevel` (L1-L4), `onboardingStatus` fields to `DigitalEmployee`
+- Add `riskLevel` field to tool definitions
+- Expand `EmployeeDeploymentConfig` permissions: `allowAutoStart`, `canMessageEmployees`, `canDelegateTasks`, `canHandoff`, `requireMessageApproval`

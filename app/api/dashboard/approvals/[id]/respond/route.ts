@@ -75,6 +75,27 @@ export async function POST(req: Request, { params }: RouteParams) {
       }
     }
 
+    // C7: Handle message_send approvals
+    if (approval.requestType === "message_send" && approval.content) {
+      const messageData = approval.content as Record<string, unknown>
+      const messageId = messageData.messageId as string
+      if (messageId) {
+        if (approvalStatusMap[status] === "APPROVED") {
+          // Mark message as pending (ready for delivery)
+          await prisma.employeeMessage.update({
+            where: { id: messageId },
+            data: { status: "pending" },
+          })
+        } else {
+          // Mark message as cancelled
+          await prisma.employeeMessage.update({
+            where: { id: messageId },
+            data: { status: "cancelled" },
+          })
+        }
+      }
+    }
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("Failed to respond to approval:", error)
