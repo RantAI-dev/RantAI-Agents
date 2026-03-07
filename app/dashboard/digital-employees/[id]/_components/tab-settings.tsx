@@ -222,6 +222,8 @@ export function TabSettings(props: TabSettingsProps) {
                 )}
                 {section.id === "danger" && (
                   <SettingsDanger
+                    employeeId={props.employee.id}
+                    employeeName={props.employee.name}
                     onArchiveOpen={props.onArchiveOpen}
                     onDeleteOpen={props.onDeleteOpen}
                   />
@@ -448,9 +450,13 @@ function ToolsSkillsCombined(props: {
 }
 
 function SettingsDanger({
+  employeeId,
+  employeeName,
   onArchiveOpen,
   onDeleteOpen,
 }: {
+  employeeId: string
+  employeeName: string
   onArchiveOpen: () => void
   onDeleteOpen: () => void
 }) {
@@ -471,6 +477,49 @@ function SettingsDanger({
         <Button variant="destructive" size="sm" onClick={onDeleteOpen}>
           <Trash2 className="h-4 w-4 mr-1.5" />
           Delete
+        </Button>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border border-border p-3">
+        <div>
+          <p className="text-sm font-medium">Export Data</p>
+          <p className="text-xs text-muted-foreground">Download all employee data as JSON.</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            window.open(`/api/dashboard/digital-employees/${employeeId}/export`, "_blank")
+          }}
+        >
+          Export
+        </Button>
+      </div>
+      <div className="flex items-center justify-between rounded-lg border border-destructive/50 p-3">
+        <div>
+          <p className="text-sm font-medium">Purge All Data</p>
+          <p className="text-xs text-muted-foreground">Permanently delete employee and all associated data.</p>
+        </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={async () => {
+            const confirmed = window.prompt(`Type "${employeeName}" to confirm purge:`)
+            if (confirmed !== employeeName) return
+            try {
+              const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/purge`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ confirmName: confirmed }),
+              })
+              if (!res.ok) throw new Error("Failed")
+              window.location.href = "/dashboard/digital-employees"
+            } catch {
+              // silently fail — toast not available in this sub-component
+            }
+          }}
+        >
+          <Trash2 className="h-4 w-4 mr-1.5" />
+          Purge
         </Button>
       </div>
     </div>
