@@ -60,26 +60,33 @@ export function IntegrationSetupWizard({
   if (integration.setupType === "chat-guided" && onOpenChat) {
     return (
       <Sheet open={!!integration} onOpenChange={handleOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle className="flex items-center gap-2">
-              <span className="text-xl">{integration.icon}</span>
-              {integration.name}
-            </SheetTitle>
-            <SheetDescription>{integration.description}</SheetDescription>
+        <SheetContent className="sm:max-w-md">
+          <SheetHeader className="pb-4 border-b">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-muted text-xl">
+                {integration.icon}
+              </div>
+              <div>
+                <SheetTitle className="text-base">{integration.name}</SheetTitle>
+                <SheetDescription className="text-xs mt-0.5">{integration.description}</SheetDescription>
+              </div>
+            </div>
           </SheetHeader>
-          <div className="mt-6 space-y-4">
-            <p className="text-sm text-muted-foreground">
-              This integration is best set up through a guided conversation with your employee.
-            </p>
-            <Button
-              onClick={() => {
-                onOpenChat(`Help me set up the ${integration.name} integration. I need to configure ${integration.description}.`)
-                onClose()
-              }}
-            >
-              Start Setup Chat
-            </Button>
+          <div className="mt-5 space-y-4">
+            <div className="rounded-lg border border-dashed p-4 text-center space-y-2">
+              <p className="text-sm text-muted-foreground">
+                This integration is best set up through a guided conversation with your employee.
+              </p>
+              <Button
+                onClick={() => {
+                  onOpenChat(`Help me set up the ${integration.name} integration. I need to configure ${integration.description}.`)
+                  onClose()
+                }}
+                className="w-full"
+              >
+                Start Setup Chat
+              </Button>
+            </div>
           </div>
         </SheetContent>
       </Sheet>
@@ -91,18 +98,22 @@ export function IntegrationSetupWizard({
 
   return (
     <Sheet open={!!integration} onOpenChange={handleOpen}>
-      <SheetContent>
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <span className="text-xl">{integration.icon}</span>
-            Set up {integration.name}
-          </SheetTitle>
-          <SheetDescription>{integration.description}</SheetDescription>
+      <SheetContent className="sm:max-w-md overflow-y-auto">
+        <SheetHeader className="pb-4 border-b">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-muted text-xl">
+              {integration.icon}
+            </div>
+            <div>
+              <SheetTitle className="text-base">Set up {integration.name}</SheetTitle>
+              <SheetDescription className="text-xs mt-0.5">{integration.description}</SheetDescription>
+            </div>
+          </div>
         </SheetHeader>
-        <div className="mt-6 space-y-4">
+        <div className="mt-5 space-y-4">
           {integration.fields.map((field) => (
             <div key={field.key} className="space-y-1.5">
-              <Label htmlFor={`field-${field.key}`}>
+              <Label htmlFor={`field-${field.key}`} className="text-sm font-medium">
                 {field.label}
                 {field.required && <span className="text-red-500 ml-0.5">*</span>}
               </Label>
@@ -112,6 +123,7 @@ export function IntegrationSetupWizard({
                   value={values[field.key] || ""}
                   onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
                   placeholder={field.placeholder}
+                  className="bg-muted/50 border-border/50 focus:bg-background transition-colors"
                   rows={3}
                 />
               ) : (
@@ -121,15 +133,16 @@ export function IntegrationSetupWizard({
                   value={values[field.key] || ""}
                   onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
                   placeholder={field.placeholder}
+                  className="bg-muted/50 border-border/50 focus:bg-background transition-colors"
                 />
               )}
               {field.helpText && (
-                <p className="text-[11px] text-muted-foreground">{field.helpText}</p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">{field.helpText}</p>
               )}
             </div>
           ))}
-          <div className="flex gap-2 pt-2">
-            <Button onClick={handleSubmit} disabled={isSaving || !allRequiredFilled}>
+          <div className="flex gap-2 pt-4 border-t">
+            <Button onClick={handleSubmit} disabled={isSaving || !allRequiredFilled} className="flex-1">
               {isSaving && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
               {integration.status === "connected" ? "Update" : "Connect"}
             </Button>

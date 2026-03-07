@@ -406,7 +406,13 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
 
   const { assistant: defaultAssistant } = useDefaultAssistant()
   const { workflows } = useWorkflows()
-  const { employees: digitalEmployees } = useDigitalEmployees()
+  const { employees: digitalEmployees, fetchEmployees: refreshEmployees } = useDigitalEmployees()
+
+  // Auto-refresh employee list when navigating back to sidebar or after creation
+  useEffect(() => {
+    // Refresh when pathname changes (e.g. after creating a new employee and navigating)
+    refreshEmployees()
+  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null)
@@ -879,7 +885,11 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                       )}
                     >
                       <div className="relative">
-                        <Bot className="h-4 w-4 shrink-0" />
+                        {emp.avatar ? (
+                          <span className="text-base leading-none">{emp.avatar}</span>
+                        ) : (
+                          <Bot className="h-4 w-4 shrink-0" />
+                        )}
                         <div className={cn(
                           "absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-sidebar",
                           emp.status === "ACTIVE" && isRecent && "bg-chart-2 animate-pulse",
