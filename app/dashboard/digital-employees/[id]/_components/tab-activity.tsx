@@ -16,6 +16,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { GoalTracker } from "./goal-tracker"
+import { ErrorPatternsCard } from "./error-patterns-card"
 
 interface TabActivityProps {
   employee: {
@@ -39,6 +41,9 @@ interface TabActivityProps {
     approvalId: string,
     response: { status: string }
   ) => Promise<void>
+  runs: Array<{
+    id: string; status: string; error: string | null; startedAt: string
+  }>
   onRunNow: () => void
   onDeploy: () => void
   onStart: () => void
@@ -50,6 +55,7 @@ export function TabActivity({
   containerRunning,
   pendingApprovals,
   respondToApproval,
+  runs,
   onRunNow,
   onDeploy,
   onStart,
@@ -143,6 +149,12 @@ export function TabActivity({
           </div>
         </div>
       </div>
+
+      {/* ─── Goal Tracker ─── */}
+      <GoalTracker employeeId={employee.id} />
+
+      {/* ─── Error Patterns ─── */}
+      <ErrorPatternsCard employeeId={employee.id} runs={runs} />
 
       {/* ─── Pending Approvals ─── */}
       {pendingApprovals.length > 0 && (

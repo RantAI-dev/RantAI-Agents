@@ -25,8 +25,11 @@ import { useAssistants } from "@/hooks/use-assistants"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"
 import { toast } from "sonner"
+import { TemplateGallery } from "./_components/template-gallery"
+import type { EmployeeTemplate } from "@/lib/digital-employee/templates/employee-templates"
 
 const STEPS = [
+  { label: "Template", description: "Choose a starting point" },
   { label: "Identity", description: "Name and appearance" },
   { label: "Select Agent", description: "Choose an assistant" },
   { label: "Autonomy Level", description: "Set decision authority" },
@@ -85,6 +88,7 @@ export default function NewDigitalEmployeePage() {
   const [isCreating, setIsCreating] = useState(false)
 
   // Form state
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [avatar, setAvatar] = useState("🤖")
@@ -92,15 +96,30 @@ export default function NewDigitalEmployeePage() {
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
   const [autonomyLevel, setAutonomyLevel] = useState("L1")
 
+  const handleTemplateSelect = (template: EmployeeTemplate | null) => {
+    if (template) {
+      setSelectedTemplateId(template.id)
+      setName(template.identity.name)
+      setDescription(template.identity.description)
+      setAvatar(template.identity.avatar)
+      setAvatarUrl(null)
+      setAutonomyLevel(template.suggestedAutonomy)
+    } else {
+      setSelectedTemplateId(null)
+    }
+  }
+
   const selectedAssistant = assistants.find((a) => a.id === selectedAssistantId)
 
   const canProceed = () => {
     switch (step) {
       case 0:
-        return name.trim().length > 0
+        return true // Template step — always can proceed
       case 1:
-        return selectedAssistantId !== null
+        return name.trim().length > 0
       case 2:
+        return selectedAssistantId !== null
+      case 3:
         return true
       default:
         return true
@@ -201,10 +220,24 @@ export default function NewDigitalEmployeePage() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 24 }}
-          className="max-w-2xl"
+          className={cn("max-w-2xl", step === 0 && "max-w-4xl")}
         >
-          {/* Step 0: Identity */}
+          {/* Step 0: Template */}
           {step === 0 && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold mb-1">Choose a Template</h2>
+                <p className="text-sm text-muted-foreground">Start from a template or build from scratch.</p>
+              </div>
+              <TemplateGallery
+                selectedTemplateId={selectedTemplateId}
+                onSelect={handleTemplateSelect}
+              />
+            </div>
+          )}
+
+          {/* Step 1: Identity */}
+          {step === 1 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Identity</h2>
@@ -244,8 +277,8 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 1: Select Agent */}
-          {step === 1 && (
+          {/* Step 2: Select Agent */}
+          {step === 2 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Select Agent</h2>
@@ -291,8 +324,8 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 2: Autonomy Level */}
-          {step === 2 && (
+          {/* Step 3: Autonomy Level */}
+          {step === 3 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Autonomy Level</h2>
@@ -335,8 +368,8 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 3: Review & Create */}
-          {step === 3 && (
+          {/* Step 4: Review & Create */}
+          {step === 4 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Review & Create</h2>

@@ -699,6 +699,7 @@ export default function DigitalEmployeeDetailPage() {
               containerRunning={containerRunning}
               pendingApprovals={pendingApprovals}
               respondToApproval={respondToApproval}
+              runs={runs}
               onRunNow={handleRunNow}
               onDeploy={handleDeploy}
               onStart={handleStart}
