@@ -15,6 +15,8 @@ Replace the scattered messaging/task/approval system with a unified, ClickUp-ins
 - **Team is a property on tasks/subtasks**, not the grouping structure. Tasks are grouped by Status (default), and can be re-grouped by Team, Assignee, or Priority.
 - **Both humans and employees can create tasks.** Employees can also create tasks for each other or themselves via runtime tools.
 - **Formal review flow** with optional per-subtask review.
+- **Tab routing uses query params:** `/dashboard/digital-employees?tab=tasks` (not path segments) to avoid routing conflicts.
+- **Rejected tasks move to CANCELLED**, not DONE — rejected work should not inflate completion metrics.
 
 ## Architecture
 
@@ -173,22 +175,31 @@ id              String    @id @default(cuid())
 organizationId  String    (FK → Organization)
 title           String
 description     String?   @db.Text
-status          String    (default: "TODO") — "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE"
+status          String    (default: "TODO") — "TODO" | "IN_PROGRESS" | "IN_REVIEW" | "DONE" | "CANCELLED"
 priority        String    (default: "MEDIUM") — "LOW" | "MEDIUM" | "HIGH"
-assigneeId      String?   (FK → DigitalEmployee)
-groupId         String?   (FK → EmployeeGroup) — the team
-reviewerId      String?   (FK → DigitalEmployee, nullable) — supervisor employee reviewer
+assigneeId      String?   (FK → DigitalEmployee, relation: "assignedTasks")
+groupId         String?   (FK → EmployeeGroup, relation: "tasks") — the team
+reviewerId      String?   (FK → DigitalEmployee, nullable, relation: "reviewingTasks") — supervisor employee reviewer
 humanReview     Boolean   (default: false) — requires human review
 reviewStatus    String?   — "PENDING" | "APPROVED" | "CHANGES_REQUESTED" | "REJECTED"
 reviewComment   String?   @db.Text
-parentTaskId    String?   (FK → EmployeeTask, nullable) — for subtasks
-createdById     String?   (FK → DigitalEmployee, nullable) — null = created by human
+parentTaskId    String?   (FK → self, relation: "subtasks"/"parentTask") — for subtasks
+subtasks        EmployeeTask[] (relation: "subtasks")
+parentTask      EmployeeTask?  (relation: "parentTask")
+createdByEmployeeId  String?  (FK → DigitalEmployee, nullable, relation: "createdTasks") — if created by employee
+createdByUserId      String?  — NextAuth user ID, set when human creates the task
 dueDate         DateTime?
 completedAt     DateTime?
-order           Int       (default: 0) — for drag-drop ordering
+orderInStatus   Int       (default: 0) — ordering within the same status column (Kanban)
+orderInParent   Int       (default: 0) — ordering within parent task (subtask order)
 metadata        Json      (default: {})
 createdAt       DateTime  @default(now())
 updatedAt       DateTime  @updatedAt
+
+// Reverse relations to add on existing models:
+// DigitalEmployee: assignedTasks, reviewingTasks, createdTasks
+// EmployeeGroup: tasks
+// Organization: employeeTasks
 
 @@index([organizationId, status])
 @@index([assigneeId, status])
@@ -196,13 +207,16 @@ updatedAt       DateTime  @updatedAt
 @@index([parentTaskId])
 ```
 
+**Subtasks use the same 4-status model** (TODO/IN_PROGRESS/IN_REVIEW/DONE) as parent tasks. The UI simplifies this visually — checkbox unchecked = TODO, blue border = IN_PROGRESS, eye icon = IN_REVIEW, green check = DONE — but the underlying status is the same enum.
+
 **New: `EmployeeTaskComment` table**
 ```
 id              String    @id @default(cuid())
 taskId          String    (FK → EmployeeTask)
 content         String    @db.Text
 authorType      String    — "HUMAN" | "EMPLOYEE"
-authorId        String?   (FK → DigitalEmployee, nullable)
+authorEmployeeId String?  (FK → DigitalEmployee, nullable) — set when authorType = "EMPLOYEE"
+authorUserId    String?   — NextAuth user ID, set when authorType = "HUMAN"
 createdAt       DateTime  @default(now())
 ```
 
@@ -212,7 +226,8 @@ id              String    @id @default(cuid())
 taskId          String    (FK → EmployeeTask)
 type            String    — "CREATED" | "STATUS_CHANGED" | "ASSIGNED" | "REVIEW_SUBMITTED" | "REVIEW_RESPONDED" | "COMMENT" | "SUBTASK_COMPLETED"
 actorType       String    — "HUMAN" | "EMPLOYEE"
-actorId         String?   (FK → DigitalEmployee, nullable)
+actorEmployeeId String?   (FK → DigitalEmployee, nullable) — set when actorType = "EMPLOYEE"
+actorUserId     String?   — NextAuth user ID, set when actorType = "HUMAN"
 data            Json      (default: {}) — event-specific payload
 createdAt       DateTime  @default(now())
 
@@ -221,37 +236,42 @@ createdAt       DateTime  @default(now())
 
 ### 9. API Routes
 
+Routes use `/api/dashboard/tasks/` (not nested under `digital-employees`) to avoid App Router dynamic segment collision with `/api/dashboard/digital-employees/[id]`:
+
 ```
-GET    /api/dashboard/digital-employees/tasks          — list all tasks (filterable)
-POST   /api/dashboard/digital-employees/tasks          — create task
-GET    /api/dashboard/digital-employees/tasks/[id]      — get task detail
-PUT    /api/dashboard/digital-employees/tasks/[id]      — update task
-DELETE /api/dashboard/digital-employees/tasks/[id]      — delete task
-POST   /api/dashboard/digital-employees/tasks/[id]/review  — submit review (approve/changes/reject)
+GET    /api/dashboard/tasks                    — list all tasks (filterable by status, assignee, group, priority)
+POST   /api/dashboard/tasks                    — create task
+GET    /api/dashboard/tasks/[id]               — get task detail (includes subtasks, comments, events)
+PUT    /api/dashboard/tasks/[id]               — update task (title, description, status, assignee, etc.)
+DELETE /api/dashboard/tasks/[id]               — delete task
+POST   /api/dashboard/tasks/[id]/review        — submit review (approve/changes/reject) with optional comment
 
-GET    /api/dashboard/digital-employees/tasks/[id]/comments — list comments
-POST   /api/dashboard/digital-employees/tasks/[id]/comments — add comment
+GET    /api/dashboard/tasks/[id]/comments      — list comments
+POST   /api/dashboard/tasks/[id]/comments      — add comment
 
-GET    /api/dashboard/digital-employees/tasks/[id]/events   — activity timeline
+GET    /api/dashboard/tasks/[id]/events        — activity timeline
 
 # Runtime (employee-facing)
-GET    /api/runtime/tasks                              — get assigned tasks
-POST   /api/runtime/tasks                              — create task (employee-initiated)
-PUT    /api/runtime/tasks/[id]/status                  — update task status
-POST   /api/runtime/tasks/[id]/submit-review           — submit for review
-POST   /api/runtime/tasks/[id]/comments                — add comment
+GET    /api/runtime/tasks                      — get assigned tasks (includes comments and review comments)
+POST   /api/runtime/tasks                      — create task (employee-initiated)
+PUT    /api/runtime/tasks/[id]/status          — update task status
+POST   /api/runtime/tasks/[id]/submit-review   — submit for review
+POST   /api/runtime/tasks/[id]/comments        — add comment
+GET    /api/runtime/tasks/[id]/comments        — read comments (so employees can read review feedback)
 ```
 
 ### 10. Runtime Tools (Agent-Runner)
 
 Replace existing `send_message`/`check_inbox`/`reply_message` tools with task-oriented tools:
 
-- **`list_tasks`** — get tasks assigned to this employee (filterable by status)
+- **`list_tasks`** — get tasks assigned to this employee (filterable by status), includes review comments and recent comments so employees can read feedback
+- **`get_task`** — get full task detail including all comments and review status
 - **`create_task`** — create a new task (assign to self, another employee, or leave unassigned)
 - **`update_task_status`** — move task to next status (TODO → IN_PROGRESS → IN_REVIEW → DONE)
 - **`create_subtask`** — add subtask to an existing task
 - **`complete_subtask`** — mark subtask done, optionally submit for review
 - **`add_comment`** — add a comment to a task
+- **`read_comments`** — read comments on a task (critical for reading review feedback and human instructions)
 - **`list_employees`** — (keep existing) discover coworkers for task assignment
 
 ### 11. Review Flow
@@ -262,7 +282,7 @@ Replace existing `send_message`/`check_inbox`/`reply_message` tools with task-or
 3. If `reviewerId` is set → supervisor employee picks it up via `list_tasks` tool
 4. Reviewer clicks Approve → task moves to "DONE"
 5. Reviewer clicks "Changes" → task moves back to "IN_PROGRESS" with review comment
-6. Reviewer clicks "Reject" → task moves to "DONE" with rejected status
+6. Reviewer clicks "Reject" → task moves to "CANCELLED" with `reviewStatus = "REJECTED"` (rejected tasks do NOT count as completed work in progress bars and counts)
 
 **Subtask-level review (optional):**
 1. When creating a subtask, creator can toggle "Requires review"
