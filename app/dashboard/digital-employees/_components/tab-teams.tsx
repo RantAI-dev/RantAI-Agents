@@ -5,6 +5,15 @@ import { Search, Plus, Loader2, Users } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { useEmployeeGroups } from "@/hooks/use-employee-groups"
 import { useTasks } from "@/hooks/use-tasks"
@@ -13,10 +22,15 @@ import { toast } from "sonner"
 
 export default function TabTeams() {
   const router = useRouter()
-  const { groups, isLoading: groupsLoading, error: groupsError, refresh } = useEmployeeGroups()
+  const { groups, isLoading: groupsLoading, error: groupsError, refresh, createGroup, deployGroup, startGroup, stopGroup } = useEmployeeGroups()
   const { tasks } = useTasks()
 
   const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "IDLE">("ALL")
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [newTeamName, setNewTeamName] = useState("")
+  const [newTeamDesc, setNewTeamDesc] = useState("")
+  const [creating, setCreating] = useState(false)
 
   // Compute task counts per group from tasks array
   const taskCountsByGroup = useMemo(() => {
@@ -51,22 +65,31 @@ export default function TabTeams() {
     return map
   }, [tasks])
 
-  const filteredGroups = useMemo(() => {
-    if (!search.trim()) return groups
-    const q = search.toLowerCase()
-    return groups.filter(
-      (g) =>
-        g.name.toLowerCase().includes(q) ||
-        (g.description && g.description.toLowerCase().includes(q))
-    )
-  }, [groups, search])
+  const filtered = useMemo(() => {
+    let result = [...groups]
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      result = result.filter(g => g.name.toLowerCase().includes(q) || g.description?.toLowerCase().includes(q))
+    }
+    if (statusFilter !== "ALL") {
+      result = result.filter(g => g.status === statusFilter)
+    }
+    return result
+  }, [groups, search, statusFilter])
 
-  function handleManage(groupId: string) {
-    // Navigate to groups page if it exists, otherwise show toast
+  const handleCreateTeam = async () => {
+    if (!newTeamName.trim()) return
+    setCreating(true)
     try {
-      router.push(`/dashboard/groups/${groupId}`)
-    } catch {
-      toast.info("Group management page coming soon")
+      await createGroup({ name: newTeamName.trim(), description: newTeamDesc.trim() || undefined })
+      toast.success("Team created")
+      setShowCreateDialog(false)
+      setNewTeamName("")
+      setNewTeamDesc("")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create team")
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -84,10 +107,24 @@ export default function TabTeams() {
           />
         </div>
 
+        <div className="flex items-center gap-1">
+          {(["ALL", "ACTIVE", "IDLE"] as const).map((s) => (
+            <Button
+              key={s}
+              size="sm"
+              variant={statusFilter === s ? "default" : "outline"}
+              className="h-7 text-xs px-2.5"
+              onClick={() => setStatusFilter(s)}
+            >
+              {s === "ALL" ? "All" : s === "ACTIVE" ? "Active" : "Idle"}
+            </Button>
+          ))}
+        </div>
+
         <Button
           size="sm"
           className="h-8 text-xs ml-auto shrink-0"
-          onClick={() => toast.info("Create team feature coming soon")}
+          onClick={() => setShowCreateDialog(true)}
         >
           <Plus className="h-3.5 w-3.5 mr-1.5" />
           Create Team
@@ -107,19 +144,19 @@ export default function TabTeams() {
               Retry
             </Button>
           </div>
-        ) : filteredGroups.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="rounded-full bg-muted p-4 mb-4 mx-auto w-fit">
               <Users className="h-8 w-8 text-muted-foreground" />
             </div>
-            {search.trim() ? (
+            {search.trim() || statusFilter !== "ALL" ? (
               <>
                 <h3 className="text-sm font-medium mb-1">No teams found</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Try adjusting your search query
+                  Try adjusting your search query or filter
                 </p>
-                <Button variant="outline" size="sm" onClick={() => setSearch("")}>
-                  Clear search
+                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setStatusFilter("ALL") }}>
+                  Clear filters
                 </Button>
               </>
             ) : (
@@ -130,7 +167,7 @@ export default function TabTeams() {
                 </p>
                 <Button
                   size="sm"
-                  onClick={() => toast.info("Create team feature coming soon")}
+                  onClick={() => setShowCreateDialog(true)}
                 >
                   <Plus className="h-4 w-4 mr-1.5" />
                   Create Team
@@ -140,17 +177,73 @@ export default function TabTeams() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-            {filteredGroups.map((group) => (
+            {filtered.map((group) => (
               <TeamCard
                 key={group.id}
                 group={group}
                 taskCounts={taskCountsByGroup.get(group.id)}
-                onManage={() => handleManage(group.id)}
+                onManage={() => router.push(`/dashboard/groups/${group.id}`)}
+                onDeploy={() => deployGroup(group.id).catch(e => toast.error(e.message))}
+                onStart={() => startGroup(group.id).catch(e => toast.error(e.message))}
+                onStop={() => stopGroup(group.id).catch(e => toast.error(e.message))}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Create Team Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Create Team</DialogTitle>
+            <DialogDescription>
+              Create a new team to organize your digital employees.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="team-name">Name</Label>
+              <Input
+                id="team-name"
+                placeholder="e.g. Customer Support"
+                value={newTeamName}
+                onChange={(e) => setNewTeamName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateTeam()
+                }}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="team-desc">Description (optional)</Label>
+              <Input
+                id="team-desc"
+                placeholder="What does this team do?"
+                value={newTeamDesc}
+                onChange={(e) => setNewTeamDesc(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateTeam()
+                }}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateDialog(false)} disabled={creating}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateTeam} disabled={creating || !newTeamName.trim()}>
+              {creating ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
