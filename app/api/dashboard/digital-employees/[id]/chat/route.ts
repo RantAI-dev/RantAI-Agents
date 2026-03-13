@@ -418,44 +418,41 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    // Resolve container URL — group members use the group's shared container
-    let containerUrl: string | null
-    let gatewayToken: string | null | undefined = employee.gatewayToken
+    // Resolve container through employee's team
+    let containerUrl: string | null = null
+    let gatewayToken: string | null = null
     let agentIdHeader: string | undefined
 
     if (employee.groupId) {
       const group = await prisma.employeeGroup.findUnique({
         where: { id: employee.groupId },
-        select: { containerPort: true, gatewayToken: true, containerId: true },
+        select: { containerPort: true, gatewayToken: true, containerId: true, status: true },
       })
+
       if (group?.containerPort && group.containerId) {
         containerUrl = await orchestrator.getGroupContainerUrl(employee.groupId)
         gatewayToken = group.gatewayToken
         agentIdHeader = id // Route to specific agent within group gateway
-      } else {
-        containerUrl = null
       }
-    } else {
-      containerUrl = await orchestrator.getContainerUrl(id)
-    }
 
-    // Auto-start container if employee is ACTIVE but not running
-    if (!containerUrl && employee.status === "ACTIVE") {
-      try {
-        const { port } = await orchestrator.startContainer(id)
-        containerUrl = `http://localhost:${port}`
-        // Wait for gateway to become responsive (up to 30s)
-        for (let i = 0; i < 15; i++) {
-          await new Promise((r) => setTimeout(r, 2000))
-          try {
-            const probe = await fetch(`${containerUrl}/health`, { signal: AbortSignal.timeout(2000) })
-            if (probe.ok) break
-          } catch {
-            // Not ready yet
+      // Auto-start container if group is ACTIVE but container isn't running
+      if (!containerUrl && group?.status === "ACTIVE") {
+        try {
+          const { port } = await orchestrator.startGroupContainer(employee.groupId)
+          containerUrl = `http://localhost:${port}`
+          // Wait for gateway to become responsive (up to 30s)
+          for (let i = 0; i < 15; i++) {
+            await new Promise((r) => setTimeout(r, 2000))
+            try {
+              const probe = await fetch(`${containerUrl}/health`, { signal: AbortSignal.timeout(2000) })
+              if (probe.ok) break
+            } catch {
+              // Not ready yet
+            }
           }
+        } catch (startErr) {
+          console.error("Auto-start container failed:", startErr)
         }
-      } catch (startErr) {
-        console.error("Auto-start container failed:", startErr)
       }
     }
 
