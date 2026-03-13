@@ -13,7 +13,6 @@ import {
   Square,
   Zap,
   Folder,
-  History,
 } from "@/lib/icons"
 import { CheckSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -31,7 +30,6 @@ import { useDigitalEmployee, type DeployProgressEvent } from "@/hooks/use-digita
 import { WorkspaceIDE } from "./_components/workspace-ide"
 import { TabChat } from "./_components/tab-chat"
 import { TabActivity } from "./_components/tab-activity"
-import { TabHistory } from "./_components/tab-history"
 import { TabSettings } from "./_components/tab-settings"
 import TabEmployeeTasks from "./_components/tab-tasks"
 import { ChatDrawer } from "./_components/chat-drawer"
@@ -44,7 +42,7 @@ import type { EmployeeSchedule } from "@/lib/digital-employee/types"
 
 // ─── Types ────────────────────────────────────────────────
 
-type Section = "activity" | "chat" | "history" | "tasks" | "workspace" | "settings"
+type Section = "activity" | "chat" | "tasks" | "workspace" | "settings"
 
 interface NavItem {
   id: Section
@@ -56,7 +54,6 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { id: "activity", label: "Activity", icon: Zap, group: "interact" },
   { id: "chat", label: "Chat", icon: MessageSquare, group: "interact" },
-  { id: "history", label: "History", icon: History, group: "interact" },
   { id: "tasks", label: "Tasks", icon: CheckSquare, group: "interact" },
   { id: "workspace", label: "Workspace", icon: Folder, group: "configure" },
   { id: "settings", label: "Settings", icon: Settings, group: "configure" },
@@ -462,8 +459,6 @@ export default function DigitalEmployeeDetailPage() {
   const status = STATUS_STYLES[employee.status] || STATUS_STYLES.DRAFT
   const autonomy = AUTONOMY_STYLES[employee.autonomyLevel] || AUTONOMY_STYLES.supervised
   const pendingApprovals = approvals.filter((a) => a.status === "PENDING")
-  const historyApprovals = approvals.filter((a) => a.status !== "PENDING")
-
   // Build synthetic assistant for ChatWorkspace
   const employeeAssistant: Assistant = {
     id: employee.assistant.id,
@@ -680,17 +675,6 @@ export default function DigitalEmployeeDetailPage() {
               syntheticSession={syntheticSession}
               employeeAssistant={employeeAssistant}
               onUpdateSession={handleUpdateSession}
-            />
-          )}
-
-          {/* ─── History ─── */}
-          {activeSection === "history" && (
-            <TabHistory
-              runs={runs}
-              containerRunning={containerRunning}
-              employeeStatus={employee.status}
-              model={employee.assistant.model}
-              onRunNow={handleRunNow}
             />
           )}
 
