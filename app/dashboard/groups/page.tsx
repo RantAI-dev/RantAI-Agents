@@ -20,7 +20,6 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useEmployeeGroups } from "@/hooks/use-employee-groups"
-import type { EmployeeGroup } from "@/hooks/use-employee-groups"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { CountUp } from "@/components/reactbits/count-up"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"
@@ -92,7 +91,7 @@ export default function GroupsPage() {
     if (!newName.trim()) return
     setCreating(true)
     try {
-      const group = await createGroup(newName.trim(), newDescription.trim() || undefined)
+      const group = await createGroup({ name: newName.trim(), description: newDescription.trim() || undefined })
       if (group) {
         toast.success("Team created")
         setNewName("")
@@ -428,16 +427,16 @@ export default function GroupsPage() {
                               </span>
                             </div>
                           ))}
-                          {group.memberCount > 5 && (
+                          {group.members.length > 5 && (
                             <div className="h-6 w-6 rounded-full bg-muted border-2 border-card flex items-center justify-center">
                               <span className="text-[9px] font-medium text-muted-foreground">
-                                +{group.memberCount - 5}
+                                +{group.members.length - 5}
                               </span>
                             </div>
                           )}
                         </div>
                         <span className="text-[11px] text-muted-foreground/70">
-                          {group.memberCount} member{group.memberCount !== 1 ? "s" : ""}
+                          {group.members.length} member{group.members.length !== 1 ? "s" : ""}
                         </span>
                       </div>
 
@@ -483,7 +482,7 @@ export default function GroupsPage() {
                               )}
                             </Button>
                           )}
-                          {group.status === "RUNNING" && group.containerId && (
+                          {group.status === "RUNNING" && (
                             <Button
                               size="sm"
                               variant="ghost"

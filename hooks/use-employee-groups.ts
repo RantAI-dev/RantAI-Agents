@@ -143,6 +143,18 @@ export function useEmployeeGroups() {
     [fetchGroups]
   )
 
+  const deleteGroup = useCallback(
+    async (groupId: string): Promise<void> => {
+      const res = await fetch(`/api/dashboard/groups/${groupId}`, { method: "DELETE" })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || "Failed to delete team")
+      }
+      await fetchGroups()
+    },
+    [fetchGroups]
+  )
+
   return {
     groups,
     isLoading,
@@ -150,6 +162,7 @@ export function useEmployeeGroups() {
     refresh: fetchGroups,
     createGroup,
     updateGroup,
+    deleteGroup,
     addMembers,
     removeMembers,
     deployGroup,
