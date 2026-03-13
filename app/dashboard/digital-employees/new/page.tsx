@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { AvatarPicker } from "@/app/dashboard/agent-builder/_components/avatar-picker"
 import { useAssistants } from "@/hooks/use-assistants"
+import { useEmployeeGroups } from "@/hooks/use-employee-groups"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"
 import { toast } from "sonner"
@@ -33,6 +34,7 @@ const STEPS = [
   { label: "Identity", description: "Name and appearance" },
   { label: "Select Agent", description: "Choose an assistant" },
   { label: "Autonomy Level", description: "Set decision authority" },
+  { label: "Team", description: "Assign to a team" },
   { label: "Review & Create", description: "Confirm and deploy" },
 ]
 
@@ -83,6 +85,7 @@ const fadeUp = {
 export default function NewDigitalEmployeePage() {
   const router = useRouter()
   const { assistants, isLoading: assistantsLoading } = useAssistants()
+  const { groups } = useEmployeeGroups()
 
   const [step, setStep] = useState(0)
   const [isCreating, setIsCreating] = useState(false)
@@ -95,6 +98,10 @@ export default function NewDigitalEmployeePage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
   const [autonomyLevel, setAutonomyLevel] = useState("L1")
+  const [teamMode, setTeamMode] = useState<"existing" | "new">("new")
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+  const [newTeamName, setNewTeamName] = useState("")
+  const [newTeamDesc, setNewTeamDesc] = useState("")
 
   const handleTemplateSelect = (template: EmployeeTemplate | null) => {
     if (template) {
@@ -109,6 +116,12 @@ export default function NewDigitalEmployeePage() {
     }
   }
 
+  useEffect(() => {
+    if (teamMode === "new" && !newTeamName) {
+      setNewTeamName(name)
+    }
+  }, [name, teamMode, newTeamName])
+
   const selectedAssistant = assistants.find((a) => a.id === selectedAssistantId)
 
   const canProceed = () => {
@@ -121,6 +134,8 @@ export default function NewDigitalEmployeePage() {
         return selectedAssistantId !== null
       case 3:
         return true
+      case 4:
+        return teamMode === "existing" ? selectedGroupId !== null : true
       default:
         return true
     }
@@ -130,6 +145,21 @@ export default function NewDigitalEmployeePage() {
     if (!selectedAssistantId) return
     setIsCreating(true)
     try {
+      let groupId: string | undefined
+
+      if (teamMode === "existing" && selectedGroupId) {
+        groupId = selectedGroupId
+      } else if (teamMode === "new" && newTeamName.trim()) {
+        const res = await fetch("/api/dashboard/groups", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newTeamName.trim(), description: newTeamDesc.trim() || undefined }),
+        })
+        if (!res.ok) throw new Error("Failed to create team")
+        const team = await res.json()
+        groupId = team.id
+      }
+
       const res = await fetch("/api/dashboard/digital-employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -139,6 +169,7 @@ export default function NewDigitalEmployeePage() {
           avatar: avatarUrl || avatar.trim() || undefined,
           assistantId: selectedAssistantId,
           autonomyLevel,
+          groupId,
         }),
       })
       if (!res.ok) {
@@ -153,7 +184,7 @@ export default function NewDigitalEmployeePage() {
     } finally {
       setIsCreating(false)
     }
-  }, [name, description, avatar, avatarUrl, selectedAssistantId, autonomyLevel, router])
+  }, [name, description, avatar, avatarUrl, selectedAssistantId, autonomyLevel, teamMode, selectedGroupId, newTeamName, newTeamDesc, router])
 
   return (
     <div className="flex flex-col h-full">
@@ -368,8 +399,53 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 4: Review & Create */}
+          {/* Step 4: Team */}
           {step === 4 && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold mb-1">Team Assignment</h2>
+                <p className="text-sm text-muted-foreground">Assign this employee to a team.</p>
+              </div>
+
+              <div className="flex gap-3">
+                <Button variant={teamMode === "new" ? "default" : "outline"} onClick={() => setTeamMode("new")}>
+                  Create new team
+                </Button>
+                <Button variant={teamMode === "existing" ? "default" : "outline"} onClick={() => setTeamMode("existing")}>
+                  Add to existing team
+                </Button>
+              </div>
+
+              {teamMode === "new" && (
+                <div className="space-y-3">
+                  <Input placeholder="Team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} />
+                  <Input placeholder="Description (optional)" value={newTeamDesc} onChange={(e) => setNewTeamDesc(e.target.value)} />
+                </div>
+              )}
+
+              {teamMode === "existing" && (
+                <div className="space-y-2">
+                  {groups.map((g) => (
+                    <button
+                      key={g.id}
+                      className={cn(
+                        "w-full text-left p-3 rounded-lg border transition-colors",
+                        selectedGroupId === g.id ? "border-primary bg-primary/5" : "hover:bg-muted"
+                      )}
+                      onClick={() => setSelectedGroupId(g.id)}
+                    >
+                      <div className="font-medium text-sm">{g.name}</div>
+                      {g.description && <div className="text-xs text-muted-foreground">{g.description}</div>}
+                      <div className="text-xs text-muted-foreground mt-1">{g.members.length} members</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 5: Review & Create */}
+          {step === 5 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Review & Create</h2>
