@@ -24,6 +24,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       id,
       ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
     },
+    select: { groupId: true },
   })
 
   if (!employee) {
@@ -33,6 +34,8 @@ export async function POST(req: Request, { params }: RouteParams) {
     })
   }
 
+  const groupId = employee.groupId
+
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
@@ -41,7 +44,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       }
 
       try {
-        await orchestrator.startContainer(id, (event) => {
+        await orchestrator.startGroupContainer(groupId, (event) => {
           send(event)
         })
       } catch (error) {

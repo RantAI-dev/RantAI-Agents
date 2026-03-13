@@ -23,21 +23,21 @@ export async function POST(req: Request, { params }: RouteParams) {
         id,
         ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
       },
+      select: { groupId: true },
     })
 
     if (!employee) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    const result = await orchestrator.deploy(id)
+    const result = await orchestrator.deployGroup(employee.groupId)
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    // Auto-start the container after deploying
     try {
-      const { containerId, port } = await orchestrator.startContainer(id)
+      const { containerId, port } = await orchestrator.startGroupContainer(employee.groupId)
       return NextResponse.json({ success: true, containerId, port })
     } catch (startError) {
       console.error("Auto-start after resume failed:", startError)
