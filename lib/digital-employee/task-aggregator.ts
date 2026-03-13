@@ -27,37 +27,12 @@ interface ContainerTarget {
   url: string
   token: string
   sourceId: string
-  sourceType: "employee" | "group"
+  sourceType: "group"
 }
 
 // ─── Active Container Resolution ──────────────────────────────────────────────
 
 export async function getActiveContainers(orgId: string): Promise<ContainerTarget[]> {
-  const targets: ContainerTarget[] = []
-
-  // Individual employees (not in a group)
-  const employees = await prisma.digitalEmployee.findMany({
-    where: {
-      organizationId: orgId,
-      containerPort: { not: null },
-      gatewayToken: { not: null },
-      groupId: null,
-    },
-    select: { id: true, containerPort: true, gatewayToken: true },
-  })
-
-  for (const emp of employees) {
-    if (emp.containerPort !== null && emp.gatewayToken !== null) {
-      targets.push({
-        url: `http://localhost:${emp.containerPort}`,
-        token: emp.gatewayToken,
-        sourceId: emp.id,
-        sourceType: "employee",
-      })
-    }
-  }
-
-  // Group containers
   const groups = await prisma.employeeGroup.findMany({
     where: {
       organizationId: orgId,
@@ -67,6 +42,7 @@ export async function getActiveContainers(orgId: string): Promise<ContainerTarge
     select: { id: true, containerPort: true, gatewayToken: true },
   })
 
+  const targets: ContainerTarget[] = []
   for (const grp of groups) {
     if (grp.containerPort !== null && grp.gatewayToken !== null) {
       targets.push({
@@ -86,40 +62,27 @@ export async function resolveWriteTarget(
   orgId: string,
 ): Promise<ContainerTarget | null> {
   if (assigneeId) {
-    // Check if assignee belongs to a group that has a container
     const emp = await prisma.digitalEmployee.findFirst({
       where: { id: assigneeId, organizationId: orgId },
-      select: { id: true, groupId: true, containerPort: true, gatewayToken: true },
+      select: { groupId: true },
     })
 
-    if (emp) {
-      if (emp.groupId) {
-        // Use group container
-        const grp = await prisma.employeeGroup.findFirst({
-          where: { id: emp.groupId, containerPort: { not: null }, gatewayToken: { not: null } },
-          select: { id: true, containerPort: true, gatewayToken: true },
-        })
-        if (grp && grp.containerPort !== null && grp.gatewayToken !== null) {
-          return {
-            url: `http://localhost:${grp.containerPort}`,
-            token: grp.gatewayToken,
-            sourceId: grp.id,
-            sourceType: "group",
-          }
-        }
-      } else if (emp.containerPort !== null && emp.gatewayToken !== null) {
-        // Use employee's own container
+    if (emp?.groupId) {
+      const grp = await prisma.employeeGroup.findFirst({
+        where: { id: emp.groupId, containerPort: { not: null }, gatewayToken: { not: null } },
+        select: { id: true, containerPort: true, gatewayToken: true },
+      })
+      if (grp && grp.containerPort !== null && grp.gatewayToken !== null) {
         return {
-          url: `http://localhost:${emp.containerPort}`,
-          token: emp.gatewayToken,
-          sourceId: emp.id,
-          sourceType: "employee",
+          url: `http://localhost:${grp.containerPort}`,
+          token: grp.gatewayToken,
+          sourceId: grp.id,
+          sourceType: "group",
         }
       }
     }
   }
 
-  // Fallback: first active container in org
   const all = await getActiveContainers(orgId)
   return all[0] ?? null
 }
@@ -139,33 +102,23 @@ async function resolveContainerForSource(
   sourceEmployeeId: string,
   sourceGroupId: string | null,
 ): Promise<ContainerTarget | null> {
-  // Try group container first
-  if (sourceGroupId) {
-    const grp = await prisma.employeeGroup.findFirst({
-      where: { id: sourceGroupId, containerPort: { not: null }, gatewayToken: { not: null } },
-      select: { id: true, containerPort: true, gatewayToken: true },
-    })
-    if (grp && grp.containerPort !== null && grp.gatewayToken !== null) {
-      return {
-        url: `http://localhost:${grp.containerPort}`,
-        token: grp.gatewayToken,
-        sourceId: grp.id,
-        sourceType: "group",
-      }
-    }
-  }
+  const groupId = sourceGroupId ?? (await prisma.digitalEmployee.findFirst({
+    where: { id: sourceEmployeeId },
+    select: { groupId: true },
+  }))?.groupId
 
-  // Fall back to employee container
-  const emp = await prisma.digitalEmployee.findFirst({
-    where: { id: sourceEmployeeId, containerPort: { not: null }, gatewayToken: { not: null } },
+  if (!groupId) return null
+
+  const grp = await prisma.employeeGroup.findFirst({
+    where: { id: groupId, containerPort: { not: null }, gatewayToken: { not: null } },
     select: { id: true, containerPort: true, gatewayToken: true },
   })
-  if (emp && emp.containerPort !== null && emp.gatewayToken !== null) {
+  if (grp && grp.containerPort !== null && grp.gatewayToken !== null) {
     return {
-      url: `http://localhost:${emp.containerPort}`,
-      token: emp.gatewayToken,
-      sourceId: emp.id,
-      sourceType: "employee",
+      url: `http://localhost:${grp.containerPort}`,
+      token: grp.gatewayToken,
+      sourceId: grp.id,
+      sourceType: "group",
     }
   }
 
@@ -449,8 +402,8 @@ export async function fanOutTaskQuery(
         if (!existing || new Date(task.updated_at) > new Date(existing.task.updated_at)) {
           merged.set(task.id, {
             task,
-            sourceEmployeeId: target.sourceType === "employee" ? target.sourceId : task.assignee_id ?? target.sourceId,
-            sourceGroupId: target.sourceType === "group" ? target.sourceId : null,
+            sourceEmployeeId: task.assignee_id ?? target.sourceId,
+            sourceGroupId: target.sourceId,
           })
         }
       }
@@ -522,8 +475,8 @@ export async function proxyCreateTask(
   if (!res.ok) return null
   const task = (await res.json()) as Task
 
-  const sourceEmployeeId = target.sourceType === "employee" ? target.sourceId : (input.assignee_id ?? target.sourceId)
-  const sourceGroupId = target.sourceType === "group" ? target.sourceId : null
+  const sourceEmployeeId = input.assignee_id ?? target.sourceId
+  const sourceGroupId = target.sourceId
 
   upsertTaskCache(task, sourceEmployeeId, sourceGroupId, orgId).catch(() => {})
   return task
@@ -546,8 +499,8 @@ export async function proxyGetTaskDetail(
       if (res.ok) {
         const detail = (await res.json()) as TaskDetail
         // Cache the task
-        const sourceEmployeeId = target.sourceType === "employee" ? target.sourceId : (detail.task.assignee_id ?? target.sourceId)
-        const sourceGroupId = target.sourceType === "group" ? target.sourceId : null
+        const sourceEmployeeId = detail.task.assignee_id ?? target.sourceId
+        const sourceGroupId = target.sourceId
         upsertTaskCache(detail.task, sourceEmployeeId, sourceGroupId, orgId).catch(() => {})
         return detail
       }
@@ -611,8 +564,8 @@ export async function proxyUpdateTask(
   if (!res.ok) return null
   const task = (await res.json()) as Task
 
-  const sourceEmployeeId = target.sourceType === "employee" ? target.sourceId : (task.assignee_id ?? target.sourceId)
-  const sourceGroupId = target.sourceType === "group" ? target.sourceId : null
+  const sourceEmployeeId = task.assignee_id ?? target.sourceId
+  const sourceGroupId = target.sourceId
   upsertTaskCache(task, sourceEmployeeId, sourceGroupId, orgId).catch(() => {})
   return task
 }
@@ -670,8 +623,8 @@ export async function proxySubmitReview(
   if (!res.ok) return null
   const task = (await res.json()) as Task
 
-  const sourceEmployeeId = target.sourceType === "employee" ? target.sourceId : (task.assignee_id ?? target.sourceId)
-  const sourceGroupId = target.sourceType === "group" ? target.sourceId : null
+  const sourceEmployeeId = task.assignee_id ?? target.sourceId
+  const sourceGroupId = target.sourceId
   upsertTaskCache(task, sourceEmployeeId, sourceGroupId, orgId).catch(() => {})
   return task
 }
