@@ -18,7 +18,7 @@ export async function GET(
   }
 
   const { id } = await params
-  const comments = await proxyGetComments(id)
+  const comments = await proxyGetComments(id, orgCtx.organizationId)
 
   return NextResponse.json(comments)
 }

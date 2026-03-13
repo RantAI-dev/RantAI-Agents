@@ -18,7 +18,7 @@ export async function GET(
   }
 
   const { id } = await params
-  const events = await proxyGetEvents(id)
+  const events = await proxyGetEvents(id, orgCtx.organizationId)
 
   return NextResponse.json(events)
 }

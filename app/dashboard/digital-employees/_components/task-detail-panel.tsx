@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import {
   X,
   Link2,
@@ -52,11 +52,25 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface EmployeeLookup {
+  id: string
+  name: string
+  avatar?: string | null
+  online?: boolean
+}
+
+interface GroupLookup {
+  id: string
+  name: string
+}
+
 interface TaskDetailPanelProps {
   taskId: string | null
   open: boolean
   onClose: () => void
   onTaskUpdated?: () => void
+  employees?: EmployeeLookup[]
+  groups?: GroupLookup[]
 }
 
 // ─── Activity Timeline ────────────────────────────────────────────────────────
@@ -253,8 +267,27 @@ function PropertyRow({
   )
 }
 
-function PropertiesGrid({ task }: { task: Task }) {
+function PropertiesGrid({
+  task,
+  employeeMap,
+  groupMap,
+}: {
+  task: Task
+  employeeMap: Map<string, EmployeeLookup>
+  groupMap: Map<string, GroupLookup>
+}) {
   const priorityCfg = TASK_PRIORITY_CONFIG[task.priority]
+  const assignee = task.assignee_id ? employeeMap.get(task.assignee_id) : undefined
+  const group = task.group_id ? groupMap.get(task.group_id) : undefined
+  const reviewer = task.reviewer_id ? employeeMap.get(task.reviewer_id) : undefined
+  const creator = task.created_by_employee_id
+    ? employeeMap.get(task.created_by_employee_id)
+    : undefined
+
+  const assigneeName = assignee?.name ?? (task.assignee_id ? task.assignee_id.slice(0, 8) : null)
+  const groupName = group?.name ?? (task.group_id ? task.group_id.slice(0, 8) : null)
+  const reviewerName = reviewer?.name ?? (task.reviewer_id ? task.reviewer_id.slice(0, 8) : null)
+  const creatorName = creator?.name ?? task.created_by_user_id ?? task.created_by_employee_id ?? "Unknown"
 
   const isOverdue =
     task.due_date && !["DONE", "CANCELLED"].includes(task.status)
@@ -264,16 +297,18 @@ function PropertiesGrid({ task }: { task: Task }) {
   return (
     <div className="px-5 py-4">
       <PropertyRow label="Assignee">
-        {task.assignee_id ? (
+        {assigneeName ? (
           <div className="flex items-center gap-2">
             <div className="relative">
               <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-medium">
-                {task.assignee_id.slice(0, 2).toUpperCase()}
+                {assigneeName.charAt(0).toUpperCase()}
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-background" />
+              {assignee?.online && (
+                <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-background" />
+              )}
             </div>
             <span className="text-sm text-foreground truncate">
-              {task.assignee_id}
+              {assigneeName}
             </span>
           </div>
         ) : (
@@ -282,12 +317,12 @@ function PropertiesGrid({ task }: { task: Task }) {
       </PropertyRow>
 
       <PropertyRow label="Team">
-        {task.group_id ? (
+        {groupName ? (
           <Badge
             variant="outline"
             className="text-xs bg-blue-500/10 text-blue-500 border-blue-500/20"
           >
-            {task.group_id}
+            {groupName}
           </Badge>
         ) : (
           <span className="text-muted-foreground text-sm">None</span>
@@ -323,8 +358,8 @@ function PropertiesGrid({ task }: { task: Task }) {
           <span className="text-sm text-violet-500 font-medium">
             Human review required
           </span>
-        ) : task.reviewer_id ? (
-          <span className="text-sm text-foreground">{task.reviewer_id}</span>
+        ) : reviewerName ? (
+          <span className="text-sm text-foreground">{reviewerName}</span>
         ) : (
           <span className="text-muted-foreground text-sm">None</span>
         )}
@@ -333,12 +368,10 @@ function PropertiesGrid({ task }: { task: Task }) {
       <PropertyRow label="Created by">
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-medium flex-shrink-0">
-            {(task.created_by_user_id ?? task.created_by_employee_id ?? "?")
-              .slice(0, 2)
-              .toUpperCase()}
+            {creatorName.charAt(0).toUpperCase()}
           </div>
           <span className="text-sm text-foreground truncate">
-            {task.created_by_user_id ?? task.created_by_employee_id ?? "Unknown"}
+            {creatorName}
           </span>
           <span className="text-[11px] text-muted-foreground flex-shrink-0">
             {formatDistanceToNow(new Date(task.created_at), {
@@ -380,7 +413,17 @@ export function TaskDetailPanel({
   open,
   onClose,
   onTaskUpdated,
+  employees = [],
+  groups = [],
 }: TaskDetailPanelProps) {
+  const employeeMap = useMemo(
+    () => new Map(employees.map((e) => [e.id, e])),
+    [employees]
+  )
+  const groupMap = useMemo(
+    () => new Map(groups.map((g) => [g.id, g])),
+    [groups]
+  )
   const {
     task,
     subtasks,
@@ -631,7 +674,7 @@ export function TaskDetailPanel({
               </div>
 
               {/* Properties */}
-              <PropertiesGrid task={task} />
+              <PropertiesGrid task={task} employeeMap={employeeMap} groupMap={groupMap} />
 
               {/* Divider */}
               <div className="h-px bg-border mx-5" />

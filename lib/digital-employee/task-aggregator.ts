@@ -619,7 +619,14 @@ export async function proxyUpdateTask(
 
 // ─── Proxy: Delete Task ────────────────────────────────────────────────────────
 
-export async function proxyDeleteTask(taskId: string): Promise<boolean> {
+export async function proxyDeleteTask(taskId: string, orgId: string): Promise<boolean> {
+  // Verify the task belongs to the requesting organization
+  const cached = await prisma.employeeTask.findFirst({
+    where: { id: taskId, organizationId: orgId },
+    select: { id: true },
+  })
+  if (!cached) return false
+
   const target = await resolveContainerForTask(taskId)
 
   if (target) {
@@ -671,7 +678,14 @@ export async function proxySubmitReview(
 
 // ─── Proxy: Comments ──────────────────────────────────────────────────────────
 
-export async function proxyGetComments(taskId: string): Promise<TaskComment[]> {
+export async function proxyGetComments(taskId: string, orgId: string): Promise<TaskComment[]> {
+  // Verify the task belongs to the requesting organization
+  const cached = await prisma.employeeTask.findFirst({
+    where: { id: taskId, organizationId: orgId },
+    select: { id: true },
+  })
+  if (!cached) return []
+
   const target = await resolveContainerForTask(taskId)
 
   if (target) {
@@ -750,7 +764,14 @@ export async function proxyAddComment(
 
 // ─── Proxy: Events ────────────────────────────────────────────────────────────
 
-export async function proxyGetEvents(taskId: string): Promise<TaskEvent[]> {
+export async function proxyGetEvents(taskId: string, orgId: string): Promise<TaskEvent[]> {
+  // Verify the task belongs to the requesting organization
+  const cached = await prisma.employeeTask.findFirst({
+    where: { id: taskId, organizationId: orgId },
+    select: { id: true },
+  })
+  if (!cached) return []
+
   const target = await resolveContainerForTask(taskId)
 
   if (target) {

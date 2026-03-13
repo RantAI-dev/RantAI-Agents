@@ -95,8 +95,9 @@ export default function TabTasks() {
   }
 
   async function handleSubmitCreate(input: CreateTaskInput) {
-    await createTask(input)
+    const result = await createTask(input)
     await refresh()
+    return result
   }
 
   return (
@@ -206,6 +207,8 @@ export default function TabTasks() {
         open={!!selectedTaskId}
         onClose={() => setSelectedTaskId(null)}
         onTaskUpdated={refresh}
+        employees={employees}
+        groups={groups}
       />
 
       {/* Create Dialog */}

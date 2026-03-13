@@ -70,7 +70,7 @@ export async function DELETE(
   }
 
   const { id } = await params
-  await proxyDeleteTask(id)
+  await proxyDeleteTask(id, orgCtx.organizationId)
 
   return NextResponse.json({ success: true })
 }

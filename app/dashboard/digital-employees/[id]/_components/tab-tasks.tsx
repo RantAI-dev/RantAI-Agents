@@ -26,11 +26,12 @@ export default function TabEmployeeTasks({
   const [showCreateDialog, setShowCreateDialog] = useState(false)
 
   async function handleSubmitCreate(input: CreateTaskInput) {
-    await createTask({
+    const result = await createTask({
       ...input,
       assignee_id: employeeId,
     })
     await refresh()
+    return result
   }
 
   return (

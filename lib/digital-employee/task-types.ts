@@ -170,8 +170,8 @@ export const TASK_STATUS_CONFIG: Record<
   },
   IN_REVIEW: {
     label: "In Review",
-    color: "text-yellow-500",
-    dotClass: "bg-yellow-500",
+    color: "text-violet-500",
+    dotClass: "bg-violet-500",
   },
   DONE: {
     label: "Done",

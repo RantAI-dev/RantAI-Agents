@@ -26,7 +26,7 @@ import type { CreateTaskInput, TaskStatus, TaskPriority } from "@/lib/digital-em
 interface TaskCreateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (input: CreateTaskInput) => Promise<void>
+  onSubmit: (input: CreateTaskInput) => Promise<{ id: string } | void>
   defaultStatus?: TaskStatus
   defaultAssigneeId?: string
   employees?: Array<{ id: string; name: string; avatar: string | null }>
@@ -72,11 +72,11 @@ export function TaskCreateDialog({
 }: TaskCreateDialogProps) {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
-  const [assigneeId, setAssigneeId] = useState(defaultAssigneeId ?? "")
-  const [groupId, setGroupId] = useState("")
+  const [assigneeId, setAssigneeId] = useState(defaultAssigneeId ?? "__none__")
+  const [groupId, setGroupId] = useState("__none__")
   const [priority, setPriority] = useState<TaskPriority>("MEDIUM")
   const [dueDate, setDueDate] = useState("")
-  const [reviewerId, setReviewerId] = useState("")
+  const [reviewerId, setReviewerId] = useState("__none__")
   const [subtaskInput, setSubtaskInput] = useState("")
   const [subtasks, setSubtasks] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -84,11 +84,11 @@ export function TaskCreateDialog({
   function handleReset() {
     setTitle("")
     setDescription("")
-    setAssigneeId(defaultAssigneeId ?? "")
-    setGroupId("")
+    setAssigneeId(defaultAssigneeId ?? "__none__")
+    setGroupId("__none__")
     setPriority("MEDIUM")
     setDueDate("")
-    setReviewerId("")
+    setReviewerId("__none__")
     setSubtaskInput("")
     setSubtasks([])
   }
@@ -120,21 +120,41 @@ export function TaskCreateDialog({
     if (!title.trim() || isSubmitting) return
     setIsSubmitting(true)
     try {
+      const resolvedAssignee = assigneeId !== "__none__" ? assigneeId : undefined
+      const resolvedGroup = groupId !== "__none__" ? groupId : undefined
+      const resolvedReviewer =
+        reviewerId !== "__none__" && reviewerId !== "__human__"
+          ? reviewerId
+          : undefined
+
       const input: CreateTaskInput = {
         title: title.trim(),
         description: description.trim() || undefined,
         priority,
-        assignee_id: assigneeId || undefined,
-        group_id: groupId || undefined,
+        assignee_id: resolvedAssignee,
+        group_id: resolvedGroup,
         due_date: dueDate || undefined,
         human_review: reviewerId === "__human__" ? true : undefined,
-        reviewer_id:
-          reviewerId && reviewerId !== "__human__" && reviewerId !== "__none__"
-            ? reviewerId
-            : undefined,
+        reviewer_id: resolvedReviewer,
         metadata: defaultStatus ? { initial_status: defaultStatus } : undefined,
       }
-      await onSubmit(input)
+
+      // Submit parent task
+      const result = await onSubmit(input)
+
+      // Create subtasks with parent_task_id
+      if (result?.id && subtasks.length > 0) {
+        for (const subtaskTitle of subtasks) {
+          await onSubmit({
+            title: subtaskTitle,
+            parent_task_id: result.id,
+            assignee_id: resolvedAssignee,
+            group_id: resolvedGroup,
+            priority,
+          })
+        }
+      }
+
       handleReset()
       onOpenChange(false)
     } finally {
@@ -186,7 +206,7 @@ export function TaskCreateDialog({
                   <SelectValue placeholder="Unassigned" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
+                  <SelectItem value="__none__">Unassigned</SelectItem>
                   {employees.map((emp) => (
                     <SelectItem key={emp.id} value={emp.id}>
                       <div className="flex items-center gap-2">
@@ -207,7 +227,7 @@ export function TaskCreateDialog({
                   <SelectValue placeholder="No team" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">No team</SelectItem>
+                  <SelectItem value="__none__">No team</SelectItem>
                   {groups.map((g) => (
                     <SelectItem key={g.id} value={g.id}>
                       {g.name}
@@ -269,7 +289,7 @@ export function TaskCreateDialog({
                 <SelectValue placeholder="None" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">None</SelectItem>
+                <SelectItem value="__none__">None</SelectItem>
                 <SelectItem value="__human__">Human review</SelectItem>
                 {employees.map((emp) => (
                   <SelectItem key={emp.id} value={emp.id}>

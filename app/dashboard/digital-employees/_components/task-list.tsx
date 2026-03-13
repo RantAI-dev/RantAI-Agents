@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, Fragment } from "react"
 import {
   ChevronDown,
   ChevronRight,
@@ -242,10 +242,9 @@ export function TaskList({
           {groups.map((group) => {
             const isCollapsed = collapsedGroups.has(group.key)
             return (
-              <>
+              <Fragment key={`group-${group.key}`}>
                 {/* Group header row */}
                 <tr
-                  key={`group-${group.key}`}
                   className="border-b bg-muted/5 cursor-pointer hover:bg-muted/10 transition-colors"
                   onClick={() => toggleGroup(group.key)}
                 >
@@ -282,10 +281,9 @@ export function TaskList({
                       const overdue = isOverdue(task.due_date)
 
                       return (
-                        <>
+                        <Fragment key={`task-${task.id}`}>
                           {/* Task row */}
                           <tr
-                            key={`task-${task.id}`}
                             className={cn(
                               "border-b hover:bg-muted/5 cursor-pointer transition-colors",
                               isDone && "opacity-50"
@@ -408,8 +406,7 @@ export function TaskList({
                               const subDone = sub.status === "DONE"
                               const subOverdue = isOverdue(sub.due_date)
                               return (
-                                <tr
-                                  key={`sub-${sub.id}`}
+                                <tr key={`sub-${sub.id}`}
                                   className={cn(
                                     "border-b hover:bg-muted/5 cursor-pointer transition-colors",
                                     subDone && "opacity-50"
@@ -501,7 +498,7 @@ export function TaskList({
                                 </tr>
                               )
                             })}
-                        </>
+                        </Fragment>
                       )
                     })}
 
@@ -519,7 +516,7 @@ export function TaskList({
                     </tr>
                   </>
                 )}
-              </>
+              </Fragment>
             )
           })}
         </tbody>
