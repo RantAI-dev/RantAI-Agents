@@ -32,8 +32,14 @@ interface Group {
   name: string
 }
 
-export default function TabTasks() {
-  const { tasks, isLoading, error, createTask, refresh } = useTasks()
+interface TabTasksProps {
+  groupId?: string
+}
+
+export default function TabTasks({ groupId }: TabTasksProps) {
+  const { tasks, isLoading, error, createTask, refresh } = useTasks({
+    filter: groupId ? { groupId } : undefined,
+  })
 
   const [viewMode, setViewMode] = useState<ViewMode>("board")
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
