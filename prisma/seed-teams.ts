@@ -1,25 +1,30 @@
+/**
+ * One-time migration script: create implicit teams for ungrouped employees.
+ * This was run BEFORE the schema change that made groupId required.
+ * Kept for reference only — running it again is a no-op since all employees now have groupId.
+ */
 import { PrismaClient } from "@prisma/client"
 
 const prisma = new PrismaClient()
 
 async function main() {
+  // After schema migration, groupId is required — no ungrouped employees can exist.
+  // This script only applies to the pre-migration state where groupId was nullable.
   const ungrouped = await prisma.digitalEmployee.findMany({
-    where: { groupId: null },
+    where: {},
     select: {
       id: true,
       name: true,
       organizationId: true,
       createdBy: true,
-      containerId: true,
-      containerPort: true,
-      noVncPort: true,
-      gatewayToken: true,
+      groupId: true,
     },
   })
 
-  console.log(`Found ${ungrouped.length} ungrouped employees`)
+  const needsTeam = ungrouped.filter((e) => !e.groupId)
+  console.log(`Found ${needsTeam.length} employees without a team (total: ${ungrouped.length})`)
 
-  for (const emp of ungrouped) {
+  for (const emp of needsTeam) {
     const group = await prisma.employeeGroup.create({
       data: {
         name: emp.name,
@@ -27,11 +32,7 @@ async function main() {
         organizationId: emp.organizationId,
         createdBy: emp.createdBy,
         isImplicit: true,
-        containerId: emp.containerId,
-        containerPort: emp.containerPort,
-        noVncPort: emp.noVncPort,
-        gatewayToken: emp.gatewayToken,
-        status: emp.containerPort ? "ACTIVE" : "IDLE",
+        status: "IDLE",
       },
     })
 

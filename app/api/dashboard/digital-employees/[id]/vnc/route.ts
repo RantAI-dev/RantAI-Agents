@@ -29,10 +29,6 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    if (!employee.groupId) {
-      return NextResponse.json({ error: "Employee has no team" }, { status: 400 })
-    }
-
     const group = await prisma.employeeGroup.findFirst({
       where: { id: employee.groupId },
       select: { noVncPort: true },

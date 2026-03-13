@@ -69,7 +69,7 @@ export async function POST(req: Request, { params }: RouteParams) {
 
     const group = await prisma.employeeGroup.findUnique({
       where: { id: employee.groupId },
-      select: { containerPort: true, containerId: true },
+      select: { containerPort: true, containerId: true, gatewayToken: true },
     })
 
     if (!group?.containerId || !group.containerPort) {
@@ -84,6 +84,9 @@ export async function POST(req: Request, { params }: RouteParams) {
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
+    }
+    if (group.gatewayToken) {
+      headers["Authorization"] = `Bearer ${group.gatewayToken}`
     }
     if (signature) {
       headers["X-Hub-Signature-256"] = signature
