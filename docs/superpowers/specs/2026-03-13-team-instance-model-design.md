@@ -62,14 +62,28 @@ Since we're not in production, use `prisma db push` after schema changes. For an
 
 ---
 
+## Terminology
+
+**Group** (code) = **Team** (UI). The Prisma model is `EmployeeGroup`, API routes are `/groups/`, code uses `groupId`. The UI says "Team" everywhere. This mapping is canonical.
+
+---
+
 ## Section 2: Backend — Orchestrator & API
 
-### Docker Orchestrator (`lib/digital-employee/docker-orchestrator.ts`)
+### Orchestrator Interface (`lib/digital-employee/orchestrator.ts`)
 
-**Remove:**
-- `deployEmployee()` — solo container deployment
-- `startEmployeeContainer()` — solo container start
-- `stopEmployeeContainer()` — solo container stop
+The `EmployeeOrchestrator` interface defines solo container methods. These must be removed or redirected:
+
+**Remove from interface and `docker-orchestrator.ts` implementation:**
+- `deploy(employeeId)` — solo container deployment
+- `startContainer(employeeId)` — solo container start
+- `stopContainer(employeeId)` — solo container stop
+- `undeploy(employeeId)` — solo container teardown
+- `getContainerUrl(employeeId)` — solo container URL lookup
+- `getStatus(employeeId)` — solo container status
+- `startRun(employeeId, ...)` — solo run trigger
+- `resumeRun(employeeId, ...)` — solo run resume
+- `terminate(employeeId)` — solo run termination
 - Any code reading `containerPort`/`gatewayToken` from DigitalEmployee
 
 **Keep (unchanged):**
@@ -79,6 +93,30 @@ Since we're not in production, use `prisma db push` after schema changes. For an
 - `getGroupContainerUrl()` — returns container URL for a team
 
 These become the only container lifecycle methods.
+
+### Per-Employee Action Routes — redirect to team
+
+These routes currently call solo orchestrator methods and must be updated to delegate through the employee's team:
+
+- `app/api/dashboard/digital-employees/[id]/deploy/route.ts` — look up employee's `groupId`, call `orchestrator.deployGroup(groupId)`
+- `app/api/dashboard/digital-employees/[id]/start/route.ts` — look up employee's `groupId`, call `orchestrator.startGroupContainer(groupId)`
+- `app/api/dashboard/digital-employees/[id]/stop/route.ts` — look up employee's `groupId`, call `orchestrator.stopGroupContainer(groupId)`
+- `app/api/dashboard/digital-employees/[id]/resume/route.ts` — resolve container through group, use group's `gatewayToken`/`containerPort`
+
+These become thin wrappers: employee → group → container action.
+
+### Chat Route (`app/api/dashboard/digital-employees/[id]/chat/route.ts`)
+
+Currently reads `employee.gatewayToken` and `employee.containerPort` directly. Must be updated to:
+1. Look up employee's `groupId`
+2. Get group's `containerPort` and `gatewayToken`
+3. Proxy to group container
+
+### Workspace/VNC Proxy Routes
+
+These routes resolve container URLs and must route through the group:
+- `app/api/dashboard/digital-employees/[id]/vnc/` — use group's `noVncPort`
+- `app/api/dashboard/digital-employees/[id]/workspace/` — use group's `containerPort`
 
 ### Employee Creation API (`POST /api/dashboard/digital-employees`)
 
@@ -96,17 +134,18 @@ Updated flow:
 - Only query EmployeeGroup containers
 
 **`resolveWriteTarget(assigneeId, orgId)`:**
-- Look up employee → get their groupId → get group's container
-- Remove direct employee container lookup
+- Look up employee → get their `groupId` → get group's `containerPort`/`gatewayToken`
+- Remove direct employee container field lookup
 
 **`resolveContainerForSource(sourceEmployeeId, sourceGroupId)`:**
 - Always resolve through group container
 - Remove employee container fallback
+- `ContainerTarget.sourceType` can be simplified (always "group"), but may keep for now to minimize churn
 
 ### Groups API
 
 Existing CRUD stays. One behavior change:
-- `DELETE /api/dashboard/groups/:id` — prevent deletion if group has members (must move/remove members first, not just unlink them — they need a new team)
+- `DELETE /api/dashboard/groups/:id` — return 409 if group has members. Members must be moved to another team (or removed, which auto-creates implicit solo teams for them) before the group can be deleted
 
 ---
 
@@ -183,11 +222,23 @@ Add "Team Assignment" step:
 ### Schema
 - `prisma/schema.prisma` — add `isImplicit` to EmployeeGroup, make `groupId` required on DigitalEmployee, remove container fields from DigitalEmployee
 
-### Backend
-- `lib/digital-employee/docker-orchestrator.ts` — remove solo container methods
-- `lib/digital-employee/task-aggregator.ts` — remove solo employee container queries
+### Backend — Orchestrator
+- `lib/digital-employee/orchestrator.ts` — remove solo methods from interface
+- `lib/digital-employee/docker-orchestrator.ts` — remove solo container implementation
+
+### Backend — API Routes
 - `app/api/dashboard/digital-employees/route.ts` — auto-create implicit team on employee creation
-- `app/api/dashboard/groups/[id]/route.ts` — prevent deletion with members
+- `app/api/dashboard/digital-employees/[id]/deploy/route.ts` — redirect to group deploy
+- `app/api/dashboard/digital-employees/[id]/start/route.ts` — redirect to group start
+- `app/api/dashboard/digital-employees/[id]/stop/route.ts` — redirect to group stop
+- `app/api/dashboard/digital-employees/[id]/resume/route.ts` — resolve container through group
+- `app/api/dashboard/digital-employees/[id]/chat/route.ts` — resolve gateway through group
+- `app/api/dashboard/digital-employees/[id]/vnc/` — resolve noVncPort through group
+- `app/api/dashboard/digital-employees/[id]/workspace/` — resolve containerPort through group
+- `app/api/dashboard/groups/[id]/route.ts` — return 409 on delete with members
+
+### Backend — Task Aggregator
+- `lib/digital-employee/task-aggregator.ts` — remove solo employee container queries
 
 ### Frontend
 - `app/dashboard/digital-employees/_components/tab-teams.tsx` — functional create, status filter
@@ -195,7 +246,6 @@ Add "Team Assignment" step:
 - `app/dashboard/digital-employees/page.tsx` — employee cards show team badge
 - `app/dashboard/digital-employees/new/page.tsx` — team assignment step
 - `app/dashboard/groups/[id]/page.tsx` — **new** team management page
-- `hooks/use-employee-groups.ts` — may need updates for new fields
 
 ### Hooks
-- `hooks/use-employee-groups.ts` — add `isImplicit` to return type
+- `hooks/use-employee-groups.ts` — add `isImplicit` to return type, remove `containerPort` from `TeamMember` (container state is on the group, not the member)
