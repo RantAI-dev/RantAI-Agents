@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
-import { MESSAGE_TYPES, MESSAGE_PRIORITIES } from "@/lib/digital-employee/messaging"
+const MESSAGE_TYPES = ["message", "task", "handoff", "broadcast"] as const
+const MESSAGE_PRIORITIES = ["low", "normal", "high", "urgent"] as const
 import { logAudit, classifyActionRisk, AUDIT_ACTIONS } from "@/lib/digital-employee/audit"
 
 export async function POST(req: Request) {
