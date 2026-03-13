@@ -17,6 +17,7 @@ import {
   Folder,
   History,
 } from "@/lib/icons"
+import { CheckSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -34,6 +35,7 @@ import { TabChat } from "./_components/tab-chat"
 import { TabActivity } from "./_components/tab-activity"
 import { TabHistory } from "./_components/tab-history"
 import { TabSettings } from "./_components/tab-settings"
+import TabEmployeeTasks from "./_components/tab-tasks"
 import { ChatDrawer } from "./_components/chat-drawer"
 import { CreateToolDialog, ArchiveDialog, DeleteDialog, DeployProgressDialog } from "./_components/dialogs"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
@@ -44,7 +46,7 @@ import type { EmployeeSchedule } from "@/lib/digital-employee/types"
 
 // ─── Types ────────────────────────────────────────────────
 
-type Section = "activity" | "chat" | "history" | "workspace" | "settings"
+type Section = "activity" | "chat" | "history" | "tasks" | "workspace" | "settings"
 
 interface NavItem {
   id: Section
@@ -57,6 +59,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "activity", label: "Activity", icon: Zap, group: "interact" },
   { id: "chat", label: "Chat", icon: MessageSquare, group: "interact" },
   { id: "history", label: "History", icon: History, group: "interact" },
+  { id: "tasks", label: "Tasks", icon: CheckSquare, group: "interact" },
   { id: "workspace", label: "Workspace", icon: Folder, group: "configure" },
   { id: "settings", label: "Settings", icon: Settings, group: "configure" },
 ]
@@ -731,6 +734,11 @@ export default function DigitalEmployeeDetailPage() {
               model={employee.assistant.model}
               onRunNow={handleRunNow}
             />
+          )}
+
+          {/* ─── Tasks ─── */}
+          {activeSection === "tasks" && (
+            <TabEmployeeTasks employeeId={id} employeeName={employee?.name} />
           )}
 
           {/* ─── Workspace ─── */}

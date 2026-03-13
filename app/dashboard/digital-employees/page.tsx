@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   Plus,
@@ -25,6 +25,9 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useDigitalEmployees } from "@/hooks/use-digital-employees"
+import { useTasks } from "@/hooks/use-tasks"
+import TabTasks from "./_components/tab-tasks"
+import TabTeams from "./_components/tab-teams"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { CountUp } from "@/components/reactbits/count-up"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"
@@ -72,7 +75,25 @@ function getActivityText(emp: { status: string; lastActiveAt: string | null; lat
 
 export default function DigitalEmployeesPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { employees, isLoading } = useDigitalEmployees()
+  const { openCount } = useTasks()
+
+  const activeTab = searchParams.get("tab") || "employees"
+  const setTab = useCallback(
+    (tab: string) => {
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("tab", tab)
+      router.push(`/dashboard/digital-employees?${params.toString()}`)
+    },
+    [router, searchParams]
+  )
+
+  const tabs = [
+    { key: "employees", label: "Employees" },
+    { key: "teams", label: "Teams" },
+    { key: "tasks", label: "Tasks" },
+  ]
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("ALL")
@@ -178,8 +199,34 @@ export default function DigitalEmployeesPage() {
         )}
       </motion.div>
 
+      {/* Tab Bar */}
+      <div className="flex gap-0 border-b border-border px-6">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setTab(tab.key)}
+            className={cn(
+              "px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5",
+              activeTab === tab.key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {tab.label}
+            {tab.key === "tasks" && openCount > 0 && (
+              <span className="inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-bold h-4 min-w-[16px] px-1">
+                {openCount}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       {/* Content */}
       <div className="flex-1 overflow-auto px-6 pb-6">
+        {activeTab === "teams" && <TabTeams />}
+        {activeTab === "tasks" && <TabTasks />}
+        {activeTab === "employees" && <>
         {/* Search & Filter Bar */}
         <motion.div
           className="flex items-center gap-3 mb-6 flex-wrap"
@@ -508,6 +555,7 @@ export default function DigitalEmployeesPage() {
             </div>
           </motion.div>
         )}
+        </>}
       </div>
     </div>
   )
