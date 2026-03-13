@@ -38,14 +38,46 @@ export async function POST(req: Request, { params }: RouteParams) {
       },
     })
 
-    // Create a run for this trigger
-    const { orchestrator } = await import("@/lib/digital-employee")
-    const runId = await orchestrator.startRun(webhook.digitalEmployeeId, {
-      type: "webhook",
-      input: { webhookId: webhook.id, webhookName: webhook.name, payload },
+    // Route the trigger through the employee's group container
+    const employee = await prisma.digitalEmployee.findUnique({
+      where: { id: webhook.digitalEmployeeId },
+      select: { id: true, groupId: true },
     })
 
-    return NextResponse.json({ received: true, runId })
+    if (!employee?.groupId) {
+      return NextResponse.json({ error: "Employee has no group" }, { status: 500 })
+    }
+
+    const { orchestrator } = await import("@/lib/digital-employee")
+    const containerUrl = await orchestrator.getGroupContainerUrl(employee.groupId)
+    if (!containerUrl) {
+      return NextResponse.json({ error: "Group container not running" }, { status: 503 })
+    }
+
+    const group = await prisma.employeeGroup.findUnique({
+      where: { id: employee.groupId },
+      select: { gatewayToken: true },
+    })
+
+    const triggerRes = await fetch(`${containerUrl}/trigger`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(group?.gatewayToken ? { Authorization: `Bearer ${group.gatewayToken}` } : {}),
+      },
+      body: JSON.stringify({
+        employeeId: webhook.digitalEmployeeId,
+        trigger: {
+          type: "webhook",
+          input: { webhookId: webhook.id, webhookName: webhook.name, payload },
+        },
+      }),
+      signal: AbortSignal.timeout(30_000),
+    })
+
+    const result = await triggerRes.json().catch(() => ({}))
+
+    return NextResponse.json({ received: true, runId: result.runId })
   } catch (error) {
     console.error("Webhook processing failed:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

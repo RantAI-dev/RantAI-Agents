@@ -24,6 +24,7 @@ export async function POST(req: Request, { params }: RouteParams) {
         id,
         ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
       },
+      select: { id: true, status: true, groupId: true },
     })
 
     if (!employee) {
@@ -34,6 +35,16 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Employee must be ACTIVE to run" }, { status: 400 })
     }
 
+    const containerUrl = await orchestrator.getGroupContainerUrl(employee.groupId)
+    if (!containerUrl) {
+      return NextResponse.json({ error: "Group container not running" }, { status: 503 })
+    }
+
+    const group = await prisma.employeeGroup.findUnique({
+      where: { id: employee.groupId },
+      select: { gatewayToken: true },
+    })
+
     const body = await req.json().catch(() => ({}))
 
     const trigger: TriggerContext = {
@@ -42,9 +53,22 @@ export async function POST(req: Request, { params }: RouteParams) {
       input: body.input,
     }
 
-    const runId = await orchestrator.startRun(id, trigger)
+    const res = await fetch(`${containerUrl}/trigger`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(group?.gatewayToken ? { Authorization: `Bearer ${group.gatewayToken}` } : {}),
+      },
+      body: JSON.stringify({ employeeId: id, trigger }),
+      signal: AbortSignal.timeout(30_000),
+    })
 
-    return NextResponse.json({ runId }, { status: 201 })
+    const result = await res.json()
+    if (!res.ok) {
+      return NextResponse.json({ error: result.error || "Run failed" }, { status: res.status })
+    }
+
+    return NextResponse.json({ runId: result.runId }, { status: 201 })
   } catch (error) {
     console.error("Run failed:", error)
     const message = error instanceof Error ? error.message : "Run failed"

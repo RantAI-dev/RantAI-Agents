@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
 import { orchestrator } from "@/lib/digital-employee"
 
 interface RouteParams {
@@ -18,7 +19,16 @@ export async function GET(req: Request, { params }: RouteParams) {
   try {
     const { id, path } = await params
 
-    const containerUrl = await orchestrator.getContainerUrl(id)
+    // Look up employee's group, then get the group's container URL
+    const employee = await prisma.digitalEmployee.findUnique({
+      where: { id },
+      select: { groupId: true },
+    })
+    if (!employee?.groupId) {
+      return new Response("Employee is not running.", { status: 502 })
+    }
+
+    const containerUrl = await orchestrator.getGroupContainerUrl(employee.groupId)
     if (!containerUrl) {
       return new Response("Employee is not running.", { status: 502 })
     }
