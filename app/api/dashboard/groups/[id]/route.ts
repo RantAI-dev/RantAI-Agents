@@ -76,13 +76,14 @@ export async function PATCH(req: Request, { params }: RouteParams) {
     }
 
     const body = await req.json()
-    const { name, description } = body
+    const { name, description, isImplicit } = body
 
     const updated = await prisma.employeeGroup.update({
       where: { id },
       data: {
         ...(name && { name }),
         ...(description !== undefined && { description }),
+        ...(isImplicit !== undefined && { isImplicit }),
       },
       include: {
         members: {

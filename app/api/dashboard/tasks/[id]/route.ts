@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   proxyGetTaskDetail,
   proxyUpdateTask,
@@ -16,7 +16,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const orgCtx = await getOrganizationContext(request, session.user.id)
+  const orgCtx = await getOrganizationContextWithFallback(request, session.user.id)
   if (!orgCtx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
@@ -39,7 +39,7 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const orgCtx = await getOrganizationContext(request, session.user.id)
+  const orgCtx = await getOrganizationContextWithFallback(request, session.user.id)
   if (!orgCtx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
@@ -64,7 +64,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const orgCtx = await getOrganizationContext(request, session.user.id)
+  const orgCtx = await getOrganizationContextWithFallback(request, session.user.id)
   if (!orgCtx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }

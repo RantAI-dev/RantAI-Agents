@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import { proxySubmitReview } from "@/lib/digital-employee/task-aggregator"
 
 const VALID_ACTIONS = ["approve", "changes", "reject"] as const
@@ -15,7 +15,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const orgCtx = await getOrganizationContext(request, session.user.id)
+  const orgCtx = await getOrganizationContextWithFallback(request, session.user.id)
   if (!orgCtx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }

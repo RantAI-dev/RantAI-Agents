@@ -100,7 +100,7 @@ const allNavItems: NavItem[] = [
   { title: "Agent Builder", url: "/dashboard/agent-builder", icon: Blocks, feature: null },
   { title: "Workflows", url: "/dashboard/workflows", icon: GitBranch, feature: null },
   { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: null },
-  { title: "Teams", url: "/dashboard/groups", icon: Network, feature: null },
+
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
   { title: "Knowledge", url: "/dashboard/knowledge", icon: BookOpen, feature: null },
   { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },

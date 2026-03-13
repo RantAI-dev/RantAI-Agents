@@ -33,8 +33,13 @@ export function useTasks(options: UseTasksOptions = {}) {
 
       const res = await fetch(`/api/dashboard/tasks?${params}`)
       if (!res.ok) {
-        const data = await res.json()
-        setError(data.error || "Failed to fetch tasks")
+        const text = await res.text()
+        try {
+          const data = JSON.parse(text)
+          setError(data.error || `Failed to fetch tasks (${res.status})`)
+        } catch {
+          setError(`Failed to fetch tasks (${res.status})`)
+        }
         return
       }
       const data = await res.json()

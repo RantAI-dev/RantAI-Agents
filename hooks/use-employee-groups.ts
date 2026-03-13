@@ -5,6 +5,7 @@ import { useState, useCallback, useEffect } from "react"
 export interface EmployeeGroupMember {
   id: string
   name: string
+  status: string
   avatar: string | null
 }
 
