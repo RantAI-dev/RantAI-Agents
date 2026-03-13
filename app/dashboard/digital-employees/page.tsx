@@ -33,7 +33,6 @@ import { Squares } from "@/components/reactbits/squares"
 import { formatDistanceToNow } from "date-fns"
 import { STATUS_STYLES, AUTONOMY_STYLES } from "@/lib/digital-employee/shared-constants"
 import { toast } from "sonner"
-import Link from "next/link"
 
 const STATUS_FILTERS = [
   { value: "ALL", label: "All" },

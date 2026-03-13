@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import {
-  Zap, Clock, Check, X, Shield, Play, Rocket, Square, Loader2, ChevronDown,
+  Zap, Check, X, Shield, Play, Rocket, Square, Loader2, ChevronDown,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
