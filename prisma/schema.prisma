@@ -135,6 +135,8 @@ model Organization {
   marketplaceInstalls MarketplaceInstall[]
   installedSkills     InstalledSkill[]
   digitalEmployees    DigitalEmployee[]
+  employeeGroups      EmployeeGroup[]
+  employeeTasks       EmployeeTask[]
   employeeMessages    EmployeeMessage[]
   auditLogs           AuditLog[]
   sharedTemplates     EmployeeTemplateShare[]
@@ -913,6 +915,7 @@ model DigitalEmployee {
   totalTokensUsed  BigInt          @default(0)
   containerId      String?         // Docker container ID when running
   containerPort    Int?            // Mapped host port for RantaiClaw gateway
+  noVncPort        Int?            // Mapped host port for noVNC browser streaming
   gatewayToken     String?         // Runtime JWT for gateway proxy
   organizationId   String
   organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -932,12 +935,33 @@ model DigitalEmployee {
   webhooks         EmployeeWebhook[]
   goals            EmployeeGoal[]
   sandboxMode      Boolean         @default(false)
+  groupId          String?
+  group            EmployeeGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
   sentMessages     EmployeeMessage[] @relation("sentMessages")
   receivedMessages EmployeeMessage[] @relation("receivedMessages")
 
   @@index([organizationId])
   @@index([status])
   @@index([assistantId])
+}
+
+model EmployeeGroup {
+  id             String           @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  containerId    String?
+  containerPort  Int?
+  noVncPort      Int?
+  gatewayToken   String?
+  status         String           @default("IDLE")
+  members        DigitalEmployee[]
+  createdBy      String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([organizationId])
 }
 
 model EmployeeRun {
@@ -1206,4 +1230,77 @@ model EmployeeTemplateShare {
 
   @@index([organizationId])
   @@index([isPublic, category])
+}
+
+// ─── Task Engine Cache (source of truth = RantaiClaw containers) ───
+
+model EmployeeTask {
+  id                  String    @id  // UUID from RantaiClaw, NOT auto-generated
+  organizationId      String
+  title               String
+  description         String?   @db.Text
+  status              String    @default("TODO")
+  priority            String    @default("MEDIUM")
+  assigneeId          String?
+  groupId             String?
+  reviewerId          String?
+  humanReview         Boolean   @default(false)
+  reviewStatus        String?
+  reviewComment       String?   @db.Text
+  parentTaskId        String?
+  createdByEmployeeId String?
+  createdByUserId     String?
+  dueDate             DateTime?
+  completedAt         DateTime?
+  orderInStatus       Int       @default(0)
+  orderInParent       Int       @default(0)
+  metadata            Json      @default("{}")
+  sourceEmployeeId    String    // which container this task came from
+  sourceGroupId       String?   // if from a group container
+  isStale             Boolean   @default(false)
+  cachedAt            DateTime  @default(now())
+  createdAt           DateTime
+  updatedAt           DateTime
+
+  subtasks   EmployeeTask[]  @relation("TaskSubtasks")
+  parentTask EmployeeTask?   @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  comments   EmployeeTaskComment[]
+  events     EmployeeTaskEvent[]
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([assigneeId, status])
+  @@index([groupId])
+  @@index([parentTaskId])
+  @@index([sourceEmployeeId])
+}
+
+model EmployeeTaskComment {
+  id                String   @id  // UUID from RantaiClaw
+  taskId            String
+  content           String   @db.Text
+  authorType        String   @default("HUMAN")
+  authorEmployeeId  String?
+  authorUserId      String?
+  createdAt         DateTime
+
+  task EmployeeTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+}
+
+model EmployeeTaskEvent {
+  id                String   @id  // UUID from RantaiClaw
+  taskId            String
+  eventType         String
+  actorType         String
+  actorEmployeeId   String?
+  actorUserId       String?
+  data              Json     @default("{}")
+  createdAt         DateTime
+
+  task EmployeeTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
 }
