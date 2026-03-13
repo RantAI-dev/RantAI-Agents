@@ -6,7 +6,6 @@ export interface EmployeeGroupMember {
   id: string
   name: string
   avatar: string | null
-  containerPort: number | null
 }
 
 export interface EmployeeGroupItem {
@@ -14,6 +13,9 @@ export interface EmployeeGroupItem {
   name: string
   description: string | null
   status: string
+  isImplicit: boolean
+  containerPort: number | null
+  noVncPort: number | null
   members: EmployeeGroupMember[]
   createdAt: string
   updatedAt: string
@@ -47,10 +49,110 @@ export function useEmployeeGroups() {
     fetchGroups()
   }, [fetchGroups])
 
+  const createGroup = useCallback(
+    async (data: { name: string; description?: string }): Promise<EmployeeGroupItem> => {
+      const res = await fetch("/api/dashboard/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || "Failed to create team")
+      }
+      const result = await res.json()
+      await fetchGroups()
+      return result
+    },
+    [fetchGroups]
+  )
+
+  const updateGroup = useCallback(
+    async (groupId: string, data: { name?: string; description?: string; isImplicit?: boolean }): Promise<void> => {
+      const res = await fetch(`/api/dashboard/groups/${groupId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || "Failed to update team")
+      }
+      await fetchGroups()
+    },
+    [fetchGroups]
+  )
+
+  const addMembers = useCallback(
+    async (groupId: string, employeeIds: string[]): Promise<void> => {
+      const res = await fetch(`/api/dashboard/groups/${groupId}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeIds }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || "Failed to add members")
+      }
+      await fetchGroups()
+    },
+    [fetchGroups]
+  )
+
+  const removeMembers = useCallback(
+    async (groupId: string, employeeIds: string[]): Promise<void> => {
+      const res = await fetch(`/api/dashboard/groups/${groupId}/members`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ employeeIds }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || "Failed to remove members")
+      }
+      await fetchGroups()
+    },
+    [fetchGroups]
+  )
+
+  const deployGroup = useCallback(
+    async (groupId: string): Promise<void> => {
+      const res = await fetch(`/api/dashboard/groups/${groupId}/deploy`, { method: "POST" })
+      if (!res.ok) throw new Error("Failed to deploy team")
+      await fetchGroups()
+    },
+    [fetchGroups]
+  )
+
+  const startGroup = useCallback(
+    async (groupId: string): Promise<void> => {
+      const res = await fetch(`/api/dashboard/groups/${groupId}/start`, { method: "POST" })
+      if (!res.ok) throw new Error("Failed to start team")
+      await fetchGroups()
+    },
+    [fetchGroups]
+  )
+
+  const stopGroup = useCallback(
+    async (groupId: string): Promise<void> => {
+      const res = await fetch(`/api/dashboard/groups/${groupId}/stop`, { method: "POST" })
+      if (!res.ok) throw new Error("Failed to stop team")
+      await fetchGroups()
+    },
+    [fetchGroups]
+  )
+
   return {
     groups,
     isLoading,
     error,
     refresh: fetchGroups,
+    createGroup,
+    updateGroup,
+    addMembers,
+    removeMembers,
+    deployGroup,
+    startGroup,
+    stopGroup,
   }
 }
