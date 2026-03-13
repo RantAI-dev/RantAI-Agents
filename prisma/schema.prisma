@@ -913,10 +913,6 @@ model DigitalEmployee {
   successfulRuns   Int             @default(0)
   failedRuns       Int             @default(0)
   totalTokensUsed  BigInt          @default(0)
-  containerId      String?         // Docker container ID when running
-  containerPort    Int?            // Mapped host port for RantaiClaw gateway
-  noVncPort        Int?            // Mapped host port for noVNC browser streaming
-  gatewayToken     String?         // Runtime JWT for gateway proxy
   organizationId   String
   organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy        String
@@ -935,8 +931,8 @@ model DigitalEmployee {
   webhooks         EmployeeWebhook[]
   goals            EmployeeGoal[]
   sandboxMode      Boolean         @default(false)
-  groupId          String?
-  group            EmployeeGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupId          String
+  group            EmployeeGroup   @relation(fields: [groupId], references: [id], onDelete: Restrict)
   sentMessages     EmployeeMessage[] @relation("sentMessages")
   receivedMessages EmployeeMessage[] @relation("receivedMessages")
 
@@ -955,6 +951,7 @@ model EmployeeGroup {
   containerPort  Int?
   noVncPort      Int?
   gatewayToken   String?
+  isImplicit     Boolean          @default(false)
   status         String           @default("IDLE")
   members        DigitalEmployee[]
   createdBy      String
