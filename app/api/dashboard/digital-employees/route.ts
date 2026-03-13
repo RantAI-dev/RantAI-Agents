@@ -126,6 +126,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Assistant not found" }, { status: 404 })
     }
 
+    // Resolve or create team
+    let resolvedGroupId: string
+
+    if (body.groupId) {
+      // Validate team exists and belongs to org
+      const group = await prisma.employeeGroup.findFirst({
+        where: { id: body.groupId, organizationId: orgContext.organizationId },
+      })
+      if (!group) {
+        return NextResponse.json({ error: "Team not found" }, { status: 404 })
+      }
+      resolvedGroupId = group.id
+    } else {
+      // Auto-create implicit team
+      const implicitTeam = await prisma.employeeGroup.create({
+        data: {
+          name: body.name,
+          organizationId: orgContext.organizationId,
+          createdBy: session.user.id,
+          isImplicit: true,
+        },
+      })
+      resolvedGroupId = implicitTeam.id
+    }
+
     // Create employee
     const employee = await prisma.digitalEmployee.create({
       data: {
@@ -133,6 +158,7 @@ export async function POST(req: Request) {
         description: description || null,
         avatar: avatar || null,
         assistantId,
+        groupId: resolvedGroupId,
         autonomyLevel: autonomyLevel || "L1",
         sandboxMode: (autonomyLevel || "L1") === "L1",
         deploymentConfig: DEFAULT_DEPLOYMENT_CONFIG as object,
