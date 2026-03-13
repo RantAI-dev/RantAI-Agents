@@ -16,8 +16,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { GoalTracker } from "./goal-tracker"
-import { ErrorPatternsCard } from "./error-patterns-card"
 import { OnboardingChecklist } from "./onboarding-checklist"
 import { SandboxBanner } from "./sandbox-banner"
 
@@ -176,12 +174,6 @@ export function TabActivity({
       {employee.status === "ONBOARDING" && (
         <OnboardingChecklist employeeId={employee.id} />
       )}
-
-      {/* ─── Goal Tracker ─── */}
-      <GoalTracker employeeId={employee.id} />
-
-      {/* ─── Error Patterns ─── */}
-      <ErrorPatternsCard employeeId={employee.id} runs={runs} />
 
       {/* ─── Pending Approvals ─── */}
       {pendingApprovals.length > 0 && (
