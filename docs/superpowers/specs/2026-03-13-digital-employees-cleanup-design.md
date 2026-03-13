@@ -31,11 +31,11 @@ This cleanup removes Model B features that add noise without serving the primary
 - `useDigitalEmployees`, `useTasks` hooks
 
 **Delete (dead code after removal):**
-- `useEmployeeMessages` hook usage + import
+- `useEmployeeMessages` hook usage + import from this file (the hook file itself must NOT be deleted — it is also consumed by `app/dashboard/messages/page.tsx`)
 - `usePipelines` hook usage + import
 - `TabTeams` import and render
-- `MessageSquare`, `GitBranch`, `ArrowRight` icon imports (if unused)
-- `formatDistanceToNow` import from `date-fns` (if only used by Pipelines section)
+- `MessageSquare`, `GitBranch`, `ArrowRight` icon imports (if unused after removal)
+- **Keep** `formatDistanceToNow` import from `date-fns` — it is also used by the `getActivityText` helper function which powers both grid and table views
 
 ---
 
@@ -46,6 +46,7 @@ This cleanup removes Model B features that add noise without serving the primary
 - `Section` type updated: remove `"history"` from the union
 - `TabHistory` import and render block
 - `History` icon import (if unused)
+- `historyApprovals` derived variable at line ~465 (`approvals.filter((a) => a.status !== "PENDING")`) — passed to `TabHistory` and referenced in `TabInbox`'s interface, but `TabInbox` is already dead code (never imported by the page). Safe to remove.
 
 **Resulting nav order:** Activity → Chat → Tasks → Workspace → Settings
 
@@ -75,10 +76,11 @@ The following components become unreferenced after the above changes and should 
 - `app/dashboard/digital-employees/[id]/_components/tab-history.tsx`
 - `app/dashboard/digital-employees/[id]/_components/goal-tracker.tsx`
 - `app/dashboard/digital-employees/[id]/_components/error-patterns-card.tsx`
+- `app/dashboard/digital-employees/[id]/_components/tab-inbox.tsx` — already unreferenced (never imported by the page)
 
-Hooks to check for dead code (remove if no other consumers):
-- `hooks/use-employee-messages.ts`
-- `hooks/use-employee-groups.ts` (used by TabTeams)
+Hooks — do NOT delete:
+- `hooks/use-employee-messages.ts` — also consumed by `app/dashboard/messages/page.tsx`
+- `hooks/use-employee-groups.ts` — also consumed by `app/dashboard/groups/page.tsx` and `app/dashboard/groups/[id]/page.tsx`
 
 ---
 
@@ -88,7 +90,7 @@ Hooks to check for dead code (remove if no other consumers):
 - Autonomy level badge on employee cards — kept (directly relevant: tells you if employee will ask for approvals)
 - `SandboxBanner` inside Activity tab — kept
 - Sandbox mode field in Settings — untouched
-- All API routes — untouched
+- All API routes relevant to this cleanup — untouched (IDE routes were already removed in a prior commit and are not part of this spec)
 - Prisma schema — untouched
 - `TabHistory` component file deleted but no API route changes needed (runs data still fetched by `useDigitalEmployee` hook and consumed by Activity tab for the events feed)
 
