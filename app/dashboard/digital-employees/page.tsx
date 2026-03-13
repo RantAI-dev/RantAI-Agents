@@ -19,9 +19,6 @@ import {
   LayoutGrid,
   List,
   AlertTriangle,
-  MessageSquare,
-  GitBranch,
-  ArrowRight,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -29,10 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useDigitalEmployees } from "@/hooks/use-digital-employees"
 import { useTasks } from "@/hooks/use-tasks"
-import { useEmployeeMessages } from "@/hooks/use-employee-messages"
-import { usePipelines } from "@/hooks/use-pipelines"
 import TabTasks from "./_components/tab-tasks"
-import TabTeams from "./_components/tab-teams"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { CountUp } from "@/components/reactbits/count-up"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"
@@ -83,8 +77,6 @@ export default function DigitalEmployeesPage() {
   const searchParams = useSearchParams()
   const { employees, isLoading } = useDigitalEmployees()
   const { openCount } = useTasks()
-  const { messages, isLoading: messagesLoading } = useEmployeeMessages()
-  const { pipelines, isLoading: pipelinesLoading } = usePipelines()
 
   const activeTab = searchParams.get("tab") || "employees"
   const setTab = useCallback(
@@ -98,7 +90,6 @@ export default function DigitalEmployeesPage() {
 
   const tabs = [
     { key: "employees", label: "Employees" },
-    { key: "teams", label: "Teams" },
     { key: "tasks", label: "Tasks" },
   ]
 
@@ -237,7 +228,6 @@ export default function DigitalEmployeesPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto px-6 pb-6">
-        {activeTab === "teams" && <TabTeams />}
         {activeTab === "tasks" && <TabTasks />}
         {activeTab === "employees" && <>
         {/* Search & Filter Bar */}
@@ -440,14 +430,6 @@ export default function DigitalEmployeesPage() {
                           >
                             {autonomy.label}
                           </Badge>
-                          {"sandboxMode" in emp && !!(emp as unknown as Record<string, unknown>).sandboxMode && (
-                            <Badge
-                              variant="secondary"
-                              className="text-[10px] px-1.5 py-0.5 shrink-0 bg-amber-500/10 text-amber-500"
-                            >
-                              SANDBOX
-                            </Badge>
-                          )}
                         </div>
                         <div className="flex items-center gap-3 text-[11px] text-muted-foreground/70">
                           <span className="flex items-center gap-1">
@@ -565,122 +547,6 @@ export default function DigitalEmployeesPage() {
           </motion.div>
         )}
 
-        {/* Team Activity: Messages & Pipelines */}
-        {employees.length > 0 && (
-          <motion.div
-            className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4"
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5, type: "spring", stiffness: 260, damping: 24 }}
-          >
-            {/* Recent Messages */}
-            <div className="rounded-lg border bg-card">
-              <div className="flex items-center justify-between px-4 py-3 border-b">
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-sm font-medium">Recent Messages</h3>
-                </div>
-                <Link href="/dashboard/messages">
-                  <Button variant="ghost" size="sm" className="h-7 text-xs">
-                    View all
-                  </Button>
-                </Link>
-              </div>
-              <div className="p-3">
-                {messagesLoading ? (
-                  <div className="flex items-center justify-center py-6">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-6 text-center">
-                    <MessageSquare className="h-6 w-6 text-muted-foreground/30 mb-2" />
-                    <p className="text-xs text-muted-foreground">No messages between employees yet</p>
-                    <p className="text-[11px] text-muted-foreground/60 mt-0.5">Messages appear when employees communicate during tasks</p>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {messages.slice(0, 5).map((msg) => (
-                      <div
-                        key={msg.id}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors text-xs"
-                      >
-                        <span className="shrink-0">{msg.fromEmployee.avatar || "\uD83E\uDD16"}</span>
-                        <span className="font-medium truncate max-w-[80px]">{msg.fromEmployee.name}</span>
-                        <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
-                        <span className="shrink-0">{msg.toEmployee?.avatar || "\uD83E\uDD16"}</span>
-                        <span className="font-medium truncate max-w-[80px]">{msg.toEmployee?.name || msg.toGroup || "All"}</span>
-                        <span className="flex-1 truncate text-muted-foreground">{msg.subject}</span>
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">{msg.type}</Badge>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Pipelines */}
-            <div className="rounded-lg border bg-card">
-              <div className="flex items-center justify-between px-4 py-3 border-b">
-                <div className="flex items-center gap-2">
-                  <GitBranch className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-sm font-medium">Pipelines</h3>
-                </div>
-                <Link href="/dashboard/pipelines">
-                  <Button variant="ghost" size="sm" className="h-7 text-xs">
-                    Manage
-                  </Button>
-                </Link>
-              </div>
-              <div className="p-3">
-                {pipelinesLoading ? (
-                  <div className="flex items-center justify-center py-6">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  </div>
-                ) : pipelines.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-6 text-center">
-                    <GitBranch className="h-6 w-6 text-muted-foreground/30 mb-2" />
-                    <p className="text-xs text-muted-foreground">No handoff pipelines yet</p>
-                    <p className="text-[11px] text-muted-foreground/60 mt-0.5">Chain employees together for multi-step workflows</p>
-                    <Link href="/dashboard/pipelines">
-                      <Button variant="outline" size="sm" className="h-7 text-xs mt-2">
-                        <Plus className="h-3 w-3 mr-1" />
-                        Create Pipeline
-                      </Button>
-                    </Link>
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {pipelines.slice(0, 5).map((pipeline) => (
-                      <Link
-                        key={pipeline.id}
-                        href={`/dashboard/pipelines/${pipeline.id}`}
-                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors text-xs"
-                      >
-                        <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="font-medium truncate">{pipeline.name}</span>
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
-                          {pipeline.steps.length} step{pipeline.steps.length !== 1 ? "s" : ""}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-[9px] px-1 py-0 shrink-0",
-                            pipeline.status === "active" ? "text-emerald-500" : "text-muted-foreground"
-                          )}
-                        >
-                          {pipeline.status}
-                        </Badge>
-                        <span className="ml-auto text-muted-foreground shrink-0">
-                          {formatDistanceToNow(new Date(pipeline.updatedAt), { addSuffix: true })}
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
         </>}
       </div>
     </div>
