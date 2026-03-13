@@ -264,6 +264,7 @@ export default function McpSettingsPage() {
                             <div className="h-7 w-7 rounded-md bg-muted flex items-center justify-center shrink-0">
                               <DynamicIcon
                                 icon={server.icon ?? undefined}
+                                serviceName={server.name}
                                 fallback={Plug}
                                 className="h-4 w-4 text-muted-foreground"
                                 emojiClassName="text-base leading-none"

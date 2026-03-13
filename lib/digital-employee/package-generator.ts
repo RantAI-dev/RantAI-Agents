@@ -7,6 +7,7 @@ import type {
 } from "./types"
 import { WORKSPACE_FILES, DEFAULT_DEPLOYMENT_CONFIG } from "./types"
 import { getClawHubSkill } from "./clawhub"
+import { decryptCredential } from "@/lib/workflow/credentials"
 
 export async function generateEmployeePackage(employeeId: string): Promise<EmployeePackage> {
   const employee = await prisma.digitalEmployee.findUnique({
@@ -60,6 +61,28 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
     },
     select: { name: true, description: true, avatar: true, status: true },
   })
+
+  // Fetch connected channel integrations (Telegram, WhatsApp, etc.)
+  const CHANNEL_IDS = ["telegram", "whatsapp", "whatsapp-web"]
+  const channelRows = await prisma.employeeIntegration.findMany({
+    where: {
+      digitalEmployeeId: employeeId,
+      status: "connected",
+      integrationId: { in: CHANNEL_IDS },
+    },
+  })
+  const channelIntegrations: Array<{ channelId: string; credentials: Record<string, string> }> = []
+  for (const ci of channelRows) {
+    if (!ci.encryptedData) continue
+    try {
+      channelIntegrations.push({
+        channelId: ci.integrationId,
+        credentials: decryptCredential(ci.encryptedData) as Record<string, string>,
+      })
+    } catch (err) {
+      console.error(`[PackageGenerator] Failed to decrypt ${ci.integrationId} credentials:`, err instanceof Error ? err.message : err)
+    }
+  }
 
   // Build workspace file context
   const ctx: WorkspaceFileContext = {
@@ -195,5 +218,6 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
         content: m.content,
       })),
     },
+    channelIntegrations: channelIntegrations.length > 0 ? channelIntegrations : undefined,
   }
 }

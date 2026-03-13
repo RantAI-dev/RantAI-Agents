@@ -165,20 +165,20 @@ export function TabSettings(props: TabSettingsProps) {
               </button>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="pt-1 pb-3">
+              <div className="pt-3 pb-3">
                 {section.id === "identity" && (
                   <div className="space-y-4">
                     <SettingsIdentity
                       employee={props.employee}
                       fetchEmployee={props.fetchEmployee}
                     />
-                    <div className="px-5 max-w-lg">
+                    <div className="px-5 max-w-3xl">
                       <TrustScoreCard
                         employeeId={props.employee.id}
                         onLevelChange={props.fetchEmployee}
                       />
                     </div>
-                    <div className="px-5 max-w-lg">
+                    <div className="px-5 max-w-3xl">
                       <Button
                         variant="outline"
                         size="sm"
@@ -337,7 +337,7 @@ function SettingsIdentity({
   }, [employee.id, settingsName, settingsDesc, settingsAvatar, settingsAutonomy, fetchEmployee])
 
   return (
-    <div className="px-5 max-w-lg space-y-4">
+    <div className="px-5 max-w-3xl space-y-4">
       <div className="space-y-2">
         <Label htmlFor="settings-name">Name</Label>
         <Input id="settings-name" value={settingsName} onChange={(e) => setSettingsName(e.target.value)} />
@@ -506,65 +506,22 @@ function SettingsDanger({
   onDeleteOpen: () => void
 }) {
   return (
-    <div className="px-5 max-w-lg space-y-3">
+    <div className="px-5 max-w-3xl space-y-3">
       <div className="flex items-center justify-between rounded-lg border border-border p-3">
         <div>
           <p className="text-sm font-medium">Archive Employee</p>
-          <p className="text-xs text-muted-foreground">Stop all tasks and set status to archived.</p>
+          <p className="text-xs text-muted-foreground">Deactivate and hide from active list. Can be restored later.</p>
         </div>
         <Button variant="outline" size="sm" onClick={onArchiveOpen}>Archive</Button>
       </div>
       <div className="flex items-center justify-between rounded-lg border border-destructive/50 p-3">
         <div>
           <p className="text-sm font-medium">Delete Employee</p>
-          <p className="text-xs text-muted-foreground">Permanently delete. This cannot be undone.</p>
+          <p className="text-xs text-muted-foreground">Permanently delete the employee and all associated data (runs, messages, files). This cannot be undone.</p>
         </div>
         <Button variant="destructive" size="sm" onClick={onDeleteOpen}>
           <Trash2 className="h-4 w-4 mr-1.5" />
           Delete
-        </Button>
-      </div>
-      <div className="flex items-center justify-between rounded-lg border border-border p-3">
-        <div>
-          <p className="text-sm font-medium">Export Data</p>
-          <p className="text-xs text-muted-foreground">Download all employee data as JSON.</p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            window.open(`/api/dashboard/digital-employees/${employeeId}/export`, "_blank")
-          }}
-        >
-          Export
-        </Button>
-      </div>
-      <div className="flex items-center justify-between rounded-lg border border-destructive/50 p-3">
-        <div>
-          <p className="text-sm font-medium">Purge All Data</p>
-          <p className="text-xs text-muted-foreground">Permanently delete employee and all associated data.</p>
-        </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          onClick={async () => {
-            const confirmed = window.prompt(`Type "${employeeName}" to confirm purge:`)
-            if (confirmed !== employeeName) return
-            try {
-              const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/purge`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ confirmName: confirmed }),
-              })
-              if (!res.ok) throw new Error("Failed")
-              window.location.href = "/dashboard/digital-employees"
-            } catch {
-              // silently fail — toast not available in this sub-component
-            }
-          }}
-        >
-          <Trash2 className="h-4 w-4 mr-1.5" />
-          Purge
         </Button>
       </div>
     </div>

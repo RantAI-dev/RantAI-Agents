@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
   ArrowLeft,
-  Send,
   Square,
   Bot,
   User,
@@ -24,6 +23,7 @@ import {
   Loader2,
   FileText,
 } from "@/lib/icons"
+import { SendHorizontal } from "lucide-react"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { cn } from "@/lib/utils"
@@ -1335,6 +1335,7 @@ export function ChatWorkspace({
             const events = pollData.events as Array<{ seq: number; type: string; data: Record<string, unknown> }>
             nextSeq = pollData.nextSeq
 
+            let receivedAgentDone = false
             for (const evt of events) {
               switch (evt.type) {
                 case "thinking":
@@ -1376,6 +1377,9 @@ export function ChatWorkspace({
                 case "error":
                   assistantContent += `Error: ${evt.data.message}`
                   break
+                case "agent-done":
+                  receivedAgentDone = true
+                  break
               }
             }
 
@@ -1407,7 +1411,7 @@ export function ChatWorkspace({
               return updated
             })
 
-            if (pollData.done) break
+            if (pollData.done || receivedAgentDone) break
           }
 
           // Skip SSE stream handling below — jump to post-stream finalization
@@ -2581,46 +2585,48 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     <ButtonLoadingIndicator />
                   )
                 ) : (
-                  <Send className="h-4 w-4" />
+                  <SendHorizontal className="h-4 w-4" />
                 )}
               </Button>
             </div>
 
-            {/* Toolbar inside container */}
-            <div className="px-2 pb-2">
-              <ChatInputToolbar
-                onFileSelect={(files) => setAttachedFiles(prev => [...prev, ...files])}
-                fileAttached={attachedFiles.length > 0}
-                webSearchEnabled={effectiveWebSearch}
-                onToggleWebSearch={() => setWebSearchOverride((prev) => !(prev ?? webSearchAvailable))}
-                codeInterpreterEnabled={effectiveCodeInterpreter}
-                onToggleCodeInterpreter={() => setCodeInterpreterOverride((prev) => !(prev ?? codeInterpreterAvailable))}
-                knowledgeBaseGroupIds={effectiveKBGroupIds}
-                onKBGroupsChange={setSelectedKBGroupIds}
-                kbGroups={kbGroups}
-                toolMode={toolMode}
-                onSetToolMode={setToolMode}
-                selectedToolNames={selectedToolNames}
-                onSetSelectedToolNames={setSelectedToolNames}
-                assistantTools={assistantTools}
-                skillMode={skillMode}
-                onSetSkillMode={setSkillMode}
-                selectedSkillIds={selectedSkillIds}
-                onSetSelectedSkillIds={setSelectedSkillIds}
-                assistantSkills={assistantSkills}
-                onImportGithub={() => {
-                  setGithubUrl("")
-                  setGithubDialogOpen(true)
-                }}
-                canvasMode={canvasMode}
-                onSetCanvasMode={setCanvasMode}
-                artifacts={artifacts}
-                activeArtifactId={activeArtifactId}
-                onOpenArtifact={openArtifact}
-                onCloseArtifact={closeArtifact}
-                disabled={isLoading}
-              />
-            </div>
+            {/* Toolbar inside container — hidden for employee chat (gateway manages its own tools) */}
+            {!apiEndpoint && (
+              <div className="px-2 pb-2">
+                <ChatInputToolbar
+                  onFileSelect={(files) => setAttachedFiles(prev => [...prev, ...files])}
+                  fileAttached={attachedFiles.length > 0}
+                  webSearchEnabled={effectiveWebSearch}
+                  onToggleWebSearch={() => setWebSearchOverride((prev) => !(prev ?? webSearchAvailable))}
+                  codeInterpreterEnabled={effectiveCodeInterpreter}
+                  onToggleCodeInterpreter={() => setCodeInterpreterOverride((prev) => !(prev ?? codeInterpreterAvailable))}
+                  knowledgeBaseGroupIds={effectiveKBGroupIds}
+                  onKBGroupsChange={setSelectedKBGroupIds}
+                  kbGroups={kbGroups}
+                  toolMode={toolMode}
+                  onSetToolMode={setToolMode}
+                  selectedToolNames={selectedToolNames}
+                  onSetSelectedToolNames={setSelectedToolNames}
+                  assistantTools={assistantTools}
+                  skillMode={skillMode}
+                  onSetSkillMode={setSkillMode}
+                  selectedSkillIds={selectedSkillIds}
+                  onSetSelectedSkillIds={setSelectedSkillIds}
+                  assistantSkills={assistantSkills}
+                  onImportGithub={() => {
+                    setGithubUrl("")
+                    setGithubDialogOpen(true)
+                  }}
+                  canvasMode={canvasMode}
+                  onSetCanvasMode={setCanvasMode}
+                  artifacts={artifacts}
+                  activeArtifactId={activeArtifactId}
+                  onOpenArtifact={openArtifact}
+                  onCloseArtifact={closeArtifact}
+                  disabled={isLoading}
+                />
+              </div>
+            )}
           </div>
 
           <p className="text-[10px] text-muted-foreground mt-2 text-center">

@@ -26,13 +26,13 @@ import {
 } from "@/lib/digital-employee/messaging"
 
 export default function MessagesPage() {
-  const [typeFilter, setTypeFilter] = useState<string>("")
-  const [statusFilter, setStatusFilter] = useState<string>("")
+  const [typeFilter, setTypeFilter] = useState<string>("all")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const { messages, isLoading, fetchMore, hasMore } = useEmployeeMessages({
-    type: typeFilter || undefined,
-    status: statusFilter || undefined,
+    type: typeFilter !== "all" ? typeFilter : undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
   })
 
   return (
@@ -51,7 +51,7 @@ export default function MessagesPage() {
               <SelectValue placeholder="All types" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All types</SelectItem>
+              <SelectItem value="all">All types</SelectItem>
               <SelectItem value="message">Message</SelectItem>
               <SelectItem value="task">Task</SelectItem>
               <SelectItem value="handoff">Handoff</SelectItem>
@@ -63,7 +63,7 @@ export default function MessagesPage() {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All statuses</SelectItem>
+              <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="delivered">Delivered</SelectItem>
               <SelectItem value="read">Read</SelectItem>

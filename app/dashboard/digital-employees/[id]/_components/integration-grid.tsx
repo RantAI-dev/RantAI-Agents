@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Plug, Check, X, Loader2, AlertCircle, Eye } from "@/lib/icons"
+import { DynamicIcon } from "@/components/ui/dynamic-icon"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -72,9 +73,20 @@ export function IntegrationGrid({ employeeId, onOpenChat }: IntegrationGridProps
               return (
                 <div
                   key={item.id}
-                  className="rounded-lg border bg-card p-3 flex items-start gap-3"
+                  className={cn(
+                    "rounded-lg border bg-card p-3 flex items-start gap-3 transition-colors",
+                    item.status === "disconnected" && "cursor-pointer hover:bg-accent/50"
+                  )}
+                  onClick={item.status === "disconnected" ? () => setSelectedIntegration(item) : undefined}
                 >
-                  <span className="text-xl shrink-0">{item.icon}</span>
+                  <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center shrink-0">
+                    <DynamicIcon
+                      icon={item.icon}
+                      fallback={Plug}
+                      className="h-5 w-5"
+                      emojiClassName="text-lg leading-none"
+                    />
+                  </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h5 className="text-sm font-medium truncate">{item.name}</h5>
@@ -111,53 +123,52 @@ export function IntegrationGrid({ employeeId, onOpenChat }: IntegrationGridProps
                         ))}
                       </div>
                     )}
-                    <div className="flex items-center gap-1.5 mt-2">
-                      {item.status === "disconnected" ? (
-                        <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => setSelectedIntegration(item)}>
-                          Set up
+                    {item.status !== "disconnected" && (
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 text-xs px-2"
+                          onClick={() => handleTest(item.id)}
+                          disabled={isTesting}
+                        >
+                          {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
                         </Button>
-                      ) : (
-                        <>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 text-xs px-2"
-                            onClick={() => handleTest(item.id)}
-                            disabled={isTesting}
-                          >
-                            {isTesting ? <Loader2 className="h-3 w-3 animate-spin" /> : "Test"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 text-xs px-2 text-muted-foreground"
-                            onClick={() => setSelectedIntegration(item)}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 text-xs px-2 text-red-500"
-                            onClick={async () => {
-                              try {
-                                await disconnectIntegration(item.id)
-                                toast.success("Disconnected")
-                              } catch {
-                                toast.error("Failed to disconnect")
-                              }
-                            }}
-                          >
-                            Disconnect
-                          </Button>
-                        </>
-                      )}
-                      {item.lastError && (
-                        <span className="text-[10px] text-red-500 truncate ml-auto" title={item.lastError}>
-                          {item.lastError}
-                        </span>
-                      )}
-                    </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-xs px-2 text-muted-foreground"
+                          onClick={() => setSelectedIntegration(item)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-6 text-xs px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={async () => {
+                            try {
+                              await disconnectIntegration(item.id)
+                              toast.success("Disconnected")
+                            } catch {
+                              toast.error("Failed to disconnect")
+                            }
+                          }}
+                        >
+                          Disconnect
+                        </Button>
+                        {item.lastError && (
+                          <span className="text-[10px] text-red-500 truncate ml-auto" title={item.lastError}>
+                            {item.lastError}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {item.status === "disconnected" && item.lastError && (
+                      <span className="text-[10px] text-red-500 truncate mt-1 block" title={item.lastError}>
+                        {item.lastError}
+                      </span>
+                    )}
                   </div>
                 </div>
               )
@@ -168,6 +179,7 @@ export function IntegrationGrid({ employeeId, onOpenChat }: IntegrationGridProps
 
       <IntegrationSetupWizard
         integration={selectedIntegration}
+        employeeId={employeeId}
         onClose={() => setSelectedIntegration(null)}
         onConnect={connectIntegration}
         onOpenChat={onOpenChat}

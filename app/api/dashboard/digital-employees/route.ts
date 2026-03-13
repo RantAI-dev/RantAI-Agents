@@ -26,6 +26,7 @@ export async function GET(req: Request) {
       },
       include: {
         assistant: { select: { id: true, name: true, emoji: true, model: true } },
+        group: { select: { id: true, name: true, status: true } },
         runs: { take: 1, orderBy: { startedAt: "desc" }, select: { status: true, output: true } },
         _count: {
           select: {

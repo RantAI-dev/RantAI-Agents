@@ -35,7 +35,16 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true })
+    // Auto-start the container after deploying
+    try {
+      const { containerId, port } = await orchestrator.startContainer(id)
+      return NextResponse.json({ success: true, containerId, port })
+    } catch (startError) {
+      console.error("Auto-start after resume failed:", startError)
+      // Deploy succeeded but container start failed — still return success
+      // The user can manually start from the UI
+      return NextResponse.json({ success: true, warning: "Deployed but container start failed" })
+    }
   } catch (error) {
     console.error("Resume failed:", error)
     return NextResponse.json({ error: "Resume failed" }, { status: 500 })

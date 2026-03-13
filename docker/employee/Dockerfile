@@ -14,7 +14,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 #   docker build -f docker/employee/Dockerfile -t rantai/employee:latest .
 COPY packages/rantaiclaw /build/rantaiclaw
 WORKDIR /build/rantaiclaw
-RUN cargo build --release && \
+RUN cargo build --release --features whatsapp-web && \
     cp target/release/rantaiclaw /usr/local/bin/rantaiclaw
 
 # ── Stage 2: Grab Python 3.12 from official slim image ──────────
@@ -45,7 +45,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 libnss3 libnspr4 libdbus-1-3 libatk1.0-0 \
     libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libatspi2.0-0 \
     libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 \
-    libcairo2 libasound2 libxshmfence1 fonts-liberation xdg-utils wget && \
+    libcairo2 libasound2 libxshmfence1 fonts-liberation xdg-utils wget \
+    # Browser playground: Firefox ESR + display stack
+    firefox-esr xvfb x11vnc novnc websockify xdotool && \
     # Install Node.js 22 LTS (real node/npm/npx for tool compatibility)
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
@@ -64,6 +66,6 @@ WORKDIR /opt/agent-runner
 VOLUME /data
 
 # Expose gateway port for RantaiClaw
-EXPOSE 8080
+EXPOSE 8080 6080
 
 ENTRYPOINT ["bun", "run", "/opt/agent-runner/index.js"]

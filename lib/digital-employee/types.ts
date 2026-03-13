@@ -232,4 +232,8 @@ export interface EmployeePackage {
     longTerm: string
     recentDailyNotes: Array<{ date: string; content: string }>
   }
+  channelIntegrations?: Array<{
+    channelId: string
+    credentials: Record<string, string>
+  }>
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import { hasPermission } from "@/lib/digital-employee/rbac"
 
 interface RouteParams {
@@ -16,7 +16,7 @@ export async function GET(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
@@ -55,7 +55,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
@@ -110,7 +110,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }

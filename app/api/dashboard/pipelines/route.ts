@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import { hasPermission } from "@/lib/digital-employee/rbac"
 
 // Pipelines are stored as EmployeeTemplateShare records with category="pipeline".
@@ -14,7 +14,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }

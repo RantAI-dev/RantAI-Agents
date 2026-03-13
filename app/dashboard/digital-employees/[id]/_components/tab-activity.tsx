@@ -49,8 +49,9 @@ interface TabActivityProps {
   }>
   onRunNow: () => void
   onDeploy: () => void
-  onStart: () => void
-  onStop: () => void
+  onActivate: () => void
+  onDeactivate: () => void
+  containerLoading?: boolean
   onRefresh?: () => void
 }
 
@@ -62,8 +63,9 @@ export function TabActivity({
   runs,
   onRunNow,
   onDeploy,
-  onStart,
-  onStop,
+  onActivate,
+  onDeactivate,
+  containerLoading,
   onRefresh,
 }: TabActivityProps) {
   const { events, dailySummary, isLoading } = useEmployeeActivity(employee.id)
@@ -81,7 +83,7 @@ export function TabActivity({
   // Derive current status text
   const statusText = (() => {
     if (employee.status === "DRAFT") return "Not deployed"
-    if (employee.status === "PAUSED") return "Paused"
+    if (employee.status === "PAUSED") return "Deactivated"
     if (employee.status === "ARCHIVED") return "Archived"
     if (!containerRunning) return "Offline"
     if (pendingApprovals.length > 0) return "Waiting for approval"
@@ -133,23 +135,33 @@ export function TabActivity({
                 Deploy
               </Button>
             )}
-            {employee.status === "ACTIVE" && !containerRunning && (
-              <Button size="sm" onClick={onStart}>
-                <Play className="h-3.5 w-3.5 mr-1.5" />
-                Start
-              </Button>
-            )}
-            {employee.status === "ACTIVE" && containerRunning && (
+            {employee.status === "ACTIVE" && (
               <>
-                <Button size="sm" variant="outline" onClick={onStop}>
-                  <Square className="h-3.5 w-3.5 mr-1.5" />
-                  Stop
-                </Button>
-                <Button size="sm" onClick={onRunNow}>
-                  <Zap className="h-3.5 w-3.5 mr-1.5" />
-                  Run Now
+                {containerRunning && (
+                  <Button size="sm" onClick={onRunNow}>
+                    <Zap className="h-3.5 w-3.5 mr-1.5" />
+                    Run Now
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" onClick={onDeactivate} disabled={containerLoading}>
+                  {containerLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                  ) : (
+                    <Square className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Deactivate
                 </Button>
               </>
+            )}
+            {(employee.status === "PAUSED" || employee.status === "SUSPENDED") && (
+              <Button size="sm" onClick={onActivate} disabled={containerLoading}>
+                {containerLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Activate
+              </Button>
             )}
           </div>
         </div>

@@ -131,6 +131,7 @@ export function ItemDetailDialog({
                   >
                     <DynamicIcon
                       icon={item.icon}
+                      serviceName={item.displayName}
                       fallback={isSkill ? Sparkles : Wrench}
                       className={cn(
                         "h-5 w-5",

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import type { PipelineStep } from "@/lib/digital-employee/pipelines"
 
 interface RouteParams {
@@ -16,7 +16,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }

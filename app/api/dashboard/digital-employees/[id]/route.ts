@@ -34,6 +34,7 @@ export async function GET(req: Request, { params }: RouteParams) {
             knowledgeBaseGroupIds: true,
           },
         },
+        group: { select: { id: true, name: true, status: true } },
         _count: {
           select: {
             runs: true,
@@ -92,7 +93,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
     const {
       name, description, avatar, assistantId, autonomyLevel,
       deploymentConfig, resourceLimits, gatewayConfig, supervisorId,
-      status, sandboxMode,
+      status, sandboxMode, groupId,
     } = body
 
     // Map legacy autonomy values to L-codes
@@ -112,9 +113,11 @@ export async function PUT(req: Request, { params }: RouteParams) {
         ...(gatewayConfig !== undefined && { gatewayConfig }),
         ...(supervisorId !== undefined && { supervisorId }),
         ...(sandboxMode !== undefined && { sandboxMode }),
+        ...(groupId !== undefined && { groupId: groupId || null }),
       },
       include: {
         assistant: { select: { id: true, name: true, emoji: true, model: true } },
+        group: { select: { id: true, name: true, status: true } },
         _count: {
           select: {
             runs: true,

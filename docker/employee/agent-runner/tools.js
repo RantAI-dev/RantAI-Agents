@@ -496,6 +496,58 @@ function registerTools(pkg, platformApiUrl, runtimeToken) {
     },
   })
 
+  // ── Browser playground tool ──
+
+  tools.push({
+    name: "open_browser",
+    description:
+      "Open a URL in Firefox browser inside the container. " +
+      "Starts display services (Xvfb, VNC) on first use. " +
+      "Returns noVNC connection info. After calling this, use show_to_user " +
+      "with type 'browser' to present the browser stream to the user.",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "URL to navigate to" },
+        wait_seconds: {
+          type: "number",
+          description: "Seconds to wait after navigation before returning (default: 3)",
+        },
+      },
+      required: ["url"],
+    },
+    type: "builtin",
+    execute: async (input) => {
+      const {
+        startBrowserServices,
+        getBrowserStatus,
+        openFirefox,
+      } = require("./browser-services")
+
+      // Start display stack if not already running
+      const status = getBrowserStatus()
+      if (!status.running) {
+        await startBrowserServices()
+      }
+
+      // Open Firefox to the requested URL
+      await openFirefox(input.url)
+
+      // Wait for the page to load
+      const waitMs = ((input.wait_seconds || 3) * 1000)
+      await new Promise((resolve) => setTimeout(resolve, waitMs))
+
+      return {
+        success: true,
+        url: input.url,
+        noVncPort: 6080,
+        message:
+          "Browser is running. noVNC is available on port 6080. " +
+          "Use show_to_user with type 'browser' to present the browser stream.",
+      }
+    },
+  })
+
   // ── Integration tools ──
 
   tools.push({

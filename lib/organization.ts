@@ -54,6 +54,29 @@ export async function getOrganizationContext(
 }
 
 /**
+ * Like getOrganizationContext but falls back to user's first accepted org
+ * when no x-organization-id header is present.
+ */
+export async function getOrganizationContextWithFallback(
+  request: Request,
+  userId: string
+): Promise<OrganizationContext | null> {
+  const ctx = await getOrganizationContext(request, userId)
+  if (ctx) return ctx
+
+  const membership = await prisma.organizationMember.findFirst({
+    where: { userId, acceptedAt: { not: null } },
+    select: { id: true, role: true, userId: true, organizationId: true },
+  })
+  if (!membership) return null
+
+  return {
+    organizationId: membership.organizationId,
+    membership: { id: membership.id, role: membership.role, userId: membership.userId },
+  }
+}
+
+/**
  * Check if user can edit resources (owner, admin, or member)
  */
 export function canEdit(role: string): boolean {

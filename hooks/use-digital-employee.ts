@@ -139,8 +139,6 @@ export function useDigitalEmployee(id: string | null) {
   const [customTools, setCustomTools] = useState<CustomToolItem[]>([])
   const [skills, setSkills] = useState<{ platform: PlatformSkillItem[]; clawhub: ClawHubSkillItem[] }>({ platform: [], clawhub: [] })
   const [isLoading, setIsLoading] = useState(true)
-  const [ideStatus, setIdeStatus] = useState<{ running: boolean; url?: string } | null>(null)
-
   const base = `/api/dashboard/digital-employees/${id}`
 
   const fetchEmployee = useCallback(async () => {
@@ -398,33 +396,6 @@ export function useDigitalEmployee(id: string | null) {
     [base, employee, fetchEmployee]
   )
 
-  const fetchIdeStatus = useCallback(async () => {
-    if (!id) return
-    try {
-      const res = await fetch(`${base}/ide/status`)
-      if (res.ok) setIdeStatus(await res.json())
-    } catch {
-      setIdeStatus(null)
-    }
-  }, [id, base])
-
-  const startIde = useCallback(async () => {
-    const res = await fetch(`${base}/ide/start`, { method: "POST" })
-    if (!res.ok) {
-      const data = await res.json()
-      throw new Error(data.error || "Start IDE failed")
-    }
-    const data = await res.json() as { url: string }
-    setIdeStatus({ running: true, url: data.url })
-    return data
-  }, [base])
-
-  const stopIde = useCallback(async () => {
-    const res = await fetch(`${base}/ide/stop`, { method: "POST" })
-    if (!res.ok) throw new Error("Stop IDE failed")
-    setIdeStatus({ running: false })
-  }, [base])
-
   const deleteEmployee = useCallback(async () => {
     const res = await fetch(base, { method: "DELETE" })
     if (!res.ok) throw new Error("Delete failed")
@@ -474,9 +445,5 @@ export function useDigitalEmployee(id: string | null) {
     updateMemory,
     updateSchedules,
     deleteEmployee,
-    ideStatus,
-    fetchIdeStatus,
-    startIde,
-    stopIde,
   }
 }

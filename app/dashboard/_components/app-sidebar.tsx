@@ -30,6 +30,7 @@ import {
   PanelLeftClose,
   Bot,
   Users,
+  Network,
   type IconComponent,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -99,8 +100,7 @@ const allNavItems: NavItem[] = [
   { title: "Agent Builder", url: "/dashboard/agent-builder", icon: Blocks, feature: null },
   { title: "Workflows", url: "/dashboard/workflows", icon: GitBranch, feature: null },
   { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: null },
-  { title: "Messages", url: "/dashboard/messages", icon: MessageSquare, feature: null },
-  { title: "Pipelines", url: "/dashboard/pipelines", icon: GitBranch, feature: null },
+  { title: "Teams", url: "/dashboard/groups", icon: Network, feature: null },
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
   { title: "Knowledge", url: "/dashboard/knowledge", icon: BookOpen, feature: null },
   { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },
@@ -113,8 +113,7 @@ const sections = {
   agentBuilder: { title: "Agent Builder", subtitle: "Build & Configure", icon: Blocks, path: "/dashboard/agent-builder" },
   workflows: { title: "Workflows", subtitle: "Visual Automations", icon: GitBranch, path: "/dashboard/workflows" },
   digitalEmployees: { title: "Digital Employees", subtitle: "Autonomous Workers", icon: Users, path: "/dashboard/digital-employees" },
-  messages: { title: "Messages", subtitle: "Employee Communication", icon: MessageSquare, path: "/dashboard/messages" },
-  pipelines: { title: "Pipelines", subtitle: "Handoff Workflows", icon: GitBranch, path: "/dashboard/pipelines" },
+  groups: { title: "Teams", subtitle: "Employee Groups", icon: Network, path: "/dashboard/groups" },
   agent: { title: "Live Chat", subtitle: "Customer Support", icon: Headphones, path: "/dashboard/agent" },
   knowledge: { title: "Knowledge", subtitle: "RAG Documents", icon: BookOpen, path: "/dashboard/knowledge" },
   marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
@@ -438,8 +437,9 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     if (pathname.startsWith("/dashboard/agent-builder")) return sections.agentBuilder
     if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
     if (pathname.startsWith("/dashboard/digital-employees")) return sections.digitalEmployees
-    if (pathname.startsWith("/dashboard/messages")) return sections.messages
-    if (pathname.startsWith("/dashboard/pipelines")) return sections.pipelines
+    if (pathname.startsWith("/dashboard/messages")) return sections.digitalEmployees
+    if (pathname.startsWith("/dashboard/pipelines")) return sections.digitalEmployees
+    if (pathname.startsWith("/dashboard/groups")) return sections.groups
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/knowledge")) return sections.knowledge
     if (pathname.startsWith("/dashboard/marketplace")) return sections.marketplace

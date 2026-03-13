@@ -22,4 +22,8 @@ export interface EmployeeOrchestrator {
   startContainer(employeeId: string, onProgress?: ProgressCallback): Promise<{ containerId: string; port: number }>
   stopContainer(employeeId: string): Promise<void>
   getContainerUrl(employeeId: string): Promise<string | null>
+  deployGroup(groupId: string, onProgress?: ProgressCallback): Promise<DeployResult>
+  startGroupContainer(groupId: string, onProgress?: ProgressCallback): Promise<{ containerId: string; port: number }>
+  stopGroupContainer(groupId: string): Promise<void>
+  getGroupContainerUrl(groupId: string): Promise<string | null>
 }

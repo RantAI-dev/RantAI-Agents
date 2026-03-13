@@ -1,9 +1,9 @@
 export const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   DRAFT: { label: "Draft", className: "bg-muted text-muted-foreground" },
-  ONBOARDING: { label: "Onboarding", className: "bg-sky-500/10 text-sky-500" },
+  ONBOARDING: { label: "Draft", className: "bg-muted text-muted-foreground" },
   ACTIVE: { label: "Active", className: "bg-emerald-500/10 text-emerald-500" },
-  PAUSED: { label: "Paused", className: "bg-amber-500/10 text-amber-500" },
-  SUSPENDED: { label: "Suspended", className: "bg-red-500/10 text-red-500" },
+  PAUSED: { label: "Inactive", className: "bg-amber-500/10 text-amber-500" },
+  SUSPENDED: { label: "Inactive", className: "bg-amber-500/10 text-amber-500" },
   ARCHIVED: { label: "Archived", className: "bg-muted text-muted-foreground" },
 }
 

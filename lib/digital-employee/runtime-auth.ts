@@ -12,7 +12,7 @@ export async function createRuntimeToken(
   return new SignJWT({ employeeId, runId })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime(options?.expiresIn || "1h")
+    .setExpirationTime(options?.expiresIn || "30d")
     .sign(RUNTIME_SECRET)
 }
 

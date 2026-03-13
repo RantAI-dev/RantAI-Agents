@@ -89,7 +89,7 @@ export function TabChat({
 
             {/* Show queued messages */}
             {queuedMessages.length > 0 && (
-              <div className="space-y-2 max-w-lg mx-auto">
+              <div className="space-y-2 max-w-3xl mx-auto">
                 {queuedMessages.map((msg) => (
                   <div
                     key={msg.id}
@@ -109,7 +109,7 @@ export function TabChat({
 
             {/* Read-only history */}
             {syntheticSession && syntheticSession.messages.length > 0 && (
-              <div className="mt-6 max-w-lg mx-auto">
+              <div className="mt-6 max-w-3xl mx-auto">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                   Previous messages
                 </h4>
@@ -133,7 +133,7 @@ export function TabChat({
           {employee.status === "ACTIVE" && (
             <div className="border-t px-4 py-3">
               <form
-                className="flex items-center gap-2 max-w-lg mx-auto"
+                className="flex items-center gap-2 max-w-3xl mx-auto"
                 onSubmit={(e) => {
                   e.preventDefault()
                   handleQueueMessage()

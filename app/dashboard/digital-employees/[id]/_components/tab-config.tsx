@@ -60,7 +60,7 @@ export function TabConfig({ employee, fetchEmployee, onArchiveOpen, onDeleteOpen
 
   return (
     <div className="flex-1 overflow-auto p-5 space-y-6">
-      <div className="max-w-lg space-y-4">
+      <div className="max-w-3xl space-y-4">
         <h2 className="text-sm font-medium">General</h2>
         <div className="space-y-2">
           <Label htmlFor="settings-name">Name</Label>
@@ -111,7 +111,7 @@ export function TabConfig({ employee, fetchEmployee, onArchiveOpen, onDeleteOpen
       </div>
 
       {/* Danger Zone */}
-      <div className="max-w-lg pt-6 border-t">
+      <div className="max-w-3xl pt-6 border-t">
         <h3 className="text-sm font-medium text-red-500 mb-3">Danger Zone</h3>
         <div className="space-y-3">
           <div className="flex items-center justify-between rounded-lg border border-border p-3">

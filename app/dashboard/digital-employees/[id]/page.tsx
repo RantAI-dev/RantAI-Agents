@@ -7,12 +7,10 @@ import {
   ArrowLeft,
   MessageSquare,
   Loader2,
-  Pause,
   Play,
   Rocket,
   Settings,
   Square,
-  X,
   Zap,
   Folder,
   History,
@@ -109,10 +107,6 @@ export default function DigitalEmployeeDetailPage() {
     fetchEmployee,
     fetchTools: fetchEmployeeTools,
     fetchSkills: fetchEmployeeSkills,
-    ideStatus,
-    fetchIdeStatus,
-    startIde,
-    stopIde,
   } = useDigitalEmployee(id)
 
   // Available platform tools & skills (all items in the system)
@@ -178,41 +172,6 @@ export default function DigitalEmployeeDetailPage() {
     }
   }, [])
 
-  const handleStart = useCallback(async () => {
-    setContainerLoading(true)
-    setIsDeploying(true)
-    setDeployProgress(null)
-    setDeployStepMessages({})
-    try {
-      await start(handleProgressEvent)
-      setContainerRunning(true)
-      chatFetchedRef.current = false
-      toast.success("Employee started")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to start")
-    } finally {
-      setContainerLoading(false)
-      setTimeout(() => {
-        setIsDeploying(false)
-        setDeployProgress(null)
-        setDeployStepMessages({})
-      }, 1500)
-    }
-  }, [start, handleProgressEvent])
-
-  const handleStop = useCallback(async () => {
-    setContainerLoading(true)
-    try {
-      await stop()
-      setContainerRunning(false)
-      toast.success("Employee stopped")
-    } catch {
-      toast.error("Failed to stop")
-    } finally {
-      setContainerLoading(false)
-    }
-  }, [stop])
-
   const handleDeploy = useCallback(async () => {
     setIsDeploying(true)
     setDeployProgress(null)
@@ -231,32 +190,46 @@ export default function DigitalEmployeeDetailPage() {
     }
   }, [deploy, handleProgressEvent])
 
-  const handlePause = useCallback(async () => {
+  const handleActivate = useCallback(async () => {
+    setContainerLoading(true)
+    setIsDeploying(true)
+    setDeployProgress(null)
+    setDeployStepMessages({})
     try {
+      if (employee?.status === "PAUSED" || employee?.status === "SUSPENDED") {
+        await resume()
+      }
+      await start(handleProgressEvent)
+      setContainerRunning(true)
+      chatFetchedRef.current = false
+      toast.success("Employee activated")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to activate")
+    } finally {
+      setContainerLoading(false)
+      setTimeout(() => {
+        setIsDeploying(false)
+        setDeployProgress(null)
+        setDeployStepMessages({})
+      }, 1500)
+    }
+  }, [employee?.status, resume, start, handleProgressEvent])
+
+  const handleDeactivate = useCallback(async () => {
+    setContainerLoading(true)
+    try {
+      if (containerRunning) {
+        await stop()
+        setContainerRunning(false)
+      }
       await pause()
-      toast.success("Employee paused")
+      toast.success("Employee deactivated")
     } catch {
-      toast.error("Failed to pause")
+      toast.error("Failed to deactivate")
+    } finally {
+      setContainerLoading(false)
     }
-  }, [pause])
-
-  const handleResume = useCallback(async () => {
-    try {
-      await resume()
-      toast.success("Employee resumed")
-    } catch {
-      toast.error("Failed to resume")
-    }
-  }, [resume])
-
-  const handleTerminate = useCallback(async () => {
-    try {
-      await terminate()
-      toast.success("Employee terminated")
-    } catch {
-      toast.error("Failed to terminate")
-    }
-  }, [terminate])
+  }, [containerRunning, stop, pause])
 
   const handleRunNow = useCallback(async () => {
     try {
@@ -589,47 +562,31 @@ export default function DigitalEmployeeDetailPage() {
               Deploy
             </Button>
           )}
-          {employee.status === "ACTIVE" && !containerRunning && (
-            <Button size="sm" onClick={handleStart} disabled={containerLoading}>
-              {containerLoading ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              Start
-            </Button>
-          )}
-          {employee.status === "ACTIVE" && containerRunning && (
-            <Button size="sm" variant="outline" onClick={handleStop} disabled={containerLoading}>
-              {containerLoading ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <Square className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              Stop
-            </Button>
-          )}
           {employee.status === "ACTIVE" && (
             <>
-              <Button size="sm" variant="ghost" onClick={handlePause}>
-                <Pause className="h-3.5 w-3.5" />
-              </Button>
               {containerRunning && (
                 <Button size="sm" variant="ghost" onClick={handleRunNow}>
                   <Zap className="h-3.5 w-3.5" />
                 </Button>
               )}
+              <Button size="sm" variant="outline" onClick={handleDeactivate} disabled={containerLoading}>
+                {containerLoading ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Square className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Deactivate
+              </Button>
             </>
           )}
-          {employee.status === "PAUSED" && (
-            <Button size="sm" onClick={handleResume}>
-              <Play className="h-3.5 w-3.5 mr-1.5" />
-              Resume
-            </Button>
-          )}
-          {(employee.status === "ACTIVE" || employee.status === "PAUSED") && (
-            <Button size="sm" variant="ghost" className="text-destructive" onClick={handleTerminate}>
-              <X className="h-3.5 w-3.5" />
+          {(employee.status === "PAUSED" || employee.status === "SUSPENDED") && (
+            <Button size="sm" onClick={handleActivate} disabled={containerLoading}>
+              {containerLoading ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Play className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Activate
             </Button>
           )}
         </div>
@@ -708,8 +665,9 @@ export default function DigitalEmployeeDetailPage() {
               runs={runs}
               onRunNow={handleRunNow}
               onDeploy={handleDeploy}
-              onStart={handleStart}
-              onStop={handleStop}
+              onActivate={handleActivate}
+              onDeactivate={handleDeactivate}
+              containerLoading={containerLoading}
               onRefresh={fetchEmployee}
             />
           )}
@@ -745,10 +703,7 @@ export default function DigitalEmployeeDetailPage() {
           {activeSection === "workspace" && (
             <WorkspaceIDE
               employeeId={id}
-              ideStatus={ideStatus}
-              fetchIdeStatus={fetchIdeStatus}
-              startIde={startIde}
-              stopIde={stopIde}
+              containerRunning={containerRunning}
             />
           )}
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Wrench,
@@ -23,6 +23,11 @@ import {
   Terminal,
   Copy,
   Check,
+  Monitor,
+  ExternalLink,
+  Grid3x3,
+  Image,
+  ShieldCheck,
 } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
@@ -55,6 +60,8 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   write_note: "Writing note",
   search_memory: "Searching memory",
   create_tool: "Creating tool",
+  show_to_user: "Presenting to user",
+  open_browser: "Opening browser",
 }
 
 // Tool-specific icons
@@ -86,6 +93,8 @@ const TOOL_ICONS: Record<string, typeof Wrench> = {
   write_note: FileText,
   search_memory: Search,
   create_tool: Wrench,
+  show_to_user: Monitor,
+  open_browser: Globe,
 }
 
 type ToolState =
@@ -898,6 +907,314 @@ function GenericToolIndicator({
   )
 }
 
+// ============================================
+// Show To User — Agent-to-User Interactive Cards
+// ============================================
+
+const CONTENT_TYPE_ICONS: Record<string, typeof Monitor> = {
+  qr_code: Grid3x3,
+  link: ExternalLink,
+  image: Image,
+  terminal: Terminal,
+  approval: ShieldCheck,
+  browser: Monitor,
+}
+
+function QrCodeCard({ content, description }: { content: string; description?: string }) {
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    import("qrcode").then((QRCode) => {
+      QRCode.toDataURL(content, {
+        width: 200,
+        margin: 2,
+        color: { dark: "#000000", light: "#ffffff" },
+      })
+        .then((url: string) => { if (!cancelled) setQrDataUrl(url) })
+        .catch(() => { if (!cancelled) setError("Failed to generate QR code") })
+    }).catch(() => { if (!cancelled) setError("QR library not available") })
+    return () => { cancelled = true }
+  }, [content])
+
+  return (
+    <div className="flex flex-col items-center gap-3 p-4">
+      {qrDataUrl ? (
+        <img src={qrDataUrl} alt="QR Code" className="rounded-lg" width={200} height={200} />
+      ) : error ? (
+        <p className="text-xs text-destructive">{error}</p>
+      ) : (
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      )}
+      {description && <p className="text-xs text-muted-foreground text-center">{description}</p>}
+    </div>
+  )
+}
+
+function LinkCard({ content, description }: { content: string; description?: string }) {
+  const domain = getDomain(content)
+  const favicon = getFaviconUrl(content)
+
+  return (
+    <div className="p-3 space-y-2">
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      <a
+        href={content}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 p-3 rounded-lg bg-background/50 border border-border/40 hover:border-border/80 hover:bg-muted/30 transition-all group"
+      >
+        {favicon && (
+          <img
+            src={favicon}
+            alt=""
+            className="h-5 w-5 rounded-sm shrink-0"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = "none" }}
+          />
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-foreground truncate">{content}</p>
+          <p className="text-[10px] text-muted-foreground">{domain}</p>
+        </div>
+        <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
+      </a>
+    </div>
+  )
+}
+
+function ImageCard({ content, description }: { content: string; description?: string }) {
+  return (
+    <div className="p-3 space-y-2">
+      <img
+        src={content}
+        alt={description || "Agent image"}
+        className="max-w-full rounded-lg border border-border/30"
+      />
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+    </div>
+  )
+}
+
+function TerminalCard({ content }: { content: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="relative">
+      <div className="absolute top-2 right-2 z-10">
+        <button
+          type="button"
+          onClick={() => {
+            navigator.clipboard.writeText(content)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          }}
+          className="text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+        >
+          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        </button>
+      </div>
+      <pre className="p-3 text-xs font-mono text-[#cdd6f4] bg-[#1e1e2e] whitespace-pre-wrap leading-relaxed overflow-x-auto max-h-[300px] overflow-y-auto">
+        {content}
+      </pre>
+    </div>
+  )
+}
+
+function ApprovalCard({
+  content,
+  title,
+  description,
+  employeeId,
+}: {
+  content: string
+  title: string
+  description?: string
+  employeeId?: string
+}) {
+  const [responded, setResponded] = useState<"approved" | "rejected" | null>(null)
+
+  const handleResponse = (action: "approved" | "rejected") => {
+    setResponded(action)
+    // Send the response as a chat message
+    if (employeeId) {
+      fetch(`/api/dashboard/digital-employees/${employeeId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `${action === "approved" ? "Approved" : "Rejected"}: ${title}`,
+        }),
+      }).catch(() => {})
+    }
+  }
+
+  return (
+    <div className="p-3 space-y-3">
+      <p className="text-sm text-foreground">{content}</p>
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      {responded ? (
+        <div className="flex items-center gap-2 text-xs">
+          {responded === "approved" ? (
+            <><ShieldCheck className="h-4 w-4 text-chart-2" /><span className="text-chart-2 font-medium">Approved</span></>
+          ) : (
+            <><XCircle className="h-4 w-4 text-destructive" /><span className="text-destructive font-medium">Rejected</span></>
+          )}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => handleResponse("approved")}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-chart-2/10 text-chart-2 border border-chart-2/20 hover:bg-chart-2/20 transition-colors"
+          >
+            Approve
+          </button>
+          <button
+            type="button"
+            onClick={() => handleResponse("rejected")}
+            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 transition-colors"
+          >
+            Reject
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BrowserCard({ content, title, description }: { content: string; title: string; description?: string }) {
+  const [vncUrl, setVncUrl] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    // Extract employeeId from the current URL path: /dashboard/digital-employees/[id]/...
+    const pathMatch = window.location.pathname.match(/\/digital-employees\/([^/]+)/)
+    const employeeId = pathMatch?.[1]
+    if (!employeeId) {
+      setError("Could not determine employee context")
+      setLoading(false)
+      return
+    }
+
+    fetch(`/api/dashboard/digital-employees/${encodeURIComponent(employeeId)}/vnc`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.url) setVncUrl(data.url)
+        else setError(data.error || "Browser not available")
+      })
+      .catch(() => setError("Failed to connect to browser"))
+      .finally(() => setLoading(false))
+  }, [content])
+
+  if (loading) {
+    return (
+      <div className="p-4 flex items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-3 space-y-2">
+        <p className="text-xs text-muted-foreground">{error}</p>
+        <p className="text-[10px] text-muted-foreground/60">The browser may not have started yet. Try again in a moment.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-2 space-y-2">
+      {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      <iframe
+        src={vncUrl!}
+        title={title}
+        className="w-full rounded-lg border border-border/30"
+        style={{ height: 480 }}
+        allow="clipboard-read; clipboard-write"
+      />
+      <a
+        href={vncUrl!}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs text-primary hover:underline flex items-center gap-1"
+      >
+        <ExternalLink className="h-3 w-3" />
+        Open in new tab
+      </a>
+    </div>
+  )
+}
+
+function ShowToUserIndicator({
+  state,
+  args,
+  errorText,
+}: Omit<ToolCallIndicatorProps, "toolName">) {
+  const contentType = (args?.type as string) || ""
+  const title = (args?.title as string) || "Content"
+  const content = (args?.content as string) || ""
+  const description = args?.description as string | undefined
+
+  const isRunning =
+    state === "input-streaming" ||
+    state === "input-available" ||
+    state === "execution-started"
+  const isError = state === "error"
+
+  const TypeIcon = CONTENT_TYPE_ICONS[contentType] || Monitor
+
+  return (
+    <motion.div
+      className="my-2"
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="rounded-xl border border-border/40 bg-muted/30 overflow-hidden">
+        {/* Card header */}
+        <div className="px-3 py-2 border-b border-border/20 flex items-center gap-2">
+          <TypeIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-xs font-medium text-foreground flex-1">{title}</span>
+          {isRunning && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          {!isRunning && !isError && (
+            <motion.div
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring" as const, stiffness: 400, damping: 15 }}
+            >
+              <CheckCircle className="h-3.5 w-3.5 text-chart-2" />
+            </motion.div>
+          )}
+          {isError && <XCircle className="h-3.5 w-3.5 text-destructive" />}
+        </div>
+
+        {/* Card body */}
+        {isError && errorText ? (
+          <div className="p-3 text-xs text-destructive">{errorText}</div>
+        ) : isRunning && !content ? (
+          <div className="p-4 flex items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <>
+            {contentType === "qr_code" && <QrCodeCard content={content} description={description} />}
+            {contentType === "link" && <LinkCard content={content} description={description} />}
+            {contentType === "image" && <ImageCard content={content} description={description} />}
+            {contentType === "terminal" && <TerminalCard content={content} />}
+            {contentType === "approval" && (
+              <ApprovalCard content={content} title={title} description={description} />
+            )}
+            {contentType === "browser" && (
+              <BrowserCard content={content} title={title} description={description} />
+            )}
+          </>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Main export: routes to specialized or generic indicator ──
 export function ToolCallIndicator(props: ToolCallIndicatorProps) {
   if (props.toolName === "web_search") {
@@ -905,6 +1222,9 @@ export function ToolCallIndicator(props: ToolCallIndicatorProps) {
   }
   if (props.toolName === "code_interpreter") {
     return <CodeInterpreterIndicator {...props} />
+  }
+  if (props.toolName === "show_to_user") {
+    return <ShowToUserIndicator {...props} />
   }
   return <GenericToolIndicator {...props} />
 }

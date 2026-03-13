@@ -10,6 +10,7 @@ import type {
   EmployeeDeploymentConfig,
 } from "./types"
 import { generateEmployeePackage } from "./package-generator"
+import { generateGroupPackage } from "./group-package-generator"
 import { createRuntimeToken } from "./runtime-auth"
 
 const EMPLOYEE_IMAGE = process.env.EMPLOYEE_DOCKER_IMAGE || "rantai/employee:latest"
@@ -499,7 +500,7 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
     if (!employee) throw new Error("Employee not found")
     if (employee.status !== "ACTIVE") throw new Error("Employee must be deployed (ACTIVE) before starting")
 
-    // If container already running, return existing
+    // If container already running, return existing; otherwise clean up stale references
     if (employee.containerId) {
       try {
         const existing = this.docker.getContainer(employee.containerId)
@@ -508,9 +509,17 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
           progress({ step: total, total, message: "Container already running!", status: "completed" })
           return { containerId: employee.containerId, port: employee.containerPort }
         }
+        // Container exists but not running — remove it
+        try { await existing.remove({ force: true }) } catch {}
       } catch {
-        // Container gone, clean up and create new
+        // Container gone — try force-remove just in case it's mid-shutdown
+        try { await this.docker.getContainer(employee.containerId).remove({ force: true }) } catch {}
       }
+      // Clear stale container refs
+      await prisma.digitalEmployee.update({
+        where: { id: employeeId },
+        data: { containerId: null, containerPort: null, noVncPort: null, gatewayToken: null },
+      })
     }
 
     const volumeName = `emp-vol-${employeeId}`
@@ -549,12 +558,15 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
         "rantai.employee": employeeId,
         "rantai.mode": "gateway",
       },
-      ExposedPorts: { "8080/tcp": {} },
+      ExposedPorts: { "8080/tcp": {}, "6080/tcp": {} },
       HostConfig: {
         Binds: [`${volumeName}:/data`],
-        PortBindings: { "8080/tcp": [{ HostPort: "0" }] },
+        PortBindings: {
+          "8080/tcp": [{ HostPort: "0" }],
+          "6080/tcp": [{ HostPort: "0" }],
+        },
         ExtraHosts: ["host.docker.internal:host-gateway"],
-        Memory: (resourceLimits.memoryMb as number || 512) * 1024 * 1024,
+        Memory: (resourceLimits.memoryMb as number || 768) * 1024 * 1024,
         NanoCpus: (resourceLimits.cpuCores as number || 0.5) * 1e9,
       },
     })
@@ -562,7 +574,7 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
     progress({ step: 6, total, message: "Starting gateway...", status: "in_progress" })
     await container.start()
 
-    // Inspect to get mapped port
+    // Inspect to get mapped ports
     const inspectInfo = await container.inspect()
     const portBindings = inspectInfo.NetworkSettings.Ports["8080/tcp"]
     const mappedPort = portBindings?.[0]?.HostPort
@@ -571,6 +583,10 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
     const port = parseInt(mappedPort, 10)
     const containerId = inspectInfo.Id
 
+    // Extract noVNC port (6080) — may not be mapped if not used
+    const vncBindings = inspectInfo.NetworkSettings.Ports["6080/tcp"]
+    const noVncPort = vncBindings?.[0]?.HostPort ? parseInt(vncBindings[0].HostPort, 10) : null
+
     // Save to DB
     progress({ step: 7, total, message: "Finalizing...", status: "in_progress" })
     await prisma.digitalEmployee.update({
@@ -578,6 +594,7 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
       data: {
         containerId,
         containerPort: port,
+        noVncPort,
         gatewayToken: token,
         lastActiveAt: new Date(),
       },
@@ -609,6 +626,7 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
       data: {
         containerId: null,
         containerPort: null,
+        noVncPort: null,
         gatewayToken: null,
       },
     })
@@ -632,5 +650,257 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
     }
 
     return `http://localhost:${employee.containerPort}`
+  }
+
+  async deployGroup(groupId: string, onProgress?: ProgressCallback): Promise<DeployResult> {
+    const progress = onProgress || (() => {})
+    const total = 6
+
+    progress({ step: 1, total, message: "Validating group configuration...", status: "in_progress" })
+
+    const group = await prisma.employeeGroup.findUnique({
+      where: { id: groupId },
+      include: { members: { include: { assistant: true } } },
+    })
+
+    if (!group) return { success: false, error: "Group not found" }
+    if (group.members.length === 0) return { success: false, error: "Group has no members" }
+
+    try {
+      // Create or reuse shared Docker volume
+      progress({ step: 2, total, message: "Creating shared storage volume...", status: "in_progress" })
+      const volumeName = `emp-group-vol-${groupId}`
+      try {
+        await this.docker.getVolume(volumeName).inspect()
+      } catch {
+        await this.docker.createVolume({ Name: volumeName })
+      }
+
+      // Generate group package
+      progress({ step: 3, total, message: "Generating group package...", status: "in_progress" })
+      const groupPkg = await generateGroupPackage(groupId)
+      const groupPkgJson = JSON.stringify(groupPkg)
+
+      // Ensure helper image is available
+      progress({ step: 4, total, message: "Preparing container environment...", status: "in_progress" })
+      await this.ensureImage(HELPER_IMAGE)
+
+      // Create directory structure: shared config + per-employee subdirs
+      const dirs = [
+        "/data/config",
+        ...group.members.map((m) => `/data/employees/${m.id}`),
+      ]
+
+      const mkdirContainer = await this.docker.createContainer({
+        Image: HELPER_IMAGE,
+        Cmd: ["mkdir", "-p", ...dirs],
+        HostConfig: {
+          Binds: [`${volumeName}:/data`],
+        },
+      })
+
+      await mkdirContainer.start()
+      await mkdirContainer.wait()
+      await mkdirContainer.remove({ force: true }).catch(() => {})
+
+      // Write group package to shared volume
+      progress({ step: 5, total, message: "Writing configuration files...", status: "in_progress" })
+      await writeFileToVolume(this.docker, volumeName, "config/group-package.json", groupPkgJson, HELPER_IMAGE)
+
+      // Write per-employee packages to subdirs
+      for (const empPkg of groupPkg.employees) {
+        await writeFileToVolume(
+          this.docker,
+          volumeName,
+          `employees/${empPkg.employee.id}/employee-package.json`,
+          JSON.stringify(empPkg),
+          HELPER_IMAGE,
+        )
+      }
+
+      // Update group status
+      progress({ step: 6, total, message: "Activating group...", status: "in_progress" })
+      await prisma.employeeGroup.update({
+        where: { id: groupId },
+        data: { status: "ACTIVE" },
+      })
+
+      // Mark all members as ACTIVE
+      await prisma.digitalEmployee.updateMany({
+        where: { id: { in: group.members.map((m) => m.id) } },
+        data: { status: "ACTIVE", lastActiveAt: new Date() },
+      })
+
+      progress({ step: 6, total, message: "Group deployed successfully!", status: "completed" })
+      return { success: true, volumeId: volumeName }
+    } catch (error) {
+      console.error("Group deploy failed:", error)
+      progress({ step: 0, total, message: String(error), status: "error" })
+      return { success: false, error: String(error) }
+    }
+  }
+
+  async startGroupContainer(groupId: string, onProgress?: ProgressCallback): Promise<{ containerId: string; port: number }> {
+    const progress = onProgress || (() => {})
+    const total = 7
+
+    progress({ step: 1, total, message: "Checking group status...", status: "in_progress" })
+
+    const group = await prisma.employeeGroup.findUnique({
+      where: { id: groupId },
+      include: { members: true },
+    })
+
+    if (!group) throw new Error("Group not found")
+    if (group.status !== "ACTIVE") throw new Error("Group must be deployed (ACTIVE) before starting")
+    if (group.members.length === 0) throw new Error("Group has no members")
+
+    // If container already running, return existing
+    if (group.containerId) {
+      try {
+        const existing = this.docker.getContainer(group.containerId)
+        const info = await existing.inspect()
+        if (info.State.Running && group.containerPort) {
+          progress({ step: total, total, message: "Container already running!", status: "completed" })
+          return { containerId: group.containerId, port: group.containerPort }
+        }
+      } catch {
+        // Container gone, clean up and create new
+      }
+    }
+
+    const volumeName = `emp-group-vol-${groupId}`
+
+    // Re-generate and write group package
+    progress({ step: 2, total, message: "Generating group package...", status: "in_progress" })
+    const groupPkg = await generateGroupPackage(groupId)
+    await this.ensureImage(HELPER_IMAGE)
+    await writeFileToVolume(this.docker, volumeName, "config/group-package.json", JSON.stringify(groupPkg), HELPER_IMAGE)
+
+    for (const empPkg of groupPkg.employees) {
+      await writeFileToVolume(
+        this.docker,
+        volumeName,
+        `employees/${empPkg.employee.id}/employee-package.json`,
+        JSON.stringify(empPkg),
+        HELPER_IMAGE,
+      )
+    }
+
+    // Ensure employee image is available
+    progress({ step: 3, total, message: "Pulling container image...", status: "in_progress" })
+    await this.ensureImage(EMPLOYEE_IMAGE)
+
+    // Create gateway JWT (24h)
+    progress({ step: 4, total, message: "Generating authentication token...", status: "in_progress" })
+    const token = await createRuntimeToken(groupId, "gateway", { expiresIn: "24h" })
+
+    const employeeIds = group.members.map((m) => m.id).join(",")
+    const AI_API_KEY = process.env.OPENROUTER_API_KEY || process.env.AI_API_KEY || ""
+
+    progress({ step: 5, total, message: "Creating group gateway container...", status: "in_progress" })
+    const container = await this.docker.createContainer({
+      Image: EMPLOYEE_IMAGE,
+      Env: [
+        `MODE=group-gateway`,
+        `GROUP_ID=${groupId}`,
+        `EMPLOYEE_IDS=${employeeIds}`,
+        `RUNTIME_TOKEN=${token}`,
+        `PLATFORM_API_URL=${PLATFORM_API_URL}`,
+        `AI_API_KEY=${AI_API_KEY}`,
+        `AI_PROVIDER=openrouter`,
+      ],
+      Labels: {
+        "rantai.group": groupId,
+        "rantai.mode": "group-gateway",
+      },
+      ExposedPorts: { "8080/tcp": {}, "6080/tcp": {} },
+      HostConfig: {
+        Binds: [`${volumeName}:/data`],
+        PortBindings: {
+          "8080/tcp": [{ HostPort: "0" }],
+          "6080/tcp": [{ HostPort: "0" }],
+        },
+        ExtraHosts: ["host.docker.internal:host-gateway"],
+      },
+    })
+
+    progress({ step: 6, total, message: "Starting group gateway...", status: "in_progress" })
+    await container.start()
+
+    // Inspect to get mapped ports
+    const inspectInfo = await container.inspect()
+    const portBindings = inspectInfo.NetworkSettings.Ports["8080/tcp"]
+    const mappedPort = portBindings?.[0]?.HostPort
+    if (!mappedPort) throw new Error("Failed to get mapped port")
+
+    const port = parseInt(mappedPort, 10)
+    const containerId = inspectInfo.Id
+
+    const vncBindings = inspectInfo.NetworkSettings.Ports["6080/tcp"]
+    const noVncPort = vncBindings?.[0]?.HostPort ? parseInt(vncBindings[0].HostPort, 10) : null
+
+    // Save to DB
+    progress({ step: 7, total, message: "Finalizing...", status: "in_progress" })
+    await prisma.employeeGroup.update({
+      where: { id: groupId },
+      data: {
+        containerId,
+        containerPort: port,
+        noVncPort,
+        gatewayToken: token,
+      },
+    })
+
+    progress({ step: 7, total, message: "Group gateway started successfully!", status: "completed" })
+    return { containerId, port }
+  }
+
+  async stopGroupContainer(groupId: string): Promise<void> {
+    const group = await prisma.employeeGroup.findUnique({
+      where: { id: groupId },
+    })
+
+    if (!group) throw new Error("Group not found")
+
+    if (group.containerId) {
+      try {
+        const container = this.docker.getContainer(group.containerId)
+        await container.stop({ t: 10 })
+        await container.remove({ force: true })
+      } catch {
+        // Container may already be stopped/removed
+      }
+    }
+
+    await prisma.employeeGroup.update({
+      where: { id: groupId },
+      data: {
+        containerId: null,
+        containerPort: null,
+        noVncPort: null,
+        gatewayToken: null,
+      },
+    })
+  }
+
+  async getGroupContainerUrl(groupId: string): Promise<string | null> {
+    const group = await prisma.employeeGroup.findUnique({
+      where: { id: groupId },
+      select: { containerId: true, containerPort: true },
+    })
+
+    if (!group?.containerId || !group.containerPort) return null
+
+    // Verify container is actually running
+    try {
+      const container = this.docker.getContainer(group.containerId)
+      const info = await container.inspect()
+      if (!info.State.Running) return null
+    } catch {
+      return null
+    }
+
+    return `http://localhost:${group.containerPort}`
   }
 }

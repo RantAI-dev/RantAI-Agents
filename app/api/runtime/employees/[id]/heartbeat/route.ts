@@ -14,7 +14,19 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { employeeId } = await verifyRuntimeToken(token)
+    let employeeId: string
+    try {
+      const verified = await verifyRuntimeToken(token)
+      employeeId = verified.employeeId
+    } catch (err: unknown) {
+      // Handle expired tokens silently — containers outlive their 1h token
+      const code = (err as { code?: string }).code
+      if (code === "ERR_JWT_EXPIRED") {
+        return NextResponse.json({ error: "Token expired" }, { status: 401 })
+      }
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+    }
+
     const { id } = await params
 
     if (employeeId !== id) {

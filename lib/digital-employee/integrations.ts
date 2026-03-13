@@ -2,7 +2,7 @@ export interface IntegrationDefinition {
   id: string
   name: string
   description: string
-  icon: string  // emoji
+  icon: string  // path to logo SVG or emoji fallback
   category: "communication" | "development" | "productivity" | "custom"
   setupType: "api-key" | "oauth" | "credentials" | "chat-guided" | "custom" | "manual"
   fields: Array<{
@@ -22,7 +22,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     id: "slack",
     name: "Slack",
     description: "Send and receive messages in Slack channels",
-    icon: "\u{1F4AC}",
+    icon: "/logos/slack.svg",
     category: "communication",
     setupType: "api-key",
     fields: [
@@ -35,7 +35,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     id: "github",
     name: "GitHub",
     description: "Access repositories, issues, and pull requests",
-    icon: "\u{1F419}",
+    icon: "/logos/github.svg",
     category: "development",
     setupType: "api-key",
     fields: [
@@ -47,7 +47,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     id: "gmail",
     name: "Gmail",
     description: "Read and send emails via Gmail",
-    icon: "\u{1F4E7}",
+    icon: "/logos/gmail.svg",
     category: "communication",
     setupType: "oauth",
     fields: [
@@ -60,7 +60,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     id: "google-calendar",
     name: "Google Calendar",
     description: "Manage events and schedules in Google Calendar",
-    icon: "\u{1F4C5}",
+    icon: "/logos/google-calendar.svg",
     category: "productivity",
     setupType: "oauth",
     fields: [
@@ -73,7 +73,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     id: "google-drive",
     name: "Google Drive",
     description: "Access and manage files in Google Drive",
-    icon: "\u{1F4C1}",
+    icon: "/logos/google-drive.svg",
     category: "productivity",
     setupType: "oauth",
     fields: [
@@ -86,7 +86,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     id: "linear",
     name: "Linear",
     description: "Manage issues and projects in Linear",
-    icon: "\u{1F4CB}",
+    icon: "/logos/linear.svg",
     category: "development",
     setupType: "api-key",
     fields: [
@@ -98,7 +98,7 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     id: "notion",
     name: "Notion",
     description: "Access and update Notion pages and databases",
-    icon: "\u{1F4DD}",
+    icon: "/logos/notion.svg",
     category: "productivity",
     setupType: "api-key",
     fields: [
@@ -107,10 +107,50 @@ export const INTEGRATION_REGISTRY: IntegrationDefinition[] = [
     testEndpoint: "https://api.notion.com/v1/users/me",
   },
   {
+    id: "telegram",
+    name: "Telegram",
+    description: "Connect to Telegram as a bot",
+    icon: "/logos/telegram.svg",
+    category: "communication",
+    setupType: "api-key",
+    fields: [
+      { key: "botToken", label: "Bot Token", type: "password", required: true, placeholder: "123456:ABC-DEF...", helpText: "Get from @BotFather on Telegram" },
+      { key: "allowedUsers", label: "Allowed Users", type: "textarea", required: false, placeholder: "username1, username2 or * for all", helpText: "Comma-separated Telegram usernames. Leave empty or * to allow all." },
+      { key: "mentionOnly", label: "Mention-only Mode", type: "text", required: false, placeholder: "false", helpText: "Set to 'true' to only respond when @mentioned in groups" },
+    ],
+  },
+  {
+    id: "whatsapp",
+    name: "WhatsApp Business",
+    description: "Connect to WhatsApp via Meta Cloud API (requires Meta Business account)",
+    icon: "/logos/whatsapp.svg",
+    category: "communication",
+    setupType: "credentials",
+    fields: [
+      { key: "accessToken", label: "Access Token", type: "password", required: true, helpText: "Permanent token from Meta Business Suite" },
+      { key: "phoneNumberId", label: "Phone Number ID", type: "text", required: true, helpText: "From Meta Business Suite → WhatsApp → Phone Numbers" },
+      { key: "verifyToken", label: "Verify Token", type: "text", required: true, placeholder: "my-verify-token", helpText: "You define this — must match what you enter in Meta webhook config" },
+      { key: "appSecret", label: "App Secret", type: "password", required: true, helpText: "From Meta App Dashboard → Settings → Basic" },
+      { key: "allowedNumbers", label: "Allowed Numbers", type: "textarea", required: false, placeholder: "+1234567890, +9876543210", helpText: "Comma-separated E.164 phone numbers. Leave empty to allow all." },
+    ],
+  },
+  {
+    id: "whatsapp-web",
+    name: "WhatsApp Web",
+    description: "Connect using your personal WhatsApp number (pair via phone code)",
+    icon: "/logos/whatsapp.svg",
+    category: "communication",
+    setupType: "credentials",
+    fields: [
+      { key: "pairPhone", label: "Phone Number", type: "text", required: true, placeholder: "15551234567", helpText: "Country code + number without + (e.g. 15551234567)" },
+      { key: "allowedNumbers", label: "Allowed Numbers", type: "textarea", required: false, placeholder: "+1234567890, +9876543210", helpText: "Comma-separated E.164 phone numbers. Leave empty to allow all." },
+    ],
+  },
+  {
     id: "discord",
     name: "Discord",
     description: "Send messages and interact in Discord servers",
-    icon: "\u{1F3AE}",
+    icon: "/logos/discord.svg",
     category: "communication",
     setupType: "api-key",
     fields: [

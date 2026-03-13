@@ -13,10 +13,10 @@ import {
   MessageSquare,
   ArrowRight,
   Sparkles,
-  Send,
   Loader2,
   Square,
 } from "@/lib/icons"
+import { SendHorizontal } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -373,7 +373,7 @@ export function ChatHome({
                   className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
                   disabled={!input.trim()}
                 >
-                  <Send className="h-4 w-4" />
+                  <SendHorizontal className="h-4 w-4" />
                 </Button>
               </div>
 

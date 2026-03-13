@@ -121,6 +121,7 @@ async function processGatewayRequest(
   containerUrl: string,
   gatewayToken: string,
   contextMessage: string,
+  agentIdHeader?: string,
 ) {
   const buf = chatEventBuffers.get(messageId)
   if (!buf) return
@@ -137,6 +138,7 @@ async function processGatewayRequest(
           "Content-Type": "application/json",
           Accept: "text/event-stream",
           Authorization: `Bearer ${gatewayToken}`,
+          ...(agentIdHeader ? { "X-Agent-Id": agentIdHeader } : {}),
         },
         body: JSON.stringify({ message: contextMessage }),
         signal: AbortSignal.timeout(600_000),
@@ -149,6 +151,7 @@ async function processGatewayRequest(
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${gatewayToken}`,
+            ...(agentIdHeader ? { "X-Agent-Id": agentIdHeader } : {}),
           },
           body: JSON.stringify({ message: contextMessage }),
           signal: AbortSignal.timeout(600_000),
@@ -161,6 +164,7 @@ async function processGatewayRequest(
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${gatewayToken}`,
+          ...(agentIdHeader ? { "X-Agent-Id": agentIdHeader } : {}),
         },
         body: JSON.stringify({ message: contextMessage }),
         signal: AbortSignal.timeout(600_000),
@@ -184,6 +188,7 @@ async function processGatewayRequest(
       // ── SSE streaming mode: buffer real-time lifecycle events ──
       let assistantContent = ""
       const toolCalls: ParsedToolCall[] = []
+      let agentDone = false
 
       const reader = gatewayResponse.body.getReader()
       const decoder = new TextDecoder()
@@ -266,10 +271,19 @@ async function processGatewayRequest(
               break
 
             case "agent-done":
+              agentDone = true
               break
           }
         }
+
+        // Break out of the reader loop as soon as we get agent-done.
+        // The gateway may keep the connection open after finishing,
+        // so waiting for the stream to close would hang indefinitely.
+        if (agentDone) break
       }
+
+      // Cancel the reader if still open (gateway didn't close connection)
+      reader.cancel().catch(() => {})
 
       // Persist assistant message
       const content = assistantContent || "Task completed."
@@ -404,8 +418,47 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    // Verify container is running
-    const containerUrl = await orchestrator.getContainerUrl(id)
+    // Resolve container URL — group members use the group's shared container
+    let containerUrl: string | null
+    let gatewayToken: string | null | undefined = employee.gatewayToken
+    let agentIdHeader: string | undefined
+
+    if (employee.groupId) {
+      const group = await prisma.employeeGroup.findUnique({
+        where: { id: employee.groupId },
+        select: { containerPort: true, gatewayToken: true, containerId: true },
+      })
+      if (group?.containerPort && group.containerId) {
+        containerUrl = await orchestrator.getGroupContainerUrl(employee.groupId)
+        gatewayToken = group.gatewayToken
+        agentIdHeader = id // Route to specific agent within group gateway
+      } else {
+        containerUrl = null
+      }
+    } else {
+      containerUrl = await orchestrator.getContainerUrl(id)
+    }
+
+    // Auto-start container if employee is ACTIVE but not running
+    if (!containerUrl && employee.status === "ACTIVE") {
+      try {
+        const { port } = await orchestrator.startContainer(id)
+        containerUrl = `http://localhost:${port}`
+        // Wait for gateway to become responsive (up to 30s)
+        for (let i = 0; i < 15; i++) {
+          await new Promise((r) => setTimeout(r, 2000))
+          try {
+            const probe = await fetch(`${containerUrl}/health`, { signal: AbortSignal.timeout(2000) })
+            if (probe.ok) break
+          } catch {
+            // Not ready yet
+          }
+        }
+      } catch (startErr) {
+        console.error("Auto-start container failed:", startErr)
+      }
+    }
+
     if (!containerUrl) {
       return NextResponse.json(
         { error: "Employee is not running. Start it first." },
@@ -455,7 +508,7 @@ export async function POST(req: Request, { params }: RouteParams) {
 
     // Fire-and-forget: process gateway request in background
     // The promise is intentionally not awaited — it runs after the response is sent.
-    processGatewayRequest(messageId, id, containerUrl, employee.gatewayToken || "", contextMessage)
+    processGatewayRequest(messageId, id, containerUrl, gatewayToken || "", contextMessage, agentIdHeader)
       .catch((err) => console.error("Background gateway processing failed:", err))
 
     return NextResponse.json({ messageId }, { status: 202 })

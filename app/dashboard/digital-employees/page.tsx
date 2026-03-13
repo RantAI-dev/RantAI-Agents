@@ -19,6 +19,9 @@ import {
   LayoutGrid,
   List,
   AlertTriangle,
+  MessageSquare,
+  GitBranch,
+  ArrowRight,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,6 +29,8 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useDigitalEmployees } from "@/hooks/use-digital-employees"
 import { useTasks } from "@/hooks/use-tasks"
+import { useEmployeeMessages } from "@/hooks/use-employee-messages"
+import { usePipelines } from "@/hooks/use-pipelines"
 import TabTasks from "./_components/tab-tasks"
 import TabTeams from "./_components/tab-teams"
 import { BlurText } from "@/components/reactbits/blur-text"
@@ -35,13 +40,13 @@ import { Squares } from "@/components/reactbits/squares"
 import { formatDistanceToNow } from "date-fns"
 import { STATUS_STYLES, AUTONOMY_STYLES } from "@/lib/digital-employee/shared-constants"
 import { toast } from "sonner"
+import Link from "next/link"
 
 const STATUS_FILTERS = [
   { value: "ALL", label: "All" },
   { value: "DRAFT", label: "Draft" },
   { value: "ACTIVE", label: "Active" },
-  { value: "PAUSED", label: "Paused" },
-  { value: "SUSPENDED", label: "Suspended" },
+  { value: "INACTIVE", label: "Inactive" },
   { value: "ARCHIVED", label: "Archived" },
 ]
 
@@ -64,8 +69,8 @@ const fadeUp = {
 function getActivityText(emp: { status: string; lastActiveAt: string | null; latestRunStatus: string | null; pendingApprovalCount: number }): string {
   if (emp.pendingApprovalCount > 0) return "Awaiting approval"
   if (emp.latestRunStatus === "RUNNING") return "Running..."
-  if (emp.status === "PAUSED") return "Paused"
-  if (emp.status === "DRAFT") return "Draft"
+  if (emp.status === "PAUSED" || emp.status === "SUSPENDED") return "Inactive"
+  if (emp.status === "DRAFT" || emp.status === "ONBOARDING") return "Not deployed"
   if (emp.status === "ARCHIVED") return "Archived"
   if (emp.lastActiveAt) {
     return `Idle ${formatDistanceToNow(new Date(emp.lastActiveAt))}`
@@ -78,6 +83,8 @@ export default function DigitalEmployeesPage() {
   const searchParams = useSearchParams()
   const { employees, isLoading } = useDigitalEmployees()
   const { openCount } = useTasks()
+  const { messages, isLoading: messagesLoading } = useEmployeeMessages()
+  const { pipelines, isLoading: pipelinesLoading } = usePipelines()
 
   const activeTab = searchParams.get("tab") || "employees"
   const setTab = useCallback(
@@ -99,11 +106,13 @@ export default function DigitalEmployeesPage() {
   const [statusFilter, setStatusFilter] = useState("ALL")
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid")
 
+  const isInactive = (s: string) => s === "PAUSED" || s === "SUSPENDED"
+
   const stats = useMemo(() => {
     const total = employees.length
     const active = employees.filter((e) => e.status === "ACTIVE").length
-    const paused = employees.filter((e) => e.status === "PAUSED").length
-    return { total, active, paused }
+    const inactive = employees.filter((e) => isInactive(e.status)).length
+    return { total, active, inactive }
   }, [employees])
 
   const filtered = useMemo(() => {
@@ -117,7 +126,11 @@ export default function DigitalEmployeesPage() {
           e.assistant.name.toLowerCase().includes(q)
       )
     }
-    if (statusFilter !== "ALL") {
+    if (statusFilter === "INACTIVE") {
+      result = result.filter((e) => isInactive(e.status))
+    } else if (statusFilter === "DRAFT") {
+      result = result.filter((e) => e.status === "DRAFT" || e.status === "ONBOARDING")
+    } else if (statusFilter !== "ALL") {
       result = result.filter((e) => e.status === statusFilter)
     }
     return result
@@ -171,7 +184,7 @@ export default function DigitalEmployeesPage() {
           className="text-sm text-muted-foreground"
           variants={fadeUp}
         >
-          Manage your autonomous AI workers
+          Autonomous AI workers powered by RantAI Claw
         </motion.p>
         {employees.length > 0 && (
           <motion.div
@@ -192,8 +205,8 @@ export default function DigitalEmployeesPage() {
             <span className="text-muted-foreground/30">·</span>
             <span className="flex items-center gap-1.5">
               <Pause className="h-3.5 w-3.5" />
-              <CountUp to={stats.paused} duration={1.2} />
-              <span>paused</span>
+              <CountUp to={stats.inactive} duration={1.2} />
+              <span>inactive</span>
             </span>
           </motion.div>
         )}
@@ -255,7 +268,11 @@ export default function DigitalEmployeesPage() {
                 {sf.label}
                 {sf.value !== "ALL" && (
                   <span className="ml-1 text-muted-foreground">
-                    {employees.filter((e) => e.status === sf.value).length}
+                    {sf.value === "INACTIVE"
+                      ? employees.filter((e) => isInactive(e.status)).length
+                      : sf.value === "DRAFT"
+                        ? employees.filter((e) => e.status === "DRAFT" || e.status === "ONBOARDING").length
+                        : employees.filter((e) => e.status === sf.value).length}
                   </span>
                 )}
               </Button>
@@ -423,14 +440,6 @@ export default function DigitalEmployeesPage() {
                           >
                             {autonomy.label}
                           </Badge>
-                          {emp.status === "ONBOARDING" && (
-                            <Badge
-                              variant="secondary"
-                              className="text-[10px] px-1.5 py-0.5 shrink-0 bg-sky-500/10 text-sky-500"
-                            >
-                              Onboarding
-                            </Badge>
-                          )}
                           {"sandboxMode" in emp && !!(emp as unknown as Record<string, unknown>).sandboxMode && (
                             <Badge
                               variant="secondary"
@@ -552,6 +561,123 @@ export default function DigitalEmployeesPage() {
                   })}
                 </tbody>
               </table>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Team Activity: Messages & Pipelines */}
+        {employees.length > 0 && (
+          <motion.div
+            className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-4"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, type: "spring", stiffness: 260, damping: 24 }}
+          >
+            {/* Recent Messages */}
+            <div className="rounded-lg border bg-card">
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-medium">Recent Messages</h3>
+                </div>
+                <Link href="/dashboard/messages">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs">
+                    View all
+                  </Button>
+                </Link>
+              </div>
+              <div className="p-3">
+                {messagesLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <MessageSquare className="h-6 w-6 text-muted-foreground/30 mb-2" />
+                    <p className="text-xs text-muted-foreground">No messages between employees yet</p>
+                    <p className="text-[11px] text-muted-foreground/60 mt-0.5">Messages appear when employees communicate during tasks</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {messages.slice(0, 5).map((msg) => (
+                      <div
+                        key={msg.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors text-xs"
+                      >
+                        <span className="shrink-0">{msg.fromEmployee.avatar || "\uD83E\uDD16"}</span>
+                        <span className="font-medium truncate max-w-[80px]">{msg.fromEmployee.name}</span>
+                        <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className="shrink-0">{msg.toEmployee?.avatar || "\uD83E\uDD16"}</span>
+                        <span className="font-medium truncate max-w-[80px]">{msg.toEmployee?.name || msg.toGroup || "All"}</span>
+                        <span className="flex-1 truncate text-muted-foreground">{msg.subject}</span>
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">{msg.type}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Pipelines */}
+            <div className="rounded-lg border bg-card">
+              <div className="flex items-center justify-between px-4 py-3 border-b">
+                <div className="flex items-center gap-2">
+                  <GitBranch className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-medium">Pipelines</h3>
+                </div>
+                <Link href="/dashboard/pipelines">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs">
+                    Manage
+                  </Button>
+                </Link>
+              </div>
+              <div className="p-3">
+                {pipelinesLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : pipelines.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <GitBranch className="h-6 w-6 text-muted-foreground/30 mb-2" />
+                    <p className="text-xs text-muted-foreground">No handoff pipelines yet</p>
+                    <p className="text-[11px] text-muted-foreground/60 mt-0.5">Chain employees together for multi-step workflows</p>
+                    <Link href="/dashboard/pipelines">
+                      <Button variant="outline" size="sm" className="h-7 text-xs mt-2">
+                        <Plus className="h-3 w-3 mr-1" />
+                        Create Pipeline
+                      </Button>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {pipelines.slice(0, 5).map((pipeline) => (
+                      <Link
+                        key={pipeline.id}
+                        href={`/dashboard/pipelines/${pipeline.id}`}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors text-xs"
+                      >
+                        <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="font-medium truncate">{pipeline.name}</span>
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 shrink-0">
+                          {pipeline.steps.length} step{pipeline.steps.length !== 1 ? "s" : ""}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[9px] px-1 py-0 shrink-0",
+                            pipeline.status === "active" ? "text-emerald-500" : "text-muted-foreground"
+                          )}
+                        >
+                          {pipeline.status}
+                        </Badge>
+                        <span className="ml-auto text-muted-foreground shrink-0">
+                          {formatDistanceToNow(new Date(pipeline.updatedAt), { addSuffix: true })}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
         )}
