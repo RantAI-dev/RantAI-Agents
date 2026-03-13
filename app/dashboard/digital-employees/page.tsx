@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils"
 import { useDigitalEmployees } from "@/hooks/use-digital-employees"
 import { useTasks } from "@/hooks/use-tasks"
 import TabTasks from "./_components/tab-tasks"
+import TabTeams from "./_components/tab-teams"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { CountUp } from "@/components/reactbits/count-up"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"
@@ -88,6 +89,7 @@ export default function DigitalEmployeesPage() {
 
   const tabs = [
     { key: "employees", label: "Employees" },
+    { key: "teams", label: "Teams" },
     { key: "tasks", label: "Tasks" },
   ]
 
@@ -202,7 +204,7 @@ export default function DigitalEmployeesPage() {
       </motion.div>
 
       {/* Tab Bar */}
-      <div className="flex gap-0 border-b border-border px-6">
+      <div className="flex gap-0 border-b border-border px-6 mb-4">
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -227,6 +229,7 @@ export default function DigitalEmployeesPage() {
       {/* Content */}
       <div className="flex-1 overflow-auto px-6 pb-6">
         {activeTab === "tasks" && <TabTasks />}
+        {activeTab === "teams" && <TabTeams />}
         {activeTab === "employees" && <>
         {/* Search & Filter Bar */}
         <motion.div
@@ -428,6 +431,14 @@ export default function DigitalEmployeesPage() {
                           >
                             {autonomy.label}
                           </Badge>
+                          {emp.group && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] px-1.5 py-0.5 shrink-0 bg-muted"
+                            >
+                              {emp.group.name}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 text-[11px] text-muted-foreground/70">
                           <span className="flex items-center gap-1">
@@ -474,6 +485,7 @@ export default function DigitalEmployeesPage() {
                   <tr className="border-b bg-muted/30">
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Name</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Status</th>
+                    <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Team</th>
                     <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Activity</th>
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Runs</th>
                     <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Pending</th>
@@ -508,6 +520,18 @@ export default function DigitalEmployeesPage() {
                           >
                             {status.label}
                           </Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          {emp.group ? (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] px-1.5 py-0.5 bg-muted"
+                            >
+                              {emp.group.name}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs text-muted-foreground">{activityText}</td>
                         <td className="px-4 py-3 text-right text-muted-foreground">{emp.totalRuns}</td>

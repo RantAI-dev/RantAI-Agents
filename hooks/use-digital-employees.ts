@@ -15,6 +15,7 @@ export interface DigitalEmployeeItem {
     emoji: string
     model: string
   }
+  group?: { id: string; name: string } | null
   autonomyLevel: string
   deploymentConfig: Record<string, unknown> | null
   totalRuns: number
