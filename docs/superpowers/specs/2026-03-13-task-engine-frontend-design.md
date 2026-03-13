@@ -14,18 +14,29 @@ Build the frontend UI for the task engine that was implemented in RantaiClaw. Th
 
 RantaiClaw containers are the source of truth. Each employee container runs its own gateway with a SQLite-backed task engine. The dashboard aggregates across all containers.
 
+**Container types:**
+- **Individual containers** — one per standalone employee. Port stored in `DigitalEmployee.containerPort`.
+- **Group containers** — one per team (`MODE=group-gateway`). Port stored in `EmployeeGroup.containerPort`. Employees in a group do NOT have their own container; their tasks live in the group gateway.
+
 **Reads:**
-1. Dashboard API routes query ALL active employee containers' `/tasks` endpoints in parallel
-2. Docker orchestrator provides the mapping of employee IDs to container ports
-3. Results are merged, deduplicated by task ID
-4. Merged results are cached in Prisma (`EmployeeTask`, `EmployeeTaskComment`, `EmployeeTaskEvent`)
-5. For stopped containers, dashboard serves from Prisma cache (read-only, greyed out)
+1. Dashboard API routes query ALL active containers' `/tasks` endpoints in parallel
+2. Two query paths:
+   - Individual employees: `DigitalEmployee` where `containerPort IS NOT NULL` → `http://localhost:{containerPort}/tasks`
+   - Group containers: `EmployeeGroup` where `containerPort IS NOT NULL` → `http://localhost:{containerPort}/tasks`
+3. Auth: each request includes `Authorization: Bearer {gatewayToken}` (from `DigitalEmployee.gatewayToken` or `EmployeeGroup.gatewayToken`)
+4. Results are merged, deduplicated by task ID (RantaiClaw uses UUID v4; collisions assumed negligible). Tiebreak: latest `updatedAt` wins.
+5. Merged results are cached in Prisma (`EmployeeTask`, `EmployeeTaskComment`, `EmployeeTaskEvent`)
+6. For stopped containers, dashboard serves from Prisma cache (read-only, greyed out)
 
 **Writes:**
 1. Dashboard sends write (create/update/review/comment) to the target container's gateway
-2. Target container is determined by `assignee_id` → docker orchestrator port mapping
-3. On success, Prisma cache is updated with the response
-4. Unassigned tasks go to the first active container; Prisma-only if none running
+2. Target container lookup:
+   - Check `DigitalEmployee.groupId` for the assignee. If non-null and the group has a running container (`EmployeeGroup.containerPort IS NOT NULL`), use the group gateway URL.
+   - Otherwise, use the employee's own `containerPort`.
+   - Same `/tasks` endpoint in both cases (group gateway routes internally by assignee).
+3. Auth: `Authorization: Bearer {gatewayToken}` on all outbound requests
+4. On success, Prisma cache is updated with the response
+5. Unassigned tasks go to the first active container; Prisma-only if none running
 
 **Cache sync triggers:**
 - Every dashboard task list query (opportunistic refresh)
@@ -46,6 +57,8 @@ RantaiClaw's task engine already exists with full state machine, validation, eve
 ## Data Model (Prisma Cache Tables)
 
 Mirrors the RantaiClaw SQLite schema. These tables are caches, not sources of truth.
+
+**Important:** IDs on all three cache models are sourced from the RantaiClaw SQLite engine (UUID v4) and must be provided explicitly on upsert — do NOT add `@default(cuid())`. `createdAt` and `updatedAt` are passed through from the container response, not set by Prisma defaults.
 
 ```prisma
 model EmployeeTask {
@@ -149,12 +162,15 @@ GET    /api/dashboard/tasks/[id]/events    — list events (container or cache)
 
 ```typescript
 async function fanOutTaskQuery(orgId: string, filter?: TaskFilter): Promise<AggregatedTasks> {
-  // 1. Get all active containers for this org from docker orchestrator
-  // 2. Query each container's GET /tasks in parallel with Promise.allSettled
-  // 3. Merge results, deduplicate by task ID (latest updatedAt wins)
-  // 4. Upsert merged tasks into Prisma cache
-  // 5. Add cached tasks from offline containers (marked isStale)
-  // 6. Return merged + cached results
+  // 1. Get all active individual employees (containerPort IS NOT NULL, groupId IS NULL)
+  // 2. Get all active group containers (EmployeeGroup where containerPort IS NOT NULL)
+  // 3. Build target list: [{ url, gatewayToken, sourceId }] for both types
+  // 4. Query each container's GET /tasks in parallel with Promise.allSettled
+  //    - Include Authorization: Bearer {gatewayToken} header
+  // 5. Merge results, deduplicate by task ID (latest updatedAt wins)
+  // 6. Upsert merged tasks into Prisma cache
+  // 7. Add cached tasks from offline containers (marked isStale)
+  // 8. Return merged + cached results
 }
 ```
 
@@ -190,6 +206,8 @@ Task card contents (from mockup `tasks-kanban.html`):
 - Due date (red if overdue)
 - Done tasks: strikethrough title, faded opacity, "✓ Approved" badge
 
+CANCELLED tasks are hidden from the board by default. A "Show cancelled" toggle in the toolbar reveals them as a fifth column with red-dim styling.
+
 Visual cues:
 - In Progress cards: blue left border
 - In Review cards: violet left border
@@ -211,6 +229,8 @@ Task rows:
 - Review tags inline
 
 "Group by" dropdown: **Status** (default) | Team | Assignee | Priority
+
+CANCELLED tasks: hidden by default in list view. Same "Show cancelled" toggle as board view reveals them as a collapsed status group.
 
 ### 4. Task Detail — Slide-Over Panel
 
@@ -281,6 +301,7 @@ New **Tasks** sidebar nav item (between History and Workspace):
 - Priority (High / Medium / Low, default Medium)
 - Due date (date picker)
 - Reviewer (None / Human / specific employee)
+- Subtasks (optional, inline add rows — title + assignee per subtask)
 
 ## Hooks
 
@@ -289,6 +310,7 @@ New **Tasks** sidebar nav item (between History and Workspace):
 // Fetches tasks via /api/dashboard/tasks with optional filters
 // Returns: { tasks, isLoading, error, refresh, createTask, updateTask, deleteTask }
 // Supports: status, assigneeId, groupId, priority, topLevelOnly filters
+// Polling: auto-refreshes every 30s when the Tasks tab is active
 ```
 
 ### `useTaskDetail(taskId)`
@@ -296,6 +318,7 @@ New **Tasks** sidebar nav item (between History and Workspace):
 // Fetches full task detail via /api/dashboard/tasks/[id]
 // Returns: { task, subtasks, comments, events, isLoading, error,
 //            updateTask, addComment, submitReview, addSubtask }
+// Polling: auto-refreshes every 15s while the slide-over panel is open
 ```
 
 ## File Structure
