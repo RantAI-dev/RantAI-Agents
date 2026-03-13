@@ -1,6 +1,6 @@
 "use client"
 
-import { Users, UserPlus } from "lucide-react"
+import { Users, UserPlus, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -10,7 +10,6 @@ interface TeamMember {
   id: string
   name: string
   avatar: string | null
-  containerPort: number | null
 }
 
 interface TeamCardProps {
@@ -19,6 +18,7 @@ interface TeamCardProps {
     name: string
     description: string | null
     status: string
+    isImplicit: boolean
     members: TeamMember[]
     updatedAt?: string | null
   }
@@ -30,14 +30,19 @@ interface TeamCardProps {
     total: number
   }
   onManage?: () => void
+  onDeploy?: () => void
+  onStart?: () => void
+  onStop?: () => void
 }
 
 function getStatusBadgeClass(status: string): string {
-  switch (status.toLowerCase()) {
-    case "active":
+  switch (status) {
+    case "ACTIVE":
       return "bg-emerald-500/10 text-emerald-500"
-    case "running":
+    case "DEPLOYING":
       return "bg-blue-500/10 text-blue-500"
+    case "STOPPING":
+      return "bg-amber-500/10 text-amber-500"
     default:
       return "bg-muted text-muted-foreground"
   }
@@ -47,46 +52,40 @@ function getStatusLabel(status: string): string {
   return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
 }
 
+const avatarColors = [
+  "bg-blue-500/20 text-blue-600",
+  "bg-violet-500/20 text-violet-600",
+  "bg-emerald-500/20 text-emerald-600",
+  "bg-amber-500/20 text-amber-600",
+  "bg-rose-500/20 text-rose-600",
+  "bg-cyan-500/20 text-cyan-600",
+]
+
+function getAvatarColor(name: string) {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  return avatarColors[Math.abs(hash) % avatarColors.length]
+}
+
 function AvatarStack({ members }: { members: TeamMember[] }) {
   const visible = members.slice(0, 5)
   const rest = members.length - visible.length
 
-  const colors = [
-    "bg-blue-500/20 text-blue-600",
-    "bg-violet-500/20 text-violet-600",
-    "bg-emerald-500/20 text-emerald-600",
-    "bg-amber-500/20 text-amber-600",
-    "bg-rose-500/20 text-rose-600",
-    "bg-cyan-500/20 text-cyan-600",
-  ]
-
-  function getColor(name: string) {
-    let hash = 0
-    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-    return colors[Math.abs(hash) % colors.length]
-  }
-
   return (
     <div className="flex items-center">
-      {visible.map((m, i) => {
-        const isOnline = m.containerPort !== null
-        return (
-          <div
-            key={m.id}
-            className={cn(
-              "relative flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-semibold border-2 border-card",
-              i !== 0 && "-ml-2",
-              getColor(m.name)
-            )}
-            title={m.name}
-          >
-            {m.name.charAt(0).toUpperCase()}
-            {isOnline && (
-              <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-emerald-500 border border-card" />
-            )}
-          </div>
-        )
-      })}
+      {visible.map((m, i) => (
+        <div
+          key={m.id}
+          className={cn(
+            "relative flex items-center justify-center w-7 h-7 rounded-full text-[10px] font-semibold border-2 border-card",
+            i !== 0 && "-ml-2",
+            getAvatarColor(m.name)
+          )}
+          title={m.name}
+        >
+          {m.name.charAt(0).toUpperCase()}
+        </div>
+      ))}
       {rest > 0 && (
         <div
           className={cn(
@@ -97,6 +96,20 @@ function AvatarStack({ members }: { members: TeamMember[] }) {
           +{rest}
         </div>
       )}
+    </div>
+  )
+}
+
+function SoloAvatar({ member }: { member: TeamMember }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-center w-10 h-10 rounded-full text-sm font-semibold",
+        getAvatarColor(member.name)
+      )}
+      title={member.name}
+    >
+      {member.name.charAt(0).toUpperCase()}
     </div>
   )
 }
@@ -122,11 +135,15 @@ function ProgressBar({
   )
 }
 
-export function TeamCard({ group, taskCounts, onManage }: TeamCardProps) {
+export function TeamCard({ group, taskCounts, onManage, onDeploy, onStart, onStop }: TeamCardProps) {
   const isEmpty = group.members.length === 0
+  const isImplicitSolo = group.isImplicit && group.members.length === 1
+  const isOnline = group.status === "ACTIVE"
 
   const statusBadgeClass = getStatusBadgeClass(group.status)
   const statusLabel = getStatusLabel(group.status)
+
+  const displayName = isImplicitSolo ? group.members[0].name : group.name
 
   const updatedText = group.updatedAt
     ? `Updated ${formatDistanceToNow(new Date(group.updatedAt), { addSuffix: true })}`
@@ -144,10 +161,17 @@ export function TeamCard({ group, taskCounts, onManage }: TeamCardProps) {
       <div className="p-4 pb-3">
         <div className="flex items-start justify-between gap-2 mb-1.5">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="flex items-center justify-center h-7 w-7 rounded-md bg-muted shrink-0">
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <h3 className="text-sm font-semibold truncate">{group.name}</h3>
+            {isImplicitSolo ? (
+              <SoloAvatar member={group.members[0]} />
+            ) : (
+              <div className="flex items-center justify-center h-7 w-7 rounded-md bg-muted shrink-0">
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </div>
+            )}
+            <h3 className="text-sm font-semibold truncate">{displayName}</h3>
+            {isOnline && (
+              <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+            )}
           </div>
           <Badge
             variant="secondary"
@@ -163,22 +187,24 @@ export function TeamCard({ group, taskCounts, onManage }: TeamCardProps) {
         )}
       </div>
 
-      {/* Members row */}
-      <div className="px-4 pb-3">
-        {isEmpty ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
-            <UserPlus className="h-3.5 w-3.5" />
-            No members yet
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <AvatarStack members={group.members} />
-            <span className="text-xs text-muted-foreground">
-              {group.members.length} member{group.members.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-        )}
-      </div>
+      {/* Members row — hide for implicit solo since avatar is already in header */}
+      {!isImplicitSolo && (
+        <div className="px-4 pb-3">
+          {isEmpty ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
+              <UserPlus className="h-3.5 w-3.5" />
+              No members yet
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <AvatarStack members={group.members} />
+              <span className="text-xs text-muted-foreground">
+                {group.members.length} member{group.members.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Progress bar */}
       {taskCounts && taskCounts.total > 0 && (
@@ -219,32 +245,82 @@ export function TeamCard({ group, taskCounts, onManage }: TeamCardProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <span className="text-[10px] text-muted-foreground/50">{updatedText}</span>
-        {isEmpty ? (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs px-2.5"
-            onClick={(e) => {
-              e.stopPropagation()
-              onManage?.()
-            }}
-          >
-            <UserPlus className="h-3 w-3 mr-1" />
-            Add Members
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs px-2.5"
-            onClick={(e) => {
-              e.stopPropagation()
-              onManage?.()
-            }}
-          >
-            Manage
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {group.status === "IDLE" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2.5"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDeploy?.()
+              }}
+            >
+              Deploy
+            </Button>
+          )}
+          {group.status === "DEPLOYING" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2.5"
+              disabled
+            >
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              Deploying...
+            </Button>
+          )}
+          {group.status === "ACTIVE" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2.5"
+              onClick={(e) => {
+                e.stopPropagation()
+                onStop?.()
+              }}
+            >
+              Stop
+            </Button>
+          )}
+          {group.status === "STOPPING" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2.5"
+              disabled
+            >
+              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+              Stopping...
+            </Button>
+          )}
+          {isEmpty ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2.5"
+              onClick={(e) => {
+                e.stopPropagation()
+                onManage?.()
+              }}
+            >
+              <UserPlus className="h-3 w-3 mr-1" />
+              Add Members
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs px-2.5"
+              onClick={(e) => {
+                e.stopPropagation()
+                onManage?.()
+              }}
+            >
+              Manage
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   )
