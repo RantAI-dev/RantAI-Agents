@@ -1202,6 +1202,7 @@ echo "$RESPONSE"
   }
 
   // 6. Spawn gateway (use daemon mode when channels are configured)
+  const allChannelIntegrations = [] // TODO: populated when channel integrations are implemented
   const hasChannels = allChannelIntegrations.length > 0
   const runCmd = hasChannels ? "daemon" : "gateway"
   console.log(`[GroupGateway] Spawning ${CLAW_BIN} ${runCmd} on port 8080...`)
