@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import {
-  Zap, Check, X, Shield, Play, Rocket, Square, Loader2, ChevronDown,
+  Zap, Check, X, Shield, Play, Loader2, ChevronDown,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -45,9 +45,6 @@ interface TabActivityProps {
   runs: Array<{
     id: string; status: string; error: string | null; startedAt: string
   }>
-  onRunNow: () => void
-  onActivate: () => void
-  onDeactivate: () => void
   onRefresh?: () => void
 }
 
@@ -57,9 +54,6 @@ export function TabActivity({
   pendingApprovals,
   respondToApproval,
   runs,
-  onRunNow,
-  onActivate,
-  onDeactivate,
   onRefresh,
 }: TabActivityProps) {
   const { events, dailySummary, isLoading } = useEmployeeActivity(employee.id)
@@ -122,28 +116,7 @@ export function TabActivity({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            {employee.status === "ACTIVE" && (
-              <>
-                {containerRunning && (
-                  <Button size="sm" onClick={onRunNow}>
-                    <Zap className="h-3.5 w-3.5 mr-1.5" />
-                    Run Now
-                  </Button>
-                )}
-                <Button size="sm" variant="outline" onClick={onDeactivate}>
-                  <Square className="h-3.5 w-3.5 mr-1.5" />
-                  Pause
-                </Button>
-              </>
-            )}
-            {(employee.status === "PAUSED" || employee.status === "SUSPENDED") && (
-              <Button size="sm" onClick={onActivate}>
-                <Play className="h-3.5 w-3.5 mr-1.5" />
-                Resume
-              </Button>
-            )}
-          </div>
+          {/* Lifecycle managed at team level */}
         </div>
       </div>
 

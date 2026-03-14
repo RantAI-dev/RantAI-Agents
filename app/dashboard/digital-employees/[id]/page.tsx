@@ -7,9 +7,7 @@ import {
   ArrowLeft,
   Loader2,
   MessageSquare,
-  Play,
   Settings,
-  Square,
   Zap,
   Folder,
 } from "@/lib/icons"
@@ -84,10 +82,6 @@ export default function DigitalEmployeeDetailPage() {
     customTools,
     skills,
     isLoading,
-    pause,
-    resume,
-    terminate,
-    triggerRun,
     respondToApproval,
     updateFile,
     installSkill,
@@ -145,34 +139,6 @@ export default function DigitalEmployeeDetailPage() {
   }, [id, containerRunning])
 
   // ─── Handlers ─────────────────────────────────────────────
-
-  const handleActivate = useCallback(async () => {
-    try {
-      await resume()
-      chatFetchedRef.current = false
-      toast.success("Employee resumed")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to resume")
-    }
-  }, [resume])
-
-  const handleDeactivate = useCallback(async () => {
-    try {
-      await pause()
-      toast.success("Employee paused")
-    } catch {
-      toast.error("Failed to pause")
-    }
-  }, [pause])
-
-  const handleRunNow = useCallback(async () => {
-    try {
-      await triggerRun()
-      toast.success("Run triggered")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to trigger run")
-    }
-  }, [triggerRun])
 
   const handleCreateTool = useCallback(async (input: { name: string; description?: string; code: string }) => {
     try {
@@ -463,28 +429,7 @@ export default function DigitalEmployeeDetailPage() {
           </div>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-1.5">
-          {employee.status === "ACTIVE" && (
-            <>
-              {containerRunning && (
-                <Button size="sm" variant="ghost" onClick={handleRunNow}>
-                  <Zap className="h-3.5 w-3.5" />
-                </Button>
-              )}
-              <Button size="sm" variant="outline" onClick={handleDeactivate}>
-                <Square className="h-3.5 w-3.5 mr-1.5" />
-                Pause
-              </Button>
-            </>
-          )}
-          {(employee.status === "PAUSED" || employee.status === "SUSPENDED") && (
-            <Button size="sm" onClick={handleActivate}>
-              <Play className="h-3.5 w-3.5 mr-1.5" />
-              Resume
-            </Button>
-          )}
-        </div>
+        {/* Lifecycle managed at team level — no employee-level controls */}
       </div>
 
       {/* ─── Body: Sidebar + Content ─── */}
@@ -558,9 +503,6 @@ export default function DigitalEmployeeDetailPage() {
               pendingApprovals={pendingApprovals}
               respondToApproval={respondToApproval}
               runs={runs}
-              onRunNow={handleRunNow}
-              onActivate={handleActivate}
-              onDeactivate={handleDeactivate}
               onRefresh={fetchEmployee}
             />
           )}
