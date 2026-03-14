@@ -434,10 +434,10 @@ export async function POST(req: Request, { params }: RouteParams) {
       agentIdHeader = id // Route to specific agent within group gateway
     }
 
-    // Auto-start container if group is ACTIVE but container isn't running
-    if (!containerUrl && group?.status === "ACTIVE") {
+    // Auto-start container if group status suggests it should be running
+    if (!containerUrl && group?.status !== "IDLE") {
       try {
-        const { port } = await orchestrator.startGroupContainer(employee.groupId)
+        const { port } = await orchestrator.startGroup(employee.groupId)
         containerUrl = `http://localhost:${port}`
         // Wait for gateway to become responsive (up to 30s)
         for (let i = 0; i < 15; i++) {

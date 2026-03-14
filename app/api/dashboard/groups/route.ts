@@ -3,6 +3,54 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
 import { hasPermission } from "@/lib/digital-employee/rbac"
+import Dockerode from "dockerode"
+
+const docker = new Dockerode({ socketPath: "/var/run/docker.sock" })
+
+/** Batch-reconcile group container states against Docker */
+async function reconcileGroups(groups: Array<{ id: string; status: string; containerId: string | null; [key: string]: unknown }>) {
+  // Get all running container IDs in one Docker API call
+  const runningContainers = await docker.listContainers({ all: false })
+  const runningIds = new Set(runningContainers.map((c) => c.Id))
+
+  const reconciled = await Promise.all(
+    groups.map(async (g) => {
+      // Groups with a containerId — check if container is actually running
+      if (g.containerId) {
+        if (runningIds.has(g.containerId)) {
+          // Container is alive — ensure status is RUNNING
+          if (g.status !== "RUNNING") {
+            await prisma.employeeGroup.update({
+              where: { id: g.id },
+              data: { status: "RUNNING" },
+            })
+            return { ...g, status: "RUNNING" }
+          }
+          return g
+        }
+        // Container is dead — clear fields, set IDLE
+        await prisma.employeeGroup.update({
+          where: { id: g.id },
+          data: { status: "IDLE", containerId: null, containerPort: null, noVncPort: null, gatewayToken: null },
+        })
+        return { ...g, status: "IDLE", containerId: null, containerPort: null, noVncPort: null, gatewayToken: null }
+      }
+
+      // No containerId but status isn't IDLE (e.g. legacy "ACTIVE") — set IDLE
+      if (g.status !== "IDLE") {
+        await prisma.employeeGroup.update({
+          where: { id: g.id },
+          data: { status: "IDLE" },
+        })
+        return { ...g, status: "IDLE" }
+      }
+
+      return g
+    })
+  )
+
+  return reconciled
+}
 
 export async function GET(req: Request) {
   try {
@@ -33,11 +81,18 @@ export async function GET(req: Request) {
       orderBy: { updatedAt: "desc" },
     })
 
-    const result = groups.map((g) => ({
+    // Batch-reconcile container states against Docker
+    const reconciled = await reconcileGroups(groups)
+
+    const result = reconciled.map((g) => ({
       ...g,
-      memberCount: g.members.length,
-      createdAt: g.createdAt.toISOString(),
-      updatedAt: g.updatedAt.toISOString(),
+      memberCount: (g as { members: unknown[] }).members.length,
+      createdAt: (g as { createdAt: Date }).createdAt instanceof Date
+        ? (g as { createdAt: Date }).createdAt.toISOString()
+        : (g as { createdAt: string }).createdAt,
+      updatedAt: (g as { updatedAt: Date }).updatedAt instanceof Date
+        ? (g as { updatedAt: Date }).updatedAt.toISOString()
+        : (g as { updatedAt: string }).updatedAt,
     }))
 
     return NextResponse.json(result)

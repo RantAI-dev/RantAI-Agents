@@ -68,9 +68,9 @@ export async function PATCH(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Group not found" }, { status: 404 })
     }
 
-    if (existing.status !== "IDLE" && existing.status !== "ACTIVE") {
+    if (existing.status !== "IDLE" && existing.status !== "RUNNING") {
       return NextResponse.json(
-        { error: "Cannot update group while it is deploying or stopping" },
+        { error: "Cannot update group while it is in a transitional state" },
         { status: 409 }
       )
     }
@@ -130,13 +130,6 @@ export async function DELETE(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Group not found" }, { status: 404 })
     }
 
-    if (existing.status !== "IDLE") {
-      return NextResponse.json(
-        { error: "Cannot delete group with a running container. Stop it first." },
-        { status: 409 }
-      )
-    }
-
     // Block deletion if group has members — they must be moved first
     if (existing.members.length > 0) {
       return NextResponse.json(
@@ -145,8 +138,9 @@ export async function DELETE(req: Request, { params }: RouteParams) {
       )
     }
 
-    // Safe to delete — no members
-    await prisma.employeeGroup.delete({ where: { id } })
+    // deleteGroup auto-stops container if running
+    const { DockerOrchestrator } = await import("@/lib/digital-employee/docker-orchestrator")
+    await new DockerOrchestrator().deleteGroup(id)
 
     return NextResponse.json({ success: true })
   } catch (error) {
