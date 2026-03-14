@@ -552,7 +552,7 @@ export async function proxyUpdateTask(
   if (!target) return null
 
   const res = await fetch(`${target.url}/tasks/${taskId}`, {
-    method: "PATCH",
+    method: "PUT",
     headers: {
       Authorization: `Bearer ${target.token}`,
       "Content-Type": "application/json",
