@@ -127,39 +127,36 @@ async function processGatewayRequest(
   if (!buf) return
 
   try {
-    // Try streaming endpoint first, fall back to JSON webhook
+    // Try streaming endpoint first, fall back to JSON webhook.
+    // Retry on connection errors (gateway may still be booting).
     let useStreaming = true
     let gatewayResponse: Response
 
-    try {
-      gatewayResponse = await fetch(`${containerUrl}/webhook/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          Authorization: `Bearer ${gatewayToken}`,
-          ...(agentIdHeader ? { "X-Agent-Id": agentIdHeader } : {}),
-        },
-        body: JSON.stringify({ message: contextMessage }),
-        signal: AbortSignal.timeout(600_000),
-      })
+    const MAX_RETRIES = 5
+    const RETRY_DELAY_MS = 3000
 
-      if (gatewayResponse.status === 404) {
-        useStreaming = false
-        gatewayResponse = await fetch(`${containerUrl}/webhook`, {
+    async function attemptGatewayCall(): Promise<Response> {
+      // Try streaming first
+      try {
+        const res = await fetch(`${containerUrl}/webhook/stream`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Accept: "text/event-stream",
             Authorization: `Bearer ${gatewayToken}`,
             ...(agentIdHeader ? { "X-Agent-Id": agentIdHeader } : {}),
           },
           body: JSON.stringify({ message: contextMessage }),
           signal: AbortSignal.timeout(600_000),
         })
+        if (res.status !== 404) return res
+      } catch {
+        // Connection failed on streaming — fall through to JSON
       }
-    } catch {
+
+      // Fall back to JSON webhook
       useStreaming = false
-      gatewayResponse = await fetch(`${containerUrl}/webhook`, {
+      return fetch(`${containerUrl}/webhook`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -170,6 +167,28 @@ async function processGatewayRequest(
         signal: AbortSignal.timeout(600_000),
       })
     }
+
+    // Retry loop for connection errors (gateway not ready yet)
+    async function callWithRetry(): Promise<Response> {
+      for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+        try {
+          return await attemptGatewayCall()
+        } catch (err) {
+          const isConnectionError = err instanceof Error &&
+            (err.message.includes("ConnectionRefused") ||
+             err.message.includes("ECONNREFUSED") ||
+             err.message.includes("Unable to connect") ||
+             String(err.cause).includes("ECONNREFUSED"))
+          if (!isConnectionError || attempt === MAX_RETRIES - 1) throw err
+          console.warn(`Gateway connection attempt ${attempt + 1}/${MAX_RETRIES} failed, retrying in ${RETRY_DELAY_MS}ms...`)
+          pushEvent(messageId, "thinking", {})
+          await new Promise((r) => setTimeout(r, RETRY_DELAY_MS))
+        }
+      }
+      throw new Error("Gateway connection failed after retries")
+    }
+
+    gatewayResponse = await callWithRetry()
 
     if (!gatewayResponse.ok) {
       const errText = await gatewayResponse.text()
@@ -434,21 +453,18 @@ export async function POST(req: Request, { params }: RouteParams) {
       agentIdHeader = id // Route to specific agent within group gateway
     }
 
-    // Auto-start container if group status suggests it should be running
-    if (!containerUrl && group?.status !== "IDLE") {
+    // Auto-start container if not running (startGroup is idempotent)
+    if (!containerUrl && group) {
       try {
         const { port } = await orchestrator.startGroup(employee.groupId)
         containerUrl = `http://localhost:${port}`
-        // Wait for gateway to become responsive (up to 30s)
-        for (let i = 0; i < 15; i++) {
-          await new Promise((r) => setTimeout(r, 2000))
-          try {
-            const probe = await fetch(`${containerUrl}/health`, { signal: AbortSignal.timeout(2000) })
-            if (probe.ok) break
-          } catch {
-            // Not ready yet
-          }
-        }
+        // Refresh gateway token from DB (set during startGroup)
+        const updated = await prisma.employeeGroup.findUnique({
+          where: { id: employee.groupId },
+          select: { gatewayToken: true },
+        })
+        gatewayToken = updated?.gatewayToken ?? null
+        agentIdHeader = id
       } catch (startErr) {
         console.error("Auto-start container failed:", startErr)
       }

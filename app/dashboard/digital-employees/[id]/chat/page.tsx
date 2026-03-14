@@ -67,9 +67,16 @@ export default function EmployeeChatPage({
     try {
       const res = await fetch(`/api/dashboard/digital-employees/${id}/resume`, { method: "POST" })
       if (!res.ok) throw new Error("Failed to start")
-      // Re-check status
-      const statusRes = await fetch(`/api/dashboard/digital-employees/${id}/status`)
+      // Re-check status and load chat history
+      const [statusRes, historyRes] = await Promise.all([
+        fetch(`/api/dashboard/digital-employees/${id}/status`),
+        fetch(`/api/dashboard/digital-employees/${id}/chat`),
+      ])
       if (statusRes.ok) setContainerStatus(await statusRes.json())
+      if (historyRes.ok) {
+        const msgs: EmployeeChatMsg[] = await historyRes.json()
+        setChatHistory(msgs)
+      }
       toast.success("Employee started")
     } catch {
       toast.error("Failed to start employee")

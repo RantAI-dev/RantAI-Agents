@@ -164,7 +164,7 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
    */
   async startGroup(groupId: string, onProgress?: ProgressCallback): Promise<{ containerId: string; port: number }> {
     const progress = onProgress || (() => {})
-    const total = 7
+    const total = 8
 
     progress({ step: 1, total, message: "Validating group...", status: "in_progress" })
 
@@ -291,8 +291,25 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
       const vncBindings = inspectInfo.NetworkSettings.Ports["6080/tcp"]
       const noVncPort = vncBindings?.[0]?.HostPort ? parseInt(vncBindings[0].HostPort, 10) : null
 
+      // Wait for gateway to become responsive before marking as RUNNING
+      progress({ step: 7, total, message: "Waiting for gateway...", status: "in_progress" })
+      const gatewayUrl = `http://localhost:${port}`
+      let gatewayReady = false
+      for (let attempt = 0; attempt < 30; attempt++) {
+        try {
+          const probe = await fetch(`${gatewayUrl}/health`, { signal: AbortSignal.timeout(2000) })
+          if (probe.ok) { gatewayReady = true; break }
+        } catch {
+          // Not ready yet
+        }
+        await new Promise((r) => setTimeout(r, 2000))
+      }
+      if (!gatewayReady) {
+        console.warn(`Gateway for group ${groupId} did not become ready within 60s — marking RUNNING anyway`)
+      }
+
       // Single atomic DB update — status + container fields together
-      progress({ step: 7, total, message: "Finalizing...", status: "in_progress" })
+      progress({ step: 8, total, message: "Finalizing...", status: "in_progress" })
       await prisma.employeeGroup.update({
         where: { id: groupId },
         data: {
@@ -310,7 +327,7 @@ export class DockerOrchestrator implements EmployeeOrchestrator {
         data: { status: "ACTIVE", lastActiveAt: new Date() },
       })
 
-      progress({ step: 7, total, message: "Started successfully!", status: "completed" })
+      progress({ step: total, total, message: "Started successfully!", status: "completed" })
       return { containerId, port }
     } catch (err) {
       // Clean up container on partial failure
