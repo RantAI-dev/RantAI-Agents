@@ -6,9 +6,7 @@ import { motion } from "framer-motion"
 import {
   ArrowLeft,
   MessageSquare,
-  Loader2,
   Play,
-  Rocket,
   Settings,
   Square,
   Zap,
@@ -26,14 +24,14 @@ import {
 import { cn } from "@/lib/utils"
 import { useTools } from "@/hooks/use-tools"
 import { useSkills } from "@/hooks/use-skills"
-import { useDigitalEmployee, type DeployProgressEvent } from "@/hooks/use-digital-employee"
+import { useDigitalEmployee } from "@/hooks/use-digital-employee"
 import { WorkspaceIDE } from "./_components/workspace-ide"
 import { TabChat } from "./_components/tab-chat"
 import { TabActivity } from "./_components/tab-activity"
 import { TabSettings } from "./_components/tab-settings"
 import TabEmployeeTasks from "./_components/tab-tasks"
 import { ChatDrawer } from "./_components/chat-drawer"
-import { CreateToolDialog, ArchiveDialog, DeleteDialog, DeployProgressDialog } from "./_components/dialogs"
+import { CreateToolDialog, ArchiveDialog, DeleteDialog } from "./_components/dialogs"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { toast } from "sonner"
@@ -85,9 +83,6 @@ export default function DigitalEmployeeDetailPage() {
     customTools,
     skills,
     isLoading,
-    deploy,
-    start,
-    stop,
     pause,
     resume,
     terminate,
@@ -117,14 +112,8 @@ export default function DigitalEmployeeDetailPage() {
   // Navigation
   const [activeSection, setActiveSection] = useState<Section>("activity")
 
-  // Deploy/start progress
-  const [deployProgress, setDeployProgress] = useState<DeployProgressEvent | null>(null)
-  const [deployStepMessages, setDeployStepMessages] = useState<Record<number, string>>({})
-  const [isDeploying, setIsDeploying] = useState(false)
-
-  // Container status
+  // Container status (derived from employee's group)
   const [containerRunning, setContainerRunning] = useState(false)
-  const [containerLoading, setContainerLoading] = useState(false)
 
   // Chat state
   const [chatHistory, setChatHistory] = useState<EmployeeChatMsg[] | null>(null)
@@ -139,16 +128,10 @@ export default function DigitalEmployeeDetailPage() {
   // Chat drawer state (for chat-guided integration setup)
   const [chatDrawerMessage, setChatDrawerMessage] = useState<string | null>(null)
 
-  // Fetch container status when employee is active
+  // Derive container running from employee status
   useEffect(() => {
-    if (!employee || employee.status !== "ACTIVE") return
-    fetch(`/api/dashboard/digital-employees/${id}/status`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data) setContainerRunning(data.containerRunning)
-      })
-      .catch(() => {})
-  }, [id, employee?.status]) // eslint-disable-line react-hooks/exhaustive-deps
+    setContainerRunning(employee?.status === "ACTIVE")
+  }, [employee?.status])
 
   // Load chat history when container is running
   useEffect(() => {
@@ -162,71 +145,24 @@ export default function DigitalEmployeeDetailPage() {
 
   // ─── Handlers ─────────────────────────────────────────────
 
-  const handleProgressEvent = useCallback((event: DeployProgressEvent) => {
-    setDeployProgress(event)
-    if (event.step > 0) {
-      setDeployStepMessages((prev) => ({ ...prev, [event.step]: event.message }))
-    }
-  }, [])
-
-  const handleDeploy = useCallback(async () => {
-    setIsDeploying(true)
-    setDeployProgress(null)
-    setDeployStepMessages({})
-    try {
-      await deploy(handleProgressEvent)
-      toast.success("Employee deployed")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to deploy")
-    } finally {
-      setTimeout(() => {
-        setIsDeploying(false)
-        setDeployProgress(null)
-        setDeployStepMessages({})
-      }, 1500)
-    }
-  }, [deploy, handleProgressEvent])
-
   const handleActivate = useCallback(async () => {
-    setContainerLoading(true)
-    setIsDeploying(true)
-    setDeployProgress(null)
-    setDeployStepMessages({})
     try {
-      if (employee?.status === "PAUSED" || employee?.status === "SUSPENDED") {
-        await resume()
-      }
-      await start(handleProgressEvent)
-      setContainerRunning(true)
+      await resume()
       chatFetchedRef.current = false
-      toast.success("Employee activated")
+      toast.success("Employee resumed")
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to activate")
-    } finally {
-      setContainerLoading(false)
-      setTimeout(() => {
-        setIsDeploying(false)
-        setDeployProgress(null)
-        setDeployStepMessages({})
-      }, 1500)
+      toast.error(err instanceof Error ? err.message : "Failed to resume")
     }
-  }, [employee?.status, resume, start, handleProgressEvent])
+  }, [resume])
 
   const handleDeactivate = useCallback(async () => {
-    setContainerLoading(true)
     try {
-      if (containerRunning) {
-        await stop()
-        setContainerRunning(false)
-      }
       await pause()
-      toast.success("Employee deactivated")
+      toast.success("Employee paused")
     } catch {
-      toast.error("Failed to deactivate")
-    } finally {
-      setContainerLoading(false)
+      toast.error("Failed to pause")
     }
-  }, [containerRunning, stop, pause])
+  }, [pause])
 
   const handleRunNow = useCallback(async () => {
     try {
@@ -237,35 +173,15 @@ export default function DigitalEmployeeDetailPage() {
     }
   }, [triggerRun])
 
-  // Auto-redeploy if employee is already deployed
-  const autoRedeploy = useCallback(async () => {
-    if (!employee || employee.status === "DRAFT") return
-    try {
-      toast.info("Redeploying to apply changes...")
-      await deploy()
-      if (containerRunning) {
-        toast.info("Restarting container to apply changes...")
-        await stop()
-        await start()
-        setContainerRunning(true)
-        chatFetchedRef.current = false
-      }
-      toast.success("Redeployed successfully")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Redeploy failed")
-    }
-  }, [employee, deploy, containerRunning, stop, start])
-
   const handleCreateTool = useCallback(async (input: { name: string; description?: string; code: string }) => {
     try {
       await createCustomTool(input)
       toast.success("Tool created")
       setCreateToolOpen(false)
-      await autoRedeploy()
     } catch {
       toast.error("Failed to create tool")
     }
-  }, [createCustomTool, autoRedeploy])
+  }, [createCustomTool])
 
   // Toggle a platform tool on/off the assistant
   const handleToggleAssistantTool = useCallback(
@@ -286,12 +202,11 @@ export default function DigitalEmployeeDetailPage() {
         if (!res.ok) throw new Error("Failed to update tools")
         await fetchEmployeeTools()
         toast.success(isEnabled ? "Tool removed" : "Tool added")
-        await autoRedeploy()
       } catch {
         toast.error("Failed to update tools")
       }
     },
-    [employee, platformTools, fetchEmployeeTools, autoRedeploy]
+    [employee, platformTools, fetchEmployeeTools]
   )
 
   // Toggle a platform skill on/off the assistant
@@ -350,7 +265,6 @@ export default function DigitalEmployeeDetailPage() {
               await fetchEmployeeTools()
               toast.success(`Skill added + ${toolIdsToEnable.size} required tool${toolIdsToEnable.size > 1 ? "s" : ""} enabled`)
               await fetchEmployeeSkills()
-              await autoRedeploy()
               return
             }
           }
@@ -358,12 +272,11 @@ export default function DigitalEmployeeDetailPage() {
 
         await fetchEmployeeSkills()
         toast.success(isEnabled ? "Skill removed" : "Skill added")
-        await autoRedeploy()
       } catch {
         toast.error("Failed to update skills")
       }
     },
-    [employee, skills.platform, allPlatformSkills, allPlatformTools, platformTools, fetchEmployeeSkills, fetchEmployeeTools, autoRedeploy]
+    [employee, skills.platform, allPlatformSkills, allPlatformTools, platformTools, fetchEmployeeSkills, fetchEmployeeTools]
   )
 
   // ─── Schedule handlers ──────────────────────────────────
@@ -551,12 +464,6 @@ export default function DigitalEmployeeDetailPage() {
 
         {/* Action buttons */}
         <div className="flex items-center gap-1.5">
-          {employee.status === "DRAFT" && (
-            <Button size="sm" onClick={handleDeploy}>
-              <Rocket className="h-3.5 w-3.5 mr-1.5" />
-              Deploy
-            </Button>
-          )}
           {employee.status === "ACTIVE" && (
             <>
               {containerRunning && (
@@ -564,24 +471,16 @@ export default function DigitalEmployeeDetailPage() {
                   <Zap className="h-3.5 w-3.5" />
                 </Button>
               )}
-              <Button size="sm" variant="outline" onClick={handleDeactivate} disabled={containerLoading}>
-                {containerLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <Square className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                Deactivate
+              <Button size="sm" variant="outline" onClick={handleDeactivate}>
+                <Square className="h-3.5 w-3.5 mr-1.5" />
+                Pause
               </Button>
             </>
           )}
           {(employee.status === "PAUSED" || employee.status === "SUSPENDED") && (
-            <Button size="sm" onClick={handleActivate} disabled={containerLoading}>
-              {containerLoading ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <Play className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              Activate
+            <Button size="sm" onClick={handleActivate}>
+              <Play className="h-3.5 w-3.5 mr-1.5" />
+              Resume
             </Button>
           )}
         </div>
@@ -659,10 +558,8 @@ export default function DigitalEmployeeDetailPage() {
               respondToApproval={respondToApproval}
               runs={runs}
               onRunNow={handleRunNow}
-              onDeploy={handleDeploy}
               onActivate={handleActivate}
               onDeactivate={handleDeactivate}
-              containerLoading={containerLoading}
               onRefresh={fetchEmployee}
             />
           )}
@@ -715,7 +612,6 @@ export default function DigitalEmployeeDetailPage() {
               runs={runs}
               onUpdateHeartbeat={handleUpdateHeartbeat}
               fetchEmployee={fetchEmployee}
-              autoRedeploy={autoRedeploy}
               onArchiveOpen={() => setArchiveOpen(true)}
               onDeleteOpen={() => setDeleteOpen(true)}
               onOpenChat={(msg) => setChatDrawerMessage(msg)}
@@ -755,11 +651,6 @@ export default function DigitalEmployeeDetailPage() {
         employeeName={employee.name}
         onDelete={handleDelete}
         isDeleting={isDeleting}
-      />
-      <DeployProgressDialog
-        isDeploying={isDeploying}
-        deployProgress={deployProgress}
-        deployStepMessages={deployStepMessages}
       />
     </div>
   )

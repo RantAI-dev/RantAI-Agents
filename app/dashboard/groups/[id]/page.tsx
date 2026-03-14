@@ -12,7 +12,6 @@ import {
   Pause,
   Loader2,
   Bot,
-  Rocket,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -38,10 +37,7 @@ import TabTasks from "@/app/dashboard/digital-employees/_components/tab-tasks"
 
 const GROUP_STATUS_STYLES: Record<string, { label: string; className: string }> = {
   IDLE: { label: "Idle", className: "bg-muted text-muted-foreground" },
-  DEPLOYED: { label: "Deployed", className: "bg-blue-500/10 text-blue-500" },
   RUNNING: { label: "Running", className: "bg-emerald-500/10 text-emerald-500" },
-  STOPPING: { label: "Stopping", className: "bg-amber-500/10 text-amber-500" },
-  DEPLOYING: { label: "Deploying", className: "bg-amber-500/10 text-amber-500" },
 }
 
 const MEMBER_STATUS_STYLES: Record<string, { label: string; className: string }> = {
@@ -64,7 +60,6 @@ export default function GroupDetailPage() {
     isLoading: groupsLoading,
     updateGroup,
     removeMembers,
-    deployGroup,
     startGroup,
     stopGroup,
     deleteGroup,
@@ -119,19 +114,6 @@ export default function GroupDetailPage() {
     },
     [group, removeMembers]
   )
-
-  const handleDeploy = useCallback(async () => {
-    if (!group) return
-    setIsActionLoading(true)
-    try {
-      await deployGroup(group.id)
-      toast.success("Group deployed")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to deploy")
-    } finally {
-      setIsActionLoading(false)
-    }
-  }, [group, deployGroup])
 
   const handleStart = useCallback(async () => {
     if (!group) return
@@ -208,16 +190,8 @@ export default function GroupDetailPage() {
 
   // ─── Derived state ───────────────────────────────────────
 
-  // Derive display status: ACTIVE + containerPort = RUNNING, ACTIVE + no container = DEPLOYED
-  const displayStatus =
-    group.status === "ACTIVE" && group.containerPort
-      ? "RUNNING"
-      : group.status === "ACTIVE"
-        ? "DEPLOYED"
-        : group.status
-
   const statusStyle =
-    GROUP_STATUS_STYLES[displayStatus] || GROUP_STATUS_STYLES.IDLE
+    GROUP_STATUS_STYLES[group.status] || GROUP_STATUS_STYLES.IDLE
 
   // ─── Render ───────────────────────────────────────────────
 
@@ -292,16 +266,6 @@ export default function GroupDetailPage() {
         {/* Action buttons */}
         <div className="flex items-center gap-1.5">
           {group.status === "IDLE" && (
-            <Button size="sm" onClick={handleDeploy} disabled={isActionLoading}>
-              {isActionLoading ? (
-                <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <Rocket className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              Deploy
-            </Button>
-          )}
-          {group.status === "ACTIVE" && !group.containerPort && (
             <Button size="sm" onClick={handleStart} disabled={isActionLoading}>
               {isActionLoading ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -311,7 +275,7 @@ export default function GroupDetailPage() {
               Start
             </Button>
           )}
-          {group.status === "ACTIVE" && group.containerPort && (
+          {group.status === "RUNNING" && (
             <Button size="sm" variant="outline" onClick={handleStop} disabled={isActionLoading}>
               {isActionLoading ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -337,14 +301,14 @@ export default function GroupDetailPage() {
                 <AlertDialogTitle>Delete team permanently?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This will permanently delete the team &quot;{group.name}&quot;.
+                  {group.status === "RUNNING" && (
+                    <span className="block mt-2 text-amber-500 font-medium">
+                      The running container will be stopped automatically.
+                    </span>
+                  )}
                   {group.members.length > 0 && (
                     <span className="block mt-2 text-destructive font-medium">
                       This team has {group.members.length} member{group.members.length !== 1 ? "s" : ""}. Remove all members before deleting.
-                    </span>
-                  )}
-                  {group.status !== "IDLE" && (
-                    <span className="block mt-2 text-destructive font-medium">
-                      This team must be stopped and undeployed (Idle) before it can be deleted.
                     </span>
                   )}
                 </AlertDialogDescription>
@@ -353,7 +317,7 @@ export default function GroupDetailPage() {
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={handleDelete}
-                  disabled={group.members.length > 0 || group.status !== "IDLE"}
+                  disabled={group.members.length > 0}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
                   Delete Permanently

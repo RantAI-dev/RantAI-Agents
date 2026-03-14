@@ -24,11 +24,11 @@ import { toast } from "sonner"
 
 export default function TabTeams() {
   const router = useRouter()
-  const { groups, isLoading: groupsLoading, error: groupsError, refresh, createGroup, deployGroup, startGroup, stopGroup } = useEmployeeGroups()
+  const { groups, isLoading: groupsLoading, error: groupsError, refresh, createGroup, startGroup, stopGroup } = useEmployeeGroups()
   const { tasks } = useTasks()
 
   const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "IDLE">("ALL")
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "RUNNING" | "IDLE">("ALL")
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [newTeamName, setNewTeamName] = useState("")
   const [newTeamDesc, setNewTeamDesc] = useState("")
@@ -110,7 +110,7 @@ export default function TabTeams() {
         </div>
 
         <div className="flex items-center gap-1">
-          {(["ALL", "ACTIVE", "IDLE"] as const).map((s) => (
+          {(["ALL", "RUNNING", "IDLE"] as const).map((s) => (
             <Button
               key={s}
               size="sm"
@@ -118,7 +118,7 @@ export default function TabTeams() {
               className="h-7 text-xs px-2.5"
               onClick={() => setStatusFilter(s)}
             >
-              {s === "ALL" ? "All" : s === "ACTIVE" ? "Active" : "Idle"}
+              {s === "ALL" ? "All" : s === "RUNNING" ? "Running" : "Idle"}
             </Button>
           ))}
         </div>
@@ -200,7 +200,6 @@ export default function TabTeams() {
                 group={group}
                 taskCounts={taskCountsByGroup.get(group.id)}
                 onManage={() => router.push(`/dashboard/groups/${group.id}`)}
-                onDeploy={() => deployGroup(group.id).catch(e => toast.error(e.message))}
                 onStart={() => startGroup(group.id).catch(e => toast.error(e.message))}
                 onStop={() => stopGroup(group.id).catch(e => toast.error(e.message))}
               />

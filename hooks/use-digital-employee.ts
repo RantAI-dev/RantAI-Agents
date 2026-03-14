@@ -189,43 +189,6 @@ export function useDigitalEmployee(id: string | null) {
     }
   }, [id, base])
 
-  // Lifecycle actions with SSE progress streaming
-  const deploy = useCallback(
-    async (onProgress?: (event: DeployProgressEvent) => void) => {
-      const res = await fetch(`${base}/deploy`, { method: "POST" })
-      if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
-        const data = await res.json()
-        throw new Error(data.error || "Deploy failed")
-      }
-      if (res.body) {
-        await consumeSSE(res.body, onProgress)
-      }
-      await fetchEmployee()
-    },
-    [base, fetchEmployee]
-  )
-
-  const start = useCallback(
-    async (onProgress?: (event: DeployProgressEvent) => void) => {
-      const res = await fetch(`${base}/start`, { method: "POST" })
-      if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
-        const data = await res.json()
-        throw new Error(data.error || "Start failed")
-      }
-      if (res.body) {
-        await consumeSSE(res.body, onProgress)
-      }
-      await fetchEmployee()
-    },
-    [base, fetchEmployee]
-  )
-
-  const stop = useCallback(async () => {
-    const res = await fetch(`${base}/stop`, { method: "POST" })
-    if (!res.ok) throw new Error("Stop failed")
-    await fetchEmployee()
-  }, [base, fetchEmployee])
-
   const pause = useCallback(async () => {
     const res = await fetch(`${base}/pause`, { method: "POST" })
     if (!res.ok) throw new Error("Pause failed")
@@ -427,9 +390,6 @@ export function useDigitalEmployee(id: string | null) {
     fetchApprovals,
     fetchTools,
     fetchSkills,
-    deploy,
-    start,
-    stop,
     pause,
     resume,
     terminate,

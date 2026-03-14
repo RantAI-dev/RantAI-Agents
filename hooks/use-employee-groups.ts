@@ -116,21 +116,6 @@ export function useEmployeeGroups() {
     [fetchGroups]
   )
 
-  const deployGroup = useCallback(
-    async (groupId: string): Promise<void> => {
-      try {
-        const res = await fetch(`/api/dashboard/groups/${groupId}/deploy`, { method: "POST" })
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}))
-          throw new Error(err.error || "Failed to deploy team")
-        }
-      } finally {
-        await fetchGroups()
-      }
-    },
-    [fetchGroups]
-  )
-
   const startGroup = useCallback(
     async (groupId: string): Promise<void> => {
       try {
@@ -183,7 +168,6 @@ export function useEmployeeGroups() {
     deleteGroup,
     addMembers,
     removeMembers,
-    deployGroup,
     startGroup,
     stopGroup,
   }

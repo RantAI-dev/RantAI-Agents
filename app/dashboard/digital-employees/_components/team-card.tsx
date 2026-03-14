@@ -1,6 +1,6 @@
 "use client"
 
-import { Users, UserPlus, Loader2 } from "lucide-react"
+import { Users, UserPlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -31,26 +31,17 @@ interface TeamCardProps {
     total: number
   }
   onManage?: () => void
-  onDeploy?: () => void
   onStart?: () => void
   onStop?: () => void
 }
 
 function getStatusBadgeClass(status: string): string {
   switch (status) {
-    case "ACTIVE":
+    case "RUNNING":
       return "bg-emerald-500/10 text-emerald-500"
-    case "DEPLOYING":
-      return "bg-blue-500/10 text-blue-500"
-    case "STOPPING":
-      return "bg-amber-500/10 text-amber-500"
     default:
       return "bg-muted text-muted-foreground"
   }
-}
-
-function getStatusLabel(status: string): string {
-  return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
 }
 
 const avatarColors = [
@@ -136,18 +127,13 @@ function ProgressBar({
   )
 }
 
-export function TeamCard({ group, taskCounts, onManage, onDeploy, onStart, onStop }: TeamCardProps) {
+export function TeamCard({ group, taskCounts, onManage, onStart, onStop }: TeamCardProps) {
   const isEmpty = group.members.length === 0
   const isImplicitSolo = group.isImplicit && group.members.length === 1
-  const isRunning = group.status === "ACTIVE" && group.containerPort !== null
-  const isDeployed = group.status === "ACTIVE" && group.containerPort === null
+  const isRunning = group.status === "RUNNING"
 
-  const displayStatus = isRunning ? "Running" : isDeployed ? "Deployed" : getStatusLabel(group.status)
-  const statusBadgeClass = isRunning
-    ? "bg-emerald-500/10 text-emerald-500"
-    : isDeployed
-      ? "bg-blue-500/10 text-blue-500"
-      : getStatusBadgeClass(group.status)
+  const displayStatus = isRunning ? "Running" : "Idle"
+  const statusBadgeClass = getStatusBadgeClass(group.status)
 
   const displayName = isImplicitSolo ? group.members[0].name : group.name
 
@@ -259,30 +245,6 @@ export function TeamCard({ group, taskCounts, onManage, onDeploy, onStart, onSto
               className="h-7 text-xs px-2.5"
               onClick={(e) => {
                 e.stopPropagation()
-                onDeploy?.()
-              }}
-            >
-              Deploy
-            </Button>
-          )}
-          {group.status === "DEPLOYING" && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs px-2.5"
-              disabled
-            >
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              Deploying...
-            </Button>
-          )}
-          {isDeployed && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs px-2.5"
-              onClick={(e) => {
-                e.stopPropagation()
                 onStart?.()
               }}
             >
@@ -300,17 +262,6 @@ export function TeamCard({ group, taskCounts, onManage, onDeploy, onStart, onSto
               }}
             >
               Stop
-            </Button>
-          )}
-          {group.status === "STOPPING" && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs px-2.5"
-              disabled
-            >
-              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-              Stopping...
             </Button>
           )}
           {isEmpty ? (
