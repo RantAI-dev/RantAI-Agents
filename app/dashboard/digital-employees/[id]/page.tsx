@@ -34,6 +34,7 @@ import { CreateToolDialog, ArchiveDialog, DeleteDialog } from "./_components/dia
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { toast } from "sonner"
+import { formatDistanceToNow } from "date-fns"
 import { STATUS_STYLES, AUTONOMY_STYLES } from "@/lib/digital-employee/shared-constants"
 import type { EmployeeSchedule } from "@/lib/digital-employee/types"
 
@@ -49,9 +50,9 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "activity", label: "Activity", icon: Zap, group: "interact" },
   { id: "chat", label: "Chat", icon: MessageSquare, group: "interact" },
   { id: "tasks", label: "Tasks", icon: CheckSquare, group: "interact" },
+  { id: "activity", label: "Activity", icon: Zap, group: "interact" },
   { id: "workspace", label: "Workspace", icon: Folder, group: "configure" },
   { id: "settings", label: "Settings", icon: Settings, group: "configure" },
 ]
@@ -105,7 +106,7 @@ export default function DigitalEmployeeDetailPage() {
   const enabledSkillIds = new Set(skills.platform.map((s) => s.id))
 
   // Navigation
-  const [activeSection, setActiveSection] = useState<Section>("activity")
+  const [activeSection, setActiveSection] = useState<Section>("chat")
 
   // Container status (derived from employee's group)
   const [containerRunning, setContainerRunning] = useState(false)
@@ -414,12 +415,6 @@ export default function DigitalEmployeeDetailPage() {
               <Badge variant="secondary" className={cn("text-[10px] px-1.5 py-0", status.className)}>
                 {status.label}
               </Badge>
-              {containerRunning && (
-                <span className="flex items-center gap-1 text-[10px] text-emerald-500">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Online
-                </span>
-              )}
             </div>
             <p className="text-xs text-muted-foreground truncate">
               {employee.assistant.emoji} {employee.assistant.name}
@@ -429,7 +424,23 @@ export default function DigitalEmployeeDetailPage() {
           </div>
         </div>
 
-        {/* Lifecycle managed at team level — no employee-level controls */}
+        {/* Status indicator */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {containerRunning ? (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {employee.lastActiveAt && (Date.now() - new Date(employee.lastActiveAt).getTime()) < 60_000
+                ? <span className="text-emerald-500">Running task...</span>
+                : <span>Idle{employee.lastActiveAt && ` · last active ${formatDistanceToNow(new Date(employee.lastActiveAt), { addSuffix: true })}`}</span>
+              }
+            </>
+          ) : (
+            <>
+              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40" />
+              <span>Offline</span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ─── Body: Sidebar + Content ─── */}
