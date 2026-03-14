@@ -40,7 +40,6 @@ interface TabToolsProps {
   toggleCustomTool: (toolId: string, enabled: boolean) => Promise<void>
   deleteCustomTool: (toolId: string) => Promise<void>
   onCreateToolOpen: () => void
-  autoRedeploy: () => Promise<void>
 }
 
 export function TabTools({
@@ -54,7 +53,6 @@ export function TabTools({
   toggleCustomTool,
   deleteCustomTool,
   onCreateToolOpen,
-  autoRedeploy,
 }: TabToolsProps) {
   const [toolSearch, setToolSearch] = useState("")
 
@@ -221,7 +219,6 @@ export function TabTools({
                     onCheckedChange={async (checked) => {
                       try {
                         await toggleCustomTool(tool.id, checked)
-                        await autoRedeploy()
                       } catch {
                         toast.error("Failed to toggle tool")
                       }
@@ -235,7 +232,6 @@ export function TabTools({
                       try {
                         await deleteCustomTool(tool.id)
                         toast.success("Tool deleted")
-                        await autoRedeploy()
                       } catch {
                         toast.error("Failed to delete tool")
                       }

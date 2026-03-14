@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   ArrowLeft,
+  Loader2,
   MessageSquare,
   Play,
   Settings,

@@ -56,7 +56,6 @@ interface TabSkillsProps {
   toggleSkill: (skillId: string, enabled: boolean) => Promise<void>
   installSkill: (slug: string) => Promise<unknown>
   uninstallSkill: (skillId: string) => Promise<void>
-  autoRedeploy: () => Promise<void>
 }
 
 export function TabSkills({
@@ -71,7 +70,6 @@ export function TabSkills({
   toggleSkill,
   installSkill,
   uninstallSkill,
-  autoRedeploy,
 }: TabSkillsProps) {
   const [skillSearch, setSkillSearch] = useState("")
   const [clawHubQuery, setClawHubQuery] = useState("")
@@ -127,13 +125,12 @@ export function TabSkills({
     try {
       await installSkill(slug)
       toast.success("Skill installed")
-      await autoRedeploy()
     } catch {
       toast.error("Failed to install skill")
     } finally {
       setInstallingSlug(null)
     }
-  }, [installSkill, autoRedeploy])
+  }, [installSkill])
 
   return (
     <div className="flex-1 overflow-auto p-5 space-y-6">
@@ -254,7 +251,6 @@ export function TabSkills({
                     onCheckedChange={async (checked) => {
                       try {
                         await toggleSkill(skill.id, checked)
-                        await autoRedeploy()
                       } catch {
                         toast.error("Failed to toggle skill")
                       }
@@ -268,7 +264,6 @@ export function TabSkills({
                       try {
                         await uninstallSkill(skill.id)
                         toast.success("Skill uninstalled")
-                        await autoRedeploy()
                       } catch {
                         toast.error("Failed to uninstall skill")
                       }

@@ -30,7 +30,7 @@ export default function EmployeeChatPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
-  const { employee, isLoading, start } = useDigitalEmployee(id)
+  const { employee, isLoading } = useDigitalEmployee(id)
 
   const [containerStatus, setContainerStatus] = useState<ContainerStatus | null>(null)
   const [statusLoading, setStatusLoading] = useState(true)
@@ -65,17 +65,18 @@ export default function EmployeeChatPage({
   const handleStart = useCallback(async () => {
     setStarting(true)
     try {
-      await start()
+      const res = await fetch(`/api/dashboard/digital-employees/${id}/resume`, { method: "POST" })
+      if (!res.ok) throw new Error("Failed to start")
       // Re-check status
-      const res = await fetch(`/api/dashboard/digital-employees/${id}/status`)
-      if (res.ok) setContainerStatus(await res.json())
+      const statusRes = await fetch(`/api/dashboard/digital-employees/${id}/status`)
+      if (statusRes.ok) setContainerStatus(await statusRes.json())
       toast.success("Employee started")
     } catch {
       toast.error("Failed to start employee")
     } finally {
       setStarting(false)
     }
-  }, [id, start])
+  }, [id])
 
   // Build synthetic ChatSession from loaded history (always exists, even if empty)
   const syntheticSession: ChatSession = {

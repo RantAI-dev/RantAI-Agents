@@ -46,10 +46,8 @@ interface TabActivityProps {
     id: string; status: string; error: string | null; startedAt: string
   }>
   onRunNow: () => void
-  onDeploy: () => void
   onActivate: () => void
   onDeactivate: () => void
-  containerLoading?: boolean
   onRefresh?: () => void
 }
 
@@ -60,10 +58,8 @@ export function TabActivity({
   respondToApproval,
   runs,
   onRunNow,
-  onDeploy,
   onActivate,
   onDeactivate,
-  containerLoading,
   onRefresh,
 }: TabActivityProps) {
   const { events, dailySummary, isLoading } = useEmployeeActivity(employee.id)
@@ -127,12 +123,6 @@ export function TabActivity({
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            {employee.status === "DRAFT" && (
-              <Button size="sm" onClick={onDeploy}>
-                <Rocket className="h-3.5 w-3.5 mr-1.5" />
-                Deploy
-              </Button>
-            )}
             {employee.status === "ACTIVE" && (
               <>
                 {containerRunning && (
@@ -141,24 +131,16 @@ export function TabActivity({
                     Run Now
                   </Button>
                 )}
-                <Button size="sm" variant="outline" onClick={onDeactivate} disabled={containerLoading}>
-                  {containerLoading ? (
-                    <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                  ) : (
-                    <Square className="h-3.5 w-3.5 mr-1.5" />
-                  )}
-                  Deactivate
+                <Button size="sm" variant="outline" onClick={onDeactivate}>
+                  <Square className="h-3.5 w-3.5 mr-1.5" />
+                  Pause
                 </Button>
               </>
             )}
             {(employee.status === "PAUSED" || employee.status === "SUSPENDED") && (
-              <Button size="sm" onClick={onActivate} disabled={containerLoading}>
-                {containerLoading ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <Play className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                Activate
+              <Button size="sm" onClick={onActivate}>
+                <Play className="h-3.5 w-3.5 mr-1.5" />
+                Resume
               </Button>
             )}
           </div>

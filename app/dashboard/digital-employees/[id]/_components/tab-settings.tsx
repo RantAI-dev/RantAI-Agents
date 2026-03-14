@@ -85,7 +85,6 @@ interface TabSettingsProps {
   onUpdateHeartbeat: (heartbeat: HeartbeatConfig) => Promise<void>
   // General
   fetchEmployee: () => Promise<void>
-  autoRedeploy: () => Promise<void>
   onArchiveOpen: () => void
   onDeleteOpen: () => void
   onOpenChat?: (message: string) => void
@@ -234,7 +233,7 @@ export function TabSettings(props: TabSettingsProps) {
                     toggleSkill={props.toggleSkill}
                     installSkill={props.installSkill}
                     uninstallSkill={props.uninstallSkill}
-                    autoRedeploy={props.autoRedeploy}
+
                   />
                 )}
                 {section.id === "triggers" && (
@@ -415,7 +414,6 @@ function ToolsSkillsCombined(props: {
   toggleSkill: (id: string, enabled: boolean) => Promise<void>
   installSkill: (slug: string) => Promise<unknown>
   uninstallSkill: (id: string) => Promise<void>
-  autoRedeploy: () => Promise<void>
 }) {
   const [filter, setFilter] = useState<ToolsSkillsFilter>("all")
 
@@ -466,7 +464,7 @@ function ToolsSkillsCombined(props: {
           toggleCustomTool={props.toggleCustomTool}
           deleteCustomTool={props.deleteCustomTool}
           onCreateToolOpen={props.onCreateToolOpen}
-          autoRedeploy={props.autoRedeploy}
+
         />
       )}
       {showSkills && (
@@ -482,7 +480,7 @@ function ToolsSkillsCombined(props: {
           toggleSkill={props.toggleSkill}
           installSkill={props.installSkill}
           uninstallSkill={props.uninstallSkill}
-          autoRedeploy={props.autoRedeploy}
+
         />
       )}
       {showClawHub && !showSkills && (
