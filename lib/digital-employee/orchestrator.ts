@@ -1,5 +1,3 @@
-import type { DeployResult } from "./types"
-
 export type ProgressCallback = (event: {
   step: number
   total: number
@@ -8,8 +6,8 @@ export type ProgressCallback = (event: {
 }) => void
 
 export interface EmployeeOrchestrator {
-  deployGroup(groupId: string, onProgress?: ProgressCallback): Promise<DeployResult>
-  startGroupContainer(groupId: string, onProgress?: ProgressCallback): Promise<{ containerId: string; port: number }>
-  stopGroupContainer(groupId: string): Promise<void>
+  startGroup(groupId: string, onProgress?: ProgressCallback): Promise<{ containerId: string; port: number }>
+  stopGroup(groupId: string): Promise<void>
+  deleteGroup(groupId: string): Promise<void>
   getGroupContainerUrl(groupId: string): Promise<string | null>
 }
