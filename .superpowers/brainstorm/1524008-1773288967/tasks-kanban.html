@@ -1,0 +1,442 @@
+<style>
+  /* Match the real app's dark theme */
+  :root {
+    --bg: #0a0a0f;
+    --card: #111118;
+    --card-hover: #16161f;
+    --border: #1e1e2a;
+    --border-hover: rgba(255,255,255,0.15);
+    --muted: #64748b;
+    --muted-dim: #475569;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --primary: #6366f1;
+    --primary-dim: rgba(99,102,241,0.1);
+    --emerald: #22c55e;
+    --emerald-dim: rgba(34,197,94,0.1);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245,158,11,0.1);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.1);
+    --violet: #8b5cf6;
+    --violet-dim: rgba(139,92,246,0.1);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.1);
+  }
+  body { background: var(--bg) !important; }
+
+  .page-header {
+    padding: 24px 24px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .page-title { font-size: 24px; font-weight: 700; color: var(--text); letter-spacing: -0.025em; }
+  .page-subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+  .stats-row { display: flex; align-items: center; gap: 16px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .stats-row .dot { color: rgba(100,116,139,0.3); }
+  .stat-value { font-weight: 600; color: var(--text-dim); }
+
+  /* Top-level tabs */
+  .top-tabs { display: flex; gap: 0; margin-top: 16px; }
+  .top-tab {
+    padding: 10px 20px;
+    font-size: 14px;
+    color: var(--muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .top-tab:hover { color: var(--text-dim); }
+  .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .top-tab .badge {
+    margin-left: 6px; background: var(--red); color: #fff;
+    font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 9999px;
+  }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex; align-items: center; gap: 10px; padding: 16px 24px;
+    flex-wrap: wrap;
+  }
+  .search-box {
+    position: relative; flex: 1; min-width: 180px; max-width: 320px;
+  }
+  .search-box input {
+    width: 100%; background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 12px 7px 34px; font-size: 13px;
+    color: var(--text); outline: none; transition: border-color 0.15s;
+  }
+  .search-box input:focus { border-color: var(--primary); }
+  .search-box .icon {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 13px;
+  }
+
+  .filter-pills { display: flex; gap: 4px; }
+  .pill {
+    padding: 5px 10px; font-size: 12px; border-radius: 6px;
+    background: transparent; color: var(--muted); border: none; cursor: pointer;
+    transition: all 0.15s;
+  }
+  .pill:hover { background: var(--card); color: var(--text-dim); }
+  .pill.active { background: var(--card); color: var(--text); font-weight: 500; }
+  .pill .count { margin-left: 4px; color: var(--muted-dim); font-size: 11px; }
+
+  .view-toggle {
+    display: flex; border: 1px solid var(--border); border-radius: 6px;
+    overflow: hidden; margin-left: 4px;
+  }
+  .view-btn {
+    padding: 6px 10px; font-size: 12px; background: transparent;
+    color: var(--muted); border: none; cursor: pointer; transition: all 0.15s;
+  }
+  .view-btn.active { background: var(--card); color: var(--primary); }
+
+  .btn-primary {
+    background: var(--primary); color: #fff; border: none;
+    padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 500;
+    cursor: pointer; display: flex; align-items: center; gap: 6px;
+    transition: opacity 0.15s; margin-left: auto;
+  }
+  .btn-primary:hover { opacity: 0.9; }
+
+  /* Kanban Board */
+  .kanban {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 0 24px 24px;
+    min-height: 500px;
+  }
+
+  .kanban-col {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex; flex-direction: column;
+    min-height: 400px;
+  }
+
+  .col-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .col-header-left { display: flex; align-items: center; gap: 8px; }
+  .col-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .col-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .col-count {
+    font-size: 11px; color: var(--muted); background: rgba(100,116,139,0.1);
+    padding: 1px 8px; border-radius: 9999px;
+  }
+  .col-add {
+    width: 24px; height: 24px; border-radius: 6px; background: transparent;
+    border: 1px dashed var(--border); color: var(--muted); font-size: 14px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .col-add:hover { border-color: var(--primary); color: var(--primary); }
+
+  .col-body {
+    flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 8px;
+    overflow-y: auto;
+  }
+
+  /* Task Card */
+  .task-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .task-card:hover { border-color: var(--border-hover); transform: translateY(-1px); }
+
+  .task-title { font-size: 13px; font-weight: 500; color: var(--text); line-height: 1.4; margin-bottom: 6px; }
+
+  .task-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .task-badge {
+    font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500;
+  }
+  .badge-high { background: var(--red-dim); color: var(--red); }
+  .badge-medium { background: var(--amber-dim); color: var(--amber); }
+  .badge-low { background: var(--blue-dim); color: var(--blue); }
+  .badge-normal { background: rgba(100,116,139,0.1); color: var(--muted); }
+
+  .task-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-top: 8px; border-top: 1px solid var(--border);
+  }
+  .task-assignee {
+    display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted);
+  }
+  .assignee-avatar {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+  }
+  .task-due { font-size: 10px; color: var(--muted-dim); }
+  .task-due.overdue { color: var(--red); }
+
+  /* Subtask progress */
+  .subtask-bar {
+    display: flex; align-items: center; gap: 6px; margin-top: 6px;
+  }
+  .subtask-track {
+    flex: 1; height: 3px; background: var(--border); border-radius: 2px;
+    overflow: hidden;
+  }
+  .subtask-fill { height: 100%; border-radius: 2px; background: var(--emerald); }
+  .subtask-text { font-size: 10px; color: var(--muted-dim); white-space: nowrap; }
+
+  /* Review indicator */
+  .review-badge {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    background: var(--violet-dim); color: var(--violet); font-weight: 500;
+  }
+
+  .creator-tag {
+    font-size: 10px; color: var(--muted-dim); display: flex; align-items: center; gap: 3px;
+  }
+</style>
+
+<!-- Page Header -->
+<div class="page-header">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <div class="page-title">Digital Employees</div>
+      <div class="page-subtitle">Autonomous AI workers powered by RantAI Claw</div>
+    </div>
+  </div>
+  <div class="stats-row">
+    <span>👥 <span class="stat-value">6</span> employees</span>
+    <span class="dot">·</span>
+    <span>🚀 <span class="stat-value">4</span> active</span>
+    <span class="dot">·</span>
+    <span>⏸ <span class="stat-value">2</span> inactive</span>
+  </div>
+  <div class="top-tabs">
+    <div class="top-tab">Employees</div>
+    <div class="top-tab">Teams</div>
+    <div class="top-tab active">Tasks <span class="badge">7</span></div>
+  </div>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="search-box">
+    <span class="icon">🔍</span>
+    <input placeholder="Search tasks..." />
+  </div>
+  <div class="filter-pills">
+    <button class="pill active">All<span class="count">12</span></button>
+    <button class="pill">My Tasks<span class="count">3</span></button>
+    <button class="pill">Unassigned<span class="count">2</span></button>
+  </div>
+  <div class="view-toggle">
+    <button class="view-btn active">⊞ Board</button>
+    <button class="view-btn">☰ List</button>
+  </div>
+  <button class="btn-primary">+ New Task</button>
+</div>
+
+<!-- Kanban Board -->
+<div class="kanban">
+
+  <!-- Column: To Do -->
+  <div class="kanban-col">
+    <div class="col-header">
+      <div class="col-header-left">
+        <div class="col-dot" style="background:var(--muted)"></div>
+        <span class="col-title">To Do</span>
+        <span class="col-count">3</span>
+      </div>
+      <button class="col-add">+</button>
+    </div>
+    <div class="col-body">
+      <div class="task-card">
+        <div class="task-title">Generate weekly engagement report from analytics data</div>
+        <div class="task-meta">
+          <span class="task-badge badge-high">High</span>
+          <span class="creator-tag">📊 → assigned by human</span>
+        </div>
+        <div class="task-footer">
+          <div class="task-assignee">
+            <span class="assignee-avatar" style="background:var(--violet-dim)">📊</span>
+            Nova
+          </div>
+          <span class="task-due overdue">Due today</span>
+        </div>
+      </div>
+
+      <div class="task-card">
+        <div class="task-title">Draft social media posts for product launch</div>
+        <div class="task-meta">
+          <span class="task-badge badge-medium">Medium</span>
+        </div>
+        <div class="task-footer">
+          <div class="task-assignee">
+            <span class="assignee-avatar" style="background:var(--amber-dim)">✍️</span>
+            Rex
+          </div>
+          <span class="task-due">Mar 14</span>
+        </div>
+      </div>
+
+      <div class="task-card">
+        <div class="task-title">Categorize unresolved support tickets from last week</div>
+        <div class="task-meta">
+          <span class="task-badge badge-low">Low</span>
+          <span class="creator-tag">🤖 created by Aria</span>
+        </div>
+        <div class="task-footer">
+          <div class="task-assignee">
+            <span class="assignee-avatar" style="background:rgba(100,116,139,0.15)">—</span>
+            <span style="color:var(--muted-dim);font-style:italic">Unassigned</span>
+          </div>
+          <span class="task-due">Mar 15</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column: In Progress -->
+  <div class="kanban-col">
+    <div class="col-header">
+      <div class="col-header-left">
+        <div class="col-dot" style="background:var(--blue)"></div>
+        <span class="col-title">In Progress</span>
+        <span class="col-count">2</span>
+      </div>
+      <button class="col-add">+</button>
+    </div>
+    <div class="col-body">
+      <div class="task-card" style="border-left:2px solid var(--blue);">
+        <div class="task-title">Monitor and respond to customer inquiries on Slack</div>
+        <div class="task-meta">
+          <span class="task-badge badge-high">High</span>
+          <span style="font-size:10px;color:var(--emerald);">● Running</span>
+        </div>
+        <div class="subtask-bar">
+          <div class="subtask-track"><div class="subtask-fill" style="width:60%"></div></div>
+          <span class="subtask-text">3/5 done</span>
+        </div>
+        <div class="task-footer">
+          <div class="task-assignee">
+            <span class="assignee-avatar" style="background:var(--primary-dim)">🤖</span>
+            Aria
+          </div>
+          <span class="task-due">Ongoing</span>
+        </div>
+      </div>
+
+      <div class="task-card" style="border-left:2px solid var(--blue);">
+        <div class="task-title">Analyze competitor pricing data and create comparison sheet</div>
+        <div class="task-meta">
+          <span class="task-badge badge-medium">Medium</span>
+          <span style="font-size:10px;color:var(--amber);">⏳ 45m elapsed</span>
+        </div>
+        <div class="subtask-bar">
+          <div class="subtask-track"><div class="subtask-fill" style="width:30%"></div></div>
+          <span class="subtask-text">1/4 done</span>
+        </div>
+        <div class="task-footer">
+          <div class="task-assignee">
+            <span class="assignee-avatar" style="background:var(--violet-dim)">📊</span>
+            Nova
+          </div>
+          <span class="task-due">Mar 13</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column: In Review -->
+  <div class="kanban-col">
+    <div class="col-header">
+      <div class="col-header-left">
+        <div class="col-dot" style="background:var(--violet)"></div>
+        <span class="col-title">In Review</span>
+        <span class="col-count">2</span>
+      </div>
+    </div>
+    <div class="col-body">
+      <div class="task-card" style="border-left:2px solid var(--violet);">
+        <div class="task-title">Compile Q1 sales summary with visualizations</div>
+        <div class="task-meta">
+          <span class="task-badge badge-high">High</span>
+          <span class="review-badge">👁 Needs human review</span>
+        </div>
+        <div class="task-footer">
+          <div class="task-assignee">
+            <span class="assignee-avatar" style="background:var(--violet-dim)">📊</span>
+            Nova
+          </div>
+          <span class="task-due" style="color:var(--violet);">Awaiting review</span>
+        </div>
+      </div>
+
+      <div class="task-card" style="border-left:2px solid var(--violet);">
+        <div class="task-title">Write onboarding email sequence for new users</div>
+        <div class="task-meta">
+          <span class="task-badge badge-medium">Medium</span>
+          <span class="review-badge">🤖 Reviewing: Aria</span>
+        </div>
+        <div class="task-footer">
+          <div class="task-assignee">
+            <span class="assignee-avatar" style="background:var(--amber-dim)">✍️</span>
+            Rex
+          </div>
+          <span class="task-due" style="color:var(--violet);">Supervisor review</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Column: Done -->
+  <div class="kanban-col">
+    <div class="col-header">
+      <div class="col-header-left">
+        <div class="col-dot" style="background:var(--emerald)"></div>
+        <span class="col-title">Done</span>
+        <span class="col-count">5</span>
+      </div>
+    </div>
+    <div class="col-body">
+      <div class="task-card" style="opacity:0.7;">
+        <div class="task-title" style="text-decoration:line-through;color:var(--muted);">Respond to customer feedback emails</div>
+        <div class="task-meta">
+          <span class="task-badge" style="background:var(--emerald-dim);color:var(--emerald);">✓ Approved</span>
+        </div>
+        <div class="task-footer">
+          <div class="task-assignee">
+            <span class="assignee-avatar" style="background:var(--primary-dim)">🤖</span>
+            Aria
+          </div>
+          <span class="task-due" style="color:var(--emerald);">Completed 2h ago</span>
+        </div>
+      </div>
+
+      <div class="task-card" style="opacity:0.7;">
+        <div class="task-title" style="text-decoration:line-through;color:var(--muted);">Generate monthly newsletter draft</div>
+        <div class="task-meta">
+          <span class="task-badge" style="background:var(--emerald-dim);color:var(--emerald);">✓ Approved</span>
+        </div>
+        <div class="task-footer">
+          <div class="task-assignee">
+            <span class="assignee-avatar" style="background:var(--amber-dim)">✍️</span>
+            Rex
+          </div>
+          <span class="task-due" style="color:var(--muted-dim);">Yesterday</span>
+        </div>
+      </div>
+
+      <div style="text-align:center;padding:12px;font-size:11px;color:var(--muted-dim);">
+        + 3 more completed tasks
+      </div>
+    </div>
+  </div>
+</div>

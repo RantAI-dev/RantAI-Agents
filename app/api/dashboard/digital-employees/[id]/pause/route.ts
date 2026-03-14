@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    await orchestrator.stopGroupContainer(employee.groupId)
+    await orchestrator.stopGroup(employee.groupId)
 
     return NextResponse.json({ success: true })
   } catch (error) {

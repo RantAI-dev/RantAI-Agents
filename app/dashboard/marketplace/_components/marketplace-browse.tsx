@@ -40,58 +40,58 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useMarketplace } from "@/hooks/use-marketplace"
+import { BlurText } from "@/components/reactbits/blur-text"
+import { CountUp } from "@/components/reactbits/count-up"
 import { MarketplaceCard } from "./marketplace-card"
 import { ItemDetailDialog } from "./item-detail-dialog"
-import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
+
+const stagger = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.06, delayChildren: 0.15 },
+  },
+}
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring" as const, stiffness: 260, damping: 24 },
+  },
+}
 
 const TYPE_CONFIG: Record<
   string,
   {
     label: string
     subtitle: string
-    gradient: string
-    accentClass: string
     icon: React.ElementType
   }
 > = {
   assistant: {
     label: "Assistants",
     subtitle: "Pre-built AI assistants ready to deploy",
-    gradient:
-      "from-amber-500/8 via-orange-500/5 to-transparent dark:from-amber-500/10 dark:via-orange-500/6 dark:to-transparent",
-    accentClass: "text-amber-600 dark:text-amber-400",
     icon: Package,
   },
   skill: {
     label: "Skills",
     subtitle: "Enhance your agents with specialized capabilities",
-    gradient:
-      "from-violet-500/8 via-purple-500/5 to-transparent dark:from-violet-500/10 dark:via-purple-500/6 dark:to-transparent",
-    accentClass: "text-violet-600 dark:text-violet-400",
     icon: Sparkles,
   },
   tool: {
     label: "Tools",
     subtitle: "Connect to external services and APIs",
-    gradient:
-      "from-sky-500/8 via-cyan-500/5 to-transparent dark:from-sky-500/10 dark:via-cyan-500/6 dark:to-transparent",
-    accentClass: "text-sky-600 dark:text-sky-400",
     icon: TrendingUp,
   },
   mcp: {
     label: "MCP Servers",
     subtitle: "Model Context Protocol integrations",
-    gradient:
-      "from-emerald-500/8 via-teal-500/5 to-transparent dark:from-emerald-500/10 dark:via-teal-500/6 dark:to-transparent",
-    accentClass: "text-emerald-600 dark:text-emerald-400",
     icon: TrendingUp,
   },
   workflow: {
     label: "Workflows",
     subtitle: "Ready-made workflow templates you can import and run",
-    gradient:
-      "from-indigo-500/8 via-blue-500/5 to-transparent dark:from-indigo-500/10 dark:via-blue-500/6 dark:to-transparent",
-    accentClass: "text-indigo-600 dark:text-indigo-400",
     icon: Workflow,
   },
 }
@@ -234,38 +234,52 @@ export function MarketplaceBrowse({ type }: MarketplaceBrowseProps) {
 
   return (
     <div className="flex flex-col h-full">
-      <DashboardPageHeader title="Marketplace" subtitle={config.subtitle} />
+      {/* Animated Header */}
+      <motion.div
+        className="px-6 pt-6 pb-4 space-y-3"
+        initial="hidden"
+        animate="visible"
+        variants={stagger}
+      >
+        <motion.div variants={fadeUp}>
+          <BlurText
+            text="Marketplace"
+            className="text-3xl font-bold tracking-tight"
+            delay={40}
+          />
+        </motion.div>
+        <motion.p
+          className="text-sm text-muted-foreground"
+          variants={fadeUp}
+        >
+          {config.subtitle}
+        </motion.p>
+        {items.length > 0 && (
+          <motion.div
+            className="flex items-center gap-4 text-sm text-muted-foreground"
+            variants={fadeUp}
+          >
+            <span className="flex items-center gap-1.5">
+              <Package className="h-3.5 w-3.5" />
+              <CountUp to={items.length} duration={1.2} />
+              <span>available</span>
+            </span>
+            {installedCount > 0 && (
+              <>
+                <span className="text-muted-foreground/30">&middot;</span>
+                <span className="flex items-center gap-1.5">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <CountUp to={installedCount} duration={1.2} />
+                  <span>installed</span>
+                </span>
+              </>
+            )}
+          </motion.div>
+        )}
+      </motion.div>
 
       <div className="flex-1 overflow-auto">
-        {/* Hero gradient band */}
-        <div className={`relative bg-gradient-to-b ${config.gradient}`}>
-          <div className="absolute inset-0 dot-grid-bg opacity-30 dark:opacity-15" />
-
-          <div className="relative px-6 pt-6 pb-5">
-            {/* Stats row */}
-            <div className="flex items-center gap-5 mb-5">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Package className="h-3.5 w-3.5" />
-                <span>
-                  <span className="font-semibold text-foreground">
-                    {items.length}
-                  </span>{" "}
-                  available
-                </span>
-              </div>
-              {installedCount > 0 && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>
-                    <span className="font-semibold text-foreground">
-                      {installedCount}
-                    </span>{" "}
-                    installed
-                  </span>
-                </div>
-              )}
-            </div>
-
+        <div className="px-6 pb-5">
             {/* Search + Filter + Sort row */}
             <div className="flex items-center gap-2">
               {/* Search input */}
@@ -374,7 +388,6 @@ export function MarketplaceBrowse({ type }: MarketplaceBrowseProps) {
                 </SelectContent>
               </Select>
             </div>
-          </div>
         </div>
 
         {/* Content area */}

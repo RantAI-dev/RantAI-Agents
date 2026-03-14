@@ -19,6 +19,7 @@ interface TeamCardProps {
     description: string | null
     status: string
     isImplicit: boolean
+    containerPort: number | null
     members: TeamMember[]
     updatedAt?: string | null
   }
@@ -138,10 +139,15 @@ function ProgressBar({
 export function TeamCard({ group, taskCounts, onManage, onDeploy, onStart, onStop }: TeamCardProps) {
   const isEmpty = group.members.length === 0
   const isImplicitSolo = group.isImplicit && group.members.length === 1
-  const isOnline = group.status === "ACTIVE"
+  const isRunning = group.status === "ACTIVE" && group.containerPort !== null
+  const isDeployed = group.status === "ACTIVE" && group.containerPort === null
 
-  const statusBadgeClass = getStatusBadgeClass(group.status)
-  const statusLabel = getStatusLabel(group.status)
+  const displayStatus = isRunning ? "Running" : isDeployed ? "Deployed" : getStatusLabel(group.status)
+  const statusBadgeClass = isRunning
+    ? "bg-emerald-500/10 text-emerald-500"
+    : isDeployed
+      ? "bg-blue-500/10 text-blue-500"
+      : getStatusBadgeClass(group.status)
 
   const displayName = isImplicitSolo ? group.members[0].name : group.name
 
@@ -169,7 +175,7 @@ export function TeamCard({ group, taskCounts, onManage, onDeploy, onStart, onSto
               </div>
             )}
             <h3 className="text-sm font-semibold truncate">{displayName}</h3>
-            {isOnline && (
+            {isRunning && (
               <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
             )}
           </div>
@@ -177,7 +183,7 @@ export function TeamCard({ group, taskCounts, onManage, onDeploy, onStart, onSto
             variant="secondary"
             className={cn("text-[10px] px-1.5 py-0.5 shrink-0", statusBadgeClass)}
           >
-            {statusLabel}
+            {displayStatus}
           </Badge>
         </div>
         {group.description && (
@@ -270,7 +276,20 @@ export function TeamCard({ group, taskCounts, onManage, onDeploy, onStart, onSto
               Deploying...
             </Button>
           )}
-          {group.status === "ACTIVE" && (
+          {isDeployed && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs px-2.5"
+              onClick={(e) => {
+                e.stopPropagation()
+                onStart?.()
+              }}
+            >
+              Start
+            </Button>
+          )}
+          {isRunning && (
             <Button
               size="sm"
               variant="outline"

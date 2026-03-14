@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   ArrowLeft,
@@ -30,11 +30,11 @@ import { TemplateGallery } from "./_components/template-gallery"
 import type { EmployeeTemplate } from "@/lib/digital-employee/templates/employee-templates"
 
 const STEPS = [
+  { label: "Team", description: "Assign to a team" },
   { label: "Template", description: "Choose a starting point" },
   { label: "Identity", description: "Name and appearance" },
   { label: "Select Agent", description: "Choose an assistant" },
   { label: "Autonomy Level", description: "Set decision authority" },
-  { label: "Team", description: "Assign to a team" },
   { label: "Review & Create", description: "Confirm and deploy" },
 ]
 
@@ -84,6 +84,8 @@ const fadeUp = {
 
 export default function NewDigitalEmployeePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const preselectedGroupId = searchParams.get("groupId")
   const { assistants, isLoading: assistantsLoading } = useAssistants()
   const { groups } = useEmployeeGroups()
 
@@ -98,8 +100,8 @@ export default function NewDigitalEmployeePage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
   const [autonomyLevel, setAutonomyLevel] = useState("L1")
-  const [teamMode, setTeamMode] = useState<"existing" | "new">("new")
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
+  const [teamMode, setTeamMode] = useState<"existing" | "new">(preselectedGroupId ? "existing" : "new")
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(preselectedGroupId)
   const [newTeamName, setNewTeamName] = useState("")
   const [newTeamDesc, setNewTeamDesc] = useState("")
 
@@ -116,8 +118,9 @@ export default function NewDigitalEmployeePage() {
     }
   }
 
+  // Auto-fill team name with employee name (only if user hasn't typed one yet)
   useEffect(() => {
-    if (teamMode === "new" && !newTeamName) {
+    if (teamMode === "new" && name && !newTeamName) {
       setNewTeamName(name)
     }
   }, [name, teamMode, newTeamName])
@@ -126,16 +129,16 @@ export default function NewDigitalEmployeePage() {
 
   const canProceed = () => {
     switch (step) {
-      case 0:
-        return true // Template step — always can proceed
-      case 1:
-        return name.trim().length > 0
-      case 2:
-        return selectedAssistantId !== null
-      case 3:
-        return true
-      case 4:
+      case 0: // Team
         return teamMode === "existing" ? selectedGroupId !== null : true
+      case 1: // Template
+        return true
+      case 2: // Identity
+        return name.trim().length > 0
+      case 3: // Select Agent
+        return selectedAssistantId !== null
+      case 4: // Autonomy
+        return true
       default:
         return true
     }
@@ -251,10 +254,55 @@ export default function NewDigitalEmployeePage() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ type: "spring", stiffness: 260, damping: 24 }}
-          className={cn("max-w-2xl", step === 0 && "max-w-4xl")}
+          className={cn("max-w-2xl", step === 1 && "max-w-4xl")}
         >
-          {/* Step 0: Template */}
+          {/* Step 0: Team */}
           {step === 0 && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold mb-1">Team Assignment</h2>
+                <p className="text-sm text-muted-foreground">Assign this employee to a team.</p>
+              </div>
+
+              <div className="flex gap-3">
+                <Button variant={teamMode === "new" ? "default" : "outline"} onClick={() => setTeamMode("new")}>
+                  Create new team
+                </Button>
+                <Button variant={teamMode === "existing" ? "default" : "outline"} onClick={() => setTeamMode("existing")}>
+                  Add to existing team
+                </Button>
+              </div>
+
+              {teamMode === "new" && (
+                <div className="space-y-3">
+                  <Input placeholder="Team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} />
+                  <Input placeholder="Description (optional)" value={newTeamDesc} onChange={(e) => setNewTeamDesc(e.target.value)} />
+                </div>
+              )}
+
+              {teamMode === "existing" && (
+                <div className="space-y-2">
+                  {groups.map((g) => (
+                    <button
+                      key={g.id}
+                      className={cn(
+                        "w-full text-left p-3 rounded-lg border transition-colors",
+                        selectedGroupId === g.id ? "border-primary bg-primary/5" : "hover:bg-muted"
+                      )}
+                      onClick={() => setSelectedGroupId(g.id)}
+                    >
+                      <div className="font-medium text-sm">{g.name}</div>
+                      {g.description && <div className="text-xs text-muted-foreground">{g.description}</div>}
+                      <div className="text-xs text-muted-foreground mt-1">{g.members.length} members</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Step 1: Template */}
+          {step === 1 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Choose a Template</h2>
@@ -267,8 +315,8 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 1: Identity */}
-          {step === 1 && (
+          {/* Step 2: Identity */}
+          {step === 2 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Identity</h2>
@@ -308,8 +356,8 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 2: Select Agent */}
-          {step === 2 && (
+          {/* Step 3: Select Agent */}
+          {step === 3 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Select Agent</h2>
@@ -355,8 +403,8 @@ export default function NewDigitalEmployeePage() {
             </div>
           )}
 
-          {/* Step 3: Autonomy Level */}
-          {step === 3 && (
+          {/* Step 4: Autonomy Level */}
+          {step === 4 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">Autonomy Level</h2>
@@ -396,51 +444,6 @@ export default function NewDigitalEmployeePage() {
                   )
                 })}
               </div>
-            </div>
-          )}
-
-          {/* Step 4: Team */}
-          {step === 4 && (
-            <div className="space-y-4">
-              <div>
-                <h2 className="text-lg font-semibold mb-1">Team Assignment</h2>
-                <p className="text-sm text-muted-foreground">Assign this employee to a team.</p>
-              </div>
-
-              <div className="flex gap-3">
-                <Button variant={teamMode === "new" ? "default" : "outline"} onClick={() => setTeamMode("new")}>
-                  Create new team
-                </Button>
-                <Button variant={teamMode === "existing" ? "default" : "outline"} onClick={() => setTeamMode("existing")}>
-                  Add to existing team
-                </Button>
-              </div>
-
-              {teamMode === "new" && (
-                <div className="space-y-3">
-                  <Input placeholder="Team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} />
-                  <Input placeholder="Description (optional)" value={newTeamDesc} onChange={(e) => setNewTeamDesc(e.target.value)} />
-                </div>
-              )}
-
-              {teamMode === "existing" && (
-                <div className="space-y-2">
-                  {groups.map((g) => (
-                    <button
-                      key={g.id}
-                      className={cn(
-                        "w-full text-left p-3 rounded-lg border transition-colors",
-                        selectedGroupId === g.id ? "border-primary bg-primary/5" : "hover:bg-muted"
-                      )}
-                      onClick={() => setSelectedGroupId(g.id)}
-                    >
-                      <div className="font-medium text-sm">{g.name}</div>
-                      {g.description && <div className="text-xs text-muted-foreground">{g.description}</div>}
-                      <div className="text-xs text-muted-foreground mt-1">{g.members.length} members</div>
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 

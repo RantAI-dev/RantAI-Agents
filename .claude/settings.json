@@ -1,4 +1,14 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(docker ps:*)",
+      "Bash(psql -h localhost -U postgres -d horizonlife_insurance -c 'SELECT id, name, status, \"\"containerId\"\", \"\"containerPort\"\", \"\"noVncPort\"\" FROM \"\"EmployeeGroup\"\";')",
+      "Bash(rm /home/shiro/rantai/RantAI-Agents/app/api/dashboard/groups/[id]/deploy/route.ts)",
+      "Bash(rmdir /home/shiro/rantai/RantAI-Agents/app/api/dashboard/groups/[id]/deploy)",
+      "Bash(rm /home/shiro/rantai/RantAI-Agents/app/api/dashboard/digital-employees/[id]/stop/route.ts)",
+      "Bash(rmdir /home/shiro/rantai/RantAI-Agents/app/api/dashboard/digital-employees/[id]/stop)"
+    ]
+  },
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true
   }

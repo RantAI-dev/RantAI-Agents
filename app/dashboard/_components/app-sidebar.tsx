@@ -437,7 +437,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     if (pathname.startsWith("/dashboard/agent-builder")) return sections.agentBuilder
     if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
     if (pathname.startsWith("/dashboard/digital-employees")) return sections.digitalEmployees
-if (pathname.startsWith("/dashboard/groups")) return sections.groups
+    if (pathname.startsWith("/dashboard/groups")) return sections.digitalEmployees
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/knowledge")) return sections.knowledge
     if (pathname.startsWith("/dashboard/marketplace")) return sections.marketplace

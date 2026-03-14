@@ -17,20 +17,31 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
 import { useEmployeeGroups } from "@/hooks/use-employee-groups"
-import { useDigitalEmployees } from "@/hooks/use-digital-employees"
 import TabTasks from "@/app/dashboard/digital-employees/_components/tab-tasks"
 
 // ─── Status styles ──────────────────────────────────────────
 
 const GROUP_STATUS_STYLES: Record<string, { label: string; className: string }> = {
   IDLE: { label: "Idle", className: "bg-muted text-muted-foreground" },
-  ACTIVE: { label: "Active", className: "bg-emerald-500/10 text-emerald-500" },
+  DEPLOYED: { label: "Deployed", className: "bg-blue-500/10 text-blue-500" },
+  RUNNING: { label: "Running", className: "bg-emerald-500/10 text-emerald-500" },
   STOPPING: { label: "Stopping", className: "bg-amber-500/10 text-amber-500" },
-  DEPLOYING: { label: "Deploying", className: "bg-blue-500/10 text-blue-500" },
+  DEPLOYING: { label: "Deploying", className: "bg-amber-500/10 text-amber-500" },
 }
 
 const MEMBER_STATUS_STYLES: Record<string, { label: string; className: string }> = {
@@ -52,14 +63,12 @@ export default function GroupDetailPage() {
     groups,
     isLoading: groupsLoading,
     updateGroup,
-    addMembers,
     removeMembers,
     deployGroup,
     startGroup,
     stopGroup,
+    deleteGroup,
   } = useEmployeeGroups()
-
-  const { employees, isLoading: employeesLoading } = useDigitalEmployees()
 
   const group = useMemo(
     () => groups.find((g) => g.id === groupId) ?? null,
@@ -72,16 +81,7 @@ export default function GroupDetailPage() {
   const [isEditingDescription, setIsEditingDescription] = useState(false)
   const [editDescription, setEditDescription] = useState("")
 
-  // Add member state
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState("")
-  const [isAddingMember, setIsAddingMember] = useState(false)
   const [isActionLoading, setIsActionLoading] = useState(false)
-
-  // Available employees (not in any group)
-  const availableEmployees = useMemo(
-    () => employees.filter((e) => !group?.members.some((m) => m.id === e.id)),
-    [employees, group?.members]
-  )
 
   // ─── Handlers ─────────────────────────────────────────────
 
@@ -106,23 +106,6 @@ export default function GroupDetailPage() {
       toast.error(err instanceof Error ? err.message : "Failed to update description")
     }
   }, [editDescription, group, updateGroup])
-
-  const handleAddMember = useCallback(async () => {
-    if (!selectedEmployeeId || !group) return
-    setIsAddingMember(true)
-    try {
-      await addMembers(group.id, [selectedEmployeeId])
-      if (group.isImplicit) {
-        await updateGroup(group.id, { isImplicit: false })
-      }
-      toast.success("Member added")
-      setSelectedEmployeeId("")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add member")
-    } finally {
-      setIsAddingMember(false)
-    }
-  }, [selectedEmployeeId, group, addMembers, updateGroup])
 
   const handleRemoveMember = useCallback(
     async (employeeId: string) => {
@@ -176,9 +159,23 @@ export default function GroupDetailPage() {
     }
   }, [group, stopGroup])
 
+  const handleDelete = useCallback(async () => {
+    if (!group) return
+    setIsActionLoading(true)
+    try {
+      await deleteGroup(group.id)
+      toast.success("Team deleted permanently")
+      router.push("/dashboard/digital-employees")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete team")
+    } finally {
+      setIsActionLoading(false)
+    }
+  }, [group, deleteGroup, router])
+
   // ─── Loading ──────────────────────────────────────────────
 
-  const isLoading = groupsLoading || employeesLoading
+  const isLoading = groupsLoading
 
   if (isLoading) {
     return (
@@ -199,7 +196,7 @@ export default function GroupDetailPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => router.push("/dashboard/groups")}
+              onClick={() => router.push("/dashboard/digital-employees")}
             >
               Back to Teams
             </Button>
@@ -211,8 +208,16 @@ export default function GroupDetailPage() {
 
   // ─── Derived state ───────────────────────────────────────
 
+  // Derive display status: ACTIVE + containerPort = RUNNING, ACTIVE + no container = DEPLOYED
+  const displayStatus =
+    group.status === "ACTIVE" && group.containerPort
+      ? "RUNNING"
+      : group.status === "ACTIVE"
+        ? "DEPLOYED"
+        : group.status
+
   const statusStyle =
-    GROUP_STATUS_STYLES[group.status] || GROUP_STATUS_STYLES.IDLE
+    GROUP_STATUS_STYLES[displayStatus] || GROUP_STATUS_STYLES.IDLE
 
   // ─── Render ───────────────────────────────────────────────
 
@@ -225,7 +230,7 @@ export default function GroupDetailPage() {
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => router.push("/dashboard/groups")}
+            onClick={() => router.push("/dashboard/digital-employees")}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -296,7 +301,7 @@ export default function GroupDetailPage() {
               Deploy
             </Button>
           )}
-          {group.status === "IDLE" && (
+          {group.status === "ACTIVE" && !group.containerPort && (
             <Button size="sm" onClick={handleStart} disabled={isActionLoading}>
               {isActionLoading ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -306,7 +311,7 @@ export default function GroupDetailPage() {
               Start
             </Button>
           )}
-          {group.status === "ACTIVE" && (
+          {group.status === "ACTIVE" && group.containerPort && (
             <Button size="sm" variant="outline" onClick={handleStop} disabled={isActionLoading}>
               {isActionLoading ? (
                 <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
@@ -316,12 +321,52 @@ export default function GroupDetailPage() {
               Stop
             </Button>
           )}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                disabled={isActionLoading}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete team permanently?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete the team &quot;{group.name}&quot;.
+                  {group.members.length > 0 && (
+                    <span className="block mt-2 text-destructive font-medium">
+                      This team has {group.members.length} member{group.members.length !== 1 ? "s" : ""}. Remove all members before deleting.
+                    </span>
+                  )}
+                  {group.status !== "IDLE" && (
+                    <span className="block mt-2 text-destructive font-medium">
+                      This team must be stopped and undeployed (Idle) before it can be deleted.
+                    </span>
+                  )}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  disabled={group.members.length > 0 || group.status !== "IDLE"}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete Permanently
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
       {/* ─── Body ─── */}
       <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto p-6 space-y-8">
+        <div className="p-6 space-y-8">
           {/* ─── Description ─── */}
           <motion.section
             initial={{ opacity: 0, y: 12 }}
@@ -437,39 +482,13 @@ export default function GroupDetailPage() {
             )}
 
             {/* Add member */}
-            <div className="mt-4 flex items-center gap-2">
-              <select
-                value={selectedEmployeeId}
-                onChange={(e) => setSelectedEmployeeId(e.target.value)}
-                className={cn(
-                  "flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm",
-                  "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-                  "disabled:cursor-not-allowed disabled:opacity-50"
-                )}
-                disabled={availableEmployees.length === 0}
-              >
-                <option value="">
-                  {availableEmployees.length === 0
-                    ? "No available employees"
-                    : "Select an employee to add..."}
-                </option>
-                {availableEmployees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name}
-                  </option>
-                ))}
-              </select>
+            <div className="mt-4">
               <Button
                 size="sm"
-                onClick={handleAddMember}
-                disabled={!selectedEmployeeId || isAddingMember}
+                onClick={() => router.push(`/dashboard/digital-employees/new?groupId=${groupId}`)}
               >
-                {isAddingMember ? (
-                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <Plus className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                Add
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Create Employee for this Team
               </Button>
             </div>
           </motion.section>

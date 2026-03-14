@@ -67,8 +67,14 @@ export function useTasks(options: UseTasksOptions = {}) {
         body: JSON.stringify(input),
       })
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Failed to create task")
+        const text = await res.text()
+        try {
+          const data = JSON.parse(text)
+          throw new Error(data.error || `Failed to create task (${res.status})`)
+        } catch (e) {
+          if (e instanceof Error && e.message !== text) throw e
+          throw new Error(`Failed to create task (${res.status})`)
+        }
       }
       const result = await res.json()
       await fetchTasks()

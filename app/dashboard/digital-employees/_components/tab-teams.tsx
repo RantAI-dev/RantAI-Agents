@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react"
 import { Search, Plus, Loader2, Users } from "lucide-react"
+import { motion } from "framer-motion"
+import { Squares } from "@/components/reactbits/squares"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -145,25 +147,40 @@ export default function TabTeams() {
             </Button>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="rounded-full bg-muted p-4 mb-4 mx-auto w-fit">
-              <Users className="h-8 w-8 text-muted-foreground" />
+          search.trim() || statusFilter !== "ALL" ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="rounded-full bg-muted p-3 mb-4">
+                <Search className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-sm font-medium mb-1">No teams found</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Try adjusting your search query or filter
+              </p>
+              <Button variant="outline" size="sm" onClick={() => { setSearch(""); setStatusFilter("ALL") }}>
+                Clear filters
+              </Button>
             </div>
-            {search.trim() || statusFilter !== "ALL" ? (
-              <>
-                <h3 className="text-sm font-medium mb-1">No teams found</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Try adjusting your search query or filter
-                </p>
-                <Button variant="outline" size="sm" onClick={() => { setSearch(""); setStatusFilter("ALL") }}>
-                  Clear filters
-                </Button>
-              </>
-            ) : (
-              <>
+          ) : (
+            <motion.div
+              className="relative flex flex-col items-center justify-center py-16 text-center rounded-xl border border-dashed overflow-hidden"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.3, type: "spring", stiffness: 260, damping: 24 }}
+            >
+              <Squares
+                speed={0.3}
+                squareSize={48}
+                borderColor="rgba(127,127,127,0.08)"
+                hoverFillColor="rgba(127,127,127,0.04)"
+                direction="diagonal"
+              />
+              <div className="relative z-10">
+                <div className="rounded-full bg-muted p-4 mb-4 mx-auto w-fit">
+                  <Users className="h-8 w-8 text-muted-foreground" />
+                </div>
                 <h3 className="text-sm font-medium mb-1">No teams yet</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Create a team to organize your digital employees
+                <p className="text-sm text-muted-foreground max-w-sm mb-4">
+                  Create a team to organize your digital employees into collaborative groups.
                 </p>
                 <Button
                   size="sm"
@@ -172,9 +189,9 @@ export default function TabTeams() {
                   <Plus className="h-4 w-4 mr-1.5" />
                   Create Team
                 </Button>
-              </>
-            )}
-          </div>
+              </div>
+            </motion.div>
+          )
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map((group) => (

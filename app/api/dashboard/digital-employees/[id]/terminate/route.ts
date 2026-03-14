@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    await orchestrator.stopGroupContainer(employee.groupId)
+    await orchestrator.stopGroup(employee.groupId)
 
     await prisma.digitalEmployee.update({
       where: { id },

@@ -1,7 +1,9 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Search, LayoutGrid, List, Plus, Loader2 } from "lucide-react"
+import { Search, LayoutGrid, List, Plus, Loader2, ClipboardList } from "lucide-react"
+import { motion } from "framer-motion"
+import { Squares } from "@/components/reactbits/squares"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -192,6 +194,37 @@ export default function TabTasks({ groupId }: TabTasksProps) {
               Retry
             </Button>
           </div>
+        ) : tasks.length === 0 ? (
+          <motion.div
+            className="relative flex flex-col items-center justify-center py-16 text-center rounded-xl border border-dashed overflow-hidden"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3, type: "spring", stiffness: 260, damping: 24 }}
+          >
+            <Squares
+              speed={0.3}
+              squareSize={48}
+              borderColor="rgba(127,127,127,0.08)"
+              hoverFillColor="rgba(127,127,127,0.04)"
+              direction="diagonal"
+            />
+            <div className="relative z-10">
+              <div className="rounded-full bg-muted p-4 mb-4 mx-auto w-fit">
+                <ClipboardList className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-sm font-medium mb-1">No tasks yet</h3>
+              <p className="text-sm text-muted-foreground max-w-sm mb-4">
+                Create your first task to start tracking work for your digital employees.
+              </p>
+              <Button
+                size="sm"
+                onClick={() => handleCreateTask()}
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                New Task
+              </Button>
+            </div>
+          </motion.div>
         ) : viewMode === "board" ? (
           <TaskBoard
             tasks={filteredTasks}

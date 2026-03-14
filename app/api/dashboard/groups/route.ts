@@ -8,7 +8,7 @@ import Dockerode from "dockerode"
 const docker = new Dockerode({ socketPath: "/var/run/docker.sock" })
 
 /** Batch-reconcile group container states against Docker */
-async function reconcileGroups(groups: Array<{ id: string; status: string; containerId: string | null; [key: string]: unknown }>) {
+async function reconcileGroups<T extends { id: string; status: string; containerId: string | null }>(groups: T[]): Promise<T[]> {
   // Get all running container IDs in one Docker API call
   const runningContainers = await docker.listContainers({ all: false })
   const runningIds = new Set(runningContainers.map((c) => c.Id))
@@ -86,13 +86,9 @@ export async function GET(req: Request) {
 
     const result = reconciled.map((g) => ({
       ...g,
-      memberCount: (g as { members: unknown[] }).members.length,
-      createdAt: (g as { createdAt: Date }).createdAt instanceof Date
-        ? (g as { createdAt: Date }).createdAt.toISOString()
-        : (g as { createdAt: string }).createdAt,
-      updatedAt: (g as { updatedAt: Date }).updatedAt instanceof Date
-        ? (g as { updatedAt: Date }).updatedAt.toISOString()
-        : (g as { updatedAt: string }).updatedAt,
+      memberCount: g.members.length,
+      createdAt: g.createdAt.toISOString(),
+      updatedAt: g.updatedAt.toISOString(),
     }))
 
     return NextResponse.json(result)

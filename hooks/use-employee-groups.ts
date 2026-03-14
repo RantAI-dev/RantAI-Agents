@@ -118,27 +118,45 @@ export function useEmployeeGroups() {
 
   const deployGroup = useCallback(
     async (groupId: string): Promise<void> => {
-      const res = await fetch(`/api/dashboard/groups/${groupId}/deploy`, { method: "POST" })
-      if (!res.ok) throw new Error("Failed to deploy team")
-      await fetchGroups()
+      try {
+        const res = await fetch(`/api/dashboard/groups/${groupId}/deploy`, { method: "POST" })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error || "Failed to deploy team")
+        }
+      } finally {
+        await fetchGroups()
+      }
     },
     [fetchGroups]
   )
 
   const startGroup = useCallback(
     async (groupId: string): Promise<void> => {
-      const res = await fetch(`/api/dashboard/groups/${groupId}/start`, { method: "POST" })
-      if (!res.ok) throw new Error("Failed to start team")
-      await fetchGroups()
+      try {
+        const res = await fetch(`/api/dashboard/groups/${groupId}/start`, { method: "POST" })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error || "Failed to start team")
+        }
+      } finally {
+        await fetchGroups()
+      }
     },
     [fetchGroups]
   )
 
   const stopGroup = useCallback(
     async (groupId: string): Promise<void> => {
-      const res = await fetch(`/api/dashboard/groups/${groupId}/stop`, { method: "POST" })
-      if (!res.ok) throw new Error("Failed to stop team")
-      await fetchGroups()
+      try {
+        const res = await fetch(`/api/dashboard/groups/${groupId}/stop`, { method: "POST" })
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}))
+          throw new Error(err.error || "Failed to stop team")
+        }
+      } finally {
+        await fetchGroups()
+      }
     },
     [fetchGroups]
   )
