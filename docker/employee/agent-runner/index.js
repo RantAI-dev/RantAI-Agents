@@ -393,16 +393,31 @@ async function gatewayMode() {
     output.push("webhook_rate_limit_per_minute = 120")
     output.push("request_timeout_secs = 600")
     output.push("")
-    // Map platform autonomy levels to RantaiClaw values
-    // Platform: "supervised" | "autonomous"
-    // RantaiClaw: "readonly" | "supervised" | "full"
-    //
-    // NOTE: The employee container is an isolated Docker sandbox, so we always
-    // grant full shell access inside it. The platform's autonomy level still
-    // controls prompt-level permission hints (via mapPermissionsToAutonomy),
-    // but execution policy is unrestricted.
+    // Map platform autonomy levels (L1-L4) to RantaiClaw values.
+    // L4 (Autonomous) = full autonomy, all tools auto-approved.
+    // L1-L3 = supervised with auto_approve lists based on tool risk:
+    //   L1 (Observer): nothing auto-approved
+    //   L2 (Assistant): low-risk tools auto-approved
+    //   L3 (Collaborator): low+medium risk tools auto-approved
+    // Non-approved tools are denied in gateway mode (no interactive prompt).
+    const autonomyLevel = pkg.employee.autonomyLevel || "L1"
+    const zcLevel = autonomyLevel === "L4" ? "full" : "supervised"
+
+    // Tool risk classifications matching platform trust.ts
+    const LOW_RISK_TOOLS = ["file_read", "memory_recall", "memory_store", "search-skills", "knowledge_search", "search_memory", "list_my_skills", "list_my_tools", "web_search", "calculator", "date_time"]
+    const MEDIUM_RISK_TOOLS = ["file_write", "shell", "update_memory", "write_note", "create_artifact", "update_artifact", "install-skill", "install_skill", "search_skills", "update_goal", "platform-tool"]
+
+    let autoApproveTools = []
+    if (autonomyLevel === "L2") {
+      autoApproveTools = LOW_RISK_TOOLS
+    } else if (autonomyLevel === "L3") {
+      autoApproveTools = [...LOW_RISK_TOOLS, ...MEDIUM_RISK_TOOLS]
+    }
+    // L1 = empty (all need approval → denied in gateway mode)
+    // L4 = full autonomy (no approval checks at all)
+
     output.push("[autonomy]")
-    output.push('level = "full"')
+    output.push(`level = "${zcLevel}"`)
     output.push("workspace_only = false")
     output.push("block_high_risk_commands = false")
     output.push("require_approval_for_medium_risk = false")
@@ -410,6 +425,11 @@ async function gatewayMode() {
     output.push("max_cost_per_day_cents = 100000")
     output.push('allowed_commands = ["git", "bun", "bunx", "ls", "cat", "grep", "find", "echo", "pwd", "wc", "head", "tail", "curl", "wget", "node", "python3", "pip3", "pip", "python", "date", "env", "whoami", "mkdir", "cp", "mv", "rm", "touch", "sort", "uniq", "tr", "cut", "sed", "awk", "jq", "sh", "bash", "chmod", "chown", "tar", "gzip", "gunzip", "zip", "unzip", "xargs", "tee", "diff", "patch", "ln", "realpath", "dirname", "basename", "mktemp", "less", "more", "file", "stat", "du", "df", "free", "top", "ps", "kill", "sleep", "true", "false", "test", "expr", "bc", "dc", "base64", "md5sum", "sha256sum", "openssl", "ssh", "scp", "rsync", "nc", "ncat", "dig", "nslookup", "host", "ping", "traceroute", "ifconfig", "ip", "apt", "apt-get", "dpkg", "npm", "npx", "yarn", "pnpm", "cargo", "rustc", "gcc", "g++", "make", "cmake", "go", "java", "javac", "ruby", "perl", "php", "sqlite3", "mysql", "psql", "redis-cli", "docker", "kubectl", "terraform", "ansible", "aws", "gcloud", "az", "search-skills", "install-skill", "platform-tool", "rantaiclaw", "zeroclaw", "firefox-esr", "xdotool", "open-browser"]')
     output.push("forbidden_paths = []")
+    if (autoApproveTools.length > 0) {
+      output.push(`auto_approve = [${autoApproveTools.map(t => `"${t}"`).join(", ")}]`)
+    } else if (zcLevel === "supervised") {
+      output.push('auto_approve = []')
+    }
     output.push("")
 
     // Append channel configs from platform integrations
@@ -1119,9 +1139,25 @@ echo "$RESPONSE"
     output.push("request_timeout_secs = 600")
     output.push("")
 
-    // Append [autonomy] section (full access inside container)
+    // Append [autonomy] section — use most restrictive level among employees.
+    // In group-gateway, a single config.toml serves all agents. The approval
+    // manager uses the group-level autonomy so we pick the lowest L-level.
+    const LEVEL_ORDER = { L1: 0, L2: 1, L3: 2, L4: 3 }
+    const lowestLevel = employees.reduce((min, e) => {
+      const lvl = e.employee?.autonomyLevel || "L1"
+      return (LEVEL_ORDER[lvl] ?? 0) < (LEVEL_ORDER[min] ?? 0) ? lvl : min
+    }, "L4")
+    const grpZcLevel = lowestLevel === "L4" ? "full" : "supervised"
+
+    const GRP_LOW_RISK = ["file_read", "memory_recall", "memory_store", "search-skills", "knowledge_search", "search_memory", "list_my_skills", "list_my_tools", "web_search", "calculator", "date_time"]
+    const GRP_MEDIUM_RISK = ["file_write", "shell", "update_memory", "write_note", "create_artifact", "update_artifact", "install-skill", "install_skill", "search_skills", "update_goal", "platform-tool"]
+
+    let grpAutoApprove = []
+    if (lowestLevel === "L2") grpAutoApprove = GRP_LOW_RISK
+    else if (lowestLevel === "L3") grpAutoApprove = [...GRP_LOW_RISK, ...GRP_MEDIUM_RISK]
+
     output.push("[autonomy]")
-    output.push('level = "full"')
+    output.push(`level = "${grpZcLevel}"`)
     output.push("workspace_only = false")
     output.push("block_high_risk_commands = false")
     output.push("require_approval_for_medium_risk = false")
@@ -1129,6 +1165,11 @@ echo "$RESPONSE"
     output.push("max_cost_per_day_cents = 100000")
     output.push('allowed_commands = ["git", "bun", "bunx", "ls", "cat", "grep", "find", "echo", "pwd", "wc", "head", "tail", "curl", "wget", "node", "python3", "pip3", "pip", "python", "date", "env", "whoami", "mkdir", "cp", "mv", "rm", "touch", "sort", "uniq", "tr", "cut", "sed", "awk", "jq", "sh", "bash", "chmod", "chown", "tar", "gzip", "gunzip", "zip", "unzip", "xargs", "tee", "diff", "patch", "ln", "realpath", "dirname", "basename", "mktemp", "less", "more", "file", "stat", "du", "df", "free", "top", "ps", "kill", "sleep", "true", "false", "test", "expr", "bc", "dc", "base64", "md5sum", "sha256sum", "openssl", "ssh", "scp", "rsync", "nc", "ncat", "dig", "nslookup", "host", "ping", "traceroute", "ifconfig", "ip", "apt", "apt-get", "dpkg", "npm", "npx", "yarn", "pnpm", "cargo", "rustc", "gcc", "g++", "make", "cmake", "go", "java", "javac", "ruby", "perl", "php", "sqlite3", "mysql", "psql", "redis-cli", "docker", "kubectl", "terraform", "ansible", "aws", "gcloud", "az", "search-skills", "install-skill", "platform-tool", "rantaiclaw", "zeroclaw", "firefox-esr", "xdotool", "open-browser"]')
     output.push("forbidden_paths = []")
+    if (grpAutoApprove.length > 0) {
+      output.push(`auto_approve = [${grpAutoApprove.map(t => `"${t}"`).join(", ")}]`)
+    } else if (grpZcLevel === "supervised") {
+      output.push('auto_approve = []')
+    }
     output.push("")
 
     // Append channel configs from platform integrations (aggregate from all employees)
