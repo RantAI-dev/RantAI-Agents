@@ -90,7 +90,10 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
     employeeDescription: employee.description,
     avatar: employee.avatar,
     systemPrompt: assistant.systemPrompt,
-    toolNames: assistant.tools.map((t) => t.tool.displayName || t.tool.name),
+    toolNames: [
+      ...assistant.tools.map((t) => t.tool.displayName || t.tool.name),
+      ...employee.customTools.map((t) => t.name),
+    ],
     skillNames: assistant.skills.map((s) => s.skill.displayName || s.skill.name),
     workflowNames: assistant.assistantWorkflows.map((aw) => aw.workflow.name),
     schedules: deploymentConfig.schedules,

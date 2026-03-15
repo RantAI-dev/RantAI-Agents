@@ -126,6 +126,16 @@ async function processGatewayRequest(
   const buf = chatEventBuffers.get(messageId)
   if (!buf) return
 
+  // Create EmployeeRun for activity tracking
+  const startTime = Date.now()
+  const run = await prisma.employeeRun.create({
+    data: {
+      digitalEmployeeId: employeeId,
+      trigger: "manual",
+      status: "RUNNING",
+    },
+  })
+
   try {
     // Try streaming endpoint first, fall back to JSON webhook.
     // Retry on connection errors (gateway may still be booting).
@@ -348,9 +358,32 @@ async function processGatewayRequest(
     }
 
     pushEvent(messageId, "agent-done", {})
+
+    // Update run as completed
+    await prisma.employeeRun.update({
+      where: { id: run.id },
+      data: {
+        status: "COMPLETED",
+        completedAt: new Date(),
+        executionTimeMs: Date.now() - startTime,
+      },
+    })
+
     buf.done = true
   } catch (error) {
     console.error("Chat gateway call failed:", error)
+
+    // Mark run as failed
+    await prisma.employeeRun.update({
+      where: { id: run.id },
+      data: {
+        status: "FAILED",
+        completedAt: new Date(),
+        executionTimeMs: Date.now() - startTime,
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+    }).catch(() => {}) // Don't let run tracking failure mask the real error
+
     const errMsg = error instanceof Error ? error.message : "Unknown error"
     pushEvent(messageId, "error", { message: errMsg })
     buf.done = true
