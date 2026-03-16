@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { orchestrator } from "@/lib/digital-employee"
+import { DockerOrchestrator } from "@/lib/digital-employee/docker-orchestrator"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -23,19 +23,17 @@ export async function POST(req: Request, { params }: RouteParams) {
         id,
         ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
       },
+      select: { groupId: true },
     })
 
     if (!employee) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    const result = await orchestrator.deploy(id)
+    const orchestrator = new DockerOrchestrator()
+    const { containerId, port } = await orchestrator.startGroup(employee.groupId)
 
-    if (!result.success) {
-      return NextResponse.json({ error: result.error }, { status: 400 })
-    }
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, containerId, port })
   } catch (error) {
     console.error("Resume failed:", error)
     return NextResponse.json({ error: "Resume failed" }, { status: 500 })

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { orchestrator } from "@/lib/digital-employee"
-import type { ApprovalResponse } from "@/lib/digital-employee/types"
+
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -53,24 +53,58 @@ export async function POST(req: Request, { params }: RouteParams) {
       },
     })
 
-    // If the approval was for a paused run, resume it
+    // If the approval was for a paused run, resume it via the group's gateway
     if (approval.employeeRunId) {
       const run = await prisma.employeeRun.findUnique({
         where: { id: approval.employeeRunId },
+        include: { digitalEmployee: { select: { groupId: true } } },
       })
 
-      if (run && run.status === "PAUSED") {
-        const approvalResponse: ApprovalResponse = {
-          status,
-          response,
-          responseData,
-          respondedBy: session.user.id,
+      if (run && run.status === "PAUSED" && run.digitalEmployee?.groupId) {
+        const groupId = run.digitalEmployee.groupId
+        const containerUrl = await orchestrator.getGroupContainerUrl(groupId)
+        if (containerUrl) {
+          const group = await prisma.employeeGroup.findUnique({
+            where: { id: groupId },
+            select: { gatewayToken: true },
+          })
+          try {
+            await fetch(`${containerUrl}/resume`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                ...(group?.gatewayToken ? { Authorization: `Bearer ${group.gatewayToken}` } : {}),
+              },
+              body: JSON.stringify({
+                runId: run.id,
+                approval: { status, response, responseData, respondedBy: session.user.id },
+              }),
+              signal: AbortSignal.timeout(30_000),
+            })
+          } catch (error) {
+            console.error("Failed to resume run:", error)
+          }
         }
+      }
+    }
 
-        try {
-          await orchestrator.resumeRun(run.id, approvalResponse)
-        } catch (error) {
-          console.error("Failed to resume run:", error)
+    // C7: Handle message_send approvals
+    if (approval.requestType === "message_send" && approval.content) {
+      const messageData = approval.content as Record<string, unknown>
+      const messageId = messageData.messageId as string
+      if (messageId) {
+        if (approvalStatusMap[status] === "APPROVED") {
+          // Mark message as pending (ready for delivery)
+          await prisma.employeeMessage.update({
+            where: { id: messageId },
+            data: { status: "pending" },
+          })
+        } else {
+          // Mark message as cancelled
+          await prisma.employeeMessage.update({
+            where: { id: messageId },
+            data: { status: "cancelled" },
+          })
         }
       }
     }

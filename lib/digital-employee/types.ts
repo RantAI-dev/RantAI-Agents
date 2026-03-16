@@ -1,6 +1,6 @@
 // ─── Digital Employee Types ────────────────────────────────────────
 
-export type AutonomyLevel = "supervised" | "autonomous"
+export type AutonomyLevel = "L1" | "L2" | "L3" | "L4" | "supervised" | "autonomous"
 
 export interface EmployeeSchedule {
   id: string
@@ -89,6 +89,7 @@ export interface WorkspaceFileContext {
   skillNames: string[]
   workflowNames: string[]
   schedules: EmployeeSchedule[]
+  coworkers?: Array<{ name: string; description?: string | null; avatar?: string | null; status: string }>
 }
 
 export const WORKSPACE_FILES: WorkspaceFileDefinition[] = [
@@ -140,6 +141,20 @@ export const WORKSPACE_FILES: WorkspaceFileDefinition[] = [
     },
   },
   {
+    filename: "TEAM.md",
+    purpose: "Coworkers and communication guide",
+    readOnly: true,
+    defaultContent: (ctx) => {
+      if (!ctx.coworkers || ctx.coworkers.length === 0) {
+        return "# Team\n\n_No coworkers in this organization._\n"
+      }
+      const list = ctx.coworkers
+        .map((c) => `- **${c.name}** (${c.avatar || "🤖"}) — ${c.description || "Digital employee"}. Status: ${c.status}.`)
+        .join("\n")
+      return `# Team\n\n## Coworkers\n${list}\n\n## Communication\n- Use \`send_message\` to message a coworker\n- Use \`check_inbox\` to see replies\n- Use \`list_employees\` to discover available team members\n`
+    },
+  },
+  {
     filename: "BOOTSTRAP.md",
     purpose: "Session initialization context",
     defaultContent:
@@ -187,6 +202,7 @@ export interface EmployeePackage {
     description?: string | null
     avatar?: string | null
     autonomyLevel: AutonomyLevel
+    sandboxMode?: boolean
   }
   agent: {
     systemPrompt: string
@@ -216,4 +232,14 @@ export interface EmployeePackage {
     longTerm: string
     recentDailyNotes: Array<{ date: string; content: string }>
   }
+  channelIntegrations?: Array<{
+    channelId: string
+    credentials: Record<string, string>
+  }>
+  mcpIntegrations?: Array<{
+    serverId: string
+    command: string
+    args: string[]
+    env: Record<string, string>
+  }>
 }

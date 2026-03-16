@@ -347,6 +347,7 @@ function KnowledgePageContent() {
       <KnowledgeHeader
         selectedKB={selectedKB ?? null}
         documentCount={documents.length}
+        knowledgeBaseCount={knowledgeBases.length}
         onAddDocument={() => setUploadDialogOpen(true)}
         onEditKB={selectedKB ? handleEditKB : undefined}
         onDeleteKB={selectedKB ? () => setDeleteKBDialogOpen(true) : undefined}

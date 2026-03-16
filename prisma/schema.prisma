@@ -135,6 +135,11 @@ model Organization {
   marketplaceInstalls MarketplaceInstall[]
   installedSkills     InstalledSkill[]
   digitalEmployees    DigitalEmployee[]
+  employeeGroups      EmployeeGroup[]
+  employeeTasks       EmployeeTask[]
+  employeeMessages    EmployeeMessage[]
+  auditLogs           AuditLog[]
+  sharedTemplates     EmployeeTemplateShare[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -908,9 +913,6 @@ model DigitalEmployee {
   successfulRuns   Int             @default(0)
   failedRuns       Int             @default(0)
   totalTokensUsed  BigInt          @default(0)
-  containerId      String?         // Docker container ID when running
-  containerPort    Int?            // Mapped host port for RantaiClaw gateway
-  gatewayToken     String?         // Runtime JWT for gateway proxy
   organizationId   String
   organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy        String
@@ -923,10 +925,40 @@ model DigitalEmployee {
   installedSkills  EmployeeInstalledSkill[]
   memoryEntries    EmployeeMemory[]
   chatMessages     EmployeeChatMessage[]
+  integrations     EmployeeIntegration[]
+  trustEvents      EmployeeTrustEvent[]
+  trustScore       Float           @default(50.0)
+  webhooks         EmployeeWebhook[]
+  goals            EmployeeGoal[]
+  sandboxMode      Boolean         @default(false)
+  groupId          String
+  group            EmployeeGroup   @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  sentMessages     EmployeeMessage[] @relation("sentMessages")
+  receivedMessages EmployeeMessage[] @relation("receivedMessages")
 
   @@index([organizationId])
   @@index([status])
   @@index([assistantId])
+}
+
+model EmployeeGroup {
+  id             String           @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  containerId    String?
+  containerPort  Int?
+  noVncPort      Int?
+  gatewayToken   String?
+  isImplicit     Boolean          @default(false)
+  status         String           @default("IDLE")
+  members        DigitalEmployee[]
+  createdBy      String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([organizationId])
 }
 
 model EmployeeRun {
@@ -943,6 +975,9 @@ model EmployeeRun {
   promptTokens      Int             @default(0)
   completionTokens  Int             @default(0)
   executionTimeMs   Int?
+  errorClassification String?       // transient|permanent|ambiguous
+  retryCount          Int          @default(0)
+  parentRunId         String?
   startedAt         DateTime        @default(now())
   completedAt       DateTime?
 
@@ -1051,4 +1086,218 @@ model EmployeeChatMessage {
   createdAt         DateTime        @default(now())
 
   @@index([digitalEmployeeId, createdAt])
+}
+
+model EmployeeIntegration {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  integrationId     String
+  status            String          @default("disconnected") // disconnected|connected|error|expired
+  encryptedData     String?         @db.Text // AES-256-GCM
+  metadata          Json            @default("{}")
+  connectedAt       DateTime?
+  expiresAt         DateTime?
+  lastTestedAt      DateTime?
+  lastError         String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([digitalEmployeeId, integrationId])
+  @@index([digitalEmployeeId])
+}
+
+model EmployeeTrustEvent {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  eventType         String          // approval_accepted|approval_rejected|run_success|run_failure|promotion|demotion
+  weight            Float           @default(1.0)
+  metadata          Json?
+  createdAt         DateTime        @default(now())
+
+  @@index([digitalEmployeeId, createdAt])
+}
+
+model EmployeeWebhook {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  type              String          // webhook|email|watch
+  name              String
+  token             String          @unique @default(cuid())
+  config            Json            @default("{}")
+  filterRules       Json            @default("[]")
+  enabled           Boolean         @default(true)
+  lastTriggeredAt   DateTime?
+  triggerCount      Int             @default(0)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([digitalEmployeeId])
+  @@index([token])
+}
+
+model EmployeeGoal {
+  id                String          @id @default(cuid())
+  digitalEmployeeId String
+  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  name              String
+  type              String          // counter|threshold|boolean|percentage
+  target            Float
+  unit              String
+  period            String          // daily|weekly|monthly|total
+  currentValue      Float           @default(0)
+  source            String          @default("manual")
+  autoTrackConfig   Json?
+  status            String          @default("active")
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([digitalEmployeeId])
+}
+
+// ─── Phase C: Collaboration & Governance ──────────────────────────
+
+model EmployeeMessage {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fromEmployeeId   String
+  fromEmployee     DigitalEmployee  @relation("sentMessages", fields: [fromEmployeeId], references: [id], onDelete: Cascade)
+  toEmployeeId     String?
+  toEmployee       DigitalEmployee? @relation("receivedMessages", fields: [toEmployeeId], references: [id], onDelete: SetNull)
+  toGroup          String?          // tag group for broadcasts
+  type             String           // "message" | "task" | "handoff" | "broadcast"
+  subject          String
+  content          String           @db.Text
+  attachments      Json             @default("[]")
+  priority         String           @default("normal") // low|normal|high|urgent
+  status           String           @default("pending") // pending|delivered|in_progress|completed|failed|cancelled|pending_approval
+  requiresApproval Boolean          @default(false)
+  approvalStatus   String?          // pending|approved|rejected
+  responseContent  String?          @db.Text
+  responseData     Json?
+  respondedAt      DateTime?
+  parentMessageId  String?
+  parentMessage    EmployeeMessage? @relation("messageThread", fields: [parentMessageId], references: [id])
+  childMessages    EmployeeMessage[] @relation("messageThread")
+  runId            String?
+  metadata         Json             @default("{}")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([toEmployeeId, status])
+  @@index([fromEmployeeId])
+  @@index([organizationId, createdAt])
+}
+
+model AuditLog {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId      String?
+  userId          String?
+  action          String       // tool.execute|approval.respond|credential.access|message.send|employee.create
+  resource        String       // tool:gmail_send|employee:abc123|message:xyz
+  detail          Json         @default("{}")
+  ipAddress       String?
+  riskLevel       String       @default("low") // low|medium|high|critical
+  createdAt       DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([employeeId, createdAt])
+  @@index([action])
+  @@index([riskLevel, createdAt])
+}
+
+model EmployeeTemplateShare {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
+  category        String
+  templateData    Json         // full EmployeeTemplate serialized
+  version         Int          @default(1)
+  isPublic        Boolean      @default(false)
+  createdBy       String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([isPublic, category])
+}
+
+// ─── Task Engine Cache (source of truth = RantaiClaw containers) ───
+
+model EmployeeTask {
+  id                  String    @id  // UUID from RantaiClaw, NOT auto-generated
+  organizationId      String
+  title               String
+  description         String?   @db.Text
+  status              String    @default("TODO")
+  priority            String    @default("MEDIUM")
+  assigneeId          String?
+  groupId             String?
+  reviewerId          String?
+  humanReview         Boolean   @default(false)
+  reviewStatus        String?
+  reviewComment       String?   @db.Text
+  parentTaskId        String?
+  createdByEmployeeId String?
+  createdByUserId     String?
+  dueDate             DateTime?
+  completedAt         DateTime?
+  orderInStatus       Int       @default(0)
+  orderInParent       Int       @default(0)
+  metadata            Json      @default("{}")
+  sourceEmployeeId    String    // which container this task came from
+  sourceGroupId       String?   // if from a group container
+  isStale             Boolean   @default(false)
+  cachedAt            DateTime  @default(now())
+  createdAt           DateTime
+  updatedAt           DateTime
+
+  subtasks   EmployeeTask[]  @relation("TaskSubtasks")
+  parentTask EmployeeTask?   @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  comments   EmployeeTaskComment[]
+  events     EmployeeTaskEvent[]
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([assigneeId, status])
+  @@index([groupId])
+  @@index([parentTaskId])
+  @@index([sourceEmployeeId])
+}
+
+model EmployeeTaskComment {
+  id                String   @id  // UUID from RantaiClaw
+  taskId            String
+  content           String   @db.Text
+  authorType        String   @default("HUMAN")
+  authorEmployeeId  String?
+  authorUserId      String?
+  createdAt         DateTime
+
+  task EmployeeTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
+}
+
+model EmployeeTaskEvent {
+  id                String   @id  // UUID from RantaiClaw
+  taskId            String
+  eventType         String
+  actorType         String
+  actorEmployeeId   String?
+  actorUserId       String?
+  data              Json     @default("{}")
+  createdAt         DateTime
+
+  task EmployeeTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId, createdAt])
 }

@@ -73,7 +73,30 @@
       "Bash(gh api:*)",
       "WebFetch(domain:api.github.com)",
       "WebFetch(domain:reactscript.com)",
-      "Bash(npx jsrepo:*)"
+      "Bash(npx jsrepo:*)",
+      "Bash(git:*)",
+      "Bash(docker build:*)",
+      "Bash(rm:*)",
+      "Bash(wc -l /home/shiro/rantai/RantAI-Agents/app/api/dashboard/digital-employees/[id]/chat/route.ts)",
+      "Bash(docker ps --format \"table {{.ID}}\\\\t{{.Names}}\\\\t{{.Status}}\\\\t{{.Image}}\")",
+      "Bash(docker ps --format \"{{.ID}} {{.Names}}\")",
+      "Bash(docker ps --format \"{{.ID}} {{.Names}} {{.Image}}\")",
+      "Bash(npx prisma:*)",
+      "Bash(docker exec -i rantai-agents-postgres psql -U postgres -d rantai_agents)",
+      "Bash(docker exec rantai-agents-postgres env)",
+      "Bash(docker exec -i rantai-agents-postgres psql -U horizonlife -d horizonlife_insurance)",
+      "Bash(docker stop 2f63481e3eea a35d549ee628 a3539d5548f5 897f508854ec 8c8472768b44)",
+      "Bash(docker rm 2f63481e3eea a35d549ee628 a3539d5548f5 897f508854ec 8c8472768b44)",
+      "Bash(wc -l packages/rantaiclaw/src/channels/*.rs)",
+      "Bash(mkdir -p /home/shiro/rantai/RantAI-Agents/app/api/dashboard/digital-employees/[id]/workspace/files/read)",
+      "Bash(mkdir -p /home/shiro/rantai/RantAI-Agents/app/api/dashboard/digital-employees/[id]/workspace/files/write)",
+      "Bash(mkdir -p /home/shiro/rantai/RantAI-Agents/app/api/dashboard/digital-employees/[id]/workspace/exec)",
+      "Bash(cargo check)",
+      "Bash(sed -i 's/import { ArrowUp } from \"\"lucide-react\"\"/import { SendHorizontal } from \"\"lucide-react\"\"/' /home/shiro/rantai/RantAI-Agents/app/dashboard/_components/chat/chat-home.tsx /home/shiro/rantai/RantAI-Agents/app/dashboard/_components/chat/chat-workspace.tsx)",
+      "Bash(sed -i 's/<ArrowUp className=\"\"h-4 w-4\"\" \\\\/>/<SendHorizontal className=\"\"h-4 w-4\"\" \\\\/>/g' /home/shiro/rantai/RantAI-Agents/app/dashboard/_components/chat/chat-home.tsx /home/shiro/rantai/RantAI-Agents/app/dashboard/_components/chat/chat-workspace.tsx)",
+      "Bash(cargo test -- show_to_user)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:bibek-poudel.medium.com)"
     ]
   }
 }

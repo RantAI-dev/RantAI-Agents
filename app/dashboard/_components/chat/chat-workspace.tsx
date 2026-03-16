@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
   ArrowLeft,
-  Send,
   Square,
   Bot,
   User,
@@ -24,6 +23,7 @@ import {
   Loader2,
   FileText,
 } from "@/lib/icons"
+import { SendHorizontal } from "lucide-react"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { cn } from "@/lib/utils"
@@ -1275,13 +1275,153 @@ export function ChatWorkspace({
         abortControllerRef.current = abortController
 
         const endpoint = apiEndpoint || "/api/chat"
+        const assistantMsgId = crypto.randomUUID()
+
+        // Replace the placeholder assistant message with the real one
+        chat.setMessages((prev) => {
+          const updated = [...prev]
+          const lastIdx = updated.length - 1
+          if (updated[lastIdx]?.role === "assistant" && updated[lastIdx]?.id.startsWith("pending-")) {
+            updated[lastIdx] = { id: assistantMsgId, role: "assistant", content: "" } as unknown as typeof updated[number]
+          }
+          return updated
+        })
+        setIsStreaming(true)
+
+        let assistantContent = ""
+        const toolCalls = new Map<string, {
+          toolCallId: string
+          toolName: string
+          state: string
+          args?: Record<string, unknown>
+          output?: unknown
+          errorText?: string
+        }>()
+
+        // isSSE tracks whether we're in SSE mode (for sources parsing below)
+        let isSSE = false
+
+        // ── Digital Employee polling mode ──
+        // POST returns immediately with messageId; we poll for events.
+        if (apiEndpoint) {
+          isSSE = true // polling mode has no sources
+          const postRes = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: abortController.signal,
+            body: JSON.stringify({ message: userInput }),
+          })
+
+          if (!postRes.ok) {
+            const errorText = await postRes.text()
+            console.error("API Error:", postRes.status, errorText)
+            throw new Error(`Failed to send message: ${postRes.status}`)
+          }
+
+          const { messageId } = await postRes.json()
+          let nextSeq = 0
+
+          // Poll for events until done
+          while (!abortController.signal.aborted) {
+            await new Promise((r) => setTimeout(r, 1000)) // poll every 1s
+
+            const pollRes = await fetch(
+              `${endpoint}?messageId=${messageId}&after=${nextSeq}`,
+              { signal: abortController.signal }
+            )
+            if (!pollRes.ok) break
+
+            const pollData = await pollRes.json()
+            const events = pollData.events as Array<{ seq: number; type: string; data: Record<string, unknown> }>
+            nextSeq = pollData.nextSeq
+
+            let receivedAgentDone = false
+            for (const evt of events) {
+              switch (evt.type) {
+                case "thinking":
+                case "thinking-done":
+                  break
+                case "text-delta":
+                  assistantContent += (evt.data.delta as string) || ""
+                  break
+                case "tool-input-start":
+                  toolCalls.set(evt.data.toolCallId as string, {
+                    toolCallId: evt.data.toolCallId as string,
+                    toolName: evt.data.toolName as string,
+                    state: "call",
+                  })
+                  break
+                case "tool-input-available":
+                  if (toolCalls.has(evt.data.toolCallId as string)) {
+                    const tc = toolCalls.get(evt.data.toolCallId as string)!
+                    tc.args = evt.data.input as Record<string, unknown>
+                    tc.state = "call"
+                  }
+                  break
+                case "tool-output-available": {
+                  const tc = toolCalls.get(evt.data.toolCallId as string)
+                  if (tc) {
+                    tc.output = evt.data.output
+                    tc.state = "result"
+                  }
+                  break
+                }
+                case "tool-output-error": {
+                  const tc = toolCalls.get(evt.data.toolCallId as string)
+                  if (tc) {
+                    tc.errorText = evt.data.errorText as string
+                    tc.state = "error"
+                  }
+                  break
+                }
+                case "error":
+                  assistantContent += `Error: ${evt.data.message}`
+                  break
+                case "agent-done":
+                  receivedAgentDone = true
+                  break
+              }
+            }
+
+            // Update message with current content + tool parts
+            const parts: Array<Record<string, unknown>> = []
+            for (const tc of toolCalls.values()) {
+              parts.push({
+                type: "tool-invocation",
+                toolCallId: tc.toolCallId,
+                toolName: tc.toolName,
+                state: tc.state,
+                args: tc.args,
+                output: tc.output,
+                errorText: tc.errorText,
+              })
+            }
+
+            const displayContent = assistantContent.replace(AGENT_HANDOFF_MARKER, "").trim()
+            chat.setMessages((prev) => {
+              const updated = [...prev]
+              const lastIdx = updated.length - 1
+              if (updated[lastIdx]?.role === "assistant") {
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  content: displayContent,
+                  ...(parts.length > 0 && { parts }),
+                } as unknown as typeof updated[number]
+              }
+              return updated
+            })
+
+            if (pollData.done || receivedAgentDone) break
+          }
+
+          // Skip SSE stream handling below — jump to post-stream finalization
+        } else {
+        // ── Standard SSE streaming mode (non-employee chat) ──
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           signal: abortController.signal,
-          body: apiEndpoint
-            ? JSON.stringify({ message: userInput })
-            : JSON.stringify({
+          body: JSON.stringify({
                 messages: normalizedMessages,
                 assistantId: assistant.id,
                 sessionId: apiSessionId,
@@ -1311,33 +1451,12 @@ export function ChatWorkspace({
         // Handle streaming response
         const reader = response.body?.getReader()
         const decoder = new TextDecoder()
-        let assistantContent = ""
-        const assistantMsgId = crypto.randomUUID()
 
         // Detect if response is SSE (UIMessageStream) vs plain text
-        const isSSE = response.headers.get("x-vercel-ai-ui-message-stream") === "v1"
-
-        // Replace the placeholder assistant message with the real one
-        chat.setMessages((prev) => {
-          const updated = [...prev]
-          const lastIdx = updated.length - 1
-          if (updated[lastIdx]?.role === "assistant" && updated[lastIdx]?.id.startsWith("pending-")) {
-            updated[lastIdx] = { id: assistantMsgId, role: "assistant", content: "" } as unknown as typeof updated[number]
-          }
-          return updated
-        })
-        setIsStreaming(true)
+        isSSE = response.headers.get("x-vercel-ai-ui-message-stream") === "v1"
 
         // SSE parsing state
         let sseBuffer = ""
-        const toolCalls = new Map<string, {
-          toolCallId: string
-          toolName: string
-          state: string
-          args?: Record<string, unknown>
-          output?: unknown
-          errorText?: string
-        }>()
 
         while (reader) {
           const { done, value } = await reader.read()
@@ -1360,6 +1479,12 @@ export function ChatWorkspace({
               try {
                 const part = JSON.parse(data)
                 switch (part.type) {
+                  case "thinking":
+                    // Thinking indicator is already shown via isLoading/TypingIndicator
+                    break
+                  case "thinking-done":
+                    // LLM finished thinking, tool calls or text will follow
+                    break
                   case "text-delta":
                     assistantContent += part.delta
                     break
@@ -1513,6 +1638,7 @@ export function ChatWorkspace({
             })
           }
         }
+        } // end else (standard SSE streaming mode)
 
         setIsStreaming(false)
 
@@ -2459,46 +2585,48 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     <ButtonLoadingIndicator />
                   )
                 ) : (
-                  <Send className="h-4 w-4" />
+                  <SendHorizontal className="h-4 w-4" />
                 )}
               </Button>
             </div>
 
-            {/* Toolbar inside container */}
-            <div className="px-2 pb-2">
-              <ChatInputToolbar
-                onFileSelect={(files) => setAttachedFiles(prev => [...prev, ...files])}
-                fileAttached={attachedFiles.length > 0}
-                webSearchEnabled={effectiveWebSearch}
-                onToggleWebSearch={() => setWebSearchOverride((prev) => !(prev ?? webSearchAvailable))}
-                codeInterpreterEnabled={effectiveCodeInterpreter}
-                onToggleCodeInterpreter={() => setCodeInterpreterOverride((prev) => !(prev ?? codeInterpreterAvailable))}
-                knowledgeBaseGroupIds={effectiveKBGroupIds}
-                onKBGroupsChange={setSelectedKBGroupIds}
-                kbGroups={kbGroups}
-                toolMode={toolMode}
-                onSetToolMode={setToolMode}
-                selectedToolNames={selectedToolNames}
-                onSetSelectedToolNames={setSelectedToolNames}
-                assistantTools={assistantTools}
-                skillMode={skillMode}
-                onSetSkillMode={setSkillMode}
-                selectedSkillIds={selectedSkillIds}
-                onSetSelectedSkillIds={setSelectedSkillIds}
-                assistantSkills={assistantSkills}
-                onImportGithub={() => {
-                  setGithubUrl("")
-                  setGithubDialogOpen(true)
-                }}
-                canvasMode={canvasMode}
-                onSetCanvasMode={setCanvasMode}
-                artifacts={artifacts}
-                activeArtifactId={activeArtifactId}
-                onOpenArtifact={openArtifact}
-                onCloseArtifact={closeArtifact}
-                disabled={isLoading}
-              />
-            </div>
+            {/* Toolbar inside container — hidden for employee chat (gateway manages its own tools) */}
+            {!apiEndpoint && (
+              <div className="px-2 pb-2">
+                <ChatInputToolbar
+                  onFileSelect={(files) => setAttachedFiles(prev => [...prev, ...files])}
+                  fileAttached={attachedFiles.length > 0}
+                  webSearchEnabled={effectiveWebSearch}
+                  onToggleWebSearch={() => setWebSearchOverride((prev) => !(prev ?? webSearchAvailable))}
+                  codeInterpreterEnabled={effectiveCodeInterpreter}
+                  onToggleCodeInterpreter={() => setCodeInterpreterOverride((prev) => !(prev ?? codeInterpreterAvailable))}
+                  knowledgeBaseGroupIds={effectiveKBGroupIds}
+                  onKBGroupsChange={setSelectedKBGroupIds}
+                  kbGroups={kbGroups}
+                  toolMode={toolMode}
+                  onSetToolMode={setToolMode}
+                  selectedToolNames={selectedToolNames}
+                  onSetSelectedToolNames={setSelectedToolNames}
+                  assistantTools={assistantTools}
+                  skillMode={skillMode}
+                  onSetSkillMode={setSkillMode}
+                  selectedSkillIds={selectedSkillIds}
+                  onSetSelectedSkillIds={setSelectedSkillIds}
+                  assistantSkills={assistantSkills}
+                  onImportGithub={() => {
+                    setGithubUrl("")
+                    setGithubDialogOpen(true)
+                  }}
+                  canvasMode={canvasMode}
+                  onSetCanvasMode={setCanvasMode}
+                  artifacts={artifacts}
+                  activeArtifactId={activeArtifactId}
+                  onOpenArtifact={openArtifact}
+                  onCloseArtifact={closeArtifact}
+                  disabled={isLoading}
+                />
+              </div>
+            )}
           </div>
 
           <p className="text-[10px] text-muted-foreground mt-2 text-center">

@@ -7,6 +7,8 @@ import type {
 } from "./types"
 import { WORKSPACE_FILES, DEFAULT_DEPLOYMENT_CONFIG } from "./types"
 import { getClawHubSkill } from "./clawhub"
+import { decryptCredential } from "@/lib/workflow/credentials"
+import { getMcpServerConfig, MCP_INTEGRATION_IDS } from "./mcp-mapping"
 
 export async function generateEmployeePackage(employeeId: string): Promise<EmployeePackage> {
   const employee = await prisma.digitalEmployee.findUnique({
@@ -51,16 +53,76 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
     orderBy: { updatedAt: "desc" },
   })
 
+  // Fetch coworkers for TEAM.md
+  const coworkers = await prisma.digitalEmployee.findMany({
+    where: {
+      organizationId: employee.organizationId,
+      id: { not: employeeId },
+      status: { in: ["ACTIVE", "PAUSED", "ONBOARDING"] },
+    },
+    select: { name: true, description: true, avatar: true, status: true },
+  })
+
+  // Fetch connected channel integrations (Telegram, WhatsApp, etc.)
+  const CHANNEL_IDS = ["telegram", "whatsapp", "whatsapp-web"]
+  const channelRows = await prisma.employeeIntegration.findMany({
+    where: {
+      digitalEmployeeId: employeeId,
+      status: "connected",
+      integrationId: { in: CHANNEL_IDS },
+    },
+  })
+  const channelIntegrations: Array<{ channelId: string; credentials: Record<string, string> }> = []
+  for (const ci of channelRows) {
+    if (!ci.encryptedData) continue
+    try {
+      channelIntegrations.push({
+        channelId: ci.integrationId,
+        credentials: decryptCredential(ci.encryptedData) as Record<string, string>,
+      })
+    } catch (err) {
+      console.error(`[PackageGenerator] Failed to decrypt ${ci.integrationId} credentials:`, err instanceof Error ? err.message : err)
+    }
+  }
+
+  // Fetch MCP-type integrations
+  const mcpRows = await prisma.employeeIntegration.findMany({
+    where: {
+      digitalEmployeeId: employeeId,
+      integrationId: { in: [...MCP_INTEGRATION_IDS] },
+      status: "connected",
+    },
+  })
+
+  const mcpIntegrations = mcpRows
+    .map((row) => {
+      if (!row.encryptedData) return null
+      try {
+        const creds = decryptCredential(row.encryptedData) as Record<string, string>
+        const config = getMcpServerConfig(row.integrationId, creds)
+        if (!config) return null
+        return { serverId: row.integrationId, ...config }
+      } catch (err) {
+        console.error(`[PackageGenerator] Failed to decrypt MCP ${row.integrationId} credentials:`, err instanceof Error ? err.message : err)
+        return null
+      }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+
   // Build workspace file context
   const ctx: WorkspaceFileContext = {
     employeeName: employee.name,
     employeeDescription: employee.description,
     avatar: employee.avatar,
     systemPrompt: assistant.systemPrompt,
-    toolNames: assistant.tools.map((t) => t.tool.displayName || t.tool.name),
+    toolNames: [
+      ...assistant.tools.map((t) => t.tool.displayName || t.tool.name),
+      ...employee.customTools.map((t) => t.name),
+    ],
     skillNames: assistant.skills.map((s) => s.skill.displayName || s.skill.name),
     workflowNames: assistant.assistantWorkflows.map((aw) => aw.workflow.name),
     schedules: deploymentConfig.schedules,
+    coworkers,
   }
 
   // Resolve workspace files: use DB files for user-editable ones,
@@ -107,6 +169,7 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
       description: employee.description,
       avatar: employee.avatar,
       autonomyLevel: employee.autonomyLevel as AutonomyLevel,
+      sandboxMode: employee.sandboxMode,
     },
     agent: {
       systemPrompt: assistant.systemPrompt,
@@ -183,5 +246,7 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
         content: m.content,
       })),
     },
+    channelIntegrations: channelIntegrations.length > 0 ? channelIntegrations : undefined,
+    mcpIntegrations: mcpIntegrations.length > 0 ? mcpIntegrations : undefined,
   }
 }

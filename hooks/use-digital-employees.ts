@@ -15,6 +15,7 @@ export interface DigitalEmployeeItem {
     emoji: string
     model: string
   }
+  group?: { id: string; name: string } | null
   autonomyLevel: string
   deploymentConfig: Record<string, unknown> | null
   totalRuns: number
@@ -24,6 +25,9 @@ export interface DigitalEmployeeItem {
   lastActiveAt: string | null
   createdAt: string
   updatedAt: string
+  latestRunStatus: string | null
+  latestOutputPreview: string | null
+  pendingApprovalCount: number
   _count: {
     runs: number
     approvals: number

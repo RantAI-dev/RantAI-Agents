@@ -7,6 +7,8 @@ import {
   DEFAULT_DEPLOYMENT_CONFIG,
   type WorkspaceFileContext,
 } from "@/lib/digital-employee/types"
+import { hasPermission } from "@/lib/digital-employee/rbac"
+import { logAudit, classifyActionRisk, AUDIT_ACTIONS } from "@/lib/digital-employee/audit"
 
 // GET /api/dashboard/digital-employees - List employees
 export async function GET(req: Request) {
@@ -24,10 +26,12 @@ export async function GET(req: Request) {
       },
       include: {
         assistant: { select: { id: true, name: true, emoji: true, model: true } },
+        group: { select: { id: true, name: true, status: true } },
+        runs: { take: 1, orderBy: { startedAt: "desc" }, select: { status: true, output: true } },
         _count: {
           select: {
             runs: true,
-            approvals: true,
+            approvals: { where: { status: "PENDING" } },
             files: true,
             customTools: true,
             installedSkills: true,
@@ -37,11 +41,24 @@ export async function GET(req: Request) {
       orderBy: { updatedAt: "desc" },
     })
 
-    // Serialize BigInt
-    const serialized = employees.map((e) => ({
-      ...e,
-      totalTokensUsed: e.totalTokensUsed.toString(),
-    }))
+    // Serialize BigInt + flatten latest run
+    const serialized = employees.map((e: typeof employees[number]) => {
+      const { runs: latestRuns, ...rest } = e
+      // Truncate output preview to avoid sending huge payloads
+      const rawOutput = latestRuns[0]?.output
+      let latestOutputPreview: string | null = null
+      if (rawOutput != null) {
+        const str = typeof rawOutput === "string" ? rawOutput : JSON.stringify(rawOutput)
+        latestOutputPreview = str.length > 120 ? str.slice(0, 120) + "..." : str
+      }
+      return {
+        ...rest,
+        totalTokensUsed: e.totalTokensUsed.toString(),
+        latestRunStatus: latestRuns[0]?.status ?? null,
+        latestOutputPreview,
+        pendingApprovalCount: e._count.approvals,
+      }
+    })
 
     return NextResponse.json(serialized)
   } catch (error) {
@@ -78,6 +95,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
 
+    if (!hasPermission(orgContext.membership.role, "employee.create")) {
+      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    }
+
     const body = await req.json()
     const { name, description, avatar, assistantId, autonomyLevel } = body
 
@@ -105,6 +126,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Assistant not found" }, { status: 404 })
     }
 
+    // Resolve or create team
+    let resolvedGroupId: string
+
+    if (body.groupId) {
+      // Validate team exists and belongs to org
+      const group = await prisma.employeeGroup.findFirst({
+        where: { id: body.groupId, organizationId: orgContext.organizationId },
+      })
+      if (!group) {
+        return NextResponse.json({ error: "Team not found" }, { status: 404 })
+      }
+      resolvedGroupId = group.id
+    } else {
+      // Auto-create implicit team
+      const implicitTeam = await prisma.employeeGroup.create({
+        data: {
+          name: body.name,
+          organizationId: orgContext.organizationId,
+          createdBy: session.user.id,
+          isImplicit: true,
+        },
+      })
+      resolvedGroupId = implicitTeam.id
+    }
+
     // Create employee
     const employee = await prisma.digitalEmployee.create({
       data: {
@@ -112,7 +158,9 @@ export async function POST(req: Request) {
         description: description || null,
         avatar: avatar || null,
         assistantId,
-        autonomyLevel: autonomyLevel || "supervised",
+        groupId: resolvedGroupId,
+        autonomyLevel: autonomyLevel || "L1",
+        sandboxMode: (autonomyLevel || "L1") === "L1",
         deploymentConfig: DEFAULT_DEPLOYMENT_CONFIG as object,
         organizationId: orgContext.organizationId,
         createdBy: session.user.id,
@@ -161,6 +209,15 @@ export async function POST(req: Request) {
       })
     })
     await Promise.all(fileCreates)
+
+    logAudit({
+      organizationId: orgContext.organizationId,
+      userId: session.user.id,
+      action: AUDIT_ACTIONS.EMPLOYEE_CREATE,
+      resource: `employee:${employee.id}`,
+      detail: { name: employee.name },
+      riskLevel: classifyActionRisk(AUDIT_ACTIONS.EMPLOYEE_CREATE),
+    }).catch(() => {})
 
     return NextResponse.json(
       { ...employee, totalTokensUsed: employee.totalTokensUsed.toString() },

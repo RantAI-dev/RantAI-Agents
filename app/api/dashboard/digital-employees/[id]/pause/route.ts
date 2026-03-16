@@ -23,13 +23,14 @@ export async function POST(req: Request, { params }: RouteParams) {
         id,
         ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
       },
+      select: { id: true, groupId: true },
     })
 
     if (!employee) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    await orchestrator.undeploy(id)
+    await orchestrator.stopGroup(employee.groupId)
 
     return NextResponse.json({ success: true })
   } catch (error) {

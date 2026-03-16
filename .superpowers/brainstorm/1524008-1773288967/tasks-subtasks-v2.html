@@ -1,0 +1,362 @@
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #111118;
+    --border: #1e1e2a;
+    --muted: #64748b;
+    --muted-dim: #475569;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --primary: #6366f1;
+    --primary-dim: rgba(99,102,241,0.1);
+    --emerald: #22c55e;
+    --emerald-dim: rgba(34,197,94,0.1);
+    --amber: #f59e0b;
+    --amber-dim: rgba(245,158,11,0.1);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.1);
+    --violet: #8b5cf6;
+    --violet-dim: rgba(139,92,246,0.1);
+    --red: #ef4444;
+    --red-dim: rgba(239,68,68,0.1);
+  }
+  body { background: var(--bg) !important; }
+
+  .page-header { padding: 24px 24px 0; border-bottom: 1px solid var(--border); }
+  .page-title { font-size: 24px; font-weight: 700; color: var(--text); letter-spacing: -0.025em; }
+  .page-subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .stats-row { display: flex; align-items: center; gap: 16px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .stats-row .dot { color: rgba(100,116,139,0.3); }
+  .stat-value { font-weight: 600; color: var(--text-dim); }
+  .top-tabs { display: flex; gap: 0; margin-top: 16px; }
+  .top-tab { padding: 10px 20px; font-size: 14px; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; }
+  .top-tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .top-tab .badge { margin-left: 6px; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 9999px; }
+
+  .toolbar { display: flex; align-items: center; gap: 10px; padding: 16px 24px; flex-wrap: wrap; }
+  .search-box { position: relative; flex: 1; min-width: 180px; max-width: 280px; }
+  .search-box input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px 7px 34px; font-size: 13px; color: var(--text); outline: none; }
+  .search-box .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 13px; }
+
+  .group-by { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 5px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+  .group-by .label { color: var(--muted-dim); }
+  .group-by .value { color: var(--text-dim); font-weight: 500; }
+
+  .filter-pills { display: flex; gap: 4px; }
+  .pill { padding: 5px 10px; font-size: 12px; border-radius: 6px; background: transparent; color: var(--muted); border: none; cursor: pointer; }
+  .pill.active { background: var(--card); color: var(--text); font-weight: 500; }
+  .pill .count { margin-left: 4px; color: var(--muted-dim); font-size: 11px; }
+
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .view-btn { padding: 6px 10px; font-size: 12px; background: transparent; color: var(--muted); border: none; cursor: pointer; }
+  .view-btn.active { background: var(--card); color: var(--primary); }
+
+  .btn-primary { background: var(--primary); color: #fff; border: none; padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+  /* Table */
+  .task-table { margin: 0 24px 24px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--card); }
+  table { width: 100%; border-collapse: collapse; }
+  thead tr { border-bottom: 1px solid var(--border); background: rgba(100,116,139,0.04); }
+  th { text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(100,116,139,0.04); }
+  td { padding: 10px 14px; font-size: 13px; color: var(--text); vertical-align: middle; }
+
+  /* Status group header */
+  .status-group td { background: rgba(100,116,139,0.03); padding: 8px 14px; }
+  .status-group-header { display: flex; align-items: center; gap: 8px; }
+  .sg-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .sg-label { font-size: 12px; font-weight: 600; color: var(--text); text-transform: uppercase; letter-spacing: 0.03em; }
+  .sg-count { font-size: 11px; color: var(--muted); background: rgba(100,116,139,0.1); padding: 1px 8px; border-radius: 9999px; }
+
+  /* Task row */
+  .task-name-cell { display: flex; align-items: center; gap: 8px; }
+  .subtask-toggle { width: 16px; height: 16px; border-radius: 3px; font-size: 9px; background: rgba(100,116,139,0.1); color: var(--muted); border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.15s; }
+  .subtask-toggle:hover { background: var(--primary-dim); color: var(--primary); }
+  .subtask-toggle.collapsed { transform: rotate(-90deg); }
+  .status-icon { font-size: 14px; flex-shrink: 0; }
+  .task-label { font-weight: 500; }
+  .subtask-chip { font-size: 10px; color: var(--muted); display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; }
+
+  /* Subtask row */
+  .subtask-row td { padding-top: 7px; padding-bottom: 7px; }
+  .subtask-indent { width: 36px; flex-shrink: 0; }
+  .subtask-name { font-size: 12px; color: var(--text-dim); }
+  .subtask-name.done { text-decoration: line-through; color: var(--muted); }
+
+  /* Assignee */
+  .assignee-cell { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+  .av { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+
+  /* Team tag */
+  .team-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; padding: 2px 8px; border-radius: 9999px; font-weight: 500; white-space: nowrap; }
+  .team-support { background: var(--primary-dim); color: var(--primary); }
+  .team-analytics { background: var(--violet-dim); color: var(--violet); }
+  .team-content { background: var(--amber-dim); color: var(--amber); }
+  .team-none { background: rgba(100,116,139,0.08); color: var(--muted-dim); font-style: italic; }
+
+  /* Priority */
+  .task-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+  .badge-high { background: var(--red-dim); color: var(--red); }
+  .badge-medium { background: var(--amber-dim); color: var(--amber); }
+  .badge-low { background: var(--blue-dim); color: var(--blue); }
+
+  .due-cell { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .due-cell.overdue { color: var(--red); font-weight: 500; }
+
+  .add-task-row td { padding: 6px 14px; }
+  .add-task-btn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-dim); cursor: pointer; }
+  .add-task-btn:hover { color: var(--primary); }
+
+  .review-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--violet-dim); color: var(--violet); font-weight: 500; white-space: nowrap; }
+
+  .dots { text-align: center; color: var(--muted); font-size: 14px; cursor: pointer; }
+</style>
+
+<!-- Page Header -->
+<div class="page-header">
+  <div><div class="page-title">Digital Employees</div><div class="page-subtitle">Autonomous AI workers powered by RantAI Claw</div></div>
+  <div class="stats-row">
+    <span>👥 <span class="stat-value">6</span> employees</span><span class="dot">·</span>
+    <span>🚀 <span class="stat-value">4</span> active</span><span class="dot">·</span>
+    <span>⏸ <span class="stat-value">2</span> inactive</span>
+  </div>
+  <div class="top-tabs">
+    <div class="top-tab">Employees</div>
+    <div class="top-tab">Teams</div>
+    <div class="top-tab active">Tasks <span class="badge">7</span></div>
+  </div>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <div class="search-box"><span class="icon">🔍</span><input placeholder="Search tasks..." /></div>
+  <div class="group-by"><span class="label">Group:</span><span class="value">Status</span> <span style="font-size:10px;color:var(--muted-dim);">▾</span></div>
+  <div class="filter-pills">
+    <button class="pill active">All<span class="count">12</span></button>
+    <button class="pill">My Tasks<span class="count">3</span></button>
+  </div>
+  <div class="view-toggle"><button class="view-btn">⊞ Board</button><button class="view-btn active">☰ List</button></div>
+  <button class="btn-primary">+ New Task</button>
+</div>
+
+<!-- Task Table -->
+<div class="task-table">
+<table>
+<thead><tr>
+  <th style="width:38%;">Name</th>
+  <th>Assignee</th>
+  <th>Team</th>
+  <th>Due date</th>
+  <th>Priority</th>
+  <th style="width:28px;"></th>
+</tr></thead>
+<tbody>
+
+<!-- ═══ STATUS GROUP: In Progress ═══ -->
+<tr class="status-group"><td colspan="6">
+  <div class="status-group-header">
+    <div class="sg-dot" style="background:var(--blue);"></div>
+    <span class="sg-label">In Progress</span>
+    <span class="sg-count">2</span>
+  </div>
+</td></tr>
+
+<!-- Task 1: with subtasks expanded -->
+<tr>
+  <td>
+    <div class="task-name-cell">
+      <button class="subtask-toggle">▼</button>
+      <span class="status-icon">🔵</span>
+      <span class="task-label">Monitor and respond to customer inquiries</span>
+      <span class="subtask-chip">🔗 3</span>
+    </div>
+  </td>
+  <td><div class="assignee-cell"><span class="av" style="background:var(--primary-dim);">🤖</span>Aria</div></td>
+  <td><span class="team-tag team-support">👥 Support</span></td>
+  <td><span class="due-cell">Ongoing</span></td>
+  <td><span class="task-badge badge-high">High</span></td>
+  <td class="dots">⋯</td>
+</tr>
+  <!-- Subtask 1.1 done -->
+  <tr class="subtask-row">
+    <td><div class="task-name-cell"><div class="subtask-indent"></div><span style="font-size:12px;">✅</span><span class="subtask-name done">Check #support channel for new messages</span></div></td>
+    <td><div class="assignee-cell" style="font-size:11px;color:var(--muted);"><span class="av" style="background:var(--primary-dim);font-size:10px;">🤖</span>Aria</div></td>
+    <td><span class="team-tag team-support" style="font-size:9px;">👥 Support</span></td>
+    <td><span class="due-cell" style="color:var(--emerald);font-size:11px;">Done</span></td>
+    <td></td><td></td>
+  </tr>
+  <!-- Subtask 1.2 done -->
+  <tr class="subtask-row">
+    <td><div class="task-name-cell"><div class="subtask-indent"></div><span style="font-size:12px;">✅</span><span class="subtask-name done">Categorize tickets by urgency</span></div></td>
+    <td><div class="assignee-cell" style="font-size:11px;color:var(--muted);"><span class="av" style="background:var(--primary-dim);font-size:10px;">🤖</span>Aria</div></td>
+    <td></td>
+    <td><span class="due-cell" style="color:var(--emerald);font-size:11px;">Done</span></td>
+    <td></td><td></td>
+  </tr>
+  <!-- Subtask 1.3 todo -->
+  <tr class="subtask-row">
+    <td><div class="task-name-cell"><div class="subtask-indent"></div><span style="font-size:12px;">⚪</span><span class="subtask-name">Draft response templates for FAQ items</span></div></td>
+    <td><div class="assignee-cell" style="font-size:11px;color:var(--muted);"><span class="av" style="background:var(--violet-dim);font-size:10px;">📊</span>Nova</div></td>
+    <td><span class="team-tag team-analytics" style="font-size:9px;">👥 Analytics</span></td>
+    <td><span class="due-cell" style="font-size:11px;">Mar 13</span></td>
+    <td></td><td></td>
+  </tr>
+
+<!-- Task 2: with subtasks collapsed -->
+<tr>
+  <td>
+    <div class="task-name-cell">
+      <button class="subtask-toggle collapsed">▼</button>
+      <span class="status-icon">🔵</span>
+      <span class="task-label">Analyze competitor pricing data</span>
+      <span class="subtask-chip">🔗 4</span>
+    </div>
+  </td>
+  <td><div class="assignee-cell"><span class="av" style="background:var(--violet-dim);">📊</span>Nova</div></td>
+  <td><span class="team-tag team-analytics">👥 Analytics</span></td>
+  <td><span class="due-cell">Mar 13</span></td>
+  <td><span class="task-badge badge-medium">Medium</span></td>
+  <td class="dots">⋯</td>
+</tr>
+
+<tr class="add-task-row"><td colspan="6"><div class="add-task-btn"><span>+</span> Add Task</div></td></tr>
+
+<!-- ═══ STATUS GROUP: In Review ═══ -->
+<tr class="status-group"><td colspan="6">
+  <div class="status-group-header">
+    <div class="sg-dot" style="background:var(--violet);"></div>
+    <span class="sg-label">In Review</span>
+    <span class="sg-count">2</span>
+  </div>
+</td></tr>
+
+<tr>
+  <td>
+    <div class="task-name-cell">
+      <span style="width:16px;flex-shrink:0;"></span>
+      <span class="status-icon">🟣</span>
+      <span class="task-label">Compile Q1 sales summary with visualizations</span>
+      <span class="review-tag">👁 Human review</span>
+    </div>
+  </td>
+  <td><div class="assignee-cell"><span class="av" style="background:var(--violet-dim);">📊</span>Nova</div></td>
+  <td><span class="team-tag team-analytics">👥 Analytics</span></td>
+  <td><span class="due-cell" style="color:var(--violet);">Awaiting</span></td>
+  <td><span class="task-badge badge-high">High</span></td>
+  <td class="dots">⋯</td>
+</tr>
+
+<tr>
+  <td>
+    <div class="task-name-cell">
+      <span style="width:16px;flex-shrink:0;"></span>
+      <span class="status-icon">🟣</span>
+      <span class="task-label">Write onboarding email sequence</span>
+      <span class="review-tag">🤖 Aria reviewing</span>
+    </div>
+  </td>
+  <td><div class="assignee-cell"><span class="av" style="background:var(--amber-dim);">✍️</span>Rex</div></td>
+  <td><span class="team-tag team-content">👥 Content</span></td>
+  <td><span class="due-cell" style="color:var(--violet);">Awaiting</span></td>
+  <td><span class="task-badge badge-medium">Medium</span></td>
+  <td class="dots">⋯</td>
+</tr>
+
+<tr class="add-task-row"><td colspan="6"><div class="add-task-btn"><span>+</span> Add Task</div></td></tr>
+
+<!-- ═══ STATUS GROUP: To Do ═══ -->
+<tr class="status-group"><td colspan="6">
+  <div class="status-group-header">
+    <div class="sg-dot" style="background:var(--muted);"></div>
+    <span class="sg-label">To Do</span>
+    <span class="sg-count">3</span>
+  </div>
+</td></tr>
+
+<tr>
+  <td>
+    <div class="task-name-cell">
+      <span style="width:16px;flex-shrink:0;"></span>
+      <span class="status-icon">⚪</span>
+      <span class="task-label">Generate weekly engagement report</span>
+    </div>
+  </td>
+  <td><div class="assignee-cell"><span class="av" style="background:var(--violet-dim);">📊</span>Nova</div></td>
+  <td><span class="team-tag team-analytics">👥 Analytics</span></td>
+  <td><span class="due-cell overdue">Due today</span></td>
+  <td><span class="task-badge badge-high">High</span></td>
+  <td class="dots">⋯</td>
+</tr>
+
+<tr>
+  <td>
+    <div class="task-name-cell">
+      <span style="width:16px;flex-shrink:0;"></span>
+      <span class="status-icon">⚪</span>
+      <span class="task-label">Draft social media posts for product launch</span>
+    </div>
+  </td>
+  <td><div class="assignee-cell"><span class="av" style="background:var(--amber-dim);">✍️</span>Rex</div></td>
+  <td><span class="team-tag team-content">👥 Content</span></td>
+  <td><span class="due-cell">Mar 14</span></td>
+  <td><span class="task-badge badge-medium">Medium</span></td>
+  <td class="dots">⋯</td>
+</tr>
+
+<tr>
+  <td>
+    <div class="task-name-cell">
+      <span style="width:16px;flex-shrink:0;"></span>
+      <span class="status-icon">⚪</span>
+      <span class="task-label">Categorize unresolved support tickets</span>
+    </div>
+  </td>
+  <td>
+    <div class="assignee-cell" style="color:var(--muted-dim);font-style:italic;">
+      <span class="av" style="background:rgba(100,116,139,0.08);font-size:10px;">—</span>Unassigned
+    </div>
+  </td>
+  <td><span class="team-tag team-none">No team</span></td>
+  <td><span class="due-cell">Mar 15</span></td>
+  <td><span class="task-badge badge-low">Low</span></td>
+  <td class="dots">⋯</td>
+</tr>
+
+<tr class="add-task-row"><td colspan="6"><div class="add-task-btn"><span>+</span> Add Task</div></td></tr>
+
+<!-- ═══ STATUS GROUP: Done ═══ -->
+<tr class="status-group"><td colspan="6">
+  <div class="status-group-header">
+    <div class="sg-dot" style="background:var(--emerald);"></div>
+    <span class="sg-label">Done</span>
+    <span class="sg-count">5</span>
+  </div>
+</td></tr>
+
+<tr style="opacity:0.5;">
+  <td><div class="task-name-cell"><span style="width:16px;"></span><span style="font-size:12px;">✅</span><span class="task-label" style="text-decoration:line-through;color:var(--muted);font-weight:400;">Respond to customer feedback emails</span></div></td>
+  <td><div class="assignee-cell" style="color:var(--muted);"><span class="av" style="background:var(--primary-dim);">🤖</span>Aria</div></td>
+  <td><span class="team-tag team-support" style="opacity:0.7;">👥 Support</span></td>
+  <td><span class="due-cell" style="color:var(--emerald);">2h ago</span></td>
+  <td><span class="task-badge badge-medium">Medium</span></td>
+  <td></td>
+</tr>
+
+<tr style="opacity:0.5;">
+  <td><div class="task-name-cell"><span style="width:16px;"></span><span style="font-size:12px;">✅</span><span class="task-label" style="text-decoration:line-through;color:var(--muted);font-weight:400;">Generate monthly newsletter draft</span></div></td>
+  <td><div class="assignee-cell" style="color:var(--muted);"><span class="av" style="background:var(--amber-dim);">✍️</span>Rex</div></td>
+  <td><span class="team-tag team-content" style="opacity:0.7;">👥 Content</span></td>
+  <td><span class="due-cell">Yesterday</span></td>
+  <td><span class="task-badge badge-medium">Medium</span></td>
+  <td></td>
+</tr>
+
+<tr style="opacity:0.4;">
+  <td colspan="6" style="text-align:center;font-size:11px;color:var(--muted-dim);padding:8px;">+ 3 more completed</td>
+</tr>
+
+</tbody>
+</table>
+</div>

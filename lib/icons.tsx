@@ -151,12 +151,43 @@ function createIcon(iconData: IconData, displayName: string): IconComponent {
   return Icon
 }
 
+// ─── MDI Factory ────────────────────────────────────────────────────
+import MdiIcon from "@mdi/react"
+import { mdiRobotExcited } from "@mdi/js"
+
+/**
+ * Converts an MDI path into a Lucide-compatible React component.
+ */
+function createMdiIcon(path: string, displayName: string): IconComponent {
+  const Icon: IconComponent = ({ className, size, style }) => {
+    let resolvedSize: number = typeof size === "number" ? size : 20
+    if (!size && className) {
+      const match = className.match(/(?:^|\s)(?:h|w)-(\[([^\]]+)\]|(\d+(?:\.\d+)?))/)
+      if (match) {
+        const num = match[3]
+        if (num) resolvedSize = parseFloat(num) * 4
+      }
+    }
+    return (
+      <MdiIcon
+        path={path}
+        size={`${resolvedSize}px`}
+        className={className}
+        color={style?.color ?? "currentColor"}
+        style={style}
+      />
+    )
+  }
+  Icon.displayName = displayName
+  return Icon
+}
+
 // ─── Exported Icon Components ────────────────────────────────────────
 // Named to match Lucide conventions used throughout the project
 
 // Navigation
 export const MessageSquare = createIcon(ChatBubble2Solid, "MessageSquare")
-export const Blocks = createIcon(BricksSolid, "Blocks")
+export const Blocks = createMdiIcon(mdiRobotExcited, "Blocks")
 export const GitBranch = createIcon(Route1Solid, "GitBranch")
 export const Headphones = createIcon(Headphone1Solid, "Headphones")
 export const BookOpen = createIcon(Book1Solid, "BookOpen")
@@ -224,7 +255,7 @@ export const Calculator = createIcon(Calculator1Solid, "Calculator")
 
 // Aliases for specific Lucide names used in the codebase
 export const Sparkles = createIcon(Bolt2Solid, "Sparkles")
-export const Bot = createIcon(BricksSolid, "Bot")
+export const Bot = createMdiIcon(mdiRobotExcited, "Bot")
 export const Workflow = createIcon(Route1Solid, "Workflow")
 export const ToggleLeft = createIcon(Gear1Solid, "ToggleLeft")
 export const Brain = createIcon(BoxArchive1Solid, "Brain")

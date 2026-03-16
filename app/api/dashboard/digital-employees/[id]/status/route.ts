@@ -23,15 +23,21 @@ export async function GET(req: Request, { params }: RouteParams) {
         id,
         ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
       },
+      select: { id: true, status: true, groupId: true },
     })
 
     if (!employee) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    const status = await orchestrator.getStatus(id)
+    const containerUrl = await orchestrator.getGroupContainerUrl(employee.groupId)
 
-    return NextResponse.json(status)
+    return NextResponse.json({
+      employeeId: id,
+      status: employee.status,
+      containerRunning: !!containerUrl,
+      groupId: employee.groupId,
+    })
   } catch (error) {
     console.error("Status check failed:", error)
     return NextResponse.json({ error: "Status check failed" }, { status: 500 })

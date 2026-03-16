@@ -200,6 +200,7 @@ export function MarketplaceCard({
         >
           <DynamicIcon
             icon={item.icon}
+            serviceName={item.displayName}
             fallback={style.icon}
             className={cn("h-[18px] w-[18px]", style.iconColor)}
             emojiClassName="text-lg"
