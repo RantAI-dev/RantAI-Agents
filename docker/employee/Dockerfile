@@ -58,6 +58,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /root/.bun && \
     rm -rf /var/lib/apt/lists/*
 
+# Pre-cache official MCP server packages for fast startup
+RUN npx -y @modelcontextprotocol/server-github --help 2>/dev/null || true && \
+    npx -y @modelcontextprotocol/server-slack --help 2>/dev/null || true && \
+    npx -y @notionhq/notion-mcp-server --help 2>/dev/null || true && \
+    npx -y @modelcontextprotocol/server-linear --help 2>/dev/null || true
+
+# Custom MCP server wrappers (SMTP, Custom API)
+RUN mkdir -p /opt/mcp-servers/smtp /opt/mcp-servers/custom-api
+
 # Copy Agent Runner
 COPY docker/employee/agent-runner/ /opt/agent-runner/
 WORKDIR /opt/agent-runner
