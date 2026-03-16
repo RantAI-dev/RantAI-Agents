@@ -59,7 +59,7 @@ export async function POST(req: Request, { params }: RouteParams) {
         })
         if (ok) {
           // Push to running container (best-effort)
-          const pushResult = await pushIntegration(id, integrationId, creds)
+          const pushResult = await pushIntegration(id, integrationId, creds as Record<string, string>)
           if (pushResult.success) {
             console.log(`[Test] Config pushed to running container for ${integrationId}`)
           }
@@ -97,7 +97,7 @@ export async function POST(req: Request, { params }: RouteParams) {
         })
         if (ok) {
           // Push to running container (best-effort)
-          const pushResult = await pushIntegration(id, integrationId, creds)
+          const pushResult = await pushIntegration(id, integrationId, creds as Record<string, string>)
           if (pushResult.success) {
             console.log(`[Test] Config pushed to running container for ${integrationId}`)
           }
@@ -131,7 +131,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       })
       if (validFormat) {
         // Push to running container (best-effort)
-        const pushResult = await pushIntegration(id, integrationId, creds)
+        const pushResult = await pushIntegration(id, integrationId, creds as Record<string, string>)
         if (pushResult.success) {
           console.log(`[Test] Config pushed to running container for ${integrationId}`)
         }
@@ -166,7 +166,7 @@ export async function POST(req: Request, { params }: RouteParams) {
 
       if (ok) {
         // Push to running container (best-effort)
-        const pushResult = await pushIntegration(id, integrationId, creds)
+        const pushResult = await pushIntegration(id, integrationId, creds as Record<string, string>)
         if (pushResult.success) {
           console.log(`[Test] Config pushed to running container for ${integrationId}`)
         }
