@@ -236,4 +236,10 @@ export interface EmployeePackage {
     channelId: string
     credentials: Record<string, string>
   }>
+  mcpIntegrations?: Array<{
+    serverId: string
+    command: string
+    args: string[]
+    env: Record<string, string>
+  }>
 }

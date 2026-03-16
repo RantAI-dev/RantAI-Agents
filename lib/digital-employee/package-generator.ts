@@ -8,6 +8,7 @@ import type {
 import { WORKSPACE_FILES, DEFAULT_DEPLOYMENT_CONFIG } from "./types"
 import { getClawHubSkill } from "./clawhub"
 import { decryptCredential } from "@/lib/workflow/credentials"
+import { getMcpServerConfig, MCP_INTEGRATION_IDS } from "./mcp-mapping"
 
 export async function generateEmployeePackage(employeeId: string): Promise<EmployeePackage> {
   const employee = await prisma.digitalEmployee.findUnique({
@@ -83,6 +84,30 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
       console.error(`[PackageGenerator] Failed to decrypt ${ci.integrationId} credentials:`, err instanceof Error ? err.message : err)
     }
   }
+
+  // Fetch MCP-type integrations
+  const mcpRows = await prisma.employeeIntegration.findMany({
+    where: {
+      digitalEmployeeId: employeeId,
+      integrationId: { in: [...MCP_INTEGRATION_IDS] },
+      status: "connected",
+    },
+  })
+
+  const mcpIntegrations = mcpRows
+    .map((row) => {
+      if (!row.encryptedData) return null
+      try {
+        const creds = decryptCredential(row.encryptedData) as Record<string, string>
+        const config = getMcpServerConfig(row.integrationId, creds)
+        if (!config) return null
+        return { serverId: row.integrationId, ...config }
+      } catch (err) {
+        console.error(`[PackageGenerator] Failed to decrypt MCP ${row.integrationId} credentials:`, err instanceof Error ? err.message : err)
+        return null
+      }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
 
   // Build workspace file context
   const ctx: WorkspaceFileContext = {
@@ -222,5 +247,6 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
       })),
     },
     channelIntegrations: channelIntegrations.length > 0 ? channelIntegrations : undefined,
+    mcpIntegrations: mcpIntegrations.length > 0 ? mcpIntegrations : undefined,
   }
 }
