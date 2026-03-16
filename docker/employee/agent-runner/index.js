@@ -479,6 +479,22 @@ async function gatewayMode() {
       console.log(`[Gateway] Added ${pkg.channelIntegrations.length} channel config(s) to config.toml`)
     }
 
+    // ─── MCP Servers ───
+    if (pkg.mcpIntegrations && pkg.mcpIntegrations.length > 0) {
+      for (const mcp of pkg.mcpIntegrations) {
+        output.push(`\n[mcp_servers.${mcp.serverId}]`)
+        output.push(`command = "${mcp.command}"`)
+        output.push(`args = [${mcp.args.map(a => `"${a}"`).join(", ")}]`)
+        if (mcp.env && Object.keys(mcp.env).length > 0) {
+          output.push(`\n[mcp_servers.${mcp.serverId}.env]`)
+          for (const [key, value] of Object.entries(mcp.env)) {
+            output.push(`${key} = "${value}"`)
+          }
+        }
+      }
+      console.log(`[Gateway] Added ${pkg.mcpIntegrations.length} MCP server config(s)`)
+    }
+
     fs.writeFileSync(configPath, output.join("\n"), "utf-8")
     console.log(`[Gateway] Patched config.toml: provider=${provider}, model=${model}`)
   }
@@ -1216,6 +1232,23 @@ echo "$RESPONSE"
           output.push("")
         }
       }
+    }
+
+    // ─── MCP Servers (aggregate from all employees) ───
+    const allMcpIntegrations = employees.flatMap(e => e.mcpIntegrations || [])
+    if (allMcpIntegrations.length > 0) {
+      for (const mcp of allMcpIntegrations) {
+        output.push(`\n[mcp_servers.${mcp.serverId}]`)
+        output.push(`command = "${mcp.command}"`)
+        output.push(`args = [${mcp.args.map(a => `"${a}"`).join(", ")}]`)
+        if (mcp.env && Object.keys(mcp.env).length > 0) {
+          output.push(`\n[mcp_servers.${mcp.serverId}.env]`)
+          for (const [key, value] of Object.entries(mcp.env)) {
+            output.push(`${key} = "${value}"`)
+          }
+        }
+      }
+      console.log(`[GroupGateway] Added ${allMcpIntegrations.length} MCP server config(s)`)
     }
 
     // Append [gateway_agents.<employeeId>] sections for each employee
