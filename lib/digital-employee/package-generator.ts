@@ -8,7 +8,8 @@ import type {
 import { WORKSPACE_FILES, DEFAULT_DEPLOYMENT_CONFIG } from "./types"
 import { getClawHubSkill } from "./clawhub"
 import { decryptCredential } from "@/lib/workflow/credentials"
-import { getMcpServerConfig, MCP_INTEGRATION_IDS } from "./mcp-mapping"
+import { getMcpServerConfig, MCP_INTEGRATION_IDS, isMcpIntegration } from "./mcp-mapping"
+import { INTEGRATION_REGISTRY } from "./integrations"
 
 export async function generateEmployeePackage(employeeId: string): Promise<EmployeePackage> {
   const employee = await prisma.digitalEmployee.findUnique({
@@ -109,6 +110,25 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)
 
+  // Build connected integrations list for prompt context
+  const allConnectedRows = await prisma.employeeIntegration.findMany({
+    where: { digitalEmployeeId: employeeId, status: "connected" },
+    select: { integrationId: true },
+  })
+  const connectedIntegrations = allConnectedRows
+    .map((row) => {
+      const def = INTEGRATION_REGISTRY.find((d) => d.id === row.integrationId)
+      if (!def) return null
+      return {
+        id: def.id,
+        name: def.name,
+        description: def.description,
+        category: def.category,
+        isMcp: isMcpIntegration(def.id),
+      }
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+
   // Build workspace file context
   const ctx: WorkspaceFileContext = {
     employeeName: employee.name,
@@ -123,6 +143,7 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
     workflowNames: assistant.assistantWorkflows.map((aw) => aw.workflow.name),
     schedules: deploymentConfig.schedules,
     coworkers,
+    connectedIntegrations,
   }
 
   // Resolve workspace files: use DB files for user-editable ones,

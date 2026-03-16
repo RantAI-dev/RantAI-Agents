@@ -78,6 +78,15 @@ export interface WorkspaceFileDefinition {
   readOnly?: boolean
 }
 
+export interface ConnectedIntegration {
+  id: string
+  name: string
+  description: string
+  category: "communication" | "development" | "productivity" | "custom"
+  /** Whether this integration provides MCP tools (vs being a channel) */
+  isMcp: boolean
+}
+
 export interface WorkspaceFileContext {
   employeeName: string
   employeeDescription?: string | null
@@ -90,6 +99,8 @@ export interface WorkspaceFileContext {
   workflowNames: string[]
   schedules: EmployeeSchedule[]
   coworkers?: Array<{ name: string; description?: string | null; avatar?: string | null; status: string }>
+  /** All connected integrations (channels + MCP tool providers) */
+  connectedIntegrations: ConnectedIntegration[]
 }
 
 export const WORKSPACE_FILES: WorkspaceFileDefinition[] = [
@@ -120,16 +131,77 @@ export const WORKSPACE_FILES: WorkspaceFileDefinition[] = [
     filename: "AGENTS.md",
     purpose: "Instructions and capabilities guide",
     readOnly: true,
-    defaultContent: (ctx) =>
-      `# Agent Configuration\n\n## Capabilities\n- **Tools:** ${ctx.toolNames.length > 0 ? ctx.toolNames.join(", ") : "None"}\n- **Skills:** ${ctx.skillNames.length > 0 ? ctx.skillNames.join(", ") : "None"}\n- **Workflows:** ${ctx.workflowNames.length > 0 ? ctx.workflowNames.join(", ") : "None"}\n`,
+    defaultContent: (ctx) => {
+      const sections: string[] = ["# Agent Configuration\n"]
+
+      // Capabilities overview
+      sections.push("## Capabilities")
+      sections.push(`- **Tools:** ${ctx.toolNames.length > 0 ? ctx.toolNames.join(", ") : "None"}`)
+      sections.push(`- **Skills:** ${ctx.skillNames.length > 0 ? ctx.skillNames.join(", ") : "None"}`)
+      sections.push(`- **Workflows:** ${ctx.workflowNames.length > 0 ? ctx.workflowNames.join(", ") : "None"}`)
+
+      // Connected integrations
+      const integrations = ctx.connectedIntegrations || []
+      if (integrations.length > 0) {
+        sections.push("")
+        sections.push("## Connected Integrations")
+        sections.push("")
+
+        const channels = integrations.filter((i) => !i.isMcp)
+        const mcpTools = integrations.filter((i) => i.isMcp)
+
+        if (channels.length > 0) {
+          sections.push("### Channels (messaging)")
+          channels.forEach((ch) => sections.push(`- **${ch.name}** — ${ch.description}`))
+          sections.push("")
+        }
+
+        if (mcpTools.length > 0) {
+          sections.push("### Tool Integrations (MCP)")
+          sections.push("These integrations provide you with additional tools. The tools are automatically available — use them when relevant to the user's request.")
+          sections.push("")
+          mcpTools.forEach((mcp) => sections.push(`- **${mcp.name}** — ${mcp.description}`))
+          sections.push("")
+        }
+      }
+
+      sections.push("")
+      return sections.join("\n")
+    },
   },
   {
     filename: "TOOLS.md",
     purpose: "Available capabilities and restrictions",
     readOnly: true,
     defaultContent: (ctx) => {
-      if (ctx.toolNames.length === 0) return "# Tools\n\n_No tools configured._\n"
-      return `# Tools\n\n${ctx.toolNames.map((t) => `- **${t}**`).join("\n")}\n`
+      const sections: string[] = ["# Tools\n"]
+
+      // Platform tools (built-in + custom)
+      if (ctx.toolNames.length > 0) {
+        sections.push("## Platform Tools")
+        sections.push(ctx.toolNames.map((t) => `- **${t}**`).join("\n"))
+        sections.push("")
+      }
+
+      // MCP integration tools — tell the agent what's available
+      const mcpIntegrations = (ctx.connectedIntegrations || []).filter((i) => i.isMcp)
+      if (mcpIntegrations.length > 0) {
+        sections.push("## Integration Tools (via MCP)")
+        sections.push("The following integrations are connected and provide tools automatically.")
+        sections.push("You can call these tools directly — they are registered in your tool registry.")
+        sections.push("")
+        for (const mcp of mcpIntegrations) {
+          sections.push(`### ${mcp.name}`)
+          sections.push(`${mcp.description}. Use ${mcp.name} tools when the user asks about ${mcp.id}-related tasks.`)
+          sections.push("")
+        }
+      }
+
+      if (ctx.toolNames.length === 0 && mcpIntegrations.length === 0) {
+        sections.push("_No tools configured._")
+      }
+
+      return sections.join("\n")
     },
   },
   {
@@ -158,7 +230,7 @@ export const WORKSPACE_FILES: WorkspaceFileDefinition[] = [
     filename: "BOOTSTRAP.md",
     purpose: "Session initialization context",
     defaultContent:
-      "# Bootstrap\n\nOn each session start:\n1. Read SOUL.md for behavioral guidelines\n2. Read MEMORY.md for long-term context\n3. Read USER.md for supervisor context\n4. Check HEARTBEAT.md for scheduled tasks\n5. Review TOOLS.md for available capabilities\n",
+      "# Bootstrap\n\nOn each session start:\n1. Read SOUL.md for behavioral guidelines\n2. Read MEMORY.md for long-term context\n3. Read USER.md for supervisor context\n4. Check HEARTBEAT.md for scheduled tasks\n5. Review TOOLS.md for available capabilities\n6. Review AGENTS.md for connected integrations and how to use them\n",
   },
 ]
 
