@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
 import { decryptCredential } from "@/lib/workflow/credentials"
 import { getIntegrationDefinition } from "@/lib/digital-employee/integrations"
+import { pushIntegration } from "@/lib/digital-employee/config-push"
 
 interface RouteParams {
   params: Promise<{ id: string; integrationId: string }>
@@ -56,6 +57,13 @@ export async function POST(req: Request, { params }: RouteParams) {
             lastError: ok ? null : `Telegram API: ${data.description || `HTTP ${res.status}`}`,
           },
         })
+        if (ok) {
+          // Push to running container (best-effort)
+          const pushResult = await pushIntegration(id, integrationId, creds)
+          if (pushResult.success) {
+            console.log(`[Test] Config pushed to running container for ${integrationId}`)
+          }
+        }
         return NextResponse.json({
           success: ok,
           status: res.status,
@@ -87,6 +95,13 @@ export async function POST(req: Request, { params }: RouteParams) {
             lastError: ok ? null : `WhatsApp API: ${data.error?.message || `HTTP ${res.status}`}`,
           },
         })
+        if (ok) {
+          // Push to running container (best-effort)
+          const pushResult = await pushIntegration(id, integrationId, creds)
+          if (pushResult.success) {
+            console.log(`[Test] Config pushed to running container for ${integrationId}`)
+          }
+        }
         return NextResponse.json({
           success: ok,
           status: res.status,
@@ -114,6 +129,13 @@ export async function POST(req: Request, { params }: RouteParams) {
           lastError: validFormat ? null : "Invalid phone number format. Use country code + number without + (e.g. 15551234567)",
         },
       })
+      if (validFormat) {
+        // Push to running container (best-effort)
+        const pushResult = await pushIntegration(id, integrationId, creds)
+        if (pushResult.success) {
+          console.log(`[Test] Config pushed to running container for ${integrationId}`)
+        }
+      }
       return NextResponse.json({
         success: validFormat,
         message: validFormat
@@ -141,6 +163,14 @@ export async function POST(req: Request, { params }: RouteParams) {
           lastError: ok ? null : `Test failed: HTTP ${testRes.status}`,
         },
       })
+
+      if (ok) {
+        // Push to running container (best-effort)
+        const pushResult = await pushIntegration(id, integrationId, creds)
+        if (pushResult.success) {
+          console.log(`[Test] Config pushed to running container for ${integrationId}`)
+        }
+      }
 
       return NextResponse.json({ success: ok, status: testRes.status })
     } catch (testError) {
