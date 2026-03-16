@@ -1231,6 +1231,19 @@ echo "$RESPONSE"
           }
           output.push("")
         }
+        if (ch.channelId === "discord") {
+          output.push("[channels_config.discord]")
+          output.push(`bot_token = "${tomlEscape(ch.credentials.botToken || "")}"`)
+          if (ch.credentials.guildId) {
+            output.push(`guild_id = "${tomlEscape(ch.credentials.guildId)}"`)
+          }
+          if (ch.credentials.allowedUsers && ch.credentials.allowedUsers.trim()) {
+            const users = ch.credentials.allowedUsers.split(",").map(u => `"${tomlEscape(u.trim())}"`).join(", ")
+            output.push(`allowed_users = [${users}]`)
+          }
+          output.push(`mention_only = ${ch.credentials.mentionOnly === "true" ? "true" : "false"}`)
+          output.push("")
+        }
       }
     }
 
