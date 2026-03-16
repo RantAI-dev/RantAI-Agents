@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
 import { encryptCredential } from "@/lib/workflow/credentials"
+import { pushIntegration, removeIntegration } from "@/lib/digital-employee/config-push"
 
 interface RouteParams {
   params: Promise<{ id: string; integrationId: string }>
@@ -32,6 +33,14 @@ export async function PUT(req: Request, { params }: RouteParams) {
       },
     })
 
+    // Push to running container (best-effort — fails silently if container not running)
+    if (credentials) {
+      const pushResult = await pushIntegration(id, integrationId, credentials)
+      if (pushResult.success) {
+        console.log(`[Config Push] ${integrationId} pushed to employee ${id}`)
+      }
+    }
+
     return NextResponse.json(integration)
   } catch (error) {
     console.error("Failed to update integration:", error)
@@ -54,6 +63,12 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     await prisma.employeeIntegration.delete({
       where: { digitalEmployeeId_integrationId: { digitalEmployeeId: id, integrationId } },
     })
+
+    // Push removal to running container (best-effort — fails silently if container not running)
+    const pushResult = await removeIntegration(id, integrationId)
+    if (pushResult.success) {
+      console.log(`[Config Push] ${integrationId} removed from employee ${id}`)
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {
