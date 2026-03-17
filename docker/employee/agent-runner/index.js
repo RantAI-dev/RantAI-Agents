@@ -443,17 +443,21 @@ async function gatewayMode() {
       for (const ch of pkg.channelIntegrations) {
         if (ch.channelId === "telegram") {
           const c = ch.credentials
-          const users = (c.allowedUsers || "*").split(",").map(u => u.trim()).filter(Boolean)
           output.push("[channels_config.telegram]")
           output.push(`bot_token = "${c.botToken}"`)
-          output.push(`allowed_users = [${users.map(u => `"${u}"`).join(", ")}]`)
+          if (c.allowedUsers && c.allowedUsers.trim() && c.allowedUsers.trim() !== "*") {
+            const users = c.allowedUsers.split(",").map(u => u.trim()).filter(Boolean)
+            output.push(`allowed_users = [${users.map(u => `"${u}"`).join(", ")}]`)
+          } else {
+            output.push(`allowed_users = ["*"]`)
+          }
           output.push(`mention_only = ${c.mentionOnly === "true"}`)
           output.push(`stream_mode = "partial"`)
           output.push("")
         }
         if (ch.channelId === "whatsapp") {
           const c = ch.credentials
-          const nums = (c.allowedNumbers || "").split(",").map(n => n.trim()).filter(Boolean)
+          const nums = (c.allowedNumbers || "").split(",").map(n => n.trim()).filter(Boolean).map(n => n === "*" || n.startsWith("+") ? n : `+${n}`)
           output.push("[channels_config.whatsapp]")
           output.push(`access_token = "${c.accessToken}"`)
           output.push(`phone_number_id = "${c.phoneNumberId}"`)
@@ -466,12 +470,36 @@ async function gatewayMode() {
         }
         if (ch.channelId === "whatsapp-web") {
           const c = ch.credentials
-          const nums = (c.allowedNumbers || "").split(",").map(n => n.trim()).filter(Boolean)
+          const nums = (c.allowedNumbers || "").split(",").map(n => n.trim()).filter(Boolean).map(n => n === "*" || n.startsWith("+") ? n : `+${n}`)
           output.push("[channels_config.whatsapp]")
           output.push(`session_path = "/root/.rantaiclaw/state/whatsapp-web/session.db"`)
           if (c.pairPhone) output.push(`pair_phone = "${c.pairPhone}"`)
           if (nums.length > 0) {
             output.push(`allowed_numbers = [${nums.map(n => `"${n}"`).join(", ")}]`)
+          }
+          output.push("")
+        }
+        if (ch.channelId === "discord") {
+          const c = ch.credentials
+          const users = (c.allowedUsers || "").split(",").map(u => u.trim()).filter(Boolean)
+          output.push("[channels_config.discord]")
+          output.push(`bot_token = "${c.botToken}"`)
+          if (c.guildId) output.push(`guild_id = "${c.guildId}"`)
+          if (users.length > 0) {
+            output.push(`allowed_users = [${users.map(u => `"${u}"`).join(", ")}]`)
+          }
+          output.push(`mention_only = ${c.mentionOnly === "true"}`)
+          output.push("")
+        }
+        if (ch.channelId === "slack") {
+          const c = ch.credentials
+          const users = (c.allowedUsers || "").split(",").map(u => u.trim()).filter(Boolean)
+          output.push("[channels_config.slack]")
+          output.push(`bot_token = "${c.botToken}"`)
+          if (c.appToken) output.push(`app_token = "${c.appToken}"`)
+          if (c.channelId) output.push(`channel_id = "${c.channelId}"`)
+          if (users.length > 0) {
+            output.push(`allowed_users = [${users.map(u => `"${u}"`).join(", ")}]`)
           }
           output.push("")
         }
@@ -1204,6 +1232,8 @@ echo "$RESPONSE"
           if (ch.credentials.allowedUsers && ch.credentials.allowedUsers.trim() && ch.credentials.allowedUsers.trim() !== "*") {
             const users = ch.credentials.allowedUsers.split(",").map(u => `"${tomlEscape(u.trim())}"`).join(", ")
             output.push(`allowed_users = [${users}]`)
+          } else {
+            output.push('allowed_users = ["*"]')
           }
           output.push(`mention_only = ${ch.credentials.mentionOnly === "true" ? "true" : "false"}`)
           output.push('stream_mode = "partial"')
@@ -1216,7 +1246,7 @@ echo "$RESPONSE"
           output.push(`verify_token = "${tomlEscape(ch.credentials.verifyToken || "")}"`)
           output.push(`app_secret = "${tomlEscape(ch.credentials.appSecret || "")}"`)
           if (ch.credentials.allowedNumbers && ch.credentials.allowedNumbers.trim()) {
-            const nums = ch.credentials.allowedNumbers.split(",").map(n => `"${tomlEscape(n.trim())}"`).join(", ")
+            const nums = ch.credentials.allowedNumbers.split(",").map(n => { const t = n.trim(); return t === "*" || t.startsWith("+") ? t : `+${t}` }).map(n => `"${tomlEscape(n)}"`).join(", ")
             output.push(`allowed_numbers = [${nums}]`)
           }
           output.push("")
@@ -1226,22 +1256,37 @@ echo "$RESPONSE"
           output.push('session_path = "/root/.rantaiclaw/state/whatsapp-web/session.db"')
           output.push(`pair_phone = "${tomlEscape(ch.credentials.pairPhone || "")}"`)
           if (ch.credentials.allowedNumbers && ch.credentials.allowedNumbers.trim()) {
-            const nums = ch.credentials.allowedNumbers.split(",").map(n => `"${tomlEscape(n.trim())}"`).join(", ")
+            const nums = ch.credentials.allowedNumbers.split(",").map(n => { const t = n.trim(); return t === "*" || t.startsWith("+") ? t : `+${t}` }).map(n => `"${tomlEscape(n)}"`).join(", ")
             output.push(`allowed_numbers = [${nums}]`)
           }
           output.push("")
         }
         if (ch.channelId === "discord") {
+          const c = ch.credentials
+          const users = (c.allowedUsers || "").split(",").map(u => u.trim()).filter(Boolean)
           output.push("[channels_config.discord]")
-          output.push(`bot_token = "${tomlEscape(ch.credentials.botToken || "")}"`)
-          if (ch.credentials.guildId) {
-            output.push(`guild_id = "${tomlEscape(ch.credentials.guildId)}"`)
+          output.push(`bot_token = "${tomlEscape(c.botToken || "")}"`)
+          if (c.guildId) output.push(`guild_id = "${tomlEscape(c.guildId)}"`)
+          // When no specific users are configured, allow all ("*")
+          // RantaiClaw treats empty/missing allowed_users as "deny all"
+          if (users.length > 0) {
+            output.push(`allowed_users = [${users.map(u => `"${tomlEscape(u)}"`).join(", ")}]`)
+          } else {
+            output.push('allowed_users = ["*"]')
           }
-          if (ch.credentials.allowedUsers && ch.credentials.allowedUsers.trim()) {
-            const users = ch.credentials.allowedUsers.split(",").map(u => `"${tomlEscape(u.trim())}"`).join(", ")
-            output.push(`allowed_users = [${users}]`)
+          output.push(`mention_only = ${c.mentionOnly === "true"}`)
+          output.push("")
+        }
+        if (ch.channelId === "slack") {
+          const c = ch.credentials
+          const users = (c.allowedUsers || "").split(",").map(u => u.trim()).filter(Boolean)
+          output.push("[channels_config.slack]")
+          output.push(`bot_token = "${tomlEscape(c.botToken || "")}"`)
+          if (c.appToken) output.push(`app_token = "${tomlEscape(c.appToken)}"`)
+          if (c.channelId) output.push(`channel_id = "${tomlEscape(c.channelId)}"`)
+          if (users.length > 0) {
+            output.push(`allowed_users = [${users.map(u => `"${tomlEscape(u)}"`).join(", ")}]`)
           }
-          output.push(`mention_only = ${ch.credentials.mentionOnly === "true" ? "true" : "false"}`)
           output.push("")
         }
       }
@@ -1289,8 +1334,7 @@ echo "$RESPONSE"
   }
 
   // 6. Spawn gateway (use daemon mode when channels are configured)
-  const allChannelIntegrations = [] // TODO: populated when channel integrations are implemented
-  const hasChannels = allChannelIntegrations.length > 0
+  const hasChannels = employees.some(e => e.channelIntegrations && e.channelIntegrations.length > 0)
   const runCmd = hasChannels ? "daemon" : "gateway"
   console.log(`[GroupGateway] Spawning ${CLAW_BIN} ${runCmd} on port 8080...`)
   const rantaiclaw = spawn(CLAW_BIN, [runCmd, "--port", "8080", "--host", "0.0.0.0"], {

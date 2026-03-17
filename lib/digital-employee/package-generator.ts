@@ -63,8 +63,8 @@ export async function generateEmployeePackage(employeeId: string): Promise<Emplo
     select: { name: true, description: true, avatar: true, status: true },
   })
 
-  // Fetch connected channel integrations (Telegram, WhatsApp, Discord, etc.)
-  const CHANNEL_IDS = ["telegram", "whatsapp", "whatsapp-web", "discord"]
+  // Fetch connected channel integrations (Telegram, WhatsApp, Discord, Slack, etc.)
+  const CHANNEL_IDS = ["telegram", "whatsapp", "whatsapp-web", "discord", "slack"]
   const channelRows = await prisma.employeeIntegration.findMany({
     where: {
       digitalEmployeeId: employeeId,
