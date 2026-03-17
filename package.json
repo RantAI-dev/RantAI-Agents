@@ -6,6 +6,10 @@
     "seed": "bun prisma/seed.ts"
   },
   "scripts": {
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:watch": "vitest watch",
     "build": "next build",
     "dev": "bun server.ts",
     "dev:next": "next dev",
@@ -152,6 +156,7 @@
     "zustand": "^5.0.10"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.3.0",
     "@libsql/win32-x64-msvc": "^0.5.22",
     "@tailwindcss/postcss": "^4.1.9",
     "@types/bcryptjs": "^3.0.0",
@@ -167,6 +172,7 @@
     "sharp": "^0.34.5",
     "tailwindcss": "^4.1.9",
     "tw-animate-css": "1.3.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.0"
   }
 }
