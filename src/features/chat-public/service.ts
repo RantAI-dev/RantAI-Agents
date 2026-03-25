@@ -17,7 +17,10 @@ import {
   CORRECTION_INSTRUCTION_WITH_TOOL,
   buildToolInstruction,
 } from "@/lib/prompts/instructions"
-import { resolveSkillsForAssistant } from "@/lib/skills/resolver"
+import {
+  resolveRequiredToolNamesForSkills,
+  resolveSkillsForAssistant,
+} from "@/lib/skills/resolver"
 import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow"
 import { extractAndSaveFacts, stripSources } from "@/lib/workflow/chatflow-memory"
 import {
@@ -222,6 +225,7 @@ export async function runChat(params: {
     let modelId: string = DEFAULT_MODEL_ID
     let assistantModelConfig: Record<string, unknown> | null = null
     let assistantGuardRails: Record<string, unknown> | null = null
+    let assistantOrganizationId: string | null = null
 
     if (assistantId) {
       // Look up assistant from database (all assistants including built-in are seeded there)
@@ -229,6 +233,7 @@ export async function runChat(params: {
         const dbAssistant = await findAssistantById(assistantId)
 
         if (dbAssistant) {
+          assistantOrganizationId = dbAssistant.organizationId
           systemPrompt = dbAssistant.systemPrompt
           // Respect explicit per-request KB override from chat toolbar.
           // If groups are explicitly selected, force KB on for this request.
@@ -552,9 +557,13 @@ export async function runChat(params: {
     // ===== SKILL RESOLUTION =====
     if (assistantId && body.enableSkills !== false) {
       try {
+        const selectedSkillIds = Array.isArray(body.enabledSkillIds)
+          ? body.enabledSkillIds
+          : undefined
         const skillPrompt = await resolveSkillsForAssistant(
           assistantId,
-          Array.isArray(body.enabledSkillIds) ? body.enabledSkillIds : undefined
+          selectedSkillIds,
+          session.user.id
         );
         if (skillPrompt) {
           systemPrompt += "\n\n" + skillPrompt;
@@ -651,26 +660,47 @@ export async function runChat(params: {
     debug("Using model:", modelId);
 
     // ===== TOOL RESOLUTION =====
+    const selectedSkillIds =
+      body.enableSkills !== false && Array.isArray(body.enabledSkillIds)
+        ? body.enabledSkillIds
+        : []
+    const skillRequiredToolNames =
+      selectedSkillIds.length > 0
+        ? await resolveRequiredToolNamesForSkills(
+            selectedSkillIds,
+            body.organizationId ?? assistantOrganizationId,
+            session.user.id
+          ).catch(() => [])
+        : []
+    const selectedToolNames = Array.isArray(body.enabledToolNames)
+      ? body.enabledToolNames
+      : []
+    const effectiveSelectedToolNames = Array.from(
+      new Set([...selectedToolNames, ...skillRequiredToolNames])
+    )
+    const shouldForceToolsForSkills =
+      selectedSkillIds.length > 0 && skillRequiredToolNames.length > 0
+
     // Resolve assistant-configured tools (builtin, custom, MCP)
     const { tools: resolvedTools, toolNames } = assistantId
       ? await resolveToolsForAssistant(assistantId, modelId, {
         userId: session?.user?.id,
         assistantId,
         sessionId: body.sessionId || undefined,
-        organizationId: body.organizationId || undefined,
+        organizationId: body.organizationId || assistantOrganizationId || undefined,
       })
       : { tools: {}, toolNames: [] as string[] };
 
     // ===== TOOLBAR OVERRIDES =====
     // Honor per-message enableTools toggle — strip all assistant tools when disabled
-    if (body.enableTools === false) {
+    if (body.enableTools === false && !shouldForceToolsForSkills) {
       for (const key of Object.keys(resolvedTools)) {
         delete resolvedTools[key];
       }
       toolNames.length = 0;
       debug("All tools disabled by user toggle");
-    } else if (Array.isArray(body.enabledToolNames) && body.enabledToolNames.length > 0) {
-      const missingToolNames = body.enabledToolNames.filter(
+    } else if (effectiveSelectedToolNames.length > 0) {
+      const missingToolNames = effectiveSelectedToolNames.filter(
         (name) => !Object.prototype.hasOwnProperty.call(resolvedTools, name)
       )
       if (missingToolNames.length > 0) {
@@ -682,7 +712,7 @@ export async function runChat(params: {
             userId: session?.user?.id,
             assistantId: assistantId ?? undefined,
             sessionId: body.sessionId || undefined,
-            organizationId: body.organizationId || undefined,
+            organizationId: body.organizationId || assistantOrganizationId || undefined,
           }
         )
         Object.assign(resolvedTools, onDemand.tools)
@@ -693,9 +723,18 @@ export async function runChat(params: {
         }
       }
 
+      const unresolvedToolNames = effectiveSelectedToolNames.filter(
+        (name) => !Object.prototype.hasOwnProperty.call(resolvedTools, name)
+      )
+      if (unresolvedToolNames.length > 0) {
+        console.warn(
+          `[Chat API] Missing selected tools for assistant ${assistantId ?? "none"}: ${unresolvedToolNames.join(", ")}`
+        )
+      }
+
       // Select mode: only keep tools whose names are in the allowlist
       for (const key of Object.keys(resolvedTools)) {
-        if (!body.enabledToolNames.includes(key)) {
+        if (!effectiveSelectedToolNames.includes(key)) {
           delete resolvedTools[key];
         }
       }

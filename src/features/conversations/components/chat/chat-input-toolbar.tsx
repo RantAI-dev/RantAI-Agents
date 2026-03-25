@@ -1,6 +1,6 @@
 "use client"
 
-import { memo, useRef, useState } from "react"
+import { memo, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -55,6 +55,7 @@ export type ToolMode = "auto" | "off" | "select"
 export type SkillMode = "auto" | "off" | "select"
 
 export interface AssistantToolInfo {
+  id?: string
   name: string
   displayName: string
   description: string
@@ -67,6 +68,7 @@ export interface AssistantSkillInfo {
   displayName: string
   description: string
   icon?: string | null
+  autoToolNames?: string[]
 }
 
 export interface KBGroup {
@@ -210,6 +212,10 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
 
   const toolsActive = toolMode !== "off"
   const skillsActive = skillMode !== "off"
+  const validToolNames = useMemo(
+    () => new Set(assistantTools.map((tool) => tool.name)),
+    [assistantTools]
+  )
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -239,7 +245,64 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
       : selectedSkillIds.filter((id) => id !== skillId)
     onSetSelectedSkillIds(next)
     if (skillMode !== "select") onSetSkillMode("select")
+
+    if (!checked) return
+
+    const skill = assistantSkills.find((s) => s.id === skillId)
+    const requiredToolNames = skill?.autoToolNames ?? []
+    if (requiredToolNames.length === 0) return
+
+    const validToolNames = new Set(assistantTools.map((tool) => tool.name))
+    const autoToolNames = requiredToolNames.filter((toolName) => validToolNames.has(toolName))
+    if (autoToolNames.length === 0) return
+
+    const mergedToolNames = Array.from(new Set([...selectedToolNames, ...autoToolNames]))
+    onSetSelectedToolNames(mergedToolNames)
+    if (toolMode !== "select") onSetToolMode("select")
   }
+
+  useEffect(() => {
+    const activeSkillIds =
+      skillMode === "select"
+        ? selectedSkillIds
+        : skillMode === "auto"
+          ? defaultSkillIds
+          : []
+    if (activeSkillIds.length === 0) return
+
+    const autoToolNames = new Set<string>()
+    for (const skillId of activeSkillIds) {
+      const skill = assistantSkills.find((item) => item.id === skillId)
+      if (!skill?.autoToolNames || skill.autoToolNames.length === 0) continue
+      for (const toolName of skill.autoToolNames) {
+        if (validToolNames.has(toolName)) {
+          autoToolNames.add(toolName)
+        }
+      }
+    }
+    if (autoToolNames.size === 0) return
+
+    const mergedToolNames = Array.from(new Set([...selectedToolNames, ...autoToolNames]))
+    const changed =
+      mergedToolNames.length !== selectedToolNames.length ||
+      mergedToolNames.some((name, idx) => name !== selectedToolNames[idx])
+    if (changed) {
+      onSetSelectedToolNames(mergedToolNames)
+    }
+    if (toolMode !== "select") {
+      onSetToolMode("select")
+    }
+  }, [
+    skillMode,
+    selectedSkillIds,
+    defaultSkillIds,
+    assistantSkills,
+    validToolNames,
+    selectedToolNames,
+    onSetSelectedToolNames,
+    onSetToolMode,
+    toolMode,
+  ])
 
   // Badge count for tools
   const toolBadgeCount = toolMode === "auto" ? defaultToolNames.length : toolMode === "select" ? selectedToolNames.length : 0

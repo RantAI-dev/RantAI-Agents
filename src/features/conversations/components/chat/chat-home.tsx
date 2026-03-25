@@ -243,7 +243,12 @@ export function ChatHome({
     }
 
     if (initialToolbarData?.assistantId === activeAssistant.id) {
-      const defaultToolNames = initialToolbarData.assistantTools.map((tool) => tool.name)
+      const availableToolNames = new Set(
+        (initialToolbarData.availableTools || []).map((tool) => tool.name)
+      )
+      const defaultToolNames = initialToolbarData.assistantTools
+        .map((tool) => tool.name)
+        .filter((name) => availableToolNames.has(name))
       const defaultSkillIds = initialToolbarData.assistantSkills.map((skill) => skill.id)
       setAssistantTools(initialToolbarData.availableTools || initialToolbarData.assistantTools)
       setAssistantSkills(initialToolbarData.availableSkills || initialToolbarData.assistantSkills)
@@ -272,6 +277,13 @@ export function ChatHome({
   }, [activeOrganization?.id])
 
   const loadToolbarData = useCallback(async () => {
+    let visibleToolNames = new Set(assistantTools.map((tool) => tool.name))
+    let toolNameById = new Map(
+      assistantTools
+        .filter((tool) => typeof tool.id === "string" && tool.id.length > 0)
+        .map((tool) => [tool.id as string, tool.name])
+    )
+
     if (!catalogLoaded) {
       try {
         const [allToolsRes, allSkillsRes] = await Promise.all([
@@ -280,24 +292,92 @@ export function ChatHome({
         ])
 
         const allTools = allToolsRes.ok ? await allToolsRes.json() : []
+        visibleToolNames = new Set<string>()
+        toolNameById = new Map<string, string>()
         if (Array.isArray(allTools)) {
-          setAssistantTools(
-            allTools
-              .filter((t: { enabled?: boolean }) => t.enabled !== false)
-              .map((t: { name: string; displayName: string; description: string; category: string; icon?: string | null }) => ({
-                name: t.name,
-                displayName: t.displayName,
-                description: t.description,
-                category: t.category,
-                icon: t.icon,
-              }))
-          )
+          const visibleTools = allTools
+            .filter((t: { enabled?: boolean }) => t.enabled !== false)
+            .map((t: { id?: string; name: string; displayName: string; description: string; category: string; icon?: string | null }) => ({
+              id: t.id,
+              name: t.name,
+              displayName: t.displayName,
+              description: t.description,
+              category: t.category,
+              icon: t.icon,
+            }))
+          for (const tool of visibleTools) {
+            visibleToolNames.add(tool.name)
+            if (tool.id) {
+              toolNameById.set(tool.id, tool.name)
+            }
+          }
+          setAssistantTools(visibleTools)
         } else {
           setAssistantTools([])
         }
 
         const allSkills = allSkillsRes.ok ? await allSkillsRes.json() : []
-        setAssistantSkills(Array.isArray(allSkills) ? allSkills.filter((s: { enabled?: boolean }) => s.enabled !== false) : [])
+        setAssistantSkills(
+          Array.isArray(allSkills)
+            ? allSkills
+                .filter((s: { enabled?: boolean }) => s.enabled !== false)
+                .map((s: {
+                  id: string
+                  displayName: string
+                  description: string
+                  icon?: string | null
+                  relatedToolIds?: string[]
+                  metadata?: Record<string, unknown> | null
+                }) => {
+                  const autoToolNames = new Set<string>()
+                  const addToolName = (value: unknown) => {
+                    if (typeof value !== "string" || value.length === 0) return
+                    autoToolNames.add(toolNameById.get(value) ?? value)
+                  }
+                  if (Array.isArray(s.relatedToolIds)) {
+                    for (const toolId of s.relatedToolIds) {
+                      const toolName = toolNameById.get(toolId)
+                      if (toolName) autoToolNames.add(toolName)
+                    }
+                  }
+                  const metadata = s.metadata
+                  const attachedToolIds = Array.isArray(metadata?.toolIds) ? metadata.toolIds : []
+                  for (const toolId of attachedToolIds) addToolName(toolId)
+                  const requiredTools =
+                    metadata &&
+                    typeof metadata === "object" &&
+                    !Array.isArray(metadata) &&
+                    metadata.requirements &&
+                    typeof metadata.requirements === "object" &&
+                    !Array.isArray(metadata.requirements) &&
+                    Array.isArray((metadata.requirements as { tools?: unknown }).tools)
+                      ? (metadata.requirements as { tools: unknown[] }).tools
+                      : []
+                  for (const tool of requiredTools) {
+                    if (typeof tool === "object" && tool !== null && !Array.isArray(tool)) {
+                      const candidate = tool as Record<string, unknown>
+                      addToolName(candidate.name)
+                      addToolName(candidate.toolName)
+                      addToolName(candidate.id)
+                      continue
+                    }
+                    addToolName(tool)
+                  }
+                  const sharedTools = Array.isArray(metadata?.sharedTools) ? metadata.sharedTools : []
+                  for (const tool of sharedTools) addToolName(tool)
+                  const directTools = Array.isArray(metadata?.tools) ? metadata.tools : []
+                  for (const tool of directTools) addToolName(tool)
+
+                  return {
+                    id: s.id,
+                    displayName: s.displayName,
+                    description: s.description,
+                    icon: s.icon,
+                    autoToolNames: Array.from(autoToolNames),
+                  }
+                })
+            : []
+        )
         setCatalogLoaded(true)
       } catch {
         setAssistantTools([])
@@ -317,6 +397,7 @@ export function ChatHome({
           const defaults = boundTools
             .filter((t: { enabledForAssistant?: boolean }) => t.enabledForAssistant !== false)
             .map((t: { name: string }) => t.name)
+            .filter((name: string) => visibleToolNames.has(name))
           setAssistantDefaultToolNames(defaults)
           setSelectedToolNames(defaults)
           setToolMode(defaults.length > 0 ? "auto" : "off")

@@ -204,6 +204,18 @@ type PersistedArtifactSnapshot = {
   }
 }
 
+interface SessionToolbarStateSnapshot {
+  selectedKBGroupIds: string[] | null
+  toolMode: ToolMode
+  selectedToolNames: string[]
+  skillMode: SkillMode
+  selectedSkillIds: string[]
+  webSearchOverride: boolean | null
+  codeInterpreterOverride: boolean | null
+}
+
+const SESSION_TOOLBAR_STATE_STORAGE_PREFIX = "chat-toolbar-state:"
+
 // Message Actions component
 function MessageActions({
   onCopy,
@@ -967,6 +979,24 @@ export function ChatWorkspace({
 
   // Knowledge base groups for picker
   const [kbGroups, setKBGroups] = useState<KBGroup[]>(() => initialKnowledgeBaseGroups ?? [])
+  const [hasSessionToolbarState, setHasSessionToolbarState] = useState(false)
+  const hasInitialToolbarOverrides =
+    Boolean(initialSettings?.webSearchEnabled !== undefined) ||
+    Boolean(initialSettings?.codeInterpreterEnabled !== undefined) ||
+    Boolean(initialSettings?.knowledgeBaseGroupIds !== undefined) ||
+    Boolean(initialSettings?.toolMode !== undefined) ||
+    Boolean(initialSettings?.selectedToolNames !== undefined) ||
+    Boolean(initialSettings?.skillMode !== undefined) ||
+    Boolean(initialSettings?.selectedSkillIds !== undefined)
+  const preserveInitialToolbarSelectionRef = useRef(hasInitialToolbarOverrides)
+  const toolbarStateHydratedRef = useRef(false)
+  const hasPersistedToolbarState = useCallback(() => {
+    if (typeof window === "undefined") return false
+    const storageSessionKey = apiSessionId || session?.id
+    if (!storageSessionKey) return false
+    const key = `${SESSION_TOOLBAR_STATE_STORAGE_PREFIX}${storageSessionKey}`
+    return window.sessionStorage.getItem(key) !== null
+  }, [apiSessionId, session?.id])
 
   // Canvas mode — forces AI to create/update artifacts
   const [canvasMode, setCanvasMode] = useState<CanvasMode>(false)
@@ -1052,7 +1082,14 @@ export function ChatWorkspace({
   )
 
   const loadAssistantTools = useCallback(
-    async (assistantId: string, signal?: AbortSignal) => {
+    async (
+      assistantId: string,
+      options?: { signal?: AbortSignal; preserveSessionSelection?: boolean }
+    ) => {
+      const {
+        signal,
+        preserveSessionSelection = false,
+      } = options ?? {}
       try {
         const [boundRes, allRes] = await Promise.all([
           fetch(`/api/assistants/${assistantId}/tools`, { signal }),
@@ -1064,6 +1101,7 @@ export function ChatWorkspace({
           enabledForAssistant?: boolean
         }>
         const allTools = (allRes.ok ? await allRes.json() : []) as Array<{
+          id?: string
           name: string
           displayName: string
           description: string
@@ -1072,20 +1110,31 @@ export function ChatWorkspace({
           icon?: string | null
         }>
 
+        const visibleToolNames = new Set(
+          Array.isArray(allTools)
+            ? allTools
+                .filter((tool) => tool.enabled !== false)
+                .map((tool) => tool.name)
+            : []
+        )
         const defaultToolNames = Array.isArray(boundTools)
           ? boundTools
               .filter((tool) => tool.enabledForAssistant !== false)
               .map((tool) => tool.name)
+              .filter((name) => visibleToolNames.has(name))
           : []
         setAssistantDefaultToolNames(defaultToolNames)
-        setSelectedToolNames(defaultToolNames)
-        setToolMode(defaultToolNames.length > 0 ? "auto" : "off")
+        if (!preserveSessionSelection) {
+          setSelectedToolNames(defaultToolNames)
+          setToolMode(defaultToolNames.length > 0 ? "auto" : "off")
+        }
 
         if (Array.isArray(allTools)) {
           setAssistantTools(
             allTools
               .filter((tool) => tool.enabled !== false)
               .map((tool) => ({
+                id: tool.id,
                 name: tool.name,
                 displayName: tool.displayName,
                 description: tool.description,
@@ -1101,17 +1150,27 @@ export function ChatWorkspace({
           return
         }
         setAssistantDefaultToolNames([])
-        setSelectedToolNames([])
+        if (!preserveSessionSelection) {
+          setSelectedToolNames([])
+        }
       }
     },
     []
   )
 
-  const loadAssistantSkills = useCallback(async (assistantId: string, signal?: AbortSignal) => {
+  const loadAssistantSkills = useCallback(async (
+    assistantId: string,
+    options?: { signal?: AbortSignal; preserveSessionSelection?: boolean }
+  ) => {
+    const {
+      signal,
+      preserveSessionSelection = false,
+    } = options ?? {}
     try {
-      const [boundRes, allRes] = await Promise.all([
+      const [boundRes, allRes, allToolsRes] = await Promise.all([
         fetch(`/api/assistants/${assistantId}/skills`, { signal }),
         fetch("/api/dashboard/skills", { signal }),
+        fetch("/api/dashboard/tools", { signal }),
       ])
 
       const boundSkills = (boundRes.ok ? await boundRes.json() : []) as Array<{
@@ -1124,6 +1183,13 @@ export function ChatWorkspace({
         description: string
         icon?: string | null
         enabled?: boolean
+        relatedToolIds?: string[]
+        metadata?: Record<string, unknown> | null
+      }>
+      const allTools = (allToolsRes.ok ? await allToolsRes.json() : []) as Array<{
+        id?: string
+        name: string
+        enabled?: boolean
       }>
 
       const defaultSkillIds = Array.isArray(boundSkills)
@@ -1132,10 +1198,22 @@ export function ChatWorkspace({
             .map((skill) => skill.id)
         : []
       setAssistantDefaultSkillIds(defaultSkillIds)
-      setSelectedSkillIds(defaultSkillIds)
-      setSkillMode(defaultSkillIds.length > 0 ? "auto" : "off")
+      if (!preserveSessionSelection) {
+        setSelectedSkillIds(defaultSkillIds)
+        setSkillMode(defaultSkillIds.length > 0 ? "auto" : "off")
+      }
 
       if (Array.isArray(allSkills)) {
+        const toolNameById = new Map(
+          allTools
+            .filter(
+              (tool) =>
+                tool.enabled !== false &&
+                typeof tool.id === "string" &&
+                tool.id.length > 0
+            )
+            .map((tool) => [tool.id as string, tool.name])
+        )
         setAssistantSkills(
           allSkills
             .filter((skill) => skill.enabled !== false)
@@ -1144,6 +1222,52 @@ export function ChatWorkspace({
               displayName: skill.displayName,
               description: skill.description,
               icon: skill.icon,
+              autoToolNames: (() => {
+                const names = new Set<string>()
+                const addToolName = (value: unknown) => {
+                  if (typeof value !== "string" || value.length === 0) return
+                  names.add(toolNameById.get(value) ?? value)
+                }
+                if (Array.isArray(skill.relatedToolIds)) {
+                  for (const toolId of skill.relatedToolIds) {
+                    const toolName = toolNameById.get(toolId)
+                    if (toolName) names.add(toolName)
+                  }
+                }
+                const attachedToolIds = Array.isArray(skill.metadata?.toolIds)
+                  ? skill.metadata.toolIds
+                  : []
+                for (const toolId of attachedToolIds) addToolName(toolId)
+                const requiredTools =
+                  skill.metadata &&
+                  typeof skill.metadata === "object" &&
+                  !Array.isArray(skill.metadata) &&
+                  skill.metadata.requirements &&
+                  typeof skill.metadata.requirements === "object" &&
+                  !Array.isArray(skill.metadata.requirements) &&
+                  Array.isArray((skill.metadata.requirements as { tools?: unknown }).tools)
+                    ? (skill.metadata.requirements as { tools: unknown[] }).tools
+                    : []
+                for (const tool of requiredTools) {
+                  if (typeof tool === "object" && tool !== null && !Array.isArray(tool)) {
+                    const candidate = tool as Record<string, unknown>
+                    addToolName(candidate.name)
+                    addToolName(candidate.toolName)
+                    addToolName(candidate.id)
+                    continue
+                  }
+                  addToolName(tool)
+                }
+                const sharedTools = Array.isArray(skill.metadata?.sharedTools)
+                  ? skill.metadata.sharedTools
+                  : []
+                for (const tool of sharedTools) addToolName(tool)
+                const directTools = Array.isArray(skill.metadata?.tools)
+                  ? skill.metadata.tools
+                  : []
+                for (const tool of directTools) addToolName(tool)
+                return Array.from(names)
+              })(),
             }))
         )
       } else {
@@ -1154,7 +1278,9 @@ export function ChatWorkspace({
         return
       }
       setAssistantDefaultSkillIds([])
-      setSelectedSkillIds([])
+      if (!preserveSessionSelection) {
+        setSelectedSkillIds([])
+      }
     }
   }, [])
 
@@ -1324,28 +1450,34 @@ export function ChatWorkspace({
       }
 
       if (!hasInitialAssistantTools) {
-        void loadAssistantTools(currentAssistant.id, signal)
+        void loadAssistantTools(currentAssistant.id, {
+          signal,
+          preserveSessionSelection:
+            hasSessionToolbarState ||
+            preserveInitialToolbarSelectionRef.current ||
+            hasPersistedToolbarState(),
+        })
       }
       if (!hasInitialAssistantSkills) {
-        void loadAssistantSkills(currentAssistant.id, signal)
+        void loadAssistantSkills(currentAssistant.id, {
+          signal,
+          preserveSessionSelection:
+            hasSessionToolbarState ||
+            preserveInitialToolbarSelectionRef.current ||
+            hasPersistedToolbarState(),
+        })
       }
       // Always refresh KB groups from the active org scope to avoid stale empty hydration.
       void loadKnowledgeBaseGroups(signal)
-
-      setWebSearchOverride(null)
-      setCodeInterpreterOverride(null)
-      setSelectedKBGroupIds(null)
-      setToolMode(assistantDefaultToolNames.length > 0 ? "auto" : "off")
-      setSkillMode(assistantDefaultSkillIds.length > 0 ? "auto" : "off")
     },
     [
+      hasSessionToolbarState,
+      hasPersistedToolbarState,
       hasInitialAssistantSkills,
       hasInitialAssistantTools,
       loadAssistantSkills,
       loadAssistantTools,
       loadKnowledgeBaseGroups,
-      assistantDefaultToolNames.length,
-      assistantDefaultSkillIds.length,
     ]
   )
 
@@ -1356,6 +1488,81 @@ export function ChatWorkspace({
     syncSessionState(session, controller)
     return () => controller.abort()
   }, [session?.id, syncSessionState])
+
+  useEffect(() => {
+    toolbarStateHydratedRef.current = false
+    const storageSessionKey = apiSessionId || session?.id
+    if (!storageSessionKey || typeof window === "undefined") {
+      setHasSessionToolbarState(false)
+      toolbarStateHydratedRef.current = true
+      return
+    }
+
+    const primaryStorageKey = `${SESSION_TOOLBAR_STATE_STORAGE_PREFIX}${storageSessionKey}`
+    const fallbackStorageKey = session?.id
+      ? `${SESSION_TOOLBAR_STATE_STORAGE_PREFIX}${session.id}`
+      : null
+    const raw =
+      window.sessionStorage.getItem(primaryStorageKey) ||
+      (fallbackStorageKey ? window.sessionStorage.getItem(fallbackStorageKey) : null)
+    if (!raw) {
+      setHasSessionToolbarState(false)
+      toolbarStateHydratedRef.current = true
+      return
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as SessionToolbarStateSnapshot
+      if (!parsed || typeof parsed !== "object") {
+        setHasSessionToolbarState(false)
+        return
+      }
+
+      setSelectedKBGroupIds(Array.isArray(parsed.selectedKBGroupIds) ? parsed.selectedKBGroupIds : null)
+      setToolMode(parsed.toolMode === "auto" || parsed.toolMode === "off" || parsed.toolMode === "select" ? parsed.toolMode : "off")
+      setSelectedToolNames(Array.isArray(parsed.selectedToolNames) ? parsed.selectedToolNames : [])
+      setSkillMode(parsed.skillMode === "auto" || parsed.skillMode === "off" || parsed.skillMode === "select" ? parsed.skillMode : "off")
+      setSelectedSkillIds(Array.isArray(parsed.selectedSkillIds) ? parsed.selectedSkillIds : [])
+      setWebSearchOverride(typeof parsed.webSearchOverride === "boolean" ? parsed.webSearchOverride : null)
+      setCodeInterpreterOverride(typeof parsed.codeInterpreterOverride === "boolean" ? parsed.codeInterpreterOverride : null)
+      setHasSessionToolbarState(true)
+      if (!window.sessionStorage.getItem(primaryStorageKey)) {
+        window.sessionStorage.setItem(primaryStorageKey, raw)
+      }
+    } catch {
+      setHasSessionToolbarState(false)
+    } finally {
+      toolbarStateHydratedRef.current = true
+    }
+  }, [apiSessionId, session?.id])
+
+  useEffect(() => {
+    const storageSessionKey = apiSessionId || session?.id
+    if (!storageSessionKey || typeof window === "undefined") return
+    if (!toolbarStateHydratedRef.current) return
+
+    const storageKey = `${SESSION_TOOLBAR_STATE_STORAGE_PREFIX}${storageSessionKey}`
+    const snapshot: SessionToolbarStateSnapshot = {
+      selectedKBGroupIds,
+      toolMode,
+      selectedToolNames,
+      skillMode,
+      selectedSkillIds,
+      webSearchOverride,
+      codeInterpreterOverride,
+    }
+    window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot))
+  }, [
+    apiSessionId,
+    session?.id,
+    selectedKBGroupIds,
+    toolMode,
+    selectedToolNames,
+    skillMode,
+    selectedSkillIds,
+    webSearchOverride,
+    codeInterpreterOverride,
+  ])
 
   // Handle lazy-loaded messages (session messages populated after initial mount)
   useEffect(() => {
@@ -1425,12 +1632,7 @@ export function ChatWorkspace({
     ? selectedKBGroupIds.length > 0
     : (assistant.useKnowledgeBase ?? false)
   const effectiveToolsEnabled = toolMode !== "off"
-  const effectiveToolNames =
-    toolMode === "select"
-      ? selectedToolNames
-      : toolMode === "auto"
-        ? assistantDefaultToolNames
-        : undefined
+  const effectiveToolNames = toolMode === "select" ? selectedToolNames : undefined
   const effectiveSkillsEnabled = skillMode !== "off"
   const effectiveSkillIds =
     skillMode === "select"
@@ -2090,17 +2292,9 @@ export function ChatWorkspace({
       } finally {
         setIsLoading(false)
         abortControllerRef.current = null
-        // Reset toolbar overrides back to defaults (keep activeArtifactId for iteration)
-        setWebSearchOverride(null)
-        setCodeInterpreterOverride(null)
-        setSelectedKBGroupIds(null)
-        setToolMode(assistantDefaultToolNames.length > 0 ? "auto" : "off")
-        setSelectedToolNames([])
-        setSkillMode(assistantDefaultSkillIds.length > 0 ? "auto" : "off")
-        setSelectedSkillIds([])
       }
     },
-    [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, effectiveToolNames, effectiveSkillsEnabled, effectiveSkillIds, canvasMode, activeArtifactId, apiSessionId, assistantDefaultToolNames.length, assistantDefaultSkillIds.length]
+    [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, effectiveToolNames, effectiveSkillsEnabled, effectiveSkillIds, canvasMode, activeArtifactId, apiSessionId]
   )
 
   const queueInitialMessageSend = useCallback(async () => {
@@ -2151,6 +2345,34 @@ export function ChatWorkspace({
 
     // Apply toolbar overrides to ChatWorkspace state so the toolbar UI reflects them
     if (initialSettings) {
+      if (typeof window !== "undefined") {
+        const snapshot: SessionToolbarStateSnapshot = {
+          selectedKBGroupIds: initialSettings.knowledgeBaseGroupIds ?? null,
+          toolMode: initialSettings.toolMode ?? "off",
+          selectedToolNames: initialSettings.selectedToolNames ?? [],
+          skillMode: initialSettings.skillMode ?? "off",
+          selectedSkillIds: initialSettings.selectedSkillIds ?? [],
+          webSearchOverride:
+            typeof initialSettings.webSearchEnabled === "boolean"
+              ? initialSettings.webSearchEnabled
+              : null,
+          codeInterpreterOverride:
+            typeof initialSettings.codeInterpreterEnabled === "boolean"
+              ? initialSettings.codeInterpreterEnabled
+              : null,
+        }
+        const serialized = JSON.stringify(snapshot)
+        window.sessionStorage.setItem(
+          `${SESSION_TOOLBAR_STATE_STORAGE_PREFIX}${session.id}`,
+          serialized
+        )
+        if (apiSessionId && apiSessionId !== session.id) {
+          window.sessionStorage.setItem(
+            `${SESSION_TOOLBAR_STATE_STORAGE_PREFIX}${apiSessionId}`,
+            serialized
+          )
+        }
+      }
       if (initialSettings.webSearchEnabled !== undefined) {
         setWebSearchOverride(initialSettings.webSearchEnabled)
       }
@@ -2172,12 +2394,14 @@ export function ChatWorkspace({
       if (initialSettings.selectedSkillIds) {
         setSelectedSkillIds(initialSettings.selectedSkillIds)
       }
-      if (initialSettings.canvasMode) {
-        setCanvasMode(initialSettings.canvasMode)
+        if (initialSettings.canvasMode) {
+          setCanvasMode(initialSettings.canvasMode)
+        }
+        setHasSessionToolbarState(true)
+        toolbarStateHydratedRef.current = true
       }
-    }
-    void queueInitialMessageSend()
-  }, [initialMessage, initialSettings, queueInitialMessageSend, session?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+      void queueInitialMessageSend()
+  }, [apiSessionId, initialMessage, initialSettings, queueInitialMessageSend, session?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStop = useCallback(() => {
     abortControllerRef.current?.abort()
@@ -2839,12 +3063,12 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                             onOpenToolsMenu={() => {
                               if (!assistant?.id) return
                               if (assistantTools.length > 0) return
-                              void loadAssistantTools(assistant.id)
+                              void loadAssistantTools(assistant.id, { preserveSessionSelection: true })
                             }}
                             onOpenSkillsMenu={() => {
                               if (!assistant?.id) return
                               if (assistantSkills.length > 0) return
-                              void loadAssistantSkills(assistant.id)
+                              void loadAssistantSkills(assistant.id, { preserveSessionSelection: true })
                             }}
                             onOpenKnowledgeMenu={() => {
                               if (kbGroups.length > 0) return
@@ -3025,12 +3249,12 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                   onOpenToolsMenu={() => {
                     if (!assistant?.id) return
                     if (assistantTools.length > 0) return
-                    void loadAssistantTools(assistant.id)
+                    void loadAssistantTools(assistant.id, { preserveSessionSelection: true })
                   }}
                   onOpenSkillsMenu={() => {
                     if (!assistant?.id) return
                     if (assistantSkills.length > 0) return
-                    void loadAssistantSkills(assistant.id)
+                    void loadAssistantSkills(assistant.id, { preserveSessionSelection: true })
                   }}
                   onOpenKnowledgeMenu={() => {
                     if (kbGroups.length > 0) return

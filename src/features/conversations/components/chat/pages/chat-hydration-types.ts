@@ -1,4 +1,5 @@
 export interface AssistantToolInfo {
+  id?: string
   name: string
   displayName: string
   description: string
@@ -11,6 +12,7 @@ export interface AssistantSkillInfo {
   displayName: string
   description: string
   icon?: string | null
+  autoToolNames?: string[]
 }
 
 export interface KBGroup {

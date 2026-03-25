@@ -65,6 +65,34 @@ export default function ChatPageClient({
             : assistantId
 
           const newSession = await createSession(targetAssistantId)
+          if (settings) {
+            const toolbarSnapshot = {
+              selectedKBGroupIds: settings.knowledgeBaseGroupIds ?? null,
+              toolMode: settings.toolMode ?? "off",
+              selectedToolNames: settings.selectedToolNames ?? [],
+              skillMode: settings.skillMode ?? "off",
+              selectedSkillIds: settings.selectedSkillIds ?? [],
+              webSearchOverride:
+                typeof settings.webSearchEnabled === "boolean"
+                  ? settings.webSearchEnabled
+                  : null,
+              codeInterpreterOverride:
+                typeof settings.codeInterpreterEnabled === "boolean"
+                  ? settings.codeInterpreterEnabled
+                  : null,
+            }
+            const serializedSnapshot = JSON.stringify(toolbarSnapshot)
+            sessionStorage.setItem(
+              `chat-toolbar-state:${newSession.id}`,
+              serializedSnapshot
+            )
+            if (newSession.dbId) {
+              sessionStorage.setItem(
+                `chat-toolbar-state:${newSession.dbId}`,
+                serializedSnapshot
+              )
+            }
+          }
           let initToken: string | null = null
           if (initialMessage) {
             initToken = crypto.randomUUID()

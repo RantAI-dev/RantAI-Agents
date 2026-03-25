@@ -386,6 +386,19 @@ export async function resolveToolsByNames(
       OR: [
         { organizationId: null, isBuiltIn: true },
         ...(context.organizationId ? [{ organizationId: context.organizationId }] : []),
+        ...(context.userId
+          ? [
+              {
+                organization: {
+                  memberships: {
+                    some: {
+                      userId: context.userId,
+                    },
+                  },
+                },
+              },
+            ]
+          : []),
       ],
     },
     include: { mcpServer: true },

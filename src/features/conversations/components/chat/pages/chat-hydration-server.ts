@@ -49,6 +49,14 @@ function mapAssistantToolsToToolbar(tools: Array<Record<string, unknown>>): Assi
     .filter((tool) => tool.name.length > 0)
 }
 
+function filterAssistantToolsByAvailability(
+  assistantTools: AssistantToolInfo[],
+  availableTools: AssistantToolInfo[]
+): AssistantToolInfo[] {
+  const availableToolNames = new Set(availableTools.map((tool) => tool.name))
+  return assistantTools.filter((tool) => availableToolNames.has(tool.name))
+}
+
 function mapAssistantSkillsToToolbar(skills: Array<Record<string, unknown>>): AssistantSkillInfo[] {
   return skills
     .map((skill) => ({
@@ -60,12 +68,62 @@ function mapAssistantSkillsToToolbar(skills: Array<Record<string, unknown>>): As
     .filter((skill) => skill.id.length > 0)
 }
 
+function extractSkillAutoToolNames(
+  skill: Awaited<ReturnType<typeof listDashboardSkills>>[number],
+  toolNameById: Map<string, string>
+): string[] {
+  const names = new Set<string>()
+  const addToolName = (value: unknown) => {
+    if (typeof value !== "string" || value.length === 0) return
+    names.add(toolNameById.get(value) ?? value)
+  }
+
+  if (Array.isArray(skill.relatedToolIds)) {
+    for (const toolId of skill.relatedToolIds) {
+      const toolName = toolNameById.get(toolId)
+      if (toolName) names.add(toolName)
+    }
+  }
+
+  const metadata =
+    skill.metadata && typeof skill.metadata === "object" && !Array.isArray(skill.metadata)
+      ? (skill.metadata as Record<string, unknown>)
+      : null
+  const attachedToolIds = Array.isArray(metadata?.toolIds) ? metadata.toolIds : []
+  for (const toolId of attachedToolIds) addToolName(toolId)
+
+  const requirements =
+    metadata?.requirements && typeof metadata.requirements === "object" && !Array.isArray(metadata.requirements)
+      ? (metadata.requirements as Record<string, unknown>)
+      : null
+  const requiredTools = Array.isArray(requirements?.tools) ? requirements.tools : []
+  for (const tool of requiredTools) {
+    if (typeof tool === "object" && tool !== null && !Array.isArray(tool)) {
+      const candidate = tool as Record<string, unknown>
+      addToolName(candidate.name)
+      addToolName(candidate.toolName)
+      addToolName(candidate.id)
+      continue
+    }
+    addToolName(tool)
+  }
+
+  const sharedTools = Array.isArray(metadata?.sharedTools) ? metadata.sharedTools : []
+  for (const tool of sharedTools) addToolName(tool)
+
+  const directTools = Array.isArray(metadata?.tools) ? metadata.tools : []
+  for (const tool of directTools) addToolName(tool)
+
+  return Array.from(names)
+}
+
 function mapDashboardToolsToToolbar(
   tools: Awaited<ReturnType<typeof listToolsForDashboard>>
 ): AssistantToolInfo[] {
   return tools
     .filter((tool) => tool.enabled !== false)
     .map((tool) => ({
+      id: tool.id,
       name: tool.name,
       displayName: tool.displayName || tool.name,
       description: tool.description || "",
@@ -75,7 +133,8 @@ function mapDashboardToolsToToolbar(
 }
 
 function mapDashboardSkillsToToolbar(
-  skills: Awaited<ReturnType<typeof listDashboardSkills>>
+  skills: Awaited<ReturnType<typeof listDashboardSkills>>,
+  toolNameById: Map<string, string>
 ): AssistantSkillInfo[] {
   return skills
     .filter((skill) => skill.enabled !== false)
@@ -84,6 +143,7 @@ function mapDashboardSkillsToToolbar(
       displayName: skill.displayName || skill.name || "",
       description: skill.description || "",
       icon: skill.icon ?? null,
+      autoToolNames: extractSkillAutoToolNames(skill, toolNameById),
     }))
 }
 
@@ -128,14 +188,25 @@ export async function loadChatToolbarHydrationData(params: {
   ])
 
   const assistantTools = isServiceError(toolsResult) ? [] : mapAssistantToolsToToolbar(toolsResult)
+  const availableToolsMapped = mapDashboardToolsToToolbar(availableTools)
+  const toolNameById = new Map(
+    availableToolsMapped
+      .filter((tool) => typeof tool.id === "string" && tool.id.length > 0)
+      .map((tool) => [tool.id as string, tool.name])
+  )
+  const availableSkillsMapped = mapDashboardSkillsToToolbar(availableSkills, toolNameById)
+  const availableSkillById = new Map(availableSkillsMapped.map((skill) => [skill.id, skill]))
   const assistantSkills = isServiceError(skillsResult) ? [] : mapAssistantSkillsToToolbar(skillsResult)
 
   return {
     assistantId: params.assistantId,
-    availableTools: mapDashboardToolsToToolbar(availableTools),
-    availableSkills: mapDashboardSkillsToToolbar(availableSkills),
-    assistantTools,
-    assistantSkills,
+    availableTools: availableToolsMapped,
+    availableSkills: availableSkillsMapped,
+    assistantTools: filterAssistantToolsByAvailability(assistantTools, availableToolsMapped),
+    assistantSkills: assistantSkills.map((skill) => ({
+      ...skill,
+      autoToolNames: availableSkillById.get(skill.id)?.autoToolNames ?? [],
+    })),
     kbGroups: mapKnowledgeGroups(groupsResult),
   }
 }
