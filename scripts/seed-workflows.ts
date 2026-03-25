@@ -2,7 +2,7 @@
  * Seed 15 community workflow CatalogItem records.
  * Installing a workflow creates a real Workflow record in DRAFT status.
  *
- * Usage: npx tsx scripts/seed-workflows.ts [--dry-run]
+ * Usage: bun scripts/seed-workflows.ts [--dry-run]
  */
 
 import { PrismaClient } from "@prisma/client"

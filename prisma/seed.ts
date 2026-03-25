@@ -868,6 +868,119 @@ async function seedCatalogItems() {
   console.log(`  Seeded ${count} community catalog items (${Object.keys(tools).length} tools + ${Object.keys(skills).length} skills)`)
 }
 
+async function seedAssistantToolBindings() {
+  const assistantIds = BUILT_IN_ASSISTANTS.map((assistant) => assistant.id)
+  const tools = await prisma.tool.findMany({
+    where: {
+      isBuiltIn: true,
+      organizationId: null,
+      enabled: true,
+    },
+    select: {
+      id: true,
+    },
+  })
+
+  if (assistantIds.length === 0 || tools.length === 0) {
+    console.log("\n[Assistant Tool Bindings]\n  ! Skipped (no assistants/tools found)")
+    return
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const assistantId of assistantIds) {
+      const existingCount = await tx.assistantTool.count({
+        where: { assistantId },
+      })
+      if (existingCount > 0) {
+        continue
+      }
+
+      await tx.assistantTool.createMany({
+        data: tools.map((tool) => ({
+          assistantId,
+          toolId: tool.id,
+          enabled: false,
+        })),
+        skipDuplicates: true,
+      })
+    }
+  })
+
+  console.log(
+    `\n[Assistant Tool Bindings]\n  ✓ Ensured ${tools.length} tools are available for ${assistantIds.length} assistants (defaults preserved)`
+  )
+}
+
+async function seedPlatformSkills() {
+  let pkg: { skills?: Record<string, unknown> }
+  try {
+    pkg = await import("@rantai/community-skills")
+  } catch {
+    console.warn(
+      "\n[Skills]\n  ! @rantai/community-skills not installed, skipping skill + binding seed"
+    )
+    return
+  }
+
+  const skillDefs = pkg.skills ?? {}
+  let seededCount = 0
+
+  for (const [name, skillDef] of Object.entries(skillDefs)) {
+    const def = skillDef as {
+      name?: string
+      displayName?: string
+      description?: string
+      skillPrompt?: string
+      category?: string
+      tags?: string[]
+      icon?: string
+      version?: string
+      sharedTools?: string[]
+    }
+
+    const normalizedName = def.name || name
+    const existing = await prisma.skill.findFirst({
+      where: { name: normalizedName, organizationId: null },
+      select: { id: true },
+    })
+
+    const data = {
+      displayName: def.displayName || normalizedName,
+      description: def.description || "Community skill",
+      content: def.skillPrompt || "",
+      source: "marketplace",
+      version: def.version || "1.0.0",
+      category: (def.category || "general").toLowerCase(),
+      tags: def.tags || [],
+      icon: def.icon || "✨",
+      metadata: {
+        source: "community-skills",
+        sharedTools: def.sharedTools || [],
+      },
+      enabled: true,
+    } as const
+
+    if (existing) {
+      await prisma.skill.update({
+        where: { id: existing.id },
+        data,
+      })
+      seededCount++
+    } else {
+      await prisma.skill.create({
+        data: {
+          name: normalizedName,
+          organizationId: null,
+          ...data,
+        },
+      })
+      seededCount++
+    }
+  }
+
+  console.log(`\n[Skills]\n  ✓ Seeded ${seededCount} platform skills`)
+}
+
 async function main() {
   console.log("\n🌱 RantAI Agents — Database Seed\n")
 
@@ -924,6 +1037,8 @@ async function main() {
   const { BUILTIN_TOOLS } = await import("../lib/tools/builtin")
   await ensureBuiltinTools()
   console.log(`\n[Tools]\n  ✓ ${Object.keys(BUILTIN_TOOLS).length} built-in tools upserted`)
+  await seedAssistantToolBindings()
+  await seedPlatformSkills()
 
   // Seed Marketplace Catalog
   await seedCatalogItems()

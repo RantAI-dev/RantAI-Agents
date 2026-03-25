@@ -2,7 +2,7 @@
  * Seed 15 community assistant CatalogItem records.
  * Installing an assistant creates a real Assistant record with tools auto-bound.
  *
- * Usage: npx tsx scripts/seed-assistants.ts [--dry-run]
+ * Usage: bun scripts/seed-assistants.ts [--dry-run]
  */
 
 import { PrismaClient } from "@prisma/client"

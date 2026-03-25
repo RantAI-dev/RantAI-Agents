@@ -4,7 +4,7 @@
  * Section A: 5 pre-installed McpServerConfig (isBuiltIn: true)
  * Section B: 10 marketplace CatalogItem (type: "mcp")
  *
- * Usage: npx tsx scripts/seed-mcp.ts [--dry-run]
+ * Usage: bun scripts/seed-mcp.ts [--dry-run]
  */
 
 import { PrismaClient } from "@prisma/client"
