@@ -16,15 +16,6 @@ interface RouteParams {
   params: Promise<{ id: string }>
 }
 
-function isHttpServiceError(value: unknown): value is { status: number; error: string } {
-  if (typeof value !== "object" || value === null) return false
-  const candidate = value as { status?: unknown; error?: unknown }
-  return (
-    typeof candidate.status === "number" &&
-    typeof candidate.error === "string"
-  )
-}
-
 // GET /api/assistants/[id] - Get single assistant
 export async function GET(request: Request, { params }: RouteParams) {
   try {

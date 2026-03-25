@@ -16,6 +16,21 @@ export interface ToolSchemaInfo {
 
 let registry: CommunityRegistry | null = null
 
+async function importCommunityPackage(): Promise<{
+  tools?: Record<string, CommunityToolDefinition>
+  skills?: Record<string, CommunitySkillDefinition>
+}> {
+  // Avoid static bundler resolution so build does not fail when the optional
+  // community package is unavailable in a given environment.
+  const dynamicImport = new Function("m", "return import(m)") as (
+    moduleName: string
+  ) => Promise<{
+    tools?: Record<string, CommunityToolDefinition>
+    skills?: Record<string, CommunitySkillDefinition>
+  }>
+  return dynamicImport("@rantai/community-skills")
+}
+
 /**
  * Initialize the gateway by loading the community package.
  * Called once at startup. Gracefully handles missing package.
@@ -23,7 +38,7 @@ let registry: CommunityRegistry | null = null
 export async function initCommunityGateway(): Promise<void> {
   if (registry) return
   try {
-    const pkg = await import("@rantai/community-skills")
+    const pkg = await importCommunityPackage()
     registry = {
       tools: pkg.tools ?? {},
       skills: pkg.skills ?? {},

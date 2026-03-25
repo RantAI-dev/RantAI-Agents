@@ -13,7 +13,10 @@ const nextConfig = {
     "sharp", 
     "@libsql/client", 
     "@libsql/win32-x64-msvc", 
-    "@mastra/libsql"
+    "@mastra/libsql",
+    "dockerode",
+    "docker-modem",
+    "ssh2"
   ],
   async headers() {
     return [
