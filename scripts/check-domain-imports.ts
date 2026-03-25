@@ -30,13 +30,30 @@ const DEPRECATED_PREFIXES = [
   "@/src/features/dashboard/tasks",
 ]
 
-const files = execSync(`rg --files app src -g "*.ts" -g "*.tsx"`, {
-  encoding: "utf8",
-})
-  .trim()
-  .split("\n")
-  .filter(Boolean)
-  .map((relativePath) => path.join(root, relativePath))
+function listCandidateFiles(): string[] {
+  try {
+    const rgOutput = execSync(`rg --files app src -g "*.ts" -g "*.tsx"`, {
+      encoding: "utf8",
+    })
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+    return rgOutput.map((relativePath) => path.join(root, relativePath))
+  } catch {
+    const findOutput = execSync(
+      `find app src -type f \\( -name "*.ts" -o -name "*.tsx" \\)`,
+      {
+        encoding: "utf8",
+      }
+    )
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+    return findOutput.map((relativePath) => path.join(root, relativePath))
+  }
+}
+
+const files = listCandidateFiles()
 
 const violations: string[] = []
 
