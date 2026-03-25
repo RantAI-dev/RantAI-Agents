@@ -6,6 +6,41 @@ Enterprise-grade AI agent platform for building and deploying autonomous digital
 
 RantAI Agents enables organizations to create, manage, and orchestrate intelligent AI agents powered by large language models. It combines a traditional assistant/chatbot platform with a full **Digital Employee** layer — autonomous agents that run in isolated Docker containers, execute tools, use integrations, and collaborate with each other and with humans.
 
+## Architecture Map
+
+Canonical backend/domain slices live in `src/features/*`:
+
+- `digital-employees` — employee lifecycle, trust, runs, chat, workspace, files, integrations
+- `workflows` — workflow CRUD, import/export, execution and runs
+- `knowledge` — document/category/group knowledge management
+- `skills`, `tools`, `mcp` — capability and protocol surfaces
+- `groups`, `handoff`, `credentials`, `embed-keys`, `templates`, `approvals`, `audit`, `statistics`
+- `marketplace`, `memory`, `openapi-specs`, `tasks`, `platform-features`
+- `runtime/*`, `widget/*`, `whatsapp-webhooks`, `workflows-public`, `chat-public`, `platform-routes`
+
+Delivery contexts (`app/api/dashboard/*`, `app/api/runtime/*`) stay thin and orchestrate these domain slices.
+
+## Frontend Compliance
+
+The frontend guardrail is incremental, not all-or-nothing:
+
+- Strict scopes fail when a client effect introduces mount-time data fetching or mutations.
+- Report-only scopes still log warnings while they finish their migration to server-fed data and thin route shells.
+
+Canonical compliant patterns:
+
+- Fetch initial data in async Server Components.
+- Keep `page.tsx` files thin by re-exporting the matching feature slice or redirecting.
+- Use Server Actions and `useActionState` for mutations.
+- Keep client components focused on local state, interactions, and presentation.
+
+Migration status map:
+
+| Scope status | Scopes |
+|--------------|--------|
+| Strict | credentials, embed-keys, marketplace, mcp, memory, platform-features, statistics, tools, organizations, user, audit, digital-employees, workflows, knowledge, conversations-agent, conversations-chat |
+| Report-only | none |
+
 ### Key Features
 
 - **Digital Employees** — Autonomous AI agents running in isolated Docker containers via the RantaiClaw Rust framework
@@ -125,10 +160,8 @@ OPENROUTER_API_KEY="sk-or-v1-your-key"
 # Start PostgreSQL, SurrealDB, RustFS, and Ollama containers
 bun docker:up
 
-# Initialize database
-bun db:push
-bun db:generate
-bun db:seed
+# Initialize database (migrations + generate + full seed)
+bun setup:db
 ```
 
 Or use the all-in-one setup command:
@@ -136,6 +169,13 @@ Or use the all-in-one setup command:
 ```bash
 bun setup
 ```
+
+`bun setup:db` now includes:
+
+- Prisma migration apply (`prisma migrate deploy`)
+- Prisma client generation
+- Core seed (`prisma/seed.ts`)
+- Marketplace catalog seeds for assistants, workflows, and MCP
 
 ### 4. Run Development Server
 
