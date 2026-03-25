@@ -7,7 +7,7 @@
       "notes": "Canonical baseline release with fixed CI guardrails and validated submodule pins.",
       "submodules": {
         "rantaiclaw": {
-          "sha": "0bce0f3cd4f449da262b85a779895578390f3339",
+          "sha": "beaa551e8dba018ff2ab9203f9f4a3abbd120eb7",
           "tag": "v0.1.0"
         },
         "community_skills": {
