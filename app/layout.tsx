@@ -1,6 +1,6 @@
 import React from "react"
 import type { Metadata, Viewport } from 'next'
-import { Poppins } from 'next/font/google'
+import localFont from 'next/font/local'
 import { Analytics } from '@vercel/analytics/next'
 import { SessionProvider } from '@/components/providers/session-provider'
 import { ThemeProvider } from '@/components/theme-provider'
@@ -8,7 +8,16 @@ import { Toaster } from '@/components/ui/sonner'
 import { brand } from '@/lib/branding'
 import './globals.css'
 
-const poppins = Poppins({ subsets: ["latin"], weight: ["300", "400", "500", "600", "700"] });
+const poppins = localFont({
+  src: [
+    { path: './fonts/poppins/Poppins-300.ttf', weight: '300', style: 'normal' },
+    { path: './fonts/poppins/Poppins-400.ttf', weight: '400', style: 'normal' },
+    { path: './fonts/poppins/Poppins-500.ttf', weight: '500', style: 'normal' },
+    { path: './fonts/poppins/Poppins-600.ttf', weight: '600', style: 'normal' },
+    { path: './fonts/poppins/Poppins-700.ttf', weight: '700', style: 'normal' },
+  ],
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: brand.metaTitle,
