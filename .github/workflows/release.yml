@@ -1,0 +1,209 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (example: v1.2.3 or v1.2.3-rc.1)"
+        required: true
+        type: string
+      push_latest:
+        description: "Also push latest tag"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  checks: read
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, Validate, and Publish
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: horizonlife
+          POSTGRES_PASSWORD: horizonlife_secret
+          POSTGRES_DB: horizonlife_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
+      DATABASE_URL: postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_test
+      TEST_DATABASE_URL: postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_test
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Initialize submodules with CI-safe URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule set-url packages/rantaiclaw https://github.com/RantAI-dev/RantaiClaw.git
+          git submodule set-url packages/community-skills https://github.com/RantAI-dev/RantAI-Agents-Community.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Resolve release version and image tags
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ inputs.tag }}"
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag format: $version"
+            exit 1
+          fi
+
+          is_prerelease="false"
+          if [[ "$version" == *-* ]]; then
+            is_prerelease="true"
+          fi
+
+          publish_latest="false"
+          if [ "$is_prerelease" = "false" ]; then
+            publish_latest="true"
+          fi
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.push_latest }}" = "true" ]; then
+              publish_latest="true"
+            elif [ "${{ inputs.push_latest }}" = "false" ]; then
+              publish_latest="false"
+            fi
+          fi
+
+          tags="${IMAGE_NAME}:${version}"
+          release_notes_tags="- \`${IMAGE_NAME}:${version}\`"
+
+          if [[ "$version" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            major="${BASH_REMATCH[1]}"
+            minor="${BASH_REMATCH[2]}"
+            tags="${tags}"$'\n'"${IMAGE_NAME}:v${major}.${minor}"
+            tags="${tags}"$'\n'"${IMAGE_NAME}:v${major}"
+            release_notes_tags="${release_notes_tags}"$'\n'"- \`${IMAGE_NAME}:v${major}.${minor}\`"
+            release_notes_tags="${release_notes_tags}"$'\n'"- \`${IMAGE_NAME}:v${major}\`"
+          fi
+
+          if [ "$publish_latest" = "true" ]; then
+            tags="${tags}"$'\n'"${IMAGE_NAME}:latest"
+            release_notes_tags="${release_notes_tags}"$'\n'"- \`${IMAGE_NAME}:latest\`"
+          fi
+
+          {
+            echo "version=${version}"
+            echo "is_prerelease=${is_prerelease}"
+            echo "publish_latest=${publish_latest}"
+            echo "tags<<EOF"
+            echo "${tags}"
+            echo "EOF"
+            echo "release_notes_tags<<EOF"
+            echo "${release_notes_tags}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Verify tag exists (manual releases)
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          git rev-parse "refs/tags/${{ steps.vars.outputs.version }}" >/dev/null
+
+      - name: Validate submodule compatibility and upstream checks
+        id: compatibility
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUIRED_RANTAICLAW_CHECKS: CI Required Gate
+        run: bun run check:release-compat --version "${{ steps.vars.outputs.version }}" --verify-rantaiclaw-checks
+
+      - name: Run compliance checks
+        run: |
+          bun run check:thin-routes
+          bun run check:domain-imports
+          bun run check:frontend-compliance
+
+      - name: Run unit tests
+        run: bun run test:unit
+
+      - name: Push schema to test database
+        run: bunx prisma db push --skip-generate
+
+      - name: Run integration tests
+        run: bun run test:integration
+
+      - name: Run production build gate
+        run: bun run build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.vars.outputs.tags }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=RantAI Agents
+            org.opencontainers.image.description=Enterprise-grade AI agent platform
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.vars.outputs.version }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.version }}
+          generate_release_notes: true
+          body: |
+            ## Container Images
+            ${{ steps.vars.outputs.release_notes_tags }}
+
+            ${{ steps.compatibility.outputs.compatibility_markdown }}

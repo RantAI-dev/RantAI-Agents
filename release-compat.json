@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "releases": [
+    {
+      "rantai_agents_version": "v0.1.0",
+      "date": "2026-03-25",
+      "notes": "Initial compatibility baseline for multi-repo independent releases.",
+      "submodules": {
+        "rantaiclaw": {
+          "sha": "ffb0169b241aa3e26bf42a151b2fee487254bcd3",
+          "tag": "v0.1.0"
+        },
+        "community_skills": {
+          "sha": "54c0584711dbde783844c55dd557d6118524180c"
+        }
+      }
+    }
+  ]
+}

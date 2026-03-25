@@ -6,12 +6,24 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Initialize submodules with CI-safe URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule set-url packages/rantaiclaw https://github.com/RantAI-dev/RantaiClaw.git
+          git submodule set-url packages/community-skills https://github.com/RantAI-dev/RantAI-Agents-Community.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -42,6 +54,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Initialize submodules with CI-safe URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule set-url packages/rantaiclaw https://github.com/RantAI-dev/RantaiClaw.git
+          git submodule set-url packages/community-skills https://github.com/RantAI-dev/RantAI-Agents-Community.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -58,3 +79,32 @@ jobs:
         env:
           DATABASE_URL: postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_test
           TEST_DATABASE_URL: postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_test
+
+  compliance-and-build:
+    name: Compliance & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize submodules with CI-safe URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule set-url packages/rantaiclaw https://github.com/RantAI-dev/RantaiClaw.git
+          git submodule set-url packages/community-skills https://github.com/RantAI-dev/RantAI-Agents-Community.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run check:thin-routes
+      - run: bun run check:domain-imports
+      - run: bun run check:frontend-compliance
+      - run: bun run check:release-compat
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - run: bun run build

@@ -189,6 +189,84 @@ Access the application:
 
 ---
 
+## Release CI/CD (GitHub Actions + GHCR)
+
+This repository now ships with release automation:
+
+- `Tests` workflow for PR/main validation:
+  - Unit tests
+  - Integration tests (with PostgreSQL service)
+  - Compliance + build gates (`check:thin-routes`, `check:domain-imports`, `check:frontend-compliance`, `build`)
+- `Release` workflow for SemVer tags (`v*.*.*`) and manual reruns
+- `Pre-Release` workflow for `main` snapshots (`edge`, `sha-<shortsha>`)
+
+Compatibility governance:
+
+- `release-compat.json` is the machine-readable source of truth for each tagged `rantai-agents` release.
+- Each release entry pins the exact supported submodule SHAs:
+  - `packages/rantaiclaw`
+  - `packages/community-skills`
+- Release CI fails if submodules are dirty/unpinned, SHAs are unreachable on origin, or tagged release metadata does not match `release-compat.json`.
+
+### How to Create a Release
+
+1. Create a SemVer tag:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+2. Monitor `.github/workflows/release.yml` in GitHub Actions.
+
+3. Pull the published image from GHCR:
+
+```bash
+docker pull ghcr.io/<owner>/<repo>:v1.2.3
+```
+
+Stable tags also publish:
+
+- `ghcr.io/<owner>/<repo>:v1.2`
+- `ghcr.io/<owner>/<repo>:v1`
+- `ghcr.io/<owner>/<repo>:latest`
+
+Pre-release tags (for example `v1.2.3-rc.1`) publish only the exact tag by default.
+
+### Manual Release Rebuild
+
+Use workflow dispatch on `Release` and provide:
+
+- `tag`: existing tag name (`v1.2.3`)
+- `push_latest`: optional override to also publish `latest`
+
+### Multi-Repo Release Order
+
+Use this order for coordinated updates:
+
+1. Release `rantaiclaw` (if runtime changes are needed).
+2. Release `community-skills` (if marketplace package updates are needed).
+3. Bump submodule SHAs in `rantai-agents` and update `release-compat.json`.
+4. Merge to `main` after full CI passes.
+5. Tag and release `rantai-agents`.
+
+### Troubleshooting
+
+- `Unable to acquire lock at .next/dev/lock`:
+  - Another dev server is running. Stop the old process before rerunning.
+- `bun install --frozen-lockfile` failure:
+  - Lockfile drift. Regenerate locally and commit `bun.lock`.
+- GHCR push denied:
+  - Ensure repository Actions permissions allow package write.
+- Compatibility check failed:
+  - Ensure `release-compat.json` includes the target `vX.Y.Z` and exact current submodule SHAs.
+- Upstream RantaiClaw check gate failed:
+  - Ensure pinned `packages/rantaiclaw` commit has successful required checks (default: `CI Required Gate`) in `RantAIClaw`.
+- Integration tests fail in CI:
+  - Validate Prisma schema and DB setup against CI `postgres:16` service.
+
+---
+
 ## Project Structure
 
 ```

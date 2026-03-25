@@ -1,7 +1,33 @@
-# Only include what the employee Dockerfile needs
-*
-!packages/rantaiclaw/
-!docker/employee/agent-runner/
+# Git / CI
+.git
+.gitignore
+.github
 
-# Exclude build artifacts (rebuild in Docker)
-packages/rantaiclaw/target/
+# Local environment
+.env
+.env.*
+!.env.example
+certs
+
+# Build caches and artifacts
+.next
+node_modules
+coverage
+dist
+tmp
+*.log
+
+# Editor / OS
+.DS_Store
+.vscode
+.idea
+
+# Local-only data
+storage
+postgres_data
+surrealdb_data
+rustfs_data
+ollama_data
+
+# Cargo build output from submodule
+packages/rantaiclaw/target

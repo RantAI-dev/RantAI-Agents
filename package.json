@@ -13,6 +13,7 @@
     "check:thin-routes": "bun scripts/check-thin-routes.ts",
     "check:domain-imports": "bun scripts/check-domain-imports.ts",
     "check:frontend-compliance": "bun scripts/check-frontend-compliance.ts",
+    "check:release-compat": "bun scripts/check-release-compat.ts",
     "build": "next build",
     "dev": "bun server.ts",
     "dev:next": "next dev",
