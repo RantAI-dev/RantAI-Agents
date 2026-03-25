@@ -3,6 +3,7 @@
 // Source of truth for task data lives inside the containers themselves.
 
 import { prisma } from "@/lib/prisma"
+import { createRuntimeToken } from "@/lib/digital-employee/runtime-auth"
 import type {
   Task,
   TaskComment,
@@ -462,15 +463,38 @@ export async function proxyCreateTask(
   const target = await resolveWriteTarget(input.assignee_id, orgId)
   if (!target) return null
 
-  const res = await fetch(`${target.url}/tasks`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${target.token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ...input, organization_id: orgId }),
-    signal: AbortSignal.timeout(10000),
-  })
+  const requestPayload = JSON.stringify({ ...input, organization_id: orgId })
+
+  const requestCreate = (token: string) =>
+    fetch(`${target.url}/tasks`, {
+      method: "POST",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        "Content-Type": "application/json",
+      },
+      body: requestPayload,
+      signal: AbortSignal.timeout(10000),
+    })
+
+  let res = await requestCreate(target.token)
+
+  // Gateway tokens can expire while group container is still running.
+  // Refresh token from server state and retry once to avoid false "no active container" errors.
+  if (res.status === 401 && target.sourceType === "group") {
+    try {
+      const refreshedToken = await createRuntimeToken(target.sourceId, "gateway", {
+        expiresIn: "24h",
+      })
+      await prisma.employeeGroup.update({
+        where: { id: target.sourceId },
+        data: { gatewayToken: refreshedToken },
+      })
+      target.token = refreshedToken
+      res = await requestCreate(target.token)
+    } catch {
+      // Fall through to normal error handling
+    }
+  }
 
   if (!res.ok) return null
   const task = (await res.json()) as Task

@@ -8,11 +8,42 @@ export async function resolveSkillsForAssistant(
   assistantId: string,
   skillIds?: string[]
 ): Promise<string | null> {
+  if (Array.isArray(skillIds) && skillIds.length > 0) {
+    const assistant = await prisma.assistant.findUnique({
+      where: { id: assistantId },
+      select: { organizationId: true },
+    })
+
+    const skills = await prisma.skill.findMany({
+      where: {
+        id: { in: skillIds },
+        enabled: true,
+        OR: [
+          { organizationId: null },
+          ...(assistant?.organizationId
+            ? [{ organizationId: assistant.organizationId }]
+            : []),
+        ],
+      },
+    })
+
+    if (skills.length === 0) return null
+
+    const orderedSkills = skillIds
+      .map((id) => skills.find((skill) => skill.id === id))
+      .filter((skill): skill is NonNullable<typeof skill> => Boolean(skill))
+
+    const sections = orderedSkills.map(
+      (skill) => `### Skill: ${skill.displayName}\n${skill.content}`
+    )
+
+    return `## Active Skills\n\n${sections.join("\n\n")}`
+  }
+
   const bindings = await prisma.assistantSkill.findMany({
     where: {
       assistantId,
       enabled: true,
-      ...(skillIds && { skillId: { in: skillIds } }),
     },
     include: { skill: true },
     orderBy: { priority: "asc" },

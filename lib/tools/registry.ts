@@ -1,5 +1,5 @@
 import { tool as aiTool, jsonSchema } from "ai"
-import type { CoreTool } from "ai"
+import type { ToolSet } from "ai"
 import { prisma } from "@/lib/prisma"
 import { AVAILABLE_MODELS } from "@/lib/models"
 import { BUILTIN_TOOLS } from "./builtin"
@@ -42,7 +42,7 @@ export async function resolveToolsForAssistant(
     },
   })
 
-  const tools: Record<string, CoreTool> = {}
+  const tools: ToolSet = {}
   const toolNames: string[] = []
 
   for (const at of assistantTools) {
@@ -359,6 +359,249 @@ export async function resolveToolsForAssistant(
       },
     })
     toolNames.push(toolName)
+  }
+
+  return { tools, toolNames }
+}
+
+/**
+ * Resolve enabled tools by explicit tool names (on-demand chat override),
+ * independent from assistant bindings.
+ */
+export async function resolveToolsByNames(
+  requestedToolNames: string[],
+  assistantId: string | null,
+  modelId: string,
+  context: ToolContext
+): Promise<ResolvedTools> {
+  const model = getModelById(modelId)
+  if (!model?.capabilities.functionCalling || requestedToolNames.length === 0) {
+    return { tools: {}, toolNames: [] }
+  }
+
+  const toolDefs = await prisma.tool.findMany({
+    where: {
+      name: { in: requestedToolNames },
+      enabled: true,
+      OR: [
+        { organizationId: null, isBuiltIn: true },
+        ...(context.organizationId ? [{ organizationId: context.organizationId }] : []),
+      ],
+    },
+    include: { mcpServer: true },
+  })
+
+  const tools: ToolSet = {}
+  const toolNames: string[] = []
+
+  for (const toolDef of toolDefs) {
+    if (toolDef.category === "builtin") {
+      const builtin = BUILTIN_TOOLS[toolDef.name]
+      if (!builtin) continue
+
+      tools[toolDef.name] = aiTool({
+        description: toolDef.description,
+        inputSchema: builtin.parameters,
+        execute: async (params) => {
+          const startTime = Date.now()
+          try {
+            const result = await builtin.execute(
+              params as Record<string, unknown>,
+              context
+            )
+            logToolExecution(
+              toolDef.name,
+              toolDef.id,
+              params,
+              result,
+              context,
+              Date.now() - startTime
+            ).catch(() => {})
+            return result
+          } catch (error) {
+            logToolExecution(
+              toolDef.name,
+              toolDef.id,
+              params,
+              null,
+              context,
+              Date.now() - startTime,
+              error
+            ).catch(() => {})
+            return {
+              error: `Tool execution failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            }
+          }
+        },
+      })
+      toolNames.push(toolDef.name)
+      continue
+    }
+
+    if (toolDef.category === "mcp" && toolDef.mcpServer) {
+      const serverConfig: McpServerOptions = {
+        id: toolDef.mcpServer.id,
+        name: toolDef.mcpServer.name,
+        transport: toolDef.mcpServer.transport as McpServerOptions["transport"],
+        url: toolDef.mcpServer.url,
+        env: decryptJsonField(toolDef.mcpServer.env),
+        headers: decryptJsonField(toolDef.mcpServer.headers),
+      }
+
+      const mcpToolInfo: McpToolInfo = {
+        name: toolDef.name,
+        description: toolDef.description,
+        inputSchema: toolDef.parameters as object,
+      }
+
+      try {
+        const adapted = adaptMcpToolsToAiSdk(serverConfig, [mcpToolInfo])
+        Object.assign(tools, adapted)
+        toolNames.push(...Object.keys(adapted))
+      } catch {
+        // MCP tool unavailable, skip silently
+      }
+      continue
+    }
+
+    if (toolDef.category === "custom" || toolDef.category === "openapi") {
+      const config = toolDef.executionConfig as ExecutionConfig | null
+      if (!config?.url) {
+        continue
+      }
+
+      const authHeaders: Record<string, string> = {}
+      if (config.authType === "bearer" && config.authValue) {
+        authHeaders["Authorization"] = `Bearer ${config.authValue}`
+      } else if (config.authType === "api_key" && config.authValue) {
+        authHeaders[config.authHeaderName || "X-API-Key"] = config.authValue
+      }
+
+      tools[toolDef.name] = aiTool({
+        description: toolDef.description,
+        inputSchema: jsonSchema(
+          toolDef.parameters as Parameters<typeof jsonSchema>[0]
+        ),
+        execute: async (params) => {
+          const startTime = Date.now()
+          const timeoutMs = config.timeoutMs || 30000
+          try {
+            const parsed = new URL(config.url)
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+              throw new Error(`Invalid protocol: ${parsed.protocol}`)
+            }
+
+            const controller = new AbortController()
+            const timer = setTimeout(() => controller.abort(), timeoutMs)
+            try {
+              const method = config.method || "POST"
+              const opts: RequestInit = {
+                method,
+                headers: {
+                  "Content-Type": "application/json",
+                  ...(config.headers || {}),
+                  ...authHeaders,
+                },
+                signal: controller.signal,
+              }
+              if (method !== "GET" && method !== "DELETE") {
+                opts.body = JSON.stringify(params)
+              }
+              const res = await fetch(config.url, opts)
+              clearTimeout(timer)
+              if (!res.ok) {
+                const errText = await res.text().catch(() => "Unknown")
+                throw new Error(`HTTP ${res.status}: ${errText.substring(0, 500)}`)
+              }
+              const result = await res.json().catch(() => res.text())
+              logToolExecution(toolDef.name, toolDef.id, params, result, context, Date.now() - startTime).catch(() => {})
+              return result
+            } catch (err) {
+              clearTimeout(timer)
+              if ((err as Error).name === "AbortError") {
+                throw new Error(`Timed out after ${timeoutMs}ms`)
+              }
+              throw err
+            }
+          } catch (error) {
+            logToolExecution(toolDef.name, toolDef.id, params, null, context, Date.now() - startTime, error).catch(() => {})
+            return {
+              error: `Tool execution failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            }
+          }
+        },
+      })
+      toolNames.push(toolDef.name)
+      continue
+    }
+
+    if (toolDef.category === "community") {
+      const communityTool = await getCommunityTool(toolDef.name)
+      if (!communityTool) {
+        continue
+      }
+
+      let userConfig: Record<string, unknown> | undefined
+      if (assistantId) {
+        const skillsUsingTool = await prisma.skill.findMany({
+          where: {
+            assistantSkills: { some: { assistantId, enabled: true } },
+          },
+          select: { metadata: true, installedSkill: { select: { config: true } } },
+        })
+        for (const skill of skillsUsingTool) {
+          const meta = (skill.metadata ?? {}) as Record<string, unknown>
+          const toolIds = Array.isArray(meta.toolIds) ? meta.toolIds : []
+          if (toolIds.includes(toolDef.id) && skill.installedSkill?.config) {
+            userConfig = skill.installedSkill.config as Record<string, unknown>
+            break
+          }
+        }
+      }
+
+      const communityCtx: CommunityToolContext = {
+        ...context,
+        config: userConfig,
+      }
+
+      tools[toolDef.name] = aiTool({
+        description: toolDef.description,
+        inputSchema: communityTool.parameters,
+        execute: async (params) => {
+          const startTime = Date.now()
+          try {
+            const result = await executeCommunityTool(
+              toolDef.name,
+              params as Record<string, unknown>,
+              communityCtx
+            )
+            logToolExecution(
+              toolDef.name,
+              toolDef.id,
+              params,
+              result,
+              context,
+              Date.now() - startTime
+            ).catch(() => {})
+            return result
+          } catch (error) {
+            logToolExecution(
+              toolDef.name,
+              toolDef.id,
+              params,
+              null,
+              context,
+              Date.now() - startTime,
+              error
+            ).catch(() => {})
+            return {
+              error: `Tool execution failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+            }
+          }
+        },
+      })
+      toolNames.push(toolDef.name)
+    }
   }
 
   return { tools, toolNames }

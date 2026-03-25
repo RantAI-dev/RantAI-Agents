@@ -1,17 +1,17 @@
 import { tool as aiTool } from "ai"
 import { jsonSchema } from "ai"
-import type { CoreTool } from "ai"
+import type { ToolSet } from "ai"
 import { mcpClientManager, type McpServerOptions, type McpToolInfo } from "./client"
 
 /**
- * Convert MCP tools into Vercel AI SDK CoreTool format.
+ * Convert MCP tools into AI SDK tool format.
  * Each tool's execute() delegates to mcpClientManager.callTool().
  */
 export function adaptMcpToolsToAiSdk(
   serverConfig: McpServerOptions,
   mcpTools: McpToolInfo[]
-): Record<string, CoreTool> {
-  const tools: Record<string, CoreTool> = {}
+): ToolSet {
+  const tools: ToolSet = {}
 
   for (const mcpTool of mcpTools) {
     const toolName = `mcp_${serverConfig.id}_${mcpTool.name}`

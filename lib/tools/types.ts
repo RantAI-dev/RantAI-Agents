@@ -1,5 +1,5 @@
 import { z } from "zod"
-import type { CoreTool } from "ai"
+import type { ToolSet } from "ai"
 
 export interface ToolDefinition {
   name: string
@@ -21,7 +21,7 @@ export interface ToolContext {
 }
 
 export interface ResolvedTools {
-  tools: Record<string, CoreTool>
+  tools: ToolSet
   toolNames: string[]
 }
 
