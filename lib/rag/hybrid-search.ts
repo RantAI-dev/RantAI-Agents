@@ -14,6 +14,7 @@
 import { getSurrealClient, SurrealDBClient } from "../surrealdb";
 import { generateEmbedding } from "./embeddings";
 import { Entity } from "../document-intelligence/types";
+import { prisma } from "../prisma";
 
 /**
  * Search configuration
@@ -253,6 +254,10 @@ export class HybridSearch {
   ): Promise<Array<{ chunk: ChunkResult; score: number }>> {
     try {
       const client = await this.getClient();
+      const scopedDocumentIds = await this.resolveScopedDocumentIds();
+      if (Array.isArray(scopedDocumentIds) && scopedDocumentIds.length === 0) {
+        return [];
+      }
 
       // Build WHERE conditions
       const conditions: string[] = [];
@@ -269,6 +274,11 @@ export class HybridSearch {
       if (this.config.fileIds.length > 0) {
         conditions.push("file_id IN $fileIds");
         vars.fileIds = this.config.fileIds;
+      }
+
+      if (Array.isArray(scopedDocumentIds)) {
+        conditions.push("document_id IN $documentIds");
+        vars.documentIds = scopedDocumentIds;
       }
 
       const whereClause = conditions.length > 0 ? conditions.join(" AND ") : "true";
@@ -303,6 +313,36 @@ export class HybridSearch {
       console.error("[HybridSearch] Vector search failed:", error);
       return [];
     }
+  }
+
+  private async resolveScopedDocumentIds(): Promise<string[] | null> {
+    if (!this.config.categoryFilter && this.config.groupIds.length === 0) {
+      return null;
+    }
+
+    const where: {
+      categories?: { has: string };
+      groups?: { some: { groupId: { in: string[] } } };
+    } = {};
+
+    if (this.config.categoryFilter) {
+      where.categories = { has: this.config.categoryFilter };
+    }
+
+    if (this.config.groupIds.length > 0) {
+      where.groups = {
+        some: {
+          groupId: { in: this.config.groupIds },
+        },
+      };
+    }
+
+    const documents = await prisma.document.findMany({
+      where,
+      select: { id: true },
+    });
+
+    return documents.map((document) => document.id);
   }
 
   /**
