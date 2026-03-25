@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   listDashboardMarketplaceItems,
 } from "@/src/features/marketplace/service"
@@ -13,7 +13,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     const { searchParams } = new URL(req.url)
 
     const category = searchParams.get("category") || undefined

@@ -30,6 +30,7 @@ import {
   Plus,
 } from "@/lib/icons"
 import { DynamicIcon } from "@/components/ui/dynamic-icon"
+import { toast } from "sonner"
 import type {
   MarketplaceItemDetail,
   ToolSchemaInfo,
@@ -71,10 +72,12 @@ export function ItemDetailDialog({
     setActionLoading(true)
     try {
       await onInstall(item.id, config)
+      toast.success(`${item.displayName} installed`)
       setJustInstalled(true)
       setTimeout(() => setJustInstalled(false), 2000)
     } catch (err) {
       console.error("Install failed:", err)
+      toast.error(err instanceof Error ? err.message : "Failed to install item")
     } finally {
       setActionLoading(false)
     }
@@ -94,7 +97,10 @@ export function ItemDetailDialog({
       setActionLoading(true)
       try {
         await onUninstall(item.id)
+        toast.success(`${item.displayName} uninstalled`)
         setJustInstalled(false)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to uninstall item")
       } finally {
         setActionLoading(false)
       }
@@ -108,7 +114,7 @@ export function ItemDetailDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col p-0 gap-0">
+        <DialogContent className="sm:max-w-lg h-[85vh] max-h-[85vh] overflow-hidden grid grid-rows-[auto_minmax(0,1fr)_auto] p-0 gap-0">
           {loading || !item ? (
             <div className="flex items-center justify-center py-20">
               <VisuallyHidden>
@@ -179,7 +185,7 @@ export function ItemDetailDialog({
               </DialogHeader>
 
               {/* Scrollable content */}
-              <ScrollArea className="flex-1 min-h-0">
+              <ScrollArea className="min-h-0">
                 <div className="px-6 py-4 space-y-5">
                   {/* Description */}
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -241,8 +247,9 @@ export function ItemDetailDialog({
 
                   {/* Skill Prompt (collapsible) */}
                   {isSkill && item.skillPrompt && (
-                    <div>
+                    <div className="relative z-0">
                       <button
+                        type="button"
                         onClick={() => setPromptExpanded(!promptExpanded)}
                         className="flex items-center gap-2 text-xs font-semibold text-foreground/80 hover:text-foreground transition-colors w-full cursor-pointer"
                       >
@@ -255,8 +262,8 @@ export function ItemDetailDialog({
                         )}
                       </button>
                       {promptExpanded && (
-                        <div className="mt-2 rounded-lg bg-muted/40 border border-border/40 p-3 max-h-[250px] overflow-auto">
-                          <pre className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap font-mono">
+                        <div className="mt-2 rounded-lg bg-muted/40 border border-border/40 p-3 max-h-56 overflow-y-auto overflow-x-hidden">
+                          <pre className="text-[11px] text-muted-foreground leading-relaxed whitespace-pre-wrap break-words font-mono">
                             {item.skillPrompt}
                           </pre>
                         </div>
@@ -286,7 +293,7 @@ export function ItemDetailDialog({
               </ScrollArea>
 
               {/* Footer */}
-              <DialogFooter className="px-6 py-3 border-t border-border/40 shrink-0">
+              <DialogFooter className="relative z-10 bg-background px-6 py-3 border-t border-border/40 shrink-0">
                 <div className="flex items-center justify-between w-full">
                   <span className="text-[10px] font-medium text-muted-foreground/70 uppercase tracking-wider">
                     {item.category}
@@ -295,7 +302,7 @@ export function ItemDetailDialog({
                     variant={!isTemplateType && item.installed ? "ghost" : "default"}
                     size="sm"
                     className={cn(
-                      "h-8 text-xs gap-1.5",
+                      "h-8 text-xs gap-1.5 cursor-pointer",
                       !isTemplateType && item.installed &&
                         "text-emerald-600 dark:text-emerald-400 hover:text-red-600 dark:hover:text-red-400"
                     )}

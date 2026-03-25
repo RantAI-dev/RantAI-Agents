@@ -1,13 +1,19 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
 
-export async function findToolsForOrganization(organizationId: string | null) {
+export async function findToolsForOrganization(
+  organizationId: string | null,
+  options?: { userSelectableOnly?: boolean }
+) {
+  const userSelectableOnly = options?.userSelectableOnly ?? true
+
   return prisma.tool.findMany({
     where: {
       OR: [
         { organizationId: null, isBuiltIn: true },
         ...(organizationId ? [{ organizationId }] : []),
       ],
+      ...(userSelectableOnly ? { userSelectable: true } : {}),
     },
     include: {
       mcpServer: { select: { id: true, name: true } },

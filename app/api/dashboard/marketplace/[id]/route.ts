@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   getDashboardMarketplaceItemDetail,
   type ServiceError,
@@ -29,7 +29,7 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     const detail = await getDashboardMarketplaceItemDetail({
       organizationId: orgContext?.organizationId ?? null,
       itemId: parsedParams.data.id,

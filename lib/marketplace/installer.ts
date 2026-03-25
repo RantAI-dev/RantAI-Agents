@@ -44,7 +44,18 @@ export async function installMarketplaceItem(
   })
 
   if (existing) {
-    return { success: false, error: "Already installed" }
+    if (existing.itemType === "skill") {
+      const installedSkill = await prisma.installedSkill.findUnique({
+        where: { id: existing.installedId },
+        select: { skillId: true },
+      })
+      return {
+        success: true,
+        installedId: existing.installedId,
+        ...(installedSkill?.skillId ? { skillId: installedSkill.skillId } : {}),
+      }
+    }
+    return { success: true, installedId: existing.installedId }
   }
 
   // Route to community install if applicable
@@ -73,43 +84,69 @@ export async function installMarketplaceItem(
       executionConfig.headers = headers
     }
 
-    const tool = await prisma.tool.create({
-      data: {
-        name: template.name,
-        displayName: template.displayName,
-        description: template.description,
-        category: "custom",
-        parameters: template.parameters,
-        icon: item.icon,
-        tags: item.tags ?? [],
-        executionConfig,
-        isBuiltIn: false,
-        enabled: true,
-        organizationId,
-        createdBy: userId,
+    const existingTool = await prisma.tool.findUnique({
+      where: {
+        name_organizationId: {
+          name: template.name,
+          organizationId,
+        },
       },
     })
-    installedId = tool.id
+
+    if (existingTool) {
+      installedId = existingTool.id
+    } else {
+      const tool = await prisma.tool.create({
+        data: {
+          name: template.name,
+          displayName: template.displayName,
+          description: template.description,
+          category: "custom",
+          parameters: template.parameters,
+          icon: item.icon,
+          tags: item.tags ?? [],
+          executionConfig,
+          isBuiltIn: false,
+          enabled: true,
+          organizationId,
+          createdBy: userId,
+        },
+      })
+      installedId = tool.id
+    }
   } else if (item.type === "skill" && item.skillTemplate) {
     const template = item.skillTemplate
 
-    const skill = await prisma.skill.create({
-      data: {
+    const existingSkill = await prisma.skill.findFirst({
+      where: {
         name: template.name,
-        displayName: template.displayName,
-        description: template.description,
-        content: template.content,
-        source: "marketplace",
-        category: template.category,
-        tags: template.tags,
-        icon: item.icon,
-        enabled: true,
         organizationId,
-        createdBy: userId,
       },
+      select: { id: true },
     })
-    installedId = skill.id
-    skillId = skill.id
+
+    if (existingSkill) {
+      installedId = existingSkill.id
+      skillId = existingSkill.id
+    } else {
+      const skill = await prisma.skill.create({
+        data: {
+          name: template.name,
+          displayName: template.displayName,
+          description: template.description,
+          content: template.content,
+          source: "marketplace",
+          category: template.category,
+          tags: template.tags,
+          icon: item.icon,
+          enabled: true,
+          organizationId,
+          createdBy: userId,
+        },
+      })
+      installedId = skill.id
+      skillId = skill.id
+    }
   } else if (item.type === "workflow" && item.workflowTemplate) {
     const imported = importWorkflow(item.workflowTemplate)
     const workflow = await prisma.workflow.create({
@@ -204,8 +241,19 @@ export async function installMarketplaceItem(
   }
 
   // Record the install
-  await prisma.marketplaceInstall.create({
-    data: {
+  await prisma.marketplaceInstall.upsert({
+    where: {
+      catalogItemId_organizationId: {
+        catalogItemId,
+        organizationId,
+      },
+    },
+    update: {
+      itemType: item.type,
+      installedId,
+      installedBy: userId,
+    },
+    create: {
       catalogItemId,
       itemType: item.type,
       installedId,
@@ -236,17 +284,25 @@ async function installCommunitySkill(
     }
   }
 
-  // Check if already installed
-  const existingSkill = await prisma.installedSkill.findFirst({
-    where: { name: skillDef.name, organizationId },
-  })
-  if (existingSkill) {
-    return { success: false, error: "Community skill already installed" }
-  }
-
-  // 1. Create Skill record for prompt injection (reuses existing skill resolver)
-  const skillRecord = await prisma.skill.create({
-    data: {
+  // 1. Upsert Skill record for prompt injection.
+  const skillRecord = await prisma.skill.upsert({
+    where: {
+      name_organizationId: {
+        name: `community-${skillDef.name}`,
+        organizationId,
+      },
+    },
+    update: {
+      displayName: skillDef.displayName,
+      description: skillDef.description,
+      content: skillDef.skillPrompt,
+      source: "community",
+      category: skillDef.category.toLowerCase(),
+      tags: skillDef.tags,
+      icon: item.icon || skillDef.icon,
+      enabled: true,
+    },
+    create: {
       name: `community-${skillDef.name}`,
       displayName: skillDef.displayName,
       description: skillDef.description,
@@ -261,9 +317,31 @@ async function installCommunitySkill(
     },
   })
 
-  // 2. Create InstalledSkill record
-  const installedSkill = await prisma.installedSkill.create({
-    data: {
+  // 2. Upsert InstalledSkill record.
+  const installedSkill = await prisma.installedSkill.upsert({
+    where: {
+      name_organizationId: {
+        name: skillDef.name,
+        organizationId,
+      },
+    },
+    update: {
+      displayName: skillDef.displayName,
+      description: skillDef.description,
+      version: skillDef.version,
+      category: skillDef.category,
+      tags: skillDef.tags,
+      icon: item.icon || skillDef.icon || "✨",
+      skillPrompt: skillDef.skillPrompt,
+      configSchema: skillDef.configSchema
+        ? configSchemaToJsonSchema(skillDef.configSchema)
+        : undefined,
+      ...(userConfig ? { config: userConfig as object } : {}),
+      enabled: true,
+      installedBy: userId,
+      skillId: skillRecord.id,
+    },
+    create: {
       name: skillDef.name,
       displayName: skillDef.displayName,
       description: skillDef.description,
@@ -320,19 +398,81 @@ async function installCommunitySkill(
   }
 
   // 3b. Store created tool IDs on the Skill metadata so frontend can resolve them
-  if (createdToolIds.length > 0) {
-    const existingMeta = (skillRecord.metadata as Record<string, unknown>) ?? {}
-    await prisma.skill.update({
-      where: { id: skillRecord.id },
-      data: {
-        metadata: { ...existingMeta, toolIds: createdToolIds },
+  const existingMeta = (skillRecord.metadata as Record<string, unknown>) ?? {}
+  const existingToolIds = Array.isArray(existingMeta.toolIds)
+    ? (existingMeta.toolIds as string[])
+    : []
+  const mergedToolIds = Array.from(new Set([...existingToolIds, ...createdToolIds]))
+  await prisma.skill.update({
+    where: { id: skillRecord.id },
+    data: {
+      metadata: { ...existingMeta, toolIds: mergedToolIds },
+    },
+  })
+
+  // 3c. Mark attached community tools as installed in Marketplace > Tools
+  // by linking each tool catalog entry to the resolved Tool row.
+  if (toolSchemas.length > 0) {
+    const schemaNames = toolSchemas.map((schema) => schema.name)
+    const toolCatalogItems = await prisma.catalogItem.findMany({
+      where: {
+        type: "tool",
+        communityToolName: { in: schemaNames },
       },
+      select: { id: true, communityToolName: true },
     })
+
+    const toolIdByName = new Map<string, string>()
+    for (let i = 0; i < toolSchemas.length; i += 1) {
+      const schema = toolSchemas[i]
+      const toolId = createdToolIds[i]
+      if (schema?.name && toolId) {
+        toolIdByName.set(schema.name, toolId)
+      }
+    }
+
+    for (const catalogTool of toolCatalogItems) {
+      if (!catalogTool.communityToolName) continue
+      const toolId = toolIdByName.get(catalogTool.communityToolName)
+      if (!toolId) continue
+
+      await prisma.marketplaceInstall.upsert({
+        where: {
+          catalogItemId_organizationId: {
+            catalogItemId: catalogTool.id,
+            organizationId,
+          },
+        },
+        update: {
+          itemType: "tool",
+          installedId: toolId,
+          installedBy: userId,
+        },
+        create: {
+          catalogItemId: catalogTool.id,
+          itemType: "tool",
+          installedId: toolId,
+          organizationId,
+          installedBy: userId,
+        },
+      })
+    }
   }
 
   // 4. Record marketplace install
-  await prisma.marketplaceInstall.create({
-    data: {
+  await prisma.marketplaceInstall.upsert({
+    where: {
+      catalogItemId_organizationId: {
+        catalogItemId,
+        organizationId,
+      },
+    },
+    update: {
+      itemType: "skill",
+      installedId: installedSkill.id,
+      installedBy: userId,
+    },
+    create: {
       catalogItemId,
       itemType: "skill",
       installedId: installedSkill.id,
@@ -345,7 +485,7 @@ async function installCommunitySkill(
     success: true,
     installedId: installedSkill.id,
     skillId: skillRecord.id,
-    toolIds: createdToolIds,
+    toolIds: mergedToolIds,
   }
 }
 
@@ -367,21 +507,32 @@ async function installCommunityTool(
     }
   }
 
-  const tool = await prisma.tool.create({
-    data: {
-      name: toolDef.name,
-      displayName: toolDef.displayName,
-      description: toolDef.description,
-      category: "community",
-      parameters: communityToolToJsonSchema(toolDef),
-      icon: item.icon,
-      tags: toolDef.tags ?? item.tags ?? [],
-      isBuiltIn: false,
-      enabled: true,
-      organizationId,
-      createdBy: userId,
+  const existingTool = await prisma.tool.findUnique({
+    where: {
+      name_organizationId: {
+        name: toolDef.name,
+        organizationId,
+      },
     },
   })
+
+  const tool = existingTool
+    ? existingTool
+    : await prisma.tool.create({
+        data: {
+          name: toolDef.name,
+          displayName: toolDef.displayName,
+          description: toolDef.description,
+          category: "community",
+          parameters: communityToolToJsonSchema(toolDef),
+          icon: item.icon,
+          tags: toolDef.tags ?? item.tags ?? [],
+          isBuiltIn: false,
+          enabled: true,
+          organizationId,
+          createdBy: userId,
+        },
+      })
 
   await prisma.marketplaceInstall.create({
     data: {
@@ -429,43 +580,9 @@ export async function uninstallMarketplaceItem(
       .catch(() => null)
 
     if (installedSkill) {
-      // Delete tools that belong to this skill (from metadata.toolIds)
-      // Only delete tools not referenced by any other skill
+      // Keep attached tools installed and reusable as standalone tools.
+      // Skill uninstall only removes skill records/linkage.
       if (installedSkill.skillId) {
-        const skill = await prisma.skill.findUnique({
-          where: { id: installedSkill.skillId },
-          select: { metadata: true },
-        })
-        const meta = (skill?.metadata ?? {}) as Record<string, unknown>
-        const toolIds = Array.isArray(meta.toolIds) ? (meta.toolIds as string[]) : []
-
-        if (toolIds.length > 0) {
-          // Check which tools are referenced by other skills
-          const otherSkills = await prisma.skill.findMany({
-            where: {
-              id: { not: installedSkill.skillId },
-              organizationId: install.organizationId,
-            },
-            select: { metadata: true },
-          })
-          const referencedByOthers = new Set<string>()
-          for (const other of otherSkills) {
-            const otherMeta = (other.metadata ?? {}) as Record<string, unknown>
-            if (Array.isArray(otherMeta.toolIds)) {
-              for (const tid of otherMeta.toolIds) {
-                if (typeof tid === "string") referencedByOthers.add(tid)
-              }
-            }
-          }
-
-          // Delete tools not referenced by any other skill
-          for (const tid of toolIds) {
-            if (!referencedByOthers.has(tid)) {
-              await prisma.tool.delete({ where: { id: tid } }).catch(() => {})
-            }
-          }
-        }
-
         await prisma.skill
           .delete({ where: { id: installedSkill.skillId } })
           .catch(() => {})

@@ -27,6 +27,7 @@ type ToolListItem = {
   executionConfig: unknown | null
   isBuiltIn: boolean
   enabled: boolean
+  userSelectable: boolean
   mcpServer: { id: string; name: string } | null
   assistantCount: number
   createdAt: string
@@ -36,10 +37,13 @@ type ToolListItem = {
  * Lists built-in tools plus organization-scoped tools visible to the caller.
  */
 export async function listToolsForDashboard(
-  organizationId: string | null
+  organizationId: string | null,
+  options?: { includeNonUserSelectable?: boolean }
 ): Promise<ToolListItem[]> {
   await ensureBuiltinTools()
-  const tools = await findToolsForOrganization(organizationId)
+  const tools = await findToolsForOrganization(organizationId, {
+    userSelectableOnly: !options?.includeNonUserSelectable,
+  })
 
   return tools.map((tool) => ({
     id: tool.id,
@@ -53,6 +57,7 @@ export async function listToolsForDashboard(
     executionConfig: tool.executionConfig ?? null,
     isBuiltIn: tool.isBuiltIn,
     enabled: tool.enabled,
+    userSelectable: tool.userSelectable,
     mcpServer: tool.mcpServer,
     assistantCount: tool._count.assistantTools,
     createdAt: tool.createdAt.toISOString(),

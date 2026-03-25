@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   CreateDashboardSkillSchema,
 } from "@/src/features/skills/schema"
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     return NextResponse.json(
       await listDashboardSkills({
         organizationId: orgContext?.organizationId ?? null,
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     const parsed = CreateDashboardSkillSchema.safeParse(await req.json())
     if (!parsed.success) {
       return NextResponse.json(

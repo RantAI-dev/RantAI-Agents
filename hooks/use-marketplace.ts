@@ -106,8 +106,19 @@ export function useMarketplace(options?: {
         body: JSON.stringify({ catalogItemId, config }),
       })
       if (!res.ok) {
-        const errData = await res.json()
-        throw new Error(errData.error || "Failed to install")
+        const errorText = await res.text()
+        let errorMessage = "Failed to install"
+        try {
+          const errData = JSON.parse(errorText) as { error?: string }
+          if (typeof errData.error === "string" && errData.error.length > 0) {
+            errorMessage = errData.error
+          }
+        } catch {
+          if (errorText.trim().length > 0) {
+            errorMessage = errorText
+          }
+        }
+        throw new Error(errorMessage)
       }
       const result = await res.json() as {
         success: boolean
@@ -125,7 +136,9 @@ export function useMarketplace(options?: {
       )
       // Also update detail view if open
       setSelectedItem((prev) =>
-        prev?.id === catalogItemId ? { ...prev, installed: true } : prev
+        prev?.id === catalogItemId
+          ? { ...prev, installed: true, installedId: result.installedId, skillId: result.skillId }
+          : prev
       )
       return result
     },

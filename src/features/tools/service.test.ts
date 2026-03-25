@@ -2,8 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   deleteDashboardTool,
   getDashboardToolById,
+  listToolsForDashboard,
 } from "./service"
 import * as repository from "./repository"
+
+vi.mock("@/lib/tools", () => ({
+  ensureBuiltinTools: vi.fn(),
+}))
 
 vi.mock("./repository", () => ({
   createTool: vi.fn(),
@@ -81,6 +86,16 @@ describe("dashboard-tools service", () => {
     expect(result).toEqual({
       status: 403,
       error: "Cannot delete built-in tools",
+    })
+  })
+
+  it("lists only user-selectable tools by default", async () => {
+    vi.mocked(repository.findToolsForOrganization).mockResolvedValue([] as never)
+
+    await listToolsForDashboard("org_1")
+
+    expect(repository.findToolsForOrganization).toHaveBeenCalledWith("org_1", {
+      userSelectableOnly: true,
     })
   })
 })

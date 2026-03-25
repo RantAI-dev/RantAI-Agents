@@ -478,6 +478,7 @@ model Tool {
   tags            String[]                        // Tags for filtering/discovery
   isBuiltIn       Boolean  @default(false)
   enabled         Boolean  @default(true)
+  userSelectable  Boolean  @default(true)         // Hidden from user selectors when false
   executionConfig Json?                           // For custom: { type, url, method, headers }
 
   // MCP association (null for builtin/custom tools)

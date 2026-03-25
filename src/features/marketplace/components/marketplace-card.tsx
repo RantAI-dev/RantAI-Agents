@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { DynamicIcon } from "@/components/ui/dynamic-icon"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import type { MarketplaceItem } from "@/hooks/use-marketplace"
 import { ConfigFormDialog } from "./config-form-dialog"
 
@@ -136,10 +137,12 @@ export function MarketplaceCard({
     setLoading(true)
     try {
       await onInstall(item.id, config)
+      toast.success(`${item.displayName} installed`)
       setJustInstalled(true)
       setTimeout(() => setJustInstalled(false), 2000)
     } catch (err) {
       console.error("Marketplace action failed:", err)
+      toast.error(err instanceof Error ? err.message : "Failed to install item")
     } finally {
       setLoading(false)
     }
@@ -164,9 +167,11 @@ export function MarketplaceCard({
       setLoading(true)
       try {
         await onUninstall(item.id)
+        toast.success(`${item.displayName} uninstalled`)
         setJustInstalled(false)
       } catch (err) {
         console.error("Marketplace action failed:", err)
+        toast.error(err instanceof Error ? err.message : "Failed to uninstall item")
       } finally {
         setLoading(false)
       }
@@ -298,7 +303,8 @@ export function MarketplaceCard({
               "h-7 text-xs gap-1.5 transition-all duration-200",
               item.installed
                 ? "text-emerald-600 dark:text-emerald-400 hover:text-red-600 dark:hover:text-red-400"
-                : "shadow-sm"
+                : "shadow-sm",
+              "cursor-pointer"
             )}
             onClick={(e) => {
               e.stopPropagation()

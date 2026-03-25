@@ -20,6 +20,20 @@ const BUILTIN_TOOL_ICONS: Record<string, string> = {
   ocr_document: "\uD83D\uDDCE",
 }
 
+const NON_USER_SELECTABLE_BUILTIN_TOOLS = new Set([
+  "create_artifact",
+  "update_artifact",
+  "date_time",
+  "ocr_document",
+  "file_operations",
+  "json_transform",
+  "text_utilities",
+])
+
+function isBuiltinToolUserSelectable(name: string): boolean {
+  return !NON_USER_SELECTABLE_BUILTIN_TOOLS.has(name)
+}
+
 /**
  * Ensure all built-in tools exist in the database.
  * Creates missing tools, updates existing ones.
@@ -36,6 +50,7 @@ export async function ensureBuiltinTools(): Promise<void> {
       description: def.description,
       parameters: zodToJsonSchema(def.parameters),
       icon: BUILTIN_TOOL_ICONS[name] || null,
+      userSelectable: isBuiltinToolUserSelectable(name),
     }
 
     if (existing) {

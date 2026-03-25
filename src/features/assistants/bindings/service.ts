@@ -1,5 +1,6 @@
 import {
   findAssistantById,
+  findHiddenAssistantToolIds,
   findAssistantMcpServerBindings,
   findAssistantSkillBindings,
   findAssistantToolBindings,
@@ -47,7 +48,14 @@ export async function setAssistantTools(
   const missing = notFoundOrVoid(assistant)
   if (missing) return missing
 
-  await replaceAssistantToolBindings(assistantId, toolIds)
+  const hiddenBoundToolIds = await findHiddenAssistantToolIds(assistantId)
+  const mergedToolIds = Array.from(
+    new Set([
+      ...toolIds.filter((id) => typeof id === "string" && id.length > 0),
+      ...hiddenBoundToolIds,
+    ])
+  )
+  await replaceAssistantToolBindings(assistantId, mergedToolIds)
 
   const rows = await findAssistantToolBindings(assistantId)
   return rows.map((row) => ({

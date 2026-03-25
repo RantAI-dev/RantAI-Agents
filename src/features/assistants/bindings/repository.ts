@@ -18,10 +18,22 @@ export async function findAssistantToolBindings(assistantId: string) {
           icon: true,
           isBuiltIn: true,
           enabled: true,
+          userSelectable: true,
         },
       },
     },
   })
+}
+
+export async function findHiddenAssistantToolIds(assistantId: string) {
+  const rows = await prisma.assistantTool.findMany({
+    where: {
+      assistantId,
+      tool: { userSelectable: false },
+    },
+    select: { toolId: true },
+  })
+  return rows.map((row) => row.toolId)
 }
 
 export async function replaceAssistantToolBindings(
@@ -143,4 +155,3 @@ export async function replaceAssistantWorkflowBindings(
       : []),
   ])
 }
-
