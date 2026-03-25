@@ -5,12 +5,25 @@ import ts from "typescript"
 
 const root = process.cwd()
 
-const files = execSync(`rg --files app src -g "*.ts" -g "*.tsx"`, {
-  encoding: "utf8",
-})
-  .trim()
-  .split("\n")
-  .filter(Boolean)
+function listCandidateFiles(): string[] {
+  try {
+    return execSync(`rg --files app src -g "*.ts" -g "*.tsx"`, {
+      encoding: "utf8",
+    })
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+  } catch {
+    return execSync(`find app src -type f \\( -name "*.ts" -o -name "*.tsx" \\)`, {
+      encoding: "utf8",
+    })
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+  }
+}
+
+const files = listCandidateFiles()
 
 const hardImportViolations: string[] = []
 const shimViolations: string[] = []
