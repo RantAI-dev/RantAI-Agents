@@ -2,6 +2,21 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "rantai_agents_version": "v0.1.1",
+      "date": "2026-03-25",
+      "notes": "Release governance update with submodule compatibility gates and CI-aligned submodule revisions.",
+      "submodules": {
+        "rantaiclaw": {
+          "sha": "1fadb152c35b186545a175f90e1529a21f1e45cb",
+          "tag": "v0.1.1"
+        },
+        "community_skills": {
+          "sha": "338da00eca10f971d3430e59a9e14aad4fe79a54",
+          "tag": "v0.1.1"
+        }
+      }
+    },
+    {
       "rantai_agents_version": "v0.1.0",
       "date": "2026-03-25",
       "notes": "Initial compatibility baseline for multi-repo independent releases.",
