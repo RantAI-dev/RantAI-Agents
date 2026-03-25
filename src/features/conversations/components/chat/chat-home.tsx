@@ -20,7 +20,7 @@ import { SendHorizontal } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useOrgFetch } from "@/hooks/use-organization"
+import { useOrgFetch, useOrganization } from "@/hooks/use-organization"
 import { ChatInputToolbar, type CanvasMode, type ToolMode, type SkillMode } from "./chat-input-toolbar"
 import { FilePreview } from "./file-preview"
 import type {
@@ -195,6 +195,7 @@ export function ChatHome({
   initialToolbarData,
 }: ChatHomeProps) {
   const orgFetch = useOrgFetch()
+  const { activeOrganization } = useOrganization()
   const { data: authSession } = useSession()
   const firstName = authSession?.user?.name?.split(" ")[0] ?? ""
   const greeting = getGreeting(firstName)
@@ -255,7 +256,8 @@ export function ChatHome({
       setKBGroups(initialToolbarData.kbGroups)
       setToolbarLoadedForAssistantId(activeAssistant.id)
       setCatalogLoaded(true)
-      setKbGroupsLoaded(true)
+      // If hydration has no groups, allow a client refetch once org context is ready.
+      setKbGroupsLoaded(initialToolbarData.kbGroups.length > 0)
       return
     }
 
@@ -263,6 +265,11 @@ export function ChatHome({
     setAssistantDefaultSkillIds([])
     setToolbarLoadedForAssistantId(null)
   }, [activeAssistant?.id, initialToolbarData])
+
+  useEffect(() => {
+    // Organization can hydrate after first render. Force KB groups refresh for new org scope.
+    setKbGroupsLoaded(false)
+  }, [activeOrganization?.id])
 
   const loadToolbarData = useCallback(async () => {
     if (!catalogLoaded) {
@@ -516,6 +523,9 @@ export function ChatHome({
                     void loadToolbarData()
                   }}
                   onOpenSkillsMenu={() => {
+                    void loadToolbarData()
+                  }}
+                  onOpenKnowledgeMenu={() => {
                     void loadToolbarData()
                   }}
                 />

@@ -198,6 +198,7 @@ export async function runChat(params: {
       ? body.useKnowledgeBase
       : (headerUseKnowledgeBase !== null ? headerUseKnowledgeBase === 'true' : undefined);
     const knowledgeBaseGroupIds: string[] | undefined = body.knowledgeBaseGroupIds;
+    const knowledgeBaseGroupsRequested = Array.isArray(knowledgeBaseGroupIds) && knowledgeBaseGroupIds.length > 0
 
     // Per-assistant memory configuration (null = all enabled for backward compatibility)
     interface AssistantMemoryConfig {
@@ -229,7 +230,11 @@ export async function runChat(params: {
 
         if (dbAssistant) {
           systemPrompt = dbAssistant.systemPrompt
-          useKnowledgeBase = dbAssistant.useKnowledgeBase
+          // Respect explicit per-request KB override from chat toolbar.
+          // If groups are explicitly selected, force KB on for this request.
+          useKnowledgeBase =
+            useKnowledgeBaseParam ??
+            (knowledgeBaseGroupsRequested ? true : dbAssistant.useKnowledgeBase)
           modelId = dbAssistant.model || DEFAULT_MODEL_ID
           // Read per-assistant memory config (null = all enabled)
           if (dbAssistant.memoryConfig && typeof dbAssistant.memoryConfig === "object") {

@@ -947,7 +947,6 @@ export function ChatWorkspace({
   const lastPollTimestamp = useRef<string | null>(null)
   const hasInitialAssistantTools = initialAssistantTools !== undefined
   const hasInitialAssistantSkills = initialAssistantSkills !== undefined
-  const hasInitialKnowledgeBaseGroups = initialKnowledgeBaseGroups !== undefined
 
   // Toolbar: per-message overrides for web search, knowledge base & tools
   const [webSearchOverride, setWebSearchOverride] = useState<boolean | null>(null)
@@ -1330,9 +1329,8 @@ export function ChatWorkspace({
       if (!hasInitialAssistantSkills) {
         void loadAssistantSkills(currentAssistant.id, signal)
       }
-      if (!hasInitialKnowledgeBaseGroups) {
-        void loadKnowledgeBaseGroups(signal)
-      }
+      // Always refresh KB groups from the active org scope to avoid stale empty hydration.
+      void loadKnowledgeBaseGroups(signal)
 
       setWebSearchOverride(null)
       setCodeInterpreterOverride(null)
@@ -1343,7 +1341,6 @@ export function ChatWorkspace({
     [
       hasInitialAssistantSkills,
       hasInitialAssistantTools,
-      hasInitialKnowledgeBaseGroups,
       loadAssistantSkills,
       loadAssistantTools,
       loadKnowledgeBaseGroups,
@@ -2849,6 +2846,10 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                               if (assistantSkills.length > 0) return
                               void loadAssistantSkills(assistant.id)
                             }}
+                            onOpenKnowledgeMenu={() => {
+                              if (kbGroups.length > 0) return
+                              void loadKnowledgeBaseGroups()
+                            }}
                           />
                         </div>
                       )}
@@ -3030,6 +3031,10 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     if (!assistant?.id) return
                     if (assistantSkills.length > 0) return
                     void loadAssistantSkills(assistant.id)
+                  }}
+                  onOpenKnowledgeMenu={() => {
+                    if (kbGroups.length > 0) return
+                    void loadKnowledgeBaseGroups()
                   }}
                 />
               </div>

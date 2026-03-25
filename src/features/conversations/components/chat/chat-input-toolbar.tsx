@@ -108,6 +108,7 @@ interface ChatInputToolbarProps {
   disabled: boolean
   onOpenToolsMenu?: () => void
   onOpenSkillsMenu?: () => void
+  onOpenKnowledgeMenu?: () => void
 }
 
 const SUPPORTED_EXTENSIONS = ".png,.jpg,.jpeg,.gif,.webp,.pdf,.md,.txt"
@@ -198,6 +199,7 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
   disabled,
   onOpenToolsMenu,
   onOpenSkillsMenu,
+  onOpenKnowledgeMenu,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [kbOpen, setKBOpen] = useState(false)
@@ -295,7 +297,13 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
           </button>
 
           {/* Knowledge base picker */}
-          <Collapsible open={kbOpen} onOpenChange={setKBOpen}>
+          <Collapsible
+            open={kbOpen}
+            onOpenChange={(nextOpen) => {
+              setKBOpen(nextOpen)
+              if (nextOpen) onOpenKnowledgeMenu?.()
+            }}
+          >
             <CollapsibleTrigger asChild>
               <button
                 type="button"
