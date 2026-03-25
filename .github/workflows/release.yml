@@ -107,21 +107,22 @@ jobs:
             fi
           fi
 
-          tags="${IMAGE_NAME}:${version}"
-          release_notes_tags="- \`${IMAGE_NAME}:${version}\`"
+          image_name="${IMAGE_NAME,,}"
+          tags="${image_name}:${version}"
+          release_notes_tags="- \`${image_name}:${version}\`"
 
           if [[ "$version" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
             major="${BASH_REMATCH[1]}"
             minor="${BASH_REMATCH[2]}"
-            tags="${tags}"$'\n'"${IMAGE_NAME}:v${major}.${minor}"
-            tags="${tags}"$'\n'"${IMAGE_NAME}:v${major}"
-            release_notes_tags="${release_notes_tags}"$'\n'"- \`${IMAGE_NAME}:v${major}.${minor}\`"
-            release_notes_tags="${release_notes_tags}"$'\n'"- \`${IMAGE_NAME}:v${major}\`"
+            tags="${tags}"$'\n'"${image_name}:v${major}.${minor}"
+            tags="${tags}"$'\n'"${image_name}:v${major}"
+            release_notes_tags="${release_notes_tags}"$'\n'"- \`${image_name}:v${major}.${minor}\`"
+            release_notes_tags="${release_notes_tags}"$'\n'"- \`${image_name}:v${major}\`"
           fi
 
           if [ "$publish_latest" = "true" ]; then
-            tags="${tags}"$'\n'"${IMAGE_NAME}:latest"
-            release_notes_tags="${release_notes_tags}"$'\n'"- \`${IMAGE_NAME}:latest\`"
+            tags="${tags}"$'\n'"${image_name}:latest"
+            release_notes_tags="${release_notes_tags}"$'\n'"- \`${image_name}:latest\`"
           fi
 
           {
