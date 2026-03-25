@@ -25,9 +25,13 @@ export interface WorkflowItem {
   updatedAt: string
 }
 
-export function useWorkflows(assistantId?: string | null) {
-  const [workflows, setWorkflows] = useState<WorkflowItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+export function useWorkflows(
+  assistantId?: string | null,
+  options?: { initialWorkflows?: WorkflowItem[] }
+) {
+  const initialWorkflows = options?.initialWorkflows
+  const [workflows, setWorkflows] = useState<WorkflowItem[]>(initialWorkflows || [])
+  const [isLoading, setIsLoading] = useState(initialWorkflows ? false : true)
   const [error, setError] = useState<string | null>(null)
 
   const fetchWorkflows = useCallback(async () => {
@@ -88,8 +92,28 @@ export function useWorkflows(assistantId?: string | null) {
   )
 
   useEffect(() => {
+    if (initialWorkflows) {
+      return
+    }
     fetchWorkflows()
-  }, [fetchWorkflows])
+  }, [fetchWorkflows, initialWorkflows])
+
+  const getWorkflowById = useCallback(async (id: string) => {
+    const existing = workflows.find((workflow) => workflow.id === id)
+    if (existing) return existing
+
+    const res = await fetch(`/api/dashboard/workflows/${id}`)
+    if (!res.ok) {
+      throw new Error("Failed to fetch workflow")
+    }
+
+    const workflow = (await res.json()) as WorkflowItem
+    setWorkflows((prev) => {
+      if (prev.some((item) => item.id === workflow.id)) return prev
+      return [workflow, ...prev]
+    })
+    return workflow
+  }, [workflows])
 
   return {
     workflows,
@@ -99,5 +123,6 @@ export function useWorkflows(assistantId?: string | null) {
     createWorkflow,
     updateWorkflow,
     deleteWorkflow,
+    getWorkflowById,
   }
 }

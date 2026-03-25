@@ -22,9 +22,10 @@ export interface EmployeeGroupItem {
   updatedAt: string
 }
 
-export function useEmployeeGroups() {
-  const [groups, setGroups] = useState<EmployeeGroupItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[] }) {
+  const initialGroups = options?.initialGroups
+  const [groups, setGroups] = useState<EmployeeGroupItem[]>(initialGroups ?? [])
+  const [isLoading, setIsLoading] = useState(initialGroups ? false : true)
   const [error, setError] = useState<string | null>(null)
 
   const fetchGroups = useCallback(async () => {
@@ -47,8 +48,11 @@ export function useEmployeeGroups() {
   }, [])
 
   useEffect(() => {
+    if (initialGroups) {
+      return
+    }
     fetchGroups()
-  }, [fetchGroups])
+  }, [fetchGroups, initialGroups])
 
   const createGroup = useCallback(
     async (data: { name: string; description?: string }): Promise<EmployeeGroupItem> => {

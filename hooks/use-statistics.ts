@@ -1,12 +1,10 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-
-export interface StatisticsFilters {
-  from: string
-  to: string
-  groupBy: "day" | "week" | "month"
-}
+import {
+  createDefaultStatisticsFilters,
+  type StatisticsFilters,
+} from "@/src/features/statistics/filters"
 
 export interface StatisticsData {
   overview: {
@@ -43,20 +41,16 @@ export interface StatisticsData {
   }
 }
 
-function defaultFilters(): StatisticsFilters {
-  const now = new Date()
-  const from = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-  return {
-    from: from.toISOString().split("T")[0],
-    to: now.toISOString().split("T")[0],
-    groupBy: "day",
-  }
-}
+export function useStatistics(options?: {
+  initialData?: StatisticsData | null
+  initialFilters?: StatisticsFilters
+}) {
+  const initialData = options?.initialData ?? null
+  const initialFilters = options?.initialFilters ?? createDefaultStatisticsFilters()
 
-export function useStatistics() {
-  const [data, setData] = useState<StatisticsData | null>(null)
-  const [filters, setFilters] = useState<StatisticsFilters>(defaultFilters)
-  const [isLoading, setIsLoading] = useState(true)
+  const [data, setData] = useState<StatisticsData | null>(initialData)
+  const [filters, setFilters] = useState<StatisticsFilters>(initialFilters)
+  const [isLoading, setIsLoading] = useState(options?.initialData == null)
   const [error, setError] = useState<string | null>(null)
 
   const fetchStatistics = useCallback(async (f: StatisticsFilters) => {
@@ -87,8 +81,11 @@ export function useStatistics() {
   )
 
   useEffect(() => {
+    if (initialData && filters.from === initialFilters.from && filters.to === initialFilters.to && filters.groupBy === initialFilters.groupBy) {
+      return
+    }
     fetchStatistics(filters)
-  }, [filters, fetchStatistics])
+  }, [fetchStatistics, filters, initialData, initialFilters.from, initialFilters.groupBy, initialFilters.to])
 
   return {
     data,

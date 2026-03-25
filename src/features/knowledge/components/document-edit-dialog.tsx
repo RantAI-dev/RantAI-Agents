@@ -1,0 +1,532 @@
+"use client"
+
+import { memo, Suspense, use, useMemo, useState } from "react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command"
+import { Loader2, Check, Folder, Plus, ChevronsUpDown, X } from "@/lib/icons"
+import { CategoryDialog, Category } from "./category-dialog"
+import { cn } from "@/lib/utils"
+
+interface KnowledgeBase {
+  id: string
+  name: string
+  color: string | null
+  documentCount: number
+}
+
+interface DocumentGroup {
+  id: string
+  name: string
+  color: string | null
+}
+
+interface DocumentData {
+  id: string
+  title: string
+  categories: string[]
+  subcategory: string | null
+  groups: DocumentGroup[]
+}
+
+interface DocumentEditDialogProps {
+  documentId: string | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess: () => void
+  knowledgeBases: KnowledgeBase[]
+  categories: Category[]
+  onCategoriesChange: () => void
+  initialDocument?: DocumentData | null
+}
+
+type DocumentLoadResult =
+  | { data: DocumentData; error: null }
+  | { data: null; error: string }
+
+type DocumentFormProps = {
+  documentResource: Promise<DocumentLoadResult>
+  onOpenChange: (open: boolean) => void
+  onSuccess: () => void
+  knowledgeBases: KnowledgeBase[]
+  availableCategories: Category[]
+  onCategoriesChange: () => void
+}
+
+const PRESET_COLORS = [
+  "#ef4444", "#f97316", "#eab308", "#22c55e",
+  "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899",
+]
+
+function DialogActions({
+  saving,
+  canSave,
+  onCancel,
+  onSave,
+  saveLabel,
+}: {
+  saving: boolean
+  canSave: boolean
+  onCancel: () => void
+  onSave: () => void
+  saveLabel: string
+}) {
+  return (
+    <DialogFooter className="flex justify-end gap-2">
+      <Button variant="outline" onClick={onCancel} disabled={saving}>
+        Cancel
+      </Button>
+      <Button onClick={onSave} disabled={!canSave || saving}>
+        {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+        {saving ? "Saving..." : saveLabel}
+      </Button>
+    </DialogFooter>
+  )
+}
+
+function DocumentEditDialogLoading({
+  onOpenChange,
+}: {
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <div className="space-y-4 py-4">
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+      <DialogActions
+        saving={false}
+        canSave={false}
+        onCancel={() => onOpenChange(false)}
+        onSave={() => undefined}
+        saveLabel="Save Changes"
+      />
+    </div>
+  )
+}
+
+function DocumentEditDialogError({
+  message,
+  onOpenChange,
+}: {
+  message: string
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <div className="space-y-4 py-4">
+      <div className="text-center py-8 text-muted-foreground">
+        {message}
+      </div>
+      <DialogActions
+        saving={false}
+        canSave={false}
+        onCancel={() => onOpenChange(false)}
+        onSave={() => undefined}
+        saveLabel="Save Changes"
+      />
+    </div>
+  )
+}
+
+const DocumentEditDialogLoadedForm = memo<{
+  document: DocumentData
+  onOpenChange: (open: boolean) => void
+  onSuccess: () => void
+  knowledgeBases: KnowledgeBase[]
+  availableCategories: Category[]
+  onCategoriesChange: () => void
+}>(
+  ({
+    document,
+    onOpenChange,
+    onSuccess,
+    knowledgeBases,
+    availableCategories,
+    onCategoriesChange,
+  }) => {
+    const [saving, setSaving] = useState(false)
+    const [title, setTitle] = useState(document.title)
+    const [selectedCategories, setSelectedCategories] = useState<string[]>(
+      document.categories || []
+    )
+    const [subcategory, setSubcategory] = useState(document.subcategory || "")
+    const [selectedKBIds, setSelectedKBIds] = useState<string[]>(
+      document.groups?.map((group) => group.id) || []
+    )
+    const [error, setError] = useState("")
+    const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+
+    const toggleCategory = (category: string) => {
+      setSelectedCategories((prev) =>
+        prev.includes(category)
+          ? prev.filter((c) => c !== category)
+          : [...prev, category]
+      )
+    }
+
+    const handleCategoryCreated = () => {
+      setCategoryDialogOpen(false)
+      onCategoriesChange()
+    }
+
+    const toggleKB = (kbId: string) => {
+      setSelectedKBIds((prev) =>
+        prev.includes(kbId)
+          ? prev.filter((id) => id !== kbId)
+          : [...prev, kbId]
+      )
+    }
+
+    const handleSave = async () => {
+      if (selectedCategories.length === 0) {
+        setError("At least one category is required")
+        return
+      }
+
+      setSaving(true)
+      setError("")
+
+      try {
+        const response = await fetch(`/api/dashboard/knowledge/${document.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title,
+            categories: selectedCategories,
+            subcategory: subcategory || null,
+            groupIds: selectedKBIds,
+          }),
+        })
+
+        if (!response.ok) {
+          const data = await response.json()
+          throw new Error(data.error || "Failed to update document")
+        }
+
+        onSuccess()
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to update document")
+      } finally {
+        setSaving(false)
+      }
+    }
+
+    return (
+      <div className="space-y-4 py-4">
+        {/* Title */}
+        <div className="space-y-2">
+          <Label htmlFor="edit-title">Title</Label>
+          <Input
+            id="edit-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Document title"
+          />
+        </div>
+
+        {/* Categories */}
+        <div className="space-y-2">
+          <Label>Categories (select one or more)</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                className="w-full justify-between h-auto min-h-9 font-normal"
+              >
+                {selectedCategories.length > 0 ? (
+                  <div className="flex gap-1 flex-wrap">
+                    {selectedCategories.map((name) => {
+                      const cat = availableCategories.find((c) => c.name === name)
+                      return (
+                        <Badge
+                          key={name}
+                          variant="default"
+                          className="text-xs"
+                          style={cat ? { backgroundColor: cat.color, borderColor: cat.color } : undefined}
+                        >
+                          {cat?.label ?? name}
+                          <button
+                            type="button"
+                            className="ml-1 hover:opacity-70"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleCategory(name)
+                            }}
+                          >
+                            <X className="h-2.5 w-2.5" />
+                          </button>
+                        </Badge>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">Select categories...</span>
+                )}
+                <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+              <Command>
+                <CommandInput placeholder="Search categories..." />
+                <CommandList className="max-h-[180px] overflow-y-auto">
+                  <CommandEmpty>No category found.</CommandEmpty>
+                  <CommandGroup>
+                    {availableCategories.map((cat) => {
+                      const isSelected = selectedCategories.includes(cat.name)
+                      return (
+                        <CommandItem
+                          key={cat.name}
+                          value={cat.label}
+                          onSelect={() => toggleCategory(cat.name)}
+                          className="cursor-pointer"
+                        >
+                          <div
+                            className="h-4 w-4 rounded border shrink-0 mr-2 flex items-center justify-center"
+                            style={{
+                              borderColor: cat.color,
+                              backgroundColor: isSelected ? `${cat.color}30` : "transparent",
+                            }}
+                          >
+                            {isSelected && <Check className="h-3 w-3" style={{ color: cat.color }} />}
+                          </div>
+                          <span>{cat.label}</span>
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                  <CommandSeparator />
+                  <CommandGroup>
+                    <CommandItem
+                      onSelect={() => setCategoryDialogOpen(true)}
+                      className="cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
+                      <span>New category</span>
+                    </CommandItem>
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* Category Dialog */}
+        <CategoryDialog
+          open={categoryDialogOpen}
+          onOpenChange={setCategoryDialogOpen}
+          onSuccess={handleCategoryCreated}
+        />
+
+        {/* Subcategory */}
+        <div className="space-y-2">
+          <Label htmlFor="edit-subcategory">Subcategory (optional)</Label>
+          <Input
+            id="edit-subcategory"
+            value={subcategory}
+            onChange={(e) => setSubcategory(e.target.value)}
+            placeholder="e.g., Term Life Premium"
+          />
+        </div>
+
+        {/* Knowledge Bases */}
+        {knowledgeBases.length > 0 && (
+          <div className="space-y-2">
+            <Label>Knowledge Bases</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Select which knowledge bases this document belongs to.
+            </p>
+            <div className="grid grid-cols-2 gap-2 max-h-[150px] overflow-y-auto rounded-lg border p-2">
+              {knowledgeBases.map((kb) => {
+                const isSelected = selectedKBIds.includes(kb.id)
+                return (
+                  <button
+                    key={kb.id}
+                    type="button"
+                    onClick={() => toggleKB(kb.id)}
+                    className={cn(
+                      "flex items-center gap-2 p-2 rounded-md text-sm transition-colors text-left",
+                      isSelected
+                        ? "bg-primary/10 border border-primary"
+                        : "border border-transparent hover:bg-muted"
+                    )}
+                  >
+                    <div
+                      className="h-4 w-4 rounded flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: kb.color ?? "var(--chart-3)" }}
+                    >
+                      {isSelected ? (
+                        <Check className="h-3 w-3 text-white" />
+                      ) : (
+                        <Folder className="h-2.5 w-2.5 text-white" />
+                      )}
+                    </div>
+                    <span className="truncate flex-1">{kb.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {selectedKBIds.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {selectedKBIds.length} knowledge base{selectedKBIds.length !== 1 ? "s" : ""} selected
+              </p>
+            )}
+          </div>
+        )}
+
+        {error && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
+
+        <DialogActions
+          saving={saving}
+          canSave={selectedCategories.length > 0}
+          onCancel={() => onOpenChange(false)}
+          onSave={handleSave}
+          saveLabel="Save Changes"
+        />
+      </div>
+    )
+  }
+)
+
+const DocumentEditDialogForm = memo<DocumentFormProps>(
+  ({
+    documentResource,
+    onOpenChange,
+    onSuccess,
+    knowledgeBases,
+    availableCategories,
+    onCategoriesChange,
+  }) => {
+    const result = use(documentResource)
+
+    if (result.error) {
+      return <DocumentEditDialogError message={result.error} onOpenChange={onOpenChange} />
+    }
+
+    return (
+      <DocumentEditDialogLoadedForm
+        key={result.data.id}
+        document={result.data}
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+        knowledgeBases={knowledgeBases}
+        availableCategories={availableCategories}
+        onCategoriesChange={onCategoriesChange}
+      />
+    )
+  }
+)
+
+function DocumentEditDialogBody({
+  documentResource,
+  onOpenChange,
+  onSuccess,
+  knowledgeBases,
+  availableCategories,
+  onCategoriesChange,
+}: DocumentFormProps) {
+  return (
+    <Suspense fallback={<DocumentEditDialogLoading onOpenChange={onOpenChange} />}>
+      <DocumentEditDialogForm
+        documentResource={documentResource}
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+        knowledgeBases={knowledgeBases}
+        availableCategories={availableCategories}
+        onCategoriesChange={onCategoriesChange}
+      />
+    </Suspense>
+  )
+}
+
+export function DocumentEditDialog({
+  documentId,
+  open,
+  onOpenChange,
+  onSuccess,
+  knowledgeBases,
+  categories: availableCategories,
+  onCategoriesChange,
+  initialDocument,
+}: DocumentEditDialogProps) {
+  const documentResource = useMemo<Promise<DocumentLoadResult>>(() => {
+    if (initialDocument !== undefined) {
+      return Promise.resolve(
+        initialDocument
+          ? { data: initialDocument, error: null }
+          : { data: null, error: "No document selected" }
+      )
+    }
+
+    if (!documentId) {
+      return Promise.resolve({ data: null, error: "No document selected" })
+    }
+
+    return fetch(`/api/dashboard/knowledge/${documentId}`)
+      .then(async (response) => {
+        if (!response.ok) {
+          const data = await response.json().catch(() => null)
+          return {
+            data: null,
+            error: (data as { error?: string } | null)?.error || "Failed to load document",
+          }
+        }
+
+        const data = (await response.json()) as DocumentData
+        return { data, error: null }
+      })
+      .catch((err: unknown) => ({
+        data: null,
+        error: err instanceof Error ? err.message : "Failed to load document",
+      }))
+  }, [documentId, initialDocument])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[90vh] max-w-lg flex-col gap-4 overflow-hidden p-6">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-semibold">Edit Document</DialogTitle>
+          <DialogDescription>
+            Update the document's title, categories, and knowledge base assignments.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <DocumentEditDialogBody
+            documentResource={documentResource}
+            onOpenChange={onOpenChange}
+            onSuccess={onSuccess}
+            knowledgeBases={knowledgeBases}
+            availableCategories={availableCategories}
+            onCategoriesChange={onCategoriesChange}
+          />
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}

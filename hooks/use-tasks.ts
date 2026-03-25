@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useCallback, useEffect, useRef } from "react"
+import { useState, useCallback, useEffect } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 import type {
   EnrichedTask,
   TaskFilter,
@@ -12,13 +13,15 @@ import type {
 interface UseTasksOptions {
   filter?: TaskFilter
   pollInterval?: number // ms, default 30000
+  initialTasks?: EnrichedTask[]
 }
 
 export function useTasks(options: UseTasksOptions = {}) {
-  const { filter, pollInterval = 30000 } = options
+  const { filter, pollInterval = 30000, initialTasks } = options
+  const orgFetch = useOrgFetch()
 
-  const [tasks, setTasks] = useState<EnrichedTask[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [tasks, setTasks] = useState<EnrichedTask[]>(initialTasks ?? [])
+  const [isLoading, setIsLoading] = useState(initialTasks ? false : true)
   const [error, setError] = useState<string | null>(null)
 
   const fetchTasks = useCallback(async () => {
@@ -31,7 +34,7 @@ export function useTasks(options: UseTasksOptions = {}) {
       if (filter?.priority) params.set("priority", filter.priority)
       if (filter?.topLevelOnly) params.set("topLevelOnly", "true")
 
-      const res = await fetch(`/api/dashboard/tasks?${params}`)
+      const res = await orgFetch(`/api/dashboard/tasks?${params}`)
       if (!res.ok) {
         const text = await res.text()
         try {
@@ -50,8 +53,8 @@ export function useTasks(options: UseTasksOptions = {}) {
     } finally {
       setIsLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
+    orgFetch,
     filter?.status,
     filter?.assigneeId,
     filter?.groupId,
@@ -61,7 +64,7 @@ export function useTasks(options: UseTasksOptions = {}) {
 
   const createTask = useCallback(
     async (input: CreateTaskInput): Promise<EnrichedTask> => {
-      const res = await fetch("/api/dashboard/tasks", {
+      const res = await orgFetch("/api/dashboard/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -80,12 +83,12 @@ export function useTasks(options: UseTasksOptions = {}) {
       await fetchTasks()
       return result
     },
-    [fetchTasks]
+    [fetchTasks, orgFetch]
   )
 
   const updateTask = useCallback(
     async (taskId: string, input: UpdateTaskInput): Promise<EnrichedTask> => {
-      const res = await fetch(`/api/dashboard/tasks/${taskId}`, {
+      const res = await orgFetch(`/api/dashboard/tasks/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -98,12 +101,12 @@ export function useTasks(options: UseTasksOptions = {}) {
       await fetchTasks()
       return result
     },
-    [fetchTasks]
+    [fetchTasks, orgFetch]
   )
 
   const deleteTask = useCallback(
     async (taskId: string): Promise<void> => {
-      const res = await fetch(`/api/dashboard/tasks/${taskId}`, {
+      const res = await orgFetch(`/api/dashboard/tasks/${taskId}`, {
         method: "DELETE",
       })
       if (!res.ok) {
@@ -112,13 +115,16 @@ export function useTasks(options: UseTasksOptions = {}) {
       }
       await fetchTasks()
     },
-    [fetchTasks]
+    [fetchTasks, orgFetch]
   )
 
   // Fetch on mount and when filter changes
   useEffect(() => {
+    if (initialTasks) {
+      return
+    }
     fetchTasks()
-  }, [fetchTasks])
+  }, [fetchTasks, initialTasks])
 
   // Polling
   useEffect(() => {

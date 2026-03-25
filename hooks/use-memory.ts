@@ -21,16 +21,26 @@ export interface MemoryStats {
   total: number
 }
 
-export function useMemory() {
-  const [memories, setMemories] = useState<MemoryItem[]>([])
-  const [stats, setStats] = useState<MemoryStats>({
-    working: 0,
-    semantic: 0,
-    longTerm: 0,
-    total: 0,
-  })
-  const [filter, setFilter] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export function useMemory(options?: {
+  initialMemories?: MemoryItem[]
+  initialStats?: MemoryStats
+  initialFilter?: string | null
+}) {
+  const initialMemories = options?.initialMemories
+  const initialStats = options?.initialStats
+  const initialFilter = options?.initialFilter ?? null
+
+  const [memories, setMemories] = useState<MemoryItem[]>(initialMemories ?? [])
+  const [stats, setStats] = useState<MemoryStats>(
+    initialStats ?? {
+      working: 0,
+      semantic: 0,
+      longTerm: 0,
+      total: 0,
+    }
+  )
+  const [filter, setFilter] = useState<string | null>(initialFilter)
+  const [isLoading, setIsLoading] = useState(!(initialMemories && initialStats))
   const [error, setError] = useState<string | null>(null)
 
   const fetchMemories = useCallback(async (type?: string | null) => {
@@ -75,8 +85,11 @@ export function useMemory() {
   )
 
   useEffect(() => {
+    if (initialMemories && initialStats && filter === initialFilter) {
+      return
+    }
     fetchMemories(filter)
-  }, [filter, fetchMemories])
+  }, [filter, fetchMemories, initialFilter, initialMemories, initialStats])
 
   return {
     memories,

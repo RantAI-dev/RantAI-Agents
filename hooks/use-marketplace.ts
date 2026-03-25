@@ -45,11 +45,14 @@ interface MarketplaceResponse {
   total: number
 }
 
-export function useMarketplace() {
+export function useMarketplace(options?: {
+  initialItems?: MarketplaceItem[]
+  initialCategories?: string[]
+}) {
   const orgFetch = useOrgFetch()
-  const [items, setItems] = useState<MarketplaceItem[]>([])
-  const [categories, setCategories] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [items, setItems] = useState<MarketplaceItem[]>(options?.initialItems ?? [])
+  const [categories, setCategories] = useState<string[]>(options?.initialCategories ?? [])
+  const [isLoading, setIsLoading] = useState(options?.initialItems == null)
   const [selectedItem, setSelectedItem] = useState<MarketplaceItemDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
 

@@ -1,7 +1,1 @@
-"use client"
-
-import { MarketplaceBrowse } from "./_components/marketplace-browse"
-
-export default function MarketplaceAssistantsPage() {
-  return <MarketplaceBrowse type="assistant" />
-}
+export { default } from "@/src/features/marketplace/components/pages/marketplace-assistants-page"

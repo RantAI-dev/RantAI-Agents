@@ -1,6 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode, useRef } from "react"
+import {
+  normalizeSerializedChatSession,
+  type SerializedChatSession,
+} from "@/src/features/conversations/components/chat/pages/chat-session-data"
 
 // Edit history entry for versioning
 interface EditHistoryEntry {
@@ -21,7 +25,36 @@ export interface ChatMessage {
     content: string
     similarity?: number
   }>
-  metadata?: { artifactIds?: string[]; attachments?: Array<{ fileName: string; mimeType: string; type: string; text?: string; pageCount?: number; chunkCount?: number; fileId?: string }> } | null
+  metadata?: {
+    artifactIds?: string[]
+    toolCalls?: Array<{
+      toolCallId: string
+      toolName: string
+      state: string
+      input?: Record<string, unknown>
+      output?: unknown
+      errorText?: string
+    }>
+    artifacts?: Array<{
+      id: string
+      title: string
+      content: string
+      artifactType: string
+      metadata?: {
+        artifactLanguage?: string
+        versions?: Array<{ content: string; title: string; timestamp: number }>
+      }
+    }>
+    attachments?: Array<{
+      fileName: string
+      mimeType: string
+      type: string
+      text?: string
+      pageCount?: number
+      chunkCount?: number
+      fileId?: string
+    }>
+  } | null
 }
 
 export interface PersistedArtifactData {
@@ -83,6 +116,7 @@ interface ChatSessionsContextType {
   activeSessionId: string | null
   activeSession: ChatSession | undefined
   setActiveSessionId: (id: string | null) => void
+  hydrateSessions: (sessions: SerializedChatSession[]) => void
   createSession: (assistantId: string) => Promise<ChatSession>
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => void
   deleteSession: (sessionId: string) => void
@@ -92,19 +126,112 @@ interface ChatSessionsContextType {
 }
 
 const ChatSessionsContext = createContext<ChatSessionsContextType | null>(null)
+const CHAT_SESSIONS_HYDRATION_SCRIPT_ID = "rantai-chat-sessions-hydration"
 
-export function ChatSessionsProvider({ children }: { children: ReactNode }) {
-  const [sessions, setSessions] = useState<ChatSession[]>([])
+function readHydratedSessionsFromDocument(): SerializedChatSession[] | null {
+  if (typeof document === "undefined") {
+    return null
+  }
+
+  const script = document.getElementById(CHAT_SESSIONS_HYDRATION_SCRIPT_ID)
+  if (!script?.textContent) {
+    return null
+  }
+
+  try {
+    const sessions = JSON.parse(script.textContent) as SerializedChatSession[]
+    return sessions
+  } catch (error) {
+    console.error("[ChatSessions] Failed to parse hydrated sessions:", error)
+    return null
+  }
+}
+
+function mergeHydratedSessions(
+  previousSessions: ChatSession[],
+  incomingSessions: SerializedChatSession[]
+): ChatSession[] {
+  const remaining = [...previousSessions]
+  const merged: ChatSession[] = []
+
+  for (const rawSession of incomingSessions) {
+    const normalized = normalizeSerializedChatSession(rawSession)
+
+    const exactMatchIndex = remaining.findIndex((session) => session.id === normalized.id)
+    if (exactMatchIndex >= 0) {
+      const existing = remaining.splice(exactMatchIndex, 1)[0]
+      merged.push({
+        ...existing,
+        ...normalized,
+        id: existing.id,
+        dbId: existing.dbId ?? normalized.dbId,
+        messages: normalized.messages.length > 0 ? normalized.messages : existing.messages,
+        artifacts: normalized.artifacts ?? existing.artifacts,
+      })
+      continue
+    }
+
+    const dbMatchIndex = remaining.findIndex((session) => session.dbId === normalized.id)
+    if (dbMatchIndex >= 0) {
+      const existing = remaining.splice(dbMatchIndex, 1)[0]
+      merged.push({
+        ...existing,
+        title: normalized.title,
+        assistantId: normalized.assistantId,
+        createdAt: normalized.createdAt,
+        messages: normalized.messages.length > 0 ? normalized.messages : existing.messages,
+        artifacts: normalized.artifacts ?? existing.artifacts,
+        dbId: normalized.id,
+      })
+      continue
+    }
+
+    merged.push(normalized as ChatSession)
+  }
+
+  return [...merged, ...remaining]
+}
+
+export function ChatSessionsProvider({
+  children,
+  initialSessions,
+}: {
+  children: ReactNode
+  initialSessions?: SerializedChatSession[]
+}) {
+  const [seededSessions] = useState<SerializedChatSession[] | null>(() => {
+    if (initialSessions) {
+      return initialSessions
+    }
+    return readHydratedSessionsFromDocument()
+  })
+  const [sessions, setSessions] = useState<ChatSession[]>(() =>
+    seededSessions ? (seededSessions.map((session) => normalizeSerializedChatSession(session)) as ChatSession[]) : []
+  )
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  const [isLoaded, setIsLoaded] = useState(false)
+  const [isLoaded, setIsLoaded] = useState(Boolean(seededSessions))
   const [isSyncing, setIsSyncing] = useState(false)
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const loadedSessionsRef = useRef<Set<string>>(new Set())
+  const hasSeededSessionsRef = useRef(Boolean(seededSessions))
   const sessionsRef = useRef(sessions)
   sessionsRef.current = sessions
 
   // Load session list (metadata only) from API
   useEffect(() => {
+    if (hasSeededSessionsRef.current) {
+      setIsLoaded(true)
+      return
+    }
+
+    const hydratedSessions = readHydratedSessionsFromDocument()
+    if (hydratedSessions) {
+      hasSeededSessionsRef.current = true
+      setSessions(hydratedSessions.map((session) => normalizeSerializedChatSession(session)) as ChatSession[])
+      setIsLoaded(true)
+      return
+    }
+
     const loadSessions = async () => {
       setIsLoaded(true)
 
@@ -160,6 +287,18 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
   }, [activeSessionId, sessions])
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
+
+  const hydrateSessions = useCallback((nextSessions: SerializedChatSession[]) => {
+    hasSeededSessionsRef.current = true
+    setSessions((prev) => {
+      if (nextSessions.length === 0) {
+        return []
+      }
+
+      return mergeHydratedSessions(prev, nextSessions)
+    })
+    setIsLoaded(true)
+  }, [])
 
   // Create a new session
   const createSession = useCallback(async (assistantId: string): Promise<ChatSession> => {
@@ -283,9 +422,23 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
         const existingMessages = messages.filter((m) => existingMessageIds.has(m.id))
         for (const msg of existingMessages) {
           const dbMsg = data.messages.find((dm: any) => dm.id === msg.id)
+          const nextEditHistory = msg.editHistory?.map((h) => ({
+            ...h,
+            editedAt: h.editedAt.toISOString(),
+          }))
+          const hasContentDiff = msg.content !== dbMsg?.content
+          const hasEditHistoryDiff =
+            JSON.stringify(nextEditHistory) !== JSON.stringify(dbMsg?.editHistory)
+          const hasSourcesDiff =
+            JSON.stringify(msg.sources ?? null) !== JSON.stringify(dbMsg?.sources ?? null)
+          const hasMetadataDiff =
+            JSON.stringify(msg.metadata ?? null) !== JSON.stringify(dbMsg?.metadata ?? null)
+
           if (dbMsg && (
-            msg.content !== dbMsg.content ||
-            JSON.stringify(msg.editHistory) !== JSON.stringify(dbMsg.editHistory)
+            hasContentDiff ||
+            hasEditHistoryDiff ||
+            hasSourcesDiff ||
+            hasMetadataDiff
           )) {
             await fetch(`/api/dashboard/chat/sessions/${apiId}/messages`, {
               method: "PATCH",
@@ -293,10 +446,9 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
               body: JSON.stringify({
                 messageId: msg.id,
                 content: msg.content,
-                editHistory: msg.editHistory?.map((h) => ({
-                  ...h,
-                  editedAt: h.editedAt.toISOString(),
-                })),
+                editHistory: nextEditHistory,
+                sources: msg.sources,
+                metadata: msg.metadata,
               }),
             })
           }
@@ -345,6 +497,7 @@ export function ChatSessionsProvider({ children }: { children: ReactNode }) {
         activeSessionId,
         activeSession,
         setActiveSessionId,
+        hydrateSessions,
         createSession,
         updateSession,
         deleteSession,

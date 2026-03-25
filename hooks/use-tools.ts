@@ -28,10 +28,11 @@ export interface ToolItem {
   createdAt: string
 }
 
-export function useTools() {
+export function useTools(options?: { initialTools?: ToolItem[] }) {
   const orgFetch = useOrgFetch()
-  const [tools, setTools] = useState<ToolItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const initialTools = options?.initialTools
+  const [tools, setTools] = useState<ToolItem[]>(initialTools ?? [])
+  const [isLoading, setIsLoading] = useState(!initialTools)
   const [error, setError] = useState<string | null>(null)
 
   const fetchTools = useCallback(async () => {
@@ -109,8 +110,11 @@ export function useTools() {
   )
 
   useEffect(() => {
+    if (initialTools) {
+      return
+    }
     fetchTools()
-  }, [fetchTools])
+  }, [fetchTools, initialTools])
 
   return {
     tools,

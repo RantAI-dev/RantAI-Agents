@@ -1,7 +1,1 @@
-"use client"
-
-import { MarketplaceBrowse } from "../_components/marketplace-browse"
-
-export default function MarketplaceSkillsPage() {
-  return <MarketplaceBrowse type="skill" />
-}
+export { default } from "@/src/features/marketplace/components/pages/marketplace-skills-page"

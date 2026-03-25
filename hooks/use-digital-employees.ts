@@ -37,9 +37,10 @@ export interface DigitalEmployeeItem {
   }
 }
 
-export function useDigitalEmployees() {
-  const [employees, setEmployees] = useState<DigitalEmployeeItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+export function useDigitalEmployees(options?: { initialEmployees?: DigitalEmployeeItem[] }) {
+  const initialEmployees = options?.initialEmployees
+  const [employees, setEmployees] = useState<DigitalEmployeeItem[]>(initialEmployees ?? [])
+  const [isLoading, setIsLoading] = useState(initialEmployees ? false : true)
   const [error, setError] = useState<string | null>(null)
 
   const fetchEmployees = useCallback(async () => {
@@ -105,8 +106,11 @@ export function useDigitalEmployees() {
   }, [])
 
   useEffect(() => {
+    if (initialEmployees) {
+      return
+    }
     fetchEmployees()
-  }, [fetchEmployees])
+  }, [fetchEmployees, initialEmployees])
 
   return {
     employees,

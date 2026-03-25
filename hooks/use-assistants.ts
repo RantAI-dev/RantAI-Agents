@@ -6,8 +6,28 @@ import type { Assistant, AssistantInput, MemoryConfig, ModelConfig, ChatConfig, 
 const SELECTED_KEY = "rantai-selected-assistant"
 const ASSISTANT_CHANGE_EVENT = "rantai-assistant-change"
 
+function resolveSelectedAssistantId(
+  assistants: Assistant[],
+  currentSelectedId: string | null,
+  storedSelectedId: string | null
+): string | null {
+  if (assistants.length === 0) {
+    return null
+  }
+
+  if (currentSelectedId && assistants.some((a) => a.id === currentSelectedId)) {
+    return currentSelectedId
+  }
+
+  if (storedSelectedId && assistants.some((a) => a.id === storedSelectedId)) {
+    return storedSelectedId
+  }
+
+  return assistants.find((a) => a.isDefault)?.id ?? assistants[0].id
+}
+
 // Database assistant type from API
-interface DbAssistant {
+export interface DbAssistant {
   id: string
   name: string
   description: string | null
@@ -28,6 +48,7 @@ interface DbAssistant {
   tags?: string[]
   liveChatEnabled?: boolean
   createdAt: string
+  toolCount?: number
   _count?: { tools: number }
 }
 
@@ -53,15 +74,23 @@ function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
     isDefault: dbAssistant.isSystemDefault,
     isEditable: true, // All assistants are editable
     liveChatEnabled: dbAssistant.liveChatEnabled ?? false,
-    toolCount: dbAssistant._count?.tools ?? 0,
+    toolCount: dbAssistant.toolCount ?? dbAssistant._count?.tools ?? 0,
     createdAt: new Date(dbAssistant.createdAt),
   }
 }
 
-export function useAssistants() {
-  const [assistants, setAssistants] = useState<Assistant[]>([])
-  const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
+  const initialAssistants = options?.initialAssistants
+  const [assistants, setAssistants] = useState<Assistant[]>(
+    initialAssistants ? initialAssistants.map(mapDbAssistant) : []
+  )
+  const [selectedAssistantId, setSelectedAssistantId] = useState<string | null>(() => {
+    if (typeof window === "undefined") {
+      return null
+    }
+    return localStorage.getItem(SELECTED_KEY)
+  })
+  const [isLoading, setIsLoading] = useState(initialAssistants ? false : true)
   const [error, setError] = useState<string | null>(null)
 
   // Fetch assistants from API
@@ -76,15 +105,15 @@ export function useAssistants() {
       const mapped = data.map(mapDbAssistant)
       setAssistants(mapped)
 
-      // Set default selected assistant if none selected
-      if (!selectedAssistantId && mapped.length > 0) {
-        const storedSelected = localStorage.getItem(SELECTED_KEY)
-        if (storedSelected && mapped.some((a: Assistant) => a.id === storedSelected)) {
-          setSelectedAssistantId(storedSelected)
-        } else {
-          const defaultAssistant = mapped.find((a: Assistant) => a.isDefault) || mapped[0]
-          setSelectedAssistantId(defaultAssistant.id)
-        }
+      // Recover stale/invalid selected assistant IDs and always keep a valid selection.
+      const storedSelected = localStorage.getItem(SELECTED_KEY)
+      const nextSelectedId = resolveSelectedAssistantId(
+        mapped,
+        selectedAssistantId,
+        storedSelected
+      )
+      if (nextSelectedId !== selectedAssistantId) {
+        setSelectedAssistantId(nextSelectedId)
       }
     } catch (err) {
       console.error("Failed to fetch assistants:", err)
@@ -94,15 +123,42 @@ export function useAssistants() {
     }
   }, [selectedAssistantId])
 
-  // Initial fetch
+  // Initial fetch (unless server hydrated)
   useEffect(() => {
+    if (initialAssistants) {
+      return
+    }
     fetchAssistants()
-  }, [fetchAssistants])
+  }, [fetchAssistants, initialAssistants])
+
+  // Initialize selected assistant from stored/default when assistants are already hydrated
+  useEffect(() => {
+    if (assistants.length === 0) {
+      return
+    }
+
+    const storedSelected = localStorage.getItem(SELECTED_KEY)
+    const nextSelectedId = resolveSelectedAssistantId(
+      assistants,
+      selectedAssistantId,
+      storedSelected
+    )
+    if (nextSelectedId !== selectedAssistantId) {
+      setSelectedAssistantId(nextSelectedId)
+    }
+  }, [assistants, selectedAssistantId])
 
   // Listen for assistant changes from other components
   useEffect(() => {
     const handleAssistantChange = (event: CustomEvent<string>) => {
-      setSelectedAssistantId(event.detail)
+      const nextAssistantId = event.detail
+      setSelectedAssistantId(nextAssistantId)
+
+      // Another hook instance (sidebar/editor) may have created a new assistant.
+      // Refetch when this instance doesn't have that assistant yet.
+      if (!assistants.some((assistant) => assistant.id === nextAssistantId)) {
+        void fetchAssistants()
+      }
     }
 
     window.addEventListener(
@@ -116,7 +172,7 @@ export function useAssistants() {
         handleAssistantChange as EventListener
       )
     }
-  }, [])
+  }, [assistants, fetchAssistants])
 
   // Save selected assistant ID to localStorage
   useEffect(() => {
@@ -125,8 +181,10 @@ export function useAssistants() {
     }
   }, [selectedAssistantId])
 
-  // Currently selected assistant
-  const selectedAssistant = assistants.find((a) => a.id === selectedAssistantId) || assistants[0]
+  // Always expose a valid selected assistant to avoid UI dead-ends in sidebar/chat.
+  const selectedAssistant = selectedAssistantId
+    ? assistants.find((a) => a.id === selectedAssistantId) ?? assistants[0]
+    : assistants[0]
 
   const selectAssistant = useCallback((id: string) => {
     setSelectedAssistantId(id)

@@ -1,7 +1,1 @@
-"use client"
-
-import { MarketplaceBrowse } from "../_components/marketplace-browse"
-
-export default function MarketplaceMcpPage() {
-  return <MarketplaceBrowse type="mcp" />
-}
+export { default } from "@/src/features/marketplace/components/pages/marketplace-mcp-page"

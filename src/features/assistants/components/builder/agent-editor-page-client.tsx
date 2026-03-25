@@ -1,0 +1,571 @@
+"use client"
+
+import { useState, useEffect, useCallback, useRef, use } from "react"
+import { useRouter } from "next/navigation"
+import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
+import { useDefaultAssistant } from "@/hooks/use-default-assistant"
+import { useAssistantTools } from "@/hooks/use-assistant-tools"
+import { useAssistantSkills } from "@/hooks/use-assistant-skills"
+import { useAssistantMcpServers } from "@/hooks/use-assistant-mcp-servers"
+import { useAssistantWorkflows } from "@/hooks/use-assistant-workflows"
+import { getModelById, DEFAULT_MODEL_ID } from "@/lib/models"
+import { AgentEditorLayout, type TabId } from "@/src/features/assistants/components/builder/agent-editor-layout"
+import { TabConfigure } from "@/src/features/assistants/components/builder/tab-configure"
+import { TabModel } from "@/src/features/assistants/components/builder/tab-model"
+import { TabTools } from "@/src/features/assistants/components/builder/tab-tools"
+import { TabSkills } from "@/src/features/assistants/components/builder/tab-skills"
+import { TabKnowledge } from "@/src/features/assistants/components/builder/tab-knowledge"
+import { TabMemory } from "@/src/features/assistants/components/builder/tab-memory"
+import { TabChatPreferences } from "@/src/features/assistants/components/builder/tab-chat-preferences"
+import { GuardRailsSettings } from "@/src/features/assistants/components/builder/guard-rails-settings"
+import { TabTest } from "@/src/features/assistants/components/builder/tab-test"
+import { TabWorkflows } from "@/src/features/assistants/components/builder/tab-workflows"
+import { TabMcp } from "@/src/features/assistants/components/builder/tab-mcp"
+import { TabDeploy } from "@/src/features/assistants/components/builder/tab-deploy"
+import type { Assistant, MemoryConfig, ModelConfig, ChatConfig, GuardRailsConfig } from "@/lib/types/assistant"
+
+const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
+  enabled: true,
+  workingMemory: true,
+  semanticRecall: true,
+  longTermProfile: true,
+}
+
+const DEFAULT_MODEL_CONFIG: ModelConfig = {}
+
+const DEFAULT_CHAT_CONFIG: ChatConfig = {
+  autoCreateTopic: true,
+  messageThreshold: 2,
+  limitHistory: true,
+  historyCount: 20,
+  autoSummary: true,
+  autoScroll: false,
+}
+
+const DEFAULT_GUARD_RAILS: GuardRailsConfig = {}
+
+interface FormState {
+  name: string
+  description: string
+  emoji: string
+  avatarS3Key: string
+  avatarUrl: string
+  model: string
+  systemPrompt: string
+  selectedToolIds: string[]
+  selectedSkillIds: string[]
+  selectedMcpServerIds: string[]
+  selectedWorkflowIds: string[]
+  useKnowledgeBase: boolean
+  knowledgeBaseGroupIds: string[]
+  memoryConfig: MemoryConfig
+  modelConfig: ModelConfig
+  chatConfig: ChatConfig
+  guardRails: GuardRailsConfig
+  liveChatEnabled: boolean
+  openingMessage: string
+  openingQuestions: string[]
+  tags: string[]
+}
+
+interface KnowledgeGroupOption {
+  id: string
+  name: string
+  color: string | null
+  documentCount: number
+}
+
+function getInitialState(agent?: Assistant | null): FormState {
+  return {
+    name: agent?.name ?? "",
+    description: agent?.description ?? "",
+    emoji: agent?.emoji ?? "🤖",
+    avatarS3Key: agent?.avatarS3Key ?? "",
+    avatarUrl: "",
+    model: agent?.model ?? DEFAULT_MODEL_ID,
+    systemPrompt: agent?.systemPrompt ?? "",
+    selectedToolIds: [],
+    selectedSkillIds: [],
+    selectedMcpServerIds: [],
+    selectedWorkflowIds: [],
+    useKnowledgeBase: agent?.useKnowledgeBase ?? false,
+    knowledgeBaseGroupIds: agent?.knowledgeBaseGroupIds ?? [],
+    memoryConfig: agent?.memoryConfig ?? DEFAULT_MEMORY_CONFIG,
+    modelConfig: agent?.modelConfig ?? DEFAULT_MODEL_CONFIG,
+    chatConfig: agent?.chatConfig ?? DEFAULT_CHAT_CONFIG,
+    guardRails: agent?.guardRails ?? DEFAULT_GUARD_RAILS,
+    liveChatEnabled: agent?.liveChatEnabled ?? false,
+    openingMessage: agent?.openingMessage ?? "",
+    openingQuestions: agent?.openingQuestions ?? [],
+    tags: agent?.tags ?? [],
+  }
+}
+
+export default function AgentEditorPageClient({
+  params,
+  initialAssistants,
+  initialKnowledgeGroups,
+}: {
+  params: Promise<{ id: string }>
+  initialAssistants: DbAssistant[]
+  initialKnowledgeGroups: KnowledgeGroupOption[]
+}) {
+  const { id } = use(params)
+  const isNew = id === "new"
+  const router = useRouter()
+
+  const {
+    assistants,
+    isLoading,
+    addAssistant,
+    updateAssistant,
+    deleteAssistant,
+    refetch,
+  } = useAssistants({ initialAssistants })
+
+  const {
+    assistant: defaultAssistant,
+    source: defaultSource,
+    setUserDefault,
+    clearUserDefault,
+    refetch: refetchDefault,
+  } = useDefaultAssistant()
+
+  const {
+    enabledToolIds,
+    updateAssistantTools,
+    isLoading: toolsLoading,
+  } = useAssistantTools(isNew ? null : id)
+
+  const {
+    enabledSkillIds,
+    updateAssistantSkills,
+    isLoading: skillsLoading,
+  } = useAssistantSkills(isNew ? null : id)
+
+  const {
+    enabledMcpServerIds,
+    updateAssistantMcpServers,
+    isLoading: mcpLoading,
+  } = useAssistantMcpServers(isNew ? null : id)
+
+  const {
+    enabledWorkflowIds,
+    updateAssistantWorkflows,
+    isLoading: workflowsLoading,
+  } = useAssistantWorkflows(isNew ? null : id)
+
+  const [activeTab, setActiveTab] = useState<TabId>("configure")
+  const [form, setForm] = useState<FormState>(getInitialState())
+  const [isSaving, setIsSaving] = useState(false)
+  const [isDirty, setIsDirty] = useState(isNew)
+  const initializedRef = useRef(false)
+
+  // Load existing agent data
+  useEffect(() => {
+    if (isNew || isLoading || initializedRef.current) return
+    const agent = assistants.find((a) => a.id === id)
+    if (agent) {
+      setForm(getInitialState(agent))
+      initializedRef.current = true
+    }
+  }, [isNew, isLoading, assistants, id])
+
+  // Sync tool IDs from the server
+  useEffect(() => {
+    if (!isNew && !toolsLoading && initializedRef.current) {
+      setForm((prev) => ({ ...prev, selectedToolIds: enabledToolIds }))
+    }
+  }, [isNew, toolsLoading, enabledToolIds])
+
+  // Sync skill IDs from the server
+  useEffect(() => {
+    if (!isNew && !skillsLoading && initializedRef.current) {
+      setForm((prev) => ({ ...prev, selectedSkillIds: enabledSkillIds }))
+    }
+  }, [isNew, skillsLoading, enabledSkillIds])
+
+  // Sync MCP server IDs from the server
+  useEffect(() => {
+    if (!isNew && !mcpLoading && initializedRef.current) {
+      setForm((prev) => ({ ...prev, selectedMcpServerIds: enabledMcpServerIds }))
+    }
+  }, [isNew, mcpLoading, enabledMcpServerIds])
+
+  // Sync workflow IDs from the server
+  useEffect(() => {
+    if (!isNew && !workflowsLoading && initializedRef.current) {
+      setForm((prev) => ({ ...prev, selectedWorkflowIds: enabledWorkflowIds }))
+    }
+  }, [isNew, workflowsLoading, enabledWorkflowIds])
+
+  // Track dirty state
+  const updateField = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setIsDirty(true)
+  }, [])
+
+  const handleToggleTool = useCallback(
+    (toolId: string) => {
+      setForm((prev) => {
+        const current = prev.selectedToolIds
+        const isEnabled = current.includes(toolId)
+        const next = isEnabled
+          ? current.filter((tid) => tid !== toolId)
+          : [...current, toolId]
+        return { ...prev, selectedToolIds: next }
+      })
+      setIsDirty(true)
+    },
+    []
+  )
+
+  const handleToggleSkill = useCallback(
+    (skillId: string, autoEnableToolIds?: string[]) => {
+      setForm((prev) => {
+        const current = prev.selectedSkillIds
+        const isEnabled = current.includes(skillId)
+        const nextSkills = isEnabled
+          ? current.filter((sid) => sid !== skillId)
+          : [...current, skillId]
+
+        // When toggling ON with auto-enable tool IDs, add them in one atomic update
+        let nextTools = prev.selectedToolIds
+        if (!isEnabled && autoEnableToolIds && autoEnableToolIds.length > 0) {
+          const toAdd = autoEnableToolIds.filter((tid) => !nextTools.includes(tid))
+          if (toAdd.length > 0) {
+            nextTools = [...nextTools, ...toAdd]
+          }
+        }
+
+        return { ...prev, selectedSkillIds: nextSkills, selectedToolIds: nextTools }
+      })
+      setIsDirty(true)
+    },
+    []
+  )
+
+  const handleToggleMcpServer = useCallback(
+    (serverId: string) => {
+      setForm((prev) => {
+        const current = prev.selectedMcpServerIds
+        const isEnabled = current.includes(serverId)
+        const next = isEnabled
+          ? current.filter((sid) => sid !== serverId)
+          : [...current, serverId]
+        return { ...prev, selectedMcpServerIds: next }
+      })
+      setIsDirty(true)
+    },
+    []
+  )
+
+  const handleToggleWorkflow = useCallback(
+    (workflowId: string) => {
+      setForm((prev) => {
+        const current = prev.selectedWorkflowIds
+        const isEnabled = current.includes(workflowId)
+        const next = isEnabled
+          ? current.filter((wid) => wid !== workflowId)
+          : [...current, workflowId]
+        return { ...prev, selectedWorkflowIds: next }
+      })
+      setIsDirty(true)
+    },
+    []
+  )
+
+  // Avatar upload handler
+  const handleAvatarUpload = useCallback((s3Key: string, url: string) => {
+    setForm((prev) => ({ ...prev, avatarS3Key: s3Key, avatarUrl: url }))
+    setIsDirty(true)
+  }, [])
+
+  const handleAvatarRemove = useCallback(() => {
+    setForm((prev) => ({ ...prev, avatarS3Key: "", avatarUrl: "" }))
+    setIsDirty(true)
+  }, [])
+
+  // Save handler
+  const handleSave = useCallback(async () => {
+    setIsSaving(true)
+    try {
+      const input = {
+        name: form.name || "Untitled Agent",
+        description: form.description,
+        emoji: form.emoji,
+        systemPrompt: form.systemPrompt,
+        model: form.model,
+        useKnowledgeBase: form.useKnowledgeBase,
+        knowledgeBaseGroupIds: form.knowledgeBaseGroupIds,
+        memoryConfig: form.memoryConfig,
+        modelConfig: form.modelConfig,
+        chatConfig: form.chatConfig,
+        guardRails: form.guardRails,
+        liveChatEnabled: form.liveChatEnabled,
+        openingMessage: form.openingMessage || undefined,
+        openingQuestions: form.openingQuestions.filter((q) => q.trim()),
+        avatarS3Key: form.avatarS3Key || undefined,
+        tags: form.tags,
+      }
+
+      if (isNew) {
+        const created = await addAssistant(input)
+        if (created) {
+          // After create, update tools and skills if any were selected
+          const promises: Promise<unknown>[] = []
+          if (form.selectedToolIds.length > 0) {
+            promises.push(
+              fetch(`/api/assistants/${created.id}/tools`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ toolIds: form.selectedToolIds }),
+              }).catch(() => {})
+            )
+          }
+          if (form.selectedSkillIds.length > 0) {
+            promises.push(
+              fetch(`/api/assistants/${created.id}/skills`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ skillIds: form.selectedSkillIds }),
+              }).catch(() => {})
+            )
+          }
+          if (form.selectedMcpServerIds.length > 0) {
+            promises.push(
+              fetch(`/api/assistants/${created.id}/mcp-servers`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mcpServerIds: form.selectedMcpServerIds }),
+              }).catch(() => {})
+            )
+          }
+          if (form.selectedWorkflowIds.length > 0) {
+            promises.push(
+              fetch(`/api/assistants/${created.id}/workflows`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ workflowIds: form.selectedWorkflowIds }),
+              }).catch(() => {})
+            )
+          }
+          await Promise.all(promises)
+          refetch()
+          router.replace(`/dashboard/agent-builder/${created.id}`)
+        }
+      } else {
+        const success = await updateAssistant(id, input)
+        if (success) {
+          // Update tool, skill, and MCP server bindings
+          await Promise.all([
+            updateAssistantTools(form.selectedToolIds),
+            updateAssistantSkills(form.selectedSkillIds),
+            updateAssistantMcpServers(form.selectedMcpServerIds),
+            updateAssistantWorkflows(form.selectedWorkflowIds),
+          ])
+          refetch()
+          setIsDirty(false)
+        }
+      }
+    } finally {
+      setIsSaving(false)
+    }
+  }, [form, isNew, id, addAssistant, updateAssistant, updateAssistantTools, updateAssistantSkills, updateAssistantMcpServers, updateAssistantWorkflows, refetch, router])
+
+  // Actions
+  const handleDuplicate = useCallback(async () => {
+    const created = await addAssistant({
+      name: `${form.name} (Copy)`,
+      description: form.description,
+      emoji: form.emoji,
+      systemPrompt: form.systemPrompt,
+      model: form.model,
+      useKnowledgeBase: form.useKnowledgeBase,
+      knowledgeBaseGroupIds: form.knowledgeBaseGroupIds,
+      memoryConfig: form.memoryConfig,
+      modelConfig: form.modelConfig,
+      chatConfig: form.chatConfig,
+      guardRails: form.guardRails,
+      liveChatEnabled: form.liveChatEnabled,
+      openingMessage: form.openingMessage,
+      openingQuestions: form.openingQuestions,
+      avatarS3Key: form.avatarS3Key || undefined,
+    })
+    if (created) {
+      refetch()
+      router.push(`/dashboard/agent-builder/${created.id}`)
+    }
+  }, [form, addAssistant, refetch, router])
+
+  const handleSetDefault = useCallback(async () => {
+    const isCurrentDefault = defaultSource === "user" && defaultAssistant?.id === id
+    if (isCurrentDefault) {
+      await clearUserDefault()
+    } else {
+      await setUserDefault(id)
+    }
+    refetchDefault()
+  }, [id, defaultAssistant, defaultSource, setUserDefault, clearUserDefault, refetchDefault])
+
+  const handleDelete = useCallback(async () => {
+    await deleteAssistant(id)
+    refetch()
+    router.push("/dashboard/agent-builder")
+  }, [id, deleteAssistant, refetch, router])
+
+  // Build a test assistant from form state
+  const formAssistant: Assistant = {
+    id: isNew ? "new" : id,
+    name: form.name || "Untitled Agent",
+    description: form.description,
+    emoji: form.emoji,
+    systemPrompt: form.systemPrompt,
+    model: form.model,
+    useKnowledgeBase: form.useKnowledgeBase,
+    knowledgeBaseGroupIds: form.knowledgeBaseGroupIds,
+    memoryConfig: form.memoryConfig,
+    modelConfig: form.modelConfig,
+    chatConfig: form.chatConfig,
+    guardRails: form.guardRails,
+    toolCount: form.selectedToolIds.length,
+    skillCount: form.selectedSkillIds.length,
+    createdAt: new Date(),
+  }
+
+  const model = getModelById(form.model)
+  const modelSupportsFunctionCalling = model?.capabilities.functionCalling ?? false
+  const isDefault = defaultAssistant?.id === id
+
+  if (isLoading && !isNew) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    )
+  }
+
+  return (
+    <AgentEditorLayout
+      agentName={form.name || "Untitled Agent"}
+      agentEmoji={form.emoji}
+      isNew={isNew}
+      isDirty={isDirty}
+      isSaving={isSaving}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      onSave={handleSave}
+      onDuplicate={isNew ? undefined : handleDuplicate}
+      onSetDefault={isNew ? undefined : handleSetDefault}
+      onDelete={isNew ? undefined : handleDelete}
+      isDefault={isDefault}
+    >
+      {activeTab === "configure" && (
+        <TabConfigure
+          name={form.name}
+          description={form.description}
+          emoji={form.emoji}
+          avatarUrl={form.avatarUrl || null}
+          systemPrompt={form.systemPrompt}
+          liveChatEnabled={form.liveChatEnabled}
+          openingMessage={form.openingMessage}
+          openingQuestions={form.openingQuestions}
+          isNew={isNew}
+          onNameChange={(v) => updateField("name", v)}
+          onDescriptionChange={(v) => updateField("description", v)}
+          onEmojiChange={(v) => updateField("emoji", v)}
+          onAvatarUpload={handleAvatarUpload}
+          onAvatarRemove={handleAvatarRemove}
+          onSystemPromptChange={(v) => updateField("systemPrompt", v)}
+          onLiveChatEnabledChange={(v) => updateField("liveChatEnabled", v)}
+          onOpeningMessageChange={(v) => updateField("openingMessage", v)}
+          onOpeningQuestionsChange={(v) => updateField("openingQuestions", v)}
+          tags={form.tags}
+          onTagsChange={(v) => updateField("tags", v)}
+        />
+      )}
+      {activeTab === "model" && (
+        <TabModel
+          model={form.model}
+          modelConfig={form.modelConfig}
+          onModelChange={(v) => updateField("model", v)}
+          onModelConfigChange={(v) => updateField("modelConfig", v)}
+        />
+      )}
+      {activeTab === "tools" && (
+        <TabTools
+          selectedToolIds={form.selectedToolIds}
+          onToggleTool={handleToggleTool}
+          modelSupportsFunctionCalling={modelSupportsFunctionCalling}
+          isNew={isNew}
+        />
+      )}
+      {activeTab === "skills" && (
+        <TabSkills
+          selectedSkillIds={form.selectedSkillIds}
+          onToggleSkill={handleToggleSkill}
+          selectedToolIds={form.selectedToolIds}
+          onToggleTool={handleToggleTool}
+          isNew={isNew}
+          assistantId={isNew ? null : id}
+        />
+      )}
+      {activeTab === "workflows" && (
+        <TabWorkflows
+          selectedWorkflowIds={form.selectedWorkflowIds}
+          onToggleWorkflow={handleToggleWorkflow}
+          isNew={isNew}
+        />
+      )}
+      {activeTab === "mcp" && (
+        <TabMcp
+          selectedMcpServerIds={form.selectedMcpServerIds}
+          onToggleMcpServer={handleToggleMcpServer}
+          modelSupportsFunctionCalling={modelSupportsFunctionCalling}
+          isNew={isNew}
+        />
+      )}
+      {activeTab === "knowledge" && (
+        <TabKnowledge
+          useKnowledgeBase={form.useKnowledgeBase}
+          knowledgeBaseGroupIds={form.knowledgeBaseGroupIds}
+          initialKnowledgeGroups={initialKnowledgeGroups}
+          onUseKnowledgeBaseChange={(v) => updateField("useKnowledgeBase", v)}
+          onKnowledgeBaseGroupIdsChange={(ids) => updateField("knowledgeBaseGroupIds", ids)}
+        />
+      )}
+      {activeTab === "memory" && (
+        <TabMemory
+          memoryConfig={form.memoryConfig}
+          onMemoryConfigChange={(config) => updateField("memoryConfig", config)}
+        />
+      )}
+      {activeTab === "guardrails" && (
+        <GuardRailsSettings
+          config={form.guardRails}
+          onChange={(config) => updateField("guardRails", config)}
+        />
+      )}
+      {activeTab === "chat" && (
+        <TabChatPreferences
+          chatConfig={form.chatConfig}
+          onChatConfigChange={(config) => updateField("chatConfig", config)}
+        />
+      )}
+      {activeTab === "test" && (
+        <TabTest
+          agentId={isNew ? null : id}
+          isNew={isNew}
+          formAssistant={formAssistant}
+        />
+      )}
+      {activeTab === "deploy" && (
+        <TabDeploy
+          agentId={isNew ? null : id}
+          agentName={form.name || "Untitled Agent"}
+          isNew={isNew}
+        />
+      )}
+    </AgentEditorLayout>
+  )
+}

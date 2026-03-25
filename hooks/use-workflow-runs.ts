@@ -17,8 +17,12 @@ export interface WorkflowRunItem {
   completedAt: string | null
 }
 
-export function useWorkflowRuns(workflowId: string | null) {
-  const [runs, setRuns] = useState<WorkflowRunItem[]>([])
+export function useWorkflowRuns(
+  workflowId: string | null,
+  options?: { initialRuns?: WorkflowRunItem[] }
+) {
+  const initialRuns = options?.initialRuns
+  const [runs, setRuns] = useState<WorkflowRunItem[]>(initialRuns || [])
   const [isLoading, setIsLoading] = useState(false)
   const [activeRun, setActiveRun] = useState<WorkflowRunItem | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -112,8 +116,11 @@ export function useWorkflowRuns(workflowId: string | null) {
   )
 
   useEffect(() => {
+    if (initialRuns) {
+      return
+    }
     if (workflowId) fetchRuns()
-  }, [workflowId, fetchRuns])
+  }, [workflowId, fetchRuns, initialRuns])
 
   // Poll for active runs
   useEffect(() => {

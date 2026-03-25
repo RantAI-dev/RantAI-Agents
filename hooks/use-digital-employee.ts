@@ -81,6 +81,19 @@ interface ClawHubSkillItem {
   createdAt: string
 }
 
+export interface DigitalEmployeeHydrationData {
+  employee: DigitalEmployeeItem
+  files: EmployeeFile[]
+  runs: EmployeeRunItem[]
+  approvals: ApprovalItem[]
+  platformTools: PlatformToolItem[]
+  customTools: CustomToolItem[]
+  skills: {
+    platform: PlatformSkillItem[]
+    clawhub: ClawHubSkillItem[]
+  }
+}
+
 interface ApprovalItem {
   id: string
   requestType: string
@@ -130,16 +143,44 @@ async function consumeSSE(
   }
 }
 
-export function useDigitalEmployee(id: string | null) {
-  const [employee, setEmployee] = useState<DigitalEmployeeItem | null>(null)
-  const [files, setFiles] = useState<EmployeeFile[]>([])
-  const [runs, setRuns] = useState<EmployeeRunItem[]>([])
-  const [approvals, setApprovals] = useState<ApprovalItem[]>([])
-  const [platformTools, setPlatformTools] = useState<PlatformToolItem[]>([])
-  const [customTools, setCustomTools] = useState<CustomToolItem[]>([])
-  const [skills, setSkills] = useState<{ platform: PlatformSkillItem[]; clawhub: ClawHubSkillItem[] }>({ platform: [], clawhub: [] })
-  const [isLoading, setIsLoading] = useState(true)
+export function useDigitalEmployee(
+  id: string | null,
+  options?: { initialData?: DigitalEmployeeHydrationData | null }
+) {
+  const initialData = options?.initialData
+  const [employee, setEmployee] = useState<DigitalEmployeeItem | null>(
+    initialData?.employee ?? null
+  )
+  const [files, setFiles] = useState<EmployeeFile[]>(initialData?.files ?? [])
+  const [runs, setRuns] = useState<EmployeeRunItem[]>(initialData?.runs ?? [])
+  const [approvals, setApprovals] = useState<ApprovalItem[]>(initialData?.approvals ?? [])
+  const [platformTools, setPlatformTools] = useState<PlatformToolItem[]>(
+    initialData?.platformTools ?? []
+  )
+  const [customTools, setCustomTools] = useState<CustomToolItem[]>(
+    initialData?.customTools ?? []
+  )
+  const [skills, setSkills] = useState<{
+    platform: PlatformSkillItem[]
+    clawhub: ClawHubSkillItem[]
+  }>(initialData?.skills ?? { platform: [], clawhub: [] })
+  const [isLoading, setIsLoading] = useState(initialData === undefined)
   const base = `/api/dashboard/digital-employees/${id}`
+
+  useEffect(() => {
+    if (initialData === undefined) {
+      return
+    }
+
+    setEmployee(initialData?.employee ?? null)
+    setFiles(initialData?.files ?? [])
+    setRuns(initialData?.runs ?? [])
+    setApprovals(initialData?.approvals ?? [])
+    setPlatformTools(initialData?.platformTools ?? [])
+    setCustomTools(initialData?.customTools ?? [])
+    setSkills(initialData?.skills ?? { platform: [], clawhub: [] })
+    setIsLoading(false)
+  }, [initialData])
 
   const fetchEmployee = useCallback(async () => {
     if (!id) return
@@ -365,15 +406,26 @@ export function useDigitalEmployee(id: string | null) {
   }, [base])
 
   useEffect(() => {
-    if (id) {
-      fetchEmployee()
-      fetchFiles()
-      fetchRuns()
-      fetchApprovals()
-      fetchTools()
-      fetchSkills()
+    if (initialData !== undefined || !id) {
+      return
     }
-  }, [id, fetchEmployee, fetchFiles, fetchRuns, fetchApprovals, fetchTools, fetchSkills])
+
+    fetchEmployee()
+    fetchFiles()
+    fetchRuns()
+    fetchApprovals()
+    fetchTools()
+    fetchSkills()
+  }, [
+    id,
+    initialData,
+    fetchEmployee,
+    fetchFiles,
+    fetchRuns,
+    fetchApprovals,
+    fetchTools,
+    fetchSkills,
+  ])
 
   return {
     employee,

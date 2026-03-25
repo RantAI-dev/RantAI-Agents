@@ -39,9 +39,10 @@ export interface McpServerDetail extends McpServerItem {
   }>
 }
 
-export function useMcpServers() {
-  const [servers, setServers] = useState<McpServerItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+export function useMcpServers(options?: { initialServers?: McpServerItem[] }) {
+  const initialServers = options?.initialServers
+  const [servers, setServers] = useState<McpServerItem[]>(initialServers ?? [])
+  const [isLoading, setIsLoading] = useState(!initialServers)
   const [error, setError] = useState<string | null>(null)
   const orgFetch = useOrgFetch()
 
@@ -140,8 +141,11 @@ export function useMcpServers() {
   )
 
   useEffect(() => {
+    if (initialServers) {
+      return
+    }
     fetchServers()
-  }, [fetchServers])
+  }, [fetchServers, initialServers])
 
   return {
     servers,
