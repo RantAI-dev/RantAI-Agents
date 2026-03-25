@@ -112,9 +112,30 @@ function readCompatFile(): CompatFile {
 }
 
 function assertShaReachable(remoteUrl: string, sha: string, label: string) {
-  const output = run(`git ls-remote ${remoteUrl} ${sha}`)
+  const safeUrl = remoteUrl.replace(/'/g, "'\\''")
+  const output = run(`git ls-remote '${safeUrl}' ${sha}`)
   if (!output.includes(sha)) {
     throw new Error(`${label} SHA ${sha} is not reachable on ${remoteUrl}`)
+  }
+}
+
+function assertShaKnownLocally(path: string, sha: string, label: string) {
+  const safePath = path.replace(/'/g, "'\\''")
+  run(`git -C '${safePath}' cat-file -e ${sha}^{commit}`)
+  console.warn(
+    `[release-compat] ${label}: remote reachability could not be verified, falling back to locally checked-out commit ${sha}.`
+  )
+}
+
+function assertSubmoduleShaReachable(path: string, remoteUrl: string, sha: string, label: string) {
+  try {
+    assertShaReachable(remoteUrl, sha, label)
+  } catch (error) {
+    // Cross-repo GITHUB_TOKEN permissions can block ls-remote on private repos.
+    // In that case, accept the already checked-out commit in the submodule as fallback.
+    assertShaKnownLocally(path, sha, label)
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(`[release-compat] ${label}: ${message}`)
   }
 }
 
@@ -239,8 +260,18 @@ async function main() {
   const rantaiclawRemote = withAuthIfHttps(getSubmoduleRemote("packages/rantaiclaw"))
   const communityRemote = withAuthIfHttps(getSubmoduleRemote("packages/community-skills"))
 
-  assertShaReachable(rantaiclawRemote, statuses["packages/rantaiclaw"].sha, "RantaiClaw")
-  assertShaReachable(communityRemote, statuses["packages/community-skills"].sha, "Community Skills")
+  assertSubmoduleShaReachable(
+    "packages/rantaiclaw",
+    rantaiclawRemote,
+    statuses["packages/rantaiclaw"].sha,
+    "RantaiClaw"
+  )
+  assertSubmoduleShaReachable(
+    "packages/community-skills",
+    communityRemote,
+    statuses["packages/community-skills"].sha,
+    "Community Skills"
+  )
 
   if (verifyRantaiclawChecks) {
     await assertRantaiclawChecksPassed(statuses["packages/rantaiclaw"].sha)

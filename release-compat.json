@@ -2,6 +2,21 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "rantai_agents_version": "v0.1.2",
+      "date": "2026-03-25",
+      "notes": "Release pipeline hotfix for Windows MSVC shell handling and resilient cross-repo compatibility verification.",
+      "submodules": {
+        "rantaiclaw": {
+          "sha": "26418db53ecff9d3c44f555a85221b511a17b4d0",
+          "tag": "v0.1.2"
+        },
+        "community_skills": {
+          "sha": "338da00eca10f971d3430e59a9e14aad4fe79a54",
+          "tag": "v0.1.2"
+        }
+      }
+    },
+    {
       "rantai_agents_version": "v0.1.1",
       "date": "2026-03-25",
       "notes": "Release governance update with submodule compatibility gates and CI-aligned submodule revisions.",
