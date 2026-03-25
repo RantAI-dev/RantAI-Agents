@@ -1,18 +1,14 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-
-// Helper to check membership and role
-async function getMembership(userId: string, organizationId: string) {
-  return prisma.organizationMember.findUnique({
-    where: {
-      userId_organizationId: {
-        userId,
-        organizationId,
-      },
-    },
-  })
-}
+import {
+  OrganizationMemberParamsSchema,
+  UpdateMemberRoleSchema,
+} from "@/src/features/organizations/members/schema"
+import {
+  changeOrganizationMemberRole,
+  removeOrganizationMember,
+} from "@/src/features/organizations/members/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 // PATCH /api/organizations/[id]/members/[memberId] - Update member role
 export async function PATCH(
@@ -25,61 +21,37 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id: organizationId, memberId } = await params
-
-    // Verify admin or owner membership
-    const currentMembership = await getMembership(session.user.id, organizationId)
-    if (!currentMembership || !currentMembership.acceptedAt) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 })
+    const parsedParams = OrganizationMemberParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid route params" }, { status: 400 })
     }
 
-    // Get target member
-    const targetMember = await prisma.organizationMember.findUnique({
-      where: { id: memberId },
-    })
-
-    if (!targetMember || targetMember.organizationId !== organizationId) {
-      return NextResponse.json({ error: "Member not found" }, { status: 404 })
-    }
-
-    const body = await req.json()
-    const { role } = body
-
-    // Validate role
-    const validRoles = ["admin", "member", "viewer"]
-    if (!validRoles.includes(role)) {
-      return NextResponse.json({ error: "Invalid role" }, { status: 400 })
-    }
-
-    // Permission checks
-    if (targetMember.role === "owner") {
+    const parsedBody = UpdateMemberRoleSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
       return NextResponse.json(
-        { error: "Cannot change the owner's role" },
-        { status: 403 }
+        { error: "Invalid request payload", details: parsedBody.error.flatten() },
+        { status: 400 }
       )
     }
 
-    // Only owner can change roles
-    if (currentMembership.role !== "owner") {
-      return NextResponse.json(
-        { error: "Only the owner can change member roles" },
-        { status: 403 }
-      )
-    }
-
-    const member = await prisma.organizationMember.update({
-      where: { id: memberId },
-      data: { role },
+    const member = await changeOrganizationMemberRole({
+      actorUserId: session.user.id,
+      organizationId: parsedParams.data.id,
+      memberId: parsedParams.data.memberId,
+      input: parsedBody.data,
     })
+    if (isHttpServiceError(member)) {
+      return NextResponse.json({ error: member.error }, { status: member.status })
+    }
 
     return NextResponse.json({
       id: member.id,
       userId: member.userId,
-      email: member.userEmail,
-      name: member.userName,
+      email: member.email,
+      name: member.name,
       role: member.role,
-      invitedAt: member.invitedAt.toISOString(),
-      acceptedAt: member.acceptedAt?.toISOString() || null,
+      invitedAt: member.invitedAt,
+      acceptedAt: member.acceptedAt,
     })
   } catch (error) {
     console.error("[Member API] PATCH error:", error)
@@ -101,65 +73,21 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id: organizationId, memberId } = await params
-
-    // Verify membership
-    const currentMembership = await getMembership(session.user.id, organizationId)
-    if (!currentMembership || !currentMembership.acceptedAt) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 })
+    const parsedParams = OrganizationMemberParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid route params" }, { status: 400 })
     }
 
-    // Get target member
-    const targetMember = await prisma.organizationMember.findUnique({
-      where: { id: memberId },
+    const result = await removeOrganizationMember({
+      actorUserId: session.user.id,
+      organizationId: parsedParams.data.id,
+      memberId: parsedParams.data.memberId,
     })
-
-    if (!targetMember || targetMember.organizationId !== organizationId) {
-      return NextResponse.json({ error: "Member not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    // Self-removal is allowed (leaving the organization)
-    const isSelfRemoval = targetMember.userId === session.user.id
-
-    if (!isSelfRemoval) {
-      // Only owner and admin can remove others
-      if (!["owner", "admin"].includes(currentMembership.role)) {
-        return NextResponse.json(
-          { error: "Insufficient permissions" },
-          { status: 403 }
-        )
-      }
-
-      // Admin cannot remove owner
-      if (targetMember.role === "owner") {
-        return NextResponse.json(
-          { error: "Cannot remove the organization owner" },
-          { status: 403 }
-        )
-      }
-
-      // Admin cannot remove other admins (only owner can)
-      if (targetMember.role === "admin" && currentMembership.role !== "owner") {
-        return NextResponse.json(
-          { error: "Only the owner can remove admins" },
-          { status: 403 }
-        )
-      }
-    }
-
-    // Owner cannot leave (must transfer ownership first or delete org)
-    if (isSelfRemoval && targetMember.role === "owner") {
-      return NextResponse.json(
-        { error: "Owner cannot leave. Transfer ownership first or delete the organization." },
-        { status: 403 }
-      )
-    }
-
-    await prisma.organizationMember.delete({
-      where: { id: memberId },
-    })
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Member API] DELETE error:", error)
     return NextResponse.json(

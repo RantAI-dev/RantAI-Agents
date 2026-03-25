@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { generateEmployeePackage } from "@/lib/digital-employee/package-generator"
+import { DashboardDigitalEmployeeIdParamsSchema } from "@/src/features/digital-employees/employees/schema"
+import {
+  generateDashboardDigitalEmployeePackage,
+  isServiceError,
+} from "@/src/features/digital-employees/employees/service"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -15,23 +18,17 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
+    const result = await generateDashboardDigitalEmployeePackage({
+      id,
+      organizationId: orgContext?.organizationId ?? null,
     })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const pkg = await generateEmployeePackage(id)
-
-    return NextResponse.json(pkg)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to generate package:", error)
     return NextResponse.json({ error: "Failed to generate package" }, { status: 500 })

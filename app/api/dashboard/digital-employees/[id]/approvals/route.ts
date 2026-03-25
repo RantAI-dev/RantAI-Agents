@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  DashboardDigitalEmployeeApprovalsQuerySchema,
+  DashboardDigitalEmployeeIdParamsSchema,
+} from "@/src/features/digital-employees/employees/schema"
+import {
+  isServiceError,
+  listDashboardDigitalEmployeeApprovals,
+} from "@/src/features/digital-employees/employees/service"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -14,33 +21,21 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
+    const parsed = DashboardDigitalEmployeeApprovalsQuerySchema.parse(
+      Object.fromEntries(new URL(req.url).searchParams.entries())
+    )
+    const result = await listDashboardDigitalEmployeeApprovals({
+      id,
+      organizationId: orgContext?.organizationId ?? null,
+      input: parsed,
     })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const { searchParams } = new URL(req.url)
-    const statusFilter = searchParams.get("status")
-
-    const approvals = await prisma.employeeApproval.findMany({
-      where: {
-        digitalEmployeeId: id,
-        ...(statusFilter ? { status: statusFilter as never } : {}),
-      },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    })
-
-    return NextResponse.json(approvals)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to fetch approvals:", error)
     return NextResponse.json({ error: "Failed to fetch approvals" }, { status: 500 })

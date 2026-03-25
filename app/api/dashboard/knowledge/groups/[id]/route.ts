@@ -1,178 +1,111 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { getOrganizationContext, canEdit, canManage } from "@/lib/organization"
+import { getOrganizationContext } from "@/lib/organization"
+import {
+  KnowledgeGroupIdParamsSchema,
+  KnowledgeGroupUpdateSchema,
+} from "@/src/features/knowledge/groups/schema"
+import {
+  deleteKnowledgeGroupForDashboard,
+  getKnowledgeGroupForDashboard,
+  updateKnowledgeGroupForDashboard,
+} from "@/src/features/knowledge/groups/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 // GET - Get a single group with documents
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { id } = await params
-  const orgContext = await getOrganizationContext(request, session.user.id)
-
   try {
-    const group = await prisma.knowledgeBaseGroup.findUnique({
-      where: { id },
-      include: {
-        documents: {
-          include: {
-            document: {
-              select: {
-                id: true,
-                title: true,
-                categories: true,
-              },
-            },
-          },
-        },
-      },
-    })
-
-    if (!group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 })
+    const parsedParams = KnowledgeGroupIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
-    // Verify organization access
-    if (group.organizationId) {
-      if (!orgContext || group.organizationId !== orgContext.organizationId) {
-        return NextResponse.json({ error: "Group not found" }, { status: 404 })
-      }
-    } else if (orgContext) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 })
+    const orgContext = await getOrganizationContext(request, session.user.id)
+    const group = await getKnowledgeGroupForDashboard({
+      groupId: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+    })
+
+    if (isHttpServiceError(group)) {
+      return NextResponse.json({ error: group.error }, { status: group.status })
     }
 
-    return NextResponse.json({
-      id: group.id,
-      name: group.name,
-      description: group.description,
-      color: group.color,
-      documents: group.documents.map((dg) => dg.document),
-      createdAt: group.createdAt.toISOString(),
-      updatedAt: group.updatedAt.toISOString(),
-    })
+    return NextResponse.json(group)
   } catch (error) {
     console.error("Failed to get group:", error)
-    return NextResponse.json(
-      { error: "Failed to get group" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to get group" }, { status: 500 })
   }
 }
 
 // PUT - Update group
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { id } = await params
-  const orgContext = await getOrganizationContext(request, session.user.id)
-
   try {
-    // First verify the group exists and check organization access
-    const existing = await prisma.knowledgeBaseGroup.findUnique({
-      where: { id },
-      select: { id: true, organizationId: true },
-    })
-
-    if (!existing) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 })
+    const parsedParams = KnowledgeGroupIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
-    // Verify organization access
-    if (existing.organizationId) {
-      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
-        return NextResponse.json({ error: "Group not found" }, { status: 404 })
-      }
-
-      // Check edit permission
-      if (!canEdit(orgContext.membership.role)) {
-        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
-      }
+    const orgContext = await getOrganizationContext(request, session.user.id)
+    const parsedBody = KnowledgeGroupUpdateSchema.safeParse(await request.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
-    const { name, description, color } = await request.json()
-
-    const group = await prisma.knowledgeBaseGroup.update({
-      where: { id },
-      data: {
-        ...(name && { name }),
-        ...(description !== undefined && { description: description || null }),
-        ...(color !== undefined && { color: color || null }),
-      },
+    const group = await updateKnowledgeGroupForDashboard({
+      groupId: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+      role: orgContext?.membership.role ?? null,
+      input: parsedBody.data,
     })
 
-    return NextResponse.json({
-      id: group.id,
-      name: group.name,
-      description: group.description,
-      color: group.color,
-    })
+    if (isHttpServiceError(group)) {
+      return NextResponse.json({ error: group.error }, { status: group.status })
+    }
+
+    return NextResponse.json(group)
   } catch (error) {
     console.error("Failed to update group:", error)
-    return NextResponse.json(
-      { error: "Failed to update group" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to update group" }, { status: 500 })
   }
 }
 
 // DELETE - Delete a group (documents will have groupId set to null)
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { id } = await params
-  const orgContext = await getOrganizationContext(request, session.user.id)
-
   try {
-    // First verify the group exists and check organization access
-    const existing = await prisma.knowledgeBaseGroup.findUnique({
-      where: { id },
-      select: { id: true, organizationId: true },
-    })
-
-    if (!existing) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 })
+    const parsedParams = KnowledgeGroupIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
-    // Verify organization access
-    if (existing.organizationId) {
-      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
-        return NextResponse.json({ error: "Group not found" }, { status: 404 })
-      }
-
-      // Only owner and admin can delete
-      if (!canManage(orgContext.membership.role)) {
-        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
-      }
-    }
-
-    await prisma.knowledgeBaseGroup.delete({
-      where: { id },
+    const orgContext = await getOrganizationContext(request, session.user.id)
+    const group = await deleteKnowledgeGroupForDashboard({
+      groupId: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+      role: orgContext?.membership.role ?? null,
     })
 
-    return NextResponse.json({ success: true })
+    if (isHttpServiceError(group)) {
+      return NextResponse.json({ error: group.error }, { status: group.status })
+    }
+
+    return NextResponse.json(group)
   } catch (error) {
     console.error("Failed to delete group:", error)
-    return NextResponse.json(
-      { error: "Failed to delete group" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to delete group" }, { status: 500 })
   }
 }

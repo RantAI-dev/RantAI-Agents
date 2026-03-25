@@ -1,76 +1,48 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { CreateConversationBodySchema } from "@/src/features/chat-public/schema"
+import {
+  createConversationRecord,
+  isChatPublicServiceError,
+  listConversations,
+} from "@/src/features/chat-public/service"
 
 export async function GET() {
   const session = await auth()
-
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  try {
-    const conversations = await prisma.conversation.findMany({
-      where: {
-        status: {
-          in: ["WAITING_FOR_AGENT", "AGENT_CONNECTED"],
-        },
-      },
-      include: {
-        messages: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-        agent: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-      orderBy: { handoffAt: "asc" },
-    })
-
-    return NextResponse.json(conversations)
-  } catch (error) {
-    console.error("Error fetching conversations:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch conversations" },
-      { status: 500 }
-    )
+  const result = await listConversations()
+  if (isChatPublicServiceError(result)) {
+    return NextResponse.json({ error: result.error }, { status: result.status })
   }
+
+  return NextResponse.json(result)
 }
 
 export async function POST(request: Request) {
-  try {
-    const session = await auth()
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const body = await request.json()
-    const { sessionId } = body
-
-    if (!sessionId) {
-      return NextResponse.json(
-        { error: "Session ID is required" },
-        { status: 400 }
-      )
-    }
-
-    const conversation = await prisma.conversation.create({
-      data: {
-        sessionId,
-        status: "AI_ACTIVE",
-      },
-    })
-
-    return NextResponse.json(conversation)
-  } catch (error) {
-    console.error("Error creating conversation:", error)
-    return NextResponse.json(
-      { error: "Failed to create conversation" },
-      { status: 500 }
-    )
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+
+  let rawBody: unknown
+  try {
+    rawBody = await request.json()
+  } catch {
+    return NextResponse.json({ error: "Session ID is required" }, { status: 400 })
+  }
+
+  const parsedBody = CreateConversationBodySchema.safeParse(rawBody)
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: "Session ID is required" }, { status: 400 })
+  }
+
+  const result = await createConversationRecord({ sessionId: parsedBody.data.sessionId })
+  if (isChatPublicServiceError(result)) {
+    return NextResponse.json({ error: result.error }, { status: result.status })
+  }
+
+  return NextResponse.json(result)
 }

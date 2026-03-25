@@ -1,11 +1,28 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { getOrganizationContext, canEdit, canManage } from "@/lib/organization"
-import { isValidModel } from "@/lib/models"
+import { getOrganizationContext } from "@/lib/organization"
+import {
+  AssistantIdParamsSchema,
+  UpdateAssistantSchema,
+} from "@/src/features/assistants/core/schema"
+import {
+  deleteAssistantForUser,
+  getAssistantForUser,
+  updateAssistantForUser,
+} from "@/src/features/assistants/core/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string }>
+}
+
+function isHttpServiceError(value: unknown): value is { status: number; error: string } {
+  if (typeof value !== "object" || value === null) return false
+  const candidate = value as { status?: unknown; error?: unknown }
+  return (
+    typeof candidate.status === "number" &&
+    typeof candidate.error === "string"
+  )
 }
 
 // GET /api/assistants/[id] - Get single assistant
@@ -16,28 +33,20 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const orgContext = await getOrganizationContext(request, session.user.id)
-
-    const assistant = await prisma.assistant.findUnique({
-      where: { id },
-    })
-
-    if (!assistant) {
-      return NextResponse.json(
-        { error: "Assistant not found" },
-        { status: 404 }
-      )
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
-
-    // Allow access to built-in assistants or assistants in user's organization
-    if (!assistant.isBuiltIn && assistant.organizationId) {
-      if (!orgContext || assistant.organizationId !== orgContext.organizationId) {
-        return NextResponse.json(
-          { error: "Assistant not found" },
-          { status: 404 }
-        )
-      }
+    const orgContext = await getOrganizationContext(request, session.user.id)
+    const assistant = await getAssistantForUser({
+      id: parsedParams.data.id,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        role: orgContext?.membership.role ?? null,
+      },
+    })
+    if (isHttpServiceError(assistant)) {
+      return NextResponse.json({ error: assistant.error }, { status: assistant.status })
     }
 
     return NextResponse.json(assistant)
@@ -58,121 +67,30 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
+    }
     const orgContext = await getOrganizationContext(request, session.user.id)
-
-    const existing = await prisma.assistant.findUnique({
-      where: { id },
-    })
-
-    if (!existing) {
+    const bodyParse = UpdateAssistantSchema.safeParse(await request.json())
+    if (!bodyParse.success) {
       return NextResponse.json(
-        { error: "Assistant not found" },
-        { status: 404 }
-      )
-    }
-
-    const body = await request.json()
-    const {
-      name,
-      description,
-      emoji,
-      systemPrompt,
-      model,
-      useKnowledgeBase,
-      knowledgeBaseGroupIds,
-      memoryConfig,
-      liveChatEnabled,
-      modelConfig,
-      openingMessage,
-      openingQuestions,
-      chatConfig,
-      guardRails,
-      avatarS3Key,
-      tags,
-    } = body
-
-    // Built-in assistants: only allow updating a whitelist of fields (e.g. Live Chat, prompt, model)
-    const isBuiltIn = existing.isBuiltIn
-    if (isBuiltIn) {
-      if (model !== undefined && !isValidModel(model)) {
-        return NextResponse.json(
-          { error: "Invalid model selected" },
-          { status: 400 }
-        )
-      }
-      const allowedData: Record<string, unknown> = {
-        updatedBy: session.user.id,
-      }
-      if (description !== undefined) allowedData.description = description
-      if (emoji !== undefined) allowedData.emoji = emoji
-      if (systemPrompt !== undefined) allowedData.systemPrompt = systemPrompt
-      if (model !== undefined) allowedData.model = model
-      if (memoryConfig !== undefined) allowedData.memoryConfig = memoryConfig
-      if (liveChatEnabled !== undefined) allowedData.liveChatEnabled = liveChatEnabled
-      if (modelConfig !== undefined) allowedData.modelConfig = modelConfig
-      if (openingMessage !== undefined) allowedData.openingMessage = openingMessage
-      if (openingQuestions !== undefined) allowedData.openingQuestions = openingQuestions
-      if (chatConfig !== undefined) allowedData.chatConfig = chatConfig
-      if (guardRails !== undefined) allowedData.guardRails = guardRails
-      if (avatarS3Key !== undefined) allowedData.avatarS3Key = avatarS3Key
-      if (tags !== undefined) allowedData.tags = tags
-      // name, useKnowledgeBase, knowledgeBaseGroupIds are not allowed for built-in
-
-      const assistant = await prisma.assistant.update({
-        where: { id },
-        data: allowedData,
-      })
-      return NextResponse.json(assistant)
-    }
-
-    // Non–built-in: verify organization ownership
-    if (existing.organizationId) {
-      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
-        return NextResponse.json(
-          { error: "Assistant not found" },
-          { status: 404 }
-        )
-      }
-
-      if (!canEdit(orgContext.membership.role)) {
-        return NextResponse.json(
-          { error: "Insufficient permissions" },
-          { status: 403 }
-        )
-      }
-    }
-
-    // Validate model if provided
-    if (model !== undefined && !isValidModel(model)) {
-      return NextResponse.json(
-        { error: "Invalid model selected" },
+        { error: "Invalid request payload", details: bodyParse.error.flatten() },
         { status: 400 }
       )
     }
-
-    const assistant = await prisma.assistant.update({
-      where: { id },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(description !== undefined && { description }),
-        ...(emoji !== undefined && { emoji }),
-        ...(systemPrompt !== undefined && { systemPrompt }),
-        ...(model !== undefined && { model }),
-        ...(useKnowledgeBase !== undefined && { useKnowledgeBase }),
-        ...(knowledgeBaseGroupIds !== undefined && { knowledgeBaseGroupIds }),
-        ...(memoryConfig !== undefined && { memoryConfig }),
-        ...(liveChatEnabled !== undefined && { liveChatEnabled }),
-        ...(modelConfig !== undefined && { modelConfig }),
-        ...(openingMessage !== undefined && { openingMessage }),
-        ...(openingQuestions !== undefined && { openingQuestions }),
-        ...(chatConfig !== undefined && { chatConfig }),
-        ...(guardRails !== undefined && { guardRails }),
-        ...(avatarS3Key !== undefined && { avatarS3Key }),
-        ...(tags !== undefined && { tags }),
-        updatedBy: session.user.id,
+    const assistant = await updateAssistantForUser({
+      id: parsedParams.data.id,
+      userId: session.user.id,
+      input: bodyParse.data,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        role: orgContext?.membership.role ?? null,
       },
     })
+    if (isHttpServiceError(assistant)) {
+      return NextResponse.json({ error: assistant.error }, { status: assistant.status })
+    }
 
     return NextResponse.json(assistant)
   } catch (error) {
@@ -192,50 +110,24 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
+    }
     const orgContext = await getOrganizationContext(request, session.user.id)
 
-    const existing = await prisma.assistant.findUnique({
-      where: { id },
+    const result = await deleteAssistantForUser({
+      id: parsedParams.data.id,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        role: orgContext?.membership.role ?? null,
+      },
     })
-
-    if (!existing) {
-      return NextResponse.json(
-        { error: "Assistant not found" },
-        { status: 404 }
-      )
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    if (existing.isBuiltIn) {
-      return NextResponse.json(
-        { error: "Cannot delete built-in assistants" },
-        { status: 403 }
-      )
-    }
-
-    // Verify organization ownership
-    if (existing.organizationId) {
-      if (!orgContext || existing.organizationId !== orgContext.organizationId) {
-        return NextResponse.json(
-          { error: "Assistant not found" },
-          { status: 404 }
-        )
-      }
-
-      // Only owner and admin can delete
-      if (!canManage(orgContext.membership.role)) {
-        return NextResponse.json(
-          { error: "Insufficient permissions" },
-          { status: 403 }
-        )
-      }
-    }
-
-    await prisma.assistant.delete({
-      where: { id },
-    })
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to delete assistant:", error)
     return NextResponse.json(

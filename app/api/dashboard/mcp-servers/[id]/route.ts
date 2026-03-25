@@ -1,8 +1,22 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { encryptJsonField } from "@/lib/workflow/credentials"
+import {
+  deleteDashboardMcpServerForDashboard,
+  getDashboardMcpServerForDashboard,
+  updateDashboardMcpServerForDashboard,
+  type ServiceError,
+} from "@/src/features/mcp/servers/service"
+import {
+  DashboardMcpServerIdParamsSchema,
+  DashboardMcpServerUpdateBodySchema,
+} from "@/src/features/mcp/servers/schema"
+
+function isServiceError(value: unknown): value is ServiceError {
+  if (typeof value !== "object" || value === null) return false
+  const candidate = value as { status?: unknown; error?: unknown }
+  return typeof candidate.status === "number" && typeof candidate.error === "string"
+}
 
 // GET /api/dashboard/mcp-servers/[id]
 export async function GET(
@@ -15,56 +29,24 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const server = await prisma.mcpServerConfig.findUnique({
-      where: { id },
-      include: {
-        tools: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            description: true,
-            enabled: true,
-          },
-        },
-        _count: { select: { tools: true } },
-      },
-    })
-
-    if (!server) {
+    const parsedParams = DashboardMcpServerIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
       return NextResponse.json(
         { error: "MCP server not found" },
         { status: 404 }
       )
     }
 
-    // Verify org ownership
     const orgContext = await getOrganizationContext(req, session.user.id)
-    if (server.organizationId && server.organizationId !== orgContext?.organizationId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const server = await getDashboardMcpServerForDashboard({
+      id: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+    })
+    if (isServiceError(server)) {
+      return NextResponse.json({ error: server.error }, { status: server.status })
     }
 
-    return NextResponse.json({
-      id: server.id,
-      name: server.name,
-      description: server.description,
-      icon: server.icon,
-      transport: server.transport,
-      url: server.url,
-      isBuiltIn: server.isBuiltIn,
-      envKeys: server.envKeys,
-      docsUrl: server.docsUrl,
-      hasEnv: !!server.env && Object.keys(server.env as Record<string, unknown>).length > 0,
-      hasHeaders: !!server.headers && Object.keys(server.headers as Record<string, unknown>).length > 0,
-      enabled: server.enabled,
-      configured: server.configured,
-      lastConnectedAt: server.lastConnectedAt?.toISOString() ?? null,
-      lastError: server.lastError,
-      tools: server.tools,
-      toolCount: server._count.tools,
-      createdAt: server.createdAt.toISOString(),
-    })
+    return NextResponse.json(server)
   } catch (error) {
     console.error("[MCP Servers API] GET [id] error:", error)
     return NextResponse.json(
@@ -85,55 +67,33 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const existing = await prisma.mcpServerConfig.findUnique({ where: { id } })
-
-    if (!existing) {
+    const parsedParams = DashboardMcpServerIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
       return NextResponse.json(
         { error: "MCP server not found" },
         { status: 404 }
       )
     }
 
-    // Verify org ownership
     const orgContext = await getOrganizationContext(req, session.user.id)
-    if (existing.organizationId && existing.organizationId !== orgContext?.organizationId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const parsedBody = DashboardMcpServerUpdateBodySchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: "Failed to update MCP server" },
+        { status: 500 }
+      )
     }
 
-    const body = await req.json()
-    const {
-      name,
-      description,
-      transport,
-      url,
-      env,
-      headers,
-      enabled,
-      configured,
-    } = body
-
-    const server = await prisma.mcpServerConfig.update({
-      where: { id },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(description !== undefined && { description }),
-        ...(transport !== undefined && { transport }),
-        ...(url !== undefined && { url }),
-        ...(env !== undefined && { env: encryptJsonField(env) ?? undefined }),
-        ...(headers !== undefined && { headers: encryptJsonField(headers) ?? undefined }),
-        ...(enabled !== undefined && { enabled }),
-        ...(configured !== undefined && { configured }),
-      },
+    const server = await updateDashboardMcpServerForDashboard({
+      id: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+      input: parsedBody.data,
     })
+    if (isServiceError(server)) {
+      return NextResponse.json({ error: server.error }, { status: server.status })
+    }
 
-    // Strip secrets from response
-    const { env: _env, headers: _headers, ...safeServer } = server
-    return NextResponse.json({
-      ...safeServer,
-      hasEnv: !!_env && Object.keys(_env as Record<string, unknown>).length > 0,
-      hasHeaders: !!_headers && Object.keys(_headers as Record<string, unknown>).length > 0,
-    })
+    return NextResponse.json(server)
   } catch (error) {
     console.error("[MCP Servers API] PUT error:", error)
     return NextResponse.json(
@@ -154,32 +114,22 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const server = await prisma.mcpServerConfig.findUnique({ where: { id } })
-
-    if (!server) {
+    const parsedParams = DashboardMcpServerIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
       return NextResponse.json(
         { error: "MCP server not found" },
         { status: 404 }
       )
     }
 
-    // Reject deletion of built-in servers
-    if (server.isBuiltIn) {
-      return NextResponse.json(
-        { error: "Cannot delete a built-in MCP server" },
-        { status: 403 }
-      )
-    }
-
-    // Verify org ownership
     const orgContext = await getOrganizationContext(req, session.user.id)
-    if (server.organizationId && server.organizationId !== orgContext?.organizationId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const server = await deleteDashboardMcpServerForDashboard({
+      id: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+    })
+    if (isServiceError(server)) {
+      return NextResponse.json({ error: server.error }, { status: server.status })
     }
-
-    // Delete associated tools first (cascade), then server
-    await prisma.mcpServerConfig.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[MCP Servers API] DELETE error:", error)

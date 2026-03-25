@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
-import { decryptCredential } from "@/lib/workflow/credentials"
+import {
+  EmployeeIdParamsSchema,
+  EmployeeWhatsAppVerifyQuerySchema,
+} from "@/src/features/digital-employees/whatsapp-webhooks/schema"
+import {
+  proxyEmployeeWhatsAppWebhook,
+  verifyEmployeeWhatsAppWebhook,
+} from "@/src/features/digital-employees/whatsapp-webhooks/service"
 
 interface RouteParams {
   params: Promise<{ employeeId: string }>
@@ -13,36 +19,29 @@ interface RouteParams {
  */
 export async function GET(req: Request, { params }: RouteParams) {
   try {
-    const { employeeId } = await params
-    const url = new URL(req.url)
-    const mode = url.searchParams.get("hub.mode")
-    const token = url.searchParams.get("hub.verify_token")
-    const challenge = url.searchParams.get("hub.challenge")
-
-    if (mode !== "subscribe" || !token || !challenge) {
+    const parsedParams = EmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
       return new Response("Bad request", { status: 400 })
     }
 
-    // Look up the employee's WhatsApp integration to get the verify_token
-    const integration = await prisma.employeeIntegration.findFirst({
-      where: {
-        digitalEmployeeId: employeeId,
-        integrationId: "whatsapp",
-        status: "connected",
-      },
+    const url = new URL(req.url)
+    const parsedQuery = EmployeeWhatsAppVerifyQuerySchema.safeParse({
+      mode: url.searchParams.get("hub.mode") ?? undefined,
+      token: url.searchParams.get("hub.verify_token") ?? undefined,
+      challenge: url.searchParams.get("hub.challenge") ?? undefined,
     })
-
-    if (!integration?.encryptedData) {
-      return new Response("Not found", { status: 404 })
+    if (!parsedQuery.success) {
+      return new Response("Bad request", { status: 400 })
     }
 
-    const creds = decryptCredential(integration.encryptedData)
-    if (token !== creds.verifyToken) {
-      return new Response("Forbidden", { status: 403 })
-    }
-
-    // Return the challenge to verify the webhook
-    return new Response(challenge, { status: 200, headers: { "Content-Type": "text/plain" } })
+    const result = await verifyEmployeeWhatsAppWebhook(
+      parsedParams.data.employeeId,
+      parsedQuery.data
+    )
+    return new Response(result.text, {
+      status: result.status,
+      headers: { "Content-Type": result.contentType },
+    })
   } catch (error) {
     console.error("[WhatsApp Webhook] Verification failed:", error)
     return new Response("Internal error", { status: 500 })
@@ -55,55 +54,27 @@ export async function GET(req: Request, { params }: RouteParams) {
  */
 export async function POST(req: Request, { params }: RouteParams) {
   try {
-    const { employeeId } = await params
-
-    // Get the employee's group container URL
-    const employee = await prisma.digitalEmployee.findUnique({
-      where: { id: employeeId },
-      select: { id: true, status: true, groupId: true },
-    })
-
-    if (!employee || employee.status !== "ACTIVE") {
-      return NextResponse.json({ error: "Employee not active" }, { status: 409 })
+    const parsedParams = EmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid route params" }, { status: 400 })
     }
 
-    const group = await prisma.employeeGroup.findUnique({
-      where: { id: employee.groupId },
-      select: { containerPort: true, containerId: true, gatewayToken: true },
-    })
-
-    if (!group?.containerId || !group.containerPort) {
-      return NextResponse.json({ error: "Container not running" }, { status: 503 })
-    }
-
-    const gatewayUrl = `http://localhost:${group.containerPort}`
-
-    // Forward the raw body and signature header to the container's /whatsapp endpoint
     const body = await req.text()
     const signature = req.headers.get("x-hub-signature-256")
 
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    }
-    if (group.gatewayToken) {
-      headers["Authorization"] = `Bearer ${group.gatewayToken}`
-    }
-    if (signature) {
-      headers["X-Hub-Signature-256"] = signature
-    }
-
-    const proxyRes = await fetch(`${gatewayUrl}/whatsapp`, {
-      method: "POST",
-      headers,
+    const result = await proxyEmployeeWhatsAppWebhook({
+      employeeId: parsedParams.data.employeeId,
       body,
-      signal: AbortSignal.timeout(30000),
+      signature,
     })
 
-    const responseText = await proxyRes.text()
+    if (result.type === "json") {
+      return NextResponse.json(result.body, { status: result.status })
+    }
 
-    return new Response(responseText, {
-      status: proxyRes.status,
-      headers: { "Content-Type": proxyRes.headers.get("Content-Type") || "application/json" },
+    return new Response(result.text, {
+      status: result.status,
+      headers: { "Content-Type": result.contentType },
     })
   } catch (error) {
     console.error("[WhatsApp Webhook] Proxy failed:", error)

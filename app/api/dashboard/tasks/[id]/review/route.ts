@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { proxySubmitReview } from "@/lib/digital-employee/task-aggregator"
-
-const VALID_ACTIONS = ["approve", "changes", "reject"] as const
-type ReviewAction = (typeof VALID_ACTIONS)[number]
+import {
+  SubmitTaskReviewBodySchema,
+  TaskIdParamsSchema,
+} from "@/src/features/digital-employees/tasks/schema"
+import {
+  isServiceError,
+  reviewDashboardTask,
+} from "@/src/features/digital-employees/tasks/service"
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -20,24 +24,27 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { id } = await params
-  const body = await request.json()
+  const parsedParams = TaskIdParamsSchema.safeParse(await params)
+  if (!parsedParams.success) {
+    return NextResponse.json({ error: "Invalid task id" }, { status: 400 })
+  }
 
-  if (!body.action || !VALID_ACTIONS.includes(body.action as ReviewAction)) {
+  const parsedBody = SubmitTaskReviewBodySchema.safeParse(await request.json())
+  if (!parsedBody.success) {
     return NextResponse.json(
-      { error: `action must be one of: ${VALID_ACTIONS.join(", ")}` },
-      { status: 400 },
+      { error: "action must be one of: approve, changes, reject" },
+      { status: 400 }
     )
   }
 
-  const task = await proxySubmitReview(
-    id,
-    { ...body, actor_type: "HUMAN", actor_user_id: session.user.id },
-    orgCtx.organizationId,
-  )
+  const task = await reviewDashboardTask({
+    taskId: parsedParams.data.id,
+    organizationId: orgCtx.organizationId,
+    input: parsedBody.data,
+  })
 
-  if (!task) {
-    return NextResponse.json({ error: "Review submission failed" }, { status: 502 })
+  if (isServiceError(task)) {
+    return NextResponse.json({ error: task.error }, { status: task.status })
   }
 
   return NextResponse.json(task)

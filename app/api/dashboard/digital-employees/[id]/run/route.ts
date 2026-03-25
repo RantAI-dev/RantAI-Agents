@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { orchestrator } from "@/lib/digital-employee"
-import type { TriggerContext } from "@/lib/digital-employee/types"
+import {
+  DigitalEmployeeIdParamsSchema,
+  TriggerDigitalEmployeeRunSchema,
+} from "@/src/features/digital-employees/runs/schema"
+import {
+  triggerDigitalEmployeeRun,
+} from "@/src/features/digital-employees/runs/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -16,59 +21,27 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const parsedParams = DigitalEmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
     const orgContext = await getOrganizationContext(req, session.user.id)
 
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-      select: { id: true, status: true, groupId: true },
+    const parsedBody = TriggerDigitalEmployeeRunSchema.safeParse(await req.json().catch(() => ({})))
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
+    }
+
+    const result = await triggerDigitalEmployeeRun({
+      digitalEmployeeId: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+      input: parsedBody.data,
     })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    if (employee.status !== "ACTIVE") {
-      return NextResponse.json({ error: "Employee must be ACTIVE to run" }, { status: 400 })
-    }
-
-    const containerUrl = await orchestrator.getGroupContainerUrl(employee.groupId)
-    if (!containerUrl) {
-      return NextResponse.json({ error: "Group container not running" }, { status: 503 })
-    }
-
-    const group = await prisma.employeeGroup.findUnique({
-      where: { id: employee.groupId },
-      select: { gatewayToken: true },
-    })
-
-    const body = await req.json().catch(() => ({}))
-
-    const trigger: TriggerContext = {
-      type: body.trigger || "manual",
-      workflowId: body.workflowId,
-      input: body.input,
-    }
-
-    const res = await fetch(`${containerUrl}/trigger`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(group?.gatewayToken ? { Authorization: `Bearer ${group.gatewayToken}` } : {}),
-      },
-      body: JSON.stringify({ employeeId: id, trigger }),
-      signal: AbortSignal.timeout(30_000),
-    })
-
-    const result = await res.json()
-    if (!res.ok) {
-      return NextResponse.json({ error: result.error || "Run failed" }, { status: res.status })
-    }
-
-    return NextResponse.json({ runId: result.runId }, { status: 201 })
+    return NextResponse.json(result, { status: 201 })
   } catch (error) {
     console.error("Run failed:", error)
     const message = error instanceof Error ? error.message : "Run failed"

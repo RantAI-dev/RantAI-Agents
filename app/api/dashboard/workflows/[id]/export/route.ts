@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { exportWorkflow } from "@/lib/workflow/import-export"
+import { WorkflowIdParamsSchema } from "@/src/features/workflows/schema"
+import { exportDashboardWorkflow } from "@/src/features/workflows/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -15,29 +16,20 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const workflow = await prisma.workflow.findUnique({
-      where: { id },
-    })
-
-    if (!workflow) {
-      return NextResponse.json({ error: "Workflow not found" }, { status: 404 })
+    const parsedParams = WorkflowIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid workflow id" }, { status: 400 })
     }
 
-    const exported = exportWorkflow({
-      name: workflow.name,
-      description: workflow.description,
-      mode: (workflow as unknown as { mode?: string }).mode,
-      trigger: workflow.trigger as unknown,
-      variables: workflow.variables as unknown,
-      nodes: (workflow.nodes as unknown[]) || [],
-      edges: (workflow.edges as unknown[]) || [],
-    })
+    const result = await exportDashboardWorkflow(parsedParams.data.id)
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return new NextResponse(JSON.stringify(exported, null, 2), {
+    return new NextResponse(JSON.stringify(result.exportData, null, 2), {
       headers: {
         "Content-Type": "application/json",
-        "Content-Disposition": `attachment; filename="${workflow.name.replace(/[^a-zA-Z0-9-_]/g, "_")}_workflow.json"`,
+        "Content-Disposition": `attachment; filename="${result.name.replace(/[^a-zA-Z0-9-_]/g, "_")}_workflow.json"`,
       },
     })
   } catch (error) {

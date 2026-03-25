@@ -2,14 +2,19 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
-  proxyGetTaskDetail,
-  proxyUpdateTask,
-  proxyDeleteTask,
-} from "@/lib/digital-employee/task-aggregator"
+  TaskIdParamsSchema,
+  UpdateTaskBodySchema,
+} from "@/src/features/digital-employees/tasks/schema"
+import {
+  deleteDashboardTask,
+  getDashboardTaskDetail,
+  isServiceError,
+  updateDashboardTask,
+} from "@/src/features/digital-employees/tasks/service"
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -21,10 +26,17 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { id } = await params
-  const detail = await proxyGetTaskDetail(id, orgCtx.organizationId)
-  if (!detail) {
-    return NextResponse.json({ error: "Task not found" }, { status: 404 })
+  const parsedParams = TaskIdParamsSchema.safeParse(await params)
+  if (!parsedParams.success) {
+    return NextResponse.json({ error: "Invalid task id" }, { status: 400 })
+  }
+
+  const detail = await getDashboardTaskDetail({
+    taskId: parsedParams.data.id,
+    organizationId: orgCtx.organizationId,
+  })
+  if (isServiceError(detail)) {
+    return NextResponse.json({ error: detail.error }, { status: detail.status })
   }
 
   return NextResponse.json(detail)
@@ -32,7 +44,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -44,12 +56,23 @@ export async function PUT(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { id } = await params
-  const body = await request.json()
+  const parsedParams = TaskIdParamsSchema.safeParse(await params)
+  if (!parsedParams.success) {
+    return NextResponse.json({ error: "Invalid task id" }, { status: 400 })
+  }
 
-  const task = await proxyUpdateTask(id, body, orgCtx.organizationId)
-  if (!task) {
-    return NextResponse.json({ error: "Task not found or update failed" }, { status: 404 })
+  const parsedBody = UpdateTaskBodySchema.safeParse(await request.json())
+  if (!parsedBody.success) {
+    return NextResponse.json({ error: "Invalid update payload" }, { status: 400 })
+  }
+
+  const task = await updateDashboardTask({
+    taskId: parsedParams.data.id,
+    organizationId: orgCtx.organizationId,
+    input: parsedBody.data,
+  })
+  if (isServiceError(task)) {
+    return NextResponse.json({ error: task.error }, { status: task.status })
   }
 
   return NextResponse.json(task)
@@ -57,7 +80,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -69,8 +92,15 @@ export async function DELETE(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { id } = await params
-  await proxyDeleteTask(id, orgCtx.organizationId)
+  const parsedParams = TaskIdParamsSchema.safeParse(await params)
+  if (!parsedParams.success) {
+    return NextResponse.json({ error: "Invalid task id" }, { status: 400 })
+  }
 
-  return NextResponse.json({ success: true })
+  const result = await deleteDashboardTask({
+    taskId: parsedParams.data.id,
+    organizationId: orgCtx.organizationId,
+  })
+
+  return NextResponse.json(result)
 }

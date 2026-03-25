@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { encryptJsonField } from "@/lib/workflow/credentials"
+import {
+  createDashboardMcpServerForDashboard,
+  listDashboardMcpServers,
+  type ServiceError,
+} from "@/src/features/mcp/servers/service"
+import { DashboardMcpServerCreateBodySchema } from "@/src/features/mcp/servers/schema"
+
+function isServiceError(value: unknown): value is ServiceError {
+  if (typeof value !== "object" || value === null) return false
+  const candidate = value as { status?: unknown; error?: unknown }
+  return typeof candidate.status === "number" && typeof candidate.error === "string"
+}
 
 // GET /api/dashboard/mcp-servers - List all MCP server configs
 export async function GET(req: Request) {
@@ -13,36 +23,11 @@ export async function GET(req: Request) {
     }
 
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const servers = await prisma.mcpServerConfig.findMany({
-      where: orgContext
-        ? { organizationId: orgContext.organizationId }
-        : { organizationId: null },
-      include: {
-        _count: { select: { tools: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    })
-
-    return NextResponse.json(
-      servers.map((s) => ({
-        id: s.id,
-        name: s.name,
-        description: s.description,
-        icon: s.icon,
-        transport: s.transport,
-        url: s.url,
-        isBuiltIn: s.isBuiltIn,
-        envKeys: s.envKeys,
-        docsUrl: s.docsUrl,
-        enabled: s.enabled,
-        configured: s.configured,
-        lastConnectedAt: s.lastConnectedAt?.toISOString() ?? null,
-        lastError: s.lastError,
-        toolCount: s._count.tools,
-        createdAt: s.createdAt.toISOString(),
-      }))
+    const servers = await listDashboardMcpServers(
+      orgContext?.organizationId ?? null
     )
+
+    return NextResponse.json(servers)
   } catch (error) {
     console.error("[MCP Servers API] GET error:", error)
     return NextResponse.json(
@@ -61,40 +46,24 @@ export async function POST(req: Request) {
     }
 
     const orgContext = await getOrganizationContext(req, session.user.id)
-    const body = await req.json()
-
-    const { name, description, transport, url, env, headers, envKeys, docsUrl, isBuiltIn } = body
-
-    if (!name || !transport) {
+    const parsed = DashboardMcpServerCreateBodySchema.safeParse(await req.json())
+    if (!parsed.success) {
       return NextResponse.json(
         { error: "name and transport are required" },
         { status: 400 }
       )
     }
 
-    if (!url) {
-      return NextResponse.json(
-        { error: "url is required for remote MCP servers" },
-        { status: 400 }
-      )
-    }
-
-    const server = await prisma.mcpServerConfig.create({
-      data: {
-        name,
-        description: description || null,
-        transport,
-        url,
-        env: encryptJsonField(env) ?? undefined,
-        headers: encryptJsonField(headers) ?? undefined,
-        isBuiltIn: isBuiltIn ?? false,
-        envKeys: envKeys ?? undefined,
-        docsUrl: docsUrl ?? undefined,
-        enabled: true,
-        organizationId: orgContext?.organizationId || null,
-        createdBy: session.user.id,
+    const server = await createDashboardMcpServerForDashboard({
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        userId: session.user.id,
       },
+      input: parsed.data,
     })
+    if (isServiceError(server)) {
+      return NextResponse.json({ error: server.error }, { status: server.status })
+    }
 
     return NextResponse.json(server, { status: 201 })
   } catch (error) {

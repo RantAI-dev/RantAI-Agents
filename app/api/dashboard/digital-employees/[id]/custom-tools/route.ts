@@ -1,91 +1,79 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  CustomToolCreateBodySchema,
+  DigitalEmployeeIdParamsSchema,
+} from "@/src/features/digital-employees/custom-tools/schema"
+import {
+  createCustomToolForEmployee,
+  listCustomToolsForEmployee,
+} from "@/src/features/digital-employees/custom-tools/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
-
-// GET - List custom tools
-export async function GET(req: Request, { params }: RouteParams) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const parsedParams = DigitalEmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
 
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const result = await listCustomToolsForEmployee({
+      employeeId: parsedParams.data.id,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
       },
     })
 
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const tools = await prisma.employeeCustomTool.findMany({
-      where: { digitalEmployeeId: id },
-      orderBy: { createdAt: "desc" },
-    })
-
-    return NextResponse.json(tools)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to fetch custom tools:", error)
     return NextResponse.json({ error: "Failed to fetch custom tools" }, { status: 500 })
   }
 }
 
-// POST - Create custom tool
-export async function POST(req: Request, { params }: RouteParams) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-    })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    const parsedParams = DigitalEmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
 
-    const { name, description, parameters, code, language } = await req.json()
-
-    if (!name || !code) {
+    const body = CustomToolCreateBodySchema.safeParse(await req.json())
+    if (!body.success) {
       return NextResponse.json({ error: "Name and code are required" }, { status: 400 })
     }
 
-    // Auto-approve if autonomous, otherwise require approval
-    const approved = employee.autonomyLevel === "autonomous"
-
-    const tool = await prisma.employeeCustomTool.create({
-      data: {
-        digitalEmployeeId: id,
-        name,
-        description: description || null,
-        parameters: parameters || {},
-        code,
-        language: language || "javascript",
-        approved,
-        createdBy: session.user.id,
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const result = await createCustomToolForEmployee({
+      employeeId: parsedParams.data.id,
+      createdBy: session.user.id,
+      input: body.data,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
       },
     })
 
-    return NextResponse.json(tool, { status: 201 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result, { status: 201 })
   } catch (error) {
     console.error("Failed to create custom tool:", error)
     return NextResponse.json({ error: "Failed to create custom tool" }, { status: 500 })

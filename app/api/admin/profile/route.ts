@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { UpdateAdminProfileSchema } from "@/src/features/admin/profile/schema"
+import {
+  getAdminProfile,
+  isServiceError,
+  updateAdminProfile,
+} from "@/src/features/admin/profile/service"
 
 // GET - Get current user profile
 export async function GET() {
@@ -10,31 +15,12 @@ export async function GET() {
   }
 
   try {
-    const agent = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        status: true,
-        avatarS3Key: true,
-        createdAt: true,
-      },
-    })
-
-    if (!agent) {
-      return NextResponse.json({ error: "Agent not found" }, { status: 404 })
+    const result = await getAdminProfile(session.user.id)
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    // Use proxy URL for avatar so the browser doesn't need direct S3 access
-    const avatarUrl = agent.avatarS3Key
-      ? `/api/admin/profile/avatar?t=${Date.now()}`
-      : null
-
-    return NextResponse.json({
-      ...agent,
-      avatarUrl,
-    })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to get profile:", error)
     return NextResponse.json(
@@ -52,25 +38,15 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const { name } = await request.json()
-
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
+    const parsed = UpdateAdminProfileSchema.safeParse(await request.json())
+    if (!parsed.success) {
       return NextResponse.json(
         { error: "Name is required" },
         { status: 400 }
       )
     }
 
-    const agent = await prisma.user.update({
-      where: { id: session.user.id },
-      data: { name: name.trim() },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    })
-
+    const agent = await updateAdminProfile(session.user.id, parsed.data)
     return NextResponse.json(agent)
   } catch (error) {
     console.error("Failed to update profile:", error)

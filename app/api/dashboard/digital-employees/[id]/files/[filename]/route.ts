@@ -1,100 +1,81 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  DigitalEmployeeFileParamsSchema,
+  EmployeeFileUpdateBodySchema,
+} from "@/src/features/digital-employees/files/schema"
+import {
+  getEmployeeFile,
+  updateEmployeeFile,
+} from "@/src/features/digital-employees/files/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
-interface RouteParams {
-  params: Promise<{ id: string; filename: string }>
-}
-
-// GET - Single file content
-export async function GET(req: Request, { params }: RouteParams) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string; filename: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id, filename } = await params
-    const decodedFilename = decodeURIComponent(filename)
+    const parsedParams = DigitalEmployeeFileParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
+
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
+    const result = await getEmployeeFile({
+      employeeId: parsedParams.data.id,
+      filename: decodeURIComponent(parsedParams.data.filename),
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
       },
     })
 
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const file = await prisma.employeeFile.findUnique({
-      where: {
-        digitalEmployeeId_filename: {
-          digitalEmployeeId: id,
-          filename: decodedFilename,
-        },
-      },
-    })
-
-    if (!file) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 })
-    }
-
-    return NextResponse.json(file)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to fetch file:", error)
     return NextResponse.json({ error: "Failed to fetch file" }, { status: 500 })
   }
 }
 
-// PUT - Update file content
-export async function PUT(req: Request, { params }: RouteParams) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string; filename: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id, filename } = await params
-    const decodedFilename = decodeURIComponent(filename)
-    const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-    })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    const parsedParams = DigitalEmployeeFileParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
 
-    const { content } = await req.json()
+    const body = EmployeeFileUpdateBodySchema.safeParse(await req.json())
+    if (!body.success) {
+      return NextResponse.json({ error: "Failed to update file" }, { status: 400 })
+    }
 
-    const file = await prisma.employeeFile.upsert({
-      where: {
-        digitalEmployeeId_filename: {
-          digitalEmployeeId: id,
-          filename: decodedFilename,
-        },
-      },
-      create: {
-        digitalEmployeeId: id,
-        filename: decodedFilename,
-        content,
-        updatedBy: session.user.id,
-      },
-      update: {
-        content,
-        updatedBy: session.user.id,
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const result = await updateEmployeeFile({
+      employeeId: parsedParams.data.id,
+      filename: decodeURIComponent(parsedParams.data.filename),
+      updatedBy: session.user.id,
+      input: body.data,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
       },
     })
 
-    return NextResponse.json(file)
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to update file:", error)
     return NextResponse.json({ error: "Failed to update file" }, { status: 500 })

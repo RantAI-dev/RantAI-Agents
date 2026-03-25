@@ -1,55 +1,46 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { proxyToGateway } from "@/lib/digital-employee/workspace-proxy"
+import {
+  DigitalEmployeeIdParamsSchema,
+  WorkspaceFileWriteBodySchema,
+} from "@/src/features/digital-employees/workspace/schema"
+import { writeWorkspaceFile } from "@/src/features/digital-employees/workspace/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
-
-// POST - Write a workspace file
-export async function POST(req: Request, { params }: RouteParams) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const parsedParams = DigitalEmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
+
+    const body = WorkspaceFileWriteBodySchema.safeParse(await req.json())
+    if (!body.success) {
+      return NextResponse.json({ error: "path and content are required" }, { status: 400 })
+    }
+
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
+    const result = await writeWorkspaceFile({
+      employeeId: parsedParams.data.id,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
       },
-      select: { id: true },
+      input: body.data,
     })
 
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
-
-    const body = await req.json()
-    if (!body.path || typeof body.content !== "string") {
-      return NextResponse.json(
-        { error: "path and content are required" },
-        { status: 400 }
-      )
-    }
-
-    const result = await proxyToGateway(id, "/workspace/files/write", {
-      method: "POST",
-      body: { path: body.path, content: body.content },
-    })
 
     return NextResponse.json(result.data, { status: result.status })
-  } catch (err) {
-    console.error("Workspace file write error:", err)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+  } catch (error) {
+    console.error("Workspace file write error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

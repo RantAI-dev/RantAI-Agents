@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
+import { RuntimeOnboardingReportSchema } from "@/src/features/runtime/onboarding-report/schema"
+import { reportRuntimeOnboardingStatus } from "@/src/features/runtime/onboarding-report/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 export async function POST(req: Request) {
   try {
@@ -8,31 +10,17 @@ export async function POST(req: Request) {
     if (!bearerToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     await verifyRuntimeToken(bearerToken)
 
-    const { employeeId, step, status, details } = await req.json()
-    if (!employeeId || !step || !status) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    const parsed = RuntimeOnboardingReportSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Failed" }, { status: 500 })
     }
 
-    // Read existing onboarding status
-    const existing = await prisma.employeeFile.findUnique({
-      where: { digitalEmployeeId_filename: { digitalEmployeeId: employeeId, filename: "ONBOARDING_STATUS.json" } },
-    })
+    const result = await reportRuntimeOnboardingStatus(parsed.data)
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    const current = existing ? JSON.parse(existing.content) : { steps: {}, startedAt: new Date().toISOString() }
-    current.steps[step] = { status, details: details || null, updatedAt: new Date().toISOString() }
-
-    // Count completed
-    const stepValues = Object.values(current.steps) as Array<{ status: string }>
-    current.completedCount = stepValues.filter((s) => s.status === "completed").length
-    current.totalSteps = stepValues.length
-
-    await prisma.employeeFile.upsert({
-      where: { digitalEmployeeId_filename: { digitalEmployeeId: employeeId, filename: "ONBOARDING_STATUS.json" } },
-      create: { digitalEmployeeId: employeeId, filename: "ONBOARDING_STATUS.json", content: JSON.stringify(current, null, 2) },
-      update: { content: JSON.stringify(current, null, 2) },
-    })
-
-    return NextResponse.json(current)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Onboarding report failed:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

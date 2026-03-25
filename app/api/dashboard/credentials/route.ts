@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { encryptCredential } from "@/lib/workflow/credentials"
+import {
+  CreateCredentialSchema,
+} from "@/src/features/credentials/schema"
+import {
+  createDashboardCredential,
+  listDashboardCredentials,
+} from "@/src/features/credentials/service"
 
 // GET /api/dashboard/credentials — List credentials (no secret data)
 export async function GET(req: Request) {
@@ -13,30 +18,12 @@ export async function GET(req: Request) {
     }
 
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const credentials = await prisma.credential.findMany({
-      where: {
-        OR: [
-          { organizationId: null, createdBy: session.user.id },
-          ...(orgContext
-            ? [{ organizationId: orgContext.organizationId }]
-            : []),
-        ],
-      },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        organizationId: true,
-        createdBy: true,
-        createdAt: true,
-        updatedAt: true,
-        // NOTE: encryptedData is intentionally excluded
-      },
-      orderBy: { createdAt: "desc" },
-    })
-
-    return NextResponse.json(credentials)
+    return NextResponse.json(
+      await listDashboardCredentials({
+        organizationId: orgContext?.organizationId ?? null,
+        userId: session.user.id,
+      })
+    )
   } catch (error) {
     console.error("[Credentials API] GET error:", error)
     return NextResponse.json(
@@ -55,46 +42,26 @@ export async function POST(req: Request) {
     }
 
     const orgContext = await getOrganizationContext(req, session.user.id)
-    const body = await req.json()
-    const { name, type, data } = body
-
-    if (!name || !type || !data) {
+    const parsed = CreateCredentialSchema.safeParse(await req.json())
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "name, type, and data are required" },
+        { error: "Invalid request payload", details: parsed.error.flatten() },
         { status: 400 }
       )
     }
 
-    const validTypes = ["api_key", "oauth2", "basic_auth", "bearer"]
-    if (!validTypes.includes(type)) {
-      return NextResponse.json(
-        { error: `Invalid type. Must be one of: ${validTypes.join(", ")}` },
-        { status: 400 }
-      )
-    }
-
-    const encryptedData = encryptCredential(data)
-
-    const credential = await prisma.credential.create({
-      data: {
-        name,
-        type,
-        encryptedData,
-        organizationId: orgContext?.organizationId || null,
-        createdBy: session.user.id,
+    const result = await createDashboardCredential({
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        userId: session.user.id,
       },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        organizationId: true,
-        createdBy: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      input: parsed.data,
     })
+    if ("status" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json(credential, { status: 201 })
+    return NextResponse.json(result, { status: 201 })
   } catch (error) {
     console.error("[Credentials API] POST error:", error)
     return NextResponse.json(

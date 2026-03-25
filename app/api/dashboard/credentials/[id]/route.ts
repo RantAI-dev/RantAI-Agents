@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { encryptCredential } from "@/lib/workflow/credentials"
+import {
+  UpdateCredentialSchema,
+} from "@/src/features/credentials/schema"
+import {
+  deleteDashboardCredentialRecord,
+  getDashboardCredential,
+  updateDashboardCredentialRecord,
+} from "@/src/features/credentials/service"
 
 type RouteParams = { params: Promise<{ id: string }> }
 
@@ -15,34 +21,20 @@ export async function GET(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-
-    const credential = await prisma.credential.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        organizationId: true,
-        createdBy: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    })
-
-    if (!credential) {
-      return NextResponse.json(
-        { error: "Credential not found" },
-        { status: 404 }
-      )
-    }
-
-    // Verify org ownership
     const orgContext = await getOrganizationContext(req, session.user.id)
-    if (credential.organizationId && credential.organizationId !== orgContext?.organizationId) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+    const result = await getDashboardCredential({
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        userId: session.user.id,
+      },
+      id,
+    })
+    if ("status" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    return NextResponse.json(credential)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Credentials API] GET [id] error:", error)
     return NextResponse.json(
@@ -61,57 +53,29 @@ export async function PUT(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const body = await req.json()
-    const { name, type, data } = body
+    const orgContext = await getOrganizationContext(req, session.user.id)
 
-    const existing = await prisma.credential.findUnique({ where: { id } })
-    if (!existing) {
+    const parsed = UpdateCredentialSchema.safeParse(await req.json())
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Credential not found" },
-        { status: 404 }
+        { error: "Invalid request payload", details: parsed.error.flatten() },
+        { status: 400 }
       )
     }
 
-    // Verify ownership
-    const orgContext = await getOrganizationContext(req, session.user.id)
-    if (
-      existing.organizationId &&
-      existing.organizationId !== orgContext?.organizationId
-    ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-
-    const updateData: Record<string, unknown> = {}
-    if (name) updateData.name = name
-    if (type) {
-      const validTypes = ["api_key", "oauth2", "basic_auth", "bearer"]
-      if (!validTypes.includes(type)) {
-        return NextResponse.json(
-          { error: `Invalid type. Must be one of: ${validTypes.join(", ")}` },
-          { status: 400 }
-        )
-      }
-      updateData.type = type
-    }
-    if (data) {
-      updateData.encryptedData = encryptCredential(data)
-    }
-
-    const credential = await prisma.credential.update({
-      where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        organizationId: true,
-        createdBy: true,
-        createdAt: true,
-        updatedAt: true,
+    const result = await updateDashboardCredentialRecord({
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        userId: session.user.id,
       },
+      id,
+      input: parsed.data,
     })
+    if ("status" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json(credential)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Credentials API] PUT error:", error)
     return NextResponse.json(
@@ -130,27 +94,20 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-
-    const existing = await prisma.credential.findUnique({ where: { id } })
-    if (!existing) {
-      return NextResponse.json(
-        { error: "Credential not found" },
-        { status: 404 }
-      )
-    }
-
-    // Verify ownership
     const orgContext = await getOrganizationContext(req, session.user.id)
-    if (
-      existing.organizationId &&
-      existing.organizationId !== orgContext?.organizationId
-    ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+    const result = await deleteDashboardCredentialRecord({
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        userId: session.user.id,
+      },
+      id,
+    })
+    if ("status" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    await prisma.credential.delete({ where: { id } })
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Credentials API] DELETE error:", error)
     return NextResponse.json(

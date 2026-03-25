@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { getOrganizationContext } from "@/lib/organization"
+import {
+  WorkflowIdParamsSchema,
+  UpdateWorkflowSchema,
+} from "@/src/features/workflows/schema"
+import {
+  deleteDashboardWorkflow,
+  getDashboardWorkflow,
+  updateDashboardWorkflow,
+} from "@/src/features/workflows/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -15,14 +23,14 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const workflow = await prisma.workflow.findUnique({
-      where: { id },
-      include: { _count: { select: { runs: true } } },
-    })
+    const parsedParams = WorkflowIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid workflow id" }, { status: 400 })
+    }
 
-    if (!workflow) {
-      return NextResponse.json({ error: "Workflow not found" }, { status: 404 })
+    const workflow = await getDashboardWorkflow(parsedParams.data.id)
+    if (isHttpServiceError(workflow)) {
+      return NextResponse.json({ error: workflow.error }, { status: workflow.status })
     }
 
     return NextResponse.json(workflow)
@@ -40,41 +48,23 @@ export async function PUT(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const body = await req.json()
-    const { name, description, nodes, edges, trigger, variables, status, mode, category, chatflowConfig, apiEnabled, assistantId, tags } = body
-
-    // Auto-generate API key when enabling API access
-    let apiKey: string | undefined
-    if (apiEnabled === true) {
-      const existing = await prisma.workflow.findUnique({ where: { id }, select: { apiKey: true } })
-      if (!existing?.apiKey) {
-        apiKey = `wf_${id.slice(0, 8)}_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
-      }
+    const parsedParams = WorkflowIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid workflow id" }, { status: 400 })
     }
 
-    const workflow = await prisma.workflow.update({
-      where: { id },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(description !== undefined && { description }),
-        ...(nodes !== undefined && { nodes }),
-        ...(edges !== undefined && { edges }),
-        ...(trigger !== undefined && { trigger }),
-        ...(variables !== undefined && { variables }),
-        ...(status !== undefined && { status }),
-        ...(mode !== undefined && { mode }),
-        ...(category !== undefined && { category }),
-        ...(chatflowConfig !== undefined && { chatflowConfig }),
-        ...(apiEnabled !== undefined && { apiEnabled }),
-        ...(tags !== undefined && { tags }),
-        ...(assistantId !== undefined && { assistantId: assistantId || null }),
-        ...(apiKey && { apiKey }),
-        // Clear API key when disabling
-        ...(apiEnabled === false && { apiKey: null }),
-      },
-      include: { _count: { select: { runs: true } } },
+    const parsedBody = UpdateWorkflowSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
+    }
+
+    const workflow = await updateDashboardWorkflow({
+      id: parsedParams.data.id,
+      input: parsedBody.data,
     })
+    if (isHttpServiceError(workflow)) {
+      return NextResponse.json({ error: workflow.error }, { status: workflow.status })
+    }
 
     return NextResponse.json(workflow)
   } catch (error) {
@@ -91,10 +81,17 @@ export async function DELETE(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    await prisma.workflow.delete({ where: { id } })
+    const parsedParams = WorkflowIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid workflow id" }, { status: 400 })
+    }
 
-    return NextResponse.json({ success: true })
+    const result = await deleteDashboardWorkflow(parsedParams.data.id)
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to delete workflow:", error)
     return NextResponse.json({ error: "Failed to delete workflow" }, { status: 500 })

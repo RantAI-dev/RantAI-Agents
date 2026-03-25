@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { importWorkflow } from "@/lib/workflow/import-export"
-import { Prisma } from "@prisma/client"
+import { WorkflowImportSchema } from "@/src/features/workflows/schema"
+import { importDashboardWorkflow } from "@/src/features/workflows/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 // POST /api/dashboard/workflows/import
 export async function POST(req: Request) {
@@ -13,31 +13,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = await req.json()
+    const parsedBody = WorkflowImportSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
+    }
 
-    // Import and validate
-    const imported = importWorkflow(body)
-
-    // Get org context
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    // Create workflow from imported data
-    const workflow = await prisma.workflow.create({
-      data: {
-        name: `${imported.name} (imported)`,
-        description: imported.description,
-        nodes: imported.nodes as unknown as Prisma.InputJsonValue,
-        edges: imported.edges as unknown as Prisma.InputJsonValue,
-        trigger: imported.trigger as unknown as Prisma.InputJsonValue,
-        variables: imported.variables as unknown as Prisma.InputJsonValue,
-        status: "DRAFT",
-        createdBy: session.user.id,
-        ...(orgContext?.organizationId && {
-          organizationId: orgContext.organizationId,
-        }),
-      },
-      include: { _count: { select: { runs: true } } },
+    const workflow = await importDashboardWorkflow({
+      actorUserId: session.user.id,
+      organizationId: orgContext?.organizationId ?? null,
+      input: parsedBody.data,
     })
+    if (isHttpServiceError(workflow)) {
+      return NextResponse.json({ error: workflow.error }, { status: workflow.status })
+    }
 
     return NextResponse.json(workflow)
   } catch (error) {

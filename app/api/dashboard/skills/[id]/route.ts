@@ -1,8 +1,23 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import {
+  UpdateDashboardSkillSchema,
+} from "@/src/features/skills/schema"
+import {
+  deleteDashboardSkillRecord,
+  getDashboardSkillById,
+  updateDashboardSkillRecord,
+} from "@/src/features/skills/service"
 
-// GET /api/dashboard/skills/[id]
+function isServiceError(value: unknown): value is {
+  status: number
+  error: string
+} {
+  if (typeof value !== "object" || value === null) return false
+  const candidate = value as { status?: unknown; error?: unknown }
+  return typeof candidate.status === "number" && typeof candidate.error === "string"
+}
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -14,24 +29,18 @@ export async function GET(
     }
 
     const { id } = await params
-
-    const skill = await prisma.skill.findUnique({
-      where: { id },
-      include: { _count: { select: { assistantSkills: true } } },
-    })
-
-    if (!skill) {
-      return NextResponse.json({ error: "Skill not found" }, { status: 404 })
+    const result = await getDashboardSkillById(id)
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    return NextResponse.json(skill)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Skills API] GET [id] error:", error)
     return NextResponse.json({ error: "Failed to fetch skill" }, { status: 500 })
   }
 }
 
-// PUT /api/dashboard/skills/[id]
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -43,28 +52,29 @@ export async function PUT(
     }
 
     const { id } = await params
-    const body = await req.json()
+    const parsed = UpdateDashboardSkillSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request payload", details: parsed.error.flatten() },
+        { status: 400 }
+      )
+    }
 
-    const skill = await prisma.skill.update({
-      where: { id },
-      data: {
-        ...(body.displayName !== undefined && { displayName: body.displayName }),
-        ...(body.description !== undefined && { description: body.description }),
-        ...(body.content !== undefined && { content: body.content }),
-        ...(body.category !== undefined && { category: body.category }),
-        ...(body.tags !== undefined && { tags: body.tags }),
-        ...(body.enabled !== undefined && { enabled: body.enabled }),
-      },
+    const result = await updateDashboardSkillRecord({
+      id,
+      input: parsed.data,
     })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json(skill)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Skills API] PUT error:", error)
     return NextResponse.json({ error: "Failed to update skill" }, { status: 500 })
   }
 }
 
-// DELETE /api/dashboard/skills/[id]
 export async function DELETE(
   _req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -76,10 +86,12 @@ export async function DELETE(
     }
 
     const { id } = await params
+    const result = await deleteDashboardSkillRecord(id)
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    await prisma.skill.delete({ where: { id } })
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Skills API] DELETE error:", error)
     return NextResponse.json({ error: "Failed to delete skill" }, { status: 500 })

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
-import { logAudit, classifyActionRisk } from "@/lib/digital-employee/audit"
+import { RuntimeAuditLogSchema } from "@/src/features/runtime/audit-log/schema"
+import { logRuntimeAudit } from "@/src/features/runtime/audit-log/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 // POST /api/runtime/audit/log — agent writes an audit entry
 export async function POST(req: Request) {
@@ -12,25 +13,9 @@ export async function POST(req: Request) {
     }
 
     const { employeeId } = await verifyRuntimeToken(token)
-
-    const body = await req.json()
-    const { action, resource, detail, riskLevel } = body
-
-    if (!action || !resource) {
-      return NextResponse.json(
-        { error: "action and resource are required" },
-        { status: 400 }
-      )
-    }
-
-    // Look up employee's organizationId
-    const employee = await prisma.digitalEmployee.findUnique({
-      where: { id: employeeId },
-      select: { organizationId: true },
-    })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Employee not found" }, { status: 404 })
+    const parsed = RuntimeAuditLogSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return NextResponse.json({ error: "action and resource are required" }, { status: 400 })
     }
 
     const ipAddress =
@@ -38,17 +23,16 @@ export async function POST(req: Request) {
       req.headers.get("x-real-ip") ||
       null
 
-    await logAudit({
-      organizationId: employee.organizationId,
+    const result = await logRuntimeAudit({
       employeeId,
-      action,
-      resource,
-      detail: detail || {},
-      ipAddress: ipAddress || undefined,
-      riskLevel: riskLevel || classifyActionRisk(action),
+      input: parsed.data,
+      ipAddress,
     })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Runtime audit log failed:", error)
     return NextResponse.json({ error: "Failed to log audit entry" }, { status: 500 })

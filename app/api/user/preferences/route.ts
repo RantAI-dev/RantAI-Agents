@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { UpdateUserPreferencesSchema } from "@/src/features/user/preferences/schema"
+import {
+  getUserPreferences,
+  updateUserPreferences,
+} from "@/src/features/user/preferences/service"
 
 // GET /api/user/preferences - Get user preferences
 export async function GET() {
@@ -11,18 +15,8 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const preferences = await prisma.userPreference.findUnique({
-      where: { userId: session.user.id },
-    })
-
-    // Return preferences or defaults
-    return NextResponse.json(
-      preferences || {
-        userId: session.user.id,
-        defaultAssistantId: null,
-        sidebarConfig: null,
-      }
-    )
+    const preferences = await getUserPreferences(session.user.id)
+    return NextResponse.json(preferences)
   } catch (error) {
     console.error("Failed to fetch user preferences:", error)
     return NextResponse.json(
@@ -41,40 +35,18 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { defaultAssistantId, sidebarConfig } = body
-
-    // If defaultAssistantId provided, verify it exists
-    if (defaultAssistantId) {
-      const assistant = await prisma.assistant.findUnique({
-        where: { id: defaultAssistantId },
-      })
-      if (!assistant) {
-        return NextResponse.json(
-          { error: "Assistant not found" },
-          { status: 404 }
-        )
-      }
+    const parsed = UpdateUserPreferencesSchema.safeParse(await request.json())
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request payload", details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
 
-    // Build update data
-    const updateData: Record<string, unknown> = {}
-    if ("defaultAssistantId" in body) {
-      updateData.defaultAssistantId = defaultAssistantId || null
+    const preferences = await updateUserPreferences(session.user.id, parsed.data)
+    if ("error" in preferences) {
+      return NextResponse.json({ error: preferences.error }, { status: preferences.status })
     }
-    if ("sidebarConfig" in body) {
-      updateData.sidebarConfig = sidebarConfig ?? null
-    }
-
-    const preferences = await prisma.userPreference.upsert({
-      where: { userId: session.user.id },
-      update: updateData,
-      create: {
-        userId: session.user.id,
-        defaultAssistantId: defaultAssistantId || null,
-        sidebarConfig: sidebarConfig ?? null,
-      },
-    })
 
     return NextResponse.json(preferences)
   } catch (error) {

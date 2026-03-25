@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { DockerOrchestrator } from "@/lib/digital-employee/docker-orchestrator"
+import { DigitalEmployeeIdParamsSchema } from "@/src/features/digital-employees/lifecycle/schema"
+import { resumeDigitalEmployee } from "@/src/features/digital-employees/lifecycle/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -15,25 +16,20 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const parsedParams = DigitalEmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-      select: { groupId: true },
+    const result = await resumeDigitalEmployee({
+      digitalEmployeeId: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
     })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const orchestrator = new DockerOrchestrator()
-    const { containerId, port } = await orchestrator.startGroup(employee.groupId)
-
-    return NextResponse.json({ success: true, containerId, port })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Resume failed:", error)
     return NextResponse.json({ error: "Resume failed" }, { status: 500 })

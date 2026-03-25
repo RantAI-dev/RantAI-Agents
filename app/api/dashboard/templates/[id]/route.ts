@@ -1,11 +1,24 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { hasPermission } from "@/lib/digital-employee/rbac"
+import {
+  deleteDashboardTemplateForDashboard,
+  updateDashboardTemplateForDashboard,
+  type ServiceError,
+} from "@/src/features/templates/service"
+import {
+  DashboardTemplateIdParamsSchema,
+  DashboardTemplateUpdateBodySchema,
+} from "@/src/features/templates/schema"
 
 interface RouteParams {
   params: Promise<{ id: string }>
+}
+
+function isServiceError(value: unknown): value is ServiceError {
+  if (typeof value !== "object" || value === null) return false
+  const candidate = value as { status?: unknown; error?: unknown }
+  return typeof candidate.status === "number" && typeof candidate.error === "string"
 }
 
 // PUT /api/dashboard/templates/:id
@@ -16,39 +29,33 @@ export async function PUT(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
     const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
 
-    const existing = await prisma.employeeTemplateShare.findFirst({
-      where: { id, organizationId: orgContext.organizationId },
-    })
-    if (!existing) {
+    const parsedParams = DashboardTemplateIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
       return NextResponse.json({ error: "Template not found" }, { status: 404 })
     }
 
-    // Only creator or admin can update
-    if (existing.createdBy !== session.user.id && !hasPermission(orgContext.membership.role, "employee.delete")) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    const parsedBody = DashboardTemplateUpdateBodySchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Failed to update template" }, { status: 500 })
     }
 
-    const body = await req.json()
-    const { name, description, category, templateData, isPublic } = body
-
-    const canMakePublic = hasPermission(orgContext.membership.role, "employee.delete")
-    const updated = await prisma.employeeTemplateShare.update({
-      where: { id },
-      data: {
-        ...(name && { name }),
-        ...(description !== undefined && { description }),
-        ...(category && { category }),
-        ...(templateData && { templateData: templateData as object }),
-        ...(isPublic !== undefined && canMakePublic && { isPublic }),
-        version: { increment: 1 },
+    const updated = await updateDashboardTemplateForDashboard({
+      templateId: parsedParams.data.id,
+      context: {
+        organizationId: orgContext.organizationId,
+        role: orgContext.membership.role,
+        userId: session.user.id,
       },
+      input: parsedBody.data,
     })
+    if (isServiceError(updated)) {
+      return NextResponse.json({ error: updated.error }, { status: updated.status })
+    }
 
     return NextResponse.json(updated)
   } catch (error) {
@@ -65,24 +72,27 @@ export async function DELETE(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
     const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
 
-    const existing = await prisma.employeeTemplateShare.findFirst({
-      where: { id, organizationId: orgContext.organizationId },
-    })
-    if (!existing) {
+    const parsedParams = DashboardTemplateIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
       return NextResponse.json({ error: "Template not found" }, { status: 404 })
     }
 
-    if (existing.createdBy !== session.user.id && !hasPermission(orgContext.membership.role, "employee.delete")) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    const deleted = await deleteDashboardTemplateForDashboard({
+      templateId: parsedParams.data.id,
+      context: {
+        organizationId: orgContext.organizationId,
+        role: orgContext.membership.role,
+        userId: session.user.id,
+      },
+    })
+    if (isServiceError(deleted)) {
+      return NextResponse.json({ error: deleted.error }, { status: deleted.status })
     }
-
-    await prisma.employeeTemplateShare.delete({ where: { id } })
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { discoverAndSyncTools } from "@/lib/mcp"
+import { discoverDashboardMcpServerTools } from "@/src/features/mcp/servers/service"
+import { DashboardMcpServerIdParamsSchema } from "@/src/features/mcp/servers/schema"
 
 // POST /api/dashboard/mcp-servers/[id]/discover - Trigger tool discovery
 export async function POST(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -13,19 +14,16 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const tools = await discoverAndSyncTools(id)
+    const parsedParams = DashboardMcpServerIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json(
+        { error: "Failed to discover tools" },
+        { status: 500 }
+      )
+    }
 
-    return NextResponse.json({
-      success: true,
-      toolCount: tools.length,
-      tools: tools.map((t) => ({
-        id: t.id,
-        name: t.name,
-        displayName: t.displayName,
-        description: t.description,
-      })),
-    })
+    const result = await discoverDashboardMcpServerTools(parsedParams.data.id)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[MCP Servers API] Discover error:", error)
     return NextResponse.json(

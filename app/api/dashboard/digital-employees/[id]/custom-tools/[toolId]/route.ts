@@ -1,118 +1,113 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  DigitalEmployeeToolParamsSchema,
+  CustomToolUpdateBodySchema,
+} from "@/src/features/digital-employees/custom-tools/schema"
+import {
+  deleteCustomToolForEmployee,
+  getCustomToolForEmployee,
+  updateCustomToolForEmployee,
+} from "@/src/features/digital-employees/custom-tools/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
-interface RouteParams {
-  params: Promise<{ id: string; toolId: string }>
-}
-
-// GET - Single custom tool
-export async function GET(req: Request, { params }: RouteParams) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string; toolId: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id, toolId } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const parsedParams = DigitalEmployeeToolParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
 
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const result = await getCustomToolForEmployee({
+      employeeId: parsedParams.data.id,
+      toolId: parsedParams.data.toolId,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
       },
     })
 
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const tool = await prisma.employeeCustomTool.findFirst({
-      where: { id: toolId, digitalEmployeeId: id },
-    })
-
-    if (!tool) {
-      return NextResponse.json({ error: "Tool not found" }, { status: 404 })
-    }
-
-    return NextResponse.json(tool)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to fetch custom tool:", error)
     return NextResponse.json({ error: "Failed to fetch custom tool" }, { status: 500 })
   }
 }
 
-// PUT - Update custom tool
-export async function PUT(req: Request, { params }: RouteParams) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string; toolId: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id, toolId } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-    })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    const parsedParams = DigitalEmployeeToolParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
 
-    const body = await req.json()
+    const body = CustomToolUpdateBodySchema.safeParse(await req.json())
+    if (!body.success) {
+      return NextResponse.json({ error: "Failed to update custom tool" }, { status: 400 })
+    }
 
-    const tool = await prisma.employeeCustomTool.update({
-      where: { id: toolId },
-      data: {
-        ...(body.name !== undefined && { name: body.name }),
-        ...(body.description !== undefined && { description: body.description }),
-        ...(body.parameters !== undefined && { parameters: body.parameters }),
-        ...(body.code !== undefined && { code: body.code }),
-        ...(body.language !== undefined && { language: body.language }),
-        ...(body.enabled !== undefined && { enabled: body.enabled }),
-        ...(body.approved !== undefined && { approved: body.approved }),
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const result = await updateCustomToolForEmployee({
+      employeeId: parsedParams.data.id,
+      toolId: parsedParams.data.toolId,
+      input: body.data,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
       },
     })
 
-    return NextResponse.json(tool)
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to update custom tool:", error)
     return NextResponse.json({ error: "Failed to update custom tool" }, { status: 500 })
   }
 }
 
-// DELETE - Delete custom tool
-export async function DELETE(req: Request, { params }: RouteParams) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string; toolId: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id, toolId } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const parsedParams = DigitalEmployeeToolParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
 
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const result = await deleteCustomToolForEmployee({
+      employeeId: parsedParams.data.id,
+      toolId: parsedParams.data.toolId,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
       },
     })
 
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    await prisma.employeeCustomTool.delete({ where: { id: toolId } })
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to delete custom tool:", error)
     return NextResponse.json({ error: "Failed to delete custom tool" }, { status: 500 })

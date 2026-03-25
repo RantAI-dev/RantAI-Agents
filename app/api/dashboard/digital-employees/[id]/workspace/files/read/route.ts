@@ -1,53 +1,47 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { proxyToGateway } from "@/lib/digital-employee/workspace-proxy"
+import {
+  DigitalEmployeeIdParamsSchema,
+  WorkspaceFilePathQuerySchema,
+} from "@/src/features/digital-employees/workspace/schema"
+import { readWorkspaceFile } from "@/src/features/digital-employees/workspace/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
-
-// GET - Read a workspace file
-export async function GET(req: Request, { params }: RouteParams) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-      select: { id: true },
-    })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    const parsedParams = DigitalEmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
 
     const url = new URL(req.url)
-    const path = url.searchParams.get("path")
-    if (!path) {
-      return NextResponse.json({ error: "path is required" }, { status: 400 })
+    const query = WorkspaceFilePathQuerySchema.safeParse(Object.fromEntries(url.searchParams.entries()))
+    if (!query.success) {
+      return NextResponse.json({ error: "Invalid request payload" }, { status: 400 })
     }
 
-    const result = await proxyToGateway(
-      id,
-      `/workspace/files/read?path=${encodeURIComponent(path)}`
-    )
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const result = await readWorkspaceFile({
+      employeeId: parsedParams.data.id,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+      },
+      path: typeof query.data.path === "string" ? query.data.path : null,
+    })
+
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
     return NextResponse.json(result.data, { status: result.status })
-  } catch (err) {
-    console.error("Workspace file read error:", err)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+  } catch (error) {
+    console.error("Workspace file read error:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

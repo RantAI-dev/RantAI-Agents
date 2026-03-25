@@ -1,7 +1,21 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getOrganizationContext } from "@/lib/organization"
-import { installMarketplaceItem, uninstallMarketplaceItem } from "@/lib/marketplace/installer"
+import {
+  installDashboardMarketplaceItem,
+  uninstallDashboardMarketplaceItem,
+  type ServiceError,
+} from "@/src/features/marketplace/service"
+import {
+  DashboardMarketplaceInstallBodySchema,
+  DashboardMarketplaceUninstallQuerySchema,
+} from "@/src/features/marketplace/schema"
+
+function isServiceError(value: unknown): value is ServiceError {
+  if (typeof value !== "object" || value === null) return false
+  const candidate = value as { status?: unknown; error?: unknown }
+  return typeof candidate.status === "number" && typeof candidate.error === "string"
+}
 
 // POST /api/dashboard/marketplace/install — Install item
 export async function POST(req: Request) {
@@ -19,29 +33,22 @@ export async function POST(req: Request) {
       )
     }
 
-    const body = await req.json()
-    const { catalogItemId, authConfig, config } = body
-
-    if (!catalogItemId) {
-      return NextResponse.json(
-        { error: "catalogItemId is required" },
-        { status: 400 }
-      )
+    const parsed = DashboardMarketplaceInstallBodySchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return NextResponse.json({ error: "catalogItemId is required" }, { status: 400 })
     }
 
-    const result = await installMarketplaceItem(
-      catalogItemId,
-      orgContext.organizationId,
-      session.user.id,
-      authConfig,
-      config
-    )
+    const result = await installDashboardMarketplaceItem({
+      organizationId: orgContext.organizationId,
+      userId: session.user.id,
+      input: parsed.data,
+    })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
     return NextResponse.json(result, { status: 201 })
@@ -68,19 +75,23 @@ export async function DELETE(req: Request) {
     }
 
     const { searchParams } = new URL(req.url)
-    const catalogItemId = searchParams.get("catalogItemId")
-
-    if (!catalogItemId) {
+    const parsed = DashboardMarketplaceUninstallQuerySchema.safeParse({
+      catalogItemId: searchParams.get("catalogItemId"),
+    })
+    if (!parsed.success) {
       return NextResponse.json(
         { error: "catalogItemId query param required" },
         { status: 400 }
       )
     }
 
-    const result = await uninstallMarketplaceItem(
-      catalogItemId,
-      orgContext.organizationId
-    )
+    const result = await uninstallDashboardMarketplaceItem({
+      organizationId: orgContext.organizationId,
+      input: parsed.data,
+    })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })

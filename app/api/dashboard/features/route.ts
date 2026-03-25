@@ -1,28 +1,16 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { getDashboardFeatures } from "@/src/features/platform-features/service"
 
 // GET feature flags for dashboard consumption
 export async function GET() {
-  const session = await auth()
-
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
   try {
-    const features = await prisma.featureConfig.findMany()
+    const session = await auth()
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
 
-    // Return a simple map of feature -> enabled
-    const allFeatures = ["AGENT"]
-    const result: Record<string, boolean> = {}
-
-    allFeatures.forEach((feature) => {
-      const existing = features.find((f) => f.feature === feature)
-      result[feature] = existing ? existing.enabled : true
-    })
-
-    return NextResponse.json(result)
+    return NextResponse.json(await getDashboardFeatures())
   } catch (error) {
     console.error("Error fetching features:", error)
     return NextResponse.json(

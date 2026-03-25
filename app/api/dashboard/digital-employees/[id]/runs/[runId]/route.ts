@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  DigitalEmployeeRunIdParamsSchema,
+} from "@/src/features/digital-employees/runs/schema"
+import {
+  getDigitalEmployeeRun,
+} from "@/src/features/digital-employees/runs/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string; runId: string }>
@@ -14,26 +20,18 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id, runId } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-    })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    const parsedParams = DigitalEmployeeRunIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
-
-    const run = await prisma.employeeRun.findFirst({
-      where: { id: runId, digitalEmployeeId: id },
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const run = await getDigitalEmployeeRun({
+      digitalEmployeeId: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+      runId: parsedParams.data.runId,
     })
-
-    if (!run) {
-      return NextResponse.json({ error: "Run not found" }, { status: 404 })
+    if (isHttpServiceError(run)) {
+      return NextResponse.json({ error: run.error }, { status: run.status })
     }
 
     return NextResponse.json(run)

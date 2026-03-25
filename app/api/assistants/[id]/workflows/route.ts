@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import {
+  AssistantIdParamsSchema,
+  AssistantWorkflowIdsSchema,
+} from "@/src/features/assistants/bindings/schema"
+import {
+  isServiceError,
+  listAssistantWorkflows,
+  setAssistantWorkflows,
+} from "@/src/features/assistants/bindings/service"
 
 // GET /api/assistants/[id]/workflows - Get assistant's attached workflows
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -13,33 +21,17 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const assistantWorkflows = await prisma.assistantWorkflow.findMany({
-      where: { assistantId: id },
-      include: {
-        workflow: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            status: true,
-            mode: true,
-            category: true,
-            trigger: true,
-            tags: true,
-            nodes: true,
-            _count: { select: { runs: true } },
-          },
-        },
-      },
-    })
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
+    }
 
-    return NextResponse.json(
-      assistantWorkflows.map((aw) => ({
-        ...aw.workflow,
-        enabledForAssistant: aw.enabled,
-      }))
-    )
+    const result = await listAssistantWorkflows(parsedParams.data.id)
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Assistant Workflows API] GET error:", error)
     return NextResponse.json(
@@ -60,59 +52,28 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const body = await req.json()
-    const { workflowIds } = body as { workflowIds: string[] }
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
+    }
 
-    if (!Array.isArray(workflowIds)) {
+    const parsedBody = AssistantWorkflowIdsSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
       return NextResponse.json(
         { error: "workflowIds must be an array" },
         { status: 400 }
       )
     }
 
-    // Verify assistant exists
-    const assistant = await prisma.assistant.findUnique({ where: { id } })
-    if (!assistant) {
-      return NextResponse.json(
-        { error: "Assistant not found" },
-        { status: 404 }
-      )
+    const result = await setAssistantWorkflows(
+      parsedParams.data.id,
+      parsedBody.data.workflowIds
+    )
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    // Replace all workflow bindings in a transaction
-    await prisma.$transaction([
-      prisma.assistantWorkflow.deleteMany({ where: { assistantId: id } }),
-      ...(workflowIds.length > 0
-        ? [
-            prisma.assistantWorkflow.createMany({
-              data: workflowIds.map((workflowId) => ({
-                assistantId: id,
-                workflowId,
-              })),
-            }),
-          ]
-        : []),
-    ])
-
-    // Return updated list
-    const updatedWorkflows = await prisma.assistantWorkflow.findMany({
-      where: { assistantId: id },
-      include: {
-        workflow: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            status: true,
-            mode: true,
-            category: true,
-          },
-        },
-      },
-    })
-
-    return NextResponse.json(updatedWorkflows.map((aw) => aw.workflow))
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Assistant Workflows API] PUT error:", error)
     return NextResponse.json(

@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  DashboardDigitalEmployeeMessageListQuerySchema,
+} from "@/src/features/digital-employees/interactions/schema"
+import {
+  isServiceError,
+  listDigitalEmployeeMessages,
+} from "@/src/features/digital-employees/interactions/service"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -16,39 +22,26 @@ export async function GET(req: Request, { params }: RouteParams) {
 
     const { id } = await params
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    // Verify employee belongs to org
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-      select: { id: true },
+    const { searchParams } = new URL(req.url)
+    const parsed = DashboardDigitalEmployeeMessageListQuerySchema.safeParse({
+      limit: searchParams.get("limit") ?? undefined,
+      before: searchParams.get("before") ?? undefined,
     })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request payload", details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
 
-    const { searchParams } = new URL(req.url)
-    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100)
-    const before = searchParams.get("before")
-
-    const messages = await prisma.employeeMessage.findMany({
-      where: {
-        OR: [
-          { fromEmployeeId: id },
-          { toEmployeeId: id },
-        ],
-        ...(before ? { createdAt: { lt: new Date(before) } } : {}),
-      },
-      include: {
-        fromEmployee: { select: { id: true, name: true, avatar: true } },
-        toEmployee: { select: { id: true, name: true, avatar: true } },
-      },
-      orderBy: { createdAt: "desc" },
-      take: limit,
+    const messages = await listDigitalEmployeeMessages({
+      id,
+      organizationId: orgContext?.organizationId ?? null,
+      query: parsed.data,
     })
+    if (isServiceError(messages)) {
+      return NextResponse.json({ error: messages.error }, { status: messages.status })
+    }
 
     return NextResponse.json({ messages })
   } catch (error) {

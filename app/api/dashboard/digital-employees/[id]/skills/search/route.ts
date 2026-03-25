@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { searchClawHub, listClawHubSkills } from "@/lib/digital-employee/clawhub"
+import {
+  DashboardDigitalEmployeeSkillSearchQuerySchema,
+} from "@/src/features/digital-employees/interactions/schema"
+import {
+  isServiceError,
+  searchDigitalEmployeeSkills,
+} from "@/src/features/digital-employees/interactions/service"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -17,26 +22,27 @@ export async function GET(req: Request, { params }: RouteParams) {
 
     const { id } = await params
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
+    const url = new URL(req.url)
+    const parsed = DashboardDigitalEmployeeSkillSearchQuerySchema.safeParse({
+      q: url.searchParams.get("q") ?? undefined,
     })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request payload", details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
 
-    const url = new URL(req.url)
-    const query = url.searchParams.get("q") || ""
+    const result = await searchDigitalEmployeeSkills({
+      id,
+      organizationId: orgContext?.organizationId ?? null,
+      query: parsed.data,
+    })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    // No query → return top-rated skills
-    const results = query.trim()
-      ? await searchClawHub(query)
-      : await listClawHubSkills()
-    return NextResponse.json({ results })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("ClawHub search failed:", error)
     return NextResponse.json({ error: "Search failed" }, { status: 500 })

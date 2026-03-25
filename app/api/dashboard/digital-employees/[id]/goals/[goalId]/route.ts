@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  DigitalEmployeeGoalIdParamsSchema,
+  UpdateDigitalEmployeeGoalSchema,
+} from "@/src/features/digital-employees/goals/schema"
+import {
+  deleteDigitalEmployeeGoalForEmployee,
+  updateDigitalEmployeeGoalForEmployee,
+} from "@/src/features/digital-employees/goals/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string; goalId: string }>
@@ -11,27 +19,25 @@ export async function PUT(req: Request, { params }: RouteParams) {
   try {
     const session = await auth()
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const { id, goalId } = await params
+    const parsedParams = DigitalEmployeeGoalIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
     const orgContext = await getOrganizationContext(req, session.user.id)
+    const parsedBody = UpdateDigitalEmployeeGoalSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
+    }
 
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: { id, ...(orgContext ? { organizationId: orgContext.organizationId } : {}) },
+    const goal = await updateDigitalEmployeeGoalForEmployee({
+      digitalEmployeeId: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+      goalId: parsedParams.data.goalId,
+      input: parsedBody.data,
     })
-    if (!employee) return NextResponse.json({ error: "Not found" }, { status: 404 })
-
-    const { name, target, unit, period, currentValue, status } = await req.json()
-
-    const goal = await prisma.employeeGoal.update({
-      where: { id: goalId },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(target !== undefined && { target: Number(target) }),
-        ...(unit !== undefined && { unit }),
-        ...(period !== undefined && { period }),
-        ...(currentValue !== undefined && { currentValue: Number(currentValue) }),
-        ...(status !== undefined && { status }),
-      },
-    })
+    if (isHttpServiceError(goal)) {
+      return NextResponse.json({ error: goal.error }, { status: goal.status })
+    }
 
     return NextResponse.json(goal)
   } catch (error) {
@@ -44,16 +50,21 @@ export async function DELETE(req: Request, { params }: RouteParams) {
   try {
     const session = await auth()
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    const { id, goalId } = await params
+    const parsedParams = DigitalEmployeeGoalIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: { id, ...(orgContext ? { organizationId: orgContext.organizationId } : {}) },
+    const result = await deleteDigitalEmployeeGoalForEmployee({
+      digitalEmployeeId: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+      goalId: parsedParams.data.goalId,
     })
-    if (!employee) return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    await prisma.employeeGoal.delete({ where: { id: goalId } })
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to delete goal:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

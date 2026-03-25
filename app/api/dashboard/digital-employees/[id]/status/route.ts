@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { orchestrator } from "@/lib/digital-employee"
+import { DigitalEmployeeIdParamsSchema } from "@/src/features/digital-employees/lifecycle/schema"
+import { getDigitalEmployeeLifecycleStatus } from "@/src/features/digital-employees/lifecycle/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -15,29 +16,20 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const parsedParams = DigitalEmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-      select: { id: true, status: true, groupId: true },
+    const result = await getDigitalEmployeeLifecycleStatus({
+      digitalEmployeeId: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
     })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const containerUrl = await orchestrator.getGroupContainerUrl(employee.groupId)
-
-    return NextResponse.json({
-      employeeId: id,
-      status: employee.status,
-      containerRunning: !!containerUrl,
-      groupId: employee.groupId,
-    })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Status check failed:", error)
     return NextResponse.json({ error: "Status check failed" }, { status: 500 })

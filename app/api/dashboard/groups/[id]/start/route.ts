@@ -1,22 +1,20 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { hasPermission } from "@/lib/digital-employee/rbac"
-import { DockerOrchestrator } from "@/lib/digital-employee/docker-orchestrator"
+import { DashboardGroupIdParamsSchema } from "@/src/features/digital-employees/groups/schema"
+import { startGroupForDashboard } from "@/src/features/digital-employees/groups/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
-
-// In-memory concurrency guard — prevents double-start races
-const startingGroups = new Set<string>()
-
-export async function POST(req: Request, { params }: RouteParams) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const parsedParams = DashboardGroupIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
     const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
@@ -24,37 +22,22 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
 
-    if (!hasPermission(orgContext.membership.role, "employee.create")) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
-    }
-
-    const { id } = await params
-
-    const group = await prisma.employeeGroup.findFirst({
-      where: { id, organizationId: orgContext.organizationId },
+    const result = await startGroupForDashboard({
+      groupId: parsedParams.data.id,
+      context: {
+        organizationId: orgContext.organizationId,
+        role: orgContext.membership.role,
+        userId: session.user.id,
+      },
     })
-    if (!group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 })
+
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    // Concurrency guard
-    if (startingGroups.has(id)) {
-      return NextResponse.json({ error: "Already starting" }, { status: 409 })
-    }
-
-    startingGroups.add(id)
-    try {
-      const orchestrator = new DockerOrchestrator()
-      const { containerId, port } = await orchestrator.startGroup(id)
-      return NextResponse.json({ success: true, containerId, port })
-    } finally {
-      startingGroups.delete(id)
-    }
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to start group:", error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to start group" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Failed to start group" }, { status: 500 })
   }
 }

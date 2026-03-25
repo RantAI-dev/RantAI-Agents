@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  CreateWorkflowSchema,
+  WorkflowListQuerySchema,
+} from "@/src/features/workflows/schema"
+import {
+  createDashboardWorkflow,
+  listDashboardWorkflows,
+} from "@/src/features/workflows/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 // GET /api/dashboard/workflows - List workflows
 export async function GET(req: Request) {
@@ -12,18 +20,16 @@ export async function GET(req: Request) {
     }
 
     const orgContext = await getOrganizationContext(req, session.user.id)
-    const { searchParams } = new URL(req.url)
-    const assistantId = searchParams.get("assistantId")
+    const parsedQuery = WorkflowListQuerySchema.safeParse(
+      Object.fromEntries(new URL(req.url).searchParams.entries())
+    )
+    if (!parsedQuery.success) {
+      return NextResponse.json({ error: "Invalid query" }, { status: 400 })
+    }
 
-    const workflows = await prisma.workflow.findMany({
-      where: {
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-        ...(assistantId ? { assistantId } : {}),
-      },
-      include: {
-        _count: { select: { runs: true } },
-      },
-      orderBy: { updatedAt: "desc" },
+    const workflows = await listDashboardWorkflows({
+      organizationId: orgContext?.organizationId ?? null,
+      assistantId: parsedQuery.data.assistantId || null,
     })
 
     return NextResponse.json(workflows)
@@ -42,27 +48,19 @@ export async function POST(req: Request) {
     }
 
     const orgContext = await getOrganizationContext(req, session.user.id)
-    const body = await req.json()
-    const { name, description, assistantId, tags, category } = body
-
-    if (!name) {
-      return NextResponse.json({ error: "Name is required" }, { status: 400 })
+    const parsedBody = CreateWorkflowSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
-    const workflow = await prisma.workflow.create({
-      data: {
-        name,
-        description: description || null,
-        ...(tags !== undefined && { tags }),
-        ...(category !== undefined && { category }),
-        assistantId: assistantId || null,
-        organizationId: orgContext?.organizationId || null,
-        createdBy: session.user.id,
-      },
-      include: {
-        _count: { select: { runs: true } },
-      },
+    const workflow = await createDashboardWorkflow({
+      actorUserId: session.user.id,
+      organizationId: orgContext?.organizationId ?? null,
+      input: parsedBody.data,
     })
+    if (isHttpServiceError(workflow)) {
+      return NextResponse.json({ error: workflow.error }, { status: workflow.status })
+    }
 
     return NextResponse.json(workflow, { status: 201 })
   } catch (error) {

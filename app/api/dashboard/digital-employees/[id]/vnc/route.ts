@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import { DashboardDigitalEmployeeIdParamsSchema } from "@/src/features/digital-employees/employees/schema"
+import {
+  getDashboardDigitalEmployeeVncUrl,
+  isServiceError,
+} from "@/src/features/digital-employees/employees/service"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -14,35 +18,17 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-      select: { groupId: true },
+    const result = await getDashboardDigitalEmployeeVncUrl({
+      id,
+      organizationId: orgContext?.organizationId ?? null,
     })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const group = await prisma.employeeGroup.findFirst({
-      where: { id: employee.groupId },
-      select: { noVncPort: true },
-    })
-
-    if (!group?.noVncPort) {
-      return NextResponse.json({ error: "Container not running" }, { status: 503 })
-    }
-
-    const noVncPort = group.noVncPort
-
-    return NextResponse.json({
-      url: `http://localhost:${noVncPort}/vnc.html?autoconnect=true&resize=scale`,
-    })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("VNC URL lookup failed:", error)
     return NextResponse.json({ error: "VNC lookup failed" }, { status: 500 })

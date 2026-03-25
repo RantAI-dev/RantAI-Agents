@@ -1,52 +1,35 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { WorkflowPublicDiscoverQuerySchema } from "@/src/features/workflows-public/schema"
+import {
+  discoverPublicWorkflows,
+  isWorkflowPublicServiceError,
+} from "@/src/features/workflows-public/service"
 
-// GET /api/workflows/discover?name=fraud&mode=STANDARD&apiEnabled=true
-// Generic workflow discovery endpoint — no domain-specific paths
-// Auth: x-api-key header (validates against any WorkflowRun API key)
+/**
+ * GET /api/workflows/discover?name=fraud&mode=STANDARD&apiEnabled=true
+ */
 export async function GET(request: Request) {
-  const apiKey = request.headers.get("x-api-key")
-  if (!apiKey) {
-    return NextResponse.json({ error: "API key required" }, { status: 401 })
-  }
-
-  // Validate API key against any workflow that has this key
-  const validWorkflow = await prisma.workflow.findFirst({
-    where: { apiKey, apiEnabled: true },
-    select: { id: true },
-  })
-
-  if (!validWorkflow) {
-    return NextResponse.json({ error: "Invalid API key" }, { status: 403 })
-  }
-
   const { searchParams } = new URL(request.url)
-  const name = searchParams.get("name")
-  const mode = searchParams.get("mode")
-  const apiEnabled = searchParams.get("apiEnabled")
-
-  // Build query filters
-  const where: Record<string, unknown> = { status: "ACTIVE" }
-  if (name) {
-    where.name = { contains: name, mode: "insensitive" }
-  }
-  if (mode) {
-    where.mode = mode
-  }
-  if (apiEnabled === "true") {
-    where.apiEnabled = true
-  }
-
-  const workflows = await prisma.workflow.findMany({
-    where,
-    select: {
-      id: true,
-      name: true,
-      mode: true,
-      description: true,
-    },
-    orderBy: { updatedAt: "desc" },
+  const parsedQuery = WorkflowPublicDiscoverQuerySchema.safeParse({
+    name: searchParams.get("name") ?? undefined,
+    mode: searchParams.get("mode") ?? undefined,
+    apiEnabled: searchParams.get("apiEnabled") ?? undefined,
   })
+  if (!parsedQuery.success) {
+    return NextResponse.json({ error: "Invalid query params" }, { status: 400 })
+  }
 
-  return NextResponse.json(workflows)
+  const result = await discoverPublicWorkflows({
+    apiKey: request.headers.get("x-api-key"),
+    query: parsedQuery.data,
+  })
+  if (isWorkflowPublicServiceError(result)) {
+    return NextResponse.json({ error: result.error }, { status: result.status })
+  }
+
+  if (result.kind === "response") {
+    return result.response
+  }
+
+  return NextResponse.json(result.body, { status: result.status })
 }

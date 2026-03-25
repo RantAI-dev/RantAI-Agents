@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
+import { RuntimeGoalUpdateSchema } from "@/src/features/runtime/goals/schema"
+import { updateRuntimeGoal } from "@/src/features/runtime/goals/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 export async function POST(req: Request) {
   try {
@@ -8,25 +10,22 @@ export async function POST(req: Request) {
     if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const { employeeId } = await verifyRuntimeToken(token)
-    const { goalId, increment, setValue } = await req.json()
+    const parsedBody = RuntimeGoalUpdateSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
+    }
 
-    if (!goalId) return NextResponse.json({ error: "goalId required" }, { status: 400 })
-
-    const goal = await prisma.employeeGoal.findFirst({
-      where: { id: goalId, digitalEmployeeId: employeeId },
+    const result = await updateRuntimeGoal({
+      employeeId,
+      goalId: parsedBody.data.goalId,
+      increment: parsedBody.data.increment,
+      setValue: parsedBody.data.setValue,
     })
-    if (!goal) return NextResponse.json({ error: "Goal not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    const newValue = setValue !== undefined
-      ? Number(setValue)
-      : goal.currentValue + (increment !== undefined ? Number(increment) : 1)
-
-    const updated = await prisma.employeeGoal.update({
-      where: { id: goalId },
-      data: { currentValue: newValue },
-    })
-
-    return NextResponse.json({ id: updated.id, currentValue: updated.currentValue, target: updated.target })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to update goal:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

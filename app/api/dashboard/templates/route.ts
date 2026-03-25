@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { hasPermission } from "@/lib/digital-employee/rbac"
+import {
+  createDashboardTemplateForDashboard,
+  listDashboardTemplates,
+  type ServiceError,
+} from "@/src/features/templates/service"
+import { DashboardTemplateCreateBodySchema } from "@/src/features/templates/schema"
+
+function isServiceError(value: unknown): value is ServiceError {
+  if (typeof value !== "object" || value === null) return false
+  const candidate = value as { status?: unknown; error?: unknown }
+  return typeof candidate.status === "number" && typeof candidate.error === "string"
+}
 
 // GET /api/dashboard/templates — list org + public shared templates
 export async function GET(req: Request) {
@@ -17,15 +27,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
 
-    const templates = await prisma.employeeTemplateShare.findMany({
-      where: {
-        OR: [
-          { organizationId: orgContext.organizationId },
-          { isPublic: true },
-        ],
-      },
-      orderBy: { updatedAt: "desc" },
-    })
+    const templates = await listDashboardTemplates(orgContext.organizationId)
 
     return NextResponse.json(templates)
   } catch (error) {
@@ -47,30 +49,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
 
-    if (!hasPermission(orgContext.membership.role, "employee.create")) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    const parsed = DashboardTemplateCreateBodySchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "name, category, and templateData are required" },
+        { status: 400 }
+      )
     }
 
-    const body = await req.json()
-    const { name, description, category, templateData, isPublic } = body
-
-    if (!name || !category || !templateData) {
-      return NextResponse.json({ error: "name, category, and templateData are required" }, { status: 400 })
-    }
-
-    // Only admin/owner can make templates public
-    const canMakePublic = hasPermission(orgContext.membership.role, "employee.delete") // admin+ permission
-    const template = await prisma.employeeTemplateShare.create({
-      data: {
+    const template = await createDashboardTemplateForDashboard({
+      context: {
         organizationId: orgContext.organizationId,
-        name,
-        description: description || null,
-        category,
-        templateData: templateData as object,
-        isPublic: canMakePublic && isPublic ? true : false,
-        createdBy: session.user.id,
+        role: orgContext.membership.role,
+        userId: session.user.id,
       },
+      input: parsed.data,
     })
+    if (isServiceError(template)) {
+      return NextResponse.json({ error: template.error }, { status: template.status })
+    }
 
     return NextResponse.json(template, { status: 201 })
   } catch (error) {

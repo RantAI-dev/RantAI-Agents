@@ -1,35 +1,32 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { ConversationIdParamsSchema } from "@/src/features/chat-public/schema"
+import {
+  getConversationStatus,
+  isChatPublicServiceError,
+} from "@/src/features/chat-public/service"
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
-
-  if (!session) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { id } = await params
-
-  try {
-    const conversation = await prisma.conversation.findUnique({
-      where: { id },
-      select: { status: true },
-    })
-
-    if (!conversation) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
-    }
-
-    return NextResponse.json({ status: conversation.status })
-  } catch (error) {
-    console.error("Error fetching conversation status:", error)
-    return NextResponse.json(
-      { error: "Failed to fetch status" },
-      { status: 500 }
-    )
+  const parsedParams = ConversationIdParamsSchema.safeParse(await params)
+  if (!parsedParams.success) {
+    return NextResponse.json({ error: "Invalid conversation id" }, { status: 400 })
   }
+
+  const result = await getConversationStatus({
+    conversationId: parsedParams.data.id,
+  })
+
+  if (isChatPublicServiceError(result)) {
+    return NextResponse.json({ error: result.error }, { status: result.status })
+  }
+
+  return NextResponse.json(result)
 }

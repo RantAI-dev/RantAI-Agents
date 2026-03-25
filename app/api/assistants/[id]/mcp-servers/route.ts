@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import {
+  AssistantIdParamsSchema,
+  AssistantMcpServerIdsSchema,
+} from "@/src/features/assistants/bindings/schema"
+import {
+  isServiceError,
+  listAssistantMcpServers,
+  setAssistantMcpServers,
+} from "@/src/features/assistants/bindings/service"
 
 // GET /api/assistants/[id]/mcp-servers - Get assistant's bound MCP servers
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -13,38 +21,17 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const bindings = await prisma.assistantMcpServer.findMany({
-      where: { assistantId: id },
-      include: {
-        mcpServer: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            transport: true,
-            enabled: true,
-            lastConnectedAt: true,
-            lastError: true,
-            _count: { select: { tools: true } },
-          },
-        },
-      },
-    })
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
+    }
 
-    return NextResponse.json(
-      bindings.map((b) => ({
-        id: b.mcpServer.id,
-        name: b.mcpServer.name,
-        description: b.mcpServer.description,
-        transport: b.mcpServer.transport,
-        enabled: b.mcpServer.enabled,
-        lastConnectedAt: b.mcpServer.lastConnectedAt,
-        lastError: b.mcpServer.lastError,
-        toolCount: b.mcpServer._count.tools,
-        boundEnabled: b.enabled,
-      }))
-    )
+    const result = await listAssistantMcpServers(parsedParams.data.id)
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Assistant MCP Servers API] GET error:", error)
     return NextResponse.json(
@@ -65,68 +52,28 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const body = await req.json()
-    const { mcpServerIds } = body as { mcpServerIds: string[] }
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
+    }
 
-    if (!Array.isArray(mcpServerIds)) {
+    const parsedBody = AssistantMcpServerIdsSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
       return NextResponse.json(
         { error: "mcpServerIds must be an array" },
         { status: 400 }
       )
     }
 
-    // Verify assistant exists
-    const assistant = await prisma.assistant.findUnique({ where: { id } })
-    if (!assistant) {
-      return NextResponse.json(
-        { error: "Assistant not found" },
-        { status: 404 }
-      )
+    const result = await setAssistantMcpServers(
+      parsedParams.data.id,
+      parsedBody.data.mcpServerIds
+    )
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    // Replace all MCP server bindings in a transaction
-    await prisma.$transaction([
-      prisma.assistantMcpServer.deleteMany({ where: { assistantId: id } }),
-      ...(mcpServerIds.length > 0
-        ? [
-            prisma.assistantMcpServer.createMany({
-              data: mcpServerIds.map((mcpServerId) => ({
-                assistantId: id,
-                mcpServerId,
-              })),
-            }),
-          ]
-        : []),
-    ])
-
-    // Return updated list
-    const updated = await prisma.assistantMcpServer.findMany({
-      where: { assistantId: id },
-      include: {
-        mcpServer: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            transport: true,
-            enabled: true,
-            _count: { select: { tools: true } },
-          },
-        },
-      },
-    })
-
-    return NextResponse.json(
-      updated.map((b) => ({
-        id: b.mcpServer.id,
-        name: b.mcpServer.name,
-        description: b.mcpServer.description,
-        transport: b.mcpServer.transport,
-        enabled: b.mcpServer.enabled,
-        toolCount: b.mcpServer._count.tools,
-      }))
-    )
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Assistant MCP Servers API] PUT error:", error)
     return NextResponse.json(

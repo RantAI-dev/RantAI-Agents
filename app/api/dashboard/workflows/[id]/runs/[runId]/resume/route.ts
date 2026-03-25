@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { workflowEngine } from "@/lib/workflow"
+import { WorkflowResumeSchema, WorkflowRunIdParamsSchema } from "@/src/features/workflows/schema"
+import { resumeWorkflowRun } from "@/src/features/workflows/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string; runId: string }>
@@ -15,31 +16,26 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { runId } = await params
-    const body = await req.json()
-    const { stepId, data } = body
-
-    const run = await prisma.workflowRun.findUnique({
-      where: { id: runId },
-    })
-
-    if (!run) {
-      return NextResponse.json({ error: "Run not found" }, { status: 404 })
+    const parsedParams = WorkflowRunIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid workflow id" }, { status: 400 })
     }
 
-    if (run.status !== "PAUSED") {
-      return NextResponse.json({ error: "Run is not paused" }, { status: 400 })
+    const parsedBody = WorkflowResumeSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
-    // Resume via workflow engine
-    await workflowEngine.resume(runId, stepId, data)
-
-    // Return updated run
-    const updatedRun = await prisma.workflowRun.findUnique({
-      where: { id: runId },
+    const result = await resumeWorkflowRun({
+      runId: parsedParams.data.runId,
+      stepId: parsedBody.data.stepId,
+      data: parsedBody.data.data,
     })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json(updatedRun)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to resume run:", error)
     return NextResponse.json({ error: "Failed to resume run" }, { status: 500 })

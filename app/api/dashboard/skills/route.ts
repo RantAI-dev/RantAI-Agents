@@ -1,9 +1,23 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  CreateDashboardSkillSchema,
+} from "@/src/features/skills/schema"
+import {
+  createDashboardSkillRecord,
+  listDashboardSkills,
+} from "@/src/features/skills/service"
 
-// GET /api/dashboard/skills - List all org skills
+function isServiceError(value: unknown): value is {
+  status: number
+  error: string
+} {
+  if (typeof value !== "object" || value === null) return false
+  const candidate = value as { status?: unknown; error?: unknown }
+  return typeof candidate.status === "number" && typeof candidate.error === "string"
+}
+
 export async function GET(req: Request) {
   try {
     const session = await auth()
@@ -12,43 +26,10 @@ export async function GET(req: Request) {
     }
 
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const skills = await prisma.skill.findMany({
-      where: {
-        organizationId: orgContext?.organizationId || null,
-      },
-      include: {
-        _count: { select: { assistantSkills: true } },
-        installedSkill: { select: { icon: true } },
-      },
-      orderBy: [{ category: "asc" }, { displayName: "asc" }],
-    })
-
     return NextResponse.json(
-      skills.map((s) => {
-        const meta = (s.metadata ?? {}) as Record<string, unknown>
-        const toolIds = Array.isArray(meta.toolIds)
-          ? (meta.toolIds as string[])
-          : []
-
-        return {
-          id: s.id,
-          name: s.name,
-          displayName: s.displayName,
-          description: s.description,
-          content: s.content,
-          source: s.source,
-          sourceUrl: s.sourceUrl,
-          version: s.version,
-          category: s.category,
-          tags: s.tags,
-          icon: s.icon || s.installedSkill?.icon || null,
-          metadata: s.metadata,
-          relatedToolIds: toolIds,
-          enabled: s.enabled,
-          assistantCount: s._count.assistantSkills,
-          createdAt: s.createdAt.toISOString(),
-        }
+      await listDashboardSkills({
+        organizationId: orgContext?.organizationId ?? null,
+        userId: session.user.id,
       })
     )
   } catch (error) {
@@ -57,7 +38,6 @@ export async function GET(req: Request) {
   }
 }
 
-// POST /api/dashboard/skills - Create skill
 export async function POST(req: Request) {
   try {
     const session = await auth()
@@ -66,36 +46,26 @@ export async function POST(req: Request) {
     }
 
     const orgContext = await getOrganizationContext(req, session.user.id)
-    const body = await req.json()
-
-    const { name, displayName, description, content, source, sourceUrl, version, category, tags, metadata } = body
-
-    if (!name || !displayName || !content) {
+    const parsed = CreateDashboardSkillSchema.safeParse(await req.json())
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "name, displayName, and content are required" },
+        { error: "Invalid request payload", details: parsed.error.flatten() },
         { status: 400 }
       )
     }
 
-    const skill = await prisma.skill.create({
-      data: {
-        name,
-        displayName,
-        description: description || "",
-        content,
-        source: source || "custom",
-        sourceUrl: sourceUrl || null,
-        version: version || null,
-        category: category || "general",
-        tags: tags || [],
-        metadata: metadata || null,
-        enabled: true,
-        organizationId: orgContext?.organizationId || null,
-        createdBy: session.user.id,
+    const result = await createDashboardSkillRecord({
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        userId: session.user.id,
       },
+      input: parsed.data,
     })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json(skill, { status: 201 })
+    return NextResponse.json(result, { status: 201 })
   } catch (error) {
     console.error("[Skills API] POST error:", error)
     return NextResponse.json({ error: "Failed to create skill" }, { status: 500 })

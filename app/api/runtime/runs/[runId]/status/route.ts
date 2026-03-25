@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
+import { RuntimeRunParamsSchema, RuntimeRunStatusSchema } from "@/src/features/runtime/runs/schema"
+import { reportRuntimeRunStatus } from "@/src/features/runtime/runs/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ runId: string }>
@@ -15,47 +17,29 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     const { runId: tokenRunId } = await verifyRuntimeToken(token)
-    const { runId } = await params
+    const parsedParams = RuntimeRunParamsSchema.safeParse(await params)
+    if (!parsedParams.success || !parsedParams.data.runId) {
+      return NextResponse.json({ error: "Failed" }, { status: 500 })
+    }
 
-    if (tokenRunId !== runId) {
+    if (tokenRunId !== parsedParams.data.runId) {
       return NextResponse.json({ error: "Token mismatch" }, { status: 403 })
     }
 
-    const body = await req.json()
-    const { status, error, executionTimeMs, promptTokens, completionTokens } = body
-
-    const updateData: Record<string, unknown> = {}
-    if (status) updateData.status = status
-    if (error) updateData.error = error
-    if (executionTimeMs) updateData.executionTimeMs = executionTimeMs
-    if (promptTokens) updateData.promptTokens = promptTokens
-    if (completionTokens) updateData.completionTokens = completionTokens
-    if (status === "COMPLETED" || status === "FAILED") {
-      updateData.completedAt = new Date()
+    const parsedBody = RuntimeRunStatusSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Failed" }, { status: 500 })
     }
 
-    await prisma.employeeRun.update({
-      where: { id: runId },
-      data: updateData,
+    const result = await reportRuntimeRunStatus({
+      runId: parsedParams.data.runId,
+      input: parsedBody.data,
     })
-
-    // Update employee stats
-    const run = await prisma.employeeRun.findUnique({ where: { id: runId } })
-    if (run && (status === "COMPLETED" || status === "FAILED")) {
-      await prisma.digitalEmployee.update({
-        where: { id: run.digitalEmployeeId },
-        data: {
-          lastActiveAt: new Date(),
-          ...(status === "COMPLETED" ? { successfulRuns: { increment: 1 } } : {}),
-          ...(status === "FAILED" ? { failedRuns: { increment: 1 } } : {}),
-          ...(promptTokens || completionTokens
-            ? { totalTokensUsed: { increment: (promptTokens || 0) + (completionTokens || 0) } }
-            : {}),
-        },
-      })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Runtime status update failed:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

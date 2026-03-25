@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { fanOutTaskQuery, proxyCreateTask } from "@/lib/digital-employee/task-aggregator"
-import type { TaskFilter } from "@/lib/digital-employee/task-types"
+import {
+  CreateTaskBodySchema,
+  parseTaskFilterSearchParams,
+} from "@/src/features/digital-employees/tasks/schema"
+import {
+  createDashboardTask,
+  isServiceError,
+  listDashboardTasks,
+} from "@/src/features/digital-employees/tasks/service"
 
 export async function GET(request: NextRequest) {
   const session = await auth()
@@ -15,17 +22,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { searchParams } = new URL(request.url)
+  try {
+    const filter = parseTaskFilterSearchParams(request.nextUrl.searchParams)
+    const tasks = await listDashboardTasks({
+      organizationId: orgCtx.organizationId,
+      filter,
+    })
 
-  const filter: TaskFilter = {}
-  if (searchParams.get("status")) filter.status = searchParams.get("status") as TaskFilter["status"]
-  if (searchParams.get("assigneeId")) filter.assigneeId = searchParams.get("assigneeId")!
-  if (searchParams.get("groupId")) filter.groupId = searchParams.get("groupId")!
-  if (searchParams.get("priority")) filter.priority = searchParams.get("priority") as TaskFilter["priority"]
-  if (searchParams.get("topLevelOnly") === "true") filter.topLevelOnly = true
-
-  const tasks = await fanOutTaskQuery(orgCtx.organizationId, filter)
-  return NextResponse.json(tasks)
+    return NextResponse.json(tasks)
+  } catch (error) {
+    console.error("[Dashboard Tasks API] GET error:", error)
+    return NextResponse.json({ error: "Failed to list tasks" }, { status: 500 })
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -39,19 +47,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const body = await request.json()
-  if (!body.title || typeof body.title !== "string" || body.title.trim() === "") {
-    return NextResponse.json({ error: "title is required" }, { status: 400 })
+  try {
+    const parsed = CreateTaskBodySchema.safeParse(await request.json())
+    if (!parsed.success) {
+      return NextResponse.json({ error: "title is required" }, { status: 400 })
+    }
+
+    const task = await createDashboardTask({
+      organizationId: orgCtx.organizationId,
+      userId: session.user.id,
+      input: parsed.data,
+    })
+
+    if (isServiceError(task)) {
+      return NextResponse.json({ error: task.error }, { status: task.status })
+    }
+
+    return NextResponse.json(task, { status: 201 })
+  } catch (error) {
+    console.error("[Dashboard Tasks API] POST error:", error)
+    return NextResponse.json({ error: "Failed to create task" }, { status: 500 })
   }
-
-  const task = await proxyCreateTask(orgCtx.organizationId, {
-    ...body,
-    created_by_user_id: session.user.id,
-  })
-
-  if (!task) {
-    return NextResponse.json({ error: "No active container available to create task" }, { status: 503 })
-  }
-
-  return NextResponse.json(task, { status: 201 })
 }

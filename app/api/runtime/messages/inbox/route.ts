@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
+import { RuntimeInboxQuerySchema } from "@/src/features/runtime/messages/schema"
+import { getRuntimeInboxMessages } from "@/src/features/runtime/messages/service"
 
 export async function GET(req: Request) {
   try {
@@ -9,30 +10,14 @@ export async function GET(req: Request) {
 
     await verifyRuntimeToken(token)
 
-    const { searchParams } = new URL(req.url)
-    const employeeId = searchParams.get("employeeId")
-    if (!employeeId) return NextResponse.json({ error: "employeeId required" }, { status: 400 })
-
-    const messages = await prisma.employeeMessage.findMany({
-      where: {
-        toEmployeeId: employeeId,
-        status: { in: ["pending", "delivered"] },
-      },
-      include: {
-        fromEmployee: { select: { id: true, name: true, avatar: true } },
-      },
-      orderBy: { createdAt: "desc" },
+    const parsed = RuntimeInboxQuerySchema.safeParse({
+      employeeId: new URL(req.url).searchParams.get("employeeId") ?? undefined,
     })
-
-    // Mark pending messages as delivered
-    const pendingIds = messages.filter((m) => m.status === "pending").map((m) => m.id)
-    if (pendingIds.length > 0) {
-      await prisma.employeeMessage.updateMany({
-        where: { id: { in: pendingIds } },
-        data: { status: "delivered" },
-      })
+    if (!parsed.success || !parsed.data.employeeId) {
+      return NextResponse.json({ error: "employeeId required" }, { status: 400 })
     }
 
+    const messages = await getRuntimeInboxMessages(parsed.data.employeeId)
     return NextResponse.json({ messages })
   } catch (error) {
     console.error("Failed to fetch inbox:", error)

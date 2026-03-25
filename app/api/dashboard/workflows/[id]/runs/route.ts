@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { WorkflowIdParamsSchema } from "@/src/features/workflows/schema"
+import { listWorkflowRuns } from "@/src/features/workflows/service"
 
 interface RouteParams {
   params: Promise<{ id: string }>
@@ -14,13 +15,12 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
+    const parsedParams = WorkflowIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid workflow id" }, { status: 400 })
+    }
 
-    const runs = await prisma.workflowRun.findMany({
-      where: { workflowId: id },
-      orderBy: { startedAt: "desc" },
-      take: 50,
-    })
+    const runs = await listWorkflowRuns(parsedParams.data.id)
 
     return NextResponse.json(runs)
   } catch (error) {

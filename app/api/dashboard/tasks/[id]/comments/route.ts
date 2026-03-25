@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { proxyGetComments, proxyAddComment } from "@/lib/digital-employee/task-aggregator"
+import {
+  CreateTaskCommentBodySchema,
+  TaskIdParamsSchema,
+} from "@/src/features/digital-employees/tasks/schema"
+import {
+  createDashboardTaskComment,
+  isServiceError,
+  listDashboardTaskComments,
+} from "@/src/features/digital-employees/tasks/service"
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -17,15 +25,22 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { id } = await params
-  const comments = await proxyGetComments(id, orgCtx.organizationId)
+  const parsedParams = TaskIdParamsSchema.safeParse(await params)
+  if (!parsedParams.success) {
+    return NextResponse.json({ error: "Invalid task id" }, { status: 400 })
+  }
+
+  const comments = await listDashboardTaskComments({
+    taskId: parsedParams.data.id,
+    organizationId: orgCtx.organizationId,
+  })
 
   return NextResponse.json(comments)
 }
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -37,25 +52,25 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const { id } = await params
-  const body = await request.json()
+  const parsedParams = TaskIdParamsSchema.safeParse(await params)
+  if (!parsedParams.success) {
+    return NextResponse.json({ error: "Invalid task id" }, { status: 400 })
+  }
 
-  if (!body.content || typeof body.content !== "string" || body.content.trim() === "") {
+  const parsedBody = CreateTaskCommentBodySchema.safeParse(await request.json())
+  if (!parsedBody.success) {
     return NextResponse.json({ error: "content is required" }, { status: 400 })
   }
 
-  const comment = await proxyAddComment(
-    id,
-    {
-      content: body.content,
-      author_type: "HUMAN",
-      author_user_id: session.user.id,
-    },
-    orgCtx.organizationId,
-  )
+  const comment = await createDashboardTaskComment({
+    taskId: parsedParams.data.id,
+    organizationId: orgCtx.organizationId,
+    userId: session.user.id,
+    input: parsedBody.data,
+  })
 
-  if (!comment) {
-    return NextResponse.json({ error: "Failed to add comment" }, { status: 502 })
+  if (isServiceError(comment)) {
+    return NextResponse.json({ error: comment.error }, { status: comment.status })
   }
 
   return NextResponse.json(comment, { status: 201 })

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
+import { RuntimeEmployeeListQuerySchema } from "@/src/features/runtime/employees/schema"
+import { listRuntimeEmployees } from "@/src/features/runtime/employees/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 export async function GET(req: Request) {
   try {
@@ -9,36 +11,19 @@ export async function GET(req: Request) {
 
     await verifyRuntimeToken(token)
 
-    const { searchParams } = new URL(req.url)
-    const employeeId = searchParams.get("employeeId")
-    if (!employeeId) return NextResponse.json({ error: "employeeId required" }, { status: 400 })
-
-    // Get caller's org
-    const caller = await prisma.digitalEmployee.findUnique({
-      where: { id: employeeId },
-      select: { organizationId: true },
+    const parsed = RuntimeEmployeeListQuerySchema.safeParse({
+      employeeId: new URL(req.url).searchParams.get("employeeId") ?? undefined,
     })
-    if (!caller) return NextResponse.json({ error: "Employee not found" }, { status: 404 })
+    if (!parsed.success || !parsed.data.employeeId) {
+      return NextResponse.json({ error: "employeeId required" }, { status: 400 })
+    }
 
-    // List coworkers in same org (exclude self, only active-ish statuses)
-    const employees = await prisma.digitalEmployee.findMany({
-      where: {
-        organizationId: caller.organizationId,
-        id: { not: employeeId },
-        status: { in: ["ACTIVE", "PAUSED", "ONBOARDING"] },
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        avatar: true,
-        status: true,
-        autonomyLevel: true,
-      },
-      orderBy: { name: "asc" },
-    })
+    const result = await listRuntimeEmployees(parsed.data.employeeId)
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json({ employees })
+    return NextResponse.json({ employees: result })
   } catch (error) {
     console.error("Failed to list employees:", error)
     return NextResponse.json({ error: "Failed to list employees" }, { status: 500 })

@@ -1,46 +1,41 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { hasPermission } from "@/lib/digital-employee/rbac"
-import { DockerOrchestrator } from "@/lib/digital-employee/docker-orchestrator"
+import { DashboardGroupIdParamsSchema } from "@/src/features/digital-employees/groups/schema"
+import { stopGroupForDashboard } from "@/src/features/digital-employees/groups/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
-
-export async function POST(req: Request, { params }: RouteParams) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id: groupId } = await params
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const parsedParams = DashboardGroupIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
+    }
 
+    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "No organization" }, { status: 403 })
     }
 
-    if (!hasPermission(orgContext.membership.role, "employee.delete")) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
-    }
-
-    const group = await prisma.employeeGroup.findFirst({
-      where: {
-        id: groupId,
+    const result = await stopGroupForDashboard({
+      groupId: parsedParams.data.id,
+      context: {
         organizationId: orgContext.organizationId,
+        role: orgContext.membership.role,
+        userId: session.user.id,
       },
     })
 
-    if (!group) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    await new DockerOrchestrator().stopGroup(groupId)
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Stop group container failed:", error)
     const message = error instanceof Error ? error.message : "Stop failed"

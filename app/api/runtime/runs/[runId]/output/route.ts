@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
+import { RuntimeRunOutputSchema, RuntimeRunParamsSchema } from "@/src/features/runtime/runs/schema"
+import { submitRuntimeRunOutput } from "@/src/features/runtime/runs/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ runId: string }>
@@ -15,20 +17,29 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     const { runId: tokenRunId } = await verifyRuntimeToken(token)
-    const { runId } = await params
+    const parsedParams = RuntimeRunParamsSchema.safeParse(await params)
+    if (!parsedParams.success || !parsedParams.data.runId) {
+      return NextResponse.json({ error: "Failed" }, { status: 500 })
+    }
 
-    if (tokenRunId !== runId) {
+    if (tokenRunId !== parsedParams.data.runId) {
       return NextResponse.json({ error: "Token mismatch" }, { status: 403 })
     }
 
-    const body = await req.json()
+    const parsedBody = RuntimeRunOutputSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Failed" }, { status: 500 })
+    }
 
-    await prisma.employeeRun.update({
-      where: { id: runId },
-      data: { output: body.output || body },
+    const result = await submitRuntimeRunOutput({
+      runId: parsedParams.data.runId,
+      body: parsedBody.data,
     })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Runtime output submit failed:", error)
     return NextResponse.json({ error: "Failed" }, { status: 500 })

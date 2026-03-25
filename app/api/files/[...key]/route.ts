@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
-import { getPresignedDownloadUrl, fileExists, getFileMetadata } from "@/lib/s3"
+import {
+  FilesRouteParamsSchema,
+  FilesRouteQuerySchema,
+} from "@/src/features/platform-routes/files/schema"
+import { accessFileByKey } from "@/src/features/platform-routes/files/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 /**
  * GET /api/files/[...key] - Get file access URL or redirect to presigned URL
@@ -24,121 +28,48 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { key: keyParts } = await params
-    const s3Key = keyParts.join("/")
-
-    if (!s3Key) {
+    const parsedParams = FilesRouteParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
       return NextResponse.json({ error: "File key required" }, { status: 400 })
     }
+    const s3Key = parsedParams.data.key.join("/")
 
-    // Parse query params
     const url = new URL(request.url)
-    const shouldRedirect = url.searchParams.get("redirect") !== "false"
-    const forceDownload = url.searchParams.get("download") === "true"
+    const parsedQuery = FilesRouteQuerySchema.safeParse(
+      Object.fromEntries(url.searchParams.entries())
+    )
+    const shouldRedirect = parsedQuery.success
+      ? parsedQuery.data.redirect !== "false"
+      : url.searchParams.get("redirect") !== "false"
+    const forceDownload = parsedQuery.success
+      ? parsedQuery.data.download === "true"
+      : url.searchParams.get("download") === "true"
+    const orgContext = await getOrganizationContext(request, session.user.id)
 
-    // Verify file exists
-    const exists = await fileExists(s3Key)
-    if (!exists) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 })
+    const result = await accessFileByKey({
+      s3Key,
+      userId: session.user.id,
+      organizationId: orgContext?.organizationId ?? null,
+      shouldRedirect,
+      forceDownload,
+    })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    // Check access based on key path
-    const hasAccess = await verifyAccess(request, session.user.id, s3Key)
-    if (!hasAccess) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
+    if (result.shouldRedirect) {
+      return NextResponse.redirect(result.url, 302)
     }
 
-    // Get file metadata for response headers
-    const metadata = await getFileMetadata(s3Key)
-
-    // Generate presigned URL
-    const presignedUrl = await getPresignedDownloadUrl(s3Key)
-    const expiresAt = new Date(Date.now() + 7200 * 1000).toISOString()
-
-    if (shouldRedirect) {
-      // Redirect to presigned URL
-      return NextResponse.redirect(presignedUrl, 302)
-    }
-
-    // Return JSON response
     return NextResponse.json({
-      url: presignedUrl,
-      filename: s3Key.split("/").pop() || "file",
-      contentType: metadata?.contentType || "application/octet-stream",
-      size: metadata?.contentLength,
-      expiresAt,
+      url: result.url,
+      filename: result.filename,
+      contentType: result.contentType,
+      size: result.size,
+      expiresAt: result.expiresAt,
     })
   } catch (error) {
     console.error("[Files API] Error:", error)
-    return NextResponse.json(
-      { error: "Failed to access file" },
-      { status: 500 }
-    )
-  }
-}
-
-/**
- * Verify user has access to the file based on its S3 key path
- */
-async function verifyAccess(
-  request: Request,
-  userId: string,
-  s3Key: string
-): Promise<boolean> {
-  const parts = s3Key.split("/")
-  const resourceType = parts[0]
-
-  switch (resourceType) {
-    case "documents": {
-      // Path: documents/{orgId|global}/{docId}/{filename}
-      const orgId = parts[1]
-
-      if (orgId === "global") {
-        // Global documents are accessible to all authenticated users
-        return true
-      }
-
-      // Verify user is member of the organization
-      const orgContext = await getOrganizationContext(request, userId)
-      return orgContext?.organizationId === orgId
-    }
-
-    case "organizations": {
-      // Path: organizations/{orgId}/logo/{filename}
-      const orgId = parts[1]
-
-      // Organization logos are public within the org
-      const orgContext = await getOrganizationContext(request, userId)
-      return orgContext?.organizationId === orgId
-    }
-
-    case "users": {
-      // Path: users/{userId}/avatar/{filename}
-      // Avatars are public (anyone can see anyone's avatar)
-      return true
-    }
-
-    case "chat": {
-      // Path: chat/{sessionId}/{messageId}/{filename}
-      const sessionId = parts[1]
-
-      // Verify user owns the session
-      const session = await prisma.dashboardSession.findUnique({
-        where: { id: sessionId },
-        select: { userId: true },
-      })
-
-      return session?.userId === userId
-    }
-
-    case "temp": {
-      // Temp files - only accessible to the uploader
-      // This would require storing uploader info, for now allow authenticated access
-      return true
-    }
-
-    default:
-      // Unknown resource type - deny access
-      return false
+    return NextResponse.json({ error: "Failed to access file" }, { status: 500 })
   }
 }

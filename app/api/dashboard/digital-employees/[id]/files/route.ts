@@ -1,98 +1,79 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  DigitalEmployeeIdParamsSchema,
+  EmployeeFilesSyncBodySchema,
+} from "@/src/features/digital-employees/files/schema"
+import {
+  listEmployeeFiles,
+  syncEmployeeFilesForEmployee,
+} from "@/src/features/digital-employees/files/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
-interface RouteParams {
-  params: Promise<{ id: string }>
-}
-
-// GET - List all workspace files
-export async function GET(req: Request, { params }: RouteParams) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const parsedParams = DigitalEmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
+    }
 
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const result = await listEmployeeFiles({
+      employeeId: parsedParams.data.id,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
       },
     })
 
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    const files = await prisma.employeeFile.findMany({
-      where: { digitalEmployeeId: id },
-      orderBy: { filename: "asc" },
-    })
-
-    return NextResponse.json(files)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to fetch files:", error)
     return NextResponse.json({ error: "Failed to fetch files" }, { status: 500 })
   }
 }
 
-// PUT - Bulk sync files (for VM to push changes back)
-export async function PUT(req: Request, { params }: RouteParams) {
+export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth()
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-    })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    const parsedParams = DigitalEmployeeIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
 
-    const { files } = await req.json() as { files: Array<{ filename: string; content: string }> }
-
-    if (!Array.isArray(files)) {
+    const body = EmployeeFilesSyncBodySchema.safeParse(await req.json())
+    if (!body.success) {
       return NextResponse.json({ error: "files array required" }, { status: 400 })
     }
 
-    const results = await Promise.all(
-      files.map((f) =>
-        prisma.employeeFile.upsert({
-          where: {
-            digitalEmployeeId_filename: {
-              digitalEmployeeId: id,
-              filename: f.filename,
-            },
-          },
-          create: {
-            digitalEmployeeId: id,
-            filename: f.filename,
-            content: f.content,
-            updatedBy: session.user.id,
-          },
-          update: {
-            content: f.content,
-            updatedBy: session.user.id,
-          },
-        })
-      )
-    )
+    const orgContext = await getOrganizationContext(req, session.user.id)
+    const result = await syncEmployeeFilesForEmployee({
+      employeeId: parsedParams.data.id,
+      updatedBy: session.user.id,
+      input: body.data,
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+      },
+    })
 
-    return NextResponse.json(results)
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to sync files:", error)
     return NextResponse.json({ error: "Failed to sync files" }, { status: 500 })

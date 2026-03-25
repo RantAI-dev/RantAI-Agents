@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
-import { encryptCredential } from "@/lib/workflow/credentials"
+import { RuntimeStoreIntegrationCredentialsSchema } from "@/src/features/runtime/integrations/schema"
+import { storeRuntimeIntegrationCredentials } from "@/src/features/runtime/integrations/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 export async function POST(req: Request) {
   try {
@@ -9,52 +10,17 @@ export async function POST(req: Request) {
     if (!bearerToken) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     await verifyRuntimeToken(bearerToken)
 
-    const { employeeId, integrationId, credentials, expiresIn, metadata } = await req.json()
-    if (!employeeId || !integrationId) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    const parsed = RuntimeStoreIntegrationCredentialsSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Failed" }, { status: 500 })
     }
 
-    // Encrypt the credentials (may be empty for config-only updates)
-    const hasCredentials = credentials && Object.keys(credentials).length > 0
-    const encryptedData = hasCredentials
-      ? encryptCredential(credentials as Record<string, unknown>)
-      : undefined
+    const result = await storeRuntimeIntegrationCredentials(parsed.data)
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    const expiresAt = expiresIn
-      ? new Date(Date.now() + expiresIn * 1000)
-      : null
-
-    // Upsert the integration record
-    const integration = await prisma.employeeIntegration.upsert({
-      where: {
-        digitalEmployeeId_integrationId: {
-          digitalEmployeeId: employeeId,
-          integrationId,
-        },
-      },
-      create: {
-        digitalEmployeeId: employeeId,
-        integrationId,
-        status: hasCredentials ? "connected" : "disconnected",
-        ...(encryptedData && { encryptedData }),
-        ...(hasCredentials && { connectedAt: new Date() }),
-        expiresAt,
-        ...(metadata && { metadata }),
-      },
-      update: {
-        ...(hasCredentials && { status: "connected", encryptedData, connectedAt: new Date() }),
-        expiresAt,
-        lastError: null,
-        ...(metadata && { metadata }),
-      },
-    })
-
-    return NextResponse.json({
-      success: true,
-      integrationId: integration.integrationId,
-      status: integration.status,
-      connectedAt: integration.connectedAt,
-    })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Store credentials failed:", error)
     return NextResponse.json({ error: "Failed to store credentials" }, { status: 500 })

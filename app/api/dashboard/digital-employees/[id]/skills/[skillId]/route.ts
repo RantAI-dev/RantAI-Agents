@@ -1,13 +1,19 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import {
+  DashboardDigitalEmployeeSkillUpdateSchema,
+} from "@/src/features/digital-employees/interactions/schema"
+import {
+  deleteDigitalEmployeeSkill,
+  isServiceError,
+  updateDigitalEmployeeSkill,
+} from "@/src/features/digital-employees/interactions/service"
 
 interface RouteParams {
   params: Promise<{ id: string; skillId: string }>
 }
 
-// PUT - Enable/disable skill
 export async function PUT(req: Request, { params }: RouteParams) {
   try {
     const session = await auth()
@@ -17,34 +23,31 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
     const { id, skillId } = await params
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
-    })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    const parsed = DashboardDigitalEmployeeSkillUpdateSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Invalid request payload", details: parsed.error.flatten() },
+        { status: 400 }
+      )
     }
 
-    const body = await req.json()
-    const skill = await prisma.employeeInstalledSkill.update({
-      where: { id: skillId },
-      data: {
-        ...(body.enabled !== undefined && { enabled: body.enabled }),
-      },
+    const result = await updateDigitalEmployeeSkill({
+      id,
+      organizationId: orgContext?.organizationId ?? null,
+      skillId,
+      input: parsed.data,
     })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json(skill)
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to update skill:", error)
     return NextResponse.json({ error: "Failed to update skill" }, { status: 500 })
   }
 }
 
-// DELETE - Uninstall skill
 export async function DELETE(req: Request, { params }: RouteParams) {
   try {
     const session = await auth()
@@ -54,23 +57,16 @@ export async function DELETE(req: Request, { params }: RouteParams) {
 
     const { id, skillId } = await params
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const employee = await prisma.digitalEmployee.findFirst({
-      where: {
-        id,
-        ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-      },
+    const result = await deleteDigitalEmployeeSkill({
+      id,
+      organizationId: orgContext?.organizationId ?? null,
+      skillId,
     })
-
-    if (!employee) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    await prisma.employeeInstalledSkill.delete({
-      where: { id: skillId },
-    })
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to delete skill:", error)
     return NextResponse.json({ error: "Failed to delete skill" }, { status: 500 })

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
 import { verifyRuntimeToken } from "@/lib/digital-employee/runtime-auth"
+import { RuntimeApprovalSchema } from "@/src/features/runtime/approvals/schema"
+import { requestRuntimeApproval } from "@/src/features/runtime/approvals/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 // POST - VM requests an approval from human
 export async function POST(req: Request) {
@@ -11,37 +13,20 @@ export async function POST(req: Request) {
     }
 
     const { employeeId, runId } = await verifyRuntimeToken(token)
-
-    const body = await req.json()
-    const {
-      requestType, title, description, content,
-      options, workflowStepId, expiresInMs, timeoutAction,
-    } = body
-
-    if (!requestType || !title || !content || !options) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    const parsed = RuntimeApprovalSchema.safeParse(await req.json())
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Failed" }, { status: 500 })
     }
 
-    const approval = await prisma.employeeApproval.create({
-      data: {
-        digitalEmployeeId: employeeId,
-        employeeRunId: runId,
-        workflowStepId: workflowStepId || null,
-        requestType,
-        title,
-        description: description || null,
-        content,
-        options,
-        timeoutAction: timeoutAction || null,
-        expiresAt: expiresInMs ? new Date(Date.now() + expiresInMs) : null,
-      },
+    const approval = await requestRuntimeApproval({
+      employeeId,
+      runId,
+      input: parsed.data,
     })
 
-    // Pause the run
-    await prisma.employeeRun.update({
-      where: { id: runId },
-      data: { status: "PAUSED" },
-    })
+    if (isHttpServiceError(approval)) {
+      return NextResponse.json({ error: approval.error }, { status: approval.status })
+    }
 
     return NextResponse.json(approval, { status: 201 })
   } catch (error) {

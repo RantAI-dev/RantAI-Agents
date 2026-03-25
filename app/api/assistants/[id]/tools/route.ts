@@ -1,10 +1,18 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import {
+  AssistantIdParamsSchema,
+  AssistantToolIdsSchema,
+} from "@/src/features/assistants/bindings/schema"
+import {
+  isServiceError,
+  listAssistantTools,
+  setAssistantTools,
+} from "@/src/features/assistants/bindings/service"
 
 // GET /api/assistants/[id]/tools - Get assistant's enabled tools
 export async function GET(
-  req: Request,
+  _req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -13,31 +21,17 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const assistantTools = await prisma.assistantTool.findMany({
-      where: { assistantId: id },
-      include: {
-        tool: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            description: true,
-            category: true,
-            icon: true,
-            isBuiltIn: true,
-            enabled: true,
-          },
-        },
-      },
-    })
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
+    }
 
-    return NextResponse.json(
-      assistantTools.map((at) => ({
-        ...at.tool,
-        enabledForAssistant: at.enabled,
-      }))
-    )
+    const result = await listAssistantTools(parsedParams.data.id)
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Assistant Tools API] GET error:", error)
     return NextResponse.json(
@@ -58,58 +52,28 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-    const body = await req.json()
-    const { toolIds } = body as { toolIds: string[] }
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
+    }
 
-    if (!Array.isArray(toolIds)) {
+    const parsedBody = AssistantToolIdsSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
       return NextResponse.json(
         { error: "toolIds must be an array" },
         { status: 400 }
       )
     }
 
-    // Verify assistant exists
-    const assistant = await prisma.assistant.findUnique({ where: { id } })
-    if (!assistant) {
-      return NextResponse.json(
-        { error: "Assistant not found" },
-        { status: 404 }
-      )
+    const result = await setAssistantTools(
+      parsedParams.data.id,
+      parsedBody.data.toolIds
+    )
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    // Replace all tool bindings in a transaction
-    await prisma.$transaction([
-      prisma.assistantTool.deleteMany({ where: { assistantId: id } }),
-      ...(toolIds.length > 0
-        ? [
-            prisma.assistantTool.createMany({
-              data: toolIds.map((toolId) => ({
-                assistantId: id,
-                toolId,
-              })),
-            }),
-          ]
-        : []),
-    ])
-
-    // Return updated list
-    const updatedTools = await prisma.assistantTool.findMany({
-      where: { assistantId: id },
-      include: {
-        tool: {
-          select: {
-            id: true,
-            name: true,
-            displayName: true,
-            description: true,
-            category: true,
-          },
-        },
-      },
-    })
-
-    return NextResponse.json(updatedTools.map((at) => at.tool))
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Assistant Tools API] PUT error:", error)
     return NextResponse.json(

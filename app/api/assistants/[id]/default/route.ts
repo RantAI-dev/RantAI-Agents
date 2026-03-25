@@ -1,37 +1,28 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@/lib/prisma"
+import { AssistantIdParamsSchema } from "@/src/features/assistants/default/schema"
+import {
+  removeSystemDefaultAssistant,
+  setSystemDefaultAssistant,
+} from "@/src/features/assistants/default/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 interface RouteParams {
   params: Promise<{ id: string }>
 }
 
 // POST /api/assistants/[id]/default - Set as system default
-export async function POST(request: Request, { params }: RouteParams) {
+export async function POST(_request: Request, { params }: RouteParams) {
   try {
-    const { id } = await params
-
-    const assistant = await prisma.assistant.findUnique({
-      where: { id },
-    })
-
-    if (!assistant) {
-      return NextResponse.json(
-        { error: "Assistant not found" },
-        { status: 404 }
-      )
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
+    const { id } = parsedParams.data
 
-    // Remove system default from all other assistants
-    await prisma.assistant.updateMany({
-      where: { isSystemDefault: true },
-      data: { isSystemDefault: false },
-    })
-
-    // Set this assistant as system default
-    const updated = await prisma.assistant.update({
-      where: { id },
-      data: { isSystemDefault: true },
-    })
+    const updated = await setSystemDefaultAssistant(id)
+    if (isHttpServiceError(updated)) {
+      return NextResponse.json({ error: updated.error }, { status: updated.status })
+    }
 
     return NextResponse.json(updated)
   } catch (error) {
@@ -44,32 +35,18 @@ export async function POST(request: Request, { params }: RouteParams) {
 }
 
 // DELETE /api/assistants/[id]/default - Remove system default (makes no assistant the default)
-export async function DELETE(request: Request, { params }: RouteParams) {
+export async function DELETE(_request: Request, { params }: RouteParams) {
   try {
-    const { id } = await params
-
-    const assistant = await prisma.assistant.findUnique({
-      where: { id },
-    })
-
-    if (!assistant) {
-      return NextResponse.json(
-        { error: "Assistant not found" },
-        { status: 404 }
-      )
+    const parsedParams = AssistantIdParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
+    const { id } = parsedParams.data
 
-    if (!assistant.isSystemDefault) {
-      return NextResponse.json(
-        { error: "This assistant is not the system default" },
-        { status: 400 }
-      )
+    const updated = await removeSystemDefaultAssistant(id)
+    if (isHttpServiceError(updated)) {
+      return NextResponse.json({ error: updated.error }, { status: updated.status })
     }
-
-    const updated = await prisma.assistant.update({
-      where: { id },
-      data: { isSystemDefault: false },
-    })
 
     return NextResponse.json(updated)
   } catch (error) {

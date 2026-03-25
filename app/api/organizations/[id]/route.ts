@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-
-// Helper to check membership and role
-async function getMembership(userId: string, organizationId: string) {
-  return prisma.organizationMember.findUnique({
-    where: {
-      userId_organizationId: {
-        userId,
-        organizationId,
-      },
-    },
-  })
-}
+import {
+  OrganizationDetailParamsSchema,
+  UpdateOrganizationSchema,
+} from "@/src/features/organizations/detail/schema"
+import {
+  deleteOrganizationDetail,
+  getOrganizationDetail,
+  updateOrganizationDetail,
+} from "@/src/features/organizations/detail/service"
+import { isHttpServiceError } from "@/src/features/shared/http-service-error"
 
 // GET /api/organizations/[id] - Get organization details
 export async function GET(
@@ -25,54 +22,20 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-
-    // Verify membership
-    const membership = await getMembership(session.user.id, id)
-    if (!membership || !membership.acceptedAt) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 })
+    const parsedParams = OrganizationDetailParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid organization id" }, { status: 400 })
     }
 
-    const organization = await prisma.organization.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: {
-            memberships: true,
-            assistants: true,
-            documents: true,
-            embedKeys: true,
-          },
-        },
-      },
+    const organization = await getOrganizationDetail({
+      actorUserId: session.user.id,
+      organizationId: parsedParams.data.id,
     })
-
-    if (!organization) {
-      return NextResponse.json({ error: "Organization not found" }, { status: 404 })
+    if (isHttpServiceError(organization)) {
+      return NextResponse.json({ error: organization.error }, { status: organization.status })
     }
 
-    return NextResponse.json({
-      id: organization.id,
-      name: organization.name,
-      slug: organization.slug,
-      logoUrl: organization.logoUrl,
-      plan: organization.plan,
-      role: membership.role,
-      limits: {
-        maxMembers: organization.maxMembers,
-        maxAssistants: organization.maxAssistants,
-        maxDocuments: organization.maxDocuments,
-        maxApiKeys: organization.maxApiKeys,
-      },
-      counts: {
-        members: organization._count.memberships,
-        assistants: organization._count.assistants,
-        documents: organization._count.documents,
-        apiKeys: organization._count.embedKeys,
-      },
-      createdAt: organization.createdAt.toISOString(),
-      updatedAt: organization.updatedAt.toISOString(),
-    })
+    return NextResponse.json(organization)
   } catch (error) {
     console.error("[Organization API] GET error:", error)
     return NextResponse.json(
@@ -93,38 +56,29 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-
-    // Verify admin or owner membership
-    const membership = await getMembership(session.user.id, id)
-    if (!membership || !membership.acceptedAt) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 })
+    const parsedParams = OrganizationDetailParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid organization id" }, { status: 400 })
     }
 
-    if (!["owner", "admin"].includes(membership.role)) {
-      return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
+    const parsedBody = UpdateOrganizationSchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: "Invalid request payload", details: parsedBody.error.flatten() },
+        { status: 400 }
+      )
     }
 
-    const body = await req.json()
-    const { name, logoUrl } = body
-
-    const updateData: Record<string, unknown> = {}
-    if (name !== undefined) updateData.name = name.trim()
-    if (logoUrl !== undefined) updateData.logoUrl = logoUrl
-
-    const organization = await prisma.organization.update({
-      where: { id },
-      data: updateData,
+    const organization = await updateOrganizationDetail({
+      actorUserId: session.user.id,
+      organizationId: parsedParams.data.id,
+      input: parsedBody.data,
     })
+    if (isHttpServiceError(organization)) {
+      return NextResponse.json({ error: organization.error }, { status: organization.status })
+    }
 
-    return NextResponse.json({
-      id: organization.id,
-      name: organization.name,
-      slug: organization.slug,
-      logoUrl: organization.logoUrl,
-      plan: organization.plan,
-      updatedAt: organization.updatedAt.toISOString(),
-    })
+    return NextResponse.json(organization)
   } catch (error) {
     console.error("[Organization API] PATCH error:", error)
     return NextResponse.json(
@@ -145,27 +99,20 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id } = await params
-
-    // Verify owner membership
-    const membership = await getMembership(session.user.id, id)
-    if (!membership || !membership.acceptedAt) {
-      return NextResponse.json({ error: "Not a member" }, { status: 403 })
+    const parsedParams = OrganizationDetailParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Invalid organization id" }, { status: 400 })
     }
 
-    if (membership.role !== "owner") {
-      return NextResponse.json(
-        { error: "Only the owner can delete an organization" },
-        { status: 403 }
-      )
-    }
-
-    // Delete organization (cascades to members, assistants, etc.)
-    await prisma.organization.delete({
-      where: { id },
+    const result = await deleteOrganizationDetail({
+      actorUserId: session.user.id,
+      organizationId: parsedParams.data.id,
     })
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[Organization API] DELETE error:", error)
     return NextResponse.json(

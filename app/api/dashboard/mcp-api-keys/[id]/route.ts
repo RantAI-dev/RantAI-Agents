@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { getOrganizationContext, canManage } from "@/lib/organization"
+import { canManage, getOrganizationContext } from "@/lib/organization"
+import {
+  UpdateDashboardMcpApiKeySchema,
+} from "@/src/features/mcp/api-keys/schema"
+import {
+  deleteDashboardMcpApiKeyRecord,
+  getDashboardMcpApiKey,
+  updateDashboardMcpApiKeyRecord,
+} from "@/src/features/mcp/api-keys/service"
 
-// GET /api/dashboard/mcp-api-keys/[id]
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -16,7 +22,6 @@ export async function GET(
 
     const { id } = await params
     const orgContext = await getOrganizationContext(req, session.user.id)
-
     if (orgContext && !canManage(orgContext.membership.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -24,35 +29,19 @@ export async function GET(
       )
     }
 
-    const key = await prisma.mcpApiKey.findUnique({ where: { id } })
-
-    if (!key) {
-      return NextResponse.json(
-        { error: "MCP API key not found" },
-        { status: 404 }
-      )
+    const result = await getDashboardMcpApiKey(
+      {
+        organizationId: orgContext?.organizationId ?? null,
+        role: orgContext?.membership.role ?? null,
+        userId: session.user.id,
+      },
+      id
+    )
+    if ("status" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    if (
-      orgContext &&
-      key.organizationId !== orgContext.organizationId
-    ) {
-      return NextResponse.json(
-        { error: "MCP API key not found" },
-        { status: 404 }
-      )
-    }
-
-    return NextResponse.json({
-      id: key.id,
-      name: key.name,
-      key: key.key,
-      exposedTools: key.exposedTools,
-      requestCount: key.requestCount,
-      lastUsedAt: key.lastUsedAt?.toISOString() ?? null,
-      enabled: key.enabled,
-      createdAt: key.createdAt.toISOString(),
-    })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[MCP API Keys] GET [id] error:", error)
     return NextResponse.json(
@@ -62,7 +51,6 @@ export async function GET(
   }
 }
 
-// PUT /api/dashboard/mcp-api-keys/[id]
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -75,7 +63,6 @@ export async function PUT(
 
     const { id } = await params
     const orgContext = await getOrganizationContext(req, session.user.id)
-
     if (orgContext && !canManage(orgContext.membership.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -83,47 +70,28 @@ export async function PUT(
       )
     }
 
-    const existing = await prisma.mcpApiKey.findUnique({ where: { id } })
-
-    if (!existing) {
+    const parsed = UpdateDashboardMcpApiKeySchema.safeParse(await req.json())
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "MCP API key not found" },
-        { status: 404 }
+        { error: "Invalid request payload", details: parsed.error.flatten() },
+        { status: 400 }
       )
     }
 
-    if (
-      orgContext &&
-      existing.organizationId !== orgContext.organizationId
-    ) {
-      return NextResponse.json(
-        { error: "MCP API key not found" },
-        { status: 404 }
-      )
-    }
-
-    const body = await req.json()
-    const { name, exposedTools, enabled } = body
-
-    const updated = await prisma.mcpApiKey.update({
-      where: { id },
-      data: {
-        ...(name !== undefined && { name }),
-        ...(exposedTools !== undefined && { exposedTools }),
-        ...(enabled !== undefined && { enabled }),
+    const result = await updateDashboardMcpApiKeyRecord({
+      context: {
+        organizationId: orgContext?.organizationId ?? null,
+        role: orgContext?.membership.role ?? null,
+        userId: session.user.id,
       },
+      id,
+      input: parsed.data,
     })
+    if ("status" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
 
-    return NextResponse.json({
-      id: updated.id,
-      name: updated.name,
-      key: updated.key,
-      exposedTools: updated.exposedTools,
-      requestCount: updated.requestCount,
-      lastUsedAt: updated.lastUsedAt?.toISOString() ?? null,
-      enabled: updated.enabled,
-      createdAt: updated.createdAt.toISOString(),
-    })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[MCP API Keys] PUT error:", error)
     return NextResponse.json(
@@ -133,7 +101,6 @@ export async function PUT(
   }
 }
 
-// DELETE /api/dashboard/mcp-api-keys/[id]
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -146,7 +113,6 @@ export async function DELETE(
 
     const { id } = await params
     const orgContext = await getOrganizationContext(req, session.user.id)
-
     if (orgContext && !canManage(orgContext.membership.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -154,27 +120,19 @@ export async function DELETE(
       )
     }
 
-    const existing = await prisma.mcpApiKey.findUnique({ where: { id } })
-
-    if (!existing) {
-      return NextResponse.json(
-        { error: "MCP API key not found" },
-        { status: 404 }
-      )
+    const result = await deleteDashboardMcpApiKeyRecord(
+      {
+        organizationId: orgContext?.organizationId ?? null,
+        role: orgContext?.membership.role ?? null,
+        userId: session.user.id,
+      },
+      id
+    )
+    if ("status" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    if (
-      orgContext &&
-      existing.organizationId !== orgContext.organizationId
-    ) {
-      return NextResponse.json(
-        { error: "MCP API key not found" },
-        { status: 404 }
-      )
-    }
-
-    await prisma.mcpApiKey.delete({ where: { id } })
-    return NextResponse.json({ success: true })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("[MCP API Keys] DELETE error:", error)
     return NextResponse.json(

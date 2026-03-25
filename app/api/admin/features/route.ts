@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { UpdateAdminFeatureSchema } from "@/src/features/admin/features/schema"
+import {
+  getAdminFeatures,
+  updateAdminFeature,
+} from "@/src/features/admin/features/service"
 
 // GET all feature configurations
 export async function GET() {
@@ -15,29 +19,8 @@ export async function GET() {
   }
 
   try {
-    const features = await prisma.featureConfig.findMany({
-      orderBy: { feature: "asc" },
-    })
-
-    // Ensure all features exist in the response
-    const allFeatures = ["AGENT"]
-    const result = allFeatures.map((feature) => {
-      const existing = features.find((f) => f.feature === feature)
-      if (existing) {
-        return existing
-      }
-      // Return default config for missing features (enabled by default)
-      return {
-        id: null,
-        feature,
-        enabled: true,
-        config: {},
-        createdAt: null,
-        updatedAt: null,
-      }
-    })
-
-    return NextResponse.json(result)
+    const features = await getAdminFeatures()
+    return NextResponse.json(features)
   } catch (error) {
     console.error("Error fetching features:", error)
     return NextResponse.json(
@@ -60,29 +43,15 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const body = await request.json()
-    const { feature, enabled, config } = body
-
-    if (!feature) {
+    const parsed = UpdateAdminFeatureSchema.safeParse(await request.json())
+    if (!parsed.success) {
       return NextResponse.json(
         { error: "Feature is required" },
         { status: 400 }
       )
     }
 
-    const updated = await prisma.featureConfig.upsert({
-      where: { feature },
-      create: {
-        feature,
-        enabled: enabled ?? true,
-        config: config ?? {},
-      },
-      update: {
-        enabled: enabled ?? undefined,
-        config: config ?? undefined,
-      },
-    })
-
+    const updated = await updateAdminFeature(parsed.data)
     return NextResponse.json(updated)
   } catch (error) {
     console.error("Error updating feature:", error)

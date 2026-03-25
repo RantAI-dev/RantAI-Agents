@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { getOrganizationContext } from "@/lib/organization"
+import { listPendingDigitalEmployeeApprovals } from "@/src/features/digital-employees/employees/service"
 
 // GET /api/dashboard/digital-employees/pending-approvals
 export async function GET(req: Request) {
@@ -12,38 +12,10 @@ export async function GET(req: Request) {
     }
 
     const orgContext = await getOrganizationContext(req, session.user.id)
-
-    const approvals = await prisma.employeeApproval.findMany({
-      where: {
-        status: "PENDING",
-        digitalEmployee: {
-          ...(orgContext ? { organizationId: orgContext.organizationId } : {}),
-        },
-      },
-      select: {
-        id: true,
-        digitalEmployeeId: true,
-        digitalEmployee: { select: { name: true } },
-      },
+    const result = await listPendingDigitalEmployeeApprovals({
+      organizationId: orgContext?.organizationId ?? null,
     })
-
-    // Group by employee
-    const byEmployee: Record<string, { employeeId: string; name: string; count: number }> = {}
-    for (const a of approvals) {
-      if (!byEmployee[a.digitalEmployeeId]) {
-        byEmployee[a.digitalEmployeeId] = {
-          employeeId: a.digitalEmployeeId,
-          name: a.digitalEmployee.name,
-          count: 0,
-        }
-      }
-      byEmployee[a.digitalEmployeeId].count++
-    }
-
-    return NextResponse.json({
-      total: approvals.length,
-      byEmployee: Object.values(byEmployee),
-    })
+    return NextResponse.json(result)
   } catch (error) {
     console.error("Failed to fetch pending approvals:", error)
     return NextResponse.json({ error: "Failed to fetch" }, { status: 500 })
