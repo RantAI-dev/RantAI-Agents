@@ -11,11 +11,12 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import { landing } from "./landing-styles"
 
 const NAV_LINKS = [
-  { href: "#features", label: "Features" },
-  { href: "#use-cases", label: "Use cases" },
+  { href: "#features", label: "Platform" },
   { href: "#pricing", label: "Pricing" },
+  { href: "#docs", label: "Docs" },
   { href: "#faq", label: "FAQ" },
 ] as const
 
@@ -24,7 +25,7 @@ export function LandingMobileNav() {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button variant="ghost" size="icon" className="md:hidden text-zinc-400 hover:text-zinc-100" aria-label="Open menu">
+        <Button variant="ghost" size="icon" className="md:hidden text-zinc-400 hover:text-zinc-100 h-8 w-8" aria-label="Open menu">
           <Menu className="h-5 w-5" />
         </Button>
       </SheetTrigger>
@@ -49,14 +50,14 @@ export function LandingMobileNav() {
               onClick={() => setOpen(false)}
               className="rounded-lg px-4 py-3 text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors text-center"
             >
-              Open dashboard
+              Dashboard
             </Link>
             <Link
               href="/login"
               onClick={() => setOpen(false)}
-              className="rounded-lg px-4 py-3 bg-white text-zinc-950 font-medium hover:bg-zinc-200 transition-colors text-center"
+              className={`${landing.btnHighlightPill} px-4 py-3 font-medium text-center block`}
             >
-              Sign in
+              Get Started
             </Link>
           </div>
         </nav>
