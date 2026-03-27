@@ -170,6 +170,12 @@ Or use the all-in-one setup command:
 bun setup
 ```
 
+Font behavior (online + airgapped):
+
+- Poppins is bundled in-repo at `assets/fonts/poppins`.
+- `bun setup` and `bun run build` run `prepare:fonts` to sync bundled fonts into `app/fonts/poppins`.
+- This avoids runtime/download dependency on Google Fonts during build.
+
 `bun setup:db` now includes:
 
 - Prisma migration apply (`prisma migrate deploy`)
