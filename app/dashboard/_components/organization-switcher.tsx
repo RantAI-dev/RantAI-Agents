@@ -117,7 +117,7 @@ export function OrganizationSwitcher({ className }: OrganizationSwitcherProps) {
             <DialogHeader>
               <DialogTitle className="text-lg font-semibold">Create Organization</DialogTitle>
               <DialogDescription>
-                Create a new organization to manage your assistants, knowledge base, and team members.
+                Create a new organization to manage your assistants, files, and team members.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -243,7 +243,7 @@ export function OrganizationSwitcher({ className }: OrganizationSwitcherProps) {
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">Create Organization</DialogTitle>
             <DialogDescription>
-              Create a new organization to manage your assistants, knowledge base, and team members.
+              Create a new organization to manage your assistants, files, and team members.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">

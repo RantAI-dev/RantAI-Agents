@@ -10,6 +10,7 @@ import { OrganizationProvider } from "@/hooks/use-organization"
 import { brand } from "@/lib/branding"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { GlobalApprovalBanner } from "./_components/global-approval-banner"
+import { GlobalSearch } from "./_components/global-search"
 
 const DASHBOARD_TITLES: Record<string, string> = {
   "/dashboard": "Chat",
@@ -17,7 +18,7 @@ const DASHBOARD_TITLES: Record<string, string> = {
   "/dashboard/agent-builder": "Agent Builder",
   "/dashboard/workflows": "Workflows",
   "/dashboard/agent": "Live Chat",
-  "/dashboard/knowledge": "Knowledge",
+  "/dashboard/files": "Files",
   "/dashboard/marketplace": "Marketplace",
   "/dashboard/organization": "Organization",
   "/dashboard/settings": "Settings",
@@ -41,12 +42,25 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [searchOpen, setSearchOpen] = useState(false)
   const pathname = usePathname()
 
   useEffect(() => {
     const title = getPageTitle(pathname ?? "")
     document.title = title ? `${title} | ${brand.productName}` : brand.productName
   }, [pathname])
+
+  // Global ⌘K shortcut
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setSearchOpen((prev) => !prev)
+      }
+    }
+    document.addEventListener("keydown", down)
+    return () => document.removeEventListener("keydown", down)
+  }, [])
 
   const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), [])
 
@@ -58,8 +72,9 @@ export default function DashboardLayout({
           <div className="flex h-screen w-full overflow-hidden">
           {/* Single Unified Sidebar */}
           <Suspense fallback={null}>
-            <AppSidebar isOpen={sidebarOpen} onToggle={toggleSidebar} />
+            <AppSidebar isOpen={sidebarOpen} onToggle={toggleSidebar} onSearchOpen={() => setSearchOpen(true)} />
           </Suspense>
+          <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
 
           {/* Main Content */}
           <main className="relative flex-1 flex flex-col h-full overflow-hidden bg-background">

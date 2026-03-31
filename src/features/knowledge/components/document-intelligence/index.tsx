@@ -149,7 +149,7 @@ const DocumentIntelligence = memo<DocumentIntelligenceProps>(({ documentId, init
       return Promise.resolve({ data: null, error: "Failed to load data" })
     }
 
-    return fetch(`/api/dashboard/knowledge/${documentId}/intelligence`)
+    return fetch(`/api/dashboard/files/${documentId}/intelligence`)
       .then(async (response) => {
         if (!response.ok) {
           return { data: null, error: "Failed to fetch document intelligence" }

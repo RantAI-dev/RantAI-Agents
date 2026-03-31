@@ -69,8 +69,8 @@ export function CategoryDialog({
 
     try {
       const url = editingCategory
-        ? `/api/dashboard/knowledge/categories/${editingCategory.id}`
-        : "/api/dashboard/knowledge/categories"
+        ? `/api/dashboard/files/categories/${editingCategory.id}`
+        : "/api/dashboard/files/categories"
 
       const response = await fetch(url, {
         method: editingCategory ? "PUT" : "POST",

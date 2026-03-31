@@ -10,10 +10,8 @@ import {
   Blocks,
   GitBranch,
   Headphones,
-  BookOpen,
   Store,
   Settings,
-  Bell,
   Search,
   Plus,
   Trash2,
@@ -26,15 +24,13 @@ import {
   Wrench,
   User,
   LogOut,
-  PanelLeft,
-  PanelLeftClose,
   Bot,
   Users,
   Network,
   type IconComponent,
 } from "@/lib/icons"
+import { ChevronsLeft, ChevronsRight, FolderOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
@@ -69,6 +65,7 @@ import { useFeaturesContext } from "@/components/providers/features-provider"
 import { useProfileStore } from "@/hooks/use-profile"
 import { SETTINGS_NAV_ITEMS } from "../settings/settings-nav-items"
 import { MARKETPLACE_NAV_ITEMS } from "../marketplace/marketplace-nav-items"
+import { ThemeToggle } from "./theme-toggle"
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -82,6 +79,7 @@ interface KnowledgeBase {
 interface AppSidebarProps {
   isOpen: boolean
   onToggle: () => void
+  onSearchOpen?: () => void
 }
 
 type FeatureKey = "AGENT" | null
@@ -102,7 +100,7 @@ const allNavItems: NavItem[] = [
   { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: null },
 
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
-  { title: "Knowledge", url: "/dashboard/knowledge", icon: BookOpen, feature: null },
+  { title: "Files", url: "/dashboard/files", icon: FolderOpen, feature: null },
   { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },
 ]
 
@@ -115,7 +113,7 @@ const sections = {
   digitalEmployees: { title: "Digital Employees", subtitle: "Autonomous Workers", icon: Users, path: "/dashboard/digital-employees" },
   groups: { title: "Teams", subtitle: "Employee Groups", icon: Network, path: "/dashboard/groups" },
   agent: { title: "Live Chat", subtitle: "Customer Support", icon: Headphones, path: "/dashboard/agent" },
-  knowledge: { title: "Knowledge", subtitle: "RAG Documents", icon: BookOpen, path: "/dashboard/knowledge" },
+  knowledge: { title: "Files", subtitle: "Documents & Knowledge Bases", icon: FolderOpen, path: "/dashboard/files" },
   marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
   settings: { title: "Settings", subtitle: "Preferences", icon: Settings, path: "/dashboard/settings" },
   account: { title: "Account", subtitle: "Profile", icon: User, path: "/dashboard/account" },
@@ -342,12 +340,11 @@ function ChatSectionContent({
 
 // ─── Main Sidebar Component ──────────────────────────────────────────
 
-export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
+export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [searchQuery, setSearchQuery] = useState("")
   const { isAgentEnabled } = useFeaturesContext()
 
   const { avatarUrl, fetchProfile } = useProfileStore()
@@ -366,7 +363,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
 
   const fetchKnowledgeBases = useCallback(async () => {
     try {
-      const response = await fetch("/api/dashboard/knowledge/groups")
+      const response = await fetch("/api/dashboard/files/groups")
       if (response.ok) {
         const data = await response.json()
         setKnowledgeBases(data.groups)
@@ -391,9 +388,9 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   const handleSelectKB = (kbId: string | null) => {
     setSelectedKBId(kbId)
     if (kbId) {
-      router.push(`/dashboard/knowledge?kb=${kbId}`)
+      router.push(`/dashboard/files?kb=${kbId}`)
     } else {
-      router.push("/dashboard/knowledge")
+      router.push("/dashboard/files")
     }
   }
 
@@ -439,7 +436,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     if (pathname.startsWith("/dashboard/digital-employees")) return sections.digitalEmployees
     if (pathname.startsWith("/dashboard/groups")) return sections.digitalEmployees
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
-    if (pathname.startsWith("/dashboard/knowledge")) return sections.knowledge
+    if (pathname.startsWith("/dashboard/files")) return sections.knowledge
     if (pathname.startsWith("/dashboard/marketplace")) return sections.marketplace
     if (pathname.startsWith("/dashboard/settings")) return sections.settings
     if (pathname.startsWith("/dashboard/account")) return sections.account
@@ -475,27 +472,23 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     return (
       <TooltipProvider delayDuration={0}>
         <div className="flex flex-col h-full w-[56px] bg-sidebar border-r border-sidebar-border transition-all duration-200">
-          {/* Logo */}
+          {/* Logo — click to expand sidebar */}
           <div className="flex items-center justify-center py-3">
-            <Link href="/dashboard/chat">
-              <img
-                src={brand.logoMain}
-                alt={brand.productName}
-                className="h-8 w-8 rounded-lg"
-              />
-            </Link>
-          </div>
-
-          {/* Toggle button */}
-          <div className="flex items-center justify-center pb-2">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   onClick={onToggle}
-                  className="flex items-center justify-center w-8 h-8 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+                  className="group/logo relative flex items-center justify-center w-8 h-8 rounded-lg"
                   aria-label="Expand sidebar"
                 >
-                  <PanelLeft className="h-4 w-4" />
+                  <img
+                    src={brand.logoMain}
+                    alt={brand.productName}
+                    className="h-8 w-8 rounded-lg transition-opacity group-hover/logo:opacity-0"
+                  />
+                  <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sidebar-hover opacity-0 transition-opacity group-hover/logo:opacity-100">
+                    <ChevronsRight className="h-4 w-4 text-sidebar-foreground" />
+                  </span>
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right">Expand sidebar</TooltipContent>
@@ -506,7 +499,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
           <div className="flex items-center justify-center pb-1">
             <Tooltip>
               <TooltipTrigger asChild>
-                <button className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all">
+                <button onClick={onSearchOpen} className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all">
                   <Search className="h-5 w-5" />
                 </button>
               </TooltipTrigger>
@@ -539,8 +532,9 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
             })}
           </nav>
 
-          {/* Bottom: Settings + Notifications */}
+          {/* Bottom: Theme + Settings */}
           <div className="flex flex-col items-center gap-1 py-2 border-t border-sidebar-border">
+            <ThemeToggle />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
@@ -556,14 +550,6 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                 </Link>
               </TooltipTrigger>
               <TooltipContent side="right">Settings</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all">
-                  <Bell className="h-5 w-5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Notifications</TooltipContent>
             </Tooltip>
           </div>
 
@@ -611,46 +597,44 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
   // ─── Expanded Sidebar ──────────────────────────────────────────────
 
   return (
-    <div className="flex flex-col h-full w-[260px] bg-sidebar border-r border-sidebar-border transition-all duration-200">
-      {/* Header: Logo + toggle */}
-      <div className="p-3 border-b border-sidebar-border">
-        <div className="flex items-center justify-between">
-          <Link href="/dashboard/chat" className="flex items-center gap-2">
-            <img
-              src={brand.logoMain}
-              alt={brand.productName}
-              className="h-8 w-8 rounded-lg"
-            />
-            <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
-          </Link>
+    <TooltipProvider delayDuration={0}>
+    <div className="relative flex flex-col h-full w-[260px] bg-sidebar border-r border-sidebar-border transition-all duration-200">
+      {/* Collapse button — on the sidebar border edge */}
+      <Tooltip>
+        <TooltipTrigger asChild>
           <button
             onClick={onToggle}
-            className="flex items-center justify-center w-8 h-8 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+            className="absolute -right-3 top-4 z-50 flex items-center justify-center w-6 h-6 rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover shadow-sm transition-all"
             aria-label="Collapse sidebar"
           >
-            <PanelLeftClose className="h-4 w-4" />
+            <ChevronsLeft className="h-3.5 w-3.5" />
           </button>
-        </div>
-      </div>
+        </TooltipTrigger>
+        <TooltipContent side="right">Collapse sidebar</TooltipContent>
+      </Tooltip>
 
-      {/* Search */}
-      <div className="p-3">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4" />
-          <Input
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 h-9 bg-sidebar-hover border-sidebar-border text-sidebar-foreground placeholder:text-sidebar-muted"
+      {/* Header: Logo + title */}
+      <div className="p-3 border-b border-sidebar-border">
+        <Link href="/dashboard/chat" className="flex items-center gap-2">
+          <img
+            src={brand.logoMain}
+            alt={brand.productName}
+            className="h-8 w-8 rounded-lg"
           />
-          <kbd className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-sidebar-border bg-sidebar px-1.5 font-mono text-[10px] font-medium text-sidebar-muted">
-            <span className="text-xs">⌘</span>K
-          </kbd>
-        </div>
+          <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
+        </Link>
       </div>
 
       {/* Primary Navigation */}
       <nav className="px-2 space-y-0.5">
+        {/* Search */}
+        <button
+          onClick={onSearchOpen}
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all w-full text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+        >
+          <Search className="h-5 w-5" />
+          <span>Search</span>
+        </button>
         {mainNavItems.map((item) => {
           const active = isActive(item.url)
           return (
@@ -721,7 +705,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
               <div
                 className={cn(
                   "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer",
-                  selectedKBId === null && pathname === "/dashboard/knowledge"
+                  selectedKBId === null && pathname === "/dashboard/files"
                     ? "bg-sidebar-accent text-sidebar-foreground"
                     : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
                 )}
@@ -731,7 +715,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                   className={cn(
                     "absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-sm bg-sidebar-foreground",
                     "transition-all duration-150 ease-in-out",
-                    selectedKBId === null && pathname === "/dashboard/knowledge"
+                    selectedKBId === null && pathname === "/dashboard/files"
                       ? "h-8 opacity-100"
                       : "h-2 opacity-0 group-hover:h-5 group-hover:opacity-100"
                   )}
@@ -779,7 +763,7 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
               })}
 
               <Link
-                href="/dashboard/knowledge?action=new-kb"
+                href="/dashboard/files?action=new-kb"
                 className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
               >
                 <Plus className="h-4 w-4" />
@@ -966,8 +950,12 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
         </div>
       </div>
 
-      {/* Bottom: Settings + Notifications */}
+      {/* Bottom: Theme + Settings */}
       <div className="px-2 py-2 border-t border-sidebar-border space-y-0.5">
+        <div className="flex items-center justify-between px-3 py-2">
+          <span className="text-sm text-sidebar-foreground/70">Theme</span>
+          <ThemeToggle />
+        </div>
         <Link
           href="/dashboard/settings"
           className={cn(
@@ -980,12 +968,6 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
           <Settings className="h-5 w-5" />
           <span>Settings</span>
         </Link>
-        <button
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
-        >
-          <Bell className="h-5 w-5" />
-          <span>Notifications</span>
-        </button>
       </div>
 
       {/* User section */}
@@ -1038,5 +1020,6 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
         onDelete={handleDeleteAssistant}
       />
     </div>
+    </TooltipProvider>
   )
 }

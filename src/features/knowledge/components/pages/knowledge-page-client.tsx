@@ -134,8 +134,8 @@ export default function KnowledgePageClient({
     try {
       setLoading(true)
       const url = groupId
-        ? `/api/dashboard/knowledge?groupId=${groupId}`
-        : "/api/dashboard/knowledge"
+        ? `/api/dashboard/files?groupId=${groupId}`
+        : "/api/dashboard/files"
       const response = await fetch(url)
       if (response.ok) {
         const data = await response.json()
@@ -150,7 +150,7 @@ export default function KnowledgePageClient({
 
   const fetchKnowledgeBases = useCallback(async () => {
     try {
-      const response = await fetch("/api/dashboard/knowledge/groups")
+      const response = await fetch("/api/dashboard/files/groups")
       if (response.ok) {
         const data = await response.json()
         setKnowledgeBases(data.groups)
@@ -162,7 +162,7 @@ export default function KnowledgePageClient({
 
   const fetchCategories = useCallback(async () => {
     try {
-      const response = await fetch("/api/dashboard/knowledge/categories")
+      const response = await fetch("/api/dashboard/files/categories")
       if (response.ok) {
         const data = await response.json()
         setCategories(data.categories)
@@ -177,7 +177,7 @@ export default function KnowledgePageClient({
     if (initialAction === "new-kb") {
       handleCreateKB()
       // Clear the action from URL
-      router.replace("/dashboard/knowledge")
+      router.replace("/dashboard/files")
     }
   }, [initialAction, router])
 
@@ -191,7 +191,7 @@ export default function KnowledgePageClient({
 
   const handleDelete = async (id: string) => {
     try {
-      const response = await fetch(`/api/dashboard/knowledge/${id}`, {
+      const response = await fetch(`/api/dashboard/files/${id}`, {
         method: "DELETE",
       })
       if (response.ok) {
@@ -205,7 +205,7 @@ export default function KnowledgePageClient({
   }
 
   const handleView = (id: string) => {
-    router.push(`/dashboard/knowledge/${id}`)
+    router.push(`/dashboard/files/${id}`)
   }
 
   const handleEdit = (id: string) => {
@@ -281,11 +281,11 @@ export default function KnowledgePageClient({
     if (!selectedKB) return
 
     try {
-      const response = await fetch(`/api/dashboard/knowledge/groups/${selectedKB.id}`, {
+      const response = await fetch(`/api/dashboard/files/groups/${selectedKB.id}`, {
         method: "DELETE",
       })
       if (response.ok) {
-        router.push("/dashboard/knowledge")
+        router.push("/dashboard/files")
         fetchKnowledgeBases()
         window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
       }
@@ -302,8 +302,8 @@ export default function KnowledgePageClient({
     setSavingKB(true)
     try {
       const url = editingKB
-        ? `/api/dashboard/knowledge/groups/${editingKB.id}`
-        : "/api/dashboard/knowledge/groups"
+        ? `/api/dashboard/files/groups/${editingKB.id}`
+        : "/api/dashboard/files/groups"
 
       const response = await fetch(url, {
         method: editingKB ? "PUT" : "POST",

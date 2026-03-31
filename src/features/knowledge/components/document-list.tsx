@@ -110,7 +110,7 @@ export function DocumentList({
         <p className="text-sm text-muted-foreground max-w-sm mb-6">
           {onClearFilters
             ? "Try clearing filters or add a document to get started."
-            : "Add documents to your knowledge base to enhance AI responses."}
+            : "Add documents to get started."}
         </p>
         <div className="flex flex-wrap items-center justify-center gap-2" role="group" aria-label="Empty state actions">
           {onAddDocument && (

@@ -37,7 +37,7 @@ const deprecatedImportPrefixes = [
   "@/app/dashboard/digital-employees/[id]/_components",
   "@/app/dashboard/digital-employees/new/_components",
   "@/app/dashboard/workflows/_components",
-  "@/app/dashboard/knowledge/_components",
+  "@/app/dashboard/files/_components",
   "@/app/dashboard/marketplace/_components",
   "@/app/dashboard/settings/mcp/_components",
   "@/app/dashboard/settings/tools/_components",
@@ -56,7 +56,7 @@ const migratedShimDirs = [
   "app/dashboard/digital-employees/[id]/_components/",
   "app/dashboard/digital-employees/new/_components/",
   "app/dashboard/workflows/_components/",
-  "app/dashboard/knowledge/_components/",
+  "app/dashboard/files/_components/",
   "app/dashboard/marketplace/_components/",
   "app/dashboard/settings/mcp/_components/",
   "app/dashboard/settings/tools/_components/",
@@ -160,7 +160,7 @@ const dataEffectScopePolicies: DataEffectScopePolicy[] = [
   {
     name: "knowledge",
     mode: "strict",
-    prefixes: ["app/dashboard/knowledge/", "src/features/knowledge/components/", "src/features/knowledge/components/pages/"],
+    prefixes: ["app/dashboard/files/", "src/features/knowledge/components/", "src/features/knowledge/components/pages/"],
     rationale: "knowledge pages/dialogs now follow server-fed loading patterns",
   },
   {

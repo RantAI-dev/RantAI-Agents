@@ -94,7 +94,7 @@ export function GroupManager({
     if (!deleteTarget) return
 
     try {
-      const response = await fetch(`/api/dashboard/knowledge/groups/${deleteTarget.id}`, {
+      const response = await fetch(`/api/dashboard/files/groups/${deleteTarget.id}`, {
         method: "DELETE",
       })
       if (response.ok) {
@@ -116,8 +116,8 @@ export function GroupManager({
     setSaving(true)
     try {
       const url = editingGroup
-        ? `/api/dashboard/knowledge/groups/${editingGroup.id}`
-        : "/api/dashboard/knowledge/groups"
+        ? `/api/dashboard/files/groups/${editingGroup.id}`
+        : "/api/dashboard/files/groups"
 
       const response = await fetch(url, {
         method: editingGroup ? "PUT" : "POST",

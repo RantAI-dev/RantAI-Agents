@@ -320,8 +320,8 @@ export function UploadDialog({
       if (selectedKBIds.length > 0) formData.append("groupIds", JSON.stringify(selectedKBIds))
 
       const url = enableEnhanced
-        ? "/api/dashboard/knowledge?enhanced=true"
-        : "/api/dashboard/knowledge"
+        ? "/api/dashboard/files?enhanced=true"
+        : "/api/dashboard/files"
 
       const response = await fetch(url, {
         method: "POST",
@@ -354,7 +354,7 @@ export function UploadDialog({
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">Upload Document</DialogTitle>
           <DialogDescription>
-            Upload a file to add to the knowledge base.
+            Upload a file to your library.
           </DialogDescription>
         </DialogHeader>
 

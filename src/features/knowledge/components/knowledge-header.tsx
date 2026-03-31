@@ -51,10 +51,10 @@ export function KnowledgeHeader({
   onEditKB,
   onDeleteKB,
 }: KnowledgeHeaderProps) {
-  const title = selectedKB ? selectedKB.name : "Knowledge"
+  const title = selectedKB ? selectedKB.name : "Files"
   const subtitle = selectedKB
     ? `${documentCount} document${documentCount !== 1 ? "s" : ""} in this knowledge base`
-    : "Manage your RAG documents and knowledge bases"
+    : "Manage your files and knowledge bases"
 
   return (
     <div className="px-6 pt-6 pb-4 flex items-start justify-between gap-4">

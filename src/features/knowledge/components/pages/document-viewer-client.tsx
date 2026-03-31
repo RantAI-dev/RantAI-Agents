@@ -152,11 +152,11 @@ export default function DocumentViewerClient({
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => router.push("/dashboard/knowledge")}
+            onClick={() => router.push("/dashboard/files")}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <span className="text-sm text-muted-foreground">Back to Knowledge</span>
+          <span className="text-sm text-muted-foreground">Back to Files</span>
         </div>
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center text-muted-foreground">
@@ -182,10 +182,10 @@ export default function DocumentViewerClient({
               variant="ghost"
               size="sm"
               className="h-8 gap-2 -ml-2 text-muted-foreground hover:text-foreground"
-              onClick={() => router.push("/dashboard/knowledge")}
+              onClick={() => router.push("/dashboard/files")}
             >
               <ArrowLeft className="h-4 w-4" />
-              Knowledge
+              Files
             </Button>
 
             <div className="flex items-center gap-1">

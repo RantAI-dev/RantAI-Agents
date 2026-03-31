@@ -18,6 +18,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { MoreVertical, Trash2, Eye, Pencil } from "@/lib/icons"
+import { BrainCircuit } from "lucide-react"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip"
 import { useState } from "react"
 import { getFileTypeIcon, formatFileSize } from "./file-type-utils"
 
@@ -76,6 +83,22 @@ export function DocumentCard({ document, onDelete, onView, onEdit }: DocumentCar
         className="group relative cursor-pointer rounded-lg border bg-card overflow-hidden transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/30 hover:-translate-y-0.5"
         onClick={() => onView(document.id)}
       >
+        {/* Embedded indicator — top left */}
+        {document.chunkCount > 0 && (
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="absolute top-2 left-2 z-10 flex items-center justify-center w-6 h-6 rounded-full bg-violet-500/15 text-violet-500 dark:bg-violet-400/15 dark:text-violet-400">
+                  <BrainCircuit className="h-3.5 w-3.5" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                Embedded &middot; {document.chunkCount} chunks
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+
         {/* Actions dropdown - top right, appears on hover */}
         <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
           <DropdownMenu>

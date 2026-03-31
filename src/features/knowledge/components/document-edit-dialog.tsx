@@ -210,7 +210,7 @@ const DocumentEditDialogLoadedForm = memo<{
       setError("")
 
       try {
-        const response = await fetch(`/api/dashboard/knowledge/${document.id}`, {
+        const response = await fetch(`/api/dashboard/files/${document.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -487,7 +487,7 @@ export function DocumentEditDialog({
       return Promise.resolve({ data: null, error: "No document selected" })
     }
 
-    return fetch(`/api/dashboard/knowledge/${documentId}`)
+    return fetch(`/api/dashboard/files/${documentId}`)
       .then(async (response) => {
         if (!response.ok) {
           const data = await response.json().catch(() => null)

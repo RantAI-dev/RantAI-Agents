@@ -306,7 +306,7 @@ async function seedKnowledgeBase() {
 
   if (!fs.existsSync(knowledgeBasePath)) {
     console.log(`Knowledge base path not found: ${knowledgeBasePath}`)
-    console.log("You can add documents later via the dashboard at /dashboard/knowledge")
+    console.log("You can add documents later via the dashboard at /dashboard/files")
     return defaultKB.id
   }
 

@@ -3,9 +3,9 @@
 import {
   MessageSquare,
   Headphones,
-  BookOpen,
   Settings,
 } from "@/lib/icons"
+import { FolderOpen } from "lucide-react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
@@ -49,10 +49,10 @@ const allMainItems: MainItem[] = [
     feature: "AGENT",
   },
   {
-    title: "Knowledge",
-    url: "/dashboard/knowledge",
-    icon: BookOpen,
-    description: "RAG documents",
+    title: "Files",
+    url: "/dashboard/files",
+    icon: FolderOpen,
+    description: "Documents & knowledge bases",
     feature: null,
   },
 ]

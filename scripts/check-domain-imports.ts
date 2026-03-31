@@ -7,9 +7,9 @@ const root = process.cwd()
 const DEPRECATED_PREFIXES = [
   "@/src/features/dashboard/digital-employee",
   "@/src/features/dashboard/workflows",
-  "@/src/features/dashboard/knowledge-documents",
-  "@/src/features/dashboard/knowledge-categories",
-  "@/src/features/dashboard/knowledge-groups",
+  "@/src/features/dashboard/files-documents",
+  "@/src/features/dashboard/files-categories",
+  "@/src/features/dashboard/files-groups",
   "@/src/features/dashboard/skills",
   "@/src/features/dashboard/tools",
   "@/src/features/dashboard/mcp-servers",
