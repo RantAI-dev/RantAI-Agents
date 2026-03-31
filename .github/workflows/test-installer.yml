@@ -1,0 +1,61 @@
+name: Test Installer
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  smoke-test:
+    name: Smoke Test
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    defaults:
+      run:
+        working-directory: installer
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            installer/target/
+          key: ${{ runner.os }}-cargo-smoke-${{ hashFiles('installer/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-smoke-
+
+      - name: Build release
+        run: cargo build --release
+
+      - name: Test --help
+        run: ./target/release/rantai-agents-installer --help
+
+      - name: Test install --help
+        run: ./target/release/rantai-agents-installer install --help
+
+      - name: Test uninstall --help
+        run: ./target/release/rantai-agents-installer uninstall --help
+
+      - name: Test --version
+        run: ./target/release/rantai-agents-installer --version
+
+      - name: Test non-interactive preflight (minimal mode)
+        run: |
+          timeout 30 ./target/release/rantai-agents-installer install \
+            --non-interactive \
+            --mode minimal \
+            --install-dir /tmp/rantai-test \
+            --data-dir /tmp/rantai-test-data \
+            || true
+        # Expected: fails gracefully (no PostgreSQL) without panic

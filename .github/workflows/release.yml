@@ -208,3 +208,136 @@ jobs:
             ${{ steps.vars.outputs.release_notes_tags }}
 
             ${{ steps.compatibility.outputs.compatibility_markdown }}
+
+            ## Installer
+
+            **One-liner install:**
+            ```bash
+            curl -fsSL https://github.com/${{ github.repository }}/releases/download/${{ steps.vars.outputs.version }}/install.sh | bash
+            ```
+
+            **Direct binary download:**
+            ```bash
+            curl -fsSL -o rantai-agents-installer \
+              https://github.com/${{ github.repository }}/releases/download/${{ steps.vars.outputs.version }}/rantai-agents-installer-x86_64-linux-musl
+            chmod +x rantai-agents-installer
+            sudo ./rantai-agents-installer install
+            ```
+
+    outputs:
+      version: ${{ steps.vars.outputs.version }}
+
+  build-installer-gnu:
+    name: Build Installer (GNU)
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.version }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            installer/target/
+          key: ${{ runner.os }}-cargo-release-gnu-${{ hashFiles('installer/Cargo.lock') }}
+
+      - name: Build release (GNU)
+        working-directory: installer
+        run: cargo build --release
+
+      - name: Verify binary
+        run: installer/target/release/rantai-agents-installer --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rantai-agents-installer-x86_64-linux-gnu
+          path: installer/target/release/rantai-agents-installer
+
+  build-installer-musl:
+    name: Build Installer (musl)
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.version }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            installer/target/
+          key: ${{ runner.os }}-cargo-release-musl-${{ hashFiles('installer/Cargo.lock') }}
+
+      - name: Build release (musl static)
+        working-directory: installer
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Verify binary
+        run: installer/target/x86_64-unknown-linux-musl/release/rantai-agents-installer --version
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rantai-agents-installer-x86_64-linux-musl
+          path: installer/target/x86_64-unknown-linux-musl/release/rantai-agents-installer
+
+  upload-installer:
+    name: Upload Installer to Release
+    runs-on: ubuntu-latest
+    needs: [release, build-installer-gnu, build-installer-musl]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download GNU binary
+        uses: actions/download-artifact@v4
+        with:
+          name: rantai-agents-installer-x86_64-linux-gnu
+          path: /tmp/gnu
+
+      - name: Download musl binary
+        uses: actions/download-artifact@v4
+        with:
+          name: rantai-agents-installer-x86_64-linux-musl
+          path: /tmp/musl
+
+      - name: Prepare release assets
+        run: |
+          mv /tmp/gnu/rantai-agents-installer /tmp/rantai-agents-installer-x86_64-linux-gnu
+          mv /tmp/musl/rantai-agents-installer /tmp/rantai-agents-installer-x86_64-linux-musl
+          chmod +x /tmp/rantai-agents-installer-*
+          cp scripts/install.sh /tmp/install.sh
+
+      - name: Upload to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ needs.release.outputs.version }}" \
+            /tmp/rantai-agents-installer-x86_64-linux-gnu \
+            /tmp/rantai-agents-installer-x86_64-linux-musl \
+            /tmp/install.sh \
+            --clobber

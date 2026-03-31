@@ -1,0 +1,146 @@
+name: Build Airgap Bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g., v1.0.0). Leave empty for latest tag."
+        required: false
+        type: string
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  BUN_VERSION: "1.3.2"
+
+jobs:
+  build-bundle:
+    name: Build Airgap Bundle
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            git fetch --tags --force
+            tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Initialize submodules
+        run: |
+          git submodule set-url packages/rantaiclaw https://github.com/RantAI-dev/RantaiClaw.git
+          git submodule set-url packages/community-skills https://github.com/RantAI-dev/RantAI-Agents-Community.git
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Install Rust (musl target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y musl-tools makeself
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Build installer binary (static musl)
+        working-directory: installer
+        run: cargo build --release --target x86_64-unknown-linux-musl
+
+      - name: Build Next.js application
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Download Bun binary (baseline, AVX2-free)
+        run: |
+          curl -fsSL -o /tmp/bun.zip "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip"
+          unzip -o /tmp/bun.zip -d /tmp/bun-extracted
+          mv /tmp/bun-extracted/bun-linux-x64-baseline/bun /tmp/bun-binary
+          chmod +x /tmp/bun-binary
+          /tmp/bun-binary --version
+
+      - name: Bundle DEB packages
+        run: bash scripts/bundle-debs-ubuntu.sh --output /tmp/debs --version 24.04
+
+      - name: Pull and save Docker images
+        run: |
+          docker pull postgres:16
+          docker pull surrealdb/surrealdb:latest
+          docker pull rustfs/rustfs:latest
+          mkdir -p /tmp/docker-images
+          docker save postgres:16 | gzip > /tmp/docker-images/postgres-16.tar.gz
+          docker save surrealdb/surrealdb:latest | gzip > /tmp/docker-images/surrealdb.tar.gz
+          docker save rustfs/rustfs:latest | gzip > /tmp/docker-images/rustfs.tar.gz
+
+      - name: Assemble bundle
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          BUNDLE_DIR="/tmp/rantai-agents-bundle"
+          mkdir -p "${BUNDLE_DIR}"
+
+          # Installer binary
+          cp installer/target/x86_64-unknown-linux-musl/release/rantai-agents-installer "${BUNDLE_DIR}/"
+
+          # Bun runtime
+          cp /tmp/bun-binary "${BUNDLE_DIR}/bun"
+
+          # Application (exclude dev files)
+          rsync -a --exclude='installer/' --exclude='.git/' --exclude='.github/' \
+            --exclude='node_modules/.cache' \
+            . "${BUNDLE_DIR}/app/"
+
+          # DEB packages
+          cp -r /tmp/debs "${BUNDLE_DIR}/debs"
+
+          # Docker images
+          cp -r /tmp/docker-images "${BUNDLE_DIR}/docker-images"
+
+          # Setup script
+          cp scripts/airgap-setup.sh "${BUNDLE_DIR}/setup.sh"
+          chmod +x "${BUNDLE_DIR}/setup.sh"
+
+          # Version file
+          echo "${VERSION}" > "${BUNDLE_DIR}/VERSION"
+
+      - name: Create self-extracting archive
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          makeself --gzip --sha256 \
+            /tmp/rantai-agents-bundle \
+            "/tmp/rantai-agents-airgap-${VERSION}.run" \
+            "RantAI Agents ${VERSION} - Airgap Installer" \
+            ./setup.sh
+
+      - name: Upload to GitHub Release
+        if: steps.version.outputs.tag != 'v0.0.0'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          gh release upload "${VERSION}" \
+            "/tmp/rantai-agents-airgap-${VERSION}.run" \
+            --clobber || echo "WARNING: Could not upload to release ${VERSION}"
+
+      - name: Upload as workflow artifact (backup)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rantai-agents-airgap-${{ steps.version.outputs.tag }}
+          path: /tmp/rantai-agents-airgap-*.run
+          retention-days: 30
