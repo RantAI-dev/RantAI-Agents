@@ -108,7 +108,7 @@ function mapToolsForClient(
 ): AssistantToolInfo[] {
   if (!Array.isArray(tools)) return []
   return tools
-    .filter((tool) => tool.enabledForAssistant !== false)
+    .filter((tool) => tool.enabledForAssistant !== false && tool.userSelectable !== false)
     .map((tool) => ({
       name: tool.name as string,
       displayName: tool.displayName as string,

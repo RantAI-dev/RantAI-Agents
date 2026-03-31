@@ -31,6 +31,7 @@ import { EmptyState } from "./empty-state"
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
 import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
+import { useProfileStore } from "@/hooks/use-profile"
 import { ToastAction } from "@/components/ui/toast"
 import { MarkdownContent } from "./markdown-content"
 import { TypingIndicator, ButtonLoadingIndicator } from "./typing-indicator"
@@ -385,6 +386,8 @@ function MessagesArea({
   artifacts: Map<string, Artifact>
   digitalEmployeeId?: string
 }) {
+  const { avatarUrl: userAvatarUrl, name: userName } = useProfileStore()
+
   return (
     <div className="h-full w-full relative">
       {chat.messages.length === 0 && !isLoading ? (
@@ -475,14 +478,20 @@ function MessagesArea({
                   {/* Avatar */}
                   <div
                     className={cn(
-                      "flex shrink-0 items-center justify-center rounded-full",
+                      "flex shrink-0 items-center justify-center rounded-full overflow-hidden",
                       isUser
                         ? "h-8 w-8 bg-neutral-300 text-neutral-700 dark:bg-neutral-600 dark:text-white shadow-sm"
                         : "h-8 w-8 bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-sm"
                     )}
                   >
                     {isUser ? (
-                      <User className="h-3.5 w-3.5" />
+                      userAvatarUrl ? (
+                        <img src={userAvatarUrl} alt={userName || "User"} className="h-8 w-8 object-cover" />
+                      ) : userName ? (
+                        <span className="text-xs font-medium">{userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}</span>
+                      ) : (
+                        <User className="h-3.5 w-3.5" />
+                      )
                     ) : assistant.emoji ? (
                       <span className="text-base">{assistant.emoji}</span>
                     ) : (
@@ -1004,6 +1013,67 @@ export function ChatWorkspace({
   // GitHub import dialog state
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
   const [githubUrl, setGithubUrl] = useState("")
+  const [githubImporting, setGithubImporting] = useState(false)
+  const [githubImportResult, setGithubImportResult] = useState<{
+    type: "inline" | "rag"
+    fileName: string
+    text?: string
+    documentId?: string
+    fileCount: number
+  } | null>(null)
+
+  const handleGithubImport = useCallback(async () => {
+    const url = githubUrl.trim()
+    if (!url) return
+
+    if (!url.includes("github.com/")) {
+      toast({ title: "Invalid URL", description: "Please enter a GitHub URL", variant: "destructive" })
+      return
+    }
+
+    setGithubImporting(true)
+    try {
+      const res = await fetch("/api/chat/github-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, sessionId: apiSessionId }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Import failed: ${res.status}`)
+
+      if (data.type === "inline" && data.text) {
+        // Small repo/single file — store as inline context
+        setGithubImportResult({
+          type: "inline",
+          fileName: data.fileName,
+          text: data.text,
+          fileCount: data.fileCount,
+        })
+      } else if (data.type === "rag" && data.documentId) {
+        // Large repo — stored as RAG document
+        setGithubImportResult({
+          type: "rag",
+          fileName: data.fileName,
+          documentId: data.documentId,
+          fileCount: data.fileCount,
+        })
+      }
+
+      setGithubDialogOpen(false)
+      setGithubUrl("")
+
+      const desc = data.fileCount === 1
+        ? `${data.fileName} attached`
+        : `${data.fileCount} files from ${data.fileName}${data.skippedCount ? ` (${data.skippedCount} skipped)` : ""}`
+      toast({ title: "Imported from GitHub", description: desc })
+    } catch (err) {
+      toast({ title: "Import failed", description: err instanceof Error ? err.message : "Could not import from GitHub", variant: "destructive" })
+    } finally {
+      setGithubImporting(false)
+    }
+  }, [githubUrl, toast, apiSessionId])
+
   const queuedInitialMessageKeyRef = useRef<string | null>(null)
 
   // Artifacts system
@@ -1286,7 +1356,7 @@ export function ChatWorkspace({
 
   const loadKnowledgeBaseGroups = useCallback(async (signal?: AbortSignal) => {
     try {
-      const response = await orgFetch("/api/dashboard/knowledge/groups", { signal })
+      const response = await orgFetch("/api/dashboard/files/groups", { signal })
       const data = await response.json()
       setKBGroups(data.groups || [])
     } catch (error) {
@@ -1917,7 +1987,12 @@ export function ChatWorkspace({
                 enableSkills: toolOverrides?.enableSkills ?? effectiveSkillsEnabled,
                 enabledSkillIds: toolOverrides?.enabledSkillIds ?? effectiveSkillIds,
                 ...(resolvedCanvasMode && { canvasMode: resolvedCanvasMode }),
-                targetArtifactId: activeArtifactId || undefined,
+                // Don't point at the old artifact when canvas mode explicitly requests a different type
+                targetArtifactId:
+                  activeArtifactId &&
+                  !(typeof resolvedCanvasMode === "string" && activeArtifact && resolvedCanvasMode !== activeArtifact.type)
+                    ? activeArtifactId
+                    : undefined,
                 ...(fileCtx?.fileContext && { fileContext: fileCtx.fileContext }),
                 ...(fileCtx?.fileDocumentIds && { fileDocumentIds: fileCtx.fileDocumentIds }),
                 ...(digitalEmployeeId && { digitalEmployeeId }),
@@ -2841,6 +2916,37 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
       }
     }
 
+    // Merge GitHub import result into file context
+    if (githubImportResult) {
+      if (githubImportResult.type === "inline" && githubImportResult.text) {
+        const ctx = `[GitHub Import: ${githubImportResult.fileName}]\n${githubImportResult.text}`
+        fileCtx = {
+          fileContext: fileCtx?.fileContext ? `${fileCtx.fileContext}\n\n${ctx}` : ctx,
+          fileDocumentIds: fileCtx?.fileDocumentIds,
+        }
+        uploadAttachments.push({
+          fileName: githubImportResult.fileName,
+          mimeType: "text/plain",
+          type: "inline",
+          text: githubImportResult.text,
+        })
+      } else if (githubImportResult.type === "rag" && githubImportResult.documentId) {
+        fileCtx = {
+          fileContext: fileCtx?.fileContext,
+          fileDocumentIds: [
+            ...(fileCtx?.fileDocumentIds || []),
+            githubImportResult.documentId,
+          ],
+        }
+        uploadAttachments.push({
+          fileName: githubImportResult.fileName,
+          mimeType: "text/plain",
+          type: "rag",
+        })
+      }
+      setGithubImportResult(null)
+    }
+
     // Send the message using shared logic
     await sendMessage(userInput, chat.messages, replyContext?.id, undefined, fileCtx, uploadAttachments.length > 0 ? uploadAttachments : undefined)
   }
@@ -2976,12 +3082,20 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     </AnimatePresence>
 
                     <AnimatePresence>
-                      {attachedFiles.length > 0 && (
-                        <div className="mb-2">
+                      {(attachedFiles.length > 0 || githubImportResult) && (
+                        <div className="mb-2 flex flex-wrap gap-2">
                           <FilePreview
                             files={attachedFiles}
                             onRemove={(index) => setAttachedFiles(prev => prev.filter((_, i) => i !== index))}
                           />
+                          {githubImportResult && (
+                            <div className="inline-flex items-center gap-1.5 rounded-lg border bg-muted/50 px-3 py-1.5 text-xs">
+                              <span className="text-muted-foreground">GitHub:</span>
+                              <span className="font-medium truncate max-w-[200px]">{githubImportResult.fileName}</span>
+                              <span className="text-muted-foreground">({githubImportResult.fileCount} file{githubImportResult.fileCount !== 1 ? "s" : ""})</span>
+                              <button type="button" onClick={() => setGithubImportResult(null)} className="ml-1 text-muted-foreground hover:text-foreground">×</button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </AnimatePresence>
@@ -3029,7 +3143,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                         <div className="px-2 pb-2">
                           <ChatInputToolbar
                             onFileSelect={(files) => setAttachedFiles(prev => [...prev, ...files])}
-                            fileAttached={attachedFiles.length > 0}
+                            fileAttached={attachedFiles.length > 0 || !!githubImportResult}
                             webSearchEnabled={effectiveWebSearch}
                             onToggleWebSearch={() => setWebSearchOverride((prev) => !(prev ?? webSearchAvailable))}
                             codeInterpreterEnabled={effectiveCodeInterpreter}
@@ -3160,12 +3274,20 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
 
           {/* File preview */}
           <AnimatePresence>
-            {attachedFiles.length > 0 && (
-              <div className="mb-2">
+            {(attachedFiles.length > 0 || githubImportResult) && (
+              <div className="mb-2 flex flex-wrap gap-2">
                 <FilePreview
                   files={attachedFiles}
                   onRemove={(index) => setAttachedFiles(prev => prev.filter((_, i) => i !== index))}
                 />
+                {githubImportResult && (
+                  <div className="inline-flex items-center gap-1.5 rounded-lg border bg-muted/50 px-3 py-1.5 text-xs">
+                    <span className="text-muted-foreground">GitHub:</span>
+                    <span className="font-medium truncate max-w-[200px]">{githubImportResult.fileName}</span>
+                    <span className="text-muted-foreground">({githubImportResult.fileCount} file{githubImportResult.fileCount !== 1 ? "s" : ""})</span>
+                    <button type="button" onClick={() => setGithubImportResult(null)} className="ml-1 text-muted-foreground hover:text-foreground">×</button>
+                  </div>
+                )}
               </div>
             )}
           </AnimatePresence>
@@ -3215,7 +3337,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               <div className="px-2 pb-2">
                 <ChatInputToolbar
                   onFileSelect={(files) => setAttachedFiles(prev => [...prev, ...files])}
-                  fileAttached={attachedFiles.length > 0}
+                  fileAttached={attachedFiles.length > 0 || !!githubImportResult}
                   webSearchEnabled={effectiveWebSearch}
                   onToggleWebSearch={() => setWebSearchOverride((prev) => !(prev ?? webSearchAvailable))}
                   codeInterpreterEnabled={effectiveCodeInterpreter}
@@ -3319,39 +3441,35 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
       </Dialog>
 
       {/* GitHub Import Dialog */}
-      <Dialog open={githubDialogOpen} onOpenChange={setGithubDialogOpen}>
+      <Dialog open={githubDialogOpen} onOpenChange={(open) => { if (!githubImporting) setGithubDialogOpen(open) }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Import from GitHub</DialogTitle>
             <DialogDescription>
-              Enter a GitHub file or repository URL to import code.
+              Paste a GitHub URL to import a file or entire repository as context.
             </DialogDescription>
           </DialogHeader>
           <Input
             value={githubUrl}
             onChange={(e) => setGithubUrl(e.target.value)}
-            placeholder="https://github.com/owner/repo/blob/main/file.ts"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && githubUrl.trim()) {
-                setInput((prev) => prev + (prev ? "\n" : "") + `Import code from: ${githubUrl.trim()}`)
-                setGithubDialogOpen(false)
+            placeholder="https://github.com/owner/repo"
+            disabled={githubImporting}
+            onKeyDown={async (e) => {
+              if (e.key === "Enter" && githubUrl.trim() && !githubImporting) {
+                e.preventDefault()
+                await handleGithubImport()
               }
             }}
           />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setGithubDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setGithubDialogOpen(false)} disabled={githubImporting}>
               Cancel
             </Button>
             <Button
-              onClick={() => {
-                if (githubUrl.trim()) {
-                  setInput((prev) => prev + (prev ? "\n" : "") + `Import code from: ${githubUrl.trim()}`)
-                  setGithubDialogOpen(false)
-                }
-              }}
-              disabled={!githubUrl.trim()}
+              onClick={handleGithubImport}
+              disabled={!githubUrl.trim() || githubImporting}
             >
-              Import
+              {githubImporting ? "Importing..." : "Import"}
             </Button>
           </DialogFooter>
         </DialogContent>

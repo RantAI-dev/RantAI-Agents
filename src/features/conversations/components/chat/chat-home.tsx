@@ -7,7 +7,6 @@ import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import {
   Bot,
-  BookOpen,
   Workflow,
   Pencil,
   MessageSquare,
@@ -16,9 +15,19 @@ import {
   Loader2,
   Square,
 } from "@/lib/icons"
-import { SendHorizontal } from "lucide-react"
+import { SendHorizontal, FolderOpen } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { useOrgFetch, useOrganization } from "@/hooks/use-organization"
 import { ChatInputToolbar, type CanvasMode, type ToolMode, type SkillMode } from "./chat-input-toolbar"
@@ -120,7 +129,7 @@ const scaleIn = {
 
 const QUICK_ACTIONS = [
   { label: "Create Agent", icon: Bot, href: "/dashboard/agent-builder" },
-  { label: "Knowledge", icon: BookOpen, href: "/dashboard/knowledge" },
+  { label: "Files", icon: FolderOpen, href: "/dashboard/files" },
   { label: "Workflows", icon: Workflow, href: "/dashboard/workflows" },
 ] as const
 
@@ -223,6 +232,46 @@ export function ChatHome({
   const [skillMode, setSkillMode] = useState<SkillMode>("auto")
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
   const [canvasMode, setCanvasMode] = useState<CanvasMode>(false)
+
+  // GitHub import
+  const [githubDialogOpen, setGithubDialogOpen] = useState(false)
+  const [githubUrl, setGithubUrl] = useState("")
+  const [githubImporting, setGithubImporting] = useState(false)
+  const { toast } = useToast()
+
+  const handleGithubImport = useCallback(async () => {
+    const url = githubUrl.trim()
+    if (!url || !url.includes("github.com/")) {
+      toast({ title: "Invalid URL", description: "Please enter a GitHub URL", variant: "destructive" })
+      return
+    }
+    setGithubImporting(true)
+    try {
+      const res = await fetch("/api/chat/github-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || `Import failed: ${res.status}`)
+
+      // Create a synthetic file from the imported content
+      if (data.type === "inline" && data.text) {
+        const file = new File([data.text], data.fileName || "github-import.txt", { type: "text/plain" })
+        setAttachedFiles((prev) => [...prev, file])
+      }
+      setGithubDialogOpen(false)
+      setGithubUrl("")
+      const desc = data.fileCount === 1
+        ? `${data.fileName} attached`
+        : `${data.fileCount} files from ${data.fileName} attached`
+      toast({ title: "Imported from GitHub", description: desc })
+    } catch (err) {
+      toast({ title: "Import failed", description: err instanceof Error ? err.message : "Could not import from GitHub", variant: "destructive" })
+    } finally {
+      setGithubImporting(false)
+    }
+  }, [githubUrl, toast])
 
   // Assistant tools/skills/KB fetched for toolbar
   const [assistantTools, setAssistantTools] = useState<AssistantToolInfo[]>([])
@@ -430,7 +479,7 @@ export function ChatHome({
 
     if (!kbGroupsLoaded) {
       try {
-        const res = await orgFetch("/api/dashboard/knowledge/groups")
+        const res = await orgFetch("/api/dashboard/files/groups")
         const data = await res.json()
         setKBGroups(data.groups || [])
       } catch {
@@ -590,9 +639,7 @@ export function ChatHome({
                   defaultSkillIds={assistantDefaultSkillIds}
                   onSetSelectedSkillIds={setSelectedSkillIds}
                   assistantSkills={assistantSkills}
-                  onImportGithub={() => {
-                    // GitHub import not supported from home - will work in ChatWorkspace
-                  }}
+                  onImportGithub={() => setGithubDialogOpen(true)}
                   canvasMode={canvasMode}
                   onSetCanvasMode={setCanvasMode}
                   artifacts={new Map()}
@@ -747,6 +794,38 @@ export function ChatHome({
           </Section>
         </div>
       </div>
+
+      {/* GitHub Import Dialog */}
+      <Dialog open={githubDialogOpen} onOpenChange={(open) => { if (!githubImporting) setGithubDialogOpen(open) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Import from GitHub</DialogTitle>
+            <DialogDescription>
+              Paste a GitHub URL to import a file or entire repository as context.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={githubUrl}
+            onChange={(e) => setGithubUrl(e.target.value)}
+            placeholder="https://github.com/owner/repo"
+            disabled={githubImporting}
+            onKeyDown={async (e) => {
+              if (e.key === "Enter" && githubUrl.trim() && !githubImporting) {
+                e.preventDefault()
+                await handleGithubImport()
+              }
+            }}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setGithubDialogOpen(false)} disabled={githubImporting}>
+              Cancel
+            </Button>
+            <Button onClick={handleGithubImport} disabled={!githubUrl.trim() || githubImporting}>
+              {githubImporting ? "Importing..." : "Import"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

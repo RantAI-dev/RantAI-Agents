@@ -28,6 +28,11 @@ const NON_USER_SELECTABLE_BUILTIN_TOOLS = new Set([
   "file_operations",
   "json_transform",
   "text_utilities",
+  "calculator",
+  "document_analysis",
+  "knowledge_search",  // has dedicated UI toggle
+  "web_search",        // has dedicated UI toggle
+  "code_interpreter",  // has dedicated UI toggle
 ])
 
 function isBuiltinToolUserSelectable(name: string): boolean {

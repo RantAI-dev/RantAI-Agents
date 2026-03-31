@@ -113,7 +113,7 @@ export function AssistantEditor({
   const fetchGroups = useCallback(async () => {
     setLoadingGroups(true)
     try {
-      const response = await fetch("/api/dashboard/knowledge/groups")
+      const response = await fetch("/api/dashboard/files/groups")
       if (response.ok) {
         const data = await response.json()
         setGroups(data.groups)
@@ -430,7 +430,7 @@ export function AssistantEditor({
             {/* No groups message */}
             {!loadingGroups && groups.length === 0 && (
               <p className="text-xs text-muted-foreground">
-                No knowledge bases available. Create one in the Knowledge section.
+                No knowledge bases available. Create one in the Files section.
               </p>
             )}
           </div>
