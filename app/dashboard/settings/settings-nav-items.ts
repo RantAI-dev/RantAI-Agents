@@ -1,65 +1,17 @@
-import { Settings, Info, ToggleLeft, Code, Wrench, Sparkles, Plug, KeyRound, Brain, BarChart3, CreditCard, Building2, Users } from "@/lib/icons"
+import { Settings, ToggleLeft, Wrench, Building2, CreditCard, BarChart3 } from "@/lib/icons"
 
 export const SETTINGS_NAV_ITEMS = [
   {
     title: "General",
     href: "/dashboard/settings/general",
     icon: Settings,
-    description: "Basic preferences",
+    description: "Preferences & system info",
   },
   {
     title: "Organization",
     href: "/dashboard/settings/organization",
     icon: Building2,
-    description: "Organization settings & info",
-  },
-  {
-    title: "Members",
-    href: "/dashboard/settings/members",
-    icon: Users,
-    description: "Team members & invitations",
-  },
-  {
-    title: "Features",
-    href: "/dashboard/settings/features",
-    icon: ToggleLeft,
-    description: "Enable/disable capabilities",
-  },
-  {
-    title: "Tools",
-    href: "/dashboard/settings/tools",
-    icon: Wrench,
-    description: "Agent tools configuration",
-  },
-  {
-    title: "Skills",
-    href: "/dashboard/settings/skills",
-    icon: Sparkles,
-    description: "Instruction-based agent skills",
-  },
-  {
-    title: "MCP",
-    href: "/dashboard/settings/mcp",
-    icon: Plug,
-    description: "MCP clients & server",
-  },
-  {
-    title: "Memory",
-    href: "/dashboard/settings/memory",
-    icon: Brain,
-    description: "AI memory management",
-  },
-  {
-    title: "Statistics",
-    href: "/dashboard/settings/statistics",
-    icon: BarChart3,
-    description: "Analytics & usage metrics",
-  },
-  {
-    title: "Credentials",
-    href: "/dashboard/settings/credentials",
-    icon: KeyRound,
-    description: "API keys & auth for workflows",
+    description: "Team, members & invitations",
   },
   {
     title: "Billing",
@@ -68,15 +20,21 @@ export const SETTINGS_NAV_ITEMS = [
     description: "Plan, usage & payments",
   },
   {
-    title: "Embed Widget",
-    href: "/dashboard/settings/embed",
-    icon: Code,
-    description: "Website chat widget",
+    title: "Agent Config",
+    href: "/dashboard/settings/agent-config",
+    icon: Wrench,
+    description: "Tools, skills, MCP & credentials",
   },
   {
-    title: "About",
-    href: "/dashboard/settings/about",
-    icon: Info,
-    description: "System information",
+    title: "Analytics",
+    href: "/dashboard/settings/analytics",
+    icon: BarChart3,
+    description: "Memory & usage statistics",
+  },
+  {
+    title: "Features",
+    href: "/dashboard/settings/features",
+    icon: ToggleLeft,
+    description: "Enable/disable capabilities",
   },
 ] as const

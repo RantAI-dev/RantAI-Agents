@@ -1,1 +1,4 @@
-export { default } from "@/src/features/tools/components/tools-settings-page"
+import { redirect } from "next/navigation"
+export default function ToolsRedirect() {
+  redirect("/dashboard/settings/agent-config?tab=tools")
+}

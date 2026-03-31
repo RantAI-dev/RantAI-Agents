@@ -1,1 +1,4 @@
-export { default } from "@/src/features/skills/components/skills-settings-page"
+import { redirect } from "next/navigation"
+export default function SkillsRedirect() {
+  redirect("/dashboard/settings/agent-config?tab=skills")
+}

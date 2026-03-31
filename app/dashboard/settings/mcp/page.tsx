@@ -1,1 +1,4 @@
-export { default } from "@/src/features/mcp/components/mcp-settings-page"
+import { redirect } from "next/navigation"
+export default function McpRedirect() {
+  redirect("/dashboard/settings/agent-config?tab=mcp")
+}

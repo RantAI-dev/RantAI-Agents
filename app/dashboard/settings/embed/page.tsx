@@ -1,1 +1,5 @@
-export { default } from "@/src/features/embed-keys/components/embed-settings-page"
+import { redirect } from "next/navigation"
+
+export default function Page() {
+  redirect("/dashboard/agent-builder")
+}

@@ -1,1 +1,4 @@
-export { default } from "@/src/features/memory/components/memory-settings-page"
+import { redirect } from "next/navigation"
+export default function MemoryRedirect() {
+  redirect("/dashboard/settings/analytics?tab=memory")
+}
