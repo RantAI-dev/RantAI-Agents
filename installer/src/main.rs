@@ -1,3 +1,11 @@
+#![allow(
+    dead_code,
+    clippy::large_enum_variant,
+    clippy::vec_init_then_push,
+    clippy::if_same_then_else,
+    clippy::single_match
+)]
+
 mod app;
 mod installer;
 mod theme;
@@ -124,18 +132,27 @@ fn main() -> Result<()> {
             let install_mode = parse_mode(&mode);
 
             if non_interactive {
-                run_non_interactive(
-                    install_mode,
+                let mut config = app::InstallConfig {
+                    mode: install_mode,
                     install_dir,
                     data_dir,
                     db_host,
                     db_port,
                     db_name,
                     db_user,
-                    db_password,
-                    admin_password,
-                    openrouter_key,
-                )
+                    install_services: install_mode.includes_systemd(),
+                    ..Default::default()
+                };
+                if let Some(pw) = db_password {
+                    config.db_password = pw;
+                }
+                if let Some(pw) = admin_password {
+                    config.admin_password = pw;
+                }
+                if let Some(key) = openrouter_key {
+                    config.openrouter_api_key = key;
+                }
+                run_non_interactive(config)
             } else {
                 run_tui(install_mode)
             }
@@ -391,43 +408,10 @@ fn run_event_loop(
     }
 }
 
-fn run_non_interactive(
-    mode: InstallMode,
-    install_dir: String,
-    data_dir: String,
-    db_host: String,
-    db_port: String,
-    db_name: String,
-    db_user: String,
-    db_password: Option<String>,
-    admin_password: Option<String>,
-    openrouter_key: Option<String>,
-) -> Result<()> {
+fn run_non_interactive(mut config: app::InstallConfig) -> Result<()> {
     println!("{} Installer v{}", theme::PRODUCT_NAME, theme::VERSION);
-    println!("Mode: {}", mode.label());
+    println!("Mode: {}", config.mode.label());
     println!();
-
-    let mut config = app::InstallConfig {
-        mode,
-        install_dir,
-        data_dir,
-        db_host,
-        db_port,
-        db_name,
-        db_user,
-        install_services: mode.includes_systemd(),
-        ..Default::default()
-    };
-
-    if let Some(pw) = db_password {
-        config.db_password = pw;
-    }
-    if let Some(pw) = admin_password {
-        config.admin_password = pw;
-    }
-    if let Some(key) = openrouter_key {
-        config.openrouter_api_key = key;
-    }
 
     // Generate random values for empty secrets
     if config.db_password.is_empty() {
