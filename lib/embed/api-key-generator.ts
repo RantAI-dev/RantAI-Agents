@@ -17,6 +17,22 @@ export function validateApiKeyFormat(key: string): boolean {
 }
 
 /**
+ * Generate a secure API key for agent REST/WebSocket access
+ * Format: rantai_sk_<32 random alphanumeric chars>
+ */
+export function generateAgentApiKey(): string {
+  const randomPart = randomBytes(24).toString("base64url").slice(0, 32)
+  return `rantai_sk_${randomPart}`
+}
+
+/**
+ * Validate agent API key format
+ */
+export function validateAgentApiKeyFormat(key: string): boolean {
+  return /^rantai_sk_[A-Za-z0-9_-]{32}$/.test(key)
+}
+
+/**
  * Mask API key for display (show first 12 and last 4 chars)
  */
 export function maskApiKey(key: string): string {

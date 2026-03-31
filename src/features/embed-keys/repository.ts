@@ -2,10 +2,14 @@ import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
 
 export async function findDashboardEmbedApiKeysByOrganization(
-  organizationId: string | null
+  organizationId: string | null,
+  assistantId?: string
 ) {
   return prisma.embedApiKey.findMany({
-    where: organizationId ? { organizationId } : { organizationId: null },
+    where: {
+      ...(organizationId ? { organizationId } : { organizationId: null }),
+      ...(assistantId && { assistantId }),
+    },
     orderBy: { createdAt: "desc" },
   })
 }

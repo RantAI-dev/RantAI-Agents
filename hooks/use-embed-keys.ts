@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import type { EmbedApiKeyResponse, EmbedApiKeyInput } from "@/lib/embed/types"
 
-export function useEmbedKeys() {
+export function useEmbedKeys(assistantId?: string | null) {
   const [keys, setKeys] = useState<EmbedApiKeyResponse[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -11,7 +11,10 @@ export function useEmbedKeys() {
   const fetchKeys = useCallback(async () => {
     try {
       setError(null)
-      const response = await fetch("/api/dashboard/embed-keys")
+      const url = assistantId
+        ? `/api/dashboard/embed-keys?assistantId=${assistantId}`
+        : "/api/dashboard/embed-keys"
+      const response = await fetch(url)
       if (!response.ok) {
         throw new Error("Failed to fetch embed keys")
       }
@@ -23,7 +26,7 @@ export function useEmbedKeys() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [assistantId])
 
   useEffect(() => {
     fetchKeys()

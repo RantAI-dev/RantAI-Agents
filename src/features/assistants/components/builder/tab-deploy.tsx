@@ -1,39 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { Code, Globe, ExternalLink, Copy, Check } from "@/lib/icons"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Globe, Code, Wifi, Info } from "@/lib/icons"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { DeployWidgetSection } from "./deploy/deploy-widget-section"
+import { DeployRestApiSection } from "./deploy/deploy-rest-api-section"
+import { DeployWebSocketSection } from "./deploy/deploy-websocket-section"
+import { DeployInfoSection } from "./deploy/deploy-info-section"
 
 interface TabDeployProps {
   agentId: string | null
   agentName: string
+  agentModel: string
+  agentCreatedAt?: Date
   isNew: boolean
 }
 
-export function TabDeploy({ agentId, agentName, isNew }: TabDeployProps) {
-  const [copied, setCopied] = useState(false)
-
-  const apiExample = agentId
-    ? `POST /api/chat
-Content-Type: application/json
-
-{
-  "assistantId": "${agentId}",
-  "messages": [
-    { "role": "user", "content": "Hello!" }
-  ]
-}`
-    : ""
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(apiExample)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  if (isNew) {
+export function TabDeploy({ agentId, agentName, agentModel, agentCreatedAt, isNew }: TabDeployProps) {
+  if (isNew || !agentId) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
         <Globe className="h-8 w-8 text-muted-foreground mb-3" />
@@ -46,68 +29,55 @@ Content-Type: application/json
   }
 
   return (
-    <div className="p-6 space-y-8">
+    <div className="p-6 space-y-4">
       <div>
         <h2 className="text-sm font-semibold text-foreground">Deploy</h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Ways to use &quot;{agentName}&quot; in production.
+          Deploy &quot;{agentName}&quot; via widget embed, REST API, or WebSocket.
         </p>
       </div>
 
-      {/* API Endpoint */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Code className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-medium">API Endpoint</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Send messages to this agent programmatically via the chat API.
-        </p>
-        <div className="relative">
-          <pre className="rounded-lg border bg-muted/50 p-4 text-xs font-mono overflow-x-auto">
-            {apiExample}
-          </pre>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-2 right-2 h-7 w-7"
-            onClick={handleCopy}
-          >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-green-500" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-          </Button>
-        </div>
-      </section>
+      <Tabs defaultValue="rest-api">
+        <TabsList className="h-9">
+          <TabsTrigger value="rest-api" className="text-xs gap-1.5">
+            <Code className="h-3.5 w-3.5" />
+            REST API
+          </TabsTrigger>
+          <TabsTrigger value="widget" className="text-xs gap-1.5">
+            <Globe className="h-3.5 w-3.5" />
+            Widget Embed
+          </TabsTrigger>
+          <TabsTrigger value="websocket" className="text-xs gap-1.5">
+            <Wifi className="h-3.5 w-3.5" />
+            WebSocket
+          </TabsTrigger>
+          <TabsTrigger value="info" className="text-xs gap-1.5">
+            <Info className="h-3.5 w-3.5" />
+            Agent Info
+          </TabsTrigger>
+        </TabsList>
 
-      {/* Widget Embed */}
-      <section className="space-y-3">
-        <div className="flex items-center gap-2">
-          <Globe className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-medium">Widget Embed</h3>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Embed this agent as a chat widget on your website.
-        </p>
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/dashboard/settings">
-            Configure Embed Keys
-            <ExternalLink className="ml-1.5 h-3 w-3" />
-          </Link>
-        </Button>
-      </section>
+        <TabsContent value="rest-api" className="mt-4">
+          <DeployRestApiSection agentId={agentId} agentName={agentName} />
+        </TabsContent>
 
-      {/* Agent ID */}
-      <section className="space-y-3">
-        <h3 className="text-sm font-medium">Agent ID</h3>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="font-mono text-xs">
-            {agentId}
-          </Badge>
-        </div>
-      </section>
+        <TabsContent value="widget" className="mt-4">
+          <DeployWidgetSection agentId={agentId} />
+        </TabsContent>
+
+        <TabsContent value="websocket" className="mt-4">
+          <DeployWebSocketSection agentId={agentId} />
+        </TabsContent>
+
+        <TabsContent value="info" className="mt-4">
+          <DeployInfoSection
+            agentId={agentId}
+            agentName={agentName}
+            agentModel={agentModel}
+            agentCreatedAt={agentCreatedAt}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

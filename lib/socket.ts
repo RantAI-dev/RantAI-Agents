@@ -9,6 +9,7 @@ import {
 } from "@/types/socket"
 import { getPrimaryChannel, dispatchToChannel, getChannelCustomerMessage } from "./channels"
 import type { ConversationData } from "./channels/types"
+import { authenticateAgentApiKey } from "@/src/features/agent-api-keys/service"
 
 // Store for online agents
 const onlineAgents = new Map<string, string>() // agentId -> socketId
@@ -41,8 +42,85 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
   ioInstance = io
   globalThis.__socketIO = io
 
+  // API key authentication middleware for external connections
+  io.use(async (socket, next) => {
+    const apiKey = socket.handshake.auth?.apiKey as string | undefined
+    if (!apiKey) return next() // No API key = dashboard/widget connection (existing behavior)
+
+    try {
+      const result = await authenticateAgentApiKey(apiKey)
+      if (!result) return next(new Error("Invalid API key"))
+
+      socket.data.apiKeyId = result.apiKey.id
+      socket.data.assistantId = result.apiKey.assistantId
+      socket.data.isExternalApi = true
+      next()
+    } catch {
+      next(new Error("Authentication failed"))
+    }
+  })
+
   io.on("connection", (socket) => {
     console.log("Client connected:", socket.id)
+
+    // External API chat via WebSocket
+    if (socket.data.isExternalApi) {
+      socket.on("api:chat", async ({ messages, stream }: { messages: Array<{ role: string; content: string }>; stream?: boolean }) => {
+        try {
+          const { runV1ChatCompletion, authenticateV1Request } = await import("@/src/features/agent-api/service")
+          const { V1ChatCompletionSchema } = await import("@/src/features/agent-api/schema")
+
+          const parsed = V1ChatCompletionSchema.safeParse({
+            messages,
+            stream: stream ?? true,
+          })
+          if (!parsed.success) {
+            socket.emit("api:error", { error: "Invalid message format" })
+            return
+          }
+
+          // Build auth result from socket data
+          const authResult = {
+            apiKey: {
+              id: socket.data.apiKeyId,
+              assistantId: socket.data.assistantId,
+              scopes: ["chat", "chat:stream"],
+              ipWhitelist: [],
+            },
+            assistant: { id: socket.data.assistantId, name: "", emoji: null },
+          }
+
+          const response = await runV1ChatCompletion(authResult, parsed.data)
+
+          if (parsed.data.stream && response.body) {
+            const reader = response.body.getReader()
+            const decoder = new TextDecoder()
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) break
+              const text = decoder.decode(value, { stream: true })
+              // Parse SSE lines and emit chunks
+              for (const line of text.split("\n")) {
+                if (line.startsWith("data: ") && line !== "data: [DONE]") {
+                  try {
+                    const data = JSON.parse(line.slice(6))
+                    socket.emit("api:chunk", data)
+                  } catch { /* skip unparseable lines */ }
+                } else if (line === "data: [DONE]") {
+                  socket.emit("api:done")
+                }
+              }
+            }
+          } else {
+            const text = await response.text()
+            socket.emit("api:response", JSON.parse(text))
+          }
+        } catch (err) {
+          console.error("[Socket API] api:chat error:", err)
+          socket.emit("api:error", { error: "Internal server error" })
+        }
+      })
+    }
 
     // Customer joins a conversation room
     socket.on("chat:join", async ({ sessionId }) => {

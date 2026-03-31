@@ -82,13 +82,14 @@ function toResponse(
  * Lists embed keys visible to the caller.
  */
 export async function listDashboardEmbedKeys(
-  context: DashboardEmbedKeysContext
+  context: DashboardEmbedKeysContext,
+  assistantId?: string
 ): Promise<DashboardEmbedKeyResponse[] | ServiceError> {
   if (context.role && !canManage(context.role)) {
     return { status: 403, error: "Insufficient permissions" }
   }
 
-  const keys = await findDashboardEmbedApiKeysByOrganization(context.organizationId)
+  const keys = await findDashboardEmbedApiKeysByOrganization(context.organizationId, assistantId)
   const assistantIds = [...new Set(keys.map((key) => key.assistantId))]
   const assistants = assistantIds.length > 0 ? await findDashboardAssistantsByIds(assistantIds) : []
   const assistantMap = new Map(assistants.map((assistant) => [assistant.id, assistant]))

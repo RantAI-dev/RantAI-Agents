@@ -140,6 +140,7 @@ model Organization {
   employeeMessages    EmployeeMessage[]
   auditLogs           AuditLog[]
   sharedTemplates     EmployeeTemplateShare[]
+  agentApiKeys        AgentApiKey[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -368,6 +369,37 @@ model EmbedApiKey {
 
   // Management
   enabled        Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([key])
+  @@index([assistantId])
+  @@index([organizationId])
+}
+
+// Agent API keys for programmatic REST/WebSocket access
+model AgentApiKey {
+  id             String    @id @default(cuid())
+  name           String    // Human-readable name (e.g., "Production Backend")
+  key            String    @unique // Generated API key (e.g., "rantai_sk_...")
+  assistantId    String    // Assistant this key accesses
+
+  // Access control
+  scopes         String[]  // e.g., ["chat", "chat:stream"]
+  ipWhitelist    String[]  // Empty = allow all IPs
+
+  // Usage tracking
+  requestCount   Int       @default(0)
+  lastUsedAt     DateTime?
+
+  // Organization scope
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?
+
+  // Management
+  enabled        Boolean   @default(true)
+  expiresAt      DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

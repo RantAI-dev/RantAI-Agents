@@ -73,8 +73,8 @@ export function TabKnowledge({
               <Database className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">No knowledge groups found</p>
               <Button variant="link" size="sm" className="mt-2" asChild>
-                <Link href="/dashboard/knowledge">
-                  Go to Knowledge
+                <Link href="/dashboard/files">
+                  Go to Files
                   <ExternalLink className="ml-1 h-3 w-3" />
                 </Link>
               </Button>
@@ -127,8 +127,8 @@ export function TabKnowledge({
 
           {/* Link to manage */}
           <Button variant="link" size="sm" className="px-0 text-xs" asChild>
-            <Link href="/dashboard/knowledge">
-              Manage Knowledge
+            <Link href="/dashboard/files">
+              Manage Files
               <ExternalLink className="ml-1 h-3 w-3" />
             </Link>
           </Button>

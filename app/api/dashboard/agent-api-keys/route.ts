@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import { canManage, getOrganizationContext } from "@/lib/organization"
+import { CreateAgentApiKeySchema } from "@/src/features/agent-api-keys/schema"
 import {
-  CreateDashboardEmbedKeySchema,
-} from "@/src/features/embed-keys/schema"
-import {
-  createDashboardEmbedKey,
-  listDashboardEmbedKeys,
-} from "@/src/features/embed-keys/service"
+  createAgentApiKey,
+  listAgentApiKeys,
+} from "@/src/features/agent-api-keys/service"
 
 export async function GET(req: Request) {
   try {
@@ -27,7 +25,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const assistantId = searchParams.get("assistantId") ?? undefined
 
-    const result = await listDashboardEmbedKeys(
+    const result = await listAgentApiKeys(
       {
         organizationId: orgContext?.organizationId ?? null,
         role: orgContext?.membership.role ?? null,
@@ -41,9 +39,9 @@ export async function GET(req: Request) {
 
     return NextResponse.json(result)
   } catch (error) {
-    console.error("[Embed Keys API] GET error:", error)
+    console.error("[Agent API Keys] GET error:", error)
     return NextResponse.json(
-      { error: "Failed to fetch embed keys" },
+      { error: "Failed to fetch API keys" },
       { status: 500 }
     )
   }
@@ -64,7 +62,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const parsed = CreateDashboardEmbedKeySchema.safeParse(await req.json())
+    const parsed = CreateAgentApiKeySchema.safeParse(await req.json())
     if (!parsed.success) {
       return NextResponse.json(
         { error: "Invalid request payload", details: parsed.error.flatten() },
@@ -72,7 +70,7 @@ export async function POST(req: Request) {
       )
     }
 
-    const result = await createDashboardEmbedKey({
+    const result = await createAgentApiKey({
       context: {
         organizationId: orgContext?.organizationId ?? null,
         role: orgContext?.membership.role ?? null,
@@ -86,9 +84,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result, { status: 201 })
   } catch (error) {
-    console.error("[Embed Keys API] POST error:", error)
+    console.error("[Agent API Keys] POST error:", error)
     return NextResponse.json(
-      { error: "Failed to create embed key" },
+      { error: "Failed to create API key" },
       { status: 500 }
     )
   }

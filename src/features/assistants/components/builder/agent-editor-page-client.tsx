@@ -563,6 +563,8 @@ export default function AgentEditorPageClient({
         <TabDeploy
           agentId={isNew ? null : id}
           agentName={form.name || "Untitled Agent"}
+          agentModel={form.model}
+          agentCreatedAt={formAssistant.createdAt}
           isNew={isNew}
         />
       )}
