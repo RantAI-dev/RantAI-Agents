@@ -1,15 +1,15 @@
-use std::process::Command;
 use rand::Rng;
+use std::process::Command;
 
-pub mod preflight;
-pub mod deps;
-pub mod infrastructure;
 pub mod app_setup;
 pub mod config;
 pub mod database;
+pub mod deps;
+pub mod executor;
+pub mod infrastructure;
+pub mod preflight;
 pub mod services;
 pub mod verify;
-pub mod executor;
 
 pub fn run_command(cmd: &str, args: &[&str]) -> Result<String, String> {
     let output = Command::new(cmd)
@@ -50,7 +50,11 @@ pub fn generate_random_string(len: usize) -> String {
     (0..len)
         .map(|_| {
             let idx = rng.gen_range(0..36);
-            if idx < 10 { (b'0' + idx) as char } else { (b'a' + idx - 10) as char }
+            if idx < 10 {
+                (b'0' + idx) as char
+            } else {
+                (b'a' + idx - 10) as char
+            }
         })
         .collect()
 }

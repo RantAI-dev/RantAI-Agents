@@ -2,8 +2,8 @@ use std::path::Path;
 use std::thread;
 use std::time::Duration;
 
-use crate::app::{CheckItem, InstallConfig, Status};
 use super::run_command;
+use crate::app::{CheckItem, InstallConfig, Status};
 
 /// Run all post-install verification checks.
 pub fn run_verification(config: &InstallConfig) -> Vec<CheckItem> {
@@ -97,17 +97,22 @@ fn check_postgres(config: &InstallConfig) -> CheckItem {
     let result = if super::command_exists("pg_isready") {
         run_command(
             "pg_isready",
-            &["-h", &config.db_host, "-p", &config.db_port, "-U", &config.db_user],
+            &[
+                "-h",
+                &config.db_host,
+                "-p",
+                &config.db_port,
+                "-U",
+                &config.db_user,
+            ],
         )
     } else {
         // TCP probe fallback
         let addr = format!("{}:{}", config.db_host, config.db_port);
         match addr.parse::<std::net::SocketAddr>() {
-            Ok(addr) => {
-                std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(3))
-                    .map(|_| "connected".to_string())
-                    .map_err(|e| e.to_string())
-            }
+            Ok(addr) => std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(3))
+                .map(|_| "connected".to_string())
+                .map_err(|e| e.to_string()),
             Err(e) => Err(e.to_string()),
         }
     };
@@ -168,7 +173,19 @@ fn check_web_ui(base_url: &str) -> CheckItem {
     let delay = Duration::from_secs(2);
 
     for attempt in 1..=max_retries {
-        match run_command("curl", &["-sf", "--max-time", "5", "-o", "/dev/null", "-w", "%{http_code}", url]) {
+        match run_command(
+            "curl",
+            &[
+                "-sf",
+                "--max-time",
+                "5",
+                "-o",
+                "/dev/null",
+                "-w",
+                "%{http_code}",
+                url,
+            ],
+        ) {
             Ok(code) => {
                 let code = code.trim();
                 if code.starts_with('2') || code.starts_with('3') {
@@ -189,7 +206,10 @@ fn check_web_ui(base_url: &str) -> CheckItem {
     CheckItem {
         name: "Web UI".to_string(),
         status: Status::Warning,
-        message: Some(format!("Not responding at {} after {} retries (may still be starting)", url, max_retries)),
+        message: Some(format!(
+            "Not responding at {} after {} retries (may still be starting)",
+            url, max_retries
+        )),
     }
 }
 

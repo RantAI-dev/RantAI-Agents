@@ -16,10 +16,7 @@ pub fn draw(f: &mut Frame, entries: &[&LogEntry], scroll_offset: usize, area: Re
     let max_scroll = total.saturating_sub(visible_height);
     let offset = scroll_offset.min(max_scroll);
 
-    let visible = entries
-        .iter()
-        .skip(offset)
-        .take(visible_height);
+    let visible = entries.iter().skip(offset).take(visible_height);
 
     let lines: Vec<Line> = visible
         .map(|entry| {

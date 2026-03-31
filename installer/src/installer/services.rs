@@ -1,36 +1,57 @@
 use std::fs;
 use tokio::sync::mpsc::Sender;
 
-use crate::app::InstallConfig;
 use super::executor::InstallMessage;
 use super::{run_command, run_sudo};
+use crate::app::InstallConfig;
 
 const SERVICE_NAME: &str = "rantai-agents";
 const SERVICE_USER: &str = "rantai-agents";
 
 /// Install and enable the systemd service for RantAI Agents.
-pub async fn install_services(config: &InstallConfig, tx: &Sender<InstallMessage>) -> Result<(), String> {
+pub async fn install_services(
+    config: &InstallConfig,
+    tx: &Sender<InstallMessage>,
+) -> Result<(), String> {
     let install_dir = &config.install_dir;
 
     // ── Step 1: Create system user ──
-    tx.send(InstallMessage::Progress(format!("Creating system user '{}'...", SERVICE_USER)))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(format!(
+        "Creating system user '{}'...",
+        SERVICE_USER
+    )))
+    .await
+    .ok();
 
     create_service_user()?;
 
     // ── Step 2: Set directory ownership ──
-    tx.send(InstallMessage::Progress("Setting directory ownership...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Setting directory ownership...".into(),
+    ))
+    .await
+    .ok();
 
-    run_sudo("chown", &["-R", &format!("{SERVICE_USER}:{SERVICE_USER}"), install_dir])?;
-    run_sudo("chown", &["-R", &format!("{SERVICE_USER}:{SERVICE_USER}"), &config.data_dir])?;
+    run_sudo(
+        "chown",
+        &["-R", &format!("{SERVICE_USER}:{SERVICE_USER}"), install_dir],
+    )?;
+    run_sudo(
+        "chown",
+        &[
+            "-R",
+            &format!("{SERVICE_USER}:{SERVICE_USER}"),
+            &config.data_dir,
+        ],
+    )?;
 
     // Ensure .env is readable by service user but not world-readable
     let env_path = format!("{install_dir}/.env");
     if std::path::Path::new(&env_path).exists() {
-        run_sudo("chown", &[&format!("{SERVICE_USER}:{SERVICE_USER}"), &env_path])?;
+        run_sudo(
+            "chown",
+            &[&format!("{SERVICE_USER}:{SERVICE_USER}"), &env_path],
+        )?;
         run_sudo("chmod", &["600", &env_path])?;
     }
 
@@ -38,9 +59,11 @@ pub async fn install_services(config: &InstallConfig, tx: &Sender<InstallMessage
     let bun_path = find_bun_absolute_path()?;
 
     // ── Step 4: Write systemd unit file ──
-    tx.send(InstallMessage::Progress("Writing systemd service unit...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Writing systemd service unit...".into(),
+    ))
+    .await
+    .ok();
 
     let unit_content = generate_unit_file(install_dir, &bun_path);
     let unit_path = format!("/etc/systemd/system/{SERVICE_NAME}.service");
@@ -53,9 +76,11 @@ pub async fn install_services(config: &InstallConfig, tx: &Sender<InstallMessage
     run_sudo("chmod", &["644", &unit_path])?;
 
     // ── Step 5: Reload systemd, enable and start ──
-    tx.send(InstallMessage::Progress("Enabling and starting systemd service...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Enabling and starting systemd service...".into(),
+    ))
+    .await
+    .ok();
 
     run_sudo("systemctl", &["daemon-reload"])?;
     run_sudo("systemctl", &["enable", SERVICE_NAME])?;
@@ -66,14 +91,20 @@ pub async fn install_services(config: &InstallConfig, tx: &Sender<InstallMessage
     let status = run_command("systemctl", &["is-active", SERVICE_NAME]);
     match status {
         Ok(out) if out.trim() == "active" => {
-            tx.send(InstallMessage::Progress(format!("Service '{}' is running", SERVICE_NAME)))
-                .await
-                .ok();
+            tx.send(InstallMessage::Progress(format!(
+                "Service '{}' is running",
+                SERVICE_NAME
+            )))
+            .await
+            .ok();
         }
         _ => {
             tx.send(InstallMessage::Log(
                 crate::app::LogLevel::Warning,
-                format!("Service '{}' may not have started cleanly. Check: systemctl status {}", SERVICE_NAME, SERVICE_NAME),
+                format!(
+                    "Service '{}' may not have started cleanly. Check: systemctl status {}",
+                    SERVICE_NAME, SERVICE_NAME
+                ),
             ))
             .await
             .ok();
@@ -96,8 +127,10 @@ fn create_service_user() -> Result<(), String> {
         &[
             "--system",
             "--no-create-home",
-            "--shell", "/usr/sbin/nologin",
-            "--comment", "RantAI Agents Service",
+            "--shell",
+            "/usr/sbin/nologin",
+            "--comment",
+            "RantAI Agents Service",
             SERVICE_USER,
         ],
     )?;

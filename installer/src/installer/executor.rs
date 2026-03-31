@@ -63,7 +63,9 @@ fn should_skip_phase(phase: Phase, config: &InstallConfig) -> bool {
         Phase::Preflight => false,
 
         // Dependencies: skip in Docker-only mode (no native app)
-        Phase::Dependencies => !config.mode.includes_native_app() && !config.mode.includes_docker_services(),
+        Phase::Dependencies => {
+            !config.mode.includes_native_app() && !config.mode.includes_docker_services()
+        }
 
         // Infrastructure: skip if no docker services
         Phase::Infrastructure => !config.mode.includes_docker_services(),
@@ -93,9 +95,11 @@ async fn execute_phase(
 ) -> Result<(), String> {
     match phase {
         Phase::Preflight => {
-            tx.send(InstallMessage::Progress("Running preflight checks...".into()))
-                .await
-                .ok();
+            tx.send(InstallMessage::Progress(
+                "Running preflight checks...".into(),
+            ))
+            .await
+            .ok();
 
             let checks = super::preflight::run_preflight_checks(config);
             let errors: Vec<_> = checks
@@ -106,13 +110,7 @@ async fn execute_phase(
             if !errors.is_empty() {
                 let msg = errors
                     .iter()
-                    .map(|c| {
-                        format!(
-                            "{}: {}",
-                            c.name,
-                            c.message.as_deref().unwrap_or("failed")
-                        )
-                    })
+                    .map(|c| format!("{}: {}", c.name, c.message.as_deref().unwrap_or("failed")))
                     .collect::<Vec<_>>()
                     .join("; ");
                 return Err(format!("Preflight check failures: {}", msg));
@@ -133,22 +131,18 @@ async fn execute_phase(
             Ok(())
         }
 
-        Phase::Dependencies => {
-            super::deps::install_dependencies(config, tx).await
-        }
+        Phase::Dependencies => super::deps::install_dependencies(config, tx).await,
 
-        Phase::Infrastructure => {
-            super::infrastructure::start_infrastructure(config, tx).await
-        }
+        Phase::Infrastructure => super::infrastructure::start_infrastructure(config, tx).await,
 
-        Phase::ApplicationSetup => {
-            super::app_setup::setup_application(config, tx).await
-        }
+        Phase::ApplicationSetup => super::app_setup::setup_application(config, tx).await,
 
         Phase::Configuration => {
-            tx.send(InstallMessage::Progress("Generating .env configuration...".into()))
-                .await
-                .ok();
+            tx.send(InstallMessage::Progress(
+                "Generating .env configuration...".into(),
+            ))
+            .await
+            .ok();
 
             super::config::generate_config(config)?;
 
@@ -162,18 +156,16 @@ async fn execute_phase(
             Ok(())
         }
 
-        Phase::Database => {
-            super::database::run_database_migrations(config, tx).await
-        }
+        Phase::Database => super::database::run_database_migrations(config, tx).await,
 
-        Phase::Services => {
-            super::services::install_services(config, tx).await
-        }
+        Phase::Services => super::services::install_services(config, tx).await,
 
         Phase::Verification => {
-            tx.send(InstallMessage::Progress("Running post-install verification...".into()))
-                .await
-                .ok();
+            tx.send(InstallMessage::Progress(
+                "Running post-install verification...".into(),
+            ))
+            .await
+            .ok();
 
             let checks = super::verify::run_verification(config);
 
@@ -186,7 +178,11 @@ async fn execute_phase(
                 };
                 tx.send(InstallMessage::Log(
                     level,
-                    format!("{}: {}", check.name, check.message.as_deref().unwrap_or("ok")),
+                    format!(
+                        "{}: {}",
+                        check.name,
+                        check.message.as_deref().unwrap_or("ok")
+                    ),
                 ))
                 .await
                 .ok();
@@ -196,7 +192,10 @@ async fn execute_phase(
             if error_count > 0 {
                 tx.send(InstallMessage::Log(
                     LogLevel::Warning,
-                    format!("{} verification check(s) failed — review above", error_count),
+                    format!(
+                        "{} verification check(s) failed — review above",
+                        error_count
+                    ),
                 ))
                 .await
                 .ok();

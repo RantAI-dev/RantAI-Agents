@@ -293,6 +293,24 @@ const allowedDashboardRedirectPages = new Set([
   "app/dashboard/organization/page.tsx",
   "app/dashboard/organization/members/page.tsx",
   "app/dashboard/organization/billing/page.tsx",
+  // Redirect stubs (old routes → new grouped pages)
+  "app/dashboard/settings/about/page.tsx",
+  "app/dashboard/settings/credentials/page.tsx",
+  "app/dashboard/settings/embed/page.tsx",
+  "app/dashboard/settings/mcp/page.tsx",
+  "app/dashboard/settings/members/page.tsx",
+  "app/dashboard/settings/memory/page.tsx",
+  "app/dashboard/settings/skills/page.tsx",
+  "app/dashboard/settings/statistics/page.tsx",
+  "app/dashboard/settings/tools/page.tsx",
+])
+
+// Unified pages that pass searchParams to feature components (not thin re-exports, not redirects)
+const allowedDashboardWrapperPages = new Set([
+  "app/dashboard/settings/general/page.tsx",
+  "app/dashboard/settings/organization/page.tsx",
+  "app/dashboard/settings/agent-config/page.tsx",
+  "app/dashboard/settings/analytics/page.tsx",
 ])
 
 const thinDashboardPageExportPattern = /^export \{ default \} from "@\/src\/features\/.+?"\s*$/
@@ -317,7 +335,9 @@ for (const relativePath of files) {
 
   if (relativePath.startsWith("app/dashboard/") && relativePath.endsWith("/page.tsx")) {
     const normalized = source.trim()
-    if (allowedDashboardRedirectPages.has(relativePath)) {
+    if (allowedDashboardWrapperPages.has(relativePath)) {
+      // Unified pages with searchParams routing — allowed as-is
+    } else if (allowedDashboardRedirectPages.has(relativePath)) {
       if (!/redirect\(/.test(normalized)) {
         thinPageViolations.push(`${relativePath}: expected redirect-based page stub`)
       }

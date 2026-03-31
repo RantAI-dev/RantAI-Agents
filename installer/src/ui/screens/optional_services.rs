@@ -53,7 +53,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(2), // header
-            Constraint::Min(0),   // services
+            Constraint::Min(0),    // services
             Constraint::Length(2), // key hints
         ])
         .split(inner);

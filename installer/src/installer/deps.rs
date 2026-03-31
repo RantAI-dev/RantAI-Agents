@@ -1,8 +1,8 @@
 use tokio::sync::mpsc::Sender;
 
-use crate::app::InstallConfig;
 use super::executor::InstallMessage;
 use super::{command_exists, run_command, run_sudo};
+use crate::app::InstallConfig;
 
 /// Detect the system package manager.
 enum PackageManager {
@@ -24,24 +24,64 @@ fn detect_package_manager() -> Result<PackageManager, String> {
 }
 
 /// Install system dependencies, Docker (if needed), and Bun runtime.
-pub async fn install_dependencies(config: &InstallConfig, tx: &Sender<InstallMessage>) -> Result<(), String> {
+pub async fn install_dependencies(
+    config: &InstallConfig,
+    tx: &Sender<InstallMessage>,
+) -> Result<(), String> {
     let pm = detect_package_manager()?;
 
     // ── Step 1: Install basic system packages ──
-    tx.send(InstallMessage::Progress("Installing system packages (curl, git, unzip)...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Installing system packages (curl, git, unzip)...".into(),
+    ))
+    .await
+    .ok();
 
     match pm {
         PackageManager::Apt => {
             run_sudo("apt-get", &["update", "-qq"])?;
-            run_sudo("apt-get", &["install", "-y", "-qq", "curl", "git", "unzip", "ca-certificates", "gnupg", "lsb-release"])?;
+            run_sudo(
+                "apt-get",
+                &[
+                    "install",
+                    "-y",
+                    "-qq",
+                    "curl",
+                    "git",
+                    "unzip",
+                    "ca-certificates",
+                    "gnupg",
+                    "lsb-release",
+                ],
+            )?;
         }
         PackageManager::Dnf => {
-            run_sudo("dnf", &["install", "-y", "-q", "curl", "git", "unzip", "ca-certificates"])?;
+            run_sudo(
+                "dnf",
+                &[
+                    "install",
+                    "-y",
+                    "-q",
+                    "curl",
+                    "git",
+                    "unzip",
+                    "ca-certificates",
+                ],
+            )?;
         }
         PackageManager::Yum => {
-            run_sudo("yum", &["install", "-y", "-q", "curl", "git", "unzip", "ca-certificates"])?;
+            run_sudo(
+                "yum",
+                &[
+                    "install",
+                    "-y",
+                    "-q",
+                    "curl",
+                    "git",
+                    "unzip",
+                    "ca-certificates",
+                ],
+            )?;
         }
     }
 
@@ -57,13 +97,17 @@ pub async fn install_dependencies(config: &InstallConfig, tx: &Sender<InstallMes
 
         install_docker(&pm).await?;
 
-        tx.send(InstallMessage::Progress("Docker installed successfully".into()))
-            .await
-            .ok();
+        tx.send(InstallMessage::Progress(
+            "Docker installed successfully".into(),
+        ))
+        .await
+        .ok();
     } else if config.mode.includes_docker_services() {
-        tx.send(InstallMessage::Progress("Docker already installed, skipping".into()))
-            .await
-            .ok();
+        tx.send(InstallMessage::Progress(
+            "Docker already installed, skipping".into(),
+        ))
+        .await
+        .ok();
     }
 
     // ── Step 3: Install Bun runtime ──
@@ -79,9 +123,11 @@ pub async fn install_dependencies(config: &InstallConfig, tx: &Sender<InstallMes
                 .await
                 .ok();
         } else {
-            tx.send(InstallMessage::Progress("Bun runtime already installed, skipping".into()))
-                .await
-                .ok();
+            tx.send(InstallMessage::Progress(
+                "Bun runtime already installed, skipping".into(),
+            ))
+            .await
+            .ok();
         }
     }
 
@@ -103,21 +149,46 @@ async fn install_docker(pm: &PackageManager) -> Result<(), String> {
             // Set up the repository
             run_command(
                 "sh",
-                &["-c", r#"echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release && echo $ID) $(. /etc/os-release && echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null"#],
+                &[
+                    "-c",
+                    r#"echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release && echo $ID) $(. /etc/os-release && echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null"#,
+                ],
             )?;
 
             run_sudo("apt-get", &["update", "-qq"])?;
             run_sudo(
                 "apt-get",
-                &["install", "-y", "-qq", "docker-ce", "docker-ce-cli", "containerd.io", "docker-compose-plugin"],
+                &[
+                    "install",
+                    "-y",
+                    "-qq",
+                    "docker-ce",
+                    "docker-ce-cli",
+                    "containerd.io",
+                    "docker-compose-plugin",
+                ],
             )?;
         }
         PackageManager::Dnf => {
             run_sudo(
                 "dnf",
-                &["config-manager", "--add-repo", "https://download.docker.com/linux/centos/docker-ce.repo"],
+                &[
+                    "config-manager",
+                    "--add-repo",
+                    "https://download.docker.com/linux/centos/docker-ce.repo",
+                ],
             )?;
-            run_sudo("dnf", &["install", "-y", "docker-ce", "docker-ce-cli", "containerd.io", "docker-compose-plugin"])?;
+            run_sudo(
+                "dnf",
+                &[
+                    "install",
+                    "-y",
+                    "docker-ce",
+                    "docker-ce-cli",
+                    "containerd.io",
+                    "docker-compose-plugin",
+                ],
+            )?;
         }
         PackageManager::Yum => {
             run_sudo(
@@ -126,7 +197,17 @@ async fn install_docker(pm: &PackageManager) -> Result<(), String> {
             ).or_else(|_| {
                 run_command("sh", &["-c", "curl -fsSL https://download.docker.com/linux/centos/docker-ce.repo | sudo tee /etc/yum.repos.d/docker-ce.repo > /dev/null"])
             })?;
-            run_sudo("yum", &["install", "-y", "docker-ce", "docker-ce-cli", "containerd.io", "docker-compose-plugin"])?;
+            run_sudo(
+                "yum",
+                &[
+                    "install",
+                    "-y",
+                    "docker-ce",
+                    "docker-ce-cli",
+                    "containerd.io",
+                    "docker-compose-plugin",
+                ],
+            )?;
         }
     }
 
@@ -146,10 +227,7 @@ async fn install_docker(pm: &PackageManager) -> Result<(), String> {
 
 /// Install Bun via the official install script.
 async fn install_bun() -> Result<(), String> {
-    run_command(
-        "sh",
-        &["-c", "curl -fsSL https://bun.sh/install | bash"],
-    )?;
+    run_command("sh", &["-c", "curl -fsSL https://bun.sh/install | bash"])?;
 
     // Verify bun is available (it installs to ~/.bun/bin)
     let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());

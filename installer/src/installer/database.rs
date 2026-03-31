@@ -2,18 +2,23 @@ use std::thread;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 
-use crate::app::InstallConfig;
 use super::executor::InstallMessage;
 use super::run_command;
+use crate::app::InstallConfig;
 
 /// Run Prisma database migrations and seed.
-pub async fn run_database_migrations(config: &InstallConfig, tx: &Sender<InstallMessage>) -> Result<(), String> {
+pub async fn run_database_migrations(
+    config: &InstallConfig,
+    tx: &Sender<InstallMessage>,
+) -> Result<(), String> {
     let install_dir = &config.install_dir;
 
     // ── Step 1: Wait for PostgreSQL to be ready ──
-    tx.send(InstallMessage::Progress("Waiting for PostgreSQL to accept connections...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Waiting for PostgreSQL to accept connections...".into(),
+    ))
+    .await
+    .ok();
 
     wait_for_postgres(config)?;
 
@@ -23,17 +28,15 @@ pub async fn run_database_migrations(config: &InstallConfig, tx: &Sender<Install
     // Build DATABASE_URL for the migration command
     let database_url = format!(
         "postgresql://{}:{}@{}:{}/{}",
-        config.db_user,
-        config.db_password,
-        config.db_host,
-        config.db_port,
-        config.db_name,
+        config.db_user, config.db_password, config.db_host, config.db_port, config.db_name,
     );
 
     // ── Step 3: Run prisma migrate deploy ──
-    tx.send(InstallMessage::Progress("Running Prisma migrations (prisma migrate deploy)...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Running Prisma migrations (prisma migrate deploy)...".into(),
+    ))
+    .await
+    .ok();
 
     // Use bun to run prisma via npx-like invocation
     let migrate_output = std::process::Command::new(&bun)
@@ -48,7 +51,10 @@ pub async fn run_database_migrations(config: &InstallConfig, tx: &Sender<Install
         // If migrate deploy fails, try db push as fallback (handles shadow DB issues)
         tx.send(InstallMessage::Log(
             crate::app::LogLevel::Warning,
-            format!("prisma migrate deploy failed ({}), trying db push fallback...", stderr.lines().next().unwrap_or("unknown error")),
+            format!(
+                "prisma migrate deploy failed ({}), trying db push fallback...",
+                stderr.lines().next().unwrap_or("unknown error")
+            ),
         ))
         .await
         .ok();
@@ -66,9 +72,11 @@ pub async fn run_database_migrations(config: &InstallConfig, tx: &Sender<Install
         }
     }
 
-    tx.send(InstallMessage::Progress("Database migrations applied".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Database migrations applied".into(),
+    ))
+    .await
+    .ok();
 
     // ── Step 4: Run seed (optional, don't fail on error) ──
     tx.send(InstallMessage::Progress("Running database seed...".into()))
@@ -83,15 +91,20 @@ pub async fn run_database_migrations(config: &InstallConfig, tx: &Sender<Install
 
     match seed_output {
         Ok(output) if output.status.success() => {
-            tx.send(InstallMessage::Progress("Database seeded successfully".into()))
-                .await
-                .ok();
+            tx.send(InstallMessage::Progress(
+                "Database seeded successfully".into(),
+            ))
+            .await
+            .ok();
         }
         Ok(output) => {
             let stderr = String::from_utf8_lossy(&output.stderr);
             tx.send(InstallMessage::Log(
                 crate::app::LogLevel::Warning,
-                format!("Database seed returned non-zero (may be normal): {}", stderr.lines().next().unwrap_or("")),
+                format!(
+                    "Database seed returned non-zero (may be normal): {}",
+                    stderr.lines().next().unwrap_or("")
+                ),
             ))
             .await
             .ok();

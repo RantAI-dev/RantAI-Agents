@@ -1,8 +1,8 @@
 use std::net::TcpListener;
 use sysinfo::System;
 
-use crate::app::{CheckItem, InstallConfig, Status};
 use super::command_exists;
+use crate::app::{CheckItem, InstallConfig, Status};
 
 const MIN_RAM_MB: u64 = 2048;
 const RECOMMENDED_DISK_GB: u64 = 5;
@@ -31,9 +31,7 @@ pub fn run_preflight_checks(config: &InstallConfig) -> Vec<CheckItem> {
 }
 
 fn get_required_ports(config: &InstallConfig) -> Vec<(u16, String)> {
-    let mut ports = vec![
-        (3000, "Web UI (Next.js)".to_string()),
-    ];
+    let mut ports = vec![(3000, "Web UI (Next.js)".to_string())];
 
     if config.mode.includes_docker_services() {
         ports.push((5432, "PostgreSQL".to_string()));
@@ -113,7 +111,10 @@ fn check_ram() -> CheckItem {
         CheckItem {
             name: "RAM".to_string(),
             status: Status::Success,
-            message: Some(format!("{} MB available (minimum {} MB)", total_mb, MIN_RAM_MB)),
+            message: Some(format!(
+                "{} MB available (minimum {} MB)",
+                total_mb, MIN_RAM_MB
+            )),
         }
     } else {
         CheckItem {

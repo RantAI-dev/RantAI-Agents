@@ -125,15 +125,25 @@ fn main() -> Result<()> {
 
             if non_interactive {
                 run_non_interactive(
-                    install_mode, install_dir, data_dir,
-                    db_host, db_port, db_name, db_user,
-                    db_password, admin_password, openrouter_key,
+                    install_mode,
+                    install_dir,
+                    data_dir,
+                    db_host,
+                    db_port,
+                    db_name,
+                    db_user,
+                    db_password,
+                    admin_password,
+                    openrouter_key,
                 )
             } else {
                 run_tui(install_mode)
             }
         }
-        Some(Commands::Uninstall { remove_data, remove_database }) => {
+        Some(Commands::Uninstall {
+            remove_data,
+            remove_database,
+        }) => {
             println!("Uninstalling RantAI Agents...");
             if remove_data {
                 println!("  Removing data files...");
@@ -179,8 +189,7 @@ fn run_event_loop(
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
                 // Ctrl+C always quits
-                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c')
-                {
+                if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
                     app.should_quit = true;
                 }
 
@@ -252,7 +261,9 @@ fn run_event_loop(
                             match key.code {
                                 KeyCode::Enter | KeyCode::Esc => {
                                     if key.code == KeyCode::Enter {
-                                        if let Some(field) = app.config_items.get_mut(app.config_index) {
+                                        if let Some(field) =
+                                            app.config_items.get_mut(app.config_index)
+                                        {
                                             field.value = app.config_buffer.clone();
                                         }
                                     }
@@ -260,7 +271,9 @@ fn run_event_loop(
                                     app.config_buffer.clear();
                                 }
                                 KeyCode::Char(c) => app.config_buffer.push(c),
-                                KeyCode::Backspace => { app.config_buffer.pop(); }
+                                KeyCode::Backspace => {
+                                    app.config_buffer.pop();
+                                }
                                 _ => {}
                             }
                         } else {
@@ -299,7 +312,10 @@ fn run_event_loop(
                     }
                     Screen::Preflight => match key.code {
                         KeyCode::Enter if app.preflight_done => {
-                            let has_errors = app.preflight_checks.iter().any(|c| c.status == app::Status::Error);
+                            let has_errors = app
+                                .preflight_checks
+                                .iter()
+                                .any(|c| c.status == app::Status::Error);
                             if !has_errors {
                                 app.screen = Screen::Progress;
                             }
@@ -432,11 +448,19 @@ fn run_non_interactive(
 
     println!("Running preflight checks...");
     let checks = installer::preflight::run_preflight_checks(&config);
-    let errors: Vec<_> = checks.iter().filter(|c| c.status == app::Status::Error).collect();
+    let errors: Vec<_> = checks
+        .iter()
+        .filter(|c| c.status == app::Status::Error)
+        .collect();
     if !errors.is_empty() {
         eprintln!("Preflight errors:");
         for e in &errors {
-            eprintln!("  {} {}: {}", theme::SYM_CROSS, e.name, e.message.as_deref().unwrap_or(""));
+            eprintln!(
+                "  {} {}: {}",
+                theme::SYM_CROSS,
+                e.name,
+                e.message.as_deref().unwrap_or("")
+            );
         }
         std::process::exit(1);
     }

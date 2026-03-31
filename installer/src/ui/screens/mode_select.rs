@@ -89,7 +89,10 @@ pub fn draw(f: &mut Frame, app: &App) {
     if selected.includes_docker_services() {
         details.push(Line::from(vec![
             Span::styled(format!("  {} ", theme::SYM_CHECK), theme::success()),
-            Span::styled("Docker services (PostgreSQL, SurrealDB, RustFS)", theme::text()),
+            Span::styled(
+                "Docker services (PostgreSQL, SurrealDB, RustFS)",
+                theme::text(),
+            ),
         ]));
     } else {
         details.push(Line::from(vec![

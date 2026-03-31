@@ -39,10 +39,16 @@ impl InstallMode {
 
     pub fn description(&self) -> &str {
         match self {
-            Self::Full => "All services via Docker, app runs natively with systemd. Best for production.",
-            Self::Minimal => "Bring your own services (PostgreSQL, SurrealDB, etc.). App runs natively.",
+            Self::Full => {
+                "All services via Docker, app runs natively with systemd. Best for production."
+            }
+            Self::Minimal => {
+                "Bring your own services (PostgreSQL, SurrealDB, etc.). App runs natively."
+            }
             Self::Docker => "Everything in Docker via docker compose. Simplest setup.",
-            Self::Development => "Services in Docker, app runs with bun dev. For local development.",
+            Self::Development => {
+                "Services in Docker, app runs with bun dev. For local development."
+            }
         }
     }
 
@@ -343,27 +349,92 @@ impl App {
     pub fn build_config_fields(&mut self) {
         let c = &self.config;
         let mut fields = vec![
-            ConfigField { key: "install_dir".into(), label: "Install Directory".into(), value: c.install_dir.clone(), secret: false },
-            ConfigField { key: "data_dir".into(), label: "Data Directory".into(), value: c.data_dir.clone(), secret: false },
+            ConfigField {
+                key: "install_dir".into(),
+                label: "Install Directory".into(),
+                value: c.install_dir.clone(),
+                secret: false,
+            },
+            ConfigField {
+                key: "data_dir".into(),
+                label: "Data Directory".into(),
+                value: c.data_dir.clone(),
+                secret: false,
+            },
         ];
 
         if !self.mode.includes_docker_services() || self.mode == InstallMode::Minimal {
             fields.extend([
-                ConfigField { key: "db_host".into(), label: "PostgreSQL Host".into(), value: c.db_host.clone(), secret: false },
-                ConfigField { key: "db_port".into(), label: "PostgreSQL Port".into(), value: c.db_port.clone(), secret: false },
-                ConfigField { key: "db_name".into(), label: "Database Name".into(), value: c.db_name.clone(), secret: false },
-                ConfigField { key: "db_user".into(), label: "Database User".into(), value: c.db_user.clone(), secret: false },
-                ConfigField { key: "db_password".into(), label: "Database Password".into(), value: c.db_password.clone(), secret: true },
-                ConfigField { key: "surrealdb_url".into(), label: "SurrealDB URL".into(), value: c.surrealdb_url.clone(), secret: false },
-                ConfigField { key: "s3_endpoint".into(), label: "S3 Endpoint".into(), value: c.s3_endpoint.clone(), secret: false },
+                ConfigField {
+                    key: "db_host".into(),
+                    label: "PostgreSQL Host".into(),
+                    value: c.db_host.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "db_port".into(),
+                    label: "PostgreSQL Port".into(),
+                    value: c.db_port.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "db_name".into(),
+                    label: "Database Name".into(),
+                    value: c.db_name.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "db_user".into(),
+                    label: "Database User".into(),
+                    value: c.db_user.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "db_password".into(),
+                    label: "Database Password".into(),
+                    value: c.db_password.clone(),
+                    secret: true,
+                },
+                ConfigField {
+                    key: "surrealdb_url".into(),
+                    label: "SurrealDB URL".into(),
+                    value: c.surrealdb_url.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "s3_endpoint".into(),
+                    label: "S3 Endpoint".into(),
+                    value: c.s3_endpoint.clone(),
+                    secret: false,
+                },
             ]);
         }
 
         fields.extend([
-            ConfigField { key: "nextauth_url".into(), label: "App URL".into(), value: c.nextauth_url.clone(), secret: false },
-            ConfigField { key: "openrouter_api_key".into(), label: "OpenRouter API Key".into(), value: c.openrouter_api_key.clone(), secret: true },
-            ConfigField { key: "admin_email".into(), label: "Admin Email".into(), value: c.admin_email.clone(), secret: false },
-            ConfigField { key: "admin_password".into(), label: "Admin Password".into(), value: c.admin_password.clone(), secret: true },
+            ConfigField {
+                key: "nextauth_url".into(),
+                label: "App URL".into(),
+                value: c.nextauth_url.clone(),
+                secret: false,
+            },
+            ConfigField {
+                key: "openrouter_api_key".into(),
+                label: "OpenRouter API Key".into(),
+                value: c.openrouter_api_key.clone(),
+                secret: true,
+            },
+            ConfigField {
+                key: "admin_email".into(),
+                label: "Admin Email".into(),
+                value: c.admin_email.clone(),
+                secret: false,
+            },
+            ConfigField {
+                key: "admin_password".into(),
+                label: "Admin Password".into(),
+                value: c.admin_password.clone(),
+                secret: true,
+            },
         ]);
 
         self.config_items = fields;

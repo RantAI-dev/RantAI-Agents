@@ -29,7 +29,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(2), // header
-            Constraint::Min(0),   // checklist
+            Constraint::Min(0),    // checklist
             Constraint::Length(2), // key hints
         ])
         .split(inner);
@@ -44,17 +44,11 @@ pub fn draw(f: &mut Frame, app: &App) {
             Span::styled("Running verification checks...", theme::text()),
         ])
     } else if app.verify_done {
-        let has_errors = app
-            .verify_checks
-            .iter()
-            .any(|c| c.status == Status::Error);
+        let has_errors = app.verify_checks.iter().any(|c| c.status == Status::Error);
         if has_errors {
             Line::from(vec![
                 Span::styled(format!("{} ", theme::SYM_WARN), theme::warning()),
-                Span::styled(
-                    "Verification completed with issues",
-                    theme::warning(),
-                ),
+                Span::styled("Verification completed with issues", theme::warning()),
             ])
         } else {
             Line::from(vec![
@@ -63,10 +57,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             ])
         }
     } else {
-        Line::from(Span::styled(
-            "Preparing verification...",
-            theme::muted(),
-        ))
+        Line::from(Span::styled("Preparing verification...", theme::muted()))
     };
 
     let header = Paragraph::new(header_text);

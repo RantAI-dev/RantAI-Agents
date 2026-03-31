@@ -29,7 +29,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(2), // header / spinner
-            Constraint::Min(0),   // checklist
+            Constraint::Min(0),    // checklist
             Constraint::Length(3), // summary + hints
         ])
         .split(inner);
@@ -103,10 +103,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     // Key hints based on state
     if app.preflight_running {
-        summary_lines.push(Line::from(Span::styled(
-            "Please wait...",
-            theme::muted(),
-        )));
+        summary_lines.push(Line::from(Span::styled("Please wait...", theme::muted())));
     } else if app.preflight_done && errors == 0 {
         summary_lines.push(Line::from(vec![
             Span::styled("Enter", theme::key_hint()),

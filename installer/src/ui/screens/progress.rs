@@ -20,7 +20,10 @@ pub fn draw(f: &mut Frame, app: &App) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme::border_active())
-        .title(Span::styled(" Installation Progress ", theme::primary_bold()));
+        .title(Span::styled(
+            " Installation Progress ",
+            theme::primary_bold(),
+        ));
 
     let inner = block.inner(outer[0]);
     f.render_widget(block, outer[0]);
@@ -30,7 +33,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         .constraints([
             Constraint::Length(2),  // header / spinner
             Constraint::Length(12), // phase progress
-            Constraint::Min(0),    // log viewer
+            Constraint::Min(0),     // log viewer
             Constraint::Length(2),  // key hints
         ])
         .split(inner);

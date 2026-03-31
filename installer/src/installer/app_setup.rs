@@ -2,33 +2,43 @@ use std::fs;
 use std::path::Path;
 use tokio::sync::mpsc::Sender;
 
-use crate::app::InstallConfig;
 use super::executor::InstallMessage;
 use super::{run_command, run_sudo};
+use crate::app::InstallConfig;
 
 const REPO_URL: &str = "https://github.com/RantAI-dev/RantAI-Agents.git";
 const SUBMODULE_RANTAICLAW_URL: &str = "https://github.com/RantAI-dev/RantaiClaw.git";
 const SUBMODULE_COMMUNITY_URL: &str = "https://github.com/RantAI-dev/RantAI-Agents-Community.git";
 
 /// Clone the repository, initialize submodules, install dependencies, and build.
-pub async fn setup_application(config: &InstallConfig, tx: &Sender<InstallMessage>) -> Result<(), String> {
+pub async fn setup_application(
+    config: &InstallConfig,
+    tx: &Sender<InstallMessage>,
+) -> Result<(), String> {
     let install_dir = &config.install_dir;
 
     // ── Step 1: Clone repository ──
     if Path::new(&format!("{install_dir}/.git")).exists() {
-        tx.send(InstallMessage::Progress("Repository already cloned, pulling latest...".into()))
-            .await
-            .ok();
-        run_command("git", &["-C", install_dir, "pull", "--ff-only"])
-            .or_else(|_| {
-                // If pull fails (diverged), just reset to origin
-                run_command("git", &["-C", install_dir, "fetch", "origin"])?;
-                run_command("git", &["-C", install_dir, "reset", "--hard", "origin/main"])
-            })?;
+        tx.send(InstallMessage::Progress(
+            "Repository already cloned, pulling latest...".into(),
+        ))
+        .await
+        .ok();
+        run_command("git", &["-C", install_dir, "pull", "--ff-only"]).or_else(|_| {
+            // If pull fails (diverged), just reset to origin
+            run_command("git", &["-C", install_dir, "fetch", "origin"])?;
+            run_command(
+                "git",
+                &["-C", install_dir, "reset", "--hard", "origin/main"],
+            )
+        })?;
     } else {
-        tx.send(InstallMessage::Progress(format!("Cloning repository to {}...", install_dir)))
-            .await
-            .ok();
+        tx.send(InstallMessage::Progress(format!(
+            "Cloning repository to {}...",
+            install_dir
+        )))
+        .await
+        .ok();
 
         // Ensure parent directory exists
         if let Some(parent) = Path::new(install_dir).parent() {
@@ -47,32 +57,43 @@ pub async fn setup_application(config: &InstallConfig, tx: &Sender<InstallMessag
     }
 
     // ── Step 2: Rewrite .gitmodules SSH URLs to HTTPS ──
-    tx.send(InstallMessage::Progress("Configuring submodule URLs for HTTPS...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Configuring submodule URLs for HTTPS...".into(),
+    ))
+    .await
+    .ok();
 
     rewrite_submodule_urls(install_dir)?;
 
     // ── Step 3: Initialize and update submodules ──
-    tx.send(InstallMessage::Progress("Initializing git submodules...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Initializing git submodules...".into(),
+    ))
+    .await
+    .ok();
 
     run_command("git", &["-C", install_dir, "submodule", "init"])?;
-    run_command("git", &["-C", install_dir, "submodule", "update", "--depth", "1"])?;
+    run_command(
+        "git",
+        &["-C", install_dir, "submodule", "update", "--depth", "1"],
+    )?;
 
     // ── Step 4: Install Node dependencies via Bun ──
-    tx.send(InstallMessage::Progress("Installing dependencies with Bun...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Installing dependencies with Bun...".into(),
+    ))
+    .await
+    .ok();
 
     let bun = find_bun_binary()?;
     run_command(&bun, &["install", "--cwd", install_dir])?;
 
     // ── Step 5: Build the application ──
-    tx.send(InstallMessage::Progress("Building application (bun run build)...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Building application (bun run build)...".into(),
+    ))
+    .await
+    .ok();
 
     // Ensure .env exists before build (Next.js needs env vars at build time)
     let env_path = format!("{install_dir}/.env");
@@ -84,9 +105,11 @@ pub async fn setup_application(config: &InstallConfig, tx: &Sender<InstallMessag
 
     run_command(&bun, &["run", "--cwd", install_dir, "build"])?;
 
-    tx.send(InstallMessage::Progress("Application build complete".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Application build complete".into(),
+    ))
+    .await
+    .ok();
 
     Ok(())
 }
@@ -96,11 +119,25 @@ fn rewrite_submodule_urls(install_dir: &str) -> Result<(), String> {
     // Use git submodule set-url for each known submodule
     let _ = run_command(
         "git",
-        &["-C", install_dir, "submodule", "set-url", "packages/rantaiclaw", SUBMODULE_RANTAICLAW_URL],
+        &[
+            "-C",
+            install_dir,
+            "submodule",
+            "set-url",
+            "packages/rantaiclaw",
+            SUBMODULE_RANTAICLAW_URL,
+        ],
     );
     let _ = run_command(
         "git",
-        &["-C", install_dir, "submodule", "set-url", "packages/community", SUBMODULE_COMMUNITY_URL],
+        &[
+            "-C",
+            install_dir,
+            "submodule",
+            "set-url",
+            "packages/community",
+            SUBMODULE_COMMUNITY_URL,
+        ],
     );
 
     // Also do a brute-force replacement in .gitmodules if the file exists

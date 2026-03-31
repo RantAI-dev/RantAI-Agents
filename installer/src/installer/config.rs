@@ -2,8 +2,8 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
-use crate::app::InstallConfig;
 use super::generate_random_string;
+use crate::app::InstallConfig;
 
 /// Generate the .env file from the install configuration.
 /// Auto-generates random values for any secrets left empty.
@@ -30,11 +30,7 @@ pub fn generate_config(config: &mut InstallConfig) -> Result<(), String> {
 
     let database_url = format!(
         "postgresql://{}:{}@{}:{}/{}",
-        config.db_user,
-        config.db_password,
-        config.db_host,
-        config.db_port,
-        config.db_name,
+        config.db_user, config.db_password, config.db_host, config.db_port, config.db_name,
     );
 
     let env_content = format!(
@@ -124,8 +120,7 @@ PORT=3000
             .map_err(|e| format!("Failed to create install directory: {}", e))?;
     }
 
-    fs::write(&env_path, env_content)
-        .map_err(|e| format!("Failed to write .env file: {}", e))?;
+    fs::write(&env_path, env_content).map_err(|e| format!("Failed to write .env file: {}", e))?;
 
     // Set restrictive permissions (owner read/write only)
     fs::set_permissions(&env_path, fs::Permissions::from_mode(0o600))

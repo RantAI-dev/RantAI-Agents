@@ -38,17 +38,17 @@ pub fn draw(f: &mut Frame, app: &App) {
     )));
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        format!(
-            "{} has been installed and configured.",
-            theme::PRODUCT_NAME
-        ),
+        format!("{} has been installed and configured.", theme::PRODUCT_NAME),
         theme::text(),
     )));
     lines.push(Line::from(""));
     lines.push(Line::from(""));
 
     // Access info
-    lines.push(Line::from(Span::styled("Access Information", theme::primary_bold())));
+    lines.push(Line::from(Span::styled(
+        "Access Information",
+        theme::primary_bold(),
+    )));
     lines.push(Line::from(vec![
         Span::styled("  Web UI:      ", theme::muted()),
         Span::styled(&app.config.nextauth_url, theme::info()),
@@ -61,7 +61,10 @@ pub fn draw(f: &mut Frame, app: &App) {
     lines.push(Line::from(""));
 
     // Next steps
-    lines.push(Line::from(Span::styled("Next Steps", theme::primary_bold())));
+    lines.push(Line::from(Span::styled(
+        "Next Steps",
+        theme::primary_bold(),
+    )));
     lines.push(Line::from(vec![
         Span::styled("  1. ", theme::primary()),
         Span::styled("Open the web UI in your browser", theme::text()),

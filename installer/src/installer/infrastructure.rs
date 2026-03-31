@@ -3,35 +3,44 @@ use std::thread;
 use std::time::Duration;
 use tokio::sync::mpsc::Sender;
 
-use crate::app::InstallConfig;
 use super::executor::InstallMessage;
 use super::run_command;
+use crate::app::InstallConfig;
 
 /// Start infrastructure services via docker compose.
-pub async fn start_infrastructure(config: &InstallConfig, tx: &Sender<InstallMessage>) -> Result<(), String> {
+pub async fn start_infrastructure(
+    config: &InstallConfig,
+    tx: &Sender<InstallMessage>,
+) -> Result<(), String> {
     let compose_dir = format!("{}/docker", config.data_dir);
     fs::create_dir_all(&compose_dir)
         .map_err(|e| format!("Failed to create docker directory {}: {}", compose_dir, e))?;
 
     let compose_path = format!("{}/docker-compose.yml", compose_dir);
 
-    tx.send(InstallMessage::Progress("Generating docker-compose.yml...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Generating docker-compose.yml...".into(),
+    ))
+    .await
+    .ok();
 
     let compose_content = generate_compose(config);
     fs::write(&compose_path, &compose_content)
         .map_err(|e| format!("Failed to write docker-compose.yml: {}", e))?;
 
-    tx.send(InstallMessage::Progress("Starting Docker services...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Starting Docker services...".into(),
+    ))
+    .await
+    .ok();
 
     run_command("docker", &["compose", "-f", &compose_path, "up", "-d"])?;
 
-    tx.send(InstallMessage::Progress("Waiting for services to become healthy...".into()))
-        .await
-        .ok();
+    tx.send(InstallMessage::Progress(
+        "Waiting for services to become healthy...".into(),
+    ))
+    .await
+    .ok();
 
     wait_for_services(config, tx).await?;
 
@@ -196,7 +205,10 @@ fn generate_compose(config: &InstallConfig) -> String {
 }
 
 /// Wait for critical services (postgres, surrealdb, rustfs) to become healthy.
-async fn wait_for_services(config: &InstallConfig, tx: &Sender<InstallMessage>) -> Result<(), String> {
+async fn wait_for_services(
+    config: &InstallConfig,
+    tx: &Sender<InstallMessage>,
+) -> Result<(), String> {
     let max_attempts = 30;
     let delay = Duration::from_secs(2);
 
@@ -204,7 +216,12 @@ async fn wait_for_services(config: &InstallConfig, tx: &Sender<InstallMessage>) 
     tx.send(InstallMessage::Progress("Waiting for PostgreSQL...".into()))
         .await
         .ok();
-    wait_for_tcp("localhost", config.db_port.parse().unwrap_or(5432), max_attempts, delay)?;
+    wait_for_tcp(
+        "localhost",
+        config.db_port.parse().unwrap_or(5432),
+        max_attempts,
+        delay,
+    )?;
 
     // Wait for SurrealDB
     tx.send(InstallMessage::Progress("Waiting for SurrealDB...".into()))
@@ -268,7 +285,9 @@ async fn wait_for_services(config: &InstallConfig, tx: &Sender<InstallMessage>) 
 fn wait_for_tcp(host: &str, port: u16, max_attempts: u32, delay: Duration) -> Result<(), String> {
     for attempt in 1..=max_attempts {
         if std::net::TcpStream::connect_timeout(
-            &format!("{}:{}", host, port).parse().map_err(|e| format!("Bad address: {}", e))?,
+            &format!("{}:{}", host, port)
+                .parse()
+                .map_err(|e| format!("Bad address: {}", e))?,
             Duration::from_secs(2),
         )
         .is_ok()
