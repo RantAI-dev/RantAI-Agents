@@ -40,3 +40,6 @@ next-env.d.ts
 
 # worktrees
 .worktrees/
+
+# rust build artifacts
+installer/target/
