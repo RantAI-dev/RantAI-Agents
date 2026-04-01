@@ -13,9 +13,10 @@ import { getSurrealClient, SurrealDBClient } from "../surrealdb";
 import { SmartChunker, SmartChunkingOptions } from "../rag/smart-chunker";
 import { generateEmbeddings } from "../rag/embeddings";
 import { processFile, ProcessedFile } from "../rag/file-processor";
-import { extractEntities } from "./index";
+import { extractEntities, extractRelations } from "./index";
 import {
   Entity,
+  Relation,
   ProcessingProgress,
   ProgressCallback,
   HybridExtractionConfig,
@@ -240,6 +241,25 @@ export class DocumentPipeline {
         });
       }
 
+      // 4b. Extract relations between entities
+      let relations: Relation[] = [];
+      if (this.config.extractEntities && entities.length > 1) {
+        this.reportProgress(
+          onProgress,
+          "extracting",
+          70,
+          `Extracting relations between ${entities.length} entities...`
+        );
+        try {
+          relations = await extractRelations(content, entities, documentId, undefined, {
+            useLLM: this.config.useLLMExtraction,
+            usePatterns: this.config.usePatternExtraction,
+          });
+        } catch (error) {
+          console.error("[Pipeline] Relation extraction failed (non-fatal):", error);
+        }
+      }
+
       // 5. Store in database
       this.reportProgress(
         onProgress,
@@ -258,6 +278,7 @@ export class DocumentPipeline {
           chunks,
           embeddings,
           entities,
+          relations,
           options
         );
         chunkIds = storageResult.chunkIds;
@@ -303,6 +324,7 @@ export class DocumentPipeline {
     chunks: Array<{ text: string; chunkIndex: number; metadata: unknown }>,
     embeddings: number[][],
     entities: Entity[],
+    relations: Relation[],
     options?: {
       title?: string;
       category?: string;
@@ -385,8 +407,52 @@ export class DocumentPipeline {
       }
     }
 
+    // Store relations as graph edges between entities
+    let storedRelations = 0;
+    const entityIdMap = new Map<string, string>();
+    for (const entity of entities) {
+      const entityId = `${documentId}_entity_${entity.name.toLowerCase().replace(/[^a-z0-9]/g, "_")}`;
+      entityIdMap.set(entity.name.toLowerCase(), entityId);
+    }
+
+    for (const relation of relations) {
+      try {
+        const sourceId = entityIdMap.get(
+          (relation.metadata?.source_entity as string || "").toLowerCase()
+        );
+        const targetId = entityIdMap.get(
+          (relation.metadata?.target_entity as string || "").toLowerCase()
+        );
+
+        if (sourceId && targetId) {
+          await client.query(
+            `RELATE (SELECT * FROM entity WHERE id = $source LIMIT 1)
+              ->$relation_type->
+             (SELECT * FROM entity WHERE id = $target LIMIT 1)
+             SET
+               confidence = $confidence,
+               document_id = $document_id,
+               metadata = $metadata,
+               created_at = time::now()`,
+            {
+              source: sourceId,
+              target: targetId,
+              relation_type: relation.relation_type || "RELATED_TO",
+              confidence: relation.confidence,
+              document_id: documentId,
+              metadata: relation.metadata || {},
+            }
+          );
+          storedRelations++;
+        }
+      } catch (error) {
+        // RELATE can fail if entity didn't get stored — non-fatal
+        console.error(`[Pipeline] Failed to store relation:`, error);
+      }
+    }
+
     console.log(
-      `[Pipeline] Stored ${chunkIds.length} chunks and ${entityIds.length} entities`
+      `[Pipeline] Stored ${chunkIds.length} chunks, ${entityIds.length} entities, ${storedRelations} relations`
     );
 
     return { chunkIds, entityIds };

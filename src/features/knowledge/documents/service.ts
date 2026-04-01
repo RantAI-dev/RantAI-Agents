@@ -460,10 +460,13 @@ export async function createKnowledgeDocumentForDashboard(params: {
     }
   }
 
+  // Strip null bytes — PostgreSQL UTF-8 columns reject 0x00
+  const sanitize = (s: string) => s.replace(/\0/g, "")
+
   const document = await createKnowledgeDocument({
     id: documentId,
-    title,
-    content,
+    title: sanitize(title),
+    content: sanitize(content),
     categories,
     subcategory: params.input.subcategory || null,
     metadata: { fileType } as Prisma.InputJsonValue,

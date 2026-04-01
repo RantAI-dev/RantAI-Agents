@@ -17,6 +17,8 @@ import {
   Gear1Solid,
   Bell1Solid,
   Search1Solid,
+  SearchPlusSolid,
+  SearchMinusSolid,
   PlusSolid,
   Trash3Solid,
   PenToSquareSolid,
@@ -300,8 +302,8 @@ export const FilterX = createIcon(XmarkSolid, "FilterX")
 export const MoreHorizontal = createIcon(MenuHamburger1Solid, "MoreHorizontal")
 export const MoreVertical = createIcon(MenuHamburger1Solid, "MoreVertical")
 export const Maximize2 = createIcon(Layout26Solid, "Maximize2")
-export const ZoomIn = createIcon(Search1Solid, "ZoomIn")
-export const ZoomOut = createIcon(Search1Solid, "ZoomOut")
+export const ZoomIn = createIcon(SearchPlusSolid, "ZoomIn")
+export const ZoomOut = createIcon(SearchMinusSolid, "ZoomOut")
 export const ExternalLink = createIcon(ArrowAngularTopRightSolid, "ExternalLink")
 export const Link2 = createIcon(Route1Solid, "Link2")
 export const Loader2 = createIcon(Spinner3Solid, "Loader2")
