@@ -1334,3 +1334,29 @@ model EmployeeTaskEvent {
 
   @@index([taskId, createdAt])
 }
+
+// LLM models synced from OpenRouter
+model LlmModel {
+  id             String   @id                    // OpenRouter model ID (e.g. "openai/gpt-5.2")
+  name           String                          // Display name
+  provider       String                          // Lab name (e.g. "OpenAI", "Anthropic")
+  providerSlug   String                          // OpenRouter prefix (e.g. "openai", "anthropic")
+  description    String   @default("")
+  contextWindow  Int
+  pricingInput   Float                           // per million tokens
+  pricingOutput  Float                           // per million tokens
+  hasVision      Boolean  @default(false)
+  hasToolCalling Boolean  @default(false)
+  hasStreaming    Boolean  @default(true)
+  isFree         Boolean  @default(false)        // pricing == 0
+  isTrackedLab   Boolean  @default(false)        // from tracked provider list
+  isActive       Boolean  @default(true)         // soft-delete when removed from OpenRouter
+  rawData        Json?                           // full OpenRouter response for future use
+  lastSeenAt     DateTime @default(now())        // last time seen in OpenRouter API
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([provider])
+  @@index([isFree, hasToolCalling])
+  @@index([isActive])
+}
