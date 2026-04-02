@@ -1,1 +1,5 @@
-export { default } from "@/src/features/platform-features/components/features-settings-page"
+import { redirect } from "next/navigation"
+
+export default function Page() {
+  redirect("/dashboard/settings/general?tab=features")
+}

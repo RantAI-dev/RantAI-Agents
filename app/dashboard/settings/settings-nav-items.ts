@@ -1,11 +1,11 @@
-import { Settings, ToggleLeft, Wrench, Building2, CreditCard, BarChart3 } from "@/lib/icons"
+import { Settings, Wrench, Building2, CreditCard, BarChart3 } from "@/lib/icons"
 
 export const SETTINGS_NAV_ITEMS = [
   {
     title: "General",
     href: "/dashboard/settings/general",
     icon: Settings,
-    description: "Preferences & system info",
+    description: "Features & system info",
   },
   {
     title: "Organization",
@@ -30,11 +30,5 @@ export const SETTINGS_NAV_ITEMS = [
     href: "/dashboard/settings/analytics",
     icon: BarChart3,
     description: "Memory & usage statistics",
-  },
-  {
-    title: "Features",
-    href: "/dashboard/settings/features",
-    icon: ToggleLeft,
-    description: "Enable/disable capabilities",
   },
 ] as const
