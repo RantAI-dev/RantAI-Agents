@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Shield, User, Settings } from "@/lib/icons"
+import { Shield, User } from "@/lib/icons"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -22,12 +22,6 @@ const navItems = [
     href: "/dashboard/account",
     icon: User,
     description: "Your account details",
-  },
-  {
-    title: "Settings",
-    href: "/dashboard/settings/general",
-    icon: Settings,
-    description: "App preferences",
   },
 ]
 
