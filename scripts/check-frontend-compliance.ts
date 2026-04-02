@@ -303,6 +303,7 @@ const allowedDashboardRedirectPages = new Set([
   "app/dashboard/settings/skills/page.tsx",
   "app/dashboard/settings/statistics/page.tsx",
   "app/dashboard/settings/tools/page.tsx",
+  "app/dashboard/settings/features/page.tsx",
 ])
 
 // Unified pages that pass searchParams to feature components (not thin re-exports, not redirects)

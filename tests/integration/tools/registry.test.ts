@@ -56,6 +56,7 @@ vi.mock("@/lib/models", () => {
     DEFAULT_MODEL_ID: "test/model",
     AVAILABLE_MODELS,
     getModelById: (id: string) => AVAILABLE_MODELS.find((m) => m.id === id),
+    getModelsFromDb: async () => AVAILABLE_MODELS,
   }
 })
 
