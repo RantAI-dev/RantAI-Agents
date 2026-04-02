@@ -192,8 +192,46 @@ export function getModelName(id: string): string {
 }
 
 /**
- * Validate if a model ID is valid
+ * Validate if a model ID is valid (static list only — use isValidModelAsync for DB check)
  */
 export function isValidModel(id: string): boolean {
+  return AVAILABLE_MODELS.some((m) => m.id === id)
+}
+
+// --- Async DB-backed versions (for server-side use) ---
+
+import { prisma } from "@/lib/prisma"
+
+/** Get all active models from DB, falling back to static list if DB is empty. */
+export async function getModelsFromDb(): Promise<LLMModel[]> {
+  const dbModels = await prisma.llmModel.findMany({
+    where: { isActive: true },
+    orderBy: [{ provider: "asc" }, { name: "asc" }],
+  })
+
+  if (dbModels.length === 0) return AVAILABLE_MODELS
+
+  return dbModels.map((m) => ({
+    id: m.id,
+    name: m.name,
+    provider: m.provider,
+    description: m.description,
+    contextWindow: m.contextWindow,
+    pricing: { input: m.pricingInput, output: m.pricingOutput },
+    capabilities: {
+      vision: m.hasVision,
+      functionCalling: m.hasToolCalling,
+      streaming: m.hasStreaming,
+    },
+  }))
+}
+
+/** Check if a model ID exists in DB or static list. */
+export async function isValidModelAsync(id: string): Promise<boolean> {
+  const dbModel = await prisma.llmModel.findUnique({
+    where: { id },
+    select: { id: true },
+  })
+  if (dbModel) return true
   return AVAILABLE_MODELS.some((m) => m.id === id)
 }
