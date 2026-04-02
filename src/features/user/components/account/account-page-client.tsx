@@ -74,6 +74,10 @@ export default function AccountPageClient({
     setAvatarUrl(newAvatarUrl)
   }, [setAvatarUrl])
 
+  const handleAvatarRemoved = useCallback(() => {
+    setAvatarUrl(null)
+  }, [setAvatarUrl])
+
   const displayName = storedName || initialProfile.name || "Agent"
   const displayEmail = storedEmail || initialProfile.email || ""
   const currentAvatarUrl = avatarUrl ?? initialProfile.avatarUrl
@@ -100,6 +104,7 @@ export default function AccountPageClient({
             currentAvatarUrl={currentAvatarUrl}
             userName={displayName}
             onUploadComplete={handleAvatarUploadComplete}
+            onAvatarRemoved={handleAvatarRemoved}
           />
         </CardContent>
       </Card>

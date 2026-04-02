@@ -1,10 +1,12 @@
 import type { UpdateAdminProfileInput } from "./schema"
 import {
+  clearUserAvatar,
   downloadAvatarByKey,
   findUserAvatarS3Key,
   findUserProfileById,
   updateUserProfileName,
 } from "./repository"
+import { deleteFile } from "@/lib/s3"
 
 export interface ServiceError {
   status: number
@@ -67,6 +69,23 @@ export async function getAdminAvatar(
     body,
     contentType: inferImageContentType(avatarS3Key),
   }
+}
+
+/**
+ * Removes the current user avatar from S3 and clears the DB reference.
+ */
+export async function removeAdminAvatar(
+  userId: string
+): Promise<{ success: true } | ServiceError> {
+  const avatarS3Key = await findUserAvatarS3Key(userId)
+  if (!avatarS3Key) {
+    return { status: 404, error: "No avatar to remove" }
+  }
+
+  await deleteFile(avatarS3Key)
+  await clearUserAvatar(userId)
+
+  return { success: true }
 }
 
 export function isServiceError(value: unknown): value is ServiceError {

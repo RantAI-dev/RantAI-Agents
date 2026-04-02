@@ -39,3 +39,11 @@ export async function findUserAvatarS3Key(userId: string) {
 export async function downloadAvatarByKey(key: string) {
   return downloadFile(key)
 }
+
+export async function clearUserAvatar(userId: string) {
+  return prisma.user.update({
+    where: { id: userId },
+    data: { avatarS3Key: null },
+    select: { id: true },
+  })
+}

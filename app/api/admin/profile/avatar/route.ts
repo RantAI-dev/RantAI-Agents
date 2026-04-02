@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
 import {
   getAdminAvatar,
+  removeAdminAvatar,
   isServiceError,
 } from "@/src/features/admin/profile/service"
 
@@ -32,5 +33,27 @@ export async function GET() {
   } catch (error) {
     console.error("[Avatar Proxy] Error:", error)
     return NextResponse.json({ error: "Failed to load avatar" }, { status: 500 })
+  }
+}
+
+/**
+ * DELETE /api/admin/profile/avatar - Remove avatar from S3 and clear DB
+ */
+export async function DELETE() {
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  try {
+    const result = await removeAdminAvatar(session.user.id)
+    if (isServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("[Avatar Delete] Error:", error)
+    return NextResponse.json({ error: "Failed to remove avatar" }, { status: 500 })
   }
 }
