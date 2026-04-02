@@ -536,23 +536,39 @@ export async function createKnowledgeDocumentForDashboard(params: {
         }
 
         if (relations.length > 0) {
+          let storedCount = 0
+          let skippedCount = 0
           for (const relation of relations) {
-            const sourceId = entityIdMap.get(relation.metadata?.source_entity?.toLowerCase() || "")
-            const targetId = entityIdMap.get(relation.metadata?.target_entity?.toLowerCase() || "")
+            const sourceName = (relation.metadata?.source_entity as string || "").toLowerCase()
+            const targetName = (relation.metadata?.target_entity as string || "").toLowerCase()
+            const sourceId = entityIdMap.get(sourceName)
+            const targetId = entityIdMap.get(targetName)
 
-            if (sourceId && targetId) {
-              try {
-                await surrealClient.relate(sourceId, relation.relation_type, targetId, {
-                  confidence: relation.confidence,
-                  document_id: document.id,
-                  context: relation.metadata?.context,
-                  created_at: new Date().toISOString(),
-                })
-              } catch (error) {
-                console.warn(`[Knowledge API] Failed to create relation ${sourceId} -> ${targetId}:`, error)
-              }
+            if (!sourceId || !targetId) {
+              skippedCount++
+              continue
+            }
+
+            // Sanitize relation type to valid SurrealDB table name
+            const relType = (relation.relation_type || "RELATED_TO")
+              .toUpperCase()
+              .replace(/[^A-Z0-9_]/g, "_")
+              .replace(/^_+|_+$/g, "")
+              || "RELATED_TO"
+
+            try {
+              await surrealClient.relate(sourceId, relType, targetId, {
+                confidence: relation.confidence,
+                document_id: document.id,
+                context: relation.metadata?.context,
+                created_at: new Date().toISOString(),
+              })
+              storedCount++
+            } catch (error) {
+              console.warn(`[Knowledge API] Failed to create relation ${sourceId} ->${relType}-> ${targetId}:`, error)
             }
           }
+          console.log(`[Knowledge API] Relations: ${storedCount} stored, ${skippedCount} skipped (no matching entity), ${relations.length} total`)
         }
       } else {
         const entities = await extractEntities(content, document.id, undefined, {
@@ -768,13 +784,15 @@ export async function getKnowledgeDocumentIntelligence(params: {
   let relations: KnowledgeDocumentIntelligenceResponse["relations"] = []
 
   try {
-    const dbInfo = await client.query<{ tables: Record<string, string> }>(`INFO FOR DB`)
+    const dbInfo = await client.query<Record<string, unknown>>(`INFO FOR DB`)
     const rawInfo = dbInfo[0]
-    const info = Array.isArray(rawInfo) ? rawInfo[0] : rawInfo
+    // normalizeQueryResult wraps the INFO object as { result: [{ tables: {...}, ... }] }
+    const info = ((rawInfo as { result?: unknown[] })?.result?.[0] ?? rawInfo) as Record<string, unknown>
+    const tables = (info?.tables ?? {}) as Record<string, unknown>
 
-    if (info?.tables) {
-      const excludedTables = ["entity", "document_chunk"]
-      const relationTables = Object.keys(info.tables).filter((table) => !excludedTables.includes(table))
+    if (tables && typeof tables === "object") {
+      const excludedTables = ["entity", "document_chunk", "conversation_memory"]
+      const relationTables = Object.keys(tables).filter((t) => !excludedTables.includes(t))
 
       for (const relType of relationTables) {
         try {
@@ -785,20 +803,20 @@ export async function getKnowledgeDocumentIntelligence(params: {
             confidence?: number
             context?: string
             document_id?: string
-          }>(`SELECT * FROM ${relType} WHERE document_id = $document_id`, {
+          }>(`SELECT * FROM \`${relType}\` WHERE document_id = $document_id`, {
             document_id: params.documentId,
           })
           const typeData = typeResults[0]
-          const typeRelations = Array.isArray(typeData) ? typeData : (typeData as { result?: unknown[] })?.result || []
+          const typeRelations = ((typeData as { result?: unknown[] })?.result ?? (Array.isArray(typeData) ? typeData : [])) as Array<{
+            id: string
+            in: string
+            out: string
+            confidence?: number
+            context?: string
+          }>
 
           relations.push(
-            ...(typeRelations as Array<{
-              id: string
-              in: string
-              out: string
-              confidence?: number
-              context?: string
-            }>).map((relation) => ({
+            ...typeRelations.map((relation) => ({
               id: relation.id,
               in: relation.in,
               out: relation.out,
@@ -810,13 +828,15 @@ export async function getKnowledgeDocumentIntelligence(params: {
             }))
           )
         } catch {
-          // Skip relation tables that cannot be queried.
+          // Skip relation tables that cannot be queried
         }
       }
     }
   } catch (error) {
     console.error("Failed to get DB info for relation discovery:", error)
   }
+
+  console.log(`[Intelligence API] Document ${params.documentId}: ${entities.length} entities, ${relations.length} relations`)
 
   return {
     entities,
