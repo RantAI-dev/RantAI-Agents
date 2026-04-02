@@ -1,0 +1,47 @@
+# Getting Started
+
+Welcome to RantAI Agents! This guide will walk you through setting up your account and getting your first AI assistant running.
+
+## What You'll Need
+
+Before you begin, make sure you have:
+
+| Requirement | Version | Notes |
+|---|---|---|
+| **Node.js** | v18+ | v20+ recommended |
+| **bun** | latest | Package manager (`npm install -g bun`) |
+| **Docker** | v20+ | With Docker Compose v2 |
+| **OpenRouter API Key** | — | Get at [openrouter.ai/keys](https://openrouter.ai/keys) |
+
+### Hardware Requirements
+
+#### Minimum (Cloud OCR Only)
+- 2 CPU cores, 4 GB RAM
+- No GPU required (uses OpenRouter for OCR fallback)
+
+#### Recommended (Local OCR)
+
+| Setup | RAM | GPU VRAM | OCR Model |
+|---|---|---|---|
+| **CPU-Only** | 8 GB+ | None | `moondream` or `qwen3-vl:2b` |
+| **Budget GPU** | 8 GB+ | 4–6 GB | `glm-ocr` (recommended) |
+| **Mid-Range GPU** | 16 GB+ | 8–12 GB | `glm-ocr` + `qwen3-vl:8b` |
+| **High-End GPU** | 16 GB+ | 16 GB+ | `glm-ocr` + `minicpm-v:4.5` (SOTA) |
+
+### System Dependencies (Linux)
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y \
+  build-essential libcairo2-dev libpango1.0-dev \
+  libjpeg-dev libgif-dev librsvg2-dev libvips-dev
+
+# macOS (via Homebrew)
+brew install vips cairo pango
+```
+
+## Next Steps
+
+1. [Create your account →](/docs/getting-started/create-account)
+2. [Quick Start →](/docs/getting-started/quick-start)
+3. [Dashboard Tour →](/docs/getting-started/dashboard-tour)

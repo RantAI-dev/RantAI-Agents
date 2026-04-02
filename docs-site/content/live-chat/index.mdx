@@ -1,0 +1,150 @@
+# Live Chat
+
+The Live Chat portal lets human operators handle customer conversations that have been handed off from AI assistants. Conversations arrive here when a customer requests human help through any [Channel](/docs/channels) — web widget, WhatsApp, or email.
+
+<Screenshot src="/images/live-chat/agent-portal.png" alt="Agent Portal" />
+
+## How It Works
+
+1. A customer starts a conversation through a [Channel](/docs/channels) (widget, WhatsApp, email)
+2. The AI assistant handles the conversation automatically
+3. The customer requests human help → the conversation is **handed off**
+4. The conversation appears in the Live Chat queue
+5. An operator goes **Online**, accepts the conversation, and responds directly
+
+## The Agent Portal
+
+Navigate to **Live Chat** in the dashboard sidebar to open the agent portal. The layout has two panels: the **Queue** on the left and the **Conversation Workspace** on the right.
+
+---
+
+### Going Online
+
+Before you can receive conversations, you need to toggle your status to **Online**.
+
+<Screenshot src="/images/live-chat/queue-panel-offline.png" alt="Queue Panel Offline" />
+
+Use the **Online / Offline** switch at the top of the queue panel. When offline, the queue shows a message telling you to go online.
+
+---
+
+### Queue Panel
+
+Once you're online, the queue shows customers waiting for help.
+
+<Screenshot src="/images/live-chat/queue-panel-online.png" alt="Queue Panel Online" />
+
+Each entry displays:
+- **Customer name** (or "Anonymous" if not provided)
+- **Channel source** — Badge showing where the request came from (PORTAL, WHATSAPP, etc.)
+- **Email** — Customer's email address
+- **Product interest** — What the customer is interested in
+- **Wait time** — How long the customer has been waiting
+- **Last message** — Preview of their most recent message (truncated)
+- **Accept** button — Click to accept and start helping
+
+---
+
+### Accepting a Conversation
+
+Click **Accept** on a customer in the queue. The conversation moves from the queue to the **Active** section at the top of the panel.
+
+<Screenshot src="/images/live-chat/queue-accept.png" alt="Queue After Accept" />
+
+The active conversation shows the customer name, email, and product interest. Click it to bring the conversation back into focus.
+
+---
+
+### Conversation Workspace
+
+Once you accept a conversation, the workspace opens on the right.
+
+#### Header
+
+- Customer name, email, and product interest badge
+- **Resolve** button — Mark the conversation as done
+
+#### Message Thread
+
+<Screenshot src="/images/live-chat/conversation-messages.png" alt="Conversation Messages" />
+
+Full conversation history including previous AI assistant messages. Messages are color-coded by sender:
+
+| Color | Sender |
+|---|---|
+| **Blue** | Customer messages |
+| **Green** | Your (agent) messages |
+| **Violet** | AI assistant messages |
+| **Gray (centered)** | System messages |
+
+Hover over any message to **copy** it to clipboard.
+
+#### Typing Indicator
+
+When the customer is typing, animated dots appear to let you know a message is coming.
+
+#### Message Input
+
+- Text area at the bottom
+- **Enter** to send, **Shift+Enter** for new line
+- Send button on the right
+
+---
+
+### Resolving a Conversation
+
+Click the **Resolve** button in the header to mark the conversation as complete. The conversation is closed, and the workspace returns to the empty state.
+
+---
+
+## Empty States
+
+The workspace shows different messages depending on your status:
+
+### Offline
+
+"You're Offline" — Toggle your status to online to start receiving requests.
+
+### Online, Customers Waiting
+
+"X Customer(s) Waiting" — Select a customer from the queue to start helping them.
+
+### Online, Queue Empty
+
+"Ready to Help" — You're online and ready. New customer requests will appear in the queue.
+
+---
+
+## Enabling Live Chat
+
+<Screenshot src="/images/live-chat/enable-live-chat.png" alt="Enable Live Chat" />
+
+To enable Live Chat:
+
+1. Go to **Settings → General**
+2. Enable the **AGENT** feature flag
+3. In the **Agent Builder**, open your assistant's **Configure** tab
+4. Toggle **Enable Live Chat** handoff
+
+## Conversation Sources
+
+The queue shows which channel each conversation came from:
+
+| Channel | Source Label |
+|---|---|
+| Embed Widget | PORTAL |
+| WhatsApp | WHATSAPP |
+| Email | EMAIL |
+
+## Tips
+
+- Toggle **Online** to start receiving conversations — you won't see anything while offline
+- Review the AI assistant's previous responses (violet messages) before replying
+- Click **Resolve** when done to clear the conversation and free up for the next customer
+- Your online status is saved — if you refresh the page, you'll automatically rejoin
+
+## What's Next?
+
+- [Setup Channels →](/docs/channels)
+- [Configure Embed Widget →](/docs/channels/chatbot#widget-embed)
+- [Setup WhatsApp →](/docs/channels/live-agent#whatsapp-business)

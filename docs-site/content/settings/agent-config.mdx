@@ -1,0 +1,103 @@
+# Agent Config
+
+Manage tools, skills, MCP servers, and credentials at the organization level. These are shared across all assistants.
+
+## Tools
+
+<Screenshot src="/images/settings/agent-config-tools.png" alt="Tools Settings" />
+
+Manage function-calling tools available to your assistants.
+
+- **Search & filter** — By name, category (Built-in, Custom, Community, OpenAPI), or tags
+- **Sort** — Recent, A–Z, or Enabled first
+- **Enable/Disable** — Toggle tools on or off
+- **Create Tool** — Add a custom tool with endpoint configuration
+- **Edit/Delete** — Modify or remove custom tools (not available for built-in and community tools)
+- **Browse Marketplace** — Install new tools from the marketplace
+
+Each tool shows: icon, display name, category badge (color-coded), agent count, description (2 lines), tags, and a warning if custom tool has no endpoint configured.
+
+## Skills
+
+<Screenshot src="/images/settings/agent-config-skills.png" alt="Skills Settings" />
+
+Manage instruction-based skills that can be attached to assistants.
+
+- **Search & filter** — By name, category, or tags
+- **Sort** — Recent, A–Z, or Enabled first
+- **Categories** — General, Productivity, Development, Writing, Communication, Data & Analytics, Customer Support
+- **Enable/Disable** — Toggle skills on or off
+- **View** — Eye icon opens a detail dialog showing description, category, tags, attached tools, and full skill prompt
+- **Create Skill** — Define a new skill with:
+  - Display name and icon (emoji picker)
+  - Description
+  - Category
+  - Tags
+  - Skill instructions (markdown)
+  - Attached tools (searchable checkbox list)
+- **Edit/Delete** — Modify or remove skills
+- **Browse Marketplace** — Install pre-built skills
+
+Each skill shows: icon, display name, source badge (custom/marketplace), category badge, agent count, description, and tags.
+
+## MCP
+
+<Screenshot src="/images/settings/agent-config-mcp.png" alt="MCP Settings" />
+
+Manage Model Context Protocol servers for dynamic tool discovery. This tab has two sub-tabs:
+
+### MCP Clients
+
+The main list of configured MCP servers. Each server is a collapsible card showing:
+
+- **Name** and transport type badge (SSE or HTTP)
+- **Built-in badge** — If the server is pre-configured
+- **Status** — Connected (green), Error (red), Needs Configuration (amber), or Not connected (gray)
+- **Tool count** — Number of discovered tools
+- **URL** — Server endpoint (truncated)
+- **Last error** — Error message if connection failed
+- **Enable/Disable** toggle
+- **Actions:** Configure (if unconfigured), Discover Tools (refresh), Edit, Delete (non-built-in only)
+
+Expand a server to see its **discovered tools** with name and description.
+
+### MCP Server
+
+Configuration for running your own MCP server.
+
+### Add MCP Server
+
+Click **Add Server** to create a new MCP server:
+- **Server name**
+- **Transport type** — SSE or HTTP
+- **Environment configuration** — Key-value pairs for connection settings
+
+## Credentials
+
+<Screenshot src="/images/settings/agent-config-credentials.png" alt="Credentials Settings" />
+
+Manage API keys, tokens, and authentication credentials used by tools and integrations.
+
+- **Search** — Find credentials by name or type
+- **Add Credential** — Create a new credential
+
+### Credential Types
+
+| Type | Color | Required Fields |
+|---|---|---|
+| **API Key** | Blue | API key |
+| **Bearer Token** | Violet | Token |
+| **Basic Auth** | Amber | Username, password |
+| **OAuth 2.0** | Green | Client ID, optional client secret, access token |
+
+Each credential shows: name, type badge (color-coded), and created date.
+
+### Add / Edit Credential
+
+- **Name** — Descriptive name
+- **Type** — Select from the types above
+- **Fields** — Fill in the required fields (sensitive fields are password-masked)
+
+When editing, encrypted values are cleared — you need to re-enter them.
+
+All credentials are encrypted at rest.

@@ -1,0 +1,84 @@
+# Quick Start
+
+Get up and running in 5 minutes. This guide walks you through the initial setup and your first conversation.
+
+## 1. Clone and Install
+
+```bash
+git clone <repository-url>
+cd RantAI-Agents
+git submodule update --init --recursive
+bun install
+```
+
+## 2. Configure Environment
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` and set the required variables:
+
+```env
+# Database (Docker default provided)
+DATABASE_URL="postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_insurance?schema=public"
+
+# SurrealDB (Vector Store)
+SURREAL_DB_URL="ws://localhost:8000/rpc"
+SURREAL_DB_USER="root"
+SURREAL_DB_PASS="root"
+SURREAL_DB_NAMESPACE="rantai"
+SURREAL_DB_DATABASE="knowledge"
+
+# Authentication
+NEXTAUTH_SECRET="your-secret-key"    # Generate: openssl rand -base64 32
+NEXTAUTH_URL="http://localhost:3000"
+
+# AI/LLM (Required)
+OPENROUTER_API_KEY="sk-or-v1-your-key"
+
+# S3 Storage (Docker default provided)
+S3_ENDPOINT="http://localhost:9000"
+S3_ACCESS_KEY_ID="rustfsadmin"
+S3_SECRET_ACCESS_KEY="rustfsadmin"
+S3_BUCKET="rantai-files"
+```
+
+## 3. Start Services
+
+```bash
+# Start PostgreSQL, SurrealDB, RustFS, and Ollama containers
+bun docker:up
+
+# Initialize database (migrations + seed + marketplace)
+bun setup:db
+```
+
+Or use the all-in-one command:
+
+```bash
+bun setup
+```
+
+## 4. Run Development Server
+
+```bash
+bun dev
+```
+
+Access the application at [http://localhost:3000](http://localhost:3000). You'll be redirected to the login page.
+
+## 5. Start Your First Chat
+
+1. Log in with the demo credentials shown on the login page
+2. Click **Chat** in the sidebar
+3. Select an assistant from the dropdown
+4. Type a message and press Enter
+
+You're all set! Explore the rest of the documentation to learn about all the features available to you.
+
+## What's Next?
+
+- [Dashboard Tour →](/docs/getting-started/dashboard-tour)
+- [Create a custom assistant →](/docs/agent-builder/configure)
+- [Upload documents to Files →](/docs/files/upload-documents)

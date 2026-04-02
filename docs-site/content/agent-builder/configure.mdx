@@ -1,0 +1,230 @@
+# Create & Configure an Assistant
+
+## Step 1: Create a New Assistant
+
+1. Click **Agent Builder** in the sidebar to see your list of assistants.
+
+   <Screenshot src="/images/agent-builder/assistant-list.png" alt="Assistant List" />
+
+2. Click the **+ Create Agent** button at the bottom of the sidebar.
+
+   <Screenshot src="/images/agent-builder/create-new-button.png" alt="Create New Button" />
+
+You'll be taken to the configuration page with 12 tabs on the left sidebar. Fill in the tabs below, then click **Create** (top-right) to save.
+
+---
+
+## Step 2: Configure Your Assistant
+
+### Configure Tab
+
+The main tab for identity, prompt, and opening behavior.
+
+<Screenshot src="/images/agent-builder/config-configure.png" alt="Configure Tab" />
+
+### Identity
+- **Avatar/Emoji** — Click to pick a visual icon for your assistant
+- **Name** — Your assistant's display name
+- **Description** — Brief explanation of what this assistant does
+- **Tags** — Add color-coded tags for organization (type and press Enter)
+
+### Opening Settings
+
+- **Opening Message** — The first message users see when starting a chat (e.g. "Hello! I'm your assistant. How can I help you today?")
+- **Conversation Starters** — Suggested prompts displayed as clickable buttons to help users start quickly
+
+### System Prompt
+
+The most important setting — this defines your assistant's personality, expertise, and behavior.
+- **Generate with AI** — Describe your agent in a sentence and let AI create a complete system prompt
+- **Prompt Templates** — Pick from pre-built templates
+- **Prompt Variables** — Insert dynamic tokens like `{{user_name}}`
+
+### Live Chat Handoff
+- **Enable Live Chat** — Toggle to allow escalation to human operators
+
+---
+
+## Model
+
+Choose which AI model powers your assistant and tune its behavior.
+
+<Screenshot src="/images/agent-builder/config-model.png" alt="Model Tab" />
+
+### Model Selection
+- Select from available LLMs via OpenRouter
+- View model details: capabilities (Tool Use, Vision), context window size, and pricing
+
+### Model Parameters
+Toggle each parameter to override defaults:
+
+| Parameter | Range | Description |
+|---|---|---|
+| **Creativity Level** | 0 – 2 | Temperature: lower = focused, higher = creative |
+| **Openness to Ideas** | 0 – 1 | Top-p: controls diversity of responses |
+| **Max Output Tokens** | 1 – 32,768 | Maximum length of responses |
+| **Expression Divergence** | -2 – 2 | Presence penalty: encourages new topics |
+| **Repetition Penalty** | -2 – 2 | Frequency penalty: reduces repetition |
+| **Reasoning Effort** | Low / Medium / High | Only for reasoning models (o3-mini, DeepSeek-R1) |
+
+### Response Format
+Choose from: Default, JSON Mode, Markdown, Concise, or Detailed.
+
+---
+
+## Tools
+
+Add function-calling tools that give your assistant the ability to take actions.
+
+<Screenshot src="/images/agent-builder/config-tools.png" alt="Tools Tab" />
+
+- Search and filter tools by category and tags
+- Sort by: Recent, A-Z, or Selected First
+- Each tool shows its category badge (Built-in, Custom, Community, OpenAPI, MCP)
+- Click the checkbox to enable/disable a tool
+- Click **Marketplace** to browse and install new tools
+
+> If your selected model doesn't support tool use, a warning will appear.
+
+---
+
+## Skills
+
+Attach instruction-based capabilities that are appended to the system prompt.
+
+<Screenshot src="/images/agent-builder/config-skills.png" alt="Skills Tab" />
+
+- Search and filter skills by category and tags
+- Each skill shows a readiness indicator:
+  - Green dot — Ready to use
+  - Yellow dot — Partially configured
+  - Red dot — Needs setup (missing requirements)
+- Expand a skill to see its requirements and which tools it needs
+- When you enable a skill, related tools are automatically enabled
+
+---
+
+## Workflows
+
+Link automation workflows to your assistant.
+
+<Screenshot src="/images/agent-builder/config-workflows.png" alt="Workflows Tab" />
+
+- Only shows task-type, non-archived workflows
+- Each workflow displays: status (Draft/Active/Paused), mode (Standard/Chatflow), node count, and run count
+- Select workflows by clicking the checkbox
+
+---
+
+## MCP
+
+Connect Model Context Protocol servers for dynamic tool discovery.
+
+<Screenshot src="/images/agent-builder/config-mcp.png" alt="MCP Tab" />
+
+- Lists only enabled MCP servers with connection status
+- Shows transport type (SSE or HTTP) and tool count per server
+- "Needs Config" badge appears if setup is incomplete
+- Quick links to **MCP Marketplace** and **MCP Settings**
+
+---
+
+## Knowledge
+
+Enable RAG so your assistant can search and reference your documents.
+
+<Screenshot src="/images/agent-builder/config-knowledge.png" alt="Knowledge Tab" />
+
+- **Enable Knowledge Base** — Master toggle to turn on RAG
+- **Select Groups** — Choose which document groups the assistant can search. Leave empty to search all documents
+- Link to manage your Knowledge Base
+
+---
+
+## Memory
+
+Configure how the assistant remembers context across conversations.
+
+<Screenshot src="/images/agent-builder/config-memory.png" alt="Memory Tab" />
+
+- **Enable Memory** — Master toggle
+- **Working Memory** — Short-term context within the current conversation (always active)
+- **Semantic Recall** — Retrieve relevant memories from past conversations
+- **Long-term Profile** — Build and maintain user profiles over time
+- **Memory Instructions** — Guide what the agent should prioritize remembering
+
+---
+
+## Guard Rails
+
+Set safety rules and content restrictions.
+
+<Screenshot src="/images/agent-builder/config-guardrails.png" alt="Guard Rails Tab" />
+
+- **Blocked Topics** — Add topics the agent should never discuss (displayed as removable badges)
+- **Custom Safety Instructions** — Additional rules appended to the system prompt
+- **Max Response Length** — Character limit for responses (leave empty for no limit)
+- **Require Citations** — Force the agent to cite sources when making factual claims
+
+---
+
+## Chat
+
+Configure conversation behavior settings.
+
+<Screenshot src="/images/agent-builder/config-chat.png" alt="Chat Tab" />
+
+- **Auto Create Topic** — Automatically create a topic when message count exceeds a threshold (configurable: 1–20 messages)
+- **Limit History Message Count** — Cap historical messages sent per request to save tokens (configurable: 1–50 messages)
+- **Enable Automatic Summary** — Summarize long conversation history to maintain context
+- **Auto-scroll During AI Response** — Override the global auto-scroll setting for this agent
+
+---
+
+## Test
+
+Test your assistant with the current saved configuration.
+
+<Screenshot src="/images/agent-builder/config-test.png" alt="Test Tab" />
+
+- Full chat interface to interact with your assistant
+- **Reset** button to start a fresh test session
+- Only available after the assistant is saved
+
+> Changes must be saved before testing. The test uses the saved configuration, not unsaved edits.
+
+---
+
+## Deploy
+
+Deploy your assistant via REST API, embeddable widget, or WebSocket.
+
+<Screenshot src="/images/agent-builder/config-deploy.png" alt="Deploy Tab" />
+
+The Deploy tab has 4 subtabs:
+
+| Subtab | Description |
+|---|---|
+| **REST API** | Example API request code (`POST /api/chat`) with copy button |
+| **Widget Embed** | Create embed keys and get the script snippet for your website |
+| **WebSocket** | Real-time streaming connection details |
+| **Agent Info** | Agent ID, name, model, and creation date |
+
+> Deploy tab is only available after the assistant is saved.
+
+See [Chatbot Deployment](/docs/channels/chatbot) for the full setup guide on each deployment method.
+
+---
+
+## Tips
+
+- Use **Generate with AI** to quickly create a system prompt — you can always edit it later
+- Add **Conversation Starters** so users know what to ask
+- Test your assistant in the **Test** tab before deploying
+- Attach a [Files](/docs/files) so answers are grounded in your documents
+
+## What's Next?
+
+- [Start chatting with your assistant →](/docs/chat/start-conversation)
+- [Upload documents to Knowledge Base →](/docs/files/upload-documents)
+- [Browse the Marketplace →](/docs/marketplace)

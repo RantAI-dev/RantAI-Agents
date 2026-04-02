@@ -1,0 +1,75 @@
+# Analytics
+
+View AI memory data and usage statistics.
+
+## Memory
+
+<Screenshot src="/images/settings/analytics-memory.png" alt="Memory Settings" />
+
+View and manage what the AI remembers across conversations.
+
+### Memory Stats
+
+Four stat cards showing counts for each memory type:
+- **Working** (amber) — Short-term context within conversations
+- **Semantic** (cyan) — Retrieved relevant memories from past conversations
+- **Long-term** (violet) — Persistent user profiles and preferences
+- **Total** (primary) — Combined count across all types
+
+### Memory List
+
+Switch between sub-tabs (Working, Semantic, Long-term) to browse stored memories. Each memory shows:
+- Memory content/text
+- Created date
+- Type badge
+- Source indicator
+- **Delete** button to remove individual memories
+- **Clear All** button to remove all memories of a specific type
+
+## Statistics
+
+<Screenshot src="/images/settings/analytics-statistics.png" alt="Statistics Overview" />
+
+Usage analytics with date range filtering via the **Date Range Picker** in the top-right.
+
+### Overview Tab
+
+**Stat cards (8 total):**
+
+| Stat | Icon | Description |
+|---|---|---|
+| **Total Sessions** | Users | Dashboard chat sessions |
+| **Conversations** | MessageSquare | Widget conversations |
+| **Tool Executions** | Wrench | Total executions + error count |
+| **Assistants** | Bot | Configured assistants |
+| **Total Tokens** | Coins | Input + output breakdown |
+| **Estimated Cost** | DollarSign | Based on usage records |
+| **Usage Records** | BarChart | API calls tracked |
+| **Error Rate** | AlertTriangle | Tool execution error percentage |
+
+**Charts:**
+- Conversations over time (line chart)
+- Channel breakdown (conversations by channel)
+- Assistant breakdown (conversations by assistant)
+
+### Usage Tab
+
+<Screenshot src="/images/settings/analytics-usage.png" alt="Statistics Usage" />
+
+- **Stat cards:** Input Tokens, Output Tokens, Total Cost
+- **Token usage chart** — Time series of token consumption
+- **Sessions over time** — Session counts by date
+
+### Tools Tab
+
+- **Stat cards:** Total Executions, Errors, Error Rate
+- **Tool executions chart** — Time series of tool usage
+- **Tool performance table:**
+
+| Column | Description |
+|---|---|
+| **Tool** | Tool name |
+| **Executions** | Total execution count |
+| **Avg Duration** | Average execution time (ms) |
+| **Errors** | Error count |
+| **Error Rate** | Color-coded: green (&lt;5%), amber (5–20%), red (&gt;20%) |

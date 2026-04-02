@@ -1,0 +1,48 @@
+# API Reference
+
+> Detailed API documentation is coming soon.
+
+RantAI Agents exposes a comprehensive REST API for managing all platform resources programmatically.
+
+## API Overview
+
+The API is organized into the following domains:
+
+| Domain | Base Path | Description |
+|---|---|---|
+| **Assistants** | `/api/dashboard/assistants` | CRUD operations for AI assistants |
+| **Chat** | `/api/dashboard/chat` | Chat session management |
+| **Workflows** | `/api/dashboard/workflows` | Workflow CRUD and execution |
+| **Knowledge** | `/api/dashboard/knowledge` | Knowledge base and document management |
+| **Digital Employees** | `/api/dashboard/digital-employees` | Employee lifecycle management |
+| **Integrations** | `/api/dashboard/credentials` | Credential and integration management |
+| **Marketplace** | `/api/dashboard/marketplace` | Browse and install marketplace items |
+| **Groups** | `/api/dashboard/groups` | Group management |
+| **Audit** | `/api/dashboard/audit` | Audit log queries |
+| **Organization** | `/api/dashboard/organization` | Organization settings |
+| **MCP** | `/api/dashboard/mcp` | MCP server management |
+| **Skills** | `/api/dashboard/skills` | Skill management |
+| **Tools** | `/api/dashboard/tools` | Tool management |
+
+## Authentication
+
+All API requests require authentication via session cookie (NextAuth.js) or API key (for widget/external access).
+
+## Public Endpoints
+
+| Endpoint | Description |
+|---|---|
+| `/api/chat` | Public chat endpoint for widget integration |
+| `/api/webhooks/whatsapp` | WhatsApp webhook receiver |
+
+## Coming Soon
+
+- Detailed endpoint documentation with request/response schemas
+- Authentication guide
+- Rate limiting information
+- SDK examples
+
+## What's Next?
+
+- [Manage API Credentials →](/docs/settings/agent-config#credentials)
+- [Embed Widget Setup →](/docs/channels)

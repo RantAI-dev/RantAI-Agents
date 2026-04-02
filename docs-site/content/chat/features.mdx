@@ -1,0 +1,131 @@
+# Chat Features
+
+The chat interface includes a powerful toolbar and rich interaction features beyond basic messaging.
+
+## Chat Toolbar
+
+The toolbar below the input box gives you access to advanced features. Each toggle is per-session — settings are remembered for each conversation.
+
+<Screenshot src="/images/chat/chat-toolbar.png" alt="Chat Toolbar" />
+
+### File Upload
+
+Attach files directly in the chat by clicking the file upload button.
+
+Supported formats:
+- **Images** — `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`
+- **Documents** — `.pdf`, `.md`, `.txt`
+
+Files show a preview with thumbnail or icon before sending.
+
+### Web Search
+
+Toggle web search to let the assistant fetch real-time information from the internet. When enabled, the assistant can search the web to answer your questions with up-to-date data.
+
+### Code Interpreter
+
+Toggle code execution so the assistant can write and run code directly in the conversation. Useful for calculations, data analysis, and generating visualizations.
+
+### Knowledge Groups
+
+Select which knowledge base groups the assistant should search. Each group shows its name, color indicator, and document count. Leave empty to search all documents.
+
+### Tools
+
+Control which tools the assistant can use:
+- **Off** — No tools available
+- **Auto** — Assistant decides which tools to use (shows tool count)
+- **Select** — Manually pick specific tools with checkboxes
+
+Each tool shows its category (Built-in, Custom, Community, OpenAPI, MCP), name, description, and icon.
+
+### Skills
+
+Control which skills are active:
+- **Off** — No skills
+- **Auto** — Automatic skill selection
+- **Select** — Manually pick specific skills
+
+When you enable a skill, related tools are automatically activated.
+
+---
+
+## Canvas & Artifacts
+
+When Canvas is enabled, the assistant can generate rich content displayed in a side panel.
+
+<Screenshot src="/images/chat/chat-artifacts.png" alt="Canvas Panel" />
+
+### Canvas Modes
+- **Off** — No artifacts generated
+- **Auto** — Assistant decides when to create artifacts
+- **Select type** — Choose a specific artifact type
+
+### Supported Artifact Types
+
+| Type | Description |
+|---|---|
+| **HTML Pages** | Interactive web pages rendered live |
+| **React Components** | Live React components |
+| **SVG Graphics** | Vector graphics |
+| **Mermaid Diagrams** | Flowcharts, sequence diagrams, etc. |
+| **Markdown** | Formatted text documents |
+| **Code** | Syntax-highlighted code blocks |
+| **Spreadsheets** | Tabular data |
+| **LaTeX / Math** | Mathematical equations |
+| **Slides** | Presentation slides |
+| **Python Scripts** | Executable Python code |
+| **3D Scenes** | Three.js 3D graphics |
+
+### Artifact Panel
+
+The panel has 3 tabs:
+- **Preview** — Rendered output of the artifact
+- **Code** — Source code view with copy button
+- **Edit** — Inline editing mode
+
+Additional controls:
+- **Version navigation** — Browse through artifact versions (prev/next)
+- **Full-screen** — Toggle full-screen mode
+- **Download** — Download the artifact
+- **Fix with AI** — Ask AI to fix errors in the artifact
+
+### Artifacts & Files
+
+Artifacts generated in chat are automatically saved to the **[Files](/docs/files)** page. You can find them alongside your uploaded documents — they're displayed with their artifact type icon (e.g. HTML, React, 3D) and can be opened in the Document Viewer just like any other file.
+
+---
+
+## Message Actions
+
+Hover over any message to see available actions:
+
+| Action | Description |
+|---|---|
+| **Copy** | Copy message text to clipboard |
+| **Edit** | Edit your message (user messages only) |
+| **Delete** | Remove the message |
+| **Regenerate** | Regenerate the assistant's response |
+| **Reply** | Start a threaded reply to a specific message |
+
+### Message Threading
+
+When you reply to a message, a thread indicator appears showing a preview of the parent message (truncated to 60 characters). Click the indicator to scroll to the original message.
+
+---
+
+## Tool Calls
+
+When the assistant uses a tool during a conversation, a tool call indicator appears.
+
+The indicator shows:
+- **Tool name and icon** — e.g. Web Search, Code Interpreter, Knowledge Search
+- **Execution status** — Streaming → Running → Done / Error
+- **Expandable details** — Click to see the tool's input and output
+
+Common tools include: `knowledge_search`, `web_search`, `code_interpreter`, `file_operations`, `document_analysis`, `calculator`, `date_time`, and more.
+
+## What's Next?
+
+- [Manage Chat History →](/docs/chat/manage-history)
+- [Create a custom assistant →](/docs/agent-builder/configure)
