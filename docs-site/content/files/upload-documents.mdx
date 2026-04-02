@@ -1,0 +1,70 @@
+# Upload Documents
+
+Add documents to your knowledge base so assistants can reference them.
+
+## Open Upload Dialog
+
+Click **Knowledge** in the sidebar, then click the **Add Document** button.
+
+<Screenshot src="/images/files/files-upload-dialog.png" alt="Upload Dialog" />
+
+## Fill in the Upload Form
+
+### 1. Select File
+
+Drag and drop a file into the upload area, or click to browse. The file preview shows the icon (color-coded by type), file name, size, and a remove button.
+
+<Screenshot src="/images/files/files-upload-file-selected.png" alt="File Selected" />
+
+### 2. Title
+
+Auto-populated from the filename. You can edit it to something more descriptive.
+
+### 3. Categories
+
+Select one or more categories for the document. Categories are color-coded for visual organization. You can also create a new category inline.
+
+<Screenshot src="/images/files/files-upload-categories.png" alt="Category Select" />
+
+### 4. Subcategory (Optional)
+
+Add a subcategory for finer organization (e.g. "Product Manual", "API Docs").
+
+### 5. Knowledge Bases
+
+Select which knowledge base group(s) this document belongs to. Displayed as a grid of selectable buttons with colored icons.
+
+### 6. Enhanced Processing (Optional)
+
+Toggle **Extract entities for knowledge graph** to enable entity and relationship extraction during processing.
+
+## Processing Pipeline
+
+After uploading, your document goes through an automatic pipeline:
+
+<Screenshot src="/images/files/files-upload-progress.png" alt="Upload Progress" />
+
+1. **Parsing** — Extract text content from the document
+2. **OCR** — For images and scanned PDFs, text is extracted using AI vision models (Ollama or OpenRouter fallback)
+3. **Chunking** — Split the document into searchable segments
+4. **Embedding** — Generate semantic vectors for each chunk
+5. **Indexing** — Store in SurrealDB vector database for fast retrieval
+6. **Intelligence** (optional) — Extract entities and relationships for knowledge graph
+
+Document status indicators:
+- **Indexing** (with spinner) — Processing in progress
+- **#N chunks** — Successfully processed with N chunks
+- **Chunking failed** — Processing error occurred
+
+## Tips
+
+- Larger documents take longer to process
+- Images and scanned PDFs require OCR — processing time depends on your hardware
+- You can upload more documents at any time
+- Use categories and subcategories to keep your knowledge organized
+- Enable enhanced processing for documents where entity extraction adds value
+
+## What's Next?
+
+- [Document Viewer →](/docs/files/document-viewer)
+- [Manage Knowledge →](/docs/files/manage-files)

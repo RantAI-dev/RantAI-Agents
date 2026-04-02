@@ -1,0 +1,73 @@
+# Document Viewer
+
+Click any document in the files list to open its detail view.
+
+## Document Header
+
+<Screenshot src="/images/files/files-document-detail.png" alt="Document Detail" />
+
+The header shows:
+- **Title** with file type icon
+- **File extension** — Color-coded badge
+- **Categories** — Color-coded badges
+- **Chunk count** — Number of indexed chunks
+- **File size** — In KB or MB
+- **Subcategory** — If assigned
+- **Download button** — Download the original file
+
+## Tabs
+
+### Preview
+
+View the document content rendered in its native format:
+
+<Screenshot src="/images/files/files-document-preview.png" alt="Document Preview" />
+
+| File Type | How It's Displayed |
+|---|---|
+| **PDF** | Embedded PDF viewer (iframe) |
+| **Images** | Centered image display |
+| **Markdown** | Formatted markdown rendering |
+| **Code** | Syntax-highlighted code with artifact renderer |
+| **HTML / React** | Live rendered output |
+| **Plain text** | Pre-formatted text block |
+
+### Source
+
+View the raw content of the document in a plain text block. Binary files (PDF, images) show a "binary data" message.
+
+### Chunks
+
+<Screenshot src="/images/files/files-document-chunks.png" alt="Document Chunks" />
+
+Browse the indexed chunks that were created during processing:
+- Each chunk has a **numbered badge** (#1, #2, etc.)
+- **Character count** displayed on the right
+- **Content preview** — First few lines of each chunk (truncated to 4 lines)
+- Color-coded left accent bar
+
+### Intelligence
+
+When enhanced processing is enabled, this tab shows extracted entities and relationships.
+
+<Screenshot src="/images/files/files-document-intelligence.png" alt="Document Intelligence" />
+
+**Entities Tab:**
+- Filter by entity type (with counts)
+- Toggle between List and Grouped view
+- Each entity shows: name, type badge, confidence percentage (0–100%), source (pattern or LLM), and context snippet
+
+**Relations Tab:**
+- Source entity → Target entity relationships
+- Confidence scoring and source display
+
+**Graph Tab:**
+- Force-directed 2D knowledge graph visualization
+- Entity nodes colored by type
+- Relation edges with confidence-based styling
+- Zoom, pan, and fullscreen controls
+
+## What's Next?
+
+- [Manage Files →](/docs/files/manage-files)
+- [Attach knowledge to an assistant →](/docs/agent-builder/configure#knowledge)

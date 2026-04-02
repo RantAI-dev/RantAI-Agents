@@ -1,0 +1,104 @@
+# Run & Test
+
+Execute workflows, view run history, and test chatflow pipelines.
+
+## Running a Workflow
+
+Click the **Run** button in the toolbar to execute the workflow.
+
+During execution, you'll see visual feedback on each node:
+- **Green checkmark** — Step completed successfully
+- **Red X** — Step failed
+- **Amber alert** — Step suspended (waiting for human input)
+
+<Screenshot src="/images/workflows/canvas-run-status.png" alt="Nodes with execution status" />
+
+## Run History
+
+Click **Run History** in the toolbar to view all past executions.
+
+### Run List
+
+<Screenshot src="/images/workflows/run-history-list.png" alt="Run history list" />
+
+Each run shows:
+- **Status badge** — Completed, Failed, Running, Pending, or Paused
+- **Run ID** — Unique identifier (first 8 characters)
+- **Timestamp** — When the run started
+- **Duration** — Total execution time
+
+### Run Detail
+
+Click a run to see the step-by-step breakdown:
+
+<Screenshot src="/images/workflows/run-history-detail.png" alt="Run detail with steps" />
+
+| Field | Description |
+|---|---|
+| **Step status** | Success, failed, running, pending, or suspended |
+| **Step label** | Node name and type |
+| **Duration** | How long this step took |
+| **Token usage** | Prompt tokens + completion tokens = total (for AI nodes) |
+| **Input** | JSON data sent to the node |
+| **Output** | JSON data returned by the node |
+| **Error** | Error message with full stack trace (if failed) |
+
+The detail view auto-scrolls to the currently running step during active executions.
+
+### Resuming Paused Runs
+
+When a workflow is paused at a **Human Input** or **Approval** node:
+
+<Screenshot src="/images/workflows/run-history-paused.png" alt="Paused run waiting for input" />
+
+1. Open the run detail
+2. You'll see an amber-highlighted input area
+3. Type your response or click **Approve**
+4. The workflow resumes from where it paused
+
+## Testing Chatflow Workflows
+
+Chatflow workflows have a built-in **Chat Test Panel** accessible from the toolbar.
+
+<Screenshot src="/images/workflows/chatflow-test-panel.png" alt="Chatflow test panel" />
+
+Features:
+- Live chat interface to test the conversational flow
+- Streaming responses from Stream Output nodes
+- Follow-up suggestions parsed from responses
+- Thread continuity across multiple messages
+- Feedback buttons (thumbs up/down)
+- Welcome message and starter prompts display
+
+## API Access
+
+When **API Enable** is toggled on in workflow settings:
+
+1. An API key is auto-generated
+2. The workflow can be triggered via HTTP:
+
+```bash
+POST /api/workflows/{workflowId}/run
+Authorization: Bearer {apiKey}
+Content-Type: application/json
+
+{
+  "input": {
+    "message": "your input here"
+  }
+}
+```
+
+3. Copy the API key from the toolbar settings panel
+
+## Tips
+
+- Use **Run History** to debug failed workflows — check step inputs/outputs
+- Token usage tracking helps you monitor AI costs per run
+- Chatflow test panel lets you iterate quickly without deploying
+- API mode is useful for webhook-triggered or external integrations
+
+## What's Next?
+
+- [Create a Workflow →](/docs/workflows/create-workflow)
+- [Learn about Node Types →](/docs/workflows/nodes)

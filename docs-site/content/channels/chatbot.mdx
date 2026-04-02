@@ -1,0 +1,245 @@
+# Chatbot Deployment
+
+Deploy your AI assistant so users can interact with it directly. The assistant handles conversations automatically — no human operator needed.
+
+All chatbot channels are configured per-assistant in **Agent Builder → Deploy tab**.
+
+<Screenshot src="/images/agent-builder/config-deploy.png" alt="Deploy Tab" />
+
+---
+
+## REST API
+
+<Screenshot src="/images/agent-builder/deploy-rest-api.png" alt="REST API subtab" />
+
+Integrate the assistant into your own backend via HTTP requests. The API is **OpenAI-compatible** — works with the `openai` Python/JS SDK out of the box.
+
+### API Keys
+
+Create and manage API keys for authentication:
+
+- **Create API Key** — Click the "+" button
+- Each key shows: name, masked/revealed value, request count, expiration date, scopes
+- **Actions per key:** Reveal/Hide, Copy, Edit, Enable/Disable, Delete
+
+### Code Examples
+
+The subtab provides ready-to-use code in 3 languages:
+
+**cURL:**
+```bash
+curl -X POST https://your-domain/api/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer rantai_sk_..." \
+  -d '{
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": false
+  }'
+```
+
+**Python (OpenAI SDK):**
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://your-domain/api/v1",
+    api_key="rantai_sk_...",
+)
+
+response = client.chat.completions.create(
+    model="Your Agent Name",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+**JavaScript:**
+```javascript
+const response = await fetch("https://your-domain/api/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer rantai_sk_...",
+  },
+  body: JSON.stringify({
+    messages: [{ role: "user", content: "Hello!" }],
+    stream: false,
+  }),
+});
+
+const data = await response.json();
+console.log(data.choices[0].message.content);
+```
+
+### Endpoint Info
+
+| Info | Value |
+|---|---|
+| **Endpoint** | `POST /api/v1/chat/completions` |
+| **Auth** | `Authorization: Bearer rantai_sk_...` |
+| **Format** | OpenAI-compatible |
+| **Rate limit** | 100 requests/minute per key |
+
+---
+
+## Widget Embed
+
+<Screenshot src="/images/agent-builder/deploy-widget.png" alt="Widget Embed subtab" />
+
+Add a chat widget to any website with a single script tag.
+
+### Embed Keys
+
+Create and manage embed keys for widget authentication:
+
+- **Create Embed Key** — Click the "+" button
+- Each key shows: name, masked/revealed value, request count, last used date, allowed domains
+- **Actions per key:** Code (snippet), Edit, Enable/Disable, Delete
+
+### Create / Edit Embed Key
+
+The dialog has 3 tabs:
+
+**Main:**
+- **Name** — A friendly name (e.g. "My Website Widget")
+- **Assistant** — Select which assistant the widget uses (cannot be changed after creation)
+
+**Security:**
+- **Allowed Domains** — One domain per line. Use `*` for wildcard subdomains. Leave empty to allow all domains.
+
+**Appearance:**
+- **Primary Color** — Color picker + hex input
+- **Background Color** — Color picker + hex input
+- **Widget Position** — Bottom Right, Bottom Left, Top Right, Top Left
+- **Custom CSS Class** — Add a custom class to the widget container
+- **Avatar URL** — Custom avatar image (leave empty to use assistant emoji)
+
+**Behavior:**
+- **Header Title** — Widget header text (e.g. "Chat with us")
+- **Welcome Message** — First message shown when the chat opens
+- **Input Placeholder** — Placeholder text in the input box
+
+### Embed Code
+
+Click the **Code** button on any embed key to see the snippet:
+
+```html
+<!-- RantAI Widget -->
+<script
+  src="https://your-domain/widget/rantai-widget.js"
+  data-api-key="YOUR_API_KEY"
+  async
+></script>
+```
+
+The dialog also shows a widget configuration summary (assistant, position, primary color, welcome message, allowed domains) and an **Open Demo** button to preview.
+
+### Test with Demo Page
+
+```
+https://your-domain/widget/demo.html?key=YOUR_API_KEY
+```
+
+<Screenshot src="/images/channels/channels-widget-demo.png" alt="Widget Demo" />
+
+---
+
+## WebSocket
+
+<Screenshot src="/images/agent-builder/deploy-websocket.png" alt="WebSocket subtab" />
+
+Real-time streaming connection for custom chat integrations. Uses the same API keys as the REST API.
+
+### Code Examples
+
+**JavaScript (Socket.io):**
+```javascript
+import { io } from "socket.io-client";
+
+const socket = io("https://your-domain", {
+  path: "/api/socket",
+  auth: { apiKey: "rantai_sk_..." },
+});
+
+socket.on("connect", () => {
+  socket.emit("api:chat", {
+    messages: [{ role: "user", content: "Hello!" }],
+    stream: true,
+  });
+});
+
+socket.on("api:chunk", (data) => {
+  const content = data.choices?.[0]?.delta?.content;
+  if (content) process.stdout.write(content);
+});
+
+socket.on("api:done", () => console.log("\nDone!"));
+socket.on("api:error", (err) => console.error("Error:", err));
+```
+
+**Python (socketio):**
+```python
+import socketio
+
+sio = socketio.Client()
+sio.connect(
+    "https://your-domain",
+    socketio_path="/api/socket",
+    auth={"apiKey": "rantai_sk_..."},
+)
+
+@sio.on("api:chunk")
+def on_chunk(data):
+    content = data.get("choices", [{}])[0].get("delta", {}).get("content", "")
+    print(content, end="", flush=True)
+
+@sio.on("api:done")
+def on_done():
+    print("\nDone!")
+
+sio.emit("api:chat", {
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": True,
+})
+sio.wait()
+```
+
+### WebSocket Events
+
+| Direction | Event | Description |
+|---|---|---|
+| **Emit** | `api:chat` | Send `{ messages, stream }` |
+| **Listen** | `api:chunk` | Streamed token (OpenAI delta format) |
+| **Listen** | `api:done` | Stream complete |
+| **Listen** | `api:response` | Full response (non-streaming) |
+| **Listen** | `api:error` | Error object |
+
+---
+
+## Agent Info
+
+<Screenshot src="/images/agent-builder/deploy-info.png" alt="Agent Info subtab" />
+
+View the assistant's metadata:
+
+| Field | Description |
+|---|---|
+| **Agent ID** | Unique identifier (copyable) |
+| **Agent Name** | Display name |
+| **Model** | The LLM model powering this assistant |
+| **Created** | Creation date |
+
+---
+
+## Tips
+
+- REST API is **OpenAI-compatible** — use the `openai` SDK for Python/JS
+- Widget embed keys support **domain restrictions** to prevent unauthorized usage
+- WebSocket uses the **same API keys** as REST API — create keys in the REST API tab
+- Test the widget on the **demo page** before adding to production
+- Enable [Live Chat handoff](/docs/channels/live-agent) if customers may need human help
+
+## What's Next?
+
+- [Live Agent Channels →](/docs/channels/live-agent)
+- [Handle handoffs in Live Chat →](/docs/live-chat)

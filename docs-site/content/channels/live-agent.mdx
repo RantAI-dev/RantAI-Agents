@@ -1,0 +1,128 @@
+# Live Agent Channels
+
+When a customer requests human help during a conversation, the request is routed through a live agent channel. An operator picks up the conversation in [Live Chat](/docs/live-chat).
+
+All live agent channels are configured at the organization level in **Settings → General**.
+
+<Screenshot src="/images/settings/general-features-channels.png" alt="Channels in Settings General" />
+
+## How Channel Routing Works
+
+1. Customer requests to speak with an agent
+2. The system routes the request to the **primary channel**
+3. An operator picks up the conversation in [Live Chat](/docs/live-chat)
+4. The customer receives a response through the channel
+
+You can set any enabled channel as the **primary channel** — this determines where new agent requests are routed by default.
+
+## Portal
+
+- **Description:** Real-time web chat via WebSocket
+- **Always enabled** — Portal cannot be toggled off
+- **No configuration needed** — works out of the box
+- Conversations appear directly in [Live Chat](/docs/live-chat)
+
+> Portal is the default channel. It's always available and cannot be disabled.
+
+## WhatsApp Business
+
+<Screenshot src="/images/channels/channels-whatsapp-config.png" alt="WhatsApp Config" />
+
+- **Description:** Send notifications to agents via WhatsApp
+- **Can be enabled/disabled** — Toggle on to show configuration fields
+- **Can be set as primary** — Click "Set Primary" when enabled
+
+### Configuration Fields
+
+| Field | Placeholder | Description |
+|---|---|---|
+| **Phone Number ID** | From Meta Business | Your WhatsApp Business phone number ID from Meta |
+| **Access Token** | Meta API token | Meta API access token (password-masked) |
+| **Agent Phone Number** | +1234567890 | The phone number that receives notifications |
+| **Template Name** | customer_inquiry (optional) | WhatsApp message template name for notifications |
+
+### Setup Steps
+
+1. Go to **Settings → General**, scroll to **Channels**
+2. Find **WhatsApp Business** and toggle **Enable**
+3. Fill in the 4 configuration fields
+4. Click **Save**
+5. Optionally click **Set Primary** to make WhatsApp the default routing channel
+
+## Email
+
+- **Description:** Send confirmation emails to customers
+- **Can be enabled/disabled** — Toggle on to show configuration fields
+- **Can be set as primary** — Click "Set Primary" when enabled
+
+### Configuration Fields
+
+| Field | Placeholder | Description |
+|---|---|---|
+| **SMTP Host** | smtp.gmail.com | Your email server hostname |
+| **SMTP Port** | 587 | Email server port |
+| **SMTP Username** | your@email.com | Authentication username |
+| **SMTP Password** | App password | Authentication password (password-masked) |
+| **From Email** | *(your support email)* | Sender email address |
+| **From Name** | *(your support name)* | Sender display name |
+
+### Setup Steps
+
+1. Go to **Settings → General**, scroll to **Channels**
+2. Find **Email** and toggle **Enable**
+3. Fill in the 6 SMTP configuration fields
+4. Click **Save**
+
+## Salesforce Messaging
+
+- **Description:** Handoff to Salesforce embedded chat widget
+- **Can be enabled/disabled** — Toggle on to show configuration fields
+- **Can be set as primary** — Click "Set Primary" when enabled
+
+### Configuration Fields
+
+| Field | Placeholder | Description |
+|---|---|---|
+| **Organization ID** | 00Dfj00000II7jp | Salesforce organization identifier |
+| **Deployment Developer Name** | *(your deployment name)* | The deployment name from Salesforce setup |
+| **Embedded Service Site URL** | https://xxx.my.site.com/ESW... | URL of the Salesforce embedded service |
+| **SCRT2 URL** | https://xxx.salesforce-scrt.com | Salesforce real-time messaging URL |
+
+### Setup Steps
+
+1. Go to **Settings → General**, scroll to **Channels**
+2. Find **Salesforce Messaging** and toggle **Enable**
+3. Fill in the 4 configuration fields
+4. Click **Save**
+
+## Channel Behavior
+
+| Behavior | Portal | WhatsApp | Email | Salesforce |
+|---|---|---|---|---|
+| **Can be disabled** | No | Yes | Yes | Yes |
+| **Can be primary** | Yes | Yes | Yes | Yes |
+| **Config fields** | 0 | 4 | 6 | 4 |
+| **Has password fields** | — | Yes (Access Token) | Yes (SMTP Password) | No |
+
+When a channel is **disabled**:
+- Configuration fields are hidden
+- "Set Primary" button disappears
+- The card appears dimmed (60% opacity)
+
+When a channel is **enabled**:
+- Configuration fields become visible
+- "Set Primary" button appears (if not already primary)
+- The card appears at full opacity
+
+## Enabling Live Chat Handoff
+
+For conversations to reach these channels, you also need to:
+
+1. Enable the **AGENT** feature flag in **Settings → General**
+2. In the **Agent Builder**, open your assistant's **Configure** tab
+3. Toggle **Enable Live Chat** handoff
+
+## What's Next?
+
+- [Chatbot Deployment →](/docs/channels/chatbot)
+- [Handle handoffs in Live Chat →](/docs/live-chat)

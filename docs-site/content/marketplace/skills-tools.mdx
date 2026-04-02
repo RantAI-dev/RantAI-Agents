@@ -1,0 +1,72 @@
+# Skills & Tools
+
+Browse and install skills and tools to extend your assistants' capabilities.
+
+## Skills
+
+Skills are instruction-based capabilities that teach an assistant how to handle specific tasks. They are appended to the assistant's system prompt.
+
+<Screenshot src="/images/marketplace/marketplace-skills.png" alt="Skills Tab" />
+
+### Skill Detail
+
+Click a skill to see its detail dialog:
+
+- **Included Tools** — Tools that come bundled with this skill
+- **Shared Tools** — Tools referenced but shared across skills
+- **Skill Prompt** — The full instruction text (collapsible)
+- **Tags** and **category**
+- **Version** and **author**
+
+### Installing a Skill
+
+1. Click **Install** on the skill card
+2. If the skill requires configuration, a config form will appear (API keys, settings, etc.)
+3. Once installed, the skill appears in **Settings → Agent Config → Skills**
+4. Attach it to any assistant in the **Agent Builder → Skills tab**
+
+When you enable a skill on an assistant, its related tools are automatically activated.
+
+### Configuration
+
+Some skills require setup before installing. The config form supports:
+- **Text inputs** — Regular fields
+- **Password fields** — For API keys, secrets, and tokens (auto-detected)
+- **Select dropdowns** — For enum options
+- **Toggle switches** — For boolean settings
+- **Number inputs** — For numeric values
+
+## Tools
+
+Tools are function-calling capabilities that give assistants the ability to take actions.
+
+<Screenshot src="/images/marketplace/marketplace-tools.png" alt="Tools Tab" />
+
+### Tool Detail
+
+Click a tool to see its detail dialog:
+
+- **Parameters table** — Shows each parameter with name, type, description, and required indicator
+- **Tags** and **category**
+- **Version** and **author**
+
+### Installing a Tool
+
+1. Click **Install** on the tool card
+2. Once installed, the tool appears in **Settings → Agent Config → Tools**
+3. Attach it to any assistant in the **Agent Builder → Tools tab**
+
+### Item States
+
+| State | Button | Description |
+|---|---|---|
+| **Not installed** | "Install" (filled) | Click to install |
+| **Just installed** | "Added!" (flash) | Confirmation shown for 2 seconds |
+| **Installed** | "Installed" → "Remove" on hover | Hover to see remove option |
+| **Built-in** | "Always On" (teal) | Cannot be removed |
+
+## What's Next?
+
+- [MCP Servers →](/docs/marketplace/mcp-servers)
+- [Workflows →](/docs/marketplace/workflows)
+- [Configure assistant tools →](/docs/agent-builder/configure)

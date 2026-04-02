@@ -1,0 +1,139 @@
+# Create a Workflow
+
+Build your first automation pipeline step by step.
+
+## Step 1: Create a New Workflow
+
+Click **Workflows** in the sidebar, then click **Create New**.
+
+<Screenshot src="/images/workflows/create-new.png" alt="Create New" />
+
+<Screenshot src="/images/workflows/create-form.png" alt="Create Form" />
+
+Fill in:
+- **Name** — A descriptive name for your workflow
+- **Description** — What this workflow does
+- **Category** — Task, Chatflow, or Automation
+
+You can also start from a **template** by browsing the template gallery.
+
+## Step 2: The Workflow Editor
+
+After creation, you'll see the visual editor with four main areas:
+
+<Screenshot src="/images/workflows/canvas-with-nodes.png" alt="Workflow Canvas" />
+
+| Area | Description |
+|---|---|
+| **Node Palette** (left) | Drag nodes from here onto the canvas. Organized by category with search |
+| **Canvas** (center) | Visual editor where you design your flow. Pan, zoom, and connect nodes |
+| **Properties Panel** (right) | Configure the selected node's settings |
+| **Variables Panel** (bottom) | Define input and output variables |
+
+### Adding Nodes
+
+Three ways to add nodes:
+1. **Drag and drop** from the Node Palette on the left
+2. **Click** a node in the palette to add it to the center of the canvas
+3. **Quick Add** — Press **Ctrl+K** to search and add nodes via keyboard
+
+### Connecting Nodes
+
+Drag from a node's output handle to another node's input handle to create a connection. The editor validates connections to prevent invalid flows.
+
+### Node Palette Categories
+
+Nodes are organized by color-coded categories:
+
+| Category | Color | What's Inside |
+|---|---|---|
+| **Triggers** | Green | Manual, Webhook, Schedule, Event |
+| **AI** | Violet | Agent, LLM |
+| **Tools** | Blue | Tool, MCP Tool, Code, HTTP |
+| **Flow Control** | Amber | Condition, Switch, Loop, Parallel, Merge, Error Handler, Sub-Workflow |
+| **Human** | Pink | Human Input, Approval, Handoff |
+| **Data** | Cyan | Transform, Filter, Aggregate, Output Parser |
+| **Integration** | Orange | RAG Search, Database, Storage |
+| **Output** | Rose | Stream Output (chatflow) |
+
+## Step 3: Configure the Toolbar
+
+<Screenshot src="/images/workflows/workflow-toolbar.png" alt="Workflow Toolbar" />
+
+The toolbar at the top provides:
+
+- **Save** (Ctrl+S) — Save your workflow
+- **Run** — Execute the workflow
+- **Undo / Redo** — Navigate edit history
+- **Settings** — Open the settings panel to configure:
+  - Mode (Standard / Chatflow)
+  - Category and Status
+  - API Enable toggle (auto-generates API key)
+  - Assistant assignment (for chatflow mode)
+  - Tags
+  - Chatflow config (welcome message, starter prompts)
+- **Grid / Minimap** — Toggle visual helpers
+- **Export** — Download workflow as JSON
+- **Import** — Upload a workflow from JSON file
+- **Auto-layout** — Automatically arrange nodes
+- **Keyboard shortcuts** — View all available shortcuts
+
+## Step 4: Define Variables
+
+Use the variables panel at the bottom to define:
+
+- **Input Variables** — Data the workflow expects to receive (name, type, required flag)
+- **Output Variables** — Data the workflow produces
+
+Supported types: `string`, `number`, `boolean`, `object`, `array`
+
+Variables are accessible in expressions as `$variables.<name>`.
+
+## Step 5: Save and Activate
+
+1. Click **Save** (or Ctrl+S)
+2. Change status from **Draft** to **Active** in the settings panel
+3. Your workflow is ready to run
+
+## Keyboard Shortcuts
+
+### General
+
+| Shortcut | Action |
+|---|---|
+| **Ctrl+S** (Cmd+S on Mac) | Save workflow |
+| **Ctrl+Z** (Cmd+Z on Mac) | Undo |
+| **Ctrl+Y** (Cmd+Shift+Z on Mac) | Redo |
+| **Ctrl+K** (Cmd+K on Mac) | Quick add node |
+| **?** | Show keyboard shortcuts dialog |
+
+### Nodes
+
+| Shortcut | Action |
+|---|---|
+| **Ctrl+C** (Cmd+C on Mac) | Copy selected node(s) |
+| **Ctrl+V** (Cmd+V on Mac) | Paste node(s) |
+| **Ctrl+D** (Cmd+D on Mac) | Duplicate selected node(s) |
+| **Delete / Backspace** | Delete selected node(s) |
+| **Escape** | Deselect all |
+
+### Canvas
+
+| Shortcut | Action |
+|---|---|
+| **Shift+Click** | Multi-select nodes |
+| **Drag** | Box selection |
+| **Scroll** | Zoom in/out |
+| **Middle Click+Drag** | Pan canvas |
+
+## Tips
+
+- Start with a **Trigger** node — every workflow needs one
+- Use the **tutorial overlay** (launched automatically for new workflows) to learn the interface
+- Import/Export lets you share workflows as JSON files
+- Use expression syntax to reference data from other nodes: `<nodeId>.output.text`
+
+## What's Next?
+
+- [Learn about Node Types →](/docs/workflows/nodes)
+- [Run & Test Workflows →](/docs/workflows/run-and-test)

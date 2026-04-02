@@ -43,3 +43,8 @@ next-env.d.ts
 
 # rust build artifacts
 installer/target/
+
+# docs site
+docs-site/node_modules/
+docs-site/.next/
+docs-site/bun.lock

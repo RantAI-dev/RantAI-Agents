@@ -1,0 +1,118 @@
+# Node Types
+
+Workflows are built from 27 different node types, organized into 8 categories. Each node performs a specific function in the pipeline.
+
+## Triggers
+
+Every workflow starts with a trigger node that determines how and when the workflow runs.
+
+| Node | Description | Key Config |
+|---|---|---|
+| **Manual Trigger** | Start via the Run button or API | — |
+| **Webhook Trigger** | Start via HTTP webhook | Webhook path, secret (HMAC-SHA256) |
+| **Schedule Trigger** | Run on a cron schedule | Cron expression (e.g. `0 * * * *`) |
+| **Event Trigger** | Start on a system event | Event name (e.g. `user.created`) |
+
+## AI
+
+AI nodes let you run language models and assistants within the workflow.
+
+| Node | Description | Key Config |
+|---|---|---|
+| **Agent** | Run an AI assistant with tools | Select assistant, prompt template, max steps (1–20) |
+| **LLM** | Direct language model call | Model selection, system prompt, temperature (0–2), max tokens, top-p, frequency/presence penalty, stop sequences |
+
+## Tools
+
+Tool nodes execute actions — run code, call APIs, or use registered tools.
+
+| Node | Description | Key Config |
+|---|---|---|
+| **Tool** | Execute a registered tool | Tool selection, credential, input mapping |
+| **MCP Tool** | Execute an MCP server tool | MCP tool selection, credential, input mapping |
+| **Code** | Run custom JavaScript | Code editor with `input` variable available |
+| **HTTP** | Make an HTTP request | Method (GET/POST/PUT/DELETE/PATCH), URL, body, timeout (default 30s), max retries, response type (json/text/blob) |
+
+## Flow Control
+
+Flow control nodes manage the execution path — branching, looping, error handling, and parallelism.
+
+| Node | Description | Key Config |
+|---|---|---|
+| **Condition** | If/else branching | Multiple branches with labels and boolean expressions |
+| **Switch** | Multi-way branching | Switch expression, multiple cases with values, optional default |
+| **Loop** | Iterate over data | Type (foreach/dowhile/dountil), concurrency, max iterations (default 100) |
+| **Parallel** | Run branches in parallel | Marker node for parallel execution |
+| **Merge** | Merge parallel branches | Strategy: all, any, or first |
+| **Error Handler** | Try-catch with error branch | Retry count, retry delay, fallback value |
+| **Sub-Workflow** | Execute another workflow | Select sub-workflow, input mapping |
+
+## Human Interaction
+
+Human nodes pause the workflow and wait for a person to respond.
+
+| Node | Description | Key Config |
+|---|---|---|
+| **Human Input** | Wait for human input | Prompt text, optional timeout, assignee |
+| **Approval** | Require human approval | Prompt text, optional timeout, assignee |
+| **Handoff** | Hand off to a human agent | Prompt text, optional timeout, assignee |
+
+## Data Transformation
+
+Data nodes transform, filter, and aggregate data between steps.
+
+| Node | Description | Key Config |
+|---|---|---|
+| **Transform** | Transform data | Expression editor |
+| **Filter** | Filter data | Boolean condition expression |
+| **Aggregate** | Combine data | Operation: concat, sum, count, merge, or custom expression |
+| **Output Parser** | Parse LLM JSON output | Strict mode toggle |
+
+## Integration
+
+Integration nodes connect the workflow to external systems.
+
+| Node | Description | Key Config |
+|---|---|---|
+| **RAG Search** | Search knowledge base | Select KB groups, topK, optional query template |
+| **Database** | Database operations | Operation (query/insert/update/delete), SQL editor, timeout, result limit |
+| **Storage** | File storage operations | Operation (read/write/delete/list), path |
+
+## Output
+
+Output nodes are used in chatflow mode for streaming responses.
+
+| Node | Description | Key Config |
+|---|---|---|
+| **Stream Output** | Stream LLM response to user | Model, system prompt, temperature, max tokens, top-p, frequency/presence penalty, stop sequences |
+
+---
+
+## Expression Syntax
+
+All node configuration fields support **expression syntax** for dynamic values:
+
+| Reference | What It Accesses |
+|---|---|
+| `input` | Current node's input data |
+| `input.message` | Message from trigger or previous node |
+| `input.data` | Data payload |
+| `$flow.state` | Shared mutable flow state |
+| `$flow.meta.runId` | Current run ID |
+| `$flow.meta.workflowId` | Current workflow ID |
+| `$variables.<name>` | Workflow input variables |
+| `<nodeId>.output` | Output from a specific node |
+| `<nodeId>.output.text` | Text output from a node |
+| `<nodeId>.output.data` | Data output from a node |
+
+## Node Configuration (Universal Fields)
+
+Every node has these common fields:
+- **Label** (required) — Display name on the canvas
+- **Description** — Short description of what this node does
+- **Notes** — Internal notes or comments (not visible during execution)
+
+## What's Next?
+
+- [Run & Test Workflows →](/docs/workflows/run-and-test)
+- [Create a Workflow →](/docs/workflows/create-workflow)

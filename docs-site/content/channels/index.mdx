@@ -1,0 +1,37 @@
+# Channels
+
+RantAI Agents supports two types of deployment channels:
+
+- **Chatbot Deployment** — AI assistant responds to users automatically (REST API, Widget Embed, WebSocket)
+- **Live Agent Channels** — Customers can request handoff to a human operator via WhatsApp, Email, Salesforce, or the web portal
+
+> Channels is not a separate menu in the dashboard. Chatbot deployment is configured in **Agent Builder → Deploy**, and live agent channels are configured in **Settings → General**.
+
+## At a Glance
+
+### Chatbot Deployment (AI Responds)
+
+Configured in **Agent Builder → Deploy tab** (per-assistant).
+
+| Channel | Description |
+|---|---|
+| **REST API** | Integrate the assistant into your own backend via HTTP |
+| **Widget Embed** | Add a chat widget to any website with a script tag |
+| **WebSocket** | Real-time streaming connection for custom integrations |
+
+### Live Agent Channels (Human Responds)
+
+Configured in **Settings → General** (organization-level). When a customer requests human help, the conversation appears in [Live Chat](/docs/live-chat).
+
+| Channel | Description |
+|---|---|
+| **Portal** | Real-time web chat via WebSocket (always available) |
+| **WhatsApp** | Notifications to agents via WhatsApp Business (Meta Cloud API) |
+| **Email** | Confirmation emails to customers via SMTP |
+| **Salesforce** | Handoff to Salesforce embedded chat widget |
+
+## What's Next?
+
+- [Chatbot Deployment →](/docs/channels/chatbot)
+- [Live Agent Channels →](/docs/channels/live-agent)
+- [Handle handoffs in Live Chat →](/docs/live-chat)
