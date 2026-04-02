@@ -18,6 +18,7 @@ export default async function AgentConfigUnified({ searchParams }: Props) {
         <DashboardPageHeader
           title="Agent Config"
           subtitle="Manage tools, skills, MCP servers, and API credentials"
+          inline
         />
         <div className="mt-6">
           <SettingsTabs

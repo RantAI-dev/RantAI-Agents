@@ -23,6 +23,7 @@ export default async function OrganizationUnified({ searchParams }: Props) {
         <DashboardPageHeader
           title="Organization"
           subtitle="Manage your organization, team members, and invitations"
+          inline
         />
         <div className="mt-6">
           <SettingsTabs

@@ -61,7 +61,7 @@ const features = [
 export default function AboutPage() {
   return (
     <div className="flex flex-col h-full">
-      <DashboardPageHeader title="About" subtitle="System information" />
+      <DashboardPageHeader title="About" subtitle="System information" inline />
 
       <div className="flex-1 overflow-auto">
         <div className="max-w-2xl mx-auto px-6 py-10 space-y-10">

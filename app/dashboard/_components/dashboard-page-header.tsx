@@ -7,25 +7,32 @@ interface DashboardPageHeaderProps {
   actions?: React.ReactNode
   /** Optional custom title area (e.g. icon + title + count). When set, title/subtitle are ignored for the left side. */
   children?: React.ReactNode
+  /** If true, removes left padding and border — for use inside content containers */
+  inline?: boolean
 }
 
 const headerBaseClass =
   "min-h-14 flex shrink-0 items-center border-b bg-background pl-14 pr-4 py-3 w-full"
+
+const inlineBaseClass =
+  "flex shrink-0 items-center py-3 w-full"
 
 export function DashboardPageHeader({
   title,
   subtitle,
   actions,
   children,
+  inline,
 }: DashboardPageHeaderProps) {
   const hasActions = actions != null
   const hasCustomLeft = children != null
+  const base = inline ? inlineBaseClass : headerBaseClass
   return (
     <header
       className={
         hasActions || hasCustomLeft
-          ? `${headerBaseClass} justify-between gap-2`
-          : headerBaseClass
+          ? `${base} justify-between gap-2`
+          : base
       }
       role="banner"
     >

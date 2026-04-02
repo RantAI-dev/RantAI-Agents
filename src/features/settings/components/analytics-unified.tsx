@@ -16,6 +16,7 @@ export default async function AnalyticsUnified({ searchParams }: Props) {
         <DashboardPageHeader
           title="Analytics"
           subtitle="AI memory management and usage statistics"
+          inline
         />
         <div className="mt-6">
           <SettingsTabs

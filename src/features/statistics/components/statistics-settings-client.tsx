@@ -64,6 +64,7 @@ export default function StatisticsSettingsClient({
       <DashboardPageHeader
         title="Statistics"
         subtitle="Analytics and usage metrics"
+        inline
         actions={
           <DateRangePicker filters={filters} onUpdate={updateFilters} />
         }

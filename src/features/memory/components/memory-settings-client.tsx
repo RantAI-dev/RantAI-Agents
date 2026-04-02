@@ -94,6 +94,7 @@ export default function MemorySettingsClient({
       <DashboardPageHeader
         title="Memory"
         subtitle="View and manage what the AI remembers"
+        inline
       />
 
       <div className="flex-1 overflow-auto p-6 dot-grid-bg">
