@@ -34,7 +34,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { AVAILABLE_MODELS, DEFAULT_MODEL_ID } from "@/lib/models"
+import { DEFAULT_MODEL_ID } from "@/lib/models"
+import { useModels } from "@/hooks/use-models"
 import type { Assistant, AssistantInput } from "@/lib/types/assistant"
 import {
   type AssistantEditorHydrationData,
@@ -62,6 +63,8 @@ export function AssistantEditor({
   onDelete,
   initialHydrationData,
 }: AssistantEditorProps) {
+  const { models } = useModels()
+
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [emoji, setEmoji] = useState("💬")
@@ -312,7 +315,7 @@ export function AssistantEditor({
                 </div>
               </SelectTrigger>
               <SelectContent>
-                {AVAILABLE_MODELS.map((m) => (
+                {models.map((m) => (
                   <SelectItem key={m.id} value={m.id}>
                     <div className="flex items-center gap-2">
                       <span>{m.name}</span>
@@ -331,7 +334,7 @@ export function AssistantEditor({
               </SelectContent>
             </Select>
             {(() => {
-              const modelInfo = AVAILABLE_MODELS.find((m) => m.id === selectedModel)
+              const modelInfo = models.find((m) => m.id === selectedModel)
               if (selectedToolIds.length > 0 && modelInfo && !modelInfo.capabilities.functionCalling) {
                 return (
                   <p className="text-xs text-destructive flex items-center gap-1">
@@ -445,7 +448,7 @@ export function AssistantEditor({
             isEditing={isEditing}
             loadingTools={loadingTools}
             modelSupportsFunctionCalling={
-              AVAILABLE_MODELS.find((m) => m.id === selectedModel)?.capabilities.functionCalling ?? false
+              models.find((m) => m.id === selectedModel)?.capabilities.functionCalling ?? false
             }
           />
         )}

@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select"
 import { ModelSelectorDropdown } from "./model-selector-dropdown"
 import { ModelParamSlider } from "./model-param-slider"
-import { getModelById } from "@/lib/models"
+import { getModelById, type LLMModel } from "@/lib/models"
 import type { ModelConfig } from "@/lib/types/assistant"
 
 interface TabModelProps {
@@ -20,6 +20,7 @@ interface TabModelProps {
   modelConfig: ModelConfig
   onModelChange: (model: string) => void
   onModelConfigChange: (config: ModelConfig) => void
+  models?: LLMModel[]
 }
 
 // Models that support reasoning effort parameter
@@ -34,8 +35,9 @@ export function TabModel({
   modelConfig,
   onModelChange,
   onModelConfigChange,
+  models,
 }: TabModelProps) {
-  const modelInfo = getModelById(model)
+  const modelInfo = models?.find((m) => m.id === model) ?? getModelById(model)
 
   const updateConfig = (key: keyof ModelConfig, value: ModelConfig[keyof ModelConfig]) => {
     onModelConfigChange({ ...modelConfig, [key]: value })
@@ -58,7 +60,7 @@ export function TabModel({
           </p>
         </div>
 
-        <ModelSelectorDropdown selectedModelId={model} onSelect={onModelChange} />
+        <ModelSelectorDropdown selectedModelId={model} onSelect={onModelChange} models={models} />
 
         {/* Selected model details card */}
         {modelInfo && (

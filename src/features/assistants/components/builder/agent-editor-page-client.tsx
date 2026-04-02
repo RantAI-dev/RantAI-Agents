@@ -8,7 +8,8 @@ import { useAssistantTools } from "@/hooks/use-assistant-tools"
 import { useAssistantSkills } from "@/hooks/use-assistant-skills"
 import { useAssistantMcpServers } from "@/hooks/use-assistant-mcp-servers"
 import { useAssistantWorkflows } from "@/hooks/use-assistant-workflows"
-import { getModelById, DEFAULT_MODEL_ID } from "@/lib/models"
+import { DEFAULT_MODEL_ID } from "@/lib/models"
+import { useModels } from "@/hooks/use-models"
 import { AgentEditorLayout, type TabId } from "@/src/features/assistants/components/builder/agent-editor-layout"
 import { TabConfigure } from "@/src/features/assistants/components/builder/tab-configure"
 import { TabModel } from "@/src/features/assistants/components/builder/tab-model"
@@ -122,6 +123,8 @@ export default function AgentEditorPageClient({
     deleteAssistant,
     refetch,
   } = useAssistants({ initialAssistants })
+
+  const { models, getModelById } = useModels()
 
   const {
     assistant: defaultAssistant,
@@ -490,6 +493,7 @@ export default function AgentEditorPageClient({
           modelConfig={form.modelConfig}
           onModelChange={(v) => updateField("model", v)}
           onModelConfigChange={(v) => updateField("modelConfig", v)}
+          models={models}
         />
       )}
       {activeTab === "tools" && (

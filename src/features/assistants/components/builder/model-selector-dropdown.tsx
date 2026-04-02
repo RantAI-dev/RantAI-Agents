@@ -23,15 +23,17 @@ import { AVAILABLE_MODELS, getModelById, type LLMModel } from "@/lib/models"
 interface ModelSelectorDropdownProps {
   selectedModelId: string
   onSelect: (modelId: string) => void
+  models?: LLMModel[]
 }
 
-export function ModelSelectorDropdown({ selectedModelId, onSelect }: ModelSelectorDropdownProps) {
+export function ModelSelectorDropdown({ selectedModelId, onSelect, models }: ModelSelectorDropdownProps) {
   const [open, setOpen] = useState(false)
-  const selectedModel = getModelById(selectedModelId)
+  const modelList = models ?? AVAILABLE_MODELS
+  const selectedModel = modelList.find((m) => m.id === selectedModelId) ?? getModelById(selectedModelId)
 
   // Group by provider
   const grouped: Record<string, LLMModel[]> = {}
-  for (const model of AVAILABLE_MODELS) {
+  for (const model of modelList) {
     if (!grouped[model.provider]) grouped[model.provider] = []
     grouped[model.provider].push(model)
   }

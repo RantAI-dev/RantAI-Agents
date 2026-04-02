@@ -8,12 +8,14 @@ import { AVAILABLE_MODELS, type LLMModel } from "@/lib/models"
 interface ModelSelectorCardsProps {
   selectedModelId: string
   onSelect: (modelId: string) => void
+  models?: LLMModel[]
 }
 
-export function ModelSelectorCards({ selectedModelId, onSelect }: ModelSelectorCardsProps) {
+export function ModelSelectorCards({ selectedModelId, onSelect, models }: ModelSelectorCardsProps) {
   // Group by provider
+  const modelList = models ?? AVAILABLE_MODELS
   const grouped: Record<string, LLMModel[]> = {}
-  for (const model of AVAILABLE_MODELS) {
+  for (const model of modelList) {
     if (!grouped[model.provider]) grouped[model.provider] = []
     grouped[model.provider].push(model)
   }

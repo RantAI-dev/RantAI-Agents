@@ -51,7 +51,7 @@ import {
   type ErrorHandlerNodeData,
   type SubWorkflowNodeData,
 } from "@/lib/workflow/types"
-import { AVAILABLE_MODELS } from "@/lib/models"
+import { useModels } from "@/hooks/use-models"
 import { cn } from "@/lib/utils"
 
 // ─── Validation Helpers ───────────────────────────────────────────────────────
@@ -147,15 +147,16 @@ function ModelSelector({
   onChange: (id: string) => void
   error?: string
 }) {
+  const { models: availableModels } = useModels()
   const grouped = useMemo(() => {
-    const map = new Map<string, typeof AVAILABLE_MODELS>()
-    for (const m of AVAILABLE_MODELS) {
+    const map = new Map<string, typeof availableModels>()
+    for (const m of availableModels) {
       const list = map.get(m.provider) || []
       list.push(m)
       map.set(m.provider, list)
     }
     return map
-  }, [])
+  }, [availableModels])
 
   return (
     <div className="space-y-1">

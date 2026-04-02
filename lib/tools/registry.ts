@@ -1,7 +1,7 @@
 import { tool as aiTool, jsonSchema } from "ai"
 import type { ToolSet } from "ai"
 import { prisma } from "@/lib/prisma"
-import { AVAILABLE_MODELS } from "@/lib/models"
+import { AVAILABLE_MODELS, getModelsFromDb } from "@/lib/models"
 import { BUILTIN_TOOLS } from "./builtin"
 import { adaptMcpToolsToAiSdk } from "@/lib/mcp/tool-adapter"
 import type { McpServerOptions, McpToolInfo } from "@/lib/mcp/client"
@@ -15,8 +15,9 @@ import type { CommunityToolContext } from "@/lib/skill-sdk"
 import { workflowEngine } from "@/lib/workflow"
 import type { WorkflowVariables } from "@/lib/workflow/types"
 
-function getModelById(modelId: string) {
-  return AVAILABLE_MODELS.find((m) => m.id === modelId)
+async function getModelById(modelId: string) {
+  const dbModels = await getModelsFromDb()
+  return dbModels.find((m) => m.id === modelId) ?? AVAILABLE_MODELS.find((m) => m.id === modelId)
 }
 
 /**
@@ -28,7 +29,7 @@ export async function resolveToolsForAssistant(
   modelId: string,
   context: ToolContext
 ): Promise<ResolvedTools> {
-  const model = getModelById(modelId)
+  const model = await getModelById(modelId)
   if (!model?.capabilities.functionCalling) {
     return { tools: {}, toolNames: [] }
   }
@@ -374,7 +375,7 @@ export async function resolveToolsByNames(
   modelId: string,
   context: ToolContext
 ): Promise<ResolvedTools> {
-  const model = getModelById(modelId)
+  const model = await getModelById(modelId)
   if (!model?.capabilities.functionCalling || requestedToolNames.length === 0) {
     return { tools: {}, toolNames: [] }
   }
