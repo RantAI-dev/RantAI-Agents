@@ -5,34 +5,34 @@ import { execSync } from "child_process"
 const root = process.cwd()
 
 const DEPRECATED_PREFIXES = [
-  "@/src/features/dashboard/digital-employee",
-  "@/src/features/dashboard/workflows",
-  "@/src/features/dashboard/files-documents",
-  "@/src/features/dashboard/files-categories",
-  "@/src/features/dashboard/files-groups",
-  "@/src/features/dashboard/skills",
-  "@/src/features/dashboard/tools",
-  "@/src/features/dashboard/mcp-servers",
-  "@/src/features/dashboard/mcp-api-keys",
-  "@/src/features/dashboard/chat-sessions",
-  "@/src/features/dashboard/groups",
-  "@/src/features/dashboard/handoff",
-  "@/src/features/dashboard/credentials",
-  "@/src/features/dashboard/embed-keys",
-  "@/src/features/dashboard/templates",
-  "@/src/features/dashboard/approval-responses",
-  "@/src/features/dashboard/audit",
-  "@/src/features/dashboard/statistics",
-  "@/src/features/dashboard/features",
-  "@/src/features/dashboard/marketplace",
-  "@/src/features/dashboard/memory",
-  "@/src/features/dashboard/openapi-specs",
-  "@/src/features/dashboard/tasks",
+  "@/features/dashboard/digital-employee",
+  "@/features/dashboard/workflows",
+  "@/features/dashboard/files-documents",
+  "@/features/dashboard/files-categories",
+  "@/features/dashboard/files-groups",
+  "@/features/dashboard/skills",
+  "@/features/dashboard/tools",
+  "@/features/dashboard/mcp-servers",
+  "@/features/dashboard/mcp-api-keys",
+  "@/features/dashboard/chat-sessions",
+  "@/features/dashboard/groups",
+  "@/features/dashboard/handoff",
+  "@/features/dashboard/credentials",
+  "@/features/dashboard/embed-keys",
+  "@/features/dashboard/templates",
+  "@/features/dashboard/approval-responses",
+  "@/features/dashboard/audit",
+  "@/features/dashboard/statistics",
+  "@/features/dashboard/features",
+  "@/features/dashboard/marketplace",
+  "@/features/dashboard/memory",
+  "@/features/dashboard/openapi-specs",
+  "@/features/dashboard/tasks",
 ]
 
 function listCandidateFiles(): string[] {
   try {
-    const rgOutput = execSync(`rg --files app src -g "*.ts" -g "*.tsx"`, {
+    const rgOutput = execSync(`rg --files src -g "*.ts" -g "*.tsx"`, {
       encoding: "utf8",
     })
       .trim()
@@ -41,7 +41,7 @@ function listCandidateFiles(): string[] {
     return rgOutput.map((relativePath) => path.join(root, relativePath))
   } catch {
     const findOutput = execSync(
-      `find app src -type f \\( -name "*.ts" -o -name "*.tsx" \\)`,
+      `find src -type f \\( -name "*.ts" -o -name "*.tsx" \\)`,
       {
         encoding: "utf8",
       }
