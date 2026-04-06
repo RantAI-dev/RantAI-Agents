@@ -1,10 +1,13 @@
-import { deleteFile, uploadFile } from "@/lib/s3"
+import { deleteFile, deleteFiles, uploadFile } from "@/lib/s3"
+import { deleteChunksByDocumentId } from "@/lib/rag"
 import {
   createDashboardMessages,
   createDashboardSession,
+  deleteArtifactsBySessionId,
   deleteDashboardArtifactById,
   deleteDashboardMessagesBySession,
   deleteDashboardSessionById,
+  findArtifactsBySessionId,
   findDashboardArtifactByIdAndSession,
   findDashboardMessageByIdAndSession,
   findDashboardSessionBasicByIdAndUser,
@@ -261,6 +264,24 @@ export async function deleteDashboardChatSession(params: {
     return { status: 404, error: "Session not found" }
   }
 
+  // Cleanup artifact S3 files and RAG chunks before deleting session
+  const artifacts = await findArtifactsBySessionId(params.sessionId)
+  if (artifacts.length > 0) {
+    // Delete S3 files (non-fatal)
+    const s3Keys = artifacts.map((a) => a.s3Key).filter(Boolean) as string[]
+    if (s3Keys.length > 0) {
+      await deleteFiles(s3Keys).catch((err) =>
+        console.error("[deleteDashboardChatSession] S3 cleanup error:", err)
+      )
+    }
+    // Delete RAG chunks (non-fatal)
+    await Promise.allSettled(
+      artifacts.map((a) => deleteChunksByDocumentId(a.id))
+    )
+    // Delete document records
+    await deleteArtifactsBySessionId(params.sessionId)
+  }
+
   await deleteDashboardSessionById(params.sessionId)
   return { success: true }
 }
@@ -417,11 +438,34 @@ export async function updateDashboardChatSessionArtifact(params: {
 
   const meta = (existing.metadata as Record<string, unknown>) || {}
   const versions = (meta.versions as Array<unknown>) || []
+  const versionNum = versions.length + 1
+
+  // Archive old version to a versioned S3 key
+  let versionS3Key: string | undefined
+  if (existing.s3Key) {
+    versionS3Key = `${existing.s3Key}.v${versionNum}`
+    try {
+      await uploadFile(
+        versionS3Key,
+        Buffer.from(existing.content, "utf-8"),
+        existing.mimeType || "text/plain"
+      )
+    } catch {
+      versionS3Key = undefined
+    }
+  }
+
   versions.push({
-    content: existing.content,
     title: existing.title,
     timestamp: Date.now(),
+    contentLength: Buffer.byteLength(existing.content, "utf-8"),
+    ...(versionS3Key ? { s3Key: versionS3Key } : { content: existing.content }),
   })
+
+  // Cap version history at 20
+  if (versions.length > 20) {
+    versions.splice(0, versions.length - 20)
+  }
 
   if (existing.s3Key) {
     await uploadFile(

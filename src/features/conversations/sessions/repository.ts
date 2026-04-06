@@ -166,3 +166,16 @@ export async function deleteDashboardArtifactById(artifactId: string) {
     where: { id: artifactId },
   })
 }
+
+export async function findArtifactsBySessionId(sessionId: string) {
+  return prisma.document.findMany({
+    where: { sessionId, artifactType: { not: null } },
+    select: { id: true, s3Key: true },
+  })
+}
+
+export async function deleteArtifactsBySessionId(sessionId: string) {
+  return prisma.document.deleteMany({
+    where: { sessionId, artifactType: { not: null } },
+  })
+}
