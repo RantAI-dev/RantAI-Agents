@@ -38,7 +38,7 @@ interface KnowledgeHeaderProps {
   selectedKB: KnowledgeBaseHeader | null
   documentCount: number
   knowledgeBaseCount: number
-  onAddDocument: () => void
+  onAddDocument?: () => void
   onEditKB?: () => void
   onDeleteKB?: () => void
 }
@@ -131,10 +131,12 @@ export function KnowledgeHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        <Button onClick={onAddDocument} size="sm">
-          <Plus className="h-4 w-4 mr-1.5" />
-          Add Document
-        </Button>
+        {onAddDocument && (
+          <Button onClick={onAddDocument} size="sm">
+            <Plus className="h-4 w-4 mr-1.5" />
+            Add Document
+          </Button>
+        )}
       </div>
     </div>
   )

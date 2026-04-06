@@ -100,6 +100,7 @@ export default function KnowledgePageClient({
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [sortOption, setSortOption] = useState<SortOption>("newest")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
+  const [contentTab, setContentTab] = useState<"documents" | "artifacts">("documents")
 
   // Categories state
   const [categories, setCategories] = useState<Category[]>(initialCategories)
@@ -230,15 +231,22 @@ export default function KnowledgePageClient({
     )
   }
 
+  // Count artifacts for tab visibility
+  const artifactCount = documents.filter((doc) => doc.artifactType != null).length
+
   // Filter documents
   const filteredDocuments = documents.filter((doc) => {
+    // Tab filter: documents vs artifacts
+    const matchesTab = contentTab === "documents"
+      ? doc.artifactType == null
+      : doc.artifactType != null
     const matchesSearch =
       doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       doc.categories.some((c) => c.toLowerCase().includes(searchQuery.toLowerCase()))
     const matchesCategory =
       selectedCategories.length === 0 ||
       doc.categories.some((c) => selectedCategories.includes(c))
-    return matchesSearch && matchesCategory
+    return matchesTab && matchesSearch && matchesCategory
   })
 
   // Sort filtered documents
@@ -348,12 +356,48 @@ export default function KnowledgePageClient({
         selectedKB={selectedKB ?? null}
         documentCount={documents.length}
         knowledgeBaseCount={knowledgeBases.length}
-        onAddDocument={() => setUploadDialogOpen(true)}
+        onAddDocument={contentTab === "documents" ? () => setUploadDialogOpen(true) : undefined}
         onEditKB={selectedKB ? handleEditKB : undefined}
         onDeleteKB={selectedKB ? () => setDeleteKBDialogOpen(true) : undefined}
       />
 
       <div className="flex flex-col flex-1 overflow-hidden">
+        {/* Content tabs: Documents vs Artifacts */}
+        {artifactCount > 0 && (
+          <div className="flex border-b border-border/50 px-4">
+            <button
+              type="button"
+              className={cn(
+                "px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                contentTab === "documents"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+              onClick={() => setContentTab("documents")}
+            >
+              Documents
+              <span className="ml-1.5 text-xs text-muted-foreground">
+                {documents.filter((d) => d.artifactType == null).length}
+              </span>
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
+                contentTab === "artifacts"
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+              onClick={() => setContentTab("artifacts")}
+            >
+              Artifacts
+              <span className="ml-1.5 text-xs text-muted-foreground">
+                {artifactCount}
+              </span>
+            </button>
+          </div>
+        )}
+
         <KnowledgeToolbar
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense, useEffect, useCallback } from "react"
+import React, { useState, Suspense, useEffect, useCallback } from "react"
 import { usePathname } from "next/navigation"
 import { SessionProvider } from "next-auth/react"
 import { AppSidebar } from "./_components/app-sidebar"
@@ -63,6 +63,27 @@ export default function DashboardLayout({
   }, [])
 
   const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), [])
+
+  // Auto collapse/expand sidebar when artifact panel opens/closes
+  const sidebarBeforeArtifactRef = React.useRef<boolean | null>(null)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { open } = (e as CustomEvent<{ open: boolean }>).detail
+      if (open) {
+        // Save current state and collapse
+        sidebarBeforeArtifactRef.current = sidebarOpen
+        setSidebarOpen(false)
+      } else {
+        // Restore previous state
+        if (sidebarBeforeArtifactRef.current !== null) {
+          setSidebarOpen(sidebarBeforeArtifactRef.current)
+          sidebarBeforeArtifactRef.current = null
+        }
+      }
+    }
+    window.addEventListener("artifact-panel-changed", handler)
+    return () => window.removeEventListener("artifact-panel-changed", handler)
+  }, [sidebarOpen])
 
   return (
     <SessionProvider>
