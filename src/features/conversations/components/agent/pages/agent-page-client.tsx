@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react"
-import { QueuePanel } from "@/src/features/conversations/components/agent/queue-panel"
-import { AgentWorkspace } from "@/src/features/conversations/components/agent/agent-workspace"
-import { EmptyState } from "@/src/features/conversations/components/agent/empty-state"
+import { QueuePanel } from "@/features/conversations/components/agent/queue-panel"
+import { AgentWorkspace } from "@/features/conversations/components/agent/agent-workspace"
+import { EmptyState } from "@/features/conversations/components/agent/empty-state"
 import {
   ResizableHandle,
   ResizablePanel,

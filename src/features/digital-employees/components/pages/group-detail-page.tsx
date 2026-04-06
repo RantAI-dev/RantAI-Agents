@@ -1,7 +1,7 @@
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { listGroupsForDashboard } from "@/src/features/digital-employees/groups/service"
+import { listGroupsForDashboard } from "@/features/digital-employees/groups/service"
 import GroupDetailPageClient from "./group-detail-page-client"
 import type { EmployeeGroupItem } from "@/hooks/use-employee-groups"
 

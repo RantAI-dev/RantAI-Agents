@@ -25,7 +25,7 @@ import {
   Plus,
 } from "@/lib/icons"
 import { useMarketplace, type MarketplaceItem } from "@/hooks/use-marketplace"
-import { ConfigFormDialog } from "@/src/features/marketplace/components/config-form-dialog"
+import { ConfigFormDialog } from "@/features/marketplace/components/config-form-dialog"
 import { toast } from "sonner"
 
 interface MarketplacePickerSheetProps {

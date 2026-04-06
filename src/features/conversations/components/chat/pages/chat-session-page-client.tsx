@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useChatSessions, type ChatSession, type ChatMessage } from "@/hooks/use-chat-sessions"
-import { ChatWorkspace } from "@/src/features/conversations/components/chat/chat-workspace"
-import type { InitialChatSettings } from "@/src/features/conversations/components/chat/chat-home"
+import { ChatWorkspace } from "@/features/conversations/components/chat/chat-workspace"
+import type { InitialChatSettings } from "@/features/conversations/components/chat/chat-home"
 import type {
   AssistantSkillInfo,
   AssistantToolInfo,

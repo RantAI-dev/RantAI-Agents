@@ -1,7 +1,7 @@
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { listToolsForDashboard } from "@/src/features/tools/service"
+import { listToolsForDashboard } from "@/features/tools/service"
 import ToolsSettingsClient from "./tools-settings-client"
 import type { ToolItem } from "@/hooks/use-tools"
 

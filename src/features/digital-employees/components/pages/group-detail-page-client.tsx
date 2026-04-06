@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
 import { useEmployeeGroups, type EmployeeGroupItem } from "@/hooks/use-employee-groups"
-import TabTasks from "@/src/features/digital-employees/components/list/tab-tasks"
+import TabTasks from "@/features/digital-employees/components/list/tab-tasks"
 
 // ─── Status styles ──────────────────────────────────────────
 

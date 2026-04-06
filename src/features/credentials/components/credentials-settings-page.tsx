@@ -4,7 +4,7 @@ import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   listDashboardCredentials,
   type DashboardCredentialSummary,
-} from "@/src/features/credentials/service"
+} from "@/features/credentials/service"
 import CredentialsSettingsClient, {
   type Credential,
 } from "./credentials-settings-client"

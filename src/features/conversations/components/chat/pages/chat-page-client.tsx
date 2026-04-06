@@ -4,7 +4,7 @@ import { useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
-import { ChatHome } from "@/src/features/conversations/components/chat/chat-home"
+import { ChatHome } from "@/features/conversations/components/chat/chat-home"
 import type { ChatToolbarHydrationData } from "./chat-hydration-data"
 import type { SerializedChatSession } from "./chat-session-data"
 

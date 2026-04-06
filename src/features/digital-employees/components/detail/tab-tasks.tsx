@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button"
 import { useTasks } from "@/hooks/use-tasks"
 import { useOrgFetch } from "@/hooks/use-organization"
 import type { CreateTaskInput } from "@/lib/digital-employee/task-types"
-import { TaskList } from "@/src/features/digital-employees/components/list/task-list"
-import { TaskDetailPanel } from "@/src/features/digital-employees/components/list/task-detail-panel"
-import { TaskCreateDialog } from "@/src/features/digital-employees/components/list/task-create-dialog"
+import { TaskList } from "@/features/digital-employees/components/list/task-list"
+import { TaskDetailPanel } from "@/features/digital-employees/components/list/task-detail-panel"
+import { TaskCreateDialog } from "@/features/digital-employees/components/list/task-create-dialog"
 
 interface TabEmployeeTasksProps {
   employeeId: string

@@ -4,10 +4,10 @@ import {
   listAssistantSkills,
   listAssistantTools,
   isServiceError,
-} from "@/src/features/assistants/bindings/service"
-import { listKnowledgeGroupsForDashboard, type KnowledgeGroupListItem } from "@/src/features/knowledge/groups/service"
-import { listDashboardSkills } from "@/src/features/skills/service"
-import { listToolsForDashboard } from "@/src/features/tools/service"
+} from "@/features/assistants/bindings/service"
+import { listKnowledgeGroupsForDashboard, type KnowledgeGroupListItem } from "@/features/knowledge/groups/service"
+import { listDashboardSkills } from "@/features/skills/service"
+import { listToolsForDashboard } from "@/features/tools/service"
 import type {
   AssistantEditorHydrationData,
   AssistantEditorKnowledgeGroup,

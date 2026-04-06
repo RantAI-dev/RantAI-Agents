@@ -9,7 +9,7 @@ import {
 import { Calendar } from "@/lib/icons"
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import type { StatisticsFilters } from "@/src/features/statistics/filters"
+import type { StatisticsFilters } from "@/features/statistics/filters"
 
 interface DateRangePickerProps {
   filters: StatisticsFilters

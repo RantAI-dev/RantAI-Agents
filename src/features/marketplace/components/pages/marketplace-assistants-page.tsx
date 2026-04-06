@@ -1,4 +1,4 @@
-import { MarketplaceBrowse } from "@/src/features/marketplace/components/marketplace-browse"
+import { MarketplaceBrowse } from "@/features/marketplace/components/marketplace-browse"
 import { loadMarketplaceInitial } from "./load-marketplace-initial"
 
 export default async function MarketplaceAssistantsPage() {

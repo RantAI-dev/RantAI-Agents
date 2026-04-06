@@ -1,10 +1,10 @@
 import { auth } from "@/lib/auth"
-import { getDashboardStatistics } from "@/src/features/statistics/service"
+import { getDashboardStatistics } from "@/features/statistics/service"
 import StatisticsSettingsClient from "./statistics-settings-client"
 import {
   createDefaultStatisticsFilters,
   type StatisticsFilters,
-} from "@/src/features/statistics/filters"
+} from "@/features/statistics/filters"
 
 function toQuery(filters: StatisticsFilters) {
   return {

@@ -3,7 +3,7 @@ import {
   listDashboardMemories,
   type DashboardMemoryItem,
   type DashboardMemoryStats,
-} from "@/src/features/memory/service"
+} from "@/features/memory/service"
 import MemorySettingsClient from "./memory-settings-client"
 import type { MemoryItem, MemoryStats } from "@/hooks/use-memory"
 

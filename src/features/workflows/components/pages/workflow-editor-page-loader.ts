@@ -1,16 +1,16 @@
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { listAssistantsForUser, type AssistantListItem } from "@/src/features/assistants/core/service"
-import { listDashboardCredentials, type DashboardCredentialSummary } from "@/src/features/credentials/service"
-import { listKnowledgeGroupsForDashboard, type KnowledgeGroupListItem } from "@/src/features/knowledge/groups/service"
-import { listToolsForDashboard } from "@/src/features/tools/service"
+import { listAssistantsForUser, type AssistantListItem } from "@/features/assistants/core/service"
+import { listDashboardCredentials, type DashboardCredentialSummary } from "@/features/credentials/service"
+import { listKnowledgeGroupsForDashboard, type KnowledgeGroupListItem } from "@/features/knowledge/groups/service"
+import { listToolsForDashboard } from "@/features/tools/service"
 import {
   getDashboardWorkflow,
   listDashboardWorkflows,
   listWorkflowRuns,
-} from "@/src/features/workflows/service"
-import { isHttpServiceError } from "@/src/features/shared/http-service-error"
+} from "@/features/workflows/service"
+import { isHttpServiceError } from "@/features/shared/http-service-error"
 import type { WorkflowItem } from "@/hooks/use-workflows"
 import type { WorkflowRunItem } from "@/hooks/use-workflow-runs"
 

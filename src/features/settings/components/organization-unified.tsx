@@ -1,8 +1,8 @@
 import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
 import { auth } from "@/lib/auth"
-import { listOrganizationsForUser } from "@/src/features/organizations/core/service"
-import OrganizationSettingsPage from "@/src/features/organizations/components/settings/organization-settings-page"
-import MembersSettingsPage from "@/src/features/organizations/components/settings/members-settings-page"
+import { listOrganizationsForUser } from "@/features/organizations/core/service"
+import OrganizationSettingsPage from "@/features/organizations/components/settings/organization-settings-page"
+import MembersSettingsPage from "@/features/organizations/components/settings/members-settings-page"
 import { SettingsTabs } from "./settings-tabs"
 
 interface Props {

@@ -21,7 +21,7 @@ import {
 } from "@/lib/icons"
 import { useAgentApiKeys } from "@/hooks/use-agent-api-keys"
 import { maskApiKey } from "@/lib/embed/api-key-generator"
-import type { AgentApiKeyResponse } from "@/src/features/agent-api-keys/service"
+import type { AgentApiKeyResponse } from "@/features/agent-api-keys/service"
 import { DeployApiKeyDialog } from "./deploy-api-key-dialog"
 import {
   AlertDialog,

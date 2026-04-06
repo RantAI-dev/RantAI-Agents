@@ -1,6 +1,6 @@
 import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
-import FeaturesSettingsPage from "@/src/features/platform-features/components/features-settings-page"
-import AboutSettingsPage from "@/src/features/platform-features/components/about-settings-page"
+import FeaturesSettingsPage from "@/features/platform-features/components/features-settings-page"
+import AboutSettingsPage from "@/features/platform-features/components/about-settings-page"
 import { SettingsTabs } from "./settings-tabs"
 
 interface Props {

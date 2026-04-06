@@ -41,8 +41,8 @@ import {
 import { useMcpServers, type McpServerItem } from "@/hooks/use-mcp-servers"
 import { useOrgFetch } from "@/hooks/use-organization"
 import { DynamicIcon } from "@/components/ui/dynamic-icon"
-import { McpServerDialog } from "@/src/features/mcp/components/mcp-server-dialog"
-import { McpServerConfig } from "@/src/features/mcp/components/mcp-server-config"
+import { McpServerDialog } from "@/features/mcp/components/mcp-server-dialog"
+import { McpServerConfig } from "@/features/mcp/components/mcp-server-config"
 import { toast } from "sonner"
 import Link from "next/link"
 

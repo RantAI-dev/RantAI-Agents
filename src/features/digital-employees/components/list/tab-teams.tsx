@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
 import { useEmployeeGroups } from "@/hooks/use-employee-groups"
 import { useTasks } from "@/hooks/use-tasks"
-import { TeamCard } from "@/src/features/digital-employees/components/list/team-card"
+import { TeamCard } from "@/features/digital-employees/components/list/team-card"
 import { toast } from "sonner"
 
 export default function TabTeams() {

@@ -1,7 +1,7 @@
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { listDashboardMarketplaceItems } from "@/src/features/marketplace/service"
+import { listDashboardMarketplaceItems } from "@/features/marketplace/service"
 
 type MarketplaceType = "tool" | "skill" | "workflow" | "assistant" | "mcp"
 

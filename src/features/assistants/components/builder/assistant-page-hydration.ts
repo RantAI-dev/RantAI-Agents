@@ -1,8 +1,8 @@
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getOrganizationContext } from "@/lib/organization"
-import { listAssistantsForUser, type AssistantListItem } from "@/src/features/assistants/core/service"
-import { listKnowledgeGroupsForDashboard, type KnowledgeGroupListItem } from "@/src/features/knowledge/groups/service"
+import { listAssistantsForUser, type AssistantListItem } from "@/features/assistants/core/service"
+import { listKnowledgeGroupsForDashboard, type KnowledgeGroupListItem } from "@/features/knowledge/groups/service"
 import type { DbAssistant } from "@/hooks/use-assistants"
 
 function mapAssistantToDbAssistant(assistant: AssistantListItem): DbAssistant {
