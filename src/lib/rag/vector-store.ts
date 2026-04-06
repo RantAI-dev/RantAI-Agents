@@ -242,17 +242,25 @@ export async function searchWithThreshold(
 }
 
 /**
+ * Delete only the SurrealDB chunks for a document (preserves the Prisma record).
+ * Useful for re-indexing artifact content without destroying the Document row.
+ */
+export async function deleteChunksByDocumentId(documentId: string): Promise<void> {
+  const surrealClient = await getSurrealClient();
+  await surrealClient.query(
+    `DELETE document_chunk WHERE document_id = $document_id`,
+    { document_id: documentId }
+  );
+}
+
+/**
  * Delete a document and all its chunks
  * - Deletes document from PostgreSQL (cascades to DocumentGroup)
  * - Deletes chunks from SurrealDB
  */
 export async function deleteDocument(documentId: string): Promise<void> {
   // Delete chunks from SurrealDB
-  const surrealClient = await getSurrealClient();
-  await surrealClient.query(
-    `DELETE document_chunk WHERE document_id = $document_id`,
-    { document_id: documentId }
-  );
+  await deleteChunksByDocumentId(documentId);
 
   // Delete document from PostgreSQL (cascades to groups)
   await prisma.document.delete({

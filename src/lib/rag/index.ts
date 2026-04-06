@@ -32,6 +32,7 @@ export {
   storeChunks,
   searchSimilar,
   searchWithThreshold,
+  deleteChunksByDocumentId,
   deleteDocument,
   listDocuments,
   clearAllDocuments,
@@ -76,6 +77,9 @@ export type {
   RerankResult,
   RerankResponse,
 } from "./reranker";
+
+// Artifact indexing
+export { indexArtifactContent } from "./artifact-indexer";
 
 // Ingestion
 export {
