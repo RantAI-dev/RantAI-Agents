@@ -113,7 +113,7 @@ export function HtmlRenderer({ content }: HtmlRendererProps) {
         srcDoc={srcdoc}
         onLoad={handleLoad}
         sandbox="allow-scripts allow-modals"
-        className="w-full h-full border-0 bg-white"
+        className="w-full h-full border-0 bg-background"
         style={{ minHeight: "100%" }}
         title="HTML Artifact Preview"
       />

@@ -1,3 +1,17 @@
+export const VALID_ARTIFACT_TYPES = new Set([
+  "text/html",
+  "text/markdown",
+  "image/svg+xml",
+  "application/react",
+  "application/mermaid",
+  "application/code",
+  "application/sheet",
+  "text/latex",
+  "application/slides",
+  "application/python",
+  "application/3d",
+] as const)
+
 export type ArtifactType =
   | "text/html"
   | "text/markdown"
@@ -10,6 +24,10 @@ export type ArtifactType =
   | "application/slides"
   | "application/python"
   | "application/3d"
+
+export function isValidArtifactType(value: unknown): value is ArtifactType {
+  return typeof value === "string" && VALID_ARTIFACT_TYPES.has(value as ArtifactType)
+}
 
 export interface ArtifactVersion {
   content: string
