@@ -27,25 +27,25 @@ import {
   useDigitalEmployee,
   type DigitalEmployeeHydrationData,
 } from "@/hooks/use-digital-employee"
-import { WorkspaceIDE } from "@/src/features/digital-employees/components/detail/workspace-ide"
-import { TabChat } from "@/src/features/digital-employees/components/detail/tab-chat"
+import { WorkspaceIDE } from "@/features/digital-employees/components/detail/workspace-ide"
+import { TabChat } from "@/features/digital-employees/components/detail/tab-chat"
 import {
   TabActivity,
   type ActivityDailySummary,
   type ActivityFeedItem,
-} from "@/src/features/digital-employees/components/detail/tab-activity"
-import { TabSettings } from "@/src/features/digital-employees/components/detail/tab-settings"
-import TabEmployeeTasks from "@/src/features/digital-employees/components/detail/tab-tasks"
-import { ChatDrawer } from "@/src/features/digital-employees/components/detail/chat-drawer"
-import { CreateToolDialog, ArchiveDialog, DeleteDialog } from "@/src/features/digital-employees/components/detail/dialogs"
+} from "@/features/digital-employees/components/detail/tab-activity"
+import { TabSettings } from "@/features/digital-employees/components/detail/tab-settings"
+import TabEmployeeTasks from "@/features/digital-employees/components/detail/tab-tasks"
+import { ChatDrawer } from "@/features/digital-employees/components/detail/chat-drawer"
+import { CreateToolDialog, ArchiveDialog, DeleteDialog } from "@/features/digital-employees/components/detail/dialogs"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
 import { STATUS_STYLES, AUTONOMY_STYLES } from "@/lib/digital-employee/shared-constants"
 import type { EmployeeSchedule } from "@/lib/digital-employee/types"
-import { type TrustSummaryData } from "@/src/features/digital-employees/components/detail/trust-score-card"
-import { type OnboardingStatusData } from "@/src/features/digital-employees/components/detail/onboarding-checklist"
+import { type TrustSummaryData } from "@/features/digital-employees/components/detail/trust-score-card"
+import { type OnboardingStatusData } from "@/features/digital-employees/components/detail/onboarding-checklist"
 
 // ─── Types ────────────────────────────────────────────────
 

@@ -4,7 +4,7 @@
  * Usage: pnpm tsx scripts/test-rag.ts
  */
 
-import { smartRetrieve, formatContextForPrompt, listDocuments } from "../lib/rag";
+import { smartRetrieve, formatContextForPrompt, listDocuments } from "../src/lib/rag";
 
 const TEST_QUERIES = [
   "What is Term Life Premium and how much does it cost?",

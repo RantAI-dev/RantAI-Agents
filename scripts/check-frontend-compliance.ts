@@ -7,14 +7,14 @@ const root = process.cwd()
 
 function listCandidateFiles(): string[] {
   try {
-    return execSync(`rg --files app src -g "*.ts" -g "*.tsx"`, {
+    return execSync(`rg --files src -g "*.ts" -g "*.tsx"`, {
       encoding: "utf8",
     })
       .trim()
       .split("\n")
       .filter(Boolean)
   } catch {
-    return execSync(`find app src -type f \\( -name "*.ts" -o -name "*.tsx" \\)`, {
+    return execSync(`find src -type f \\( -name "*.ts" -o -name "*.tsx" \\)`, {
       encoding: "utf8",
     })
       .trim()
@@ -51,22 +51,22 @@ const deprecatedImportPrefixes = [
 ]
 
 const migratedShimDirs = [
-  "app/dashboard/_components/chat/",
-  "app/dashboard/digital-employees/_components/",
-  "app/dashboard/digital-employees/[id]/_components/",
-  "app/dashboard/digital-employees/new/_components/",
-  "app/dashboard/workflows/_components/",
-  "app/dashboard/files/_components/",
-  "app/dashboard/marketplace/_components/",
-  "app/dashboard/settings/mcp/_components/",
-  "app/dashboard/settings/tools/_components/",
-  "app/dashboard/settings/embed/_components/",
-  "app/dashboard/settings/statistics/_components/",
-  "app/dashboard/settings/memory/_components/",
-  "app/dashboard/account/_components/",
-  "app/dashboard/organization/_components/",
-  "app/dashboard/agent/_components/",
-  "app/dashboard/agent-builder/_components/",
+  "src/app/dashboard/_components/chat/",
+  "src/app/dashboard/digital-employees/_components/",
+  "src/app/dashboard/digital-employees/[id]/_components/",
+  "src/app/dashboard/digital-employees/new/_components/",
+  "src/app/dashboard/workflows/_components/",
+  "src/app/dashboard/files/_components/",
+  "src/app/dashboard/marketplace/_components/",
+  "src/app/dashboard/settings/mcp/_components/",
+  "src/app/dashboard/settings/tools/_components/",
+  "src/app/dashboard/settings/embed/_components/",
+  "src/app/dashboard/settings/statistics/_components/",
+  "src/app/dashboard/settings/memory/_components/",
+  "src/app/dashboard/account/_components/",
+  "src/app/dashboard/organization/_components/",
+  "src/app/dashboard/agent/_components/",
+  "src/app/dashboard/agent-builder/_components/",
 ]
 
 type DataEffectScopeMode = "strict" | "report-only"
@@ -148,19 +148,19 @@ const dataEffectScopePolicies: DataEffectScopePolicy[] = [
   {
     name: "digital-employees",
     mode: "strict",
-    prefixes: ["app/dashboard/digital-employees/", "src/features/digital-employees/components/"],
+    prefixes: ["src/app/dashboard/digital-employees/", "src/features/digital-employees/components/"],
     rationale: "digital employee detail flows are now server-hydrated with lifecycle-only polling",
   },
   {
     name: "workflows",
     mode: "strict",
-    prefixes: ["app/dashboard/workflows/", "src/features/workflows/components/", "src/features/workflows/components/pages/"],
+    prefixes: ["src/app/dashboard/workflows/", "src/features/workflows/components/", "src/features/workflows/components/pages/"],
     rationale: "workflow editor selectors now rely on server-hydrated initial payloads",
   },
   {
     name: "knowledge",
     mode: "strict",
-    prefixes: ["app/dashboard/files/", "src/features/knowledge/components/", "src/features/knowledge/components/pages/"],
+    prefixes: ["src/app/dashboard/files/", "src/features/knowledge/components/", "src/features/knowledge/components/pages/"],
     rationale: "knowledge pages/dialogs now follow server-fed loading patterns",
   },
   {
@@ -288,33 +288,33 @@ function analyzeUseEffectCalls(sourceFile: ts.SourceFile, helperNames: Set<strin
 }
 
 const allowedDashboardRedirectPages = new Set([
-  "app/dashboard/page.tsx",
-  "app/dashboard/settings/page.tsx",
-  "app/dashboard/organization/page.tsx",
-  "app/dashboard/organization/members/page.tsx",
-  "app/dashboard/organization/billing/page.tsx",
+  "src/app/dashboard/page.tsx",
+  "src/app/dashboard/settings/page.tsx",
+  "src/app/dashboard/organization/page.tsx",
+  "src/app/dashboard/organization/members/page.tsx",
+  "src/app/dashboard/organization/billing/page.tsx",
   // Redirect stubs (old routes → new grouped pages)
-  "app/dashboard/settings/about/page.tsx",
-  "app/dashboard/settings/credentials/page.tsx",
-  "app/dashboard/settings/embed/page.tsx",
-  "app/dashboard/settings/mcp/page.tsx",
-  "app/dashboard/settings/members/page.tsx",
-  "app/dashboard/settings/memory/page.tsx",
-  "app/dashboard/settings/skills/page.tsx",
-  "app/dashboard/settings/statistics/page.tsx",
-  "app/dashboard/settings/tools/page.tsx",
-  "app/dashboard/settings/features/page.tsx",
+  "src/app/dashboard/settings/about/page.tsx",
+  "src/app/dashboard/settings/credentials/page.tsx",
+  "src/app/dashboard/settings/embed/page.tsx",
+  "src/app/dashboard/settings/mcp/page.tsx",
+  "src/app/dashboard/settings/members/page.tsx",
+  "src/app/dashboard/settings/memory/page.tsx",
+  "src/app/dashboard/settings/skills/page.tsx",
+  "src/app/dashboard/settings/statistics/page.tsx",
+  "src/app/dashboard/settings/tools/page.tsx",
+  "src/app/dashboard/settings/features/page.tsx",
 ])
 
 // Unified pages that pass searchParams to feature components (not thin re-exports, not redirects)
 const allowedDashboardWrapperPages = new Set([
-  "app/dashboard/settings/general/page.tsx",
-  "app/dashboard/settings/organization/page.tsx",
-  "app/dashboard/settings/agent-config/page.tsx",
-  "app/dashboard/settings/analytics/page.tsx",
+  "src/app/dashboard/settings/general/page.tsx",
+  "src/app/dashboard/settings/organization/page.tsx",
+  "src/app/dashboard/settings/agent-config/page.tsx",
+  "src/app/dashboard/settings/analytics/page.tsx",
 ])
 
-const thinDashboardPageExportPattern = /^export \{ default \} from "@\/src\/features\/.+?"\s*$/
+const thinDashboardPageExportPattern = /^export \{ default \} from "@\/features\/.+?"\s*$/
 
 for (const relativePath of files) {
   const absolutePath = path.join(root, relativePath)
@@ -334,7 +334,7 @@ for (const relativePath of files) {
     }
   }
 
-  if (relativePath.startsWith("app/dashboard/") && relativePath.endsWith("/page.tsx")) {
+  if (relativePath.startsWith("src/app/dashboard/") && relativePath.endsWith("/page.tsx")) {
     const normalized = source.trim()
     if (allowedDashboardWrapperPages.has(relativePath)) {
       // Unified pages with searchParams routing — allowed as-is
@@ -344,7 +344,7 @@ for (const relativePath of files) {
       }
     } else if (!thinDashboardPageExportPattern.test(normalized)) {
       thinPageViolations.push(
-        `${relativePath}: expected thin page re-export to '@/src/features/*'`
+        `${relativePath}: expected thin page re-export to '@/features/*'`
       )
     }
   }

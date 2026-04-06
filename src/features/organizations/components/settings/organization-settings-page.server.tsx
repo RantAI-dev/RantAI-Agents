@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth"
-import { listOrganizationsForUser } from "@/src/features/organizations/core/service"
+import { listOrganizationsForUser } from "@/features/organizations/core/service"
 import OrganizationSettingsPage from "./organization-settings-page"
 
 export default async function OrganizationSettingsPageServer() {

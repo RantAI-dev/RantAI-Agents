@@ -82,7 +82,7 @@ import {
 } from "@/components/ui/tooltip"
 import { cn, getTagColor, setTagColor, TAG_COLORS } from "@/lib/utils"
 import { useWorkflows, type WorkflowItem } from "@/hooks/use-workflows"
-import { WorkflowTemplateGallery } from "@/src/features/workflows/components/workflow-template-gallery"
+import { WorkflowTemplateGallery } from "@/features/workflows/components/workflow-template-gallery"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { CountUp } from "@/components/reactbits/count-up"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"

@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client"
 import { hash } from "bcryptjs"
 import * as path from "path"
 import * as fs from "fs"
-import { SurrealDBClient, getSurrealDBConfigFromEnv } from "../lib/surrealdb/client"
+import { SurrealDBClient, getSurrealDBConfigFromEnv } from "../src/lib/surrealdb/client"
 
 const prisma = new PrismaClient()
 
@@ -421,7 +421,7 @@ async function seedKnowledgeBase() {
       // Enhanced mode: Extract entities and relations
       if (USE_ENHANCED) {
         try {
-          const { extractEntitiesAndRelations } = await import("../lib/document-intelligence")
+          const { extractEntitiesAndRelations } = await import("../src/lib/document-intelligence")
 
           const { entities, relations } = await extractEntitiesAndRelations(
             content,
@@ -506,7 +506,7 @@ async function seedWorkflows(createdByUserId: string) {
   console.log("\n[Workflows]")
 
   // Dynamically import the template to avoid path alias issues in seed context
-  const { WORKFLOW_TEMPLATES } = await import("../lib/templates/workflow-templates")
+  const { WORKFLOW_TEMPLATES } = await import("../src/lib/templates/workflow-templates")
 
   // Seed both fraud-related workflow templates
   const templateIds = ["wf-fraud-detection", "wf-fraud-investigation"]
@@ -986,7 +986,7 @@ async function main() {
 
   // Ensure S3 bucket exists (safe to call repeatedly — no-op if already exists)
   try {
-    const { ensureBucket } = await import("../lib/s3")
+    const { ensureBucket } = await import("../src/lib/s3")
     await ensureBucket()
   } catch (e) {
     console.warn("  [S3] Could not ensure bucket (RustFS may not be ready):", e instanceof Error ? e.message : e)
@@ -1033,8 +1033,8 @@ async function main() {
   const kbGroupId = await seedKnowledgeBase()
 
   // Seed Built-in Tools
-  const { ensureBuiltinTools } = await import("../lib/tools/seed")
-  const { BUILTIN_TOOLS } = await import("../lib/tools/builtin")
+  const { ensureBuiltinTools } = await import("../src/lib/tools/seed")
+  const { BUILTIN_TOOLS } = await import("../src/lib/tools/builtin")
   await ensureBuiltinTools()
   console.log(`\n[Tools]\n  ✓ ${Object.keys(BUILTIN_TOOLS).length} built-in tools upserted`)
   await seedAssistantToolBindings()
@@ -1085,7 +1085,7 @@ main()
     await prisma.$disconnect()
     // Close SurrealDB connection to prevent process hanging
     try {
-      const { SurrealDBClient: SDB } = await import("../lib/surrealdb/client")
+      const { SurrealDBClient: SDB } = await import("../src/lib/surrealdb/client")
       await SDB.resetInstance()
     } catch {
       // ignore

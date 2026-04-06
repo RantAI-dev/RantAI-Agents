@@ -62,7 +62,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { useTools, type ToolItem } from "@/hooks/use-tools"
-import { ToolDialog } from "@/src/features/tools/components/tool-dialog"
+import { ToolDialog } from "@/features/tools/components/tool-dialog"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 

@@ -3,7 +3,7 @@
 import { useCallback } from "react"
 import { RotateCcw, AlertTriangle } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
-import { ChatWorkspace } from "@/src/features/conversations/components/chat/chat-workspace"
+import { ChatWorkspace } from "@/features/conversations/components/chat/chat-workspace"
 import { useAssistantTestSessions } from "@/hooks/use-assistant-test-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import type { MemoryConfig } from "@/lib/types/assistant"

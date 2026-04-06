@@ -4,8 +4,8 @@ import { getOrganizationContext } from "@/lib/organization"
 import {
   getKnowledgeDocumentForDashboard,
   type KnowledgeDocumentDetail,
-} from "@/src/features/knowledge/documents/service"
-import { isHttpServiceError } from "@/src/features/shared/http-service-error"
+} from "@/features/knowledge/documents/service"
+import { isHttpServiceError } from "@/features/shared/http-service-error"
 import DocumentViewerClient, {
   type DocumentDetail,
 } from "./document-viewer-client"

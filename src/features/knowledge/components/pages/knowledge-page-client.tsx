@@ -30,13 +30,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { DocumentList, type ViewMode } from "@/src/features/knowledge/components/document-list"
-import { UploadDialog } from "@/src/features/knowledge/components/upload-dialog"
-import { DocumentEditDialog } from "@/src/features/knowledge/components/document-edit-dialog"
-import { CategoryDialog, Category } from "@/src/features/knowledge/components/category-dialog"
-import { KnowledgeHeader } from "@/src/features/knowledge/components/knowledge-header"
-import { KnowledgeToolbar, type SortOption } from "@/src/features/knowledge/components/knowledge-toolbar"
-import { FiltersPanel } from "@/src/features/knowledge/components/filters-panel"
+import { DocumentList, type ViewMode } from "@/features/knowledge/components/document-list"
+import { UploadDialog } from "@/features/knowledge/components/upload-dialog"
+import { DocumentEditDialog } from "@/features/knowledge/components/document-edit-dialog"
+import { CategoryDialog, Category } from "@/features/knowledge/components/category-dialog"
+import { KnowledgeHeader } from "@/features/knowledge/components/knowledge-header"
+import { KnowledgeToolbar, type SortOption } from "@/features/knowledge/components/knowledge-toolbar"
+import { FiltersPanel } from "@/features/knowledge/components/filters-panel"
 import { cn } from "@/lib/utils"
 
 export interface DocumentGroup {

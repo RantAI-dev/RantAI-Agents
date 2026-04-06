@@ -10,7 +10,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { ChatWorkspace } from "@/src/features/conversations/components/chat/chat-workspace"
+import { ChatWorkspace } from "@/features/conversations/components/chat/chat-workspace"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 

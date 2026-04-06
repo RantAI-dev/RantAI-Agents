@@ -1,8 +1,8 @@
 import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
-import ToolsSettingsPage from "@/src/features/tools/components/tools-settings-page"
-import SkillsSettingsPage from "@/src/features/skills/components/skills-settings-page"
-import McpSettingsPage from "@/src/features/mcp/components/mcp-settings-page"
-import CredentialsSettingsPage from "@/src/features/credentials/components/credentials-settings-page"
+import ToolsSettingsPage from "@/features/tools/components/tools-settings-page"
+import SkillsSettingsPage from "@/features/skills/components/skills-settings-page"
+import McpSettingsPage from "@/features/mcp/components/mcp-settings-page"
+import CredentialsSettingsPage from "@/features/credentials/components/credentials-settings-page"
 import { SettingsTabs } from "./settings-tabs"
 
 interface Props {

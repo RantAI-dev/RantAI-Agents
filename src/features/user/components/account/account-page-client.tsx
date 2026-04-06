@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Save, User, Mail, CheckCircle, Loader2 } from "@/lib/icons"
-import { AvatarUpload } from "@/src/features/user/components/avatar-upload"
+import { AvatarUpload } from "@/features/user/components/avatar-upload"
 import { useProfileStore } from "@/hooks/use-profile"
 
 export default function AccountPageClient({

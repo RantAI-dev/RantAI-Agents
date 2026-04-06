@@ -1,6 +1,6 @@
 import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
-import MemorySettingsPage from "@/src/features/memory/components/memory-settings-page"
-import StatisticsSettingsPage from "@/src/features/statistics/components/statistics-settings-page"
+import MemorySettingsPage from "@/features/memory/components/memory-settings-page"
+import StatisticsSettingsPage from "@/features/statistics/components/statistics-settings-page"
 import { SettingsTabs } from "./settings-tabs"
 
 interface Props {

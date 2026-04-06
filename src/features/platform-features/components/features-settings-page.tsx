@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
-import { getAdminFeatures } from "@/src/features/admin/features/service"
-import { getAdminChannels } from "@/src/features/admin/channels/service"
+import { getAdminFeatures } from "@/features/admin/features/service"
+import { getAdminChannels } from "@/features/admin/channels/service"
 import FeaturesSettingsClient, {
   type ChannelConfig,
   type FeatureConfig,

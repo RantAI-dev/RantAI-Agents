@@ -11,8 +11,8 @@ import {
 } from "@/lib/rag"
 import { resolveSkillsForAssistant } from "@/lib/skills/resolver"
 import { checkRateLimit } from "@/lib/embed/rate-limiter"
-import { authenticateAgentApiKey } from "@/src/features/agent-api-keys/service"
-import { incrementAgentApiKeyUsage } from "@/src/features/agent-api-keys/repository"
+import { authenticateAgentApiKey } from "@/features/agent-api-keys/service"
+import { incrementAgentApiKeyUsage } from "@/features/agent-api-keys/repository"
 import { prisma } from "@/lib/prisma"
 import type { V1ChatCompletionInput } from "./schema"
 

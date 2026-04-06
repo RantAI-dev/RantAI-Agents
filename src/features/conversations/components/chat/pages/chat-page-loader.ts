@@ -1,8 +1,8 @@
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { listAssistantsForUser, type AssistantListItem } from "@/src/features/assistants/core/service"
-import { listDashboardChatSessions } from "@/src/features/conversations/sessions/service"
+import { listAssistantsForUser, type AssistantListItem } from "@/features/assistants/core/service"
+import { listDashboardChatSessions } from "@/features/conversations/sessions/service"
 import type { DbAssistant } from "@/hooks/use-assistants"
 import {
   loadAssistantEditorHydrationData,

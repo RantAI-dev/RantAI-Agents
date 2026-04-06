@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Loader2 } from "@/lib/icons"
-import type { AgentApiKeyResponse } from "@/src/features/agent-api-keys/service"
+import type { AgentApiKeyResponse } from "@/features/agent-api-keys/service"
 
 const AVAILABLE_SCOPES = [
   { value: "chat", label: "Chat", description: "Send messages and receive responses" },

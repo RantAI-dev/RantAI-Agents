@@ -5,7 +5,7 @@
  * PostgreSQL + SurrealDB backend (saveMessage, getMessages, recall).
  */
 
-import { getMastraMemory, resetMastraMemory } from '../lib/memory';
+import { getMastraMemory, resetMastraMemory } from '../src/lib/memory';
 
 async function testMastraMemory() {
   console.log('🧪 Testing Mastra Memory Integration...\n');

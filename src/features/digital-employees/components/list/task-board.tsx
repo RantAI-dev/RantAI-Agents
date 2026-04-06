@@ -11,7 +11,7 @@ import {
   TASK_STATUS_CONFIG,
   TASK_STATUS_ORDER,
 } from "@/lib/digital-employee/task-types"
-import { TaskCard } from "@/src/features/digital-employees/components/list/task-card"
+import { TaskCard } from "@/features/digital-employees/components/list/task-card"
 
 interface TaskBoardProps {
   tasks: EnrichedTask[]

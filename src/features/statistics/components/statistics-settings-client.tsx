@@ -23,16 +23,16 @@ import {
 } from "@/lib/icons"
 import { useStatistics } from "@/hooks/use-statistics"
 import type { StatisticsData } from "@/hooks/use-statistics"
-import type { StatisticsFilters } from "@/src/features/statistics/filters"
-import { StatCard } from "@/src/features/statistics/components/stat-card"
-import { DateRangePicker } from "@/src/features/statistics/components/date-range-picker"
-import { ConversationsChart } from "@/src/features/statistics/components/conversations-chart"
-import { TokenUsageChart } from "@/src/features/statistics/components/token-usage-chart"
-import { ToolExecutionsChart } from "@/src/features/statistics/components/tool-executions-chart"
+import type { StatisticsFilters } from "@/features/statistics/filters"
+import { StatCard } from "@/features/statistics/components/stat-card"
+import { DateRangePicker } from "@/features/statistics/components/date-range-picker"
+import { ConversationsChart } from "@/features/statistics/components/conversations-chart"
+import { TokenUsageChart } from "@/features/statistics/components/token-usage-chart"
+import { ToolExecutionsChart } from "@/features/statistics/components/tool-executions-chart"
 import {
   ChannelBreakdown,
   AssistantBreakdown,
-} from "@/src/features/statistics/components/breakdown-charts"
+} from "@/features/statistics/components/breakdown-charts"
 import { cn } from "@/lib/utils"
 
 function formatNumber(n: number): string {

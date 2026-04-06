@@ -14,7 +14,7 @@
  */
 
 import { PrismaClient } from "@prisma/client"
-import { uploadFile, S3Paths, ensureBucket } from "../lib/s3"
+import { uploadFile, S3Paths, ensureBucket } from "../src/lib/s3"
 
 const prisma = new PrismaClient()
 

@@ -4,14 +4,14 @@ import { getOrganizationContext } from "@/lib/organization"
 import {
   listKnowledgeDocumentsForDashboard,
   type KnowledgeDocumentListItem,
-} from "@/src/features/knowledge/documents/service"
+} from "@/features/knowledge/documents/service"
 import {
   listKnowledgeGroupsForDashboard,
   type KnowledgeGroupListItem,
-} from "@/src/features/knowledge/groups/service"
+} from "@/features/knowledge/groups/service"
 import {
   listKnowledgeCategoriesForDashboard,
-} from "@/src/features/knowledge/categories/service"
+} from "@/features/knowledge/categories/service"
 import KnowledgePageClient, {
   type Document,
   type DocumentGroup,

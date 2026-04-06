@@ -2,7 +2,7 @@
  * Performance benchmark: Mastra recall vs existing semanticRecall
  */
 
-import { getMastraMemory, semanticRecall } from '../lib/memory';
+import { getMastraMemory, semanticRecall } from '../src/lib/memory';
 
 async function benchmarkPerformance() {
   console.log('⚡ Performance Benchmark: Mastra vs Existing semanticRecall\n');

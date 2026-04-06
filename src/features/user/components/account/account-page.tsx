@@ -1,5 +1,5 @@
 import { auth } from "@/lib/auth"
-import { getAdminProfile, isServiceError } from "@/src/features/admin/profile/service"
+import { getAdminProfile, isServiceError } from "@/features/admin/profile/service"
 import AccountPageClient from "./account-page-client"
 
 interface InitialProfile {

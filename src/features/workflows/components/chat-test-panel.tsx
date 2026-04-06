@@ -5,7 +5,7 @@ import { X, Send, Trash2, Loader2, Bot, User, ThumbsUp, ThumbsDown } from "@/lib
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
-import { MarkdownContent } from "@/src/features/conversations/components/chat/markdown-content"
+import { MarkdownContent } from "@/features/conversations/components/chat/markdown-content"
 import { useWorkflowEditor } from "@/hooks/use-workflow-editor"
 
 interface ChatMessage {

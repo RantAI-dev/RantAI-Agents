@@ -4,18 +4,18 @@ import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   listAssistantsForUser,
   type AssistantListItem,
-} from "@/src/features/assistants/core/service"
+} from "@/features/assistants/core/service"
 import {
   listAssistantSkills,
   listAssistantTools,
-} from "@/src/features/assistants/bindings/service"
-import { listKnowledgeGroupsForDashboard } from "@/src/features/knowledge/groups/service"
+} from "@/features/assistants/bindings/service"
+import { listKnowledgeGroupsForDashboard } from "@/features/knowledge/groups/service"
 import {
   getDashboardChatSession,
   listDashboardChatSessions,
   type DashboardChatSessionDetail,
-} from "@/src/features/conversations/sessions/service"
-import { isHttpServiceError } from "@/src/features/shared/http-service-error"
+} from "@/features/conversations/sessions/service"
+import { isHttpServiceError } from "@/features/shared/http-service-error"
 import type { DbAssistant } from "@/hooks/use-assistants"
 import {
   loadAssistantEditorHydrationData,

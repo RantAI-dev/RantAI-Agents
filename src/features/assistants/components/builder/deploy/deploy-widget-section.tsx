@@ -20,8 +20,8 @@ import {
   ToggleRight,
 } from "@/lib/icons"
 import { useEmbedKeys } from "@/hooks/use-embed-keys"
-import { EmbedKeyDialog } from "@/src/features/embed-keys/components/embed-key-dialog"
-import { EmbedCodeDialog } from "@/src/features/embed-keys/components/embed-code-dialog"
+import { EmbedKeyDialog } from "@/features/embed-keys/components/embed-key-dialog"
+import { EmbedCodeDialog } from "@/features/embed-keys/components/embed-code-dialog"
 import { maskApiKey } from "@/lib/embed/api-key-generator"
 import type { EmbedApiKeyResponse } from "@/lib/embed/types"
 import {

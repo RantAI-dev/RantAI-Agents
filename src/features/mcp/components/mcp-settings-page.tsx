@@ -1,7 +1,7 @@
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
-import { listDashboardMcpServers } from "@/src/features/mcp/servers/service"
+import { listDashboardMcpServers } from "@/features/mcp/servers/service"
 import McpSettingsClient from "./mcp-settings-client"
 import type { McpServerItem } from "@/hooks/use-mcp-servers"
 

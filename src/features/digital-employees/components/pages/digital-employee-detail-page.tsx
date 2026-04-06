@@ -6,19 +6,19 @@ import {
   isServiceError,
   listDashboardDigitalEmployeeActivity,
   listDashboardDigitalEmployeeApprovals,
-} from "@/src/features/digital-employees/employees/service"
-import { listDigitalEmployeeRuns } from "@/src/features/digital-employees/runs/service"
-import { listEmployeeFiles, getEmployeeFile } from "@/src/features/digital-employees/files/service"
-import { getChatHistoryForEmployee } from "@/src/features/digital-employees/chat/service"
-import { getDigitalEmployeeTrustSummary } from "@/src/features/digital-employees/trust/service"
-import { listDigitalEmployeeSkills, listDigitalEmployeeTools } from "@/src/features/digital-employees/interactions/service"
+} from "@/features/digital-employees/employees/service"
+import { listDigitalEmployeeRuns } from "@/features/digital-employees/runs/service"
+import { listEmployeeFiles, getEmployeeFile } from "@/features/digital-employees/files/service"
+import { getChatHistoryForEmployee } from "@/features/digital-employees/chat/service"
+import { getDigitalEmployeeTrustSummary } from "@/features/digital-employees/trust/service"
+import { listDigitalEmployeeSkills, listDigitalEmployeeTools } from "@/features/digital-employees/interactions/service"
 import type { DigitalEmployeeItem } from "@/hooks/use-digital-employees"
 import type { DigitalEmployeeHydrationData } from "@/hooks/use-digital-employee"
 import type {
   ActivityDailySummary,
   ActivityFeedItem,
-} from "@/src/features/digital-employees/components/detail/tab-activity"
-import type { TrustSummaryData } from "@/src/features/digital-employees/components/detail/trust-score-card"
+} from "@/features/digital-employees/components/detail/tab-activity"
+import type { TrustSummaryData } from "@/features/digital-employees/components/detail/trust-score-card"
 import DigitalEmployeeDetailPageClient from "./digital-employee-detail-page-client"
 
 type EmployeeChatMessage = {

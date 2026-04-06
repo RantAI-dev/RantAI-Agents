@@ -3,7 +3,7 @@
 import { use, useCallback, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useDigitalEmployee } from "@/hooks/use-digital-employee"
-import { ChatWorkspace } from "@/src/features/conversations/components/chat/chat-workspace"
+import { ChatWorkspace } from "@/features/conversations/components/chat/chat-workspace"
 import type { ChatSession, ChatMessage } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { ArrowLeft, Loader2, Play } from "@/lib/icons"
