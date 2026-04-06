@@ -4,7 +4,7 @@
  * Simulates multi-turn conversation, save via Mastra, then semantic recall.
  */
 
-import { getMastraMemory, resetMastraMemory } from '../lib/memory';
+import { getMastraMemory, resetMastraMemory } from '../src/lib/memory';
 
 async function testIntegration() {
   console.log('🧪 Integration Test: Mastra Memory + Chat Flow\n');

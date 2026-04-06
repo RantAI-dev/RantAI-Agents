@@ -1,6 +1,6 @@
 
-import { prisma } from '../lib/prisma';
-import { SurrealDBClient, getSurrealDBConfigFromEnv } from '../lib/surrealdb';
+import { prisma } from '../src/lib/prisma';
+import { SurrealDBClient, getSurrealDBConfigFromEnv } from '../src/lib/surrealdb';
 
 async function resetMemory() {
   console.log('🔄 Starting memory system reset...');

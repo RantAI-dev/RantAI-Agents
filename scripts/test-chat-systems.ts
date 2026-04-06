@@ -8,7 +8,7 @@ import {
   resetMastraMemory,
   Fact,
   Preference,
-} from '../lib/memory';
+} from '../src/lib/memory';
 
 const prisma = new PrismaClient();
 

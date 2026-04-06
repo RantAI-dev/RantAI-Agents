@@ -14,7 +14,7 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 import * as path from "path";
-import { ingestFile } from "../lib/rag/ingest";
+import { ingestFile } from "../src/lib/rag/ingest";
 
 const R3F_DOCS = [
     {

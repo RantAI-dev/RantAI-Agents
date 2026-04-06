@@ -22,8 +22,8 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 import * as path from "path";
-import { ingestKnowledgeBase, ingestDirectory } from "../lib/rag/ingest";
-import { getSupportedExtensions } from "../lib/rag/file-processor";
+import { ingestKnowledgeBase, ingestDirectory } from "../src/lib/rag/ingest";
+import { getSupportedExtensions } from "../src/lib/rag/file-processor";
 
 async function main() {
   console.log("=".repeat(60));
