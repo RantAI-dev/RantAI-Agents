@@ -22,6 +22,8 @@ import {
   Headphones,
   Loader2,
   FileText,
+  Layers,
+  Download,
 } from "@/lib/icons"
 import { SendHorizontal } from "lucide-react"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
@@ -39,6 +41,17 @@ import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
 import { ConversationExport } from "./conversation-export"
 import { CommandPalette } from "./command-palette"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { FilePreview } from "./file-preview"
 import { ChatInputToolbar, type AssistantToolInfo, type AssistantSkillInfo, type CanvasMode, type KBGroup, type ToolMode, type SkillMode } from "./chat-input-toolbar"
 import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
@@ -47,7 +60,8 @@ import { ToolCallIndicator } from "./tool-call-indicator"
 import { useArtifacts } from "./artifacts/use-artifacts"
 import { ArtifactIndicator } from "./artifacts/artifact-indicator"
 import { ArtifactPanel } from "./artifacts/artifact-panel"
-import type { Artifact, ArtifactType } from "./artifacts/types"
+import { isValidArtifactType, type Artifact, type ArtifactType } from "./artifacts/types"
+import { TYPE_ICONS, TYPE_LABELS } from "./artifacts/constants"
 import { consumeSseChunk } from "./transports/sse"
 import { reduceEmployeePollEvents, type EmployeePollEvent } from "./transports/polling"
 import type { TransportToolCallMap } from "./transports/types"
@@ -213,6 +227,7 @@ interface SessionToolbarStateSnapshot {
   selectedSkillIds: string[]
   webSearchOverride: boolean | null
   codeInterpreterOverride: boolean | null
+  canvasMode?: CanvasMode
 }
 
 const SESSION_TOOLBAR_STATE_STORAGE_PREFIX = "chat-toolbar-state:"
@@ -804,7 +819,7 @@ function MessagesArea({
                         )}
                       >
                         <span className="text-[10px] text-muted-foreground">
-                          {formatDistanceToNow(message.createdAt ? new Date(message.createdAt) : new Date(), { addSuffix: true })}
+                          {formatDistanceToNow((message as any).createdAt ? new Date((message as any).createdAt) : new Date(), { addSuffix: true })}
                         </span>
                         {hasEditHistory ? (
                           <EditVersionIndicator
@@ -1087,6 +1102,42 @@ export function ChatWorkspace({
     openArtifact,
     closeArtifact,
   } = useArtifacts()
+
+  const [artifactsSheetOpen, setArtifactsSheetOpen] = useState(false)
+
+  const handleDownloadArtifact = useCallback((artifact: Artifact) => {
+    const EXT_MAP: Record<string, string> = {
+      "text/html": ".html", "text/markdown": ".md", "image/svg+xml": ".svg",
+      "application/react": ".tsx", "application/mermaid": ".mmd", "application/sheet": ".csv",
+      "text/latex": ".tex", "application/slides": ".pptx", "application/python": ".py",
+      "application/3d": ".tsx", "application/code": `.${artifact.language || "txt"}`,
+    }
+    const ext = EXT_MAP[artifact.type] || ".txt"
+    const filename = `${artifact.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}${ext}`
+    const blob = new Blob([artifact.content], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [])
+
+  // Notify layout to auto collapse/expand sidebar when artifact panel visibility changes
+  const prevPanelVisibleRef = useRef(false)
+  useEffect(() => {
+    const isPanelVisible = !!activeArtifactId
+    if (isPanelVisible !== prevPanelVisibleRef.current) {
+      prevPanelVisibleRef.current = isPanelVisible
+      window.dispatchEvent(
+        new CustomEvent("artifact-panel-changed", { detail: { open: isPanelVisible } })
+      )
+    }
+  }, [activeArtifactId])
+
+  const handleOpenArtifact = useCallback((id: string) => {
+    openArtifact(id)
+  }, [openArtifact])
 
   const chat = useChat({
     id: session?.id,
@@ -1476,12 +1527,10 @@ export function ChatWorkspace({
           loadFromPersisted([])
         }
       } else if (currentSession?.id) {
-        if (currentSession.artifacts && currentSession.artifacts.length > 0) {
-          loadFromPersisted(currentSession.artifacts)
-        } else if (dedupedFallbackArtifacts.length > 0) {
+        if (dedupedFallbackArtifacts.length > 0) {
           loadFromPersisted(dedupedFallbackArtifacts)
         }
-        void loadFreshSessionArtifacts(Boolean(currentSession.artifacts?.length), controller.signal)
+        void loadFreshSessionArtifacts(false, controller.signal)
       } else {
         loadFromPersisted([])
       }
@@ -1595,6 +1644,9 @@ export function ChatWorkspace({
       setSelectedSkillIds(Array.isArray(parsed.selectedSkillIds) ? parsed.selectedSkillIds : [])
       setWebSearchOverride(typeof parsed.webSearchOverride === "boolean" ? parsed.webSearchOverride : null)
       setCodeInterpreterOverride(typeof parsed.codeInterpreterOverride === "boolean" ? parsed.codeInterpreterOverride : null)
+      if (parsed.canvasMode !== undefined) {
+        setCanvasMode(parsed.canvasMode)
+      }
       setHasSessionToolbarState(true)
       if (!window.sessionStorage.getItem(primaryStorageKey)) {
         window.sessionStorage.setItem(primaryStorageKey, raw)
@@ -1620,6 +1672,7 @@ export function ChatWorkspace({
       selectedSkillIds,
       webSearchOverride,
       codeInterpreterOverride,
+      canvasMode,
     }
     window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot))
   }, [
@@ -1632,6 +1685,7 @@ export function ChatWorkspace({
     selectedSkillIds,
     webSearchOverride,
     codeInterpreterOverride,
+    canvasMode,
   ])
 
   // Handle lazy-loaded messages (session messages populated after initial mount)
@@ -2091,14 +2145,14 @@ export function ChatWorkspace({
                       tc.args
                     ) {
                       const args = tc.args
-                      if (args.type && args.content) {
+                      if (args.type && args.content && isValidArtifactType(args.type)) {
                         const streamingId = tc.toolName === "update_artifact" && args.id
                           ? args.id as string
                           : `streaming-${part.toolCallId as string}`
                         addOrUpdateArtifact({
                           id: streamingId,
                           title: (args.title as string) || "Generating...",
-                          type: (args.type as ArtifactType) || "text/html",
+                          type: args.type,
                           content: args.content as string,
                           language: (args.language as string) || undefined,
                         })
@@ -2116,13 +2170,13 @@ export function ChatWorkspace({
                     // Handle create_artifact — replace streaming placeholder with final
                     if (tc.toolName === "create_artifact" && part.output && typeof part.output === "object") {
                       const out = part.output as Record<string, unknown>
-                      if (out.id && out.title && out.type && out.content) {
+                      if (out.id && out.title && isValidArtifactType(out.type) && out.content) {
                         // Remove streaming placeholder, add final artifact
                         removeArtifact(`streaming-${toolCallId}`)
                         addOrUpdateArtifact({
                           id: out.id as string,
                           title: out.title as string,
-                          type: out.type as ArtifactType,
+                          type: out.type,
                           content: out.content as string,
                           language: (out.language as string) || undefined,
                         })
@@ -2435,6 +2489,7 @@ export function ChatWorkspace({
             typeof initialSettings.codeInterpreterEnabled === "boolean"
               ? initialSettings.codeInterpreterEnabled
               : null,
+          canvasMode: initialSettings.canvasMode ?? false,
         }
         const serialized = JSON.stringify(snapshot)
         window.sessionStorage.setItem(
@@ -3013,6 +3068,24 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
         </div>
         <div className="flex items-center gap-1">
           <ConversationExport title={session.title} messages={session.messages} />
+          {artifacts.size > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 relative"
+                  onClick={() => setArtifactsSheetOpen(true)}
+                >
+                  <Layers className="h-4 w-4" />
+                  <span className="absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full text-[9px] flex items-center justify-center font-medium bg-primary text-primary-foreground">
+                    {artifacts.size}
+                  </span>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Artifacts</TooltipContent>
+            </Tooltip>
+          )}
           <CommandPalette
             onNewChat={onNewChat || (() => { })}
             onExportMarkdown={exportAsMarkdown}
@@ -3026,7 +3099,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
       <div className="flex-1 relative flex overflow-hidden">
         {activeArtifact ? (
           <ResizablePanelGroup direction="horizontal">
-            <ResizablePanel defaultSize={55} minSize={30}>
+            <ResizablePanel defaultSize={50} minSize={30}>
               <div className="h-full flex flex-col">
                 <div className="flex-1 min-h-0">
                   <MessagesArea
@@ -3063,7 +3136,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     scrollToBottom={scrollToBottom}
                     scrollToMessage={scrollToMessage}
                     requestHandoff={requestHandoff}
-                    openArtifact={openArtifact}
+                    openArtifact={handleOpenArtifact}
                     artifacts={artifacts}
                     digitalEmployeeId={digitalEmployeeId}
                   />
@@ -3171,7 +3244,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                             onSetCanvasMode={setCanvasMode}
                             artifacts={artifacts}
                             activeArtifactId={activeArtifactId}
-                            onOpenArtifact={openArtifact}
+                            onOpenArtifact={handleOpenArtifact}
                             onCloseArtifact={closeArtifact}
                             disabled={isLoading}
                             onOpenToolsMenu={() => {
@@ -3205,56 +3278,64 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                 </div>
               </div>
             </ResizablePanel>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize={45} minSize={25}>
-              <ArtifactPanel
-                artifact={activeArtifact}
-                onClose={closeArtifact}
-                onUpdateArtifact={addOrUpdateArtifact}
-                onFixWithAI={handleFixWithAI}
-                sessionId={apiSessionId}
-              />
+            <ResizableHandle />
+            <ResizablePanel defaultSize={50} minSize={25}>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.15 }}
+                className="h-full"
+              >
+                <ArtifactPanel
+                  artifact={activeArtifact}
+                  onClose={closeArtifact}
+                  onUpdateArtifact={addOrUpdateArtifact}
+                  onDeleteArtifact={removeArtifact}
+                  onFixWithAI={handleFixWithAI}
+                  sessionId={apiSessionId}
+                />
+              </motion.div>
             </ResizablePanel>
           </ResizablePanelGroup>
         ) : (
-          <MessagesArea
-            chat={chat}
-            allMessages={allMessages}
-            isLoading={isLoading}
-            isStreaming={isStreaming}
-            assistant={assistant}
-            messageSources={messageSources}
-            messageAttachments={messageAttachments}
-            onViewAttachment={setViewingAttachment}
-            editingMessageId={editingMessageId}
-            editContent={editContent}
-            viewingVersions={viewingVersions}
-            copiedId={copiedId}
-            error={error}
-            showScrollButton={showScrollButton}
-            atBottom={atBottom}
-            handoffState={handoffState}
-            handoffTriggeredMsgId={handoffTriggeredMsgId}
-            virtuosoRef={virtuosoRef}
-            setAtBottom={setAtBottom}
-            setEditContent={setEditContent}
-            setViewingVersions={setViewingVersions}
-            setError={setError}
-            handleSuggestionSelect={handleSuggestionSelect}
-            handleSaveEdit={handleSaveEdit}
-            handleCancelEdit={handleCancelEdit}
-            handleCopy={handleCopy}
-            handleEditMessage={handleEditMessage}
-            handleRegenerate={handleRegenerate}
-            handleDeleteMessage={handleDeleteMessage}
-            handleReply={handleReply}
-            scrollToBottom={scrollToBottom}
-            scrollToMessage={scrollToMessage}
-            requestHandoff={requestHandoff}
-            openArtifact={openArtifact}
-            artifacts={artifacts}
-            digitalEmployeeId={digitalEmployeeId}
-          />
+            <MessagesArea
+              chat={chat}
+              allMessages={allMessages}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              assistant={assistant}
+              messageSources={messageSources}
+              messageAttachments={messageAttachments}
+              onViewAttachment={setViewingAttachment}
+              editingMessageId={editingMessageId}
+              editContent={editContent}
+              viewingVersions={viewingVersions}
+              copiedId={copiedId}
+              error={error}
+              showScrollButton={showScrollButton}
+              atBottom={atBottom}
+              handoffState={handoffState}
+              handoffTriggeredMsgId={handoffTriggeredMsgId}
+              virtuosoRef={virtuosoRef}
+              setAtBottom={setAtBottom}
+              setEditContent={setEditContent}
+              setViewingVersions={setViewingVersions}
+              setError={setError}
+              handleSuggestionSelect={handleSuggestionSelect}
+              handleSaveEdit={handleSaveEdit}
+              handleCancelEdit={handleCancelEdit}
+              handleCopy={handleCopy}
+              handleEditMessage={handleEditMessage}
+              handleRegenerate={handleRegenerate}
+              handleDeleteMessage={handleDeleteMessage}
+              handleReply={handleReply}
+              scrollToBottom={scrollToBottom}
+              scrollToMessage={scrollToMessage}
+              requestHandoff={requestHandoff}
+              openArtifact={handleOpenArtifact}
+              artifacts={artifacts}
+              digitalEmployeeId={digitalEmployeeId}
+            />
         )}
       </div>
 
@@ -3365,7 +3446,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                   onSetCanvasMode={setCanvasMode}
                   artifacts={artifacts}
                   activeArtifactId={activeArtifactId}
-                  onOpenArtifact={openArtifact}
+                  onOpenArtifact={handleOpenArtifact}
                   onCloseArtifact={closeArtifact}
                   disabled={isLoading}
                   onOpenToolsMenu={() => {
@@ -3474,6 +3555,75 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Artifacts Sheet (right sidebar like Claude.ai) */}
+      <Sheet open={artifactsSheetOpen} onOpenChange={setArtifactsSheetOpen}>
+        <SheetContent side="right" className="w-80 sm:max-w-sm p-0">
+          <SheetHeader className="px-4 py-4 border-b">
+            <SheetTitle className="flex items-center gap-2">
+              <Layers className="h-4 w-4" />
+              Artifacts
+              <span className="text-xs text-muted-foreground font-normal">({artifacts.size})</span>
+            </SheetTitle>
+          </SheetHeader>
+          <div className="flex-1 overflow-auto py-2">
+            {artifacts.size === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No artifacts yet</p>
+            ) : (
+              <div className="space-y-1 px-2">
+                {Array.from(artifacts.values()).map((artifact) => {
+                  const Icon = TYPE_ICONS[artifact.type] || FileText
+                  const isActive = artifact.id === activeArtifactId
+                  return (
+                    <div
+                      key={artifact.id}
+                      className={cn(
+                        "flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors group",
+                        isActive ? "bg-primary/10" : "hover:bg-muted/50"
+                      )}
+                    >
+                      <button
+                        type="button"
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        onClick={() => {
+                          handleOpenArtifact(artifact.id)
+                          setArtifactsSheetOpen(false)
+                        }}
+                      >
+                        <div className="flex items-center justify-center h-10 w-10 rounded-lg bg-muted/60 shrink-0">
+                          <Icon className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={cn("text-sm font-medium truncate", isActive && "text-primary")}>
+                            {artifact.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {TYPE_LABELS[artifact.type] || artifact.type}
+                            {artifact.language ? ` · ${artifact.language}` : ""}
+                          </p>
+                        </div>
+                      </button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleDownloadArtifact(artifact)}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="left">Download</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

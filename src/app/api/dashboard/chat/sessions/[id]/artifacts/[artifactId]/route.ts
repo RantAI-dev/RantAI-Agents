@@ -26,6 +26,10 @@ export async function PUT(
     }
 
     const parsedBody = DashboardChatSessionArtifactBodySchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
+    }
+
     const result = await updateDashboardChatSessionArtifact({
       userId: session.user.id,
       sessionId: parsedParams.data.id,

@@ -16,6 +16,7 @@ import {
   Github,
   ChevronDown,
   LayoutPanelLeft,
+  Layers,
   Code,
   Check,
   Sparkles,
@@ -648,7 +649,7 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
           </DropdownMenuContent>
         </DropdownMenu>
 
-      {/* Canvas / Artifacts dropdown */}
+      {/* Canvas settings dropdown */}
       <DropdownMenu>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -666,16 +667,6 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                 disabled={disabled}
               >
                 <LayoutPanelLeft className="h-4 w-4" />
-                {artifactCount > 0 && (
-                  <span className={cn(
-                    "absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full text-[9px] flex items-center justify-center font-medium",
-                    canvasMode
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted-foreground/30 text-muted-foreground"
-                  )}>
-                    {artifactCount}
-                  </span>
-                )}
               </Button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
@@ -684,14 +675,12 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
           </TooltipContent>
         </Tooltip>
         <DropdownMenuContent side="top" align="end" className="w-56">
-          {/* Off */}
           <DropdownMenuItem onClick={() => onSetCanvasMode(false)}>
             <X className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
             <span className="flex-1">Off</span>
             {canvasMode === false && <Check className="h-3.5 w-3.5 text-primary" />}
           </DropdownMenuItem>
 
-          {/* Auto */}
           <DropdownMenuItem onClick={() => onSetCanvasMode("auto")}>
             <Sparkles className="h-3.5 w-3.5 mr-2 text-muted-foreground" />
             <span className="flex-1">Auto</span>
@@ -704,10 +693,9 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
             Artifact Type
           </DropdownMenuLabel>
 
-          {/* Type items */}
           {ARTIFACT_TYPES.map((type) => {
             const Icon = TYPE_ICONS[type]
-            const colorClass = TYPE_COLORS[type].split(" ")[0] // just the text color
+            const colorClass = TYPE_COLORS[type].split(" ")[0]
             return (
               <DropdownMenuItem key={type} onClick={() => onSetCanvasMode(type)}>
                 <Icon className={cn("h-3.5 w-3.5 mr-2", colorClass)} />
@@ -716,21 +704,60 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
               </DropdownMenuItem>
             )
           })}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-          {/* Existing artifacts */}
-          {artifactCount > 0 && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-[10px] text-muted-foreground font-normal">
-                Artifacts ({artifactCount})
-              </DropdownMenuLabel>
+      {/* Artifacts popover (only when artifacts exist) */}
+      {artifactCount > 0 && (
+        <Popover>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-8 w-8 rounded-lg transition-colors relative",
+                    activeArtifactId
+                      ? "bg-primary/10 text-primary hover:bg-primary/20"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Layers className="h-4 w-4" />
+                  <span className={cn(
+                    "absolute -top-0.5 -right-0.5 h-3.5 w-3.5 rounded-full text-[9px] flex items-center justify-center font-medium",
+                    activeArtifactId
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted-foreground/30 text-muted-foreground"
+                  )}>
+                    {artifactCount}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>Artifacts ({artifactCount})</p>
+            </TooltipContent>
+          </Tooltip>
+          <PopoverContent side="top" align="end" className="w-64 p-2">
+            <p className="text-[10px] text-muted-foreground font-medium px-2 py-1.5">
+              Artifacts ({artifactCount})
+            </p>
+            <div className="space-y-0.5">
               {Array.from(artifacts.values()).map((artifact) => {
                 const Icon = TYPE_ICONS[artifact.type] || Code
                 const isActive = artifact.id === activeArtifactId
                 return (
-                  <DropdownMenuItem
+                  <button
                     key={artifact.id}
-                    className={cn(isActive && "bg-primary/10 text-primary")}
+                    type="button"
+                    className={cn(
+                      "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm transition-colors",
+                      isActive
+                        ? "bg-primary/10 text-primary"
+                        : "hover:bg-muted text-foreground"
+                    )}
                     onClick={() => {
                       if (isActive) {
                         onCloseArtifact()
@@ -739,17 +766,17 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                       }
                     }}
                   >
-                    <Icon className="h-3.5 w-3.5 mr-2 shrink-0" />
-                    <span className="flex-1 truncate text-xs">{artifact.title}</span>
-                    <span className="text-[10px] text-muted-foreground">v{artifact.version}</span>
-                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 ml-1" />}
-                  </DropdownMenuItem>
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="flex-1 truncate text-left">{artifact.title}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">v{artifact.version}</span>
+                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+                  </button>
                 )
               })}
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
     </div>
   )
 })

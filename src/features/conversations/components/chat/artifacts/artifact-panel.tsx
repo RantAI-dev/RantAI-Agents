@@ -11,12 +11,24 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
-  Maximize2,
-  Minimize2,
   Pencil,
   Save,
+  Trash2,
+  MoreHorizontal,
 } from "@/lib/icons"
+import { Maximize, Minimize } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import type { Artifact } from "./types"
 import { ArtifactRenderer } from "./artifact-renderer"
@@ -31,6 +43,7 @@ interface ArtifactPanelProps {
   artifact: Artifact
   onClose: () => void
   onUpdateArtifact?: (artifact: ArtifactInput) => void
+  onDeleteArtifact?: (artifactId: string) => void
   onFixWithAI?: (artifactId: string, error: string) => void
   sessionId?: string
 }
@@ -53,10 +66,12 @@ export function ArtifactPanel({
   artifact,
   onClose,
   onUpdateArtifact,
+  onDeleteArtifact,
   onFixWithAI,
   sessionId,
 }: ArtifactPanelProps) {
-  const [tab, setTab] = useState<"preview" | "code" | "edit">("preview")
+  const [tab, setTab] = useState<"preview" | "code">("preview")
+  const [isEditing, setIsEditing] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [viewingVersionIdx, setViewingVersionIdx] = useState<number | null>(
@@ -67,6 +82,7 @@ export function ArtifactPanel({
   const [editContent, setEditContent] = useState("")
   const [isDirty, setIsDirty] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const hasVersions = artifact.previousVersions.length > 0
   const totalVersions = artifact.version
@@ -80,13 +96,24 @@ export function ArtifactPanel({
     return { ...artifact, content: ver.content, title: ver.title }
   }, [artifact, viewingVersionIdx])
 
-  // Initialize edit content when switching to edit tab or artifact changes
+  // Initialize edit content when entering edit mode or artifact changes
+  // Skip if a save is in progress to prevent overwriting the editor
   useEffect(() => {
-    if (tab === "edit") {
+    if (isEditing && !isSaving) {
       setEditContent(displayArtifact.content)
       setIsDirty(false)
     }
-  }, [tab, displayArtifact.content])
+  }, [isEditing, displayArtifact.content, isSaving])
+
+  // Reset version view to latest when artifact is updated externally
+  useEffect(() => {
+    setViewingVersionIdx(null)
+  }, [artifact.version])
+
+  // Exit edit mode when switching tabs
+  useEffect(() => {
+    setIsEditing(false)
+  }, [tab])
 
   // Escape key exits fullscreen
   useEffect(() => {
@@ -168,7 +195,6 @@ export function ArtifactPanel({
     setIsSaving(true)
 
     try {
-      // Update in-memory state
       if (onUpdateArtifact) {
         onUpdateArtifact({
           id: artifact.id,
@@ -179,7 +205,6 @@ export function ArtifactPanel({
         })
       }
 
-      // Persist to backend
       if (sessionId) {
         await fetch(
           `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifact.id}`,
@@ -192,7 +217,7 @@ export function ArtifactPanel({
       }
 
       setIsDirty(false)
-      setTab("preview")
+      setIsEditing(false)
     } catch (err) {
       console.error("[ArtifactPanel] Save error:", err)
     } finally {
@@ -207,110 +232,182 @@ export function ArtifactPanel({
     sessionId,
   ])
 
+  const handleDelete = useCallback(async () => {
+    if (isDeleting) return
+    setIsDeleting(true)
+
+    try {
+      if (sessionId) {
+        await fetch(
+          `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifact.id}`,
+          { method: "DELETE" }
+        )
+      }
+      onDeleteArtifact?.(artifact.id)
+      onClose()
+    } catch (err) {
+      console.error("[ArtifactPanel] Delete error:", err)
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [isDeleting, sessionId, artifact.id, onDeleteArtifact, onClose])
+
+  const closeFullscreen = useCallback(() => {
+    setIsFullscreen(false)
+  }, [])
+
   const panelContent = (
     <div
       className={cn(
         "flex flex-col bg-background",
-        isFullscreen ? "fixed inset-0 z-50" : "h-full border-l"
+        isFullscreen ? "fixed inset-3 z-50 rounded-xl shadow-2xl border" : "h-full border-l"
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-medium truncate">
-            {displayArtifact.title}
-          </h3>
-          <span className="text-[10px] text-muted-foreground">
+      <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/50">
+        {/* Title area */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-semibold truncate">
+              {displayArtifact.title}
+            </h3>
+          </div>
+          <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 shrink-0">
             {TYPE_LABELS[artifact.type] || artifact.type}
             {artifact.language ? ` · ${artifact.language}` : ""}
           </span>
+
+          {/* Version pill (inline in header) */}
+          {hasVersions && (
+            <span className="flex items-center gap-0.5 tabular-nums text-xs text-muted-foreground bg-muted rounded-full px-1 py-0.5 shrink-0">
+              <button
+                type="button"
+                className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-background/80 transition-colors disabled:opacity-30"
+                onClick={goToPrevVersion}
+                disabled={currentViewVersion <= 1}
+              >
+                <ChevronLeft className="h-3 w-3" />
+              </button>
+              <span className="px-0.5 font-medium">
+                {currentViewVersion}/{totalVersions}
+              </span>
+              <button
+                type="button"
+                className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-background/80 transition-colors disabled:opacity-30"
+                onClick={goToNextVersion}
+                disabled={currentViewVersion >= totalVersions}
+              >
+                <ChevronRight className="h-3 w-3" />
+              </button>
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={handleCopy}
-            title="Copy content"
-          >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-chart-2" />
-            ) : (
-              <Copy className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={handleDownload}
-            title="Download"
-          >
-            <Download className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => setIsFullscreen((prev) => !prev)}
-            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
-          >
-            {isFullscreen ? (
-              <Minimize2 className="h-3.5 w-3.5" />
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={() => {
-              if (isFullscreen) setIsFullscreen(false)
-              onClose()
-            }}
-            title="Close panel"
-          >
-            <X className="h-3.5 w-3.5" />
-          </Button>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleCopy}
+              >
+                {copied ? (
+                  <Check className="h-4 w-4 text-chart-2" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Copy content</TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleDownload}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Download</TooltipContent>
+          </Tooltip>
+
+          {/* More menu (delete lives here) */}
+          {onDeleteArtifact && (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">More options</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={handleDelete}
+                  disabled={isDeleting}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  {isDeleting ? "Deleting..." : "Delete artifact"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setIsFullscreen((prev) => !prev)}
+              >
+                {isFullscreen ? (
+                  <Minimize className="h-4 w-4" />
+                ) : (
+                  <Maximize className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => {
+                  if (isFullscreen) setIsFullscreen(false)
+                  onClose()
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Close</TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
-      {/* Version nav bar */}
-      {hasVersions && (
-        <div className="flex items-center justify-center gap-2 px-4 py-1.5 border-b bg-muted/30">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={goToPrevVersion}
-            disabled={currentViewVersion <= 1}
-            title="Previous version"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-          </Button>
-          <span className="text-xs font-medium tabular-nums text-muted-foreground">
-            v{currentViewVersion} / {totalVersions}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={goToNextVersion}
-            disabled={currentViewVersion >= totalVersions}
-            title="Next version"
-          >
-            <ChevronRight className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
-
-      {/* Tab bar */}
-      <div className="flex border-b px-4">
+      {/* Tab bar — Preview and Code only */}
+      <div className="flex border-b border-border/50 px-4">
         <button
           type="button"
           className={cn(
-            "flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors",
+            "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
             tab === "preview"
               ? "border-primary text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -323,7 +420,7 @@ export function ArtifactPanel({
         <button
           type="button"
           className={cn(
-            "flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors",
+            "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
             tab === "code"
               ? "border-primary text-foreground"
               : "border-transparent text-muted-foreground hover:text-foreground"
@@ -332,25 +429,10 @@ export function ArtifactPanel({
         >
           <Code className="h-3.5 w-3.5" />
           Code
+          {isDirty && isEditing && (
+            <span className="w-1.5 h-1.5 rounded-full bg-chart-1" />
+          )}
         </button>
-        {onUpdateArtifact && (
-          <button
-            type="button"
-            className={cn(
-              "flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors",
-              tab === "edit"
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-            onClick={() => setTab("edit")}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Edit
-            {isDirty && (
-              <span className="w-1.5 h-1.5 rounded-full bg-chart-1" />
-            )}
-          </button>
-        )}
       </div>
 
       {/* Content */}
@@ -360,12 +442,8 @@ export function ArtifactPanel({
             artifact={displayArtifact}
             onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
           />
-        ) : tab === "code" ? (
-          <StreamdownContent
-            content={`\`\`\`${getCodeLanguage(displayArtifact)}\n${displayArtifact.content}\n\`\`\``}
-            className="p-4"
-          />
-        ) : (
+        ) : isEditing ? (
+          /* Code tab — edit mode */
           <div className="flex flex-col h-full">
             <textarea
               value={editContent}
@@ -377,6 +455,17 @@ export function ArtifactPanel({
               spellCheck={false}
             />
             <div className="flex items-center justify-end gap-2 px-4 py-2 border-t bg-muted/30">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditContent(displayArtifact.content)
+                  setIsDirty(false)
+                  setIsEditing(false)
+                }}
+              >
+                Cancel
+              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -398,14 +487,46 @@ export function ArtifactPanel({
               </Button>
             </div>
           </div>
+        ) : (
+          /* Code tab — view mode with floating edit button */
+          <div className="relative">
+            <StreamdownContent
+              content={`\`\`\`${getCodeLanguage(displayArtifact)}\n${displayArtifact.content}\n\`\`\``}
+              className="p-4"
+            />
+            {onUpdateArtifact && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="icon"
+                    className="absolute top-3 right-3 h-8 w-8 shadow-sm"
+                    onClick={() => setIsEditing(true)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left">Edit code</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         )}
       </div>
     </div>
   )
 
-  // When fullscreen, render via portal
+  // When fullscreen, render via portal with backdrop
   if (isFullscreen) {
-    return createPortal(panelContent, document.body)
+    return createPortal(
+      <>
+        <div
+          className="fixed inset-0 z-40 bg-black/50"
+          onClick={closeFullscreen}
+        />
+        {panelContent}
+      </>,
+      document.body
+    )
   }
 
   return panelContent

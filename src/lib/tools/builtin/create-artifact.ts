@@ -2,29 +2,19 @@ import { z } from "zod"
 import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile, S3Paths, getArtifactExtension } from "@/lib/s3"
-import { chunkDocument, generateEmbeddings, storeChunks } from "@/lib/rag"
+import { indexArtifactContent } from "@/lib/rag"
 
-async function chunkAndEmbed(documentId: string, title: string, content: string) {
-  const chunks = chunkDocument(content, title, "ARTIFACT", undefined, {
-    chunkSize: 1000,
-    chunkOverlap: 200,
-  })
-  if (chunks.length === 0) return
-
-  const chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)
-  const embeddings = await generateEmbeddings(chunkTexts)
-  await storeChunks(documentId, chunks, embeddings)
-  console.log(`[create_artifact] Indexed ${chunks.length} chunks for "${title}"`)
-}
+/** Maximum artifact content size: 512 KB */
+const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
 
 export const createArtifactTool: ToolDefinition = {
   name: "create_artifact",
   displayName: "Create Artifact",
   description:
-    "Create a rich artifact that will be rendered in a side panel. Use this for substantial content like HTML pages, React components, SVG graphics, Mermaid diagrams, code files, or markdown documents. The artifact will be displayed with a live preview alongside the chat.",
+    "Create a rich, polished artifact rendered in a live preview panel. Use for substantial content: HTML pages, React components, SVG graphics, diagrams, code files, documents, spreadsheets, slides, Python scripts, or 3D scenes. Output must be complete, self-contained, and production-quality — no placeholders, no TODOs, no incomplete sections. Always choose the most appropriate type for the content.",
   category: "builtin",
   parameters: z.object({
-    title: z.string().describe("A short, descriptive title for the artifact"),
+    title: z.string().describe("A concise, descriptive title (3-8 words) that clearly identifies the artifact content"),
     type: z
       .enum([
         "text/html",
@@ -40,11 +30,11 @@ export const createArtifactTool: ToolDefinition = {
         "application/3d",
       ])
       .describe(
-        "The content type: text/html for HTML pages, application/react for React components, image/svg+xml for SVG graphics, application/mermaid for Mermaid diagrams, application/code for code files, text/markdown for documents, application/sheet for CSV tabular data, text/latex for LaTeX math documents, application/slides for markdown presentations, application/python for executable Python scripts, application/3d for interactive 3D R3F scenes"
+        "The artifact format. Choose based on content: text/html (interactive pages, dashboards, games), application/react (UI components, data visualizations), image/svg+xml (graphics, icons), application/mermaid (flowcharts, diagrams), application/code (source code), text/markdown (documents, reports), application/sheet (CSV tables), text/latex (math equations), application/slides (presentations as JSON), application/python (executable scripts), application/3d (R3F 3D scenes)"
       ),
     content: z
       .string()
-      .describe("The full content of the artifact"),
+      .describe("The complete, self-contained content of the artifact. Must be fully functional — no placeholders, stubs, or TODO comments. For HTML: include full document structure. For React: include all component logic with export default. For code: include all necessary functions. For slides: provide complete JSON with theme and slides array."),
     language: z
       .string()
       .optional()
@@ -59,7 +49,22 @@ export const createArtifactTool: ToolDefinition = {
     const title = params.title as string
     const language = (params.language as string) || undefined
 
+    // Validate content size
+    const contentBytes = Buffer.byteLength(content, "utf-8")
+    if (contentBytes > MAX_ARTIFACT_CONTENT_BYTES) {
+      return {
+        id,
+        title,
+        type,
+        content,
+        language,
+        persisted: false,
+        error: `Artifact content exceeds maximum size (${Math.round(contentBytes / 1024)}KB > ${MAX_ARTIFACT_CONTENT_BYTES / 1024}KB)`,
+      }
+    }
+
     // Persist to S3 + Document (knowledge system)
+    let persisted = true
     try {
       const ext = getArtifactExtension(type)
       const s3Key = S3Paths.artifact(
@@ -89,20 +94,21 @@ export const createArtifactTool: ToolDefinition = {
           createdBy: context.userId || null,
           s3Key,
           fileType: "artifact",
-          fileSize: Buffer.byteLength(content, "utf-8"),
+          fileSize: contentBytes,
           mimeType,
           metadata: { artifactLanguage: language },
         },
       })
       // Background: chunk + embed so it's searchable in RAG
-      chunkAndEmbed(id, title, content).catch((err) =>
+      indexArtifactContent(id, title, content).catch((err) =>
         console.error("[create_artifact] Background indexing error:", err)
       )
     } catch (err) {
       // Log but don't fail the tool — artifact still works in-memory
       console.error("[create_artifact] Persistence error:", err)
+      persisted = false
     }
 
-    return { id, title, type, content, language }
+    return { id, title, type, content, language, persisted }
   },
 }
