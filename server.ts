@@ -4,7 +4,7 @@ import { parse } from "url"
 import { readFileSync, existsSync } from "fs"
 import { join } from "path"
 import next from "next"
-import { initSocketServer } from "./lib/socket"
+import { initSocketServer } from "./src/lib/socket"
 
 const dev = process.env.NODE_ENV !== "production"
 const hostname = "localhost"
