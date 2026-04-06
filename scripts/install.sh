@@ -50,6 +50,7 @@ detect_arch() {
 # Download and run installer
 download_installer() {
     local arch="$1"
+    shift
     local variant="linux-musl"
     local binary="${BINARY_NAME}-${arch}-${variant}"
     local url="https://github.com/${REPO}/releases/latest/download/${binary}"
