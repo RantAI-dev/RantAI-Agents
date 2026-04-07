@@ -157,6 +157,133 @@ export default App;`
   })
 })
 
+describe("validateArtifactContent — image/svg+xml", () => {
+  const v = (svg: string) => validateArtifactContent("image/svg+xml", svg)
+
+  const VALID_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="t">
+  <title id="t">Bell</title>
+  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" fill="none" stroke="currentColor" stroke-width="2"/>
+</svg>`
+
+  it("accepts a valid icon SVG", () => {
+    const r = v(VALID_ICON)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+    expect(r.warnings).toEqual([])
+  })
+
+  it("errors on missing xmlns", () => {
+    const r = v(`<svg viewBox="0 0 24 24"><title>x</title></svg>`)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/xmlns/)
+  })
+
+  it("errors on missing viewBox", () => {
+    const r = v(`<svg xmlns="http://www.w3.org/2000/svg"><title>x</title></svg>`)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/viewBox/)
+  })
+
+  it("errors on hardcoded width/height", () => {
+    const r = v(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="200" height="200"><title>x</title></svg>`
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/width\/height/)
+  })
+
+  it("errors on <script>", () => {
+    const r = v(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><script>alert(1)</script></svg>`
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/<script>/)
+  })
+
+  it("errors on <foreignObject>", () => {
+    const r = v(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><foreignObject></foreignObject></svg>`
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/foreignObject/)
+  })
+
+  it("errors on external href", () => {
+    const r = v(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><image href="https://evil.com/x.png"/></svg>`
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/external href/)
+  })
+
+  it("errors on event handler attributes", () => {
+    const r = v(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><rect onclick="x()" width="10" height="10"/></svg>`
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/event handler/)
+  })
+
+  it("errors on empty content", () => {
+    const r = v("   ")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/empty/)
+  })
+
+  it("warns on missing <title> when not aria-hidden", () => {
+    const r = v(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="10" height="10"/></svg>`)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/<title>/)
+  })
+
+  it("does not warn when aria-hidden=\"true\"", () => {
+    const r = v(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><rect width="10" height="10"/></svg>`
+    )
+    expect(r.ok).toBe(true)
+    expect(r.warnings).toEqual([])
+  })
+
+  it("warns on <style> blocks", () => {
+    const r = v(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><style>.a{fill:red}</style><rect class="a"/></svg>`
+    )
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/<style>/)
+  })
+
+  it("warns on > 5 distinct colors", () => {
+    const r = v(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title>` +
+        `<rect fill="#111"/><rect fill="#222"/><rect fill="#333"/><rect fill="#444"/><rect fill="#555"/><rect fill="#666"/><rect fill="#777"/>` +
+        `</svg>`
+    )
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/distinct colors/)
+  })
+
+  it("warns on high path precision", () => {
+    const r = v(
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><path d="M12.456789 34.567890"/></svg>`
+    )
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/decimal places/)
+  })
+
+  it("accepts a valid illustration with title, desc, role, grouped", () => {
+    const r = v(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-labelledby="t d">
+  <title id="t">Empty</title>
+  <desc id="d">Desc</desc>
+  <g id="bg"><rect x="0" y="0" width="400" height="300" fill="#F1F5F9"/></g>
+  <g id="doc"><rect x="140" y="70" width="120" height="150" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2"/></g>
+  <g id="mag"><circle cx="220" cy="160" r="36" fill="none" stroke="#4F46E5" stroke-width="6"/></g>
+</svg>`)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+    expect(r.warnings).toEqual([])
+  })
+})
+
 describe("validateArtifactContent — other types pass through", () => {
   it("returns ok for text/markdown", () => {
     const r = validateArtifactContent("text/markdown", "# anything")
