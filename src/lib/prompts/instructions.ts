@@ -3,6 +3,8 @@
  * Single source of truth — used by chat/route.ts, widget/chat/route.ts, and chatflow.ts.
  */
 
+import { getDesignSystemContext } from "./design-system"
+
 /** Language consistency — appended to ALL chat prompts */
 export const LANGUAGE_INSTRUCTION = `\n\nIMPORTANT: You must ALWAYS reply in the same language as the user's last message. If they speak Indonesian, reply in Indonesian. If they speak English, reply in English. Do not mix languages unless necessary for technical terms.`
 
@@ -32,13 +34,157 @@ const CANVAS_TYPE_LABELS: Record<string, string> = {
 
 /** Per-type artifact instructions — injected individually for specific canvas mode */
 const ARTIFACT_TYPE_INSTRUCTIONS: Record<string, string> = {
-  "text/html": `**text/html — Interactive HTML Pages**
-Write complete, self-contained HTML documents. Tailwind CSS is automatically available via CDN — use Tailwind utility classes for ALL styling (do NOT write verbose custom CSS). You can use <script> tags for full interactivity. Google Fonts Inter is pre-loaded.
-STYLING: Use modern Tailwind — rounded-lg/xl, shadow-sm/md, proper spacing (p-4/6, gap-4), muted backgrounds (bg-gray-50, bg-slate-50), smooth transitions (transition-all duration-200), hover effects (hover:shadow-md, hover:scale-105), gradient hero sections (bg-gradient-to-br). Prefer cards with borders (border border-gray-200 rounded-xl p-6). Never output plain unstyled HTML.`,
+  "text/html": `**text/html — Self-contained Interactive HTML Pages**
 
-  "application/react": `**application/react — React Components**
-Available imports: react (all hooks), recharts (charts/graphs), lucide-react (icons). Tailwind CSS is automatically available — use Tailwind utility classes for ALL styling. Components MUST have \`export default\`. Do NOT import CSS files or external packages beyond react, recharts, lucide-react.
-STYLING: Write modern, polished UI with proper spacing, rounded corners (rounded-lg/xl/2xl), shadows (shadow-sm/md/lg), hover effects, and transitions. Use Inter font via font-sans class. Use consistent color palette. Structure with clear component hierarchy.`,
+You are generating a complete, production-quality HTML document that will render inside a sandboxed iframe. The result must look and feel like it was designed by a senior product designer — not a generic AI.
+
+## Runtime Environment
+- **Tailwind CSS v3 is auto-injected** from \`https://cdn.tailwindcss.com\`. Do NOT add another Tailwind <script>.
+- **You MUST include the Inter font yourself** via \`<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">\` and apply \`font-family: 'Inter', system-ui, sans-serif\` on body.
+- **Sandbox restrictions**: \`allow-scripts allow-modals\` only. \`location.*\`, \`history.*\`, \`window.open()\`, anchor navigation, and form submission are all blocked. Build single-page interactivity with JS state — never rely on real navigation or form POST.
+- **No external network** beyond Google Fonts and the Tailwind CDN. No \`fetch()\` to real APIs. Mock data inline.
+- \`localStorage\` works inside the iframe — use it for user preferences if relevant.
+
+## Required Document Structure
+Every artifact MUST start with:
+\`\`\`html
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title><!-- descriptive, <60 chars --></title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
+  <style>body{font-family:'Inter',system-ui,sans-serif}</style>
+</head>
+<body class="min-h-full bg-slate-50 text-slate-900 antialiased">
+  <!-- semantic content here -->
+</body>
+</html>
+\`\`\`
+Use semantic landmarks: \`<header>\`, \`<nav>\`, \`<main>\`, \`<section>\`, \`<article>\`, \`<aside>\`, \`<footer>\`. Exactly one \`<h1>\` per document.
+
+## Design System
+**Palette — pick exactly ONE primary, then neutrals + 1 accent. Total ≤ 5 colors.**
+- Primary candidates: \`indigo-600\`, \`blue-600\`, \`emerald-600\`, \`rose-600\`, \`amber-500\`, \`slate-900\`
+- Neutrals (always): \`slate-50\` (page bg), \`white\` (card bg), \`slate-200\` (borders), \`slate-500\` (secondary text), \`slate-900\` (primary text)
+- **NEVER** use purple/violet unless explicitly asked. **NEVER** mix more than 2 saturated hues.
+
+**Typography (Tailwind):**
+- Display: \`text-5xl font-bold tracking-tight\`
+- H1: \`text-4xl font-bold tracking-tight\`  · H2: \`text-2xl font-semibold tracking-tight\`  · H3: \`text-lg font-semibold\`
+- Body: \`text-base leading-relaxed\`  · Small: \`text-sm text-slate-500\`
+- Use \`text-balance\` on headings, \`text-pretty\` on long body.
+
+**Spacing — Tailwind scale ONLY (no \`p-[16px]\`):**
+- Section padding: \`py-16 md:py-24\`  · Card padding: \`p-6 md:p-8\`  · Gaps: \`gap-4\` / \`gap-6\` / \`gap-8\`
+
+**Cards:** \`rounded-2xl border border-slate-200 bg-white shadow-sm\`. Hover: \`hover:shadow-md hover:-translate-y-0.5 transition\`.
+
+**Container:** \`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8\`. Mobile-first: design 360px first, then \`sm:\` / \`md:\` / \`lg:\` / \`xl:\`. Touch targets ≥ \`h-11\` (44px).
+
+**Layout priority:** Flexbox first, Grid only for true 2D, never absolute positioning unless overlaying.
+
+## Accessibility (non-negotiable)
+- Visible focus ring on every interactive element: \`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2\`
+- Buttons: \`<button type="button" aria-label="...">\`. Icon-only: include \`<span class="sr-only">...</span>\`.
+- Images: meaningful \`alt\`; decorative use \`alt=""\`.
+- Form fields: paired \`<label for>\` + \`id\`. Color contrast ≥ 4.5:1.
+
+## Code Quality — STRICT
+- **NEVER truncate.** No \`<!-- ... -->\`, no "add more here". Output the COMPLETE document.
+- **NEVER use placeholders** like \`Lorem ipsum\` for product content — write realistic, on-brand copy.
+- No inline \`style="..."\` when a Tailwind class exists. Inline \`<style>\` blocks only for things Tailwind cannot express (e.g. \`@keyframes\`) and ≤ 10 lines.
+- No \`!important\`. No hardcoded px in JS-set styles.
+- Wrap top-level JS in \`(() => { ... })()\` or \`DOMContentLoaded\` listener. Mock data as \`const DATA = [...]\`.
+- Use \`<button type="button">\` instead of \`<a href="#">\` for click handlers.
+
+## Anti-Patterns
+- ❌ Emoji as functional icons (use inline SVG)
+- ❌ Hand-drawn complex SVG illustrations or geographic maps
+- ❌ Gradient circles / blurry blobs as filler
+- ❌ \`<form action="/submit">\` — sandbox blocks submission
+- ❌ \`window.location = "..."\` — sandbox blocks navigation
+- ❌ More than 2 font families · more than 5 colors
+- ❌ Truncating "for brevity"`,
+
+  "application/react": `**application/react — Self-contained React Components**
+
+You are generating a single React component that will be transpiled by Babel-standalone and rendered into a sandboxed iframe at \`#root\`. Output must be v0/Lovable-quality.
+
+## Runtime Environment
+**Libraries are exposed as window globals — do NOT \`import\` from them. Just use them directly.**
+
+| Global | What | Version |
+|---|---|---|
+| \`React\` + all hooks (\`useState\`, \`useEffect\`, \`useRef\`, \`useMemo\`, \`useCallback\`, \`useReducer\`, \`useContext\`, \`useId\`, \`useTransition\`, \`useDeferredValue\`, \`useLayoutEffect\`, \`createContext\`, \`forwardRef\`, \`memo\`, \`Fragment\`, \`Suspense\`, \`lazy\`, \`Children\`, \`cloneElement\`) — pre-destructured into scope | React | 19 |
+| \`Recharts\` — \`<LineChart>\`, \`<BarChart>\`, \`<PieChart>\`, \`<AreaChart>\`, \`<ResponsiveContainer>\`, \`<Tooltip>\`, etc. | charts | 2 |
+| \`LucideReact\` — \`LucideReact.ArrowRight\`, \`LucideReact.Check\`, ... | icons | 0.454 |
+| \`Motion\` — \`Motion.motion.div\`, \`Motion.AnimatePresence\` | framer-motion | 11 |
+| **Tailwind CSS v3** — utility classes available globally | styling | CDN |
+
+You CAN write \`import\` lines — the preprocessor strips them — but only from: \`react\`, \`recharts\`, \`lucide-react\`, \`framer-motion\`. Anything else is silently dropped and your component will crash. Cleanest output: skip imports, use globals.
+
+**Sandbox**: \`allow-scripts\` only — no modals, no real form submission, no popups, no real navigation. All forms must use \`onSubmit={(e) => { e.preventDefault(); ... }}\`. No \`window.open\`, no \`location.href = ...\`. **No real network** — mock all data.
+
+## Required Component Shape
+\`\`\`jsx
+function App() {
+  const [value, setValue] = useState(0);
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased p-6">
+      {/* content */}
+    </div>
+  );
+}
+
+export default App;
+\`\`\`
+- **MUST** have \`export default\` (function or const). The renderer keys off this.
+- **MUST** be a function component. **NEVER** \`class extends React.Component\`.
+- **NEVER** \`document.querySelector\` / \`document.getElementById\`. Use \`useRef\`.
+- **NEVER** import a CSS file. Tailwind is already loaded.
+- Top-level wrapper sets \`min-h-screen\`, background, text color, font, base padding.
+
+## Design System
+Same palette / typography / spacing / cards / container as the HTML type:
+- ONE primary (\`indigo-600\` / \`blue-600\` / \`emerald-600\` / \`rose-600\` / \`slate-900\`), slate neutrals, ≤ 5 colors. No purple unless asked.
+- Display \`text-4xl md:text-5xl font-bold tracking-tight\` · H2 \`text-2xl font-semibold\` · body \`text-base leading-relaxed text-slate-700\` · small \`text-sm text-slate-500\`
+- Tailwind scale only. Cards \`p-6\`, sections \`py-12\`/\`py-20\`, gaps \`gap-4\`/\`gap-6\`/\`gap-8\`
+- Cards: \`rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition\`
+- Buttons: \`h-11 px-5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 transition disabled:opacity-50 disabled:cursor-not-allowed\`
+- Inputs: \`h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500\`
+- Container: \`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8\`. Mobile-first. Flexbox first.
+
+## State Patterns
+- **Forms:** controlled components, validate on submit, inline \`aria-invalid\` errors.
+- **Mock fetching:** \`useEffect\` + \`setTimeout\`, show skeleton while loading.
+- **Tabs:** \`const [view, setView] = useState('overview')\` with \`role="tablist"\` and \`aria-selected\`.
+
+## Accessibility
+- Every \`<button>\` has \`type="button"\` (or \`type="submit"\` inside a form).
+- Icon-only buttons: \`<span className="sr-only">Description</span>\`.
+- Form labels paired via \`htmlFor\`/\`id\`. Visible focus ring on every interactive element.
+- \`aria-live\` for dynamic status. Color contrast ≥ 4.5:1.
+
+## Code Quality — STRICT
+- **NEVER truncate.** No \`/* ...rest of component... */\`. Output the COMPLETE component.
+- **NEVER use placeholders** like \`Lorem ipsum\` for product copy — write realistic text.
+- Mock data should be realistic and named (\`const RECENT_ORDERS = [{ id: 'ORD-1041', customer: 'Sara Chen', total: 248.00 }, ...]\`).
+- No dead code, no commented-out alternatives.
+- \`useCallback\`/\`useMemo\` only when there is an actual perf reason.
+- List keys must be stable IDs, never array indexes (unless the list is truly static).
+
+## Anti-Patterns
+- ❌ \`import { Card } from 'shadcn/ui'\` — shadcn is NOT available, build cards with raw Tailwind
+- ❌ \`import './styles.css'\` — silently dropped
+- ❌ \`class MyComponent extends React.Component\`
+- ❌ \`document.getElementById('foo')\`
+- ❌ Emoji as functional icons (use \`LucideReact.X\`)
+- ❌ Real \`fetch()\` calls
+- ❌ \`<form action="/submit">\` — use \`onSubmit\` with \`e.preventDefault()\`
+- ❌ More than 5 colors / more than 2 fonts
+- ❌ Truncating "for brevity"`,
 
   "image/svg+xml": `**image/svg+xml — SVG Graphics**
 Create clean, well-structured SVG with proper viewBox. Use semantic grouping with <g> elements. Apply consistent stroke widths and color palettes. Optimize paths — avoid unnecessary precision in coordinates. Include descriptive <title> elements for accessibility.`,
@@ -102,7 +248,9 @@ export function buildToolInstruction(toolNames: string[], options?: { targetArti
       // Specific type: inject ONLY the relevant type's instructions + design quality
       const label = CANVAS_TYPE_LABELS[canvasMode]
       const typeInstruction = ARTIFACT_TYPE_INSTRUCTIONS[canvasMode] || ""
-      instruction += `\n\n## Canvas Mode (ACTIVE — ${label})\nThe user has enabled Canvas mode with a specific artifact type. You MUST use the create_artifact tool with type="${canvasMode}". The user wants a ${label} artifact. Render your output as a live artifact in the preview panel instead of inline text.\n\n${typeInstruction}\n\n${DESIGN_QUALITY_INSTRUCTION}`
+      const designSystem = getDesignSystemContext(canvasMode)
+      const designSystemBlock = designSystem ? `\n\n---\n\n${designSystem}` : ""
+      instruction += `\n\n## Canvas Mode (ACTIVE — ${label})\nThe user has enabled Canvas mode with a specific artifact type. You MUST use the create_artifact tool with type="${canvasMode}". The user wants a ${label} artifact. Render your output as a live artifact in the preview panel instead of inline text.\n\n${typeInstruction}${designSystemBlock}\n\n${DESIGN_QUALITY_INSTRUCTION}`
     } else {
       // No canvas mode: inject all type descriptions with optional usage guidance
       instruction += `\n\n## Artifacts\nWhen creating substantial content (more than 15 lines of code, full HTML pages, React components, SVG graphics, diagrams, or long documents), use the create_artifact tool to render it in a live preview panel. Keep short code snippets, brief explanations, and simple answers inline in your response. ${buildAllArtifactTypesBlock()}`
