@@ -106,7 +106,77 @@ Use semantic landmarks: \`<header>\`, \`<nav>\`, \`<main>\`, \`<section>\`, \`<a
 - ❌ \`<form action="/submit">\` — sandbox blocks submission
 - ❌ \`window.location = "..."\` — sandbox blocks navigation
 - ❌ More than 2 font families · more than 5 colors
-- ❌ Truncating "for brevity"`,
+- ❌ Truncating "for brevity"
+
+## Few-Shot Example (complete interactive widget)
+\`\`\`html
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily calorie calculator</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+  <style>body{font-family:'Inter',system-ui,sans-serif}</style>
+</head>
+<body class="min-h-full bg-slate-50 text-slate-900 antialiased grid place-items-center p-4">
+  <main class="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-sm p-8">
+    <h1 class="text-2xl font-semibold tracking-tight">Daily calorie calculator</h1>
+    <p class="mt-1 text-sm text-slate-500">Estimate your maintenance calories using the Mifflin-St Jeor formula.</p>
+    <div class="mt-6 grid grid-cols-2 gap-4">
+      <label class="flex flex-col gap-1.5">
+        <span class="text-sm font-medium">Age</span>
+        <input id="age" type="number" value="30" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" />
+      </label>
+      <label class="flex flex-col gap-1.5">
+        <span class="text-sm font-medium">Sex</span>
+        <select id="sex" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+          <option value="m">Male</option>
+          <option value="f">Female</option>
+        </select>
+      </label>
+      <label class="flex flex-col gap-1.5">
+        <span class="text-sm font-medium">Weight (kg)</span>
+        <input id="weight" type="number" value="70" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" />
+      </label>
+      <label class="flex flex-col gap-1.5">
+        <span class="text-sm font-medium">Height (cm)</span>
+        <input id="height" type="number" value="175" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" />
+      </label>
+    </div>
+    <label class="mt-4 flex flex-col gap-1.5">
+      <span class="text-sm font-medium">Activity level</span>
+      <select id="activity" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+        <option value="1.2">Sedentary</option>
+        <option value="1.375" selected>Light (1-3 d/wk)</option>
+        <option value="1.55">Moderate (3-5 d/wk)</option>
+        <option value="1.725">Very active (6-7 d/wk)</option>
+      </select>
+    </label>
+    <div class="mt-6 rounded-xl bg-indigo-50 p-5 text-center">
+      <div class="text-xs font-medium uppercase tracking-wider text-indigo-700">Maintenance</div>
+      <div id="result" class="mt-1 text-4xl font-bold text-indigo-900">2,400</div>
+      <div class="text-xs text-indigo-700">kcal / day</div>
+    </div>
+  </main>
+  <script>
+    (() => {
+      const $ = (id) => document.getElementById(id);
+      const calc = () => {
+        const age = +$('age').value, w = +$('weight').value, h = +$('height').value;
+        const sex = $('sex').value, act = +$('activity').value;
+        const bmr = sex === 'm'
+          ? 10*w + 6.25*h - 5*age + 5
+          : 10*w + 6.25*h - 5*age - 161;
+        $('result').textContent = Math.round(bmr * act).toLocaleString();
+      };
+      ['age','sex','weight','height','activity'].forEach(id => $(id).addEventListener('input', calc));
+      calc();
+    })();
+  </script>
+</body>
+</html>
+\`\`\``,
 
   "application/react": `**application/react — Self-contained React Components**
 
@@ -184,10 +254,239 @@ Same palette / typography / spacing / cards / container as the HTML type:
 - ❌ Real \`fetch()\` calls
 - ❌ \`<form action="/submit">\` — use \`onSubmit\` with \`e.preventDefault()\`
 - ❌ More than 5 colors / more than 2 fonts
-- ❌ Truncating "for brevity"`,
+- ❌ Truncating "for brevity"
+
+## Few-Shot Example (dashboard with Recharts)
+\`\`\`jsx
+const REVENUE = [
+  { month: 'Jan', revenue: 12400, orders: 142 },
+  { month: 'Feb', revenue: 15800, orders: 168 },
+  { month: 'Mar', revenue: 14200, orders: 159 },
+  { month: 'Apr', revenue: 18900, orders: 201 },
+  { month: 'May', revenue: 21500, orders: 234 },
+  { month: 'Jun', revenue: 24800, orders: 267 },
+];
+
+const STATS = [
+  { label: 'Revenue', value: '$108k', delta: '+18.2%', positive: true },
+  { label: 'Orders', value: '1,171', delta: '+12.4%', positive: true },
+  { label: 'AOV', value: '$92.30', delta: '-2.1%', positive: false },
+  { label: 'Refund rate', value: '1.4%', delta: '-0.3%', positive: true },
+];
+
+function App() {
+  const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } = Recharts;
+  const { TrendingUp, TrendingDown } = LucideReact;
+  const [range, setRange] = useState('6m');
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-10">
+        <header className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Revenue overview</h1>
+            <p className="mt-1 text-sm text-slate-500">Last 6 months · updated just now</p>
+          </div>
+          <div role="tablist" className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+            {['1m','3m','6m','1y'].map((r) => (
+              <button
+                key={r}
+                type="button"
+                role="tab"
+                aria-selected={range === r}
+                onClick={() => setRange(r)}
+                className={\`h-8 px-3 rounded-md text-sm font-medium transition \${range === r ? 'bg-indigo-600 text-white' : 'text-slate-600 hover:bg-slate-100'}\`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        <section className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {STATS.map((s) => (
+            <div key={s.label} className="rounded-2xl bg-white border border-slate-200 p-5 shadow-sm">
+              <div className="text-sm text-slate-500">{s.label}</div>
+              <div className="mt-1 text-2xl font-semibold tracking-tight">{s.value}</div>
+              <div className={\`mt-2 inline-flex items-center gap-1 text-xs font-medium \${s.positive ? 'text-emerald-600' : 'text-rose-600'}\`}>
+                {s.positive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                {s.delta}
+              </div>
+            </div>
+          ))}
+        </section>
+
+        <section className="mt-6 rounded-2xl bg-white border border-slate-200 p-6 shadow-sm">
+          <h2 className="text-lg font-semibold tracking-tight">Monthly revenue</h2>
+          <div className="mt-4 h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={REVENUE} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="month" stroke="#94a3b8" fontSize={12} />
+                <YAxis stroke="#94a3b8" fontSize={12} tickFormatter={(v) => \`$\${v/1000}k\`} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}
+                  formatter={(v) => [\`$\${v.toLocaleString()}\`, 'Revenue']}
+                />
+                <Line type="monotone" dataKey="revenue" stroke="#4f46e5" strokeWidth={2.5} dot={{ r: 4, fill: '#4f46e5' }} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
+export default App;
+\`\`\``,
 
   "image/svg+xml": `**image/svg+xml — SVG Graphics**
-Create clean, well-structured SVG with proper viewBox. Use semantic grouping with <g> elements. Apply consistent stroke widths and color palettes. Optimize paths — avoid unnecessary precision in coordinates. Include descriptive <title> elements for accessibility.`,
+
+You are generating a single, self-contained SVG document that will be rendered **inline** (not in an iframe) inside a sanitized container. The result must look like it was made by a senior visual designer — clean geometry, harmonious colors, scalable, and accessible.
+
+## Runtime Environment
+- The SVG is sanitized by **DOMPurify** with the \`svg\` + \`svgFilters\` profiles. Anything not in those profiles is silently stripped.
+- **Render container** scales the SVG with \`max-width: 100%; height: auto\`. This means **\`viewBox\` is the only sizing mechanism that works** — hardcoded \`width\`/\`height\` attributes pin a fixed size and break responsive scaling.
+- **DO NOT use \`<script>\`** — stripped.
+- **DO NOT use \`<foreignObject>\`** — stripped.
+- **DO NOT use \`<style>\` blocks** — they technically pass the sanitizer but leak into the host page CSS because rendering is inline, not iframed. Use SVG presentation attributes (\`fill\`, \`stroke\`, \`stroke-width\`, \`opacity\`) instead.
+- **DO NOT use external \`href\` / \`xlink:href\`** (no \`http://\`, \`https://\`, \`data:\` URIs). Only same-document \`#fragment\` references are safe (e.g. \`<use href="#icon-arrow">\`).
+- **DO NOT use event handlers** (\`onclick\`, \`onload\`, etc.) — stripped.
+- For animation, only SMIL (\`<animate>\`, \`<animateTransform>\`) is available. Prefer static SVG unless animation is explicitly requested.
+
+## Required Document Structure
+Every SVG MUST start with:
+\`\`\`svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 W H" role="img" aria-labelledby="title-id">
+  <title id="title-id">Concise descriptive title</title>
+  <!-- optional: <desc id="desc-id">Longer description for complex illustrations</desc> -->
+  <!-- content -->
+</svg>
+\`\`\`
+Rules:
+- Always include \`xmlns="http://www.w3.org/2000/svg"\`.
+- Always include \`viewBox\`. **Never** set \`width=\` or \`height=\` on the root \`<svg>\`.
+- Always include \`<title>\` as the first child (unless decorative — see below).
+- Use \`role="img"\` and \`aria-labelledby\` pointing to the title (and desc, if present).
+- Decorative-only SVGs (background patterns, dividers): use \`aria-hidden="true"\` and skip \`<title>\`.
+
+## Style Categories — pick ONE per artifact
+
+### Icon (default for "icon", "glyph", "symbol")
+- \`viewBox="0 0 24 24"\`
+- Single color: use \`stroke="currentColor"\` (inherits from parent CSS)
+- \`fill="none"\`, \`stroke-width="2"\`, \`stroke-linecap="round"\`, \`stroke-linejoin="round"\`
+- ≤ 16 visible units of detail; nothing smaller than 2 px at the source viewBox
+- Prefer geometric primitives (\`<rect>\`, \`<circle>\`, \`<line>\`, \`<polyline>\`) over \`<path>\` when possible
+
+### Illustration (default for "illustration", "empty state", "scene")
+- \`viewBox="0 0 400 300"\` or similar proportional rectangle
+- 3–5 colors from a harmonious palette
+- Mostly filled shapes (no strokes unless outlining for emphasis)
+- Group logical parts with \`<g id="...">\`
+- Include \`<desc>\` describing the scene
+
+### Logo / Badge
+- Square \`viewBox="0 0 200 200"\` for emblems, or rectangular \`viewBox="0 0 240 80"\` for wordmarks
+- ≤ 3 colors
+- Bold filled shapes; use \`<text>\` (not outlined paths) for letterforms unless explicitly asked
+- Centered, balanced composition
+
+### Diagram (non-flowchart — flowcharts use Mermaid instead)
+- Proportional viewBox sized to content
+- 2–4 colors
+- Consistent stroke widths for connectors, consistent corner radii for nodes
+- Use \`<text>\` for labels with \`text-anchor="middle"\` and \`dominant-baseline="middle"\`
+
+### Decorative pattern
+- Use \`<pattern>\` inside \`<defs>\` and reference via \`fill="url(#pattern-id)"\`
+- 1–3 colors
+- \`aria-hidden="true"\` on the root \`<svg>\`
+
+## Color System
+- **Maximum 5 colors per SVG.** Decorative patterns: max 3.
+- **Icons** must use \`currentColor\` so the icon inherits text color from the parent.
+- For multi-color illustrations, use a harmonious palette. Default suggestions:
+  - Primary: \`#4F46E5\` (indigo) or \`#0EA5E9\` (sky)
+  - Secondary: \`#10B981\` (emerald) or \`#F59E0B\` (amber)
+  - Neutrals: \`#0F172A\` (ink), \`#64748B\` (muted), \`#F1F5F9\` (surface)
+- Define gradients in \`<defs>\` with descriptive \`id\`s and reference via \`fill="url(#grad-name)"\`.
+- **Never** use neon, high-saturation purple, or more than 5 hues unless explicitly asked.
+
+## Path Quality
+- Prefer primitives (\`<rect>\`, \`<circle>\`, \`<ellipse>\`, \`<line>\`, \`<polyline>\`, \`<polygon>\`) over \`<path>\`.
+- For \`<path>\`: round all coordinates to **1 decimal place** maximum. Bad: \`M12.456789 34.567890\`. Good: \`M12.5 34.6\`.
+- Use relative path commands (\`m\`, \`l\`, \`c\`, \`q\`) for shorter, more readable paths.
+- No duplicate consecutive points; no zero-length line segments.
+- Use \`<defs>\` + \`<use>\` to reuse repeated symbols rather than duplicating geometry.
+
+## Accessibility (non-negotiable for non-decorative SVGs)
+- \`<title>\` is the first child of \`<svg>\`, with text describing the meaning (not the visuals).
+- Add \`<desc>\` for illustrations and diagrams that need more context.
+- \`role="img"\` on the root \`<svg>\`.
+- \`aria-labelledby="title-id desc-id"\` (omit \`desc-id\` if no \`<desc>\`).
+- Decorative SVGs: \`aria-hidden="true"\` instead of title/role.
+
+## Code Quality — STRICT
+- 2-space indentation.
+- **Use SVG presentation attributes** (\`fill\`, \`stroke\`, \`stroke-width\`, \`opacity\`, \`transform\`) — never inline \`style="..."\` and never \`<style>\` blocks.
+- No empty \`<g>\` wrappers, no identity transforms (\`transform="translate(0,0)"\`), no zero-effect attributes.
+- Meaningful \`id\`s for groups and gradients (\`id="bg-gradient"\`, not \`id="lg1"\`).
+- **NEVER truncate.** No \`<!-- ...rest of icon... -->\`. Output the COMPLETE SVG.
+
+## Anti-Patterns
+- ❌ Hardcoded \`width="..."\` / \`height="..."\` on root \`<svg>\` (breaks responsive scaling)
+- ❌ Missing \`viewBox\` or \`xmlns\`
+- ❌ \`<script>\`, \`<foreignObject>\`, or \`<style>\` blocks
+- ❌ External \`href\` / \`xlink:href\` to \`http://\`, \`https://\`, \`data:\`
+- ❌ Event handler attributes (\`onclick\`, \`onload\`, …)
+- ❌ Emoji characters inside \`<text>\`
+- ❌ Photorealistic illustrations, geographic maps, dense data viz (wrong format — use Mermaid or HTML+canvas)
+- ❌ Outlined text via \`<path>\` instead of \`<text>\` (unless explicitly asked)
+- ❌ More than 5 colors
+- ❌ Coordinate precision beyond 1 decimal place
+- ❌ Truncating "for brevity"
+
+## Few-Shot Examples
+
+### Example 1 — Icon (notification bell)
+\`\`\`svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="bell-title"
+     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <title id="bell-title">Notifications</title>
+  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+</svg>
+\`\`\`
+
+### Example 2 — Illustration (empty state, ~400×300, 4 colors, grouped)
+\`\`\`svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img"
+     aria-labelledby="empty-title empty-desc">
+  <title id="empty-title">No results found</title>
+  <desc id="empty-desc">A magnifying glass over an empty document on a soft background.</desc>
+  <defs>
+    <linearGradient id="bg-gradient" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F1F5F9" />
+      <stop offset="100%" stop-color="#E2E8F0" />
+    </linearGradient>
+  </defs>
+  <g id="background">
+    <rect x="0" y="0" width="400" height="300" fill="url(#bg-gradient)" />
+  </g>
+  <g id="document" transform="translate(140 70)">
+    <rect x="0" y="0" width="120" height="150" rx="8" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="2" />
+    <line x1="20" y1="40" x2="100" y2="40" stroke="#CBD5E1" stroke-width="4" stroke-linecap="round" />
+    <line x1="20" y1="60" x2="80" y2="60" stroke="#CBD5E1" stroke-width="4" stroke-linecap="round" />
+    <line x1="20" y1="80" x2="90" y2="80" stroke="#CBD5E1" stroke-width="4" stroke-linecap="round" />
+  </g>
+  <g id="magnifier" transform="translate(220 160)">
+    <circle cx="0" cy="0" r="36" fill="none" stroke="#4F46E5" stroke-width="6" />
+    <line x1="26" y1="26" x2="56" y2="56" stroke="#4F46E5" stroke-width="6" stroke-linecap="round" />
+  </g>
+</svg>
+\`\`\``,
 
   "application/mermaid": `**application/mermaid — Diagrams**
 Use Mermaid syntax for flowcharts, sequence diagrams, entity-relationship diagrams, state diagrams, Gantt charts, etc. Keep labels concise. Use proper node shapes ([] for process, {} for decision, () for rounded). Apply meaningful edge labels. Structure diagrams for readability with clear directional flow.`,
@@ -224,7 +523,7 @@ CRITICAL RULES: (1) Do NOT import Canvas. (2) Do NOT import OrbitControls or Env
 }
 
 /** Shared design quality instruction for visual artifact types */
-const DESIGN_QUALITY_INSTRUCTION = `DESIGN QUALITY: ALL visual artifacts (HTML, React, SVG) must be polished and modern. Use Tailwind CSS where available. Apply: rounded corners (rounded-lg/xl/2xl), subtle shadows (shadow-sm/md/lg), generous spacing (p-6, gap-4/6), muted backgrounds (bg-gray-50/slate-50/white), smooth transitions (transition-all duration-200), hover effects (hover:shadow-md, hover:scale-105), and consistent color palettes. Use gradient backgrounds for hero sections (bg-gradient-to-br). Prefer cards with borders (border border-gray-200 rounded-xl p-6). NEVER output plain, unstyled content.`
+const DESIGN_QUALITY_INSTRUCTION = `DESIGN QUALITY: All visual artifacts must be production-quality and follow the type-specific design system rules above. NEVER output plain, unstyled content.`
 
 /** Build the full artifact types block (for auto/non-canvas modes) */
 function buildAllArtifactTypesBlock(): string {
