@@ -1,8 +1,13 @@
 import { z } from "zod"
+import { Prisma } from "@prisma/client"
 import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile } from "@/lib/s3"
 import { indexArtifactContent } from "@/lib/rag"
+import {
+  validateArtifactContent,
+  formatValidationError,
+} from "./_validate-artifact"
 
 /** Maximum number of versions to keep in metadata */
 const MAX_VERSION_HISTORY = 20
@@ -48,9 +53,31 @@ export const updateArtifactTool: ToolDefinition = {
 
     // Persist version update to Document + S3
     let persisted = true
+    let validationWarnings: string[] = []
     try {
       const existing = await prisma.document.findUnique({ where: { id } })
       if (existing) {
+        // Structural validation against the artifact's known type. Failures
+        // are surfaced back to the LLM so it can self-correct.
+        if (existing.artifactType) {
+          const validation = validateArtifactContent(
+            existing.artifactType,
+            content
+          )
+          validationWarnings = validation.warnings
+          if (!validation.ok) {
+            return {
+              id,
+              title: newTitle,
+              content,
+              updated: false,
+              persisted: false,
+              error: formatValidationError(existing.artifactType, validation),
+              validationErrors: validation.errors,
+            }
+          }
+        }
+
         // Archive old version to S3 and record lightweight metadata
         const meta = (existing.metadata as Record<string, unknown>) || {}
         const versions = (meta.versions as Array<unknown>) || []
@@ -99,7 +126,13 @@ export const updateArtifactTool: ToolDefinition = {
             content,
             title: updatedTitle,
             fileSize: contentBytes,
-            metadata: { ...meta, versions },
+            metadata: {
+              ...meta,
+              versions,
+              ...(validationWarnings.length > 0
+                ? { validationWarnings }
+                : {}),
+            } as Prisma.InputJsonValue,
           },
         })
 
@@ -119,6 +152,7 @@ export const updateArtifactTool: ToolDefinition = {
       content,
       updated: true,
       persisted,
+      ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),
     }
   },
 }

@@ -3,6 +3,10 @@ import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile, S3Paths, getArtifactExtension } from "@/lib/s3"
 import { indexArtifactContent } from "@/lib/rag"
+import {
+  validateArtifactContent,
+  formatValidationError,
+} from "./_validate-artifact"
 
 /** Maximum artifact content size: 512 KB */
 const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
@@ -63,6 +67,24 @@ export const createArtifactTool: ToolDefinition = {
       }
     }
 
+    // Structural validation for HTML/React. Failures are surfaced back to the
+    // LLM so it can self-correct on the next tool call. Other artifact types
+    // pass through unchanged.
+    const validation = validateArtifactContent(type, content)
+    let validationWarnings: string[] = validation.warnings
+    if (!validation.ok) {
+      return {
+        id,
+        title,
+        type,
+        content,
+        language,
+        persisted: false,
+        error: formatValidationError(type, validation),
+        validationErrors: validation.errors,
+      }
+    }
+
     // Persist to S3 + Document (knowledge system)
     let persisted = true
     try {
@@ -96,7 +118,12 @@ export const createArtifactTool: ToolDefinition = {
           fileType: "artifact",
           fileSize: contentBytes,
           mimeType,
-          metadata: { artifactLanguage: language },
+          metadata: {
+            artifactLanguage: language,
+            ...(validationWarnings.length > 0
+              ? { validationWarnings }
+              : {}),
+          },
         },
       })
       // Background: chunk + embed so it's searchable in RAG
@@ -109,6 +136,14 @@ export const createArtifactTool: ToolDefinition = {
       persisted = false
     }
 
-    return { id, title, type, content, language, persisted }
+    return {
+      id,
+      title,
+      type,
+      content,
+      language,
+      persisted,
+      ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),
+    }
   },
 }
