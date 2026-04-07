@@ -41,7 +41,159 @@ export function validateArtifactContent(
 ): ArtifactValidationResult {
   if (type === "text/html") return validateHtml(content)
   if (type === "application/react") return validateReact(content)
+  if (type === "image/svg+xml") return validateSvg(content)
   return { ok: true, errors: [], warnings: [] }
+}
+
+// ---------------------------------------------------------------------------
+// SVG validation
+// ---------------------------------------------------------------------------
+
+type SvgNode = {
+  nodeName: string
+  tagName?: string
+  attrs?: Array<{ name: string; value: string }>
+  childNodes?: SvgNode[]
+  parentNode?: SvgNode
+}
+
+function validateSvg(content: string): ArtifactValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!content.trim()) {
+    errors.push("SVG content is empty.")
+    return { ok: false, errors, warnings }
+  }
+
+  let document
+  try {
+    document = parseHtml(content)
+  } catch (err) {
+    errors.push(
+      `SVG failed to parse: ${err instanceof Error ? err.message : String(err)}`
+    )
+    return { ok: false, errors, warnings }
+  }
+
+  let rootSvg: SvgNode | null = null
+  let scriptCount = 0
+  let foreignObjectCount = 0
+  let styleBlockCount = 0
+  let titleAsSvgChild = 0
+  const externalHrefs: string[] = []
+  const eventHandlers = new Set<string>()
+  const colorValues = new Set<string>()
+  let highPrecisionPath = false
+
+  const walk = (node: SvgNode) => {
+    const tag = node.tagName || node.nodeName
+    const tagLc = tag?.toLowerCase()
+    if (tagLc === "svg" && !rootSvg) rootSvg = node
+    if (tagLc === "script") scriptCount++
+    if (tagLc === "foreignobject") foreignObjectCount++
+    if (tagLc === "style") styleBlockCount++
+    if (tagLc === "title") {
+      const parentTag = (
+        node.parentNode?.tagName || node.parentNode?.nodeName
+      )?.toLowerCase()
+      if (parentTag === "svg") titleAsSvgChild++
+    }
+
+    node.attrs?.forEach((a) => {
+      if (a.name === "href" || a.name === "xlink:href") {
+        if (/^(https?:|data:|\/\/)/i.test(a.value)) externalHrefs.push(a.value)
+      }
+      if (/^on[a-z]+$/i.test(a.name)) eventHandlers.add(a.name)
+      if (
+        (a.name === "fill" || a.name === "stroke") &&
+        a.value &&
+        a.value !== "none" &&
+        a.value !== "currentColor" &&
+        !a.value.startsWith("url(")
+      ) {
+        colorValues.add(a.value.toLowerCase())
+      }
+      if (a.name === "d" && /\d\.\d{3,}/.test(a.value)) highPrecisionPath = true
+    })
+    node.childNodes?.forEach(walk)
+  }
+  walk(document as unknown as SvgNode)
+
+  if (!rootSvg) {
+    errors.push("Missing root <svg> element.")
+    return { ok: false, errors, warnings }
+  }
+
+  const rootAttrs = (rootSvg as SvgNode).attrs ?? []
+  const hasXmlns = rootAttrs.some((a) => a.name.toLowerCase() === "xmlns")
+  const hasViewBox = rootAttrs.some((a) => a.name.toLowerCase() === "viewbox")
+  const hasWidth = rootAttrs.some((a) => a.name.toLowerCase() === "width")
+  const hasHeight = rootAttrs.some((a) => a.name.toLowerCase() === "height")
+  const ariaHidden =
+    rootAttrs.find((a) => a.name === "aria-hidden")?.value === "true"
+
+  if (!hasXmlns) {
+    errors.push('Missing xmlns="http://www.w3.org/2000/svg" on root <svg>.')
+  }
+  if (!hasViewBox) {
+    errors.push(
+      "Missing viewBox attribute on root <svg>. The renderer scales by viewBox; without it the SVG cannot render responsively."
+    )
+  }
+  if (hasWidth || hasHeight) {
+    errors.push(
+      "Remove hardcoded width/height attributes from the root <svg>. Use viewBox only so the SVG scales responsively to its container."
+    )
+  }
+  if (scriptCount > 0) {
+    errors.push(
+      "Found <script> element(s) — these are stripped by the sanitizer. Remove them."
+    )
+  }
+  if (foreignObjectCount > 0) {
+    errors.push(
+      "Found <foreignObject> element(s) — these are stripped by the sanitizer. Remove them."
+    )
+  }
+  if (externalHrefs.length > 0) {
+    errors.push(
+      `Found external href/xlink:href references: ${externalHrefs
+        .slice(0, 3)
+        .map((h) => `"${h}"`)
+        .join(", ")}. Only same-document fragment references (#id) are allowed.`
+    )
+  }
+  if (eventHandlers.size > 0) {
+    errors.push(
+      `Found event handler attributes: ${[...eventHandlers].join(
+        ", "
+      )}. These are stripped by the sanitizer — remove them.`
+    )
+  }
+
+  if (titleAsSvgChild === 0 && !ariaHidden) {
+    warnings.push(
+      'Missing <title> child of root <svg>. Add one for accessibility, or set aria-hidden="true" if the SVG is purely decorative.'
+    )
+  }
+  if (styleBlockCount > 0) {
+    warnings.push(
+      "Inline <style> block detected. Because the renderer is not iframed, CSS inside <style> can leak into the host page. Prefer SVG presentation attributes (fill, stroke, stroke-width, opacity)."
+    )
+  }
+  if (colorValues.size > 5) {
+    warnings.push(
+      `SVG uses ${colorValues.size} distinct colors. Aim for ≤ 5 for visual cohesion.`
+    )
+  }
+  if (highPrecisionPath) {
+    warnings.push(
+      "Some path coordinates use more than 2 decimal places. Round to 1 decimal for readability and smaller file size."
+    )
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
 }
 
 // ---------------------------------------------------------------------------
