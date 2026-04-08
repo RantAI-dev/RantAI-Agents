@@ -24,7 +24,9 @@ model User {
   avatarS3Key   String?        // S3 key for avatar image
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  conversations Conversation[]
+  conversations         Conversation[]
+  mediaLimitCentsPerDay Int?
+  mediaJobs             MediaJob[]
 
   @@map("Agent")
 }
@@ -141,6 +143,8 @@ model Organization {
   auditLogs           AuditLog[]
   sharedTemplates     EmployeeTemplateShare[]
   agentApiKeys        AgentApiKey[]
+  mediaJobs           MediaJob[]
+  mediaAssets         MediaAsset[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1351,6 +1355,8 @@ model LlmModel {
   isFree         Boolean  @default(false)        // pricing == 0
   isTrackedLab   Boolean  @default(false)        // from tracked provider list
   isActive       Boolean  @default(true)         // soft-delete when removed from OpenRouter
+  outputModalities String[] @default([])
+  inputModalities  String[] @default([])
   rawData        Json?                           // full OpenRouter response for future use
   lastSeenAt     DateTime @default(now())        // last time seen in OpenRouter API
   createdAt      DateTime @default(now())
@@ -1359,4 +1365,71 @@ model LlmModel {
   @@index([provider])
   @@index([isFree, hasToolCalling])
   @@index([isActive])
+}
+
+enum MediaModality {
+  IMAGE
+  AUDIO
+  VIDEO
+}
+
+enum MediaJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model MediaJob {
+  id                 String         @id @default(cuid())
+  organizationId     String
+  userId             String
+  modality           MediaModality
+  modelId            String
+  prompt             String         @db.Text
+  parameters         Json
+  referenceAssetIds  String[]       @default([])
+  status             MediaJobStatus @default(PENDING)
+  providerJobId      String?
+  errorMessage       String?        @db.Text
+  estimatedCostCents Int?
+  costCents          Int?
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id])
+  assets       MediaAsset[]
+
+  @@index([organizationId, createdAt])
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([modality])
+}
+
+model MediaAsset {
+  id             String        @id @default(cuid())
+  jobId          String
+  organizationId String
+  modality       MediaModality
+  mimeType       String
+  s3Key          String
+  sizeBytes      Int
+  width          Int?
+  height         Int?
+  durationMs     Int?
+  thumbnailS3Key String?
+  isFavorite     Boolean       @default(false)
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+
+  job          MediaJob     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@index([jobId])
+  @@index([modality])
 }
