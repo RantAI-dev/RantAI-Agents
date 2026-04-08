@@ -114,7 +114,7 @@ describe("openrouter.generateImage", () => {
   })
 })
 
-import { generateAudio } from "@/features/media/provider/openrouter"
+import { generateAudio, submitVideoJob, pollVideoJob } from "@/features/media/provider/openrouter"
 
 describe("openrouter.generateAudio", () => {
   beforeEach(() => fetchMock.mockReset())
@@ -149,5 +149,69 @@ describe("openrouter.generateAudio", () => {
     const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)
     expect(body.modalities).toContain("audio")
     expect(body.audio).toEqual({ voice: "alloy", format: "wav" })
+  })
+})
+
+describe("openrouter video flow", () => {
+  beforeEach(() => fetchMock.mockReset())
+
+  it("submitVideoJob returns the provider job id", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "vid_abc123", status: "queued" }),
+    })
+
+    const result = await submitVideoJob({
+      apiKey: "k",
+      modelId: "google/veo-3.1",
+      prompt: "a sunset",
+      parameters: { durationSec: 5 },
+    })
+
+    expect(result.providerJobId).toBe("vid_abc123")
+    expect(result.status).toBe("queued")
+  })
+
+  it("pollVideoJob returns running while not done", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "vid_abc123", status: "running" }),
+    })
+
+    const result = await pollVideoJob({ apiKey: "k", providerJobId: "vid_abc123" })
+    expect(result.status).toBe("running")
+    expect(result.videoUrl).toBeUndefined()
+  })
+
+  it("pollVideoJob returns succeeded with a video URL", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: "vid_abc123",
+        status: "succeeded",
+        output: { video: { url: "https://example.com/v.mp4" } },
+        usage: { total_cost: 0.5 },
+      }),
+    })
+
+    const result = await pollVideoJob({ apiKey: "k", providerJobId: "vid_abc123" })
+    expect(result.status).toBe("succeeded")
+    expect(result.videoUrl).toBe("https://example.com/v.mp4")
+    expect(result.actualCostCents).toBe(50)
+  })
+
+  it("pollVideoJob returns failed with error message", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "vid", status: "failed", error: { message: "content policy" } }),
+    })
+
+    const result = await pollVideoJob({ apiKey: "k", providerJobId: "vid" })
+    expect(result.status).toBe("failed")
+    expect(result.errorMessage).toContain("content policy")
   })
 })

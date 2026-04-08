@@ -10,7 +10,7 @@ import {
 import { enforceMediaLimit } from "./limits"
 import { estimateMediaJobCostCents } from "./cost-estimator"
 import { uploadMediaBytes } from "./storage"
-import { generateImage, generateAudio } from "./provider/openrouter"
+import { generateImage, generateAudio, submitVideoJob } from "./provider/openrouter"
 import type { MediaModality } from "./schema"
 
 export interface CreateMediaJobInput {
@@ -125,7 +125,16 @@ export async function createMediaJob(input: CreateMediaJobInput) {
       })
     }
 
-    // VIDEO path lands in a later task; for now, fail loudly
+    if (input.modality === "VIDEO") {
+      return await runVideoJob({
+        jobId: job.id,
+        organizationId: input.organizationId,
+        modelId: input.modelId,
+        prompt: input.prompt,
+        parameters: input.parameters,
+      })
+    }
+
     throw new Error(`Modality not yet implemented: ${input.modality}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -243,4 +252,31 @@ async function runAudioJob(input: {
     status: "SUCCEEDED",
   })
   return finalized
+}
+
+async function runVideoJob(input: {
+  jobId: string
+  organizationId: string
+  modelId: string
+  prompt: string
+  parameters: Record<string, unknown>
+}) {
+  const apiKey = getOpenRouterApiKey()
+  const submit = await submitVideoJob({
+    apiKey,
+    modelId: input.modelId,
+    prompt: input.prompt,
+    parameters: input.parameters,
+  })
+
+  // Persist providerJobId, leave status RUNNING — cron poller finishes it
+  await prisma.mediaJob.update({
+    where: { id: input.jobId },
+    data: { providerJobId: submit.providerJobId, status: "RUNNING" },
+  })
+
+  return prisma.mediaJob.findUniqueOrThrow({
+    where: { id: input.jobId },
+    include: { assets: true },
+  })
 }

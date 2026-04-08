@@ -133,6 +133,7 @@ export interface GenerateAudioResult {
 }
 
 export async function generateAudio(input: GenerateAudioInput): Promise<GenerateAudioResult> {
+
   const audioConfig: Record<string, unknown> = {}
   if (typeof input.parameters.voice === "string") audioConfig.voice = input.parameters.voice
   if (typeof input.parameters.format === "string") audioConfig.format = input.parameters.format
@@ -184,4 +185,100 @@ export async function generateAudio(input: GenerateAudioInput): Promise<Generate
     actualCostCents,
     rawResponse: json,
   }
+}
+
+const VIDEO_BASE = `${OPENROUTER_BASE}/video/generations`
+
+export interface SubmitVideoInput {
+  apiKey: string
+  modelId: string
+  prompt: string
+  parameters: Record<string, unknown>
+}
+
+export interface SubmitVideoResult {
+  providerJobId: string
+  status: "queued" | "running" | "succeeded" | "failed"
+}
+
+export async function submitVideoJob(input: SubmitVideoInput): Promise<SubmitVideoResult> {
+  const response = await fetch(VIDEO_BASE, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://rantai.dev",
+      "X-Title": "RantAI Agents Media Studio",
+    },
+    body: JSON.stringify({
+      model: input.modelId,
+      prompt: input.prompt,
+      duration_seconds: input.parameters.durationSec,
+      aspect_ratio: input.parameters.aspectRatio,
+      resolution: input.parameters.resolution,
+      seed: input.parameters.seed,
+    }),
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`OpenRouter video submit failed: ${text}`)
+  }
+
+  const json = (await response.json()) as { id?: string; status?: string }
+  if (!json.id) throw new Error("OpenRouter video submit returned no id")
+  return {
+    providerJobId: json.id,
+    status: (json.status as SubmitVideoResult["status"]) ?? "queued",
+  }
+}
+
+export interface PollVideoInput {
+  apiKey: string
+  providerJobId: string
+}
+
+export interface PollVideoResult {
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled"
+  videoUrl?: string
+  errorMessage?: string
+  actualCostCents?: number
+  rawResponse: unknown
+}
+
+export async function pollVideoJob(input: PollVideoInput): Promise<PollVideoResult> {
+  const response = await fetch(`${VIDEO_BASE}/${input.providerJobId}`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${input.apiKey}` },
+  })
+
+  if (!response.ok) {
+    const text = await response.text()
+    throw new Error(`OpenRouter video poll failed: ${text}`)
+  }
+
+  const json = (await response.json()) as {
+    status?: string
+    output?: { video?: { url?: string } }
+    error?: { message?: string }
+    usage?: { total_cost?: number }
+  }
+
+  const status = (json.status as PollVideoResult["status"]) ?? "running"
+  const videoUrl = json.output?.video?.url
+  const errorMessage = json.error?.message
+
+  const actualCostCents =
+    typeof json.usage?.total_cost === "number"
+      ? Math.max(1, Math.round(json.usage.total_cost * 100))
+      : undefined
+
+  return { status, videoUrl, errorMessage, actualCostCents, rawResponse: json }
+}
+
+export async function fetchVideoBytes(url: string): Promise<Uint8Array> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Failed to fetch video bytes: ${res.status}`)
+  const buf = await res.arrayBuffer()
+  return new Uint8Array(buf)
 }
