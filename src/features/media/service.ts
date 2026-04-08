@@ -95,13 +95,13 @@ export async function createMediaJob(input: CreateMediaJobInput) {
     status: "PENDING",
   })
 
-  await setJobRunning(job.id)
-  emitToOrgRoom(input.organizationId, "media:job:update", {
-    jobId: job.id,
-    status: "RUNNING",
-  })
-
   try {
+    await setJobRunning(job.id)
+    emitToOrgRoom(input.organizationId, "media:job:update", {
+      jobId: job.id,
+      status: "RUNNING",
+    })
+
     if (input.modality === "IMAGE") {
       return await runImageJob({
         jobId: job.id,
