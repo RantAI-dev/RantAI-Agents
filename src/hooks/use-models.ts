@@ -37,7 +37,11 @@ function toLLMModel(m: DashboardModel): LLMModel {
   }
 }
 
-export function useModels() {
+export interface UseModelsOptions {
+  modality?: "IMAGE" | "AUDIO" | "VIDEO"
+}
+
+export function useModels(options: UseModelsOptions = {}) {
   const [models, setModels] = useState<LLMModel[]>(AVAILABLE_MODELS)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -45,23 +49,22 @@ export function useModels() {
   const fetchModels = useCallback(async () => {
     try {
       setError(null)
-      const response = await fetch("/api/dashboard/models")
-      if (!response.ok) {
-        throw new Error("Failed to fetch models")
-      }
+      const url = options.modality
+        ? `/api/dashboard/media/models?modality=${options.modality}`
+        : "/api/dashboard/models"
+      const response = await fetch(url)
+      if (!response.ok) throw new Error("Failed to fetch models")
       const data: DashboardModel[] = await response.json()
       if (data.length > 0) {
         setModels(data.map(toLLMModel))
       }
-      // If empty, keep the static AVAILABLE_MODELS fallback
     } catch (err) {
       console.error("Failed to fetch models:", err)
       setError("Failed to load models")
-      // Keep static fallback on error
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [options.modality])
 
   useEffect(() => {
     fetchModels()
