@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import { UpdateAssetInputSchema } from "@/features/media/schema"
 import {
   findAssetById,
@@ -13,20 +14,24 @@ async function loadOwnedAsset(assetId: string, organizationId: string) {
   return asset
 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth()
-  if (!session?.organizationId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+  if (!orgContext) return NextResponse.json({ error: "No organization context" }, { status: 401 })
   const { id } = await ctx.params
-  const asset = await loadOwnedAsset(id, session.organizationId)
+  const asset = await loadOwnedAsset(id, orgContext.organizationId)
   if (!asset) return NextResponse.json({ error: "Not found" }, { status: 404 })
   return NextResponse.json(asset)
 }
 
 export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth()
-  if (!session?.organizationId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+  if (!orgContext) return NextResponse.json({ error: "No organization context" }, { status: 401 })
   const { id } = await ctx.params
-  const asset = await loadOwnedAsset(id, session.organizationId)
+  const asset = await loadOwnedAsset(id, orgContext.organizationId)
   if (!asset) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
   const parsed = UpdateAssetInputSchema.safeParse(await req.json().catch(() => ({})))
@@ -39,11 +44,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   return NextResponse.json(asset)
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth()
-  if (!session?.organizationId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+  if (!orgContext) return NextResponse.json({ error: "No organization context" }, { status: 401 })
   const { id } = await ctx.params
-  const asset = await loadOwnedAsset(id, session.organizationId)
+  const asset = await loadOwnedAsset(id, orgContext.organizationId)
   if (!asset) return NextResponse.json({ error: "Not found" }, { status: 404 })
   await deleteAssetById(id)
   return NextResponse.json({ ok: true })

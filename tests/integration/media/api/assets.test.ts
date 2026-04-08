@@ -4,12 +4,16 @@ import { createTestUser, createTestOrg, createTestMembership } from "../../../he
 
 vi.mock("@/lib/prisma", () => ({ prisma: testPrisma }))
 
-const { sessionMock, presignMock } = vi.hoisted(() => ({
+const { sessionMock, presignMock, orgContextMock } = vi.hoisted(() => ({
   sessionMock: vi.fn(),
   presignMock: vi.fn().mockResolvedValue("https://signed.example/k.png"),
+  orgContextMock: vi.fn(),
 }))
 
 vi.mock("@/lib/auth", () => ({ auth: sessionMock }))
+vi.mock("@/lib/organization", () => ({
+  getOrganizationContextWithFallback: orgContextMock,
+}))
 vi.mock("@/lib/s3", () => ({
   getS3Client: vi.fn(),
   getBucket: () => "rantai-files",
@@ -24,6 +28,7 @@ beforeAll(async () => await testPrisma.$connect())
 beforeEach(() => {
   sessionMock.mockReset()
   presignMock.mockClear()
+  orgContextMock.mockReset()
 })
 afterEach(async () => await cleanupDatabase())
 afterAll(async () => await testPrisma.$disconnect())
@@ -34,8 +39,8 @@ async function setup() {
   await createTestMembership(user.id, org.id)
   sessionMock.mockResolvedValue({
     user: { id: user.id, email: user.email },
-    organizationId: org.id,
   })
+  orgContextMock.mockResolvedValue({ organizationId: org.id })
   return { user, org }
 }
 
@@ -132,7 +137,7 @@ describe("GET /api/dashboard/media/assets/[id]/download", () => {
     const { user, org } = await setup()
     const asset = await seedAsset(org.id, user.id)
     const res = await downloadAsset(
-      new Request(`http://localhost/api/dashboard/media/assets/${asset.id}/download`),
+      new Request(`http://localhost/api/dashboard/media/assets/${asset.id}/download?inline=0`),
       { params: Promise.resolve({ id: asset.id }) }
     )
     expect(res.status).toBe(200)
