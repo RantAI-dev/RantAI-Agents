@@ -382,3 +382,126 @@ describe("validateArtifactContent — other types pass through", () => {
     expect(r.ok).toBe(true)
   })
 })
+
+// ---------------------------------------------------------------------------
+// application/code
+// ---------------------------------------------------------------------------
+
+const TS_GOOD = `/** Add two numbers. */
+export function add(a: number, b: number): number {
+  return a + b
+}
+
+// Usage:
+//   add(2, 3) // => 5
+`
+
+const PY_GOOD = `"""Greeting helper."""
+
+def greet(name: str) -> str:
+    """Return a greeting for the given name."""
+    return f"Hello, {name}!"
+
+
+if __name__ == "__main__":
+    print(greet("Alice"))
+`
+
+const RS_GOOD = `//! Simple key-value store wrapper around HashMap.
+
+use std::collections::HashMap;
+
+pub struct Store {
+    inner: HashMap<String, String>,
+}
+
+impl Store {
+    pub fn new() -> Self {
+        Self { inner: HashMap::new() }
+    }
+
+    pub fn set(&mut self, key: String, value: String) {
+        self.inner.insert(key, value);
+    }
+
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.inner.get(key)
+    }
+
+    pub fn delete(&mut self, key: &str) -> Option<String> {
+        self.inner.remove(key)
+    }
+}
+`
+
+describe("validateArtifactContent — application/code", () => {
+  it("accepts valid TypeScript", () => {
+    const result = validateArtifactContent("application/code", TS_GOOD)
+    expect(result.ok).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it("accepts valid Python", () => {
+    const result = validateArtifactContent("application/code", PY_GOOD)
+    expect(result.ok).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it("accepts valid Rust", () => {
+    const result = validateArtifactContent("application/code", RS_GOOD)
+    expect(result.ok).toBe(true)
+    expect(result.errors).toHaveLength(0)
+  })
+
+  it("rejects empty content", () => {
+    const result = validateArtifactContent("application/code", "   \n  \n")
+    expect(result.ok).toBe(false)
+    expect(result.errors[0]).toMatch(/empty/i)
+  })
+
+  it("rejects HTML document (wrong type)", () => {
+    const result = validateArtifactContent(
+      "application/code",
+      "<!DOCTYPE html>\n<html><body>hi</body></html>"
+    )
+    expect(result.ok).toBe(false)
+    expect(result.errors[0]).toMatch(/text\/html/)
+  })
+
+  it("rejects markdown-fenced content", () => {
+    const result = validateArtifactContent(
+      "application/code",
+      "```ts\nexport const x = 1\n```"
+    )
+    expect(result.ok).toBe(false)
+    expect(result.errors[0]).toMatch(/markdown code fences/i)
+  })
+
+  it("warns on truncation marker '// ... rest of implementation'", () => {
+    const content = `export function big() {
+  doStep1()
+  // ... rest of implementation
+}`
+    const result = validateArtifactContent("application/code", content)
+    expect(result.ok).toBe(true)
+    expect(result.warnings.join(" ")).toMatch(/truncation|placeholder/i)
+  })
+
+  it("warns on '// TODO: implement'", () => {
+    const content = `export function foo() {
+  // TODO: implement
+}`
+    const result = validateArtifactContent("application/code", content)
+    expect(result.ok).toBe(true)
+    expect(result.warnings.join(" ")).toMatch(/truncation|placeholder/i)
+  })
+
+  it("warns on Rust 'unimplemented!()'", () => {
+    const content = `pub fn compute() -> i32 {
+    unimplemented!()
+}`
+    const result = validateArtifactContent("application/code", content)
+    expect(result.ok).toBe(true)
+    expect(result.warnings.join(" ")).toMatch(/truncation|placeholder/i)
+  })
+})
