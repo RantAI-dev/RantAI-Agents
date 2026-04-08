@@ -12,6 +12,7 @@ import { MediaStudioPanel } from "./media-studio-panel"
 import { UsageIndicator } from "./usage-indicator"
 import { LibraryTab } from "./library-tab"
 import { useMediaStudioStore, type StoreAsset, type StoreJob } from "@/features/media/store"
+import { useMediaJobUpdates } from "@/features/media/use-media-job-updates"
 
 interface ModelInfo {
   id: string
@@ -43,6 +44,9 @@ export default function MediaStudioClient({
   videoEnabled,
 }: Props) {
   const { activeTab, setActiveTab, addJobs } = useMediaStudioStore()
+
+  // Wire up live job updates via Socket.io
+  useMediaJobUpdates(organizationId)
 
   useEffect(() => {
     // Hydrate the store from server-fetched assets by grouping into pseudo-jobs.

@@ -678,6 +678,15 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
       }
     })
 
+    // Dashboard clients join their org room to receive org-scoped events (e.g. media:job:update)
+    socket.on("org:join" as string, ({ organizationId }: { organizationId: string }) => {
+      socket.join(`org:${organizationId}`)
+    })
+
+    socket.on("org:leave" as string, ({ organizationId }: { organizationId: string }) => {
+      socket.leave(`org:${organizationId}`)
+    })
+
     // Workflow execution: join/leave run room for real-time updates
     socket.on("workflow:join" as string, ({ runId }: { runId: string }) => {
       socket.join(`workflow:${runId}`)
