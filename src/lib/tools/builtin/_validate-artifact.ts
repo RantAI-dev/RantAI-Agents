@@ -42,7 +42,132 @@ export function validateArtifactContent(
   if (type === "text/html") return validateHtml(content)
   if (type === "application/react") return validateReact(content)
   if (type === "image/svg+xml") return validateSvg(content)
+  if (type === "application/mermaid") return validateMermaid(content)
   return { ok: true, errors: [], warnings: [] }
+}
+
+// ---------------------------------------------------------------------------
+// Mermaid validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Recognized Mermaid diagram type declarations. Order matters only insofar as
+ * longer prefixes must be checked before shorter ones that are proper prefixes
+ * (e.g. `stateDiagram-v2` before `stateDiagram`). We handle that explicitly
+ * below via `startsWith(keyword + " ")` or exact-match.
+ */
+const MERMAID_DIAGRAM_TYPES = [
+  "flowchart",
+  "graph",
+  "sequenceDiagram",
+  "erDiagram",
+  "stateDiagram-v2",
+  "stateDiagram",
+  "classDiagram",
+  "gantt",
+  "pie",
+  "mindmap",
+  "gitGraph",
+  "journey",
+  "quadrantChart",
+  "timeline",
+  "sankey-beta",
+  "xychart-beta",
+  "block-beta",
+  "packet-beta",
+  "kanban",
+  "C4Context",
+  "C4Container",
+  "C4Component",
+  "C4Deployment",
+  "requirementDiagram",
+  "architecture-beta",
+]
+
+function validateMermaid(content: string): ArtifactValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!content.trim()) {
+    errors.push("Mermaid content is empty.")
+    return { ok: false, errors, warnings }
+  }
+
+  // Find the first meaningful line: skip leading frontmatter (--- ... ---),
+  // skip directives/comments (%% ...), skip blank lines.
+  const rawLines = content.split("\n")
+  let inFrontmatter = false
+  let seenFrontmatterFence = false
+  let firstLine: string | null = null
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i].trim()
+    if (!line) continue
+
+    // Leading frontmatter: first `---` opens, next `---` closes.
+    if (line === "---") {
+      if (!seenFrontmatterFence) {
+        seenFrontmatterFence = true
+        inFrontmatter = true
+        continue
+      }
+      if (inFrontmatter) {
+        inFrontmatter = false
+        continue
+      }
+    }
+    if (inFrontmatter) continue
+
+    // Skip directives and comments
+    if (line.startsWith("%%")) continue
+
+    firstLine = line
+    break
+  }
+
+  // Markdown fence wrap
+  if (firstLine && firstLine.startsWith("```")) {
+    errors.push(
+      "Remove markdown code fences (```mermaid ... ```) — output raw Mermaid syntax only."
+    )
+    return { ok: false, errors, warnings }
+  }
+
+  // Recognized diagram type declaration
+  const hasDeclaration =
+    firstLine != null &&
+    MERMAID_DIAGRAM_TYPES.some(
+      (k) =>
+        firstLine === k ||
+        firstLine.startsWith(k + " ") ||
+        firstLine.startsWith(k + "\t")
+    )
+
+  if (!hasDeclaration) {
+    errors.push(
+      "Missing or unrecognized diagram type declaration on the first non-empty line. Must start with one of: flowchart, sequenceDiagram, erDiagram, stateDiagram-v2, classDiagram, gantt, pie, mindmap, gitGraph, journey, quadrantChart, timeline, sankey-beta, xychart-beta, block-beta, kanban, C4Context, requirementDiagram, architecture-beta."
+    )
+    return { ok: false, errors, warnings }
+  }
+
+  // Length warning
+  if (content.length > 3000) {
+    warnings.push(
+      `Mermaid content is ${content.length} chars — likely too complex to render readably. Aim for ≤ 3000 chars.`
+    )
+  }
+
+  // Flowchart-style node count heuristic (noisy for ER/class but still
+  // useful as a warning for flowcharts, which is the common failure mode).
+  const nodeDefRegex = /^\s*[A-Za-z_][A-Za-z0-9_-]*\s*[[({]/gm
+  const nodeMatches = content.match(nodeDefRegex)
+  if (nodeMatches && nodeMatches.length > 15) {
+    warnings.push(
+      `Detected ${nodeMatches.length} node definitions — diagrams with more than 15 nodes become unreadable. Consider splitting into multiple diagrams.`
+    )
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
 }
 
 // ---------------------------------------------------------------------------

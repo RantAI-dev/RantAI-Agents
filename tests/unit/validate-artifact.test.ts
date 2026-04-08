@@ -284,6 +284,98 @@ describe("validateArtifactContent — image/svg+xml", () => {
   })
 })
 
+describe("validateArtifactContent — application/mermaid", () => {
+  const v = (src: string) => validateArtifactContent("application/mermaid", src)
+
+  it("accepts a valid flowchart", () => {
+    const r = v(`flowchart TD\n  A[Start] --> B[End]`)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+  })
+
+  it("accepts a valid sequence diagram", () => {
+    const r = v(`sequenceDiagram\n  Alice->>Bob: Hello`)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+  })
+
+  it("accepts a valid ER diagram", () => {
+    const r = v(`erDiagram\n  CUSTOMER ||--o{ ORDER : places`)
+    expect(r.ok).toBe(true)
+  })
+
+  it("accepts a valid stateDiagram-v2", () => {
+    const r = v(`stateDiagram-v2\n  [*] --> Draft\n  Draft --> [*]`)
+    expect(r.ok).toBe(true)
+  })
+
+  it("accepts a valid gantt chart", () => {
+    const r = v(
+      `gantt\n  title Roadmap\n  dateFormat YYYY-MM-DD\n  section A\n  Task :a1, 2025-01-01, 5d`
+    )
+    expect(r.ok).toBe(true)
+  })
+
+  it("accepts a valid classDiagram", () => {
+    const r = v(`classDiagram\n  class Animal\n  Animal <|-- Dog`)
+    expect(r.ok).toBe(true)
+  })
+
+  it("accepts a flowchart preceded by leading frontmatter", () => {
+    const r = v(`---\ntitle: My Chart\n---\nflowchart TD\n  A --> B`)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+  })
+
+  it("accepts a flowchart preceded by a %% comment line", () => {
+    const r = v(`%% leading comment\nflowchart TD\n  A --> B`)
+    expect(r.ok).toBe(true)
+  })
+
+  it("accepts a flowchart preceded by an init directive", () => {
+    const r = v(`%%{init: {'theme':'default'}}%%\nflowchart TD\n  A --> B`)
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects empty content", () => {
+    const r = v("   \n  \n")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/empty/i)
+  })
+
+  it("rejects content wrapped in markdown fences", () => {
+    const r = v("```mermaid\nflowchart TD\n  A --> B\n```")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/markdown code fences/i)
+  })
+
+  it("rejects content with no diagram declaration", () => {
+    const r = v(`A[Start] --> B[End]`)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/diagram type declaration/i)
+  })
+
+  it("rejects content with an unknown diagram type", () => {
+    const r = v(`uwuDiagram\n  A --> B`)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/diagram type declaration/i)
+  })
+
+  it("warns on very long content", () => {
+    const padding = "  A --> B\n".repeat(400) // > 3000 chars
+    const r = v(`flowchart TD\n${padding}`)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/chars/i)
+  })
+
+  it("warns on more than 15 flowchart node definitions", () => {
+    const nodes = Array.from({ length: 18 }, (_, i) => `  N${i}[Node ${i}]`).join("\n")
+    const r = v(`flowchart TD\n${nodes}`)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/15 nodes/i)
+  })
+})
+
 describe("validateArtifactContent — other types pass through", () => {
   it("returns ok for text/markdown", () => {
     const r = validateArtifactContent("text/markdown", "# anything")
