@@ -752,3 +752,18 @@ export async function broadcastQueueUpdate(io: IOServer) {
 export function getOnlineAgentsCount(): number {
   return onlineAgents.size
 }
+
+/**
+ * Emit an event to all sockets subscribed to an organization room.
+ * Safe to call from any server context (API routes, service layer, LLM tools).
+ * No-op if Socket.io is not initialized. Never throws.
+ */
+export function emitToOrgRoom(organizationId: string, event: string, payload: unknown): void {
+  try {
+    const io = getIOInstance()
+    if (!io) return
+    io.to(`org:${organizationId}`).emit(event, payload)
+  } catch (error) {
+    console.warn("[socket] emitToOrgRoom failed:", error)
+  }
+}
