@@ -112,3 +112,76 @@ function parseDataUrl(url: string): GeneratedImage | null {
   const bytes = Uint8Array.from(Buffer.from(b64, "base64"))
   return { bytes, mimeType }
 }
+
+export interface GeneratedAudio {
+  bytes: Uint8Array
+  mimeType: string
+  durationMs?: number
+}
+
+export interface GenerateAudioInput {
+  apiKey: string
+  modelId: string
+  prompt: string
+  parameters: Record<string, unknown>
+}
+
+export interface GenerateAudioResult {
+  audio: GeneratedAudio
+  actualCostCents?: number
+  rawResponse: unknown
+}
+
+export async function generateAudio(input: GenerateAudioInput): Promise<GenerateAudioResult> {
+  const audioConfig: Record<string, unknown> = {}
+  if (typeof input.parameters.voice === "string") audioConfig.voice = input.parameters.voice
+  if (typeof input.parameters.format === "string") audioConfig.format = input.parameters.format
+
+  const response = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${input.apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://rantai.dev",
+      "X-Title": "RantAI Agents Media Studio",
+    },
+    body: JSON.stringify({
+      model: input.modelId,
+      messages: [{ role: "user", content: input.prompt }],
+      modalities: ["text", "audio"],
+      audio: audioConfig,
+    }),
+  })
+
+  if (!response.ok) {
+    const errText = await response.text()
+    throw new Error(`OpenRouter audio generation failed: ${errText}`)
+  }
+
+  const json = (await response.json()) as {
+    choices?: Array<{
+      message?: {
+        audio?: { data?: string; format?: string }
+      }
+    }>
+    usage?: { total_cost?: number }
+  }
+
+  const audioObj = json.choices?.[0]?.message?.audio
+  if (!audioObj?.data) throw new Error("OpenRouter returned no audio")
+
+  const format = audioObj.format ?? "mp3"
+  const mimeType = `audio/${format === "mp3" ? "mpeg" : format}`
+  const bytes = Uint8Array.from(Buffer.from(audioObj.data, "base64"))
+
+  const actualCostCents =
+    typeof json.usage?.total_cost === "number"
+      ? Math.max(1, Math.round(json.usage.total_cost * 100))
+      : undefined
+
+  return {
+    audio: { bytes, mimeType },
+    actualCostCents,
+    rawResponse: json,
+  }
+}

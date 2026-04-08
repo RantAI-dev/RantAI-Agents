@@ -113,3 +113,41 @@ describe("openrouter.generateImage", () => {
     ).rejects.toThrow(/insufficient credits/)
   })
 })
+
+import { generateAudio } from "@/features/media/provider/openrouter"
+
+describe("openrouter.generateAudio", () => {
+  beforeEach(() => fetchMock.mockReset())
+
+  it("requests audio modalities and parses returned base64 audio", async () => {
+    const audioB64 = "UklGRiQAAABXQVZFZm10IBAAAAA=" // "fake wav header"
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              audio: { data: audioB64, format: "wav" },
+            },
+          },
+        ],
+        usage: { total_cost: 0.01 },
+      }),
+    })
+
+    const result = await generateAudio({
+      apiKey: "k",
+      modelId: "openai/gpt-audio",
+      prompt: "hello world",
+      parameters: { voice: "alloy", format: "wav" },
+    })
+
+    expect(result.audio.mimeType).toBe("audio/wav")
+    expect(result.audio.bytes.byteLength).toBeGreaterThan(0)
+    expect(result.actualCostCents).toBe(1)
+    const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)
+    expect(body.modalities).toContain("audio")
+    expect(body.audio).toEqual({ voice: "alloy", format: "wav" })
+  })
+})

@@ -10,7 +10,7 @@ import {
 import { enforceMediaLimit } from "./limits"
 import { estimateMediaJobCostCents } from "./cost-estimator"
 import { uploadMediaBytes } from "./storage"
-import { generateImage } from "./provider/openrouter"
+import { generateImage, generateAudio } from "./provider/openrouter"
 import type { MediaModality } from "./schema"
 
 export interface CreateMediaJobInput {
@@ -114,7 +114,18 @@ export async function createMediaJob(input: CreateMediaJobInput) {
       })
     }
 
-    // AUDIO and VIDEO paths land in later tasks; for now, fail loudly
+    if (input.modality === "AUDIO") {
+      return await runAudioJob({
+        jobId: job.id,
+        organizationId: input.organizationId,
+        modelId: input.modelId,
+        prompt: input.prompt,
+        parameters: input.parameters,
+        estimatedCostCents,
+      })
+    }
+
+    // VIDEO path lands in a later task; for now, fail loudly
     throw new Error(`Modality not yet implemented: ${input.modality}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -183,5 +194,53 @@ async function runImageJob(input: {
     status: "SUCCEEDED",
   })
 
+  return finalized
+}
+
+async function runAudioJob(input: {
+  jobId: string
+  organizationId: string
+  modelId: string
+  prompt: string
+  parameters: Record<string, unknown>
+  estimatedCostCents: number
+}) {
+  const apiKey = getOpenRouterApiKey()
+  const result = await generateAudio({
+    apiKey,
+    modelId: input.modelId,
+    prompt: input.prompt,
+    parameters: input.parameters,
+  })
+
+  const extension = result.audio.mimeType === "audio/mpeg" ? "mp3" : result.audio.mimeType.split("/")[1] ?? "mp3"
+  const upload = await uploadMediaBytes({
+    organizationId: input.organizationId,
+    modality: "AUDIO",
+    assetId: input.jobId,
+    mimeType: result.audio.mimeType,
+    extension,
+    bytes: result.audio.bytes,
+  })
+
+  const finalized = await finalizeMediaJobAsSucceeded({
+    jobId: input.jobId,
+    costCents: result.actualCostCents ?? input.estimatedCostCents,
+    assets: [
+      {
+        modality: "AUDIO",
+        mimeType: result.audio.mimeType,
+        s3Key: upload.s3Key,
+        sizeBytes: upload.sizeBytes,
+        durationMs: result.audio.durationMs ?? null,
+        metadata: { modelId: input.modelId },
+      },
+    ],
+  })
+
+  emitToOrgRoom(input.organizationId, "media:job:update", {
+    jobId: input.jobId,
+    status: "SUCCEEDED",
+  })
   return finalized
 }
