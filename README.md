@@ -67,6 +67,7 @@ Migration status map:
 - **Code Interpreter** — Sandboxed code execution via Piston (Python, JavaScript, TypeScript)
 - **Web Search** — Private meta-search via SearXNG with paid Serper.dev fallback
 - **White-Label Support** — Product mode branding (default RantAI or NQRust Nexus)
+- **Media Studio** -- Generate images, audio, and video via OpenRouter, with an org-wide library, reuse-as-input flows, and per-user daily spending limits
 
 ---
 
@@ -697,6 +698,43 @@ Scanned PDFs are auto-detected. Cloud fallback via OpenRouter if Ollama is unava
 - Semantic reranking over SurrealDB vector store
 - Configurable chunking strategies
 - Multi-format document ingestion
+
+---
+
+## Media Studio
+
+A first-class workspace for generating images, audio, and video through OpenRouter:
+
+- **Image** — Nano Banana 2/Pro, GPT-5 Image, Seedream 4.5, Riverflow V2 Pro
+- **Audio** — GPT Audio and other OpenRouter audio-output models
+- **Video** — Veo 3.1 (alpha, gated by `MEDIA_VIDEO_ENABLED=true`)
+
+Generated assets are stored in RustFS S3 and indexed in PostgreSQL. Every generation goes through `MediaJob` → `MediaAsset` rows so the library, audit trail, and per-user cost limits all share one data path.
+
+### Library
+
+- Org-wide gallery of every generation
+- Filter by modality, favorites, prompt search
+- "Use as reference" turns any asset into an input for image-to-image / image-to-video flows
+- Click → side panel with regenerate, download, delete
+
+### Per-user limits
+
+Set a daily spending cap in **Settings → General → Media Generation**. The studio enforces it at the service layer before any provider call, so future LLM-tool wrappers (Phase 2) inherit the same gate automatically.
+
+### API routes
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/dashboard/media/jobs` | Create a generation job |
+| `GET` | `/api/dashboard/media/jobs/[id]` | Poll job status |
+| `GET` | `/api/dashboard/media/assets` | Org-wide library |
+| `PATCH` | `/api/dashboard/media/assets/[id]` | Toggle favorite |
+| `DELETE` | `/api/dashboard/media/assets/[id]` | Delete asset |
+| `GET` | `/api/dashboard/media/models?modality=IMAGE` | Available media models |
+| `GET` | `/api/cron/media/poll-video-jobs` | Reconciler for async video jobs |
+
+Design spec: [docs/superpowers/specs/2026-04-08-media-generation-studio-design.md](docs/superpowers/specs/2026-04-08-media-generation-studio-design.md)
 
 ---
 
