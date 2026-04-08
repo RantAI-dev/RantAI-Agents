@@ -174,6 +174,7 @@ export async function createMediaJob(input: CreateMediaJobInput) {
     throw new Error(`Modality not yet implemented: ${input.modality}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    console.error(`[media] job ${job.id} failed:`, error)
     await failMediaJob(job.id, message)
     emitToOrgRoom(input.organizationId, "media:job:update", {
       jobId: job.id,

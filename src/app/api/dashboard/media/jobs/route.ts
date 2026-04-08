@@ -53,6 +53,9 @@ export async function POST(req: Request) {
         { status: 402 }
       )
     }
+    // Log the full error server-side so it shows up in the dev console
+    // regardless of how the client surfaces it.
+    console.error("[media] POST /jobs failed:", error)
     const message = error instanceof Error ? error.message : "Unknown error"
     return NextResponse.json({ error: message }, { status: 500 })
   }
