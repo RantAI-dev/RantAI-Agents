@@ -70,7 +70,10 @@ export function ArtifactPanel({
   onFixWithAI,
   sessionId,
 }: ArtifactPanelProps) {
-  const [tab, setTab] = useState<"preview" | "code">("preview")
+  const isCodeOnly = artifact.type === "application/code"
+  const [tab, setTab] = useState<"preview" | "code">(
+    isCodeOnly ? "code" : "preview"
+  )
   const [isEditing, setIsEditing] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -402,7 +405,8 @@ export function ArtifactPanel({
         </div>
       </div>
 
-      {/* Tab bar — Preview and Code only */}
+      {/* Tab bar — hidden for application/code (preview == code, redundant) */}
+      {!isCodeOnly && (
       <div className="flex border-b border-border/50 px-4">
         <button
           type="button"
@@ -434,6 +438,7 @@ export function ArtifactPanel({
           )}
         </button>
       </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-auto">

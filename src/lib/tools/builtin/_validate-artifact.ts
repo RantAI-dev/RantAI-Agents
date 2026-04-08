@@ -43,7 +43,80 @@ export function validateArtifactContent(
   if (type === "application/react") return validateReact(content)
   if (type === "image/svg+xml") return validateSvg(content)
   if (type === "application/mermaid") return validateMermaid(content)
+  if (type === "application/code") return validateCode(content)
   return { ok: true, errors: [], warnings: [] }
+}
+
+// ---------------------------------------------------------------------------
+// Code validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Truncation / placeholder markers that indicate the LLM gave up partway.
+ * Each pattern is chosen to be unlikely in real, complete code.
+ */
+const CODE_TRUNCATION_MARKERS: ReadonlyArray<{ marker: RegExp; label: string }> = [
+  { marker: /\/\/\s*\.{3,}\s*(rest|more|etc|remaining|omitted)/i, label: "// ... rest" },
+  { marker: /\/\*\s*\.{3,}\s*(rest|more|etc|remaining|omitted)[\s\S]*?\*\//i, label: "/* ... rest */" },
+  { marker: /#\s*\.{3,}\s*(rest|more|etc|remaining|omitted)/i, label: "# ... rest" },
+  { marker: /\/\/\s*TODO:?\s*implement/i, label: "// TODO: implement" },
+  { marker: /#\s*TODO:?\s*implement/i, label: "# TODO: implement" },
+  { marker: /\/\/\s*implement (this|me)/i, label: "// implement this" },
+  { marker: /throw new Error\(\s*["'`]not[ _-]?implemented["'`]/i, label: 'throw new Error("not implemented")' },
+  { marker: /\bunimplemented!\s*\(/i, label: "unimplemented!()" },
+  { marker: /\btodo!\s*\(/i, label: "todo!()" },
+  { marker: /\bpass\s*#\s*(placeholder|implement|todo)/i, label: "pass  # placeholder" },
+]
+
+function validateCode(content: string): ArtifactValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  const trimmed = content.trim()
+
+  if (!trimmed) {
+    errors.push("Code content is empty.")
+    return { ok: false, errors, warnings }
+  }
+
+  // Wrong-type guard: HTML document masquerading as code.
+  if (/^\s*<!doctype\s+html/i.test(content) || /^\s*<html[\s>]/i.test(content)) {
+    errors.push(
+      "This looks like an HTML document. Use type 'text/html' so it renders in the preview iframe, not 'application/code'."
+    )
+    return { ok: false, errors, warnings }
+  }
+
+  // Wrong-type guard: markdown fence wrap — LLM treated content as markdown.
+  const firstLine = trimmed.split("\n")[0] ?? ""
+  if (/^\s*```/.test(firstLine)) {
+    errors.push(
+      "Remove the markdown code fences (```lang ... ```). The artifact content is the code itself — the renderer adds highlighting."
+    )
+    return { ok: false, errors, warnings }
+  }
+
+  // Truncation / placeholder warnings
+  const hits: string[] = []
+  for (const { marker, label } of CODE_TRUNCATION_MARKERS) {
+    if (marker.test(content)) hits.push(label)
+  }
+  if (hits.length > 0) {
+    warnings.push(
+      `Detected likely truncation or placeholder markers: ${hits
+        .slice(0, 3)
+        .map((h) => `"${h}"`)
+        .join(", ")}. Output the COMPLETE code with every function implemented.`
+    )
+  }
+
+  if (content.length > 512 * 1024) {
+    warnings.push(
+      `Code content is ${Math.round(content.length / 1024)}KB — consider splitting into multiple files or trimming.`
+    )
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
 }
 
 // ---------------------------------------------------------------------------
