@@ -15,7 +15,7 @@ import { useMediaStudioStore } from "@/features/media/store"
 import { useLibraryAssets, type LibraryAsset } from "@/features/media/use-library-assets"
 
 export function LibraryTab() {
-  const [modality, setModality] = useState<"" | "IMAGE" | "AUDIO" | "VIDEO">("")
+  const [modality, setModality] = useState<"ALL" | "IMAGE" | "AUDIO" | "VIDEO">("ALL")
   const [favoritesOnly, setFavoritesOnly] = useState(false)
   const [q, setQ] = useState("")
 
@@ -50,7 +50,7 @@ export function LibraryTab() {
         <Select value={modality} onValueChange={(v) => setModality(v as typeof modality)}>
           <SelectTrigger className="w-32"><SelectValue placeholder="All" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All</SelectItem>
+            <SelectItem value="ALL">All</SelectItem>
             <SelectItem value="IMAGE">Image</SelectItem>
             <SelectItem value="AUDIO">Audio</SelectItem>
             <SelectItem value="VIDEO">Video</SelectItem>

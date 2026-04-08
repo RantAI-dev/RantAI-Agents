@@ -8,7 +8,7 @@ export interface LibraryAsset extends StoreAsset {
 }
 
 export interface LibraryFilters {
-  modality: "" | "IMAGE" | "AUDIO" | "VIDEO"
+  modality: "ALL" | "IMAGE" | "AUDIO" | "VIDEO"
   favoritesOnly: boolean
   q: string
 }
@@ -25,7 +25,7 @@ export function useLibraryAssets(filters: LibraryFilters): UseLibraryAssetsResul
 
   useEffect(() => {
     const params = new URLSearchParams()
-    if (filters.modality) params.set("modality", filters.modality)
+    if (filters.modality !== "ALL") params.set("modality", filters.modality)
     if (filters.favoritesOnly) params.set("favorite", "true")
     if (filters.q.trim()) params.set("q", filters.q.trim())
     params.set("limit", "60")
