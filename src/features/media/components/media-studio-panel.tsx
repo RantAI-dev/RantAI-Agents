@@ -13,6 +13,7 @@ import {
 import { Loader2, X } from "lucide-react"
 import { ParameterForm } from "./parameter-form"
 import { ImageResult } from "./result-renderers/image-result"
+import { AudioResult } from "./result-renderers/audio-result"
 import { useMediaStudioStore, type StoreJob } from "@/features/media/store"
 
 interface ModelInfo {
@@ -138,27 +139,34 @@ export function MediaStudioPanel({ modality, models, organizationId }: Props) {
         )}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {filteredJobs.flatMap((j) =>
-            j.assets.map((a) =>
-              modality === "IMAGE" ? (
-                <ImageResult
-                  key={a.id}
-                  asset={a}
-                  onToggleFavorite={() => {
-                    toggleFavorite(a.id, !a.isFavorite)
-                    fetch(`/api/dashboard/media/assets/${a.id}`, {
-                      method: "PATCH",
-                      headers: { "content-type": "application/json" },
-                      body: JSON.stringify({ isFavorite: !a.isFavorite }),
-                    })
-                  }}
-                  onUseAsReference={() => addReference(a.id)}
-                />
-              ) : (
+            j.assets.map((a) => {
+              const onToggle = () => {
+                toggleFavorite(a.id, !a.isFavorite)
+                fetch(`/api/dashboard/media/assets/${a.id}`, {
+                  method: "PATCH",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ isFavorite: !a.isFavorite }),
+                })
+              }
+              if (a.modality === "IMAGE") {
+                return (
+                  <ImageResult
+                    key={a.id}
+                    asset={a}
+                    onToggleFavorite={onToggle}
+                    onUseAsReference={() => addReference(a.id)}
+                  />
+                )
+              }
+              if (a.modality === "AUDIO") {
+                return <AudioResult key={a.id} asset={a} onToggleFavorite={onToggle} />
+              }
+              return (
                 <div key={a.id} className="rounded border bg-muted p-3 text-xs text-muted-foreground">
-                  {modality} preview placeholder
+                  Video preview coming next
                 </div>
               )
-            )
+            })
           )}
         </div>
       </div>
