@@ -9,6 +9,7 @@ import {
   Check,
   Code,
   Eye,
+  Play,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -71,6 +72,7 @@ export function ArtifactPanel({
   sessionId,
 }: ArtifactPanelProps) {
   const isCodeOnly = artifact.type === "application/code"
+  const isRunnable = artifact.type === "application/python"
   const [tab, setTab] = useState<"preview" | "code">(
     isCodeOnly ? "code" : "preview"
   )
@@ -418,8 +420,8 @@ export function ArtifactPanel({
           )}
           onClick={() => setTab("preview")}
         >
-          <Eye className="h-3.5 w-3.5" />
-          Preview
+          {isRunnable ? <Play className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          {isRunnable ? "Run" : "Preview"}
         </button>
         <button
           type="button"
