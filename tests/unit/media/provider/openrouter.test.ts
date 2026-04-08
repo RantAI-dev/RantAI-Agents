@@ -57,6 +57,64 @@ describe("openrouter.generateImage", () => {
     expect(result.actualCostCents).toBe(4)
   })
 
+  it("parses images from the primary message.images field (real OpenRouter shape)", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: "Here is your image.",
+              images: [
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgAAIAAAUAAen63NgAAAAASUVORK5CYII=",
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        usage: { total_cost: 0.03 },
+      }),
+    })
+
+    const result = await generateImage({
+      apiKey: "k",
+      modelId: "google/gemini-2.5-flash-image",
+      prompt: "a cat",
+      parameters: {},
+      referenceImageUrls: [],
+    })
+
+    expect(result.images).toHaveLength(1)
+    expect(result.images[0].mimeType).toBe("image/png")
+    expect(result.actualCostCents).toBe(3)
+  })
+
+  it("includes the raw response preview in the error when no images are found", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: "I cannot generate images." } }],
+      }),
+    })
+
+    await expect(
+      generateImage({
+        apiKey: "k",
+        modelId: "x",
+        prompt: "p",
+        parameters: {},
+        referenceImageUrls: [],
+      })
+    ).rejects.toThrow(/no images/)
+  })
+
   it("includes reference images as input modalities when provided", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,

@@ -67,33 +67,52 @@ export async function generateImage(input: GenerateImageInput): Promise<Generate
     throw new Error(`OpenRouter image generation failed: ${message}`)
   }
 
+  type ImagePart = {
+    type?: string
+    image_url?: { url?: string }
+  }
   const json = (await response.json()) as {
     choices?: Array<{
       message?: {
-        content?: Array<{
-          type?: string
-          image_url?: { url?: string }
-          text?: string
-        }>
+        content?: string | Array<{ type?: string; image_url?: { url?: string }; text?: string }>
+        // OpenRouter image-generating models (Gemini Nano Banana, GPT-5 Image) return
+        // generated images here as a sibling of `content`.
+        images?: ImagePart[]
       }
     }>
     usage?: { total_cost?: number }
+    error?: { message?: string }
   }
 
   const images: GeneratedImage[] = []
   const choices = json.choices ?? []
   for (const choice of choices) {
-    const parts = choice.message?.content ?? []
-    for (const part of parts) {
-      if (part.type === "image_url" && part.image_url?.url) {
+    // Primary shape: message.images array
+    for (const part of choice.message?.images ?? []) {
+      if (part.image_url?.url) {
         const parsed = parseDataUrl(part.image_url.url)
         if (parsed) images.push(parsed)
+      }
+    }
+    // Fallback: message.content as array of parts (some models)
+    if (Array.isArray(choice.message?.content)) {
+      for (const part of choice.message.content) {
+        if (part.type === "image_url" && part.image_url?.url) {
+          const parsed = parseDataUrl(part.image_url.url)
+          if (parsed) images.push(parsed)
+        }
       }
     }
   }
 
   if (images.length === 0) {
-    throw new Error("OpenRouter returned no images")
+    // Include a truncated raw response in the error for debugging — response
+    // shapes vary by model and this is the fastest signal when a new model
+    // returns an unexpected structure.
+    const preview = JSON.stringify(json).slice(0, 500)
+    const providerError = json.error?.message
+    const detail = providerError ? `: ${providerError}` : ` — response: ${preview}`
+    throw new Error(`OpenRouter returned no images${detail}`)
   }
 
   const actualCostCents =
