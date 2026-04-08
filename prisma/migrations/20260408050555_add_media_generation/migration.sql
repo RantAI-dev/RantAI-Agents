@@ -67,6 +67,9 @@ CREATE INDEX "MediaJob_status_idx" ON "MediaJob"("status");
 CREATE INDEX "MediaJob_modality_idx" ON "MediaJob"("modality");
 
 -- CreateIndex
+CREATE INDEX "MediaJob_status_modality_idx" ON "MediaJob"("status", "modality");
+
+-- CreateIndex
 CREATE INDEX "MediaAsset_organizationId_createdAt_idx" ON "MediaAsset"("organizationId", "createdAt");
 
 -- CreateIndex

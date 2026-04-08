@@ -15,17 +15,17 @@ enum Role {
 
 // User model (platform users — renamed from Agent, keeps same DB table)
 model User {
-  id            String         @id @default(cuid())
-  email         String         @unique
-  name          String
-  passwordHash  String
-  role          Role           @default(USER)
-  status        String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE (for live chat)
-  avatarS3Key   String?        // S3 key for avatar image
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  conversations         Conversation[]
+  id                    String         @id @default(cuid())
+  email                 String         @unique
+  name                  String
+  passwordHash          String
+  role                  Role           @default(USER)
+  status                String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE (for live chat)
+  avatarS3Key           String? // S3 key for avatar image
   mediaLimitCentsPerDay Int?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  conversations         Conversation[]
   mediaJobs             MediaJob[]
 
   @@map("Agent")
@@ -37,7 +37,7 @@ model Conversation {
   sessionId       String    @unique
   status          String    @default("AI_ACTIVE") // AI_ACTIVE, HANDOFF_REQUESTED, WAITING_FOR_AGENT, AGENT_CONNECTED, RESOLVED
   channel         String    @default("PORTAL") // PORTAL, SALESFORCE, WHATSAPP, EMAIL
-  externalId      String?   // External system ID (Salesforce Case ID, etc.)
+  externalId      String? // External system ID (Salesforce Case ID, etc.)
   productInterest String?
   customerName    String?
   customerEmail   String?
@@ -61,9 +61,9 @@ model Message {
   id             String       @id @default(cuid())
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role           String       // USER, ASSISTANT, AGENT, SYSTEM
+  role           String // USER, ASSISTANT, AGENT, SYSTEM
   content        String
-  metadata       String?      // JSON string for channel-specific data (WhatsApp message ID, etc.)
+  metadata       String? // JSON string for channel-specific data (WhatsApp message ID, etc.)
   createdAt      DateTime     @default(now())
   readAt         DateTime?
 
@@ -106,12 +106,12 @@ model FeatureConfig {
 
 // Organization/Workspace for multi-tenancy
 model Organization {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique // URL-friendly identifier
-  logoUrl     String?          // External URL for logo (backward compat)
-  logoS3Key   String?          // S3 key for uploaded logo
-  plan        String   @default("free") // free, starter, pro, enterprise
+  id        String  @id @default(cuid())
+  name      String
+  slug      String  @unique // URL-friendly identifier
+  logoUrl   String? // External URL for logo (backward compat)
+  logoS3Key String? // S3 key for uploaded logo
+  plan      String  @default("free") // free, starter, pro, enterprise
 
   // Limits based on plan
   maxMembers    Int @default(5)
@@ -120,20 +120,20 @@ model Organization {
   maxApiKeys    Int @default(2)
 
   // Relationships
-  memberships       OrganizationMember[]
-  assistants        Assistant[]
-  documents         Document[]
-  groups            KnowledgeBaseGroup[]
-  embedKeys         EmbedApiKey[]
-  dashboardSessions DashboardSession[]
-  usageRecords      UsageRecord[]
-  tools             Tool[]
-  skills            Skill[]
-  mcpServers        McpServerConfig[]
-  mcpApiKeys        McpApiKey[]
-  workflows         Workflow[]
-  credentials       Credential[]
-  openApiSpecs      OpenApiSpec[]
+  memberships         OrganizationMember[]
+  assistants          Assistant[]
+  documents           Document[]
+  groups              KnowledgeBaseGroup[]
+  embedKeys           EmbedApiKey[]
+  dashboardSessions   DashboardSession[]
+  usageRecords        UsageRecord[]
+  tools               Tool[]
+  skills              Skill[]
+  mcpServers          McpServerConfig[]
+  mcpApiKeys          McpApiKey[]
+  workflows           Workflow[]
+  credentials         Credential[]
+  openApiSpecs        OpenApiSpec[]
   marketplaceInstalls MarketplaceInstall[]
   installedSkills     InstalledSkill[]
   digitalEmployees    DigitalEmployee[]
@@ -153,15 +153,15 @@ model Organization {
 // Organization membership (links users to orgs)
 model OrganizationMember {
   id             String       @id @default(cuid())
-  userId         String       // From NextAuth session
-  userEmail      String       // For display/invite
-  userName       String?      // Cached user name
+  userId         String // From NextAuth session
+  userEmail      String // For display/invite
+  userName       String? // Cached user name
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   role           String       @default("member") // owner, admin, member, viewer
-  invitedBy      String?      // userId who invited
+  invitedBy      String? // userId who invited
   invitedAt      DateTime     @default(now())
-  acceptedAt     DateTime?    // null = pending invite
+  acceptedAt     DateTime? // null = pending invite
 
   @@unique([userId, organizationId])
   @@index([organizationId])
@@ -174,10 +174,10 @@ model UsageRecord {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  userId         String?      // Who triggered (optional)
+  userId         String? // Who triggered (optional)
 
   // What was used
-  resourceType String  // "chat", "embedding", "api_call"
+  resourceType String // "chat", "embedding", "api_call"
   resourceId   String? // assistantId, documentId, etc.
 
   // Metrics
@@ -185,7 +185,7 @@ model UsageRecord {
   tokensOutput Int      @default(0)
   cost         Decimal? // Estimated cost in USD
 
-  metadata  Json?    // Additional context
+  metadata  Json? // Additional context
   createdAt DateTime @default(now())
 
   @@index([organizationId, createdAt])
@@ -194,22 +194,22 @@ model UsageRecord {
 
 // AI Assistant configuration for chat
 model Assistant {
-  id                    String        @id @default(cuid())
+  id                    String   @id @default(cuid())
   name                  String
   description           String?
-  emoji                 String        @default("🤖")
-  systemPrompt          String        @db.Text
-  model                 String        @default("xiaomi/mimo-v2-flash") // LLM model ID from OpenRouter
-  useKnowledgeBase      Boolean       @default(false)
-  knowledgeBaseGroupIds String[]      // Array of KnowledgeBaseGroup IDs
-  isSystemDefault       Boolean       @default(false) // Global default assistant
-  isBuiltIn             Boolean       @default(false) // Non-deletable built-in assistants
+  emoji                 String   @default("🤖")
+  systemPrompt          String   @db.Text
+  model                 String   @default("xiaomi/mimo-v2-flash") // LLM model ID from OpenRouter
+  useKnowledgeBase      Boolean  @default(false)
+  knowledgeBaseGroupIds String[] // Array of KnowledgeBaseGroup IDs
+  isSystemDefault       Boolean  @default(false) // Global default assistant
+  isBuiltIn             Boolean  @default(false) // Non-deletable built-in assistants
 
   // Organization scope (null = system/global assistant)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      String?       // userId who created
-  updatedBy      String?       // userId who last updated
+  createdBy      String? // userId who created
+  updatedBy      String? // userId who last updated
 
   // Live Chat handoff — when enabled, widget can escalate to human agents
   liveChatEnabled Boolean @default(false)
@@ -221,7 +221,7 @@ model Assistant {
   modelConfig Json? // { temperature?, topP?, maxTokens?, presencePenalty?, frequencyPenalty?, reasoningEffort? }
 
   // Opening/onboarding settings
-  openingMessage  String?  @db.Text // Welcome message shown when conversation starts
+  openingMessage   String?  @db.Text // Welcome message shown when conversation starts
   openingQuestions String[] // Conversation starter suggestions
 
   // Guard rails / safety settings
@@ -264,8 +264,8 @@ model Assistant {
 model UserPreference {
   id                 String   @id @default(cuid())
   userId             String   @unique // From NextAuth session
-  defaultAssistantId String?  // User's chosen default (overrides system default)
-  sidebarConfig      Json?    // { hiddenItems: string[], sidebarCollapsed: boolean }
+  defaultAssistantId String? // User's chosen default (overrides system default)
+  sidebarConfig      Json? // { hiddenItems: string[], sidebarCollapsed: boolean }
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -274,8 +274,8 @@ model UserPreference {
 model Category {
   id        String   @id @default(cuid())
   name      String   @unique // Internal name: "LIFE_INSURANCE", "CUSTOM_CAT"
-  label     String            // Display label: "Life Insurance"
-  color     String            // Hex color: "#3b82f6"
+  label     String // Display label: "Life Insurance"
+  color     String // Hex color: "#3b82f6"
   isSystem  Boolean  @default(false) // True for default categories (prevent deletion)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -286,13 +286,13 @@ model KnowledgeBaseGroup {
   id          String          @id @default(cuid())
   name        String
   description String?
-  color       String?         // Hex color for UI display
+  color       String? // Hex color for UI display
   documents   DocumentGroup[]
 
   // Organization scope (null = global/shared)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      String?       // userId who created
+  createdBy      String? // userId who created
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -302,7 +302,7 @@ model KnowledgeBaseGroup {
 
 // Junction table for many-to-many Document <-> KnowledgeBaseGroup
 model DocumentGroup {
-  id        String             @id @default(cuid())
+  id         String             @id @default(cuid())
   documentId String
   groupId    String
   document   Document           @relation(fields: [documentId], references: [id], onDelete: Cascade)
@@ -320,26 +320,26 @@ model Document {
   id          String          @id @default(cuid())
   title       String
   content     String
-  categories  String[]        // Array of categories: LIFE_INSURANCE, HEALTH_INSURANCE, HOME_INSURANCE, FAQ, POLICY, GENERAL
-  subcategory String?         // Plan names, specific topics
-  metadata    Json?           // Additional structured data (legacy: may contain fileData as base64)
+  categories  String[] // Array of categories: LIFE_INSURANCE, HEALTH_INSURANCE, HOME_INSURANCE, FAQ, POLICY, GENERAL
+  subcategory String? // Plan names, specific topics
+  metadata    Json? // Additional structured data (legacy: may contain fileData as base64)
   groups      DocumentGroup[]
 
   // S3 file storage (replaces base64 in metadata)
-  s3Key       String?         // S3 object key for original file
-  fileType    String?         // "pdf", "image", "markdown"
-  fileSize    Int?            // File size in bytes
-  mimeType    String?         // MIME type (e.g., "application/pdf")
+  s3Key    String? // S3 object key for original file
+  fileType String? // "pdf", "image", "markdown"
+  fileSize Int? // File size in bytes
+  mimeType String? // MIME type (e.g., "application/pdf")
 
   // Organization scope (null = global/shared)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      String?       // userId who created
+  createdBy      String? // userId who created
 
   // Artifact association (null = regular knowledge document)
   sessionId    String?
   session      DashboardSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  artifactType String?           // "text/html" | "application/react" | etc.
+  artifactType String? // "text/html" | "application/react" | etc.
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -351,30 +351,30 @@ model Document {
 
 // API Key for embeddable chat widget
 model EmbedApiKey {
-  id             String    @id @default(cuid())
-  name           String    // Human-readable name (e.g., "Company Website")
-  key            String    @unique // Generated API key (e.g., "rantai_live_...")
-  assistantId    String    // Assistant to use for this key
+  id          String @id @default(cuid())
+  name        String // Human-readable name (e.g., "Company Website")
+  key         String @unique // Generated API key (e.g., "rantai_live_...")
+  assistantId String // Assistant to use for this key
 
   // Domain security
-  allowedDomains String[]  // e.g., ["example.com", "*.example.com"]
+  allowedDomains String[] // e.g., ["example.com", "*.example.com"]
 
   // Widget customization (JSON)
-  config         Json      @default("{}") // { theme, position, welcomeMessage, avatar, cssClass, launcherButton }
+  config Json @default("{}") // { theme, position, welcomeMessage, avatar, cssClass, launcherButton }
 
   // Usage tracking
-  requestCount   Int       @default(0)
-  lastUsedAt     DateTime?
+  requestCount Int       @default(0)
+  lastUsedAt   DateTime?
 
   // Organization scope (required for API keys)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      String?       // userId who created
+  createdBy      String? // userId who created
 
   // Management
-  enabled        Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([key])
   @@index([assistantId])
@@ -383,18 +383,18 @@ model EmbedApiKey {
 
 // Agent API keys for programmatic REST/WebSocket access
 model AgentApiKey {
-  id             String    @id @default(cuid())
-  name           String    // Human-readable name (e.g., "Production Backend")
-  key            String    @unique // Generated API key (e.g., "rantai_sk_...")
-  assistantId    String    // Assistant this key accesses
+  id          String @id @default(cuid())
+  name        String // Human-readable name (e.g., "Production Backend")
+  key         String @unique // Generated API key (e.g., "rantai_sk_...")
+  assistantId String // Assistant this key accesses
 
   // Access control
-  scopes         String[]  // e.g., ["chat", "chat:stream"]
-  ipWhitelist    String[]  // Empty = allow all IPs
+  scopes      String[] // e.g., ["chat", "chat:stream"]
+  ipWhitelist String[] // Empty = allow all IPs
 
   // Usage tracking
-  requestCount   Int       @default(0)
-  lastUsedAt     DateTime?
+  requestCount Int       @default(0)
+  lastUsedAt   DateTime?
 
   // Organization scope
   organizationId String?
@@ -402,10 +402,10 @@ model AgentApiKey {
   createdBy      String?
 
   // Management
-  enabled        Boolean   @default(true)
-  expiresAt      DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  enabled   Boolean   @default(true)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@index([key])
   @@index([assistantId])
@@ -415,11 +415,11 @@ model AgentApiKey {
 // Dashboard chat sessions (separate from widget conversations)
 model DashboardSession {
   id          String             @id @default(cuid())
-  userId      String             // From NextAuth session
+  userId      String // From NextAuth session
   title       String             @default("New Chat")
   assistantId String
   messages    DashboardMessage[]
-  artifacts   Document[]         // Artifacts created in this session
+  artifacts   Document[] // Artifacts created in this session
 
   // Organization context (optional - for shared/team chats)
   organizationId String?
@@ -438,12 +438,12 @@ model DashboardMessage {
   id          String           @id @default(cuid())
   sessionId   String
   session     DashboardSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role        String           // "user" or "assistant"
+  role        String // "user" or "assistant"
   content     String           @db.Text
-  replyTo     String?          // ID of the message being replied to
-  editHistory Json?            // Array of { content, assistantResponse, editedAt }
-  sources     Json?            // Array of sources for assistant messages
-  metadata    Json?            // Extra data e.g. { artifactIds: string[] }
+  replyTo     String? // ID of the message being replied to
+  editHistory Json? // Array of { content, assistantResponse, editedAt }
+  sources     Json? // Array of sources for assistant messages
+  metadata    Json? // Extra data e.g. { artifactIds: string[] }
   attachments FileAttachment[] // File attachments for this message
   createdAt   DateTime         @default(now())
 
@@ -452,25 +452,25 @@ model DashboardMessage {
 
 // File attachments stored in S3
 model FileAttachment {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
   // S3 storage
-  s3Key       String   @unique  // S3 object key
-  s3Bucket    String   @default("rantai-files")
+  s3Key    String @unique // S3 object key
+  s3Bucket String @default("rantai-files")
 
   // File metadata
-  filename    String            // Original filename
-  contentType String            // MIME type
-  size        Int               // File size in bytes
+  filename    String // Original filename
+  contentType String // MIME type
+  size        Int // File size in bytes
 
   // Owner
-  uploadedBy  String?           // userId who uploaded
+  uploadedBy String? // userId who uploaded
 
   // Relations (optional - attachment can be orphaned temporarily)
-  messageId   String?
-  message     DashboardMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId String?
+  message   DashboardMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([messageId])
   @@index([uploadedBy])
@@ -485,17 +485,17 @@ enum MemoryType {
 
 // User memory storage for agentic memory system
 model UserMemory {
-  id          String     @id @default(cuid())
-  userId      String
-  type        MemoryType
-  key         String
-  value       Json
-  embedding   Float[]    // For semantic search (empty array if not set)
-  confidence  Float?
-  source      String?    // Which conversation/message
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  expiresAt   DateTime?  // For working memory TTL
+  id         String     @id @default(cuid())
+  userId     String
+  type       MemoryType
+  key        String
+  value      Json
+  embedding  Float[] // For semantic search (empty array if not set)
+  confidence Float?
+  source     String? // Which conversation/message
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  expiresAt  DateTime? // For working memory TTL
 
   @@index([userId, type])
   @@index([userId, type, key])
@@ -505,17 +505,17 @@ model UserMemory {
 // Tool definition for agentic capabilities
 model Tool {
   id              String   @id @default(cuid())
-  name            String                          // Machine name: "knowledge_search"
-  displayName     String                          // Human name: "Knowledge Base Search"
-  description     String   @db.Text               // LLM-facing description
-  category        String   @default("builtin")    // "builtin" | "custom" | "mcp"
-  parameters      Json                            // Zod-compatible JSON schema
-  icon            String?                         // Emoji or Lucide icon name for display
-  tags            String[]                        // Tags for filtering/discovery
+  name            String // Machine name: "knowledge_search"
+  displayName     String // Human name: "Knowledge Base Search"
+  description     String   @db.Text // LLM-facing description
+  category        String   @default("builtin") // "builtin" | "custom" | "mcp"
+  parameters      Json // Zod-compatible JSON schema
+  icon            String? // Emoji or Lucide icon name for display
+  tags            String[] // Tags for filtering/discovery
   isBuiltIn       Boolean  @default(false)
   enabled         Boolean  @default(true)
-  userSelectable  Boolean  @default(true)         // Hidden from user selectors when false
-  executionConfig Json?                           // For custom: { type, url, method, headers }
+  userSelectable  Boolean  @default(true) // Hidden from user selectors when false
+  executionConfig Json? // For custom: { type, url, method, headers }
 
   // MCP association (null for builtin/custom tools)
   mcpServerId String?
@@ -590,16 +590,16 @@ model McpServerConfig {
   id              String    @id @default(cuid())
   name            String
   description     String?
-  transport       String                          // "sse" | "streamable-http"
-  url             String?                         // Server endpoint URL
-  env             Json?                           // Environment variables (encrypted)
-  headers         Json?                           // HTTP auth headers (encrypted)
-  icon            String?                         // Emoji or Lucide icon name or image URL
-  isBuiltIn       Boolean   @default(false)       // Pre-installed = non-deletable
-  envKeys         Json?                           // Array<{key, label, placeholder}> for config UI
-  docsUrl         String?                         // Link to provider documentation
+  transport       String // "sse" | "streamable-http"
+  url             String? // Server endpoint URL
+  env             Json? // Environment variables (encrypted)
+  headers         Json? // HTTP auth headers (encrypted)
+  icon            String? // Emoji or Lucide icon name or image URL
+  isBuiltIn       Boolean   @default(false) // Pre-installed = non-deletable
+  envKeys         Json? // Array<{key, label, placeholder}> for config UI
+  docsUrl         String? // Link to provider documentation
   enabled         Boolean   @default(true)
-  configured      Boolean   @default(true)        // false = needs env/config from user
+  configured      Boolean   @default(true) // false = needs env/config from user
   lastConnectedAt DateTime?
   lastError       String?
 
@@ -622,19 +622,19 @@ model McpServerConfig {
 
 // Tool execution log for tracking and debugging
 model ToolExecution {
-  id          String   @id @default(cuid())
-  toolName    String
-  toolId      String?
-  assistantId String?
-  sessionId   String?
-  input       Json
-  output      Json?
-  error       String?
-  durationMs  Int?
-  status      String   @default("pending") // "pending" | "success" | "error"
+  id             String   @id @default(cuid())
+  toolName       String
+  toolId         String?
+  assistantId    String?
+  sessionId      String?
+  input          Json
+  output         Json?
+  error          String?
+  durationMs     Int?
+  status         String   @default("pending") // "pending" | "success" | "error"
   organizationId String?
   userId         String?
-  createdAt   DateTime @default(now())
+  createdAt      DateTime @default(now())
 
   @@index([toolName, createdAt])
   @@index([sessionId])
@@ -642,18 +642,18 @@ model ToolExecution {
 }
 
 model McpApiKey {
-  id             String    @id @default(cuid())
+  id             String       @id @default(cuid())
   name           String
-  key            String    @unique
+  key            String       @unique
   exposedTools   String[]
-  requestCount   Int       @default(0)
+  requestCount   Int          @default(0)
   lastUsedAt     DateTime?
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy      String?
-  enabled        Boolean   @default(true)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  enabled        Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([key])
   @@index([organizationId])
@@ -662,15 +662,15 @@ model McpApiKey {
 // ─── Credential Management ──────────────────────────────────
 
 model Credential {
-  id              String   @id @default(cuid())
-  name            String
-  type            String   // "api_key", "oauth2", "basic_auth", "bearer"
-  encryptedData   String   @db.Text // AES-256-GCM encrypted JSON
-  organizationId  String?
-  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String        @id @default(cuid())
+  name           String
+  type           String // "api_key", "oauth2", "basic_auth", "bearer"
+  encryptedData  String        @db.Text // AES-256-GCM encrypted JSON
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   @@index([organizationId])
 }
@@ -678,74 +678,74 @@ model Credential {
 // ─── Workflow Builder ────────────────────────────────────────
 
 model Workflow {
-  id              String         @id @default(cuid())
-  name            String
-  description     String?
+  id          String  @id @default(cuid())
+  name        String
+  description String?
 
   // Canvas data (React Flow format)
-  nodes           Json           @default("[]")
-  edges           Json           @default("[]")
+  nodes Json @default("[]")
+  edges Json @default("[]")
 
   // Metadata
-  trigger         Json           @default("{\"type\":\"manual\"}")
-  variables       Json           @default("{\"inputs\":[],\"outputs\":[]}")
+  trigger   Json @default("{\"type\":\"manual\"}")
+  variables Json @default("{\"inputs\":[],\"outputs\":[]}")
 
   // Execution mode
-  mode            WorkflowMode   @default(STANDARD)
-  category        WorkflowCategory @default(AUTOMATION)
-  chatflowConfig  Json           @default("{}")
+  mode           WorkflowMode     @default(STANDARD)
+  category       WorkflowCategory @default(AUTOMATION)
+  chatflowConfig Json             @default("{}")
 
   // Public API access
-  apiEnabled      Boolean        @default(false)
-  apiKey          String?        @unique
+  apiEnabled Boolean @default(false)
+  apiKey     String? @unique
 
   // Status
-  status          WorkflowStatus @default(DRAFT)
-  version         Int            @default(1)
+  status  WorkflowStatus @default(DRAFT)
+  version Int            @default(1)
 
   // User-defined tags for filtering
-  tags            String[]
+  tags String[]
 
   // Relations
-  organizationId  String?
-  organization    Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy       String
-  assistantId     String?
-  assistant       Assistant?     @relation(fields: [assistantId], references: [id], onDelete: SetNull)
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String
+  assistantId    String?
+  assistant      Assistant?    @relation(fields: [assistantId], references: [id], onDelete: SetNull)
 
-  runs            WorkflowRun[]
+  runs               WorkflowRun[]
   assistantWorkflows AssistantWorkflow[] @relation("AssistantWorkflows")
 
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([organizationId])
   @@index([assistantId])
 }
 
 model WorkflowRun {
-  id              String     @id @default(cuid())
-  workflowId      String
-  workflow        Workflow    @relation(fields: [workflowId], references: [id], onDelete: Cascade)
-  status          RunStatus
-  input           Json
-  output          Json?
-  error           String?
+  id         String    @id @default(cuid())
+  workflowId String
+  workflow   Workflow  @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  status     RunStatus
+  input      Json
+  output     Json?
+  error      String?
 
   // Execution trace
-  steps           Json       @default("[]")
-  suspendedAt     String?    // Step ID where execution is suspended (HITL)
-  resumeData      Json?
+  steps       Json    @default("[]")
+  suspendedAt String? // Step ID where execution is suspended (HITL)
+  resumeData  Json?
 
-  startedAt       DateTime   @default(now())
-  completedAt     DateTime?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
 
   @@index([workflowId, startedAt])
 }
 
 enum WorkflowMode {
-  STANDARD   // Execute once, return result
-  CHATFLOW   // Handle chat messages, support streaming
+  STANDARD // Execute once, return result
+  CHATFLOW // Handle chat messages, support streaming
 }
 
 enum WorkflowStatus {
@@ -756,9 +756,9 @@ enum WorkflowStatus {
 }
 
 enum WorkflowCategory {
-  TASK        // Attachable to agents as jobs they execute
-  CHATFLOW    // Conversation flow (existing CHATFLOW mode)
-  AUTOMATION  // Standalone pipeline (existing STANDARD mode)
+  TASK // Attachable to agents as jobs they execute
+  CHATFLOW // Conversation flow (existing CHATFLOW mode)
+  AUTOMATION // Standalone pipeline (existing STANDARD mode)
 }
 
 enum RunStatus {
@@ -777,39 +777,41 @@ enum RunStatus {
 // ─── Skills System (OpenClaw / Custom) ──────────────────────
 
 model Skill {
-  id             String   @id @default(cuid())
-  name           String
-  displayName    String
-  description    String   @db.Text
-  content        String   @db.Text             // Skill prompt markdown
-  source         String   @default("custom")   // "openclaw" | "custom" | "marketplace"
-  sourceUrl      String?                       // ClawHub URL
-  version        String?
-  category       String   @default("general")  // "productivity", "coding", "writing", etc.
-  tags           String[]
-  icon           String?                       // Emoji or Lucide icon name for display
-  metadata       Json?                         // OpenClaw frontmatter
-  enabled        Boolean  @default(true)
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      String?
+  id              String           @id @default(cuid())
+  name            String
+  displayName     String
+  description     String           @db.Text
+  content         String           @db.Text // Skill prompt markdown
+  source          String           @default("custom") // "openclaw" | "custom" | "marketplace"
+  sourceUrl       String? // ClawHub URL
+  version         String?
+  category        String           @default("general") // "productivity", "coding", "writing", etc.
+  tags            String[]
+  icon            String? // Emoji or Lucide icon name for display
+  metadata        Json? // OpenClaw frontmatter
+  enabled         Boolean          @default(true)
+  organizationId  String?
+  organization    Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       String?
   assistantSkills AssistantSkill[]
-  installedSkill InstalledSkill?        // Reverse relation if linked from InstalledSkill
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  installedSkill  InstalledSkill? // Reverse relation if linked from InstalledSkill
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
   @@unique([name, organizationId])
   @@index([organizationId])
 }
 
 model AssistantSkill {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   assistantId String
   assistant   Assistant @relation(fields: [assistantId], references: [id], onDelete: Cascade)
   skillId     String
-  skill       Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
-  enabled     Boolean  @default(true)
-  priority    Int      @default(0)
-  createdAt   DateTime @default(now())
+  skill       Skill     @relation(fields: [skillId], references: [id], onDelete: Cascade)
+  enabled     Boolean   @default(true)
+  priority    Int       @default(0)
+  createdAt   DateTime  @default(now())
+
   @@unique([assistantId, skillId])
   @@index([assistantId])
   @@index([skillId])
@@ -818,18 +820,18 @@ model AssistantSkill {
 // ─── Installed Community Skills ──────────────────────────────
 
 model InstalledSkill {
-  id             String   @id @default(cuid())
-  name           String                          // Community skill registry key: "neko-finance"
-  displayName    String
-  description    String   @db.Text
-  version        String                          // Installed version: "1.0.0"
-  category       String   @default("general")
-  tags           String[]
-  icon           String   @default("Sparkles")
-  skillPrompt    String   @db.Text               // SKILL.md content snapshot
-  configSchema   Json?                           // JSON Schema for user config form
-  config         Json?                           // User-provided config values (API keys, etc.)
-  enabled        Boolean  @default(true)
+  id           String   @id @default(cuid())
+  name         String // Community skill registry key: "neko-finance"
+  displayName  String
+  description  String   @db.Text
+  version      String // Installed version: "1.0.0"
+  category     String   @default("general")
+  tags         String[]
+  icon         String   @default("Sparkles")
+  skillPrompt  String   @db.Text // SKILL.md content snapshot
+  configSchema Json? // JSON Schema for user config form
+  config       Json? // User-provided config values (API keys, etc.)
+  enabled      Boolean  @default(true)
 
   // Organization scope
   organizationId String
@@ -837,11 +839,11 @@ model InstalledSkill {
   installedBy    String?
 
   // Linked Skill record for prompt injection
-  skillId        String?  @unique
-  skill          Skill?   @relation(fields: [skillId], references: [id], onDelete: SetNull)
+  skillId String? @unique
+  skill   Skill?  @relation(fields: [skillId], references: [id], onDelete: SetNull)
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([name, organizationId])
   @@index([organizationId])
@@ -850,63 +852,65 @@ model InstalledSkill {
 // ─── OpenAPI Spec Import ────────────────────────────────────
 
 model OpenApiSpec {
-  id           String   @id @default(cuid())
-  name         String
-  specUrl      String?
-  specContent  Json
-  version      String?
-  serverUrl    String
-  authConfig   Json?    // { type, token, headerName }
-  toolCount    Int      @default(0)
+  id             String        @id @default(cuid())
+  name           String
+  specUrl        String?
+  specContent    Json
+  version        String?
+  serverUrl      String
+  authConfig     Json? // { type, token, headerName }
+  toolCount      Int           @default(0)
   organizationId String?
-  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
   @@index([organizationId])
 }
 
 // ─── Tool Marketplace ───────────────────────────────────────
 
 model MarketplaceInstall {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   catalogItemId  String
-  itemType       String   // "tool" | "skill"
-  installedId    String   // Created Tool.id or Skill.id
+  itemType       String // "tool" | "skill"
+  installedId    String // Created Tool.id or Skill.id
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   installedBy    String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime     @default(now())
+
   @@unique([catalogItemId, organizationId])
   @@index([organizationId])
 }
 
 model CatalogItem {
-  id            String   @id @default(cuid())
-  name          String   @unique
-  displayName   String
-  description   String   @db.Text
-  category      String
-  type          String   // "tool" | "skill" | "workflow" | "assistant"
-  icon          String   @default("Sparkles")
-  tags          String[]
-  featured      Boolean  @default(false)
-  skillContent  String?  @db.Text
-  skillCategory String?
-  toolTemplate  Json?
-  workflowTemplate Json?
+  id                String   @id @default(cuid())
+  name              String   @unique
+  displayName       String
+  description       String   @db.Text
+  category          String
+  type              String // "tool" | "skill" | "workflow" | "assistant"
+  icon              String   @default("Sparkles")
+  tags              String[]
+  featured          Boolean  @default(false)
+  skillContent      String?  @db.Text
+  skillCategory     String?
+  toolTemplate      Json?
+  workflowTemplate  Json?
   assistantTemplate Json?
-  mcpTemplate   Json?
-  sourceUrl     String?
-  sourceSlug    String?  @unique
+  mcpTemplate       Json?
+  sourceUrl         String?
+  sourceSlug        String?  @unique
 
   // Community package references
-  communitySkillName String?               // Maps to CommunitySkillDefinition.name in registry
-  communityToolName  String?               // Maps to CommunityToolDefinition.name in registry
-  configSchema       Json?                 // JSON Schema for skill config form on install
+  communitySkillName String? // Maps to CommunitySkillDefinition.name in registry
+  communityToolName  String? // Maps to CommunityToolDefinition.name in registry
+  configSchema       Json? // JSON Schema for skill config form on install
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ─── Digital Employee System ──────────────────────────────────
@@ -931,30 +935,30 @@ enum ApprovalStatus {
 }
 
 model DigitalEmployee {
-  id               String          @id @default(cuid())
+  id               String                   @id @default(cuid())
   name             String
   description      String?
   avatar           String?
-  status           EmployeeStatus  @default(DRAFT)
+  status           EmployeeStatus           @default(DRAFT)
   assistantId      String
-  assistant        Assistant       @relation(fields: [assistantId], references: [id])
-  deploymentConfig Json            @default("{}")
+  assistant        Assistant                @relation(fields: [assistantId], references: [id])
+  deploymentConfig Json                     @default("{}")
   resourceLimits   Json?
-  autonomyLevel    String          @default("supervised") // "supervised" | "autonomous"
+  autonomyLevel    String                   @default("supervised") // "supervised" | "autonomous"
   runtimeId        String?
   lastActiveAt     DateTime?
   lastRunId        String?
   supervisorId     String?
   gatewayConfig    Json?
-  totalRuns        Int             @default(0)
-  successfulRuns   Int             @default(0)
-  failedRuns       Int             @default(0)
-  totalTokensUsed  BigInt          @default(0)
+  totalRuns        Int                      @default(0)
+  successfulRuns   Int                      @default(0)
+  failedRuns       Int                      @default(0)
+  totalTokensUsed  BigInt                   @default(0)
   organizationId   String
-  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   createdBy        String
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
   runs             EmployeeRun[]
   approvals        EmployeeApproval[]
   files            EmployeeFile[]
@@ -964,14 +968,14 @@ model DigitalEmployee {
   chatMessages     EmployeeChatMessage[]
   integrations     EmployeeIntegration[]
   trustEvents      EmployeeTrustEvent[]
-  trustScore       Float           @default(50.0)
+  trustScore       Float                    @default(50.0)
   webhooks         EmployeeWebhook[]
   goals            EmployeeGoal[]
-  sandboxMode      Boolean         @default(false)
+  sandboxMode      Boolean                  @default(false)
   groupId          String
-  group            EmployeeGroup   @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  sentMessages     EmployeeMessage[] @relation("sentMessages")
-  receivedMessages EmployeeMessage[] @relation("receivedMessages")
+  group            EmployeeGroup            @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  sentMessages     EmployeeMessage[]        @relation("sentMessages")
+  receivedMessages EmployeeMessage[]        @relation("receivedMessages")
 
   @@index([organizationId])
   @@index([status])
@@ -979,44 +983,44 @@ model DigitalEmployee {
 }
 
 model EmployeeGroup {
-  id             String           @id @default(cuid())
+  id             String            @id @default(cuid())
   name           String
   description    String?
   organizationId String
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   containerId    String?
   containerPort  Int?
   noVncPort      Int?
   gatewayToken   String?
-  isImplicit     Boolean          @default(false)
-  status         String           @default("IDLE")
+  isImplicit     Boolean           @default(false)
+  status         String            @default("IDLE")
   members        DigitalEmployee[]
   createdBy      String
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
   @@index([organizationId])
 }
 
 model EmployeeRun {
-  id                String          @id @default(cuid())
-  digitalEmployeeId String
-  digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
-  trigger           String          // "schedule" | "webhook" | "manual" | "event"
-  triggerData       Json?
-  workflowId        String?
-  workflowRunId     String?
-  status            RunStatus
-  output            Json?
-  error             String?
-  promptTokens      Int             @default(0)
-  completionTokens  Int             @default(0)
-  executionTimeMs   Int?
-  errorClassification String?       // transient|permanent|ambiguous
-  retryCount          Int          @default(0)
+  id                  String          @id @default(cuid())
+  digitalEmployeeId   String
+  digitalEmployee     DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
+  trigger             String // "schedule" | "webhook" | "manual" | "event"
+  triggerData         Json?
+  workflowId          String?
+  workflowRunId       String?
+  status              RunStatus
+  output              Json?
+  error               String?
+  promptTokens        Int             @default(0)
+  completionTokens    Int             @default(0)
+  executionTimeMs     Int?
+  errorClassification String? // transient|permanent|ambiguous
+  retryCount          Int             @default(0)
   parentRunId         String?
-  startedAt         DateTime        @default(now())
-  completedAt       DateTime?
+  startedAt           DateTime        @default(now())
+  completedAt         DateTime?
 
   @@index([digitalEmployeeId, startedAt])
 }
@@ -1117,9 +1121,9 @@ model EmployeeChatMessage {
   id                String          @id @default(cuid())
   digitalEmployeeId String
   digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
-  role              String          // "user" | "assistant"
+  role              String // "user" | "assistant"
   content           String          @db.Text
-  toolCalls         Json?           // Parsed tool call metadata
+  toolCalls         Json? // Parsed tool call metadata
   createdAt         DateTime        @default(now())
 
   @@index([digitalEmployeeId, createdAt])
@@ -1148,7 +1152,7 @@ model EmployeeTrustEvent {
   id                String          @id @default(cuid())
   digitalEmployeeId String
   digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
-  eventType         String          // approval_accepted|approval_rejected|run_success|run_failure|promotion|demotion
+  eventType         String // approval_accepted|approval_rejected|run_success|run_failure|promotion|demotion
   weight            Float           @default(1.0)
   metadata          Json?
   createdAt         DateTime        @default(now())
@@ -1160,7 +1164,7 @@ model EmployeeWebhook {
   id                String          @id @default(cuid())
   digitalEmployeeId String
   digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
-  type              String          // webhook|email|watch
+  type              String // webhook|email|watch
   name              String
   token             String          @unique @default(cuid())
   config            Json            @default("{}")
@@ -1180,10 +1184,10 @@ model EmployeeGoal {
   digitalEmployeeId String
   digitalEmployee   DigitalEmployee @relation(fields: [digitalEmployeeId], references: [id], onDelete: Cascade)
   name              String
-  type              String          // counter|threshold|boolean|percentage
+  type              String // counter|threshold|boolean|percentage
   target            Float
   unit              String
-  period            String          // daily|weekly|monthly|total
+  period            String // daily|weekly|monthly|total
   currentValue      Float           @default(0)
   source            String          @default("manual")
   autoTrackConfig   Json?
@@ -1197,32 +1201,32 @@ model EmployeeGoal {
 // ─── Phase C: Collaboration & Governance ──────────────────────────
 
 model EmployeeMessage {
-  id               String           @id @default(cuid())
+  id               String            @id @default(cuid())
   organizationId   String
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   fromEmployeeId   String
-  fromEmployee     DigitalEmployee  @relation("sentMessages", fields: [fromEmployeeId], references: [id], onDelete: Cascade)
+  fromEmployee     DigitalEmployee   @relation("sentMessages", fields: [fromEmployeeId], references: [id], onDelete: Cascade)
   toEmployeeId     String?
-  toEmployee       DigitalEmployee? @relation("receivedMessages", fields: [toEmployeeId], references: [id], onDelete: SetNull)
-  toGroup          String?          // tag group for broadcasts
-  type             String           // "message" | "task" | "handoff" | "broadcast"
+  toEmployee       DigitalEmployee?  @relation("receivedMessages", fields: [toEmployeeId], references: [id], onDelete: SetNull)
+  toGroup          String? // tag group for broadcasts
+  type             String // "message" | "task" | "handoff" | "broadcast"
   subject          String
-  content          String           @db.Text
-  attachments      Json             @default("[]")
-  priority         String           @default("normal") // low|normal|high|urgent
-  status           String           @default("pending") // pending|delivered|in_progress|completed|failed|cancelled|pending_approval
-  requiresApproval Boolean          @default(false)
-  approvalStatus   String?          // pending|approved|rejected
-  responseContent  String?          @db.Text
+  content          String            @db.Text
+  attachments      Json              @default("[]")
+  priority         String            @default("normal") // low|normal|high|urgent
+  status           String            @default("pending") // pending|delivered|in_progress|completed|failed|cancelled|pending_approval
+  requiresApproval Boolean           @default(false)
+  approvalStatus   String? // pending|approved|rejected
+  responseContent  String?           @db.Text
   responseData     Json?
   respondedAt      DateTime?
   parentMessageId  String?
-  parentMessage    EmployeeMessage? @relation("messageThread", fields: [parentMessageId], references: [id])
+  parentMessage    EmployeeMessage?  @relation("messageThread", fields: [parentMessageId], references: [id])
   childMessages    EmployeeMessage[] @relation("messageThread")
   runId            String?
-  metadata         Json             @default("{}")
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  metadata         Json              @default("{}")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@index([toEmployeeId, status])
   @@index([fromEmployeeId])
@@ -1230,17 +1234,17 @@ model EmployeeMessage {
 }
 
 model AuditLog {
-  id              String       @id @default(cuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  employeeId      String?
-  userId          String?
-  action          String       // tool.execute|approval.respond|credential.access|message.send|employee.create
-  resource        String       // tool:gmail_send|employee:abc123|message:xyz
-  detail          Json         @default("{}")
-  ipAddress       String?
-  riskLevel       String       @default("low") // low|medium|high|critical
-  createdAt       DateTime     @default(now())
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String?
+  userId         String?
+  action         String // tool.execute|approval.respond|credential.access|message.send|employee.create
+  resource       String // tool:gmail_send|employee:abc123|message:xyz
+  detail         Json         @default("{}")
+  ipAddress      String?
+  riskLevel      String       @default("low") // low|medium|high|critical
+  createdAt      DateTime     @default(now())
 
   @@index([organizationId, createdAt])
   @@index([employeeId, createdAt])
@@ -1249,18 +1253,18 @@ model AuditLog {
 }
 
 model EmployeeTemplateShare {
-  id              String       @id @default(cuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name            String
-  description     String?
-  category        String
-  templateData    Json         // full EmployeeTemplate serialized
-  version         Int          @default(1)
-  isPublic        Boolean      @default(false)
-  createdBy       String
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  category       String
+  templateData   Json // full EmployeeTemplate serialized
+  version        Int          @default(1)
+  isPublic       Boolean      @default(false)
+  createdBy      String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
   @@index([isPublic, category])
@@ -1269,7 +1273,7 @@ model EmployeeTemplateShare {
 // ─── Task Engine Cache (source of truth = RantaiClaw containers) ───
 
 model EmployeeTask {
-  id                  String    @id  // UUID from RantaiClaw, NOT auto-generated
+  id                  String    @id // UUID from RantaiClaw, NOT auto-generated
   organizationId      String
   title               String
   description         String?   @db.Text
@@ -1289,15 +1293,15 @@ model EmployeeTask {
   orderInStatus       Int       @default(0)
   orderInParent       Int       @default(0)
   metadata            Json      @default("{}")
-  sourceEmployeeId    String    // which container this task came from
-  sourceGroupId       String?   // if from a group container
+  sourceEmployeeId    String // which container this task came from
+  sourceGroupId       String? // if from a group container
   isStale             Boolean   @default(false)
   cachedAt            DateTime  @default(now())
   createdAt           DateTime
   updatedAt           DateTime
 
-  subtasks   EmployeeTask[]  @relation("TaskSubtasks")
-  parentTask EmployeeTask?   @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks   EmployeeTask[]        @relation("TaskSubtasks")
+  parentTask EmployeeTask?         @relation("TaskSubtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
   comments   EmployeeTaskComment[]
   events     EmployeeTaskEvent[]
 
@@ -1311,13 +1315,13 @@ model EmployeeTask {
 }
 
 model EmployeeTaskComment {
-  id                String   @id  // UUID from RantaiClaw
-  taskId            String
-  content           String   @db.Text
-  authorType        String   @default("HUMAN")
-  authorEmployeeId  String?
-  authorUserId      String?
-  createdAt         DateTime
+  id               String   @id // UUID from RantaiClaw
+  taskId           String
+  content          String   @db.Text
+  authorType       String   @default("HUMAN")
+  authorEmployeeId String?
+  authorUserId     String?
+  createdAt        DateTime
 
   task EmployeeTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
@@ -1325,14 +1329,14 @@ model EmployeeTaskComment {
 }
 
 model EmployeeTaskEvent {
-  id                String   @id  // UUID from RantaiClaw
-  taskId            String
-  eventType         String
-  actorType         String
-  actorEmployeeId   String?
-  actorUserId       String?
-  data              Json     @default("{}")
-  createdAt         DateTime
+  id              String   @id // UUID from RantaiClaw
+  taskId          String
+  eventType       String
+  actorType       String
+  actorEmployeeId String?
+  actorUserId     String?
+  data            Json     @default("{}")
+  createdAt       DateTime
 
   task EmployeeTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
@@ -1341,26 +1345,26 @@ model EmployeeTaskEvent {
 
 // LLM models synced from OpenRouter
 model LlmModel {
-  id             String   @id                    // OpenRouter model ID (e.g. "openai/gpt-5.2")
-  name           String                          // Display name
-  provider       String                          // Lab name (e.g. "OpenAI", "Anthropic")
-  providerSlug   String                          // OpenRouter prefix (e.g. "openai", "anthropic")
-  description    String   @default("")
-  contextWindow  Int
-  pricingInput   Float                           // per million tokens
-  pricingOutput  Float                           // per million tokens
-  hasVision      Boolean  @default(false)
-  hasToolCalling Boolean  @default(false)
-  hasStreaming    Boolean  @default(true)
-  isFree         Boolean  @default(false)        // pricing == 0
-  isTrackedLab   Boolean  @default(false)        // from tracked provider list
-  isActive       Boolean  @default(true)         // soft-delete when removed from OpenRouter
-  outputModalities String[] @default([])
-  inputModalities  String[] @default([])
-  rawData        Json?                           // full OpenRouter response for future use
-  lastSeenAt     DateTime @default(now())        // last time seen in OpenRouter API
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String   @id // OpenRouter model ID (e.g. "openai/gpt-5.2")
+  name             String // Display name
+  provider         String // Lab name (e.g. "OpenAI", "Anthropic")
+  providerSlug     String // OpenRouter prefix (e.g. "openai", "anthropic")
+  description      String   @default("")
+  contextWindow    Int
+  pricingInput     Float // per million tokens
+  pricingOutput    Float // per million tokens
+  hasVision        Boolean  @default(false)
+  hasToolCalling   Boolean  @default(false)
+  hasStreaming     Boolean  @default(true)
+  isFree           Boolean  @default(false) // pricing == 0
+  isTrackedLab     Boolean  @default(false) // from tracked provider list
+  isActive         Boolean  @default(true) // soft-delete when removed from OpenRouter
+  outputModalities String[] @default([]) // from OpenRouter architecture.output_modalities
+  inputModalities  String[] @default([]) // from OpenRouter architecture.input_modalities
+  rawData          Json? // full OpenRouter response for future use
+  lastSeenAt       DateTime @default(now()) // last time seen in OpenRouter API
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([provider])
   @@index([isFree, hasToolCalling])
@@ -1408,6 +1412,7 @@ model MediaJob {
   @@index([userId, createdAt])
   @@index([status])
   @@index([modality])
+  @@index([status, modality])
 }
 
 model MediaAsset {
