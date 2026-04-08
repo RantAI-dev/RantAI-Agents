@@ -19,20 +19,30 @@ export interface EnforceLimitInput {
 
 /**
  * Returns total media cost (in cents) consumed by a user in the last 24h.
- * Counts SUCCEEDED and RUNNING jobs. RUNNING uses estimatedCostCents
- * because costCents is not yet finalized.
+ * Counts SUCCEEDED jobs by their finalized costCents, and RUNNING jobs by
+ * their estimatedCostCents (since costCents is NULL until finalization).
  */
 export async function getUsageTodayCents(userId: string): Promise<number> {
   const since = new Date(Date.now() - ONE_DAY_MS)
-  const result = await prisma.mediaJob.aggregate({
-    where: {
-      userId,
-      createdAt: { gte: since },
-      status: { in: ["SUCCEEDED", "RUNNING"] },
-    },
-    _sum: { costCents: true },
-  })
-  return result._sum.costCents ?? 0
+  const [succeeded, running] = await Promise.all([
+    prisma.mediaJob.aggregate({
+      where: {
+        userId,
+        createdAt: { gte: since },
+        status: "SUCCEEDED",
+      },
+      _sum: { costCents: true },
+    }),
+    prisma.mediaJob.aggregate({
+      where: {
+        userId,
+        createdAt: { gte: since },
+        status: "RUNNING",
+      },
+      _sum: { estimatedCostCents: true },
+    }),
+  ])
+  return (succeeded._sum.costCents ?? 0) + (running._sum.estimatedCostCents ?? 0)
 }
 
 export async function enforceMediaLimit(

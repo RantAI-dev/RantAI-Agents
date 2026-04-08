@@ -75,10 +75,16 @@ async function loadModel(modelId: string) {
   return model
 }
 
-async function loadReferenceUrls(assetIds: string[]): Promise<string[]> {
+async function loadReferenceUrls(
+  assetIds: string[],
+  organizationId: string
+): Promise<string[]> {
   if (assetIds.length === 0) return []
   const assets = await prisma.mediaAsset.findMany({
-    where: { id: { in: assetIds } },
+    where: {
+      id: { in: assetIds },
+      organizationId,
+    },
     select: { id: true, s3Key: true, mimeType: true },
   })
   // Phase 1 returns the S3 key as a path-style URL. The Phase 1.5 follow-up
@@ -189,7 +195,7 @@ async function runImageJob(input: {
   estimatedCostCents: number
 }) {
   const apiKey = getOpenRouterApiKey()
-  const referenceImageUrls = await loadReferenceUrls(input.referenceAssetIds)
+  const referenceImageUrls = await loadReferenceUrls(input.referenceAssetIds, input.organizationId)
 
   const result = await generateImage({
     apiKey,

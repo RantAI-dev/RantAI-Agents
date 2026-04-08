@@ -232,6 +232,65 @@ describe("createMediaJob — Phase 2 invariants", () => {
     expect(audits[0].action).toBe("media.generate")
   })
 
+  it("filters out reference assets from other organizations (security)", async () => {
+    const user = await createTestUser()
+    const orgA = await createTestOrg()
+    const orgB = await createTestOrg()
+    await seedImageModel()
+
+    // Create an asset in org B
+    const otherJob = await testPrisma.mediaJob.create({
+      data: {
+        organizationId: orgB.id,
+        userId: user.id,
+        modality: "IMAGE",
+        modelId: "google/nano-banana-2",
+        prompt: "secret",
+        parameters: {},
+        referenceAssetIds: [],
+        status: "SUCCEEDED",
+        estimatedCostCents: 1,
+        costCents: 1,
+      },
+    })
+    const otherAsset = await testPrisma.mediaAsset.create({
+      data: {
+        jobId: otherJob.id,
+        organizationId: orgB.id,
+        modality: "IMAGE",
+        mimeType: "image/png",
+        s3Key: "media/orgB/secret.png",
+        sizeBytes: 1,
+        width: 1,
+        height: 1,
+      },
+    })
+
+    generateImageMock.mockResolvedValueOnce({
+      images: [{ bytes: new Uint8Array([1]), mimeType: "image/png" }],
+      actualCostCents: 4,
+      rawResponse: {},
+    })
+    uploadMediaBytesMock.mockResolvedValueOnce({ s3Key: "k", sizeBytes: 1 })
+
+    // User in org A tries to use the org B asset as a reference
+    await createMediaJob({
+      userId: user.id,
+      organizationId: orgA.id,
+      modality: "IMAGE",
+      modelId: "google/nano-banana-2",
+      prompt: "make it pink",
+      parameters: {},
+      referenceAssetIds: [otherAsset.id],
+    })
+
+    // generateImage was called with an empty referenceImageUrls array
+    // because the cross-org asset was filtered out by loadReferenceUrls
+    expect(generateImageMock).toHaveBeenCalledTimes(1)
+    const call = generateImageMock.mock.calls[0]?.[0] as { referenceImageUrls: string[] }
+    expect(call.referenceImageUrls).toEqual([])
+  })
+
   it("emits a media:job:update Socket.io event when SUCCEEDED", async () => {
     const user = await createTestUser()
     const org = await createTestOrg()
