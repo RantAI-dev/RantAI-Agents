@@ -164,6 +164,12 @@ const dataEffectScopePolicies: DataEffectScopePolicy[] = [
     rationale: "knowledge pages/dialogs now follow server-fed loading patterns",
   },
   {
+    name: "media",
+    mode: "strict",
+    prefixes: ["src/app/dashboard/media/", "src/features/media/components/"],
+    rationale: "media studio is server-fed with optimistic + Socket.io client updates",
+  },
+  {
     name: "conversations-agent",
     mode: "strict",
     prefixes: ["src/features/conversations/components/agent/", "src/features/conversations/components/agent/pages/"],
