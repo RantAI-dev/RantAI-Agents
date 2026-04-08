@@ -43,6 +43,7 @@ export function validateArtifactContent(
   if (type === "application/react") return validateReact(content)
   if (type === "image/svg+xml") return validateSvg(content)
   if (type === "application/mermaid") return validateMermaid(content)
+  if (type === "application/python") return validatePython(content)
   if (type === "application/code") return validateCode(content)
   return { ok: true, errors: [], warnings: [] }
 }
@@ -594,6 +595,115 @@ function validateReact(content: string): ArtifactValidationResult {
       `Imports from non-whitelisted libraries: ${badImports
         .map((s) => `"${s}"`)
         .join(", ")}. Only react, react-dom, recharts, lucide-react, and framer-motion are available (as window globals: React, Recharts, LucideReact, Motion). Remove the imports and use the globals instead.`
+    )
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
+}
+
+// ---------------------------------------------------------------------------
+// Python validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Packages that are NOT part of the Pyodide distribution and will crash on
+ * import inside the python-renderer Web Worker.
+ */
+const PYTHON_UNAVAILABLE_PACKAGES: ReadonlyArray<{ pkg: string; reason: string }> = [
+  { pkg: "requests", reason: "no HTTP client in the Pyodide Worker" },
+  { pkg: "httpx", reason: "no HTTP client in the Pyodide Worker" },
+  { pkg: "urllib3", reason: "not in Pyodide" },
+  { pkg: "flask", reason: "no server runtime in Pyodide" },
+  { pkg: "django", reason: "no server runtime in Pyodide" },
+  { pkg: "fastapi", reason: "no server runtime in Pyodide" },
+  { pkg: "sqlalchemy", reason: "not in Pyodide" },
+  { pkg: "selenium", reason: "no browser automation in Pyodide" },
+  { pkg: "tensorflow", reason: "not in Pyodide" },
+  { pkg: "torch", reason: "not in Pyodide" },
+  { pkg: "keras", reason: "not in Pyodide" },
+  { pkg: "transformers", reason: "not in Pyodide" },
+  { pkg: "cv2", reason: "opencv-python is not in Pyodide" },
+  { pkg: "pyarrow", reason: "not in Pyodide" },
+  { pkg: "polars", reason: "not in Pyodide" },
+]
+
+function validatePython(content: string): ArtifactValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  const trimmed = content.trim()
+
+  if (!trimmed) {
+    errors.push("Python content is empty.")
+    return { ok: false, errors, warnings }
+  }
+
+  const firstLine = trimmed.split("\n")[0] ?? ""
+  if (/^\s*```/.test(firstLine)) {
+    errors.push(
+      "Remove the markdown code fences (```python ... ```). The artifact content is the Python source itself — the renderer handles highlighting."
+    )
+    return { ok: false, errors, warnings }
+  }
+
+  const stripComment = (line: string): string => {
+    const hashIdx = line.indexOf("#")
+    return hashIdx === -1 ? line : line.slice(0, hashIdx)
+  }
+
+  const codeNoComments = content.split("\n").map(stripComment).join("\n")
+
+  const unavailableHits = new Set<string>()
+  for (const { pkg } of PYTHON_UNAVAILABLE_PACKAGES) {
+    const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    const re = new RegExp(
+      `(^|\\n)\\s*(?:import\\s+${escaped}(?:\\s|$|,)|from\\s+${escaped}(?:\\.|\\s))`,
+      "m"
+    )
+    if (re.test(codeNoComments)) unavailableHits.add(pkg)
+  }
+  if (unavailableHits.size > 0) {
+    const details = [...unavailableHits]
+      .map((pkg) => {
+        const entry = PYTHON_UNAVAILABLE_PACKAGES.find((p) => p.pkg === pkg)
+        return `"${pkg}" (${entry?.reason ?? "not in Pyodide"})`
+      })
+      .join(", ")
+    errors.push(
+      `Imports unavailable packages: ${details}. These will crash the script on import. Use numpy/matplotlib/pandas/scipy or hard-code mock data instead.`
+    )
+  }
+
+  if (/(^|[^.\w])input\s*\(/m.test(codeNoComments)) {
+    errors.push(
+      "Found input() call — there is no stdin in the Pyodide Worker, input() will hang the script. Hard-code values or generate them instead."
+    )
+  }
+
+  if (/\bopen\s*\([^)]*,\s*['"][wax]b?\+?['"]/m.test(codeNoComments)) {
+    errors.push(
+      "Found open() with a write mode — there is no persistent filesystem in the Pyodide Worker. Remove file writes; use print() or plt.show() for output."
+    )
+  }
+
+  const hasPrint = /(^|[^.\w])print\s*\(/m.test(codeNoComments)
+  const hasShow = /\bplt\.show\s*\(/m.test(codeNoComments)
+  if (!hasPrint && !hasShow) {
+    warnings.push(
+      "Script has no print() or plt.show() — it may run successfully but produce no visible output in the panel."
+    )
+  }
+
+  const sleepMatch = codeNoComments.match(/\btime\.sleep\s*\(\s*([\d.]+)\s*\)/)
+  if (sleepMatch && Number.parseFloat(sleepMatch[1]) > 5) {
+    warnings.push(
+      `Found time.sleep(${sleepMatch[1]}) — sleeps longer than a few seconds feel stuck to the user. Trim or remove.`
+    )
+  }
+
+  if (/\bwhile\s+True\s*:/.test(codeNoComments) && !/\bbreak\b/.test(codeNoComments)) {
+    warnings.push(
+      "Found `while True:` with no `break` in the script — potential infinite loop. The Worker has no enforced timeout; the user will have to click Stop."
     )
   }
 

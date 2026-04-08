@@ -376,6 +376,109 @@ describe("validateArtifactContent — application/mermaid", () => {
   })
 })
 
+describe("validateArtifactContent — application/python", () => {
+  const v = (code: string) => validateArtifactContent("application/python", code)
+
+  it("accepts a valid numpy + print script", () => {
+    const r = v(`import numpy as np\n\nx = np.arange(10)\nprint("sum =", int(x.sum()))\n`)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+  })
+
+  it("accepts a valid matplotlib script", () => {
+    const r = v(
+      `import numpy as np\nimport matplotlib.pyplot as plt\n\nplt.figure(figsize=(10, 6))\nplt.plot(np.arange(10))\nplt.title("demo")\nplt.xlabel("x")\nplt.ylabel("y")\nplt.tight_layout()\nplt.show()\n`
+    )
+    expect(r.ok).toBe(true)
+  })
+
+  it("accepts pandas (Pyodide auto-loads it)", () => {
+    const r = v(`import pandas as pd\n\nprint(pd.Series([1, 2, 3]).mean())\n`)
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects empty content", () => {
+    const r = v("   \n  ")
+    expect(r.ok).toBe(false)
+    expect(r.errors[0]).toMatch(/empty/i)
+  })
+
+  it("rejects markdown fence wrap", () => {
+    const r = v("```python\nprint('hi')\n```")
+    expect(r.ok).toBe(false)
+    expect(r.errors[0]).toMatch(/markdown code fences/i)
+  })
+
+  it("rejects `import requests`", () => {
+    const r = v(`import requests\n\nprint(requests.get("https://x").text)\n`)
+    expect(r.ok).toBe(false)
+    expect(r.errors[0]).toMatch(/requests/)
+  })
+
+  it("rejects `from flask import Flask`", () => {
+    const r = v(`from flask import Flask\n\napp = Flask(__name__)\n`)
+    expect(r.ok).toBe(false)
+    expect(r.errors[0]).toMatch(/flask/)
+  })
+
+  it("rejects `import torch`", () => {
+    const r = v(`import torch\nprint(torch.tensor([1.0]))\n`)
+    expect(r.ok).toBe(false)
+    expect(r.errors[0]).toMatch(/torch/)
+  })
+
+  it("does NOT reject a substring match like `requestsx`", () => {
+    const r = v(`requestsx = 1\nprint(requestsx)\n`)
+    expect(r.ok).toBe(true)
+  })
+
+  it("ignores unavailable-package names that appear only inside comments", () => {
+    const r = v(`# import requests  -- not used\nprint("ok")\n`)
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects input()", () => {
+    const r = v(`name = input("name? ")\nprint(name)\n`)
+    expect(r.ok).toBe(false)
+    expect(r.errors.some((e) => /input\(\)/.test(e))).toBe(true)
+  })
+
+  it("rejects open() with write mode", () => {
+    const r = v(`with open("out.txt", "w") as f:\n    f.write("hi")\n`)
+    expect(r.ok).toBe(false)
+    expect(r.errors.some((e) => /open\(\)/.test(e))).toBe(true)
+  })
+
+  it("allows open() with read mode", () => {
+    const r = v(`try:\n    open("x.txt", "r")\nexcept Exception as e:\n    print(e)\n`)
+    expect(r.ok).toBe(true)
+  })
+
+  it("warns when there is no print() and no plt.show()", () => {
+    const r = v(`x = 1 + 1\ny = x * 2\n`)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.some((w) => /no print\(\) or plt\.show\(\)/.test(w))).toBe(true)
+  })
+
+  it("warns on long time.sleep", () => {
+    const r = v(`import time\ntime.sleep(30)\nprint("done")\n`)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.some((w) => /time\.sleep/.test(w))).toBe(true)
+  })
+
+  it("warns on `while True` with no break", () => {
+    const r = v(`while True:\n    print("spin")\n`)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.some((w) => /while True/.test(w))).toBe(true)
+  })
+
+  it("does not warn on `while True` that has a break", () => {
+    const r = v(`i = 0\nwhile True:\n    i += 1\n    if i > 5:\n        break\nprint(i)\n`)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.some((w) => /while True/.test(w))).toBe(false)
+  })
+})
+
 describe("validateArtifactContent — other types pass through", () => {
   it("returns ok for text/markdown", () => {
     const r = validateArtifactContent("text/markdown", "# anything")
