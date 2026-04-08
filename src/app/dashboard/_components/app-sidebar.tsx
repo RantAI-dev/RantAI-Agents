@@ -27,6 +27,7 @@ import {
   Bot,
   Users,
   Network,
+  Sparkles,
   type IconComponent,
 } from "@/lib/icons"
 import { ChevronsLeft, ChevronsRight, FolderOpen } from "lucide-react"
@@ -100,6 +101,7 @@ const allNavItems: NavItem[] = [
   { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: null },
 
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
+  { title: "Media Studio", url: "/dashboard/media", icon: Sparkles, feature: null },
   { title: "Files", url: "/dashboard/files", icon: FolderOpen, feature: null },
   { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },
 ]
@@ -113,6 +115,7 @@ const sections = {
   digitalEmployees: { title: "Digital Employees", subtitle: "Autonomous Workers", icon: Users, path: "/dashboard/digital-employees" },
   groups: { title: "Teams", subtitle: "Employee Groups", icon: Network, path: "/dashboard/groups" },
   agent: { title: "Live Chat", subtitle: "Customer Support", icon: Headphones, path: "/dashboard/agent" },
+  media: { title: "Media Studio", subtitle: "Generate Images & Video", icon: Sparkles, path: "/dashboard/media" },
   knowledge: { title: "Files", subtitle: "Documents & Knowledge Bases", icon: FolderOpen, path: "/dashboard/files" },
   marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
   settings: { title: "Settings", subtitle: "Preferences", icon: Settings, path: "/dashboard/settings" },
@@ -436,6 +439,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
     if (pathname.startsWith("/dashboard/digital-employees")) return sections.digitalEmployees
     if (pathname.startsWith("/dashboard/groups")) return sections.digitalEmployees
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
+    if (pathname.startsWith("/dashboard/media")) return sections.media
     if (pathname.startsWith("/dashboard/files")) return sections.knowledge
     if (pathname.startsWith("/dashboard/marketplace")) return sections.marketplace
     if (pathname.startsWith("/dashboard/settings")) return sections.settings
