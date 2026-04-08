@@ -23,7 +23,7 @@ const MIN_COST_CENTS = 1
  * Pricing conventions (per OpenRouter `pricing.completion` × 1_000_000 already
  * applied by `src/lib/models/sync.ts`):
  *   - IMAGE: pricingOutput is per-image-equivalent dollars × 1000 (milli-dollars)
- *   - AUDIO: pricingOutput is per-second dollars × 1000
+ *   - AUDIO: pricingOutput is per-second dollars × 100_000
  *   - VIDEO: pricingOutput is per-second dollars × 1_000_000
  *
  * The per-modality multipliers are tuned in this single file when the
