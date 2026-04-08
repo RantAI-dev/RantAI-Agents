@@ -54,11 +54,13 @@ function extractProviderSlug(modelId: string): string {
   return modelId.split("/")[0] ?? modelId
 }
 
-/** Check if a model outputs text (filter out image-only generators). */
-function isTextModel(model: OpenRouterModel): boolean {
+const SUPPORTED_OUTPUT_MODALITIES = ["text", "image", "audio", "video"]
+
+/** Check if a model outputs a supported modality (text, image, audio, or video). */
+function isSupportedModel(model: OpenRouterModel): boolean {
   const outputModalities = model.architecture?.output_modalities
   if (!outputModalities || outputModalities.length === 0) return true // assume text if unspecified
-  return outputModalities.includes("text")
+  return outputModalities.some((m) => SUPPORTED_OUTPUT_MODALITIES.includes(m))
 }
 
 function isFreeModel(model: OpenRouterModel): boolean {
@@ -90,7 +92,7 @@ function cleanModelName(rawName: string): string {
 
 /** Determine if a model should be included in our sync. */
 function shouldIncludeModel(model: OpenRouterModel): { include: boolean; reason: "tracked_lab" | "free_with_tools" | null } {
-  if (!isTextModel(model)) return { include: false, reason: null }
+  if (!isSupportedModel(model)) return { include: false, reason: null }
 
   const slug = extractProviderSlug(model.id)
   if (isTrackedProvider(slug)) {
@@ -158,6 +160,8 @@ export async function syncModelsFromOpenRouter(): Promise<SyncResult> {
         isFree: free,
         isTrackedLab: reason === "tracked_lab",
         isActive: true,
+        outputModalities: model.architecture?.output_modalities ?? [],
+        inputModalities: model.architecture?.input_modalities ?? [],
         rawData: JSON.parse(JSON.stringify(model)),
         lastSeenAt: now,
       },
@@ -173,6 +177,8 @@ export async function syncModelsFromOpenRouter(): Promise<SyncResult> {
         isFree: free,
         isTrackedLab: reason === "tracked_lab",
         isActive: true,
+        outputModalities: model.architecture?.output_modalities ?? [],
+        inputModalities: model.architecture?.input_modalities ?? [],
         rawData: JSON.parse(JSON.stringify(model)),
         lastSeenAt: now,
       },
