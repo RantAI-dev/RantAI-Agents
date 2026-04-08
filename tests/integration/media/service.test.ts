@@ -200,3 +200,64 @@ describe("createMediaJob — sync image path", () => {
     expect(result.status).toBe("SUCCEEDED")
   })
 })
+
+describe("createMediaJob — Phase 2 invariants", () => {
+  it("writes an audit row on successful generation", async () => {
+    const user = await createTestUser()
+    const org = await createTestOrg()
+    await seedImageModel()
+
+    generateImageMock.mockResolvedValueOnce({
+      images: [{ bytes: new Uint8Array([1]), mimeType: "image/png" }],
+      actualCostCents: 4,
+      rawResponse: {},
+    })
+    uploadMediaBytesMock.mockResolvedValueOnce({ s3Key: "k", sizeBytes: 1 })
+
+    const result = await createMediaJob({
+      userId: user.id,
+      organizationId: org.id,
+      modality: "IMAGE",
+      modelId: "google/nano-banana-2",
+      prompt: "p",
+      parameters: {},
+      referenceAssetIds: [],
+    })
+    expect(result.status).toBe("SUCCEEDED")
+
+    const audits = await testPrisma.auditLog.findMany({
+      where: { resource: `MediaJob:${result.id}` },
+    })
+    expect(audits.length).toBeGreaterThanOrEqual(1)
+    expect(audits[0].action).toBe("media.generate")
+  })
+
+  it("emits a media:job:update Socket.io event when SUCCEEDED", async () => {
+    const user = await createTestUser()
+    const org = await createTestOrg()
+    await seedImageModel()
+
+    generateImageMock.mockResolvedValueOnce({
+      images: [{ bytes: new Uint8Array([1]), mimeType: "image/png" }],
+      actualCostCents: 4,
+      rawResponse: {},
+    })
+    uploadMediaBytesMock.mockResolvedValueOnce({ s3Key: "k", sizeBytes: 1 })
+
+    const result = await createMediaJob({
+      userId: user.id,
+      organizationId: org.id,
+      modality: "IMAGE",
+      modelId: "google/nano-banana-2",
+      prompt: "p",
+      parameters: {},
+      referenceAssetIds: [],
+    })
+
+    const succeededCalls = emitMock.mock.calls.filter(
+      (call) => (call[2] as { status: string }).status === "SUCCEEDED"
+    )
+    expect(succeededCalls.length).toBeGreaterThanOrEqual(1)
+    expect(succeededCalls[0][1]).toBe("media:job:update")
+  })
+})

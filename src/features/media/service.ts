@@ -23,6 +23,34 @@ export interface CreateMediaJobInput {
   referenceAssetIds: string[]
 }
 
+async function logMediaAuditEvent(input: {
+  jobId: string
+  organizationId: string
+  userId: string
+  modality: MediaModality
+  modelId: string
+  costCents: number
+}) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        organizationId: input.organizationId,
+        userId: input.userId,
+        action: "media.generate",
+        resource: `MediaJob:${input.jobId}`,
+        riskLevel: "low",
+        detail: {
+          modality: input.modality,
+          modelId: input.modelId,
+          costCents: input.costCents,
+        },
+      },
+    })
+  } catch (error) {
+    console.warn("[media] audit log write failed:", error)
+  }
+}
+
 export class MediaLimitExceededError extends Error {
   constructor(
     public limitCents: number,
@@ -106,6 +134,7 @@ export async function createMediaJob(input: CreateMediaJobInput) {
       return await runImageJob({
         jobId: job.id,
         organizationId: input.organizationId,
+        userId: input.userId,
         modelId: input.modelId,
         prompt: input.prompt,
         parameters: input.parameters,
@@ -118,6 +147,7 @@ export async function createMediaJob(input: CreateMediaJobInput) {
       return await runAudioJob({
         jobId: job.id,
         organizationId: input.organizationId,
+        userId: input.userId,
         modelId: input.modelId,
         prompt: input.prompt,
         parameters: input.parameters,
@@ -151,6 +181,7 @@ export async function createMediaJob(input: CreateMediaJobInput) {
 async function runImageJob(input: {
   jobId: string
   organizationId: string
+  userId: string
   modelId: string
   prompt: string
   parameters: Record<string, unknown>
@@ -198,6 +229,15 @@ async function runImageJob(input: {
     assets,
   })
 
+  await logMediaAuditEvent({
+    jobId: input.jobId,
+    organizationId: input.organizationId,
+    userId: input.userId,
+    modality: "IMAGE",
+    modelId: input.modelId,
+    costCents,
+  })
+
   emitToOrgRoom(input.organizationId, "media:job:update", {
     jobId: input.jobId,
     status: "SUCCEEDED",
@@ -209,6 +249,7 @@ async function runImageJob(input: {
 async function runAudioJob(input: {
   jobId: string
   organizationId: string
+  userId: string
   modelId: string
   prompt: string
   parameters: Record<string, unknown>
@@ -232,9 +273,10 @@ async function runAudioJob(input: {
     bytes: result.audio.bytes,
   })
 
+  const audioCostCents = result.actualCostCents ?? input.estimatedCostCents
   const finalized = await finalizeMediaJobAsSucceeded({
     jobId: input.jobId,
-    costCents: result.actualCostCents ?? input.estimatedCostCents,
+    costCents: audioCostCents,
     assets: [
       {
         modality: "AUDIO",
@@ -245,6 +287,15 @@ async function runAudioJob(input: {
         metadata: { modelId: input.modelId },
       },
     ],
+  })
+
+  await logMediaAuditEvent({
+    jobId: input.jobId,
+    organizationId: input.organizationId,
+    userId: input.userId,
+    modality: "AUDIO",
+    modelId: input.modelId,
+    costCents: audioCostCents,
   })
 
   emitToOrgRoom(input.organizationId, "media:job:update", {
