@@ -10,6 +10,7 @@ import {
 import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
 import { MediaStudioPanel } from "./media-studio-panel"
 import { UsageIndicator } from "./usage-indicator"
+import { LibraryTab } from "./library-tab"
 import { useMediaStudioStore, type StoreAsset, type StoreJob } from "@/features/media/store"
 
 interface ModelInfo {
@@ -107,7 +108,7 @@ export default function MediaStudioClient({
           )}
         </TabsContent>
         <TabsContent value="LIBRARY">
-          <p className="p-6 text-sm text-muted-foreground">Library — added in Task 17.</p>
+          <LibraryTab />
         </TabsContent>
       </Tabs>
     </div>
