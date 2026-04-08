@@ -84,9 +84,11 @@ export function LibraryTab() {
               </div>
             )}
             {a.modality === "VIDEO" && (
-              <div className="flex aspect-square items-center justify-center bg-violet-50 text-xs text-violet-900">
-                🎬 video
-              </div>
+              <video
+                src={`/api/dashboard/media/assets/${a.id}/download`}
+                className="aspect-square w-full object-cover"
+                preload="metadata"
+              />
             )}
             <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-black/50 p-1 opacity-0 transition group-hover:opacity-100">
               <Button size="icon" variant="secondary" onClick={() => toggleFav(a)} title="Favorite">

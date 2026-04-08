@@ -14,6 +14,7 @@ import { Loader2, X } from "lucide-react"
 import { ParameterForm } from "./parameter-form"
 import { ImageResult } from "./result-renderers/image-result"
 import { AudioResult } from "./result-renderers/audio-result"
+import { VideoResult } from "./result-renderers/video-result"
 import { useMediaStudioStore, type StoreJob } from "@/features/media/store"
 
 interface ModelInfo {
@@ -161,11 +162,10 @@ export function MediaStudioPanel({ modality, models, organizationId }: Props) {
               if (a.modality === "AUDIO") {
                 return <AudioResult key={a.id} asset={a} onToggleFavorite={onToggle} />
               }
-              return (
-                <div key={a.id} className="rounded border bg-muted p-3 text-xs text-muted-foreground">
-                  Video preview coming next
-                </div>
-              )
+              if (a.modality === "VIDEO") {
+                return <VideoResult key={a.id} asset={a} onToggleFavorite={onToggle} />
+              }
+              return null
             })
           )}
         </div>
