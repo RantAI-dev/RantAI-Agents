@@ -48,7 +48,9 @@ describe("openrouter.generateImage", () => {
     })
     const body = JSON.parse(init.body as string)
     expect(body.model).toBe("google/gemini-3.1-flash-image")
-    expect(JSON.stringify(body.messages[0].content)).toContain("a red apple on a wooden table")
+    const userMessage = body.messages.find((m: { role: string }) => m.role === "user")
+    expect(JSON.stringify(userMessage.content)).toContain("a red apple on a wooden table")
+    expect(body.messages.some((m: { role: string }) => m.role === "system")).toBe(true)
 
     expect(result.images).toHaveLength(1)
     expect(result.images[0].mimeType).toBe("image/png")
@@ -144,7 +146,7 @@ describe("openrouter.generateImage", () => {
     })
 
     const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)
-    const userMessage = body.messages[0]
+    const userMessage = body.messages.find((m: { role: string }) => m.role === "user")
     expect(Array.isArray(userMessage.content)).toBe(true)
     expect(userMessage.content).toContainEqual({
       type: "image_url",

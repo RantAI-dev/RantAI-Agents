@@ -22,7 +22,11 @@ export interface GenerateImageResult {
 }
 
 export async function generateImage(input: GenerateImageInput): Promise<GenerateImageResult> {
-  const userContent: Array<Record<string, unknown>> =
+  // When no reference images are provided, send content as a plain string.
+  // Gemini reasoning-image models (e.g. 3.1-flash-image-preview) interpret
+  // array-wrapped single-text content as a conversation turn and respond
+  // with reasoning text instead of generating an image.
+  const userContent: string | Array<Record<string, unknown>> =
     input.referenceImageUrls.length > 0
       ? [
           ...input.referenceImageUrls.map((url) => ({
@@ -31,7 +35,7 @@ export async function generateImage(input: GenerateImageInput): Promise<Generate
           })),
           { type: "text", text: input.prompt },
         ]
-      : [{ type: "text", text: input.prompt }]
+      : input.prompt
 
   const extras: Record<string, unknown> = {}
   if (typeof input.parameters.width === "number") extras.image_width = input.parameters.width
@@ -49,7 +53,14 @@ export async function generateImage(input: GenerateImageInput): Promise<Generate
     },
     body: JSON.stringify({
       model: input.modelId,
-      messages: [{ role: "user", content: userContent }],
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are an image generation assistant. Generate a single high-quality image matching the user's description. Do not ask for clarification. Do not respond with text — only produce the image.",
+        },
+        { role: "user", content: userContent },
+      ],
       modalities: ["image", "text"],
       ...extras,
     }),
@@ -106,12 +117,25 @@ export async function generateImage(input: GenerateImageInput): Promise<Generate
   }
 
   if (images.length === 0) {
-    // Include a truncated raw response in the error for debugging — response
-    // shapes vary by model and this is the fastest signal when a new model
-    // returns an unexpected structure.
-    const preview = JSON.stringify(json).slice(0, 500)
+    // Surface the provider's actual text reply when a reasoning-image model
+    // refuses or stalls out. This is the most actionable signal for the user.
     const providerError = json.error?.message
-    const detail = providerError ? `: ${providerError}` : ` — response: ${preview}`
+    const textReply = (() => {
+      const firstContent = json.choices?.[0]?.message?.content
+      if (typeof firstContent === "string") return firstContent
+      if (Array.isArray(firstContent)) {
+        return firstContent
+          .map((p) => (typeof p === "object" && p && "text" in p ? (p as { text?: string }).text : ""))
+          .filter(Boolean)
+          .join(" ")
+      }
+      return ""
+    })()
+    const detail = providerError
+      ? `: ${providerError}`
+      : textReply
+      ? ` — model replied with text instead: "${textReply.slice(0, 300)}"`
+      : ` — response: ${JSON.stringify(json).slice(0, 500)}`
     throw new Error(`OpenRouter returned no images${detail}`)
   }
 
