@@ -595,6 +595,7 @@ function MessagesArea({
                                               : (out.title as string) || "Artifact"
                                           }
                                           type={existing?.type || (out.type as ArtifactType) || "text/html"}
+                                          content={existing?.content || (out.content as string | undefined)}
                                           onClick={() => {
                                             if (artifactId) openArtifact(artifactId)
                                           }}
@@ -653,6 +654,7 @@ function MessagesArea({
                                               : (out.title as string) || "Artifact"
                                           }
                                           type={existing?.type || (out.type as ArtifactType) || "text/html"}
+                                          content={existing?.content || (out.content as string | undefined)}
                                           onClick={() => {
                                             if (artifactId) openArtifact(artifactId)
                                           }}
@@ -683,6 +685,7 @@ function MessagesArea({
                                         key={aid}
                                         title={art.title}
                                         type={art.type}
+                                        content={art.content}
                                         onClick={() => openArtifact(aid)}
                                       />
                                     )
@@ -705,6 +708,7 @@ function MessagesArea({
                                           key={`snapshot-${artifact.id}`}
                                           title={inMemory?.title || artifact.title || "Artifact"}
                                           type={inMemory?.type || (artifact.artifactType as ArtifactType) || "application/code"}
+                                          content={inMemory?.content}
                                           onClick={() => openArtifact(artifact.id)}
                                         />
                                       )
@@ -1091,7 +1095,8 @@ export function ChatWorkspace({
 
   const queuedInitialMessageKeyRef = useRef<string | null>(null)
 
-  // Artifacts system
+  // Artifacts system. We pass the session id so the active-artifact pointer
+  // is persisted per-session in sessionStorage and survives a page refresh.
   const {
     artifacts,
     activeArtifact,
@@ -1101,7 +1106,7 @@ export function ChatWorkspace({
     loadFromPersisted,
     openArtifact,
     closeArtifact,
-  } = useArtifacts()
+  } = useArtifacts(apiSessionId || session?.id || null)
 
   const [artifactsSheetOpen, setArtifactsSheetOpen] = useState(false)
 

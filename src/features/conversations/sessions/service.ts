@@ -1,6 +1,10 @@
 import { deleteFile, deleteFiles, uploadFile } from "@/lib/s3"
 import { deleteChunksByDocumentId } from "@/lib/rag"
 import {
+  validateArtifactContent,
+  formatValidationError,
+} from "@/lib/tools/builtin/_validate-artifact"
+import {
   createDashboardMessages,
   createDashboardSession,
   deleteArtifactsBySessionId,
@@ -415,6 +419,14 @@ export async function deleteDashboardChatSessionMessages(params: {
 /**
  * Updates a dashboard artifact and records the prior version in metadata history.
  */
+/** Cap on inline-fallback content size when S3 archival fails. Mirrors the
+ *  same protection in the LLM tool path (`update-artifact.ts`) so manual
+ *  edits and tool-driven updates can't bloat Postgres rows.
+ */
+const MAX_INLINE_FALLBACK_BYTES = 32 * 1024
+/** Version history cap, mirrors the LLM tool path. */
+const MAX_VERSION_HISTORY = 20
+
 export async function updateDashboardChatSessionArtifact(params: {
   userId: string
   sessionId: string
@@ -426,6 +438,9 @@ export async function updateDashboardChatSessionArtifact(params: {
     return { status: 400, error: "content is required" }
   }
 
+  // Session ownership check — users can only mutate artifacts inside chat
+  // sessions they own. The lookup returns null when the session belongs to
+  // a different user, blocking cross-tenant writes via the manual edit path.
   const chatSession = await findDashboardSessionBasicByIdAndUser(params.sessionId, params.userId)
   if (!chatSession) {
     return { status: 404, error: "Session not found" }
@@ -436,8 +451,28 @@ export async function updateDashboardChatSessionArtifact(params: {
     return { status: 404, error: "Artifact not found" }
   }
 
+  // Run the same structural validator the LLM tool path uses, so manual
+  // edits get the same protection (HTML structure, React imports, SVG
+  // sanitation, …). Validation failures are returned as 422 with the
+  // formatted error message + raw error list so the panel can display the
+  // exact issues inline in edit mode instead of silently saving garbage.
+  if (existing.artifactType) {
+    const validation = validateArtifactContent(
+      existing.artifactType,
+      String(content),
+    )
+    if (!validation.ok) {
+      return {
+        status: 422,
+        error: formatValidationError(existing.artifactType, validation),
+      }
+    }
+  }
+
   const meta = (existing.metadata as Record<string, unknown>) || {}
   const versions = (meta.versions as Array<unknown>) || []
+  const evictedVersionCount =
+    typeof meta.evictedVersionCount === "number" ? meta.evictedVersionCount : 0
   const versionNum = versions.length + 1
 
   // Archive old version to a versioned S3 key
@@ -455,17 +490,33 @@ export async function updateDashboardChatSessionArtifact(params: {
     }
   }
 
+  // When S3 archival fails, fall back to inlining the previous content into
+  // metadata — but only when it's small. For large artifacts we drop to a
+  // summary-only record so the row doesn't balloon over many edits.
+  const previousBytes = Buffer.byteLength(existing.content, "utf-8")
+  const inlineFallback =
+    !versionS3Key && previousBytes <= MAX_INLINE_FALLBACK_BYTES
+      ? { content: existing.content }
+      : !versionS3Key
+        ? { archiveFailed: true as const }
+        : null
+
   versions.push({
     title: existing.title,
     timestamp: Date.now(),
-    contentLength: Buffer.byteLength(existing.content, "utf-8"),
-    ...(versionS3Key ? { s3Key: versionS3Key } : { content: existing.content }),
+    contentLength: previousBytes,
+    ...(versionS3Key ? { s3Key: versionS3Key } : {}),
+    ...(inlineFallback ?? {}),
   })
 
-  // Cap version history at 20
-  if (versions.length > 20) {
-    versions.splice(0, versions.length - 20)
+  // Track FIFO evictions in metadata so the UI can show "+N earlier
+  // versions evicted" instead of silently dropping history.
+  let newlyEvicted = 0
+  if (versions.length > MAX_VERSION_HISTORY) {
+    newlyEvicted = versions.length - MAX_VERSION_HISTORY
+    versions.splice(0, newlyEvicted)
   }
+  const totalEvicted = evictedVersionCount + newlyEvicted
 
   if (existing.s3Key) {
     await uploadFile(
@@ -479,7 +530,11 @@ export async function updateDashboardChatSessionArtifact(params: {
     content: String(content),
     title: (title as string) || existing.title,
     fileSize: Buffer.byteLength(String(content), "utf-8"),
-    metadata: { ...meta, versions },
+    metadata: {
+      ...meta,
+      versions,
+      ...(totalEvicted > 0 ? { evictedVersionCount: totalEvicted } : {}),
+    },
   })) as DashboardChatSessionArtifactRow
 
   return {

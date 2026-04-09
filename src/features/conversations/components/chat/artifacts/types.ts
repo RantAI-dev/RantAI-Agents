@@ -43,6 +43,18 @@ export interface Artifact {
   language?: string
   version: number
   previousVersions: ArtifactVersion[]
+  /**
+   * Number of historical versions that were evicted by the FIFO version
+   * cap (currently 20). Used by the UI to show "+N earlier versions
+   * evicted" so users aren't surprised when older history disappears.
+   */
+  evictedVersionCount?: number
+  /**
+   * Whether this artifact has been successfully indexed into RAG. `false`
+   * surfaces a "not searchable" badge in the panel header so users know
+   * the indexing pipeline missed (or is still pending) for this artifact.
+   */
+  ragIndexed?: boolean
 }
 
 /** Shape returned from the session API for persisted artifacts */
@@ -54,5 +66,7 @@ export interface PersistedArtifact {
   metadata?: {
     artifactLanguage?: string
     versions?: Array<{ content: string; title: string; timestamp: number }>
+    evictedVersionCount?: number
+    ragIndexed?: boolean
   } | null
 }

@@ -16,6 +16,8 @@ import {
   Save,
   Trash2,
   MoreHorizontal,
+  RotateCcw,
+  AlertTriangle,
 } from "@/lib/icons"
 import { Maximize, Minimize } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -87,12 +89,19 @@ export function ArtifactPanel({
   const [editContent, setEditContent] = useState("")
   const [isDirty, setIsDirty] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
   const hasVersions = artifact.previousVersions.length > 0
   const totalVersions = artifact.version
   const currentViewVersion =
     viewingVersionIdx !== null ? viewingVersionIdx + 1 : totalVersions
+  const evictedCount = artifact.evictedVersionCount ?? 0
+  const isViewingHistorical = viewingVersionIdx !== null
+  // RAG indexing status: undefined means "unknown" (legacy artifact, before
+  // we tracked the field) and we don't render anything for it. `false`
+  // means indexing was attempted and failed/skipped.
+  const ragIndexingFailed = artifact.ragIndexed === false
 
   const displayArtifact = useMemo<Artifact>(() => {
     if (viewingVersionIdx === null) return artifact
@@ -107,6 +116,7 @@ export function ArtifactPanel({
     if (isEditing && !isSaving) {
       setEditContent(displayArtifact.content)
       setIsDirty(false)
+      setSaveError(null)
     }
   }, [isEditing, displayArtifact.content, isSaving])
 
@@ -168,7 +178,15 @@ export function ArtifactPanel({
       return
     }
 
-    const blob = new Blob([displayArtifact.content], { type: "text/plain" })
+    // LaTeX artifacts are KaTeX fragments — they have no preamble and won't
+    // compile in pdflatex as-is. Wrap them in a minimal article document on
+    // download so users get a `.tex` file they can actually compile.
+    const downloadContent =
+      displayArtifact.type === "text/latex"
+        ? wrapLatexForDownload(displayArtifact.content)
+        : displayArtifact.content
+
+    const blob = new Blob([downloadContent], { type: "text/plain" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -198,8 +216,33 @@ export function ArtifactPanel({
   const handleSave = useCallback(async () => {
     if (!editContent || !isDirty || isSaving) return
     setIsSaving(true)
+    setSaveError(null)
 
     try {
+      // If a sessionId is wired up we hit the REST endpoint FIRST so the
+      // server-side validator gets a chance to reject the edit. We only
+      // commit the in-memory update once the server accepts the content,
+      // otherwise the panel would jump to a stale-but-valid state while
+      // showing an error from the rejected save.
+      if (sessionId) {
+        const res = await fetch(
+          `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifact.id}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ content: editContent }),
+          }
+        )
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string }
+          setSaveError(
+            body.error ||
+              `Save failed with HTTP ${res.status}. Try again or fix the highlighted issues.`,
+          )
+          return
+        }
+      }
+
       if (onUpdateArtifact) {
         onUpdateArtifact({
           id: artifact.id,
@@ -210,21 +253,15 @@ export function ArtifactPanel({
         })
       }
 
-      if (sessionId) {
-        await fetch(
-          `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifact.id}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: editContent }),
-          }
-        )
-      }
-
       setIsDirty(false)
       setIsEditing(false)
     } catch (err) {
       console.error("[ArtifactPanel] Save error:", err)
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : "Save failed — check your network connection.",
+      )
     } finally {
       setIsSaving(false)
     }
@@ -233,6 +270,52 @@ export function ArtifactPanel({
     isDirty,
     isSaving,
     artifact,
+    onUpdateArtifact,
+    sessionId,
+  ])
+
+  /**
+   * Restore the currently-viewed historical version as a brand-new edit.
+   * Goes through the same `onUpdateArtifact` + PUT path as a manual save so
+   * the restore itself is captured as a new entry in the version history.
+   */
+  const handleRestoreVersion = useCallback(async () => {
+    if (viewingVersionIdx === null) return
+    const ver = artifact.previousVersions[viewingVersionIdx]
+    if (!ver) return
+    if (isSaving) return
+    setIsSaving(true)
+    try {
+      onUpdateArtifact?.({
+        id: artifact.id,
+        title: ver.title || artifact.title,
+        type: artifact.type,
+        content: ver.content,
+        language: artifact.language,
+      })
+      if (sessionId) {
+        await fetch(
+          `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifact.id}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              content: ver.content,
+              title: ver.title || artifact.title,
+            }),
+          }
+        )
+      }
+      setViewingVersionIdx(null)
+    } catch (err) {
+      console.error("[ArtifactPanel] Restore error:", err)
+    } finally {
+      setIsSaving(false)
+    }
+  }, [
+    viewingVersionIdx,
+    artifact,
+    isSaving,
     onUpdateArtifact,
     sessionId,
   ])
@@ -284,27 +367,76 @@ export function ArtifactPanel({
 
           {/* Version pill (inline in header) */}
           {hasVersions && (
-            <span className="flex items-center gap-0.5 tabular-nums text-xs text-muted-foreground bg-muted rounded-full px-1 py-0.5 shrink-0">
-              <button
-                type="button"
-                className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-background/80 transition-colors disabled:opacity-30"
-                onClick={goToPrevVersion}
-                disabled={currentViewVersion <= 1}
-              >
-                <ChevronLeft className="h-3 w-3" />
-              </button>
-              <span className="px-0.5 font-medium">
-                {currentViewVersion}/{totalVersions}
-              </span>
-              <button
-                type="button"
-                className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-background/80 transition-colors disabled:opacity-30"
-                onClick={goToNextVersion}
-                disabled={currentViewVersion >= totalVersions}
-              >
-                <ChevronRight className="h-3 w-3" />
-              </button>
-            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex items-center gap-0.5 tabular-nums text-xs text-muted-foreground bg-muted rounded-full px-1 py-0.5 shrink-0">
+                  <button
+                    type="button"
+                    className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-background/80 transition-colors disabled:opacity-30"
+                    onClick={goToPrevVersion}
+                    disabled={currentViewVersion <= 1}
+                  >
+                    <ChevronLeft className="h-3 w-3" />
+                  </button>
+                  <span className="px-0.5 font-medium">
+                    {currentViewVersion}/{totalVersions}
+                  </span>
+                  <button
+                    type="button"
+                    className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-background/80 transition-colors disabled:opacity-30"
+                    onClick={goToNextVersion}
+                    disabled={currentViewVersion >= totalVersions}
+                  >
+                    <ChevronRight className="h-3 w-3" />
+                  </button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {evictedCount > 0
+                  ? `+${evictedCount} earlier version${evictedCount === 1 ? "" : "s"} evicted (cap is 20)`
+                  : "Browse previous versions"}
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* Restore-this-version button — only when viewing a historical
+              version, and only if updates are wired up. */}
+          {isViewingHistorical && onUpdateArtifact && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs gap-1 shrink-0"
+                  onClick={handleRestoreVersion}
+                  disabled={isSaving}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Restore
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Replace the latest content with this historical version
+                (creates a new version entry)
+              </TooltipContent>
+            </Tooltip>
+          )}
+
+          {/* RAG indexing status: only shown when explicitly false. */}
+          {ragIndexingFailed && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded-full px-1.5 py-0.5 shrink-0">
+                  <AlertTriangle className="h-3 w-3" />
+                  Not searchable
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                Background RAG indexing didn&apos;t complete for this artifact —
+                it won&apos;t appear in semantic search results until it&apos;s
+                re-indexed.
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
 
@@ -457,10 +589,20 @@ export function ArtifactPanel({
               onChange={(e) => {
                 setEditContent(e.target.value)
                 setIsDirty(true)
+                if (saveError) setSaveError(null)
               }}
               className="flex-1 w-full p-4 font-mono text-sm bg-background text-foreground resize-none outline-none"
               spellCheck={false}
             />
+            {saveError && (
+              <div className="px-4 py-2 border-t bg-amber-500/5 text-xs text-amber-600 dark:text-amber-400 whitespace-pre-wrap">
+                <div className="flex items-center gap-1.5 font-medium mb-1">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Save rejected
+                </div>
+                {saveError}
+              </div>
+            )}
             <div className="flex items-center justify-end gap-2 px-4 py-2 border-t bg-muted/30">
               <Button
                 variant="ghost"
@@ -522,7 +664,11 @@ export function ArtifactPanel({
     </div>
   )
 
-  // When fullscreen, render via portal with backdrop
+  // When fullscreen, render via portal with backdrop. The early return
+  // here guarantees that whenever `isFullscreen === true` we go through
+  // the portal branch — there is exactly one render path for fullscreen,
+  // so the embedded `panelContent` JSX will never be mounted twice (once
+  // inline + once portaled) and the backdrop is always present.
   if (isFullscreen) {
     return createPortal(
       <>
@@ -539,6 +685,66 @@ export function ArtifactPanel({
   return panelContent
 }
 
+/**
+ * Map a Shiki/canonical language identifier to a conventional file
+ * extension. Without this, an `application/code` artifact tagged
+ * `typescript` would download as `foo.typescript` instead of `foo.ts`.
+ *
+ * The keys here mirror the Shiki language list the prompts ask the LLM to
+ * use; entries not in the table fall back to the language string itself
+ * (so a niche/new language still produces a recognizable filename).
+ */
+const CODE_LANGUAGE_EXTENSIONS: Record<string, string> = {
+  typescript: "ts",
+  javascript: "js",
+  tsx: "tsx",
+  jsx: "jsx",
+  python: "py",
+  ruby: "rb",
+  rust: "rs",
+  go: "go",
+  java: "java",
+  kotlin: "kt",
+  swift: "swift",
+  csharp: "cs",
+  cpp: "cpp",
+  c: "c",
+  php: "php",
+  shell: "sh",
+  bash: "sh",
+  zsh: "sh",
+  sql: "sql",
+  html: "html",
+  css: "css",
+  scss: "scss",
+  json: "json",
+  yaml: "yml",
+  yml: "yml",
+  toml: "toml",
+  xml: "xml",
+  markdown: "md",
+  dockerfile: "dockerfile",
+  makefile: "mk",
+  perl: "pl",
+  lua: "lua",
+  r: "r",
+  julia: "jl",
+  haskell: "hs",
+  elixir: "ex",
+  erlang: "erl",
+  scala: "scala",
+  dart: "dart",
+  graphql: "graphql",
+  prisma: "prisma",
+}
+
+function codeExtension(language: string | undefined): string {
+  if (!language) return ".txt"
+  const key = language.toLowerCase().trim()
+  const mapped = CODE_LANGUAGE_EXTENSIONS[key]
+  return mapped ? `.${mapped}` : `.${key}`
+}
+
 function getExtension(artifact: Artifact): string {
   switch (artifact.type) {
     case "text/html":
@@ -552,7 +758,7 @@ function getExtension(artifact: Artifact): string {
     case "application/mermaid":
       return ".mmd"
     case "application/code":
-      return artifact.language ? `.${artifact.language}` : ".txt"
+      return codeExtension(artifact.language)
     case "application/sheet":
       return ".csv"
     case "text/latex":
@@ -566,6 +772,30 @@ function getExtension(artifact: Artifact): string {
     default:
       return ".txt"
   }
+}
+
+/**
+ * Wrap a KaTeX fragment in a minimal article preamble so the downloaded
+ * `.tex` file can compile in pdflatex / LuaTeX. The preamble loads the
+ * packages KaTeX-supported commands typically need (`amsmath`, `amssymb`,
+ * `amsthm`, `hyperref`). If the artifact already contains a `\documentclass`
+ * line we leave it alone — the user wrote a full document themselves.
+ */
+function wrapLatexForDownload(body: string): string {
+  if (/\\documentclass\b/.test(body)) return body
+  return `\\documentclass{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage{amsmath}
+\\usepackage{amssymb}
+\\usepackage{amsthm}
+\\usepackage{hyperref}
+
+\\begin{document}
+
+${body.trim()}
+
+\\end{document}
+`
 }
 
 function getCodeLanguage(artifact: Artifact): string {

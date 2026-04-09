@@ -14,11 +14,13 @@ import { ArrowUpDown, Download, Search, AlertTriangle } from "@/lib/icons"
 
 interface SheetRendererProps {
   content: string
+  /** Optional artifact title — used to derive a download filename. */
+  title?: string
 }
 
 type RowData = Record<string, string>
 
-export function SheetRenderer({ content }: SheetRendererProps) {
+export function SheetRenderer({ content, title }: SheetRendererProps) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
 
@@ -82,6 +84,11 @@ export function SheetRenderer({ content }: SheetRendererProps) {
     getFilteredRowModel: getFilteredRowModel(),
   })
 
+  // Whether the active filter is hiding any rows. Affects the download
+  // button label so users know they're getting the filtered subset.
+  const isFiltered =
+    table.getRowModel().rows.length !== rows.length
+
   const handleExportCSV = useCallback(() => {
     const escape = (v: string) =>
       v.includes(",") || v.includes('"') || v.includes("\n")
@@ -95,14 +102,22 @@ export function SheetRenderer({ content }: SheetRendererProps) {
           .join(",")
       )
     })
+    // Slugify the artifact title for the filename so multiple downloads from
+    // the same session don't collide on `export.csv`. Falls back to "sheet"
+    // when the renderer is used without a title.
+    const slug = (title ?? "sheet")
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .toLowerCase() || "sheet"
+    const filename = isFiltered ? `${slug}-filtered.csv` : `${slug}.csv`
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = "export.csv"
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
-  }, [headers, table])
+  }, [headers, table, title, isFiltered])
 
   if (parseError) {
     return (
@@ -139,10 +154,15 @@ export function SheetRenderer({ content }: SheetRendererProps) {
         <button
           type="button"
           onClick={handleExportCSV}
+          title={
+            isFiltered
+              ? "Download only the rows currently matching the filter"
+              : "Download all rows as CSV"
+          }
           className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
         >
           <Download className="h-3.5 w-3.5" />
-          CSV
+          {isFiltered ? "CSV (filtered)" : "CSV"}
         </button>
         <span className="text-xs text-muted-foreground tabular-nums">
           {table.getRowModel().rows.length} rows
@@ -196,7 +216,12 @@ export function SheetRenderer({ content }: SheetRendererProps) {
   )
 }
 
-/** Simple RFC 4180 CSV parser handling quoted fields */
+/**
+ * Simple RFC 4180 CSV parser handling quoted fields. Field values are
+ * preserved as-is (no `.trim()` on push) so leading/trailing whitespace the
+ * author intentionally included survives the round-trip; trimming for
+ * display purposes is left to the table cell renderer.
+ */
 function parseCSV(text: string): string[][] {
   const rows: string[][] = []
   let current: string[] = []
@@ -218,12 +243,12 @@ function parseCSV(text: string): string[][] {
       if (ch === '"') {
         inQuotes = true
       } else if (ch === ",") {
-        current.push(field.trim())
+        current.push(field)
         field = ""
       } else if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
-        current.push(field.trim())
+        current.push(field)
         field = ""
-        if (current.some(Boolean)) rows.push(current)
+        if (current.some((c) => c.trim().length > 0)) rows.push(current)
         current = []
         if (ch === "\r") i++
       } else {
@@ -232,8 +257,8 @@ function parseCSV(text: string): string[][] {
     }
   }
   if (field || current.length) {
-    current.push(field.trim())
-    if (current.some(Boolean)) rows.push(current)
+    current.push(field)
+    if (current.some((c) => c.trim().length > 0)) rows.push(current)
   }
   return rows
 }

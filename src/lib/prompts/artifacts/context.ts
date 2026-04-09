@@ -32,9 +32,22 @@ export function assembleArtifactContext(
   const parts: string[] = []
   const rules = ARTIFACT_TYPE_INSTRUCTIONS[type]
   if (rules) parts.push(rules)
-  const designTokens = getDesignSystemContext(type)
-  if (designTokens) parts.push(designTokens)
+  // Design tokens (palette, typography, spacing) only matter for visual
+  // artifact types — injecting them into Python/code/markdown/sheet/latex
+  // wastes tokens and confuses the LLM about what it's generating.
+  if (VISUAL_ARTIFACT_TYPES.has(type)) {
+    const designTokens = getDesignSystemContext(type)
+    if (designTokens) parts.push(designTokens)
+  }
   const examples = getExamples(type, 2)
   if (examples) parts.push(examples)
   return parts.join("\n\n---\n\n")
 }
+
+const VISUAL_ARTIFACT_TYPES = new Set([
+  "text/html",
+  "application/react",
+  "image/svg+xml",
+  "application/slides",
+  "application/3d",
+])

@@ -162,5 +162,51 @@ $$
 $$
 `,
     },
+    {
+      label: "Lecture note with itemize, quote, and \\paragraph",
+      code: `\\section{Lecture 4 — Limits of Sequences}
+
+\\paragraph{Motivation.} Before we can talk about derivatives or integrals, we need a precise notion of what it means for a sequence of numbers to ``approach'' a value. The intuitive idea is simple, but the formalization due to Cauchy and Weierstrass is one of the cornerstones of modern analysis.
+
+\\subsection{Definition}
+
+A sequence $\\{a_n\\}_{n=1}^{\\infty}$ of real numbers \\textbf{converges} to $L \\in \\mathbb{R}$ if for every $\\varepsilon > 0$ there exists $N \\in \\mathbb{N}$ such that
+
+$$
+n \\geq N \\;\\Longrightarrow\\; |a_n - L| < \\varepsilon.
+$$
+
+We write $\\lim_{n \\to \\infty} a_n = L$ or $a_n \\to L$.
+
+\\paragraph{Reading the definition.} The order of the quantifiers matters: $N$ is allowed to depend on $\\varepsilon$. The smaller you make $\\varepsilon$, the larger $N$ may need to be.
+
+\\begin{quote}
+\\textit{``A sequence converges to $L$ if, no matter how small a tolerance you give me, I can eventually keep every term inside that tolerance of $L$.''}
+\\end{quote}
+
+\\subsection{Worked Examples}
+
+The following sequences are worth committing to memory:
+
+\\begin{itemize}
+  \\item $a_n = \\dfrac{1}{n}$ converges to $0$. Given $\\varepsilon$, take $N = \\lceil 1/\\varepsilon \\rceil$.
+  \\item $a_n = \\dfrac{n}{n+1}$ converges to $1$. Note that $|a_n - 1| = \\dfrac{1}{n+1}$.
+  \\item $a_n = (-1)^n$ does \\emph{not} converge — it oscillates between $-1$ and $1$.
+  \\item $a_n = \\left(1 + \\dfrac{1}{n}\\right)^n$ converges to $e \\approx 2.71828$.
+\\end{itemize}
+
+\\subsection{Key Properties}
+
+If $a_n \\to L$ and $b_n \\to M$, then:
+
+\\begin{itemize}
+  \\item $a_n + b_n \\to L + M$
+  \\item $a_n \\cdot b_n \\to L \\cdot M$
+  \\item $\\dfrac{a_n}{b_n} \\to \\dfrac{L}{M}$, provided $M \\neq 0$ and $b_n \\neq 0$ eventually.
+\\end{itemize}
+
+\\paragraph{Next time.} We will use this definition to prove the squeeze theorem and to characterize continuous functions in terms of sequential limits.
+`,
+    },
   ] as { label: string; code: string }[],
 }

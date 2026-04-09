@@ -811,6 +811,7 @@ export async function runChat(params: {
             assistantId: assistantId ?? undefined,
             organizationId: body.organizationId || undefined,
             sessionId: body.sessionId || undefined,
+            canvasMode: body.canvasMode ?? undefined,
           }),
         });
         toolNames.push("create_artifact");
@@ -824,6 +825,7 @@ export async function runChat(params: {
             assistantId: assistantId ?? undefined,
             organizationId: body.organizationId || undefined,
             sessionId: body.sessionId || undefined,
+            canvasMode: body.canvasMode ?? undefined,
           }),
         });
         toolNames.push("update_artifact");

@@ -163,5 +163,83 @@ The recommended deployment target is a Kubernetes cluster with the included Helm
 This service is designed for horizontal scaling — it stores no session state outside Redis and Postgres. For production hardening, enable TLS termination at the ingress and rotate \`JWT_SECRET\` on a regular schedule.
 `,
     },
+    {
+      label: "Tutorial / explainer with math and a Mermaid diagram",
+      code: `# Understanding Backpropagation
+
+Backpropagation is the algorithm that lets a neural network learn from its mistakes. This tutorial walks through the intuition, the math, and a worked example for a single hidden-layer network.
+
+## The Big Picture
+
+Training a neural network is an optimization problem: we want to find the weights \`W\` that minimize a loss function \`L\`. Backpropagation is just the chain rule from calculus, applied efficiently using dynamic programming.
+
+The training loop has three phases:
+
+1. **Forward pass** — feed an input through the network, compute the prediction.
+2. **Loss computation** — compare the prediction to the ground truth.
+3. **Backward pass** — propagate the error gradient back through the layers and update each weight.
+
+\`\`\`mermaid
+flowchart LR
+  A[Input x] --> B[Hidden layer]
+  B --> C[Output ŷ]
+  C --> D[Loss L]
+  D -.gradient.-> C
+  C -.gradient.-> B
+  B -.gradient.-> A
+\`\`\`
+
+## The Math
+
+For a single hidden-layer network with weights $W_1$ and $W_2$, the forward pass is:
+
+$$
+h = \\sigma(W_1 x), \\quad \\hat{y} = W_2 h
+$$
+
+Where $\\sigma$ is a non-linearity like ReLU or tanh. The loss for a single example is the squared error:
+
+$$
+L = \\frac{1}{2} (\\hat{y} - y)^2
+$$
+
+The gradient with respect to $W_2$ is straightforward:
+
+$$
+\\frac{\\partial L}{\\partial W_2} = (\\hat{y} - y) \\cdot h^\\top
+$$
+
+For $W_1$ we apply the chain rule once more:
+
+$$
+\\frac{\\partial L}{\\partial W_1} = \\left( W_2^\\top (\\hat{y} - y) \\odot \\sigma'(W_1 x) \\right) x^\\top
+$$
+
+## Worked Example
+
+Suppose we have a single training example with $x = [1, 2]$, $y = 3$, and randomly initialized weights:
+
+| Weight | Value |
+|--------|-------|
+| $W_1$  | $[[0.5, -0.3], [0.1, 0.4]]$ |
+| $W_2$  | $[0.6, -0.2]$ |
+
+After one forward pass we get $\\hat{y} \\approx 0.04$, so the error is large ($\\hat{y} - y = -2.96$). One backward step with learning rate $\\eta = 0.01$ pulls $W_2$ toward the correct direction by approximately $0.03$ per coordinate.
+
+## Common Pitfalls
+
+- **Vanishing gradients**: with deep networks and saturating non-linearities, gradients shrink exponentially. Use ReLU and skip connections.
+- **Exploding gradients**: the opposite — gradients grow until they overflow. Clip gradient norms.
+- **Wrong sign**: a missing minus sign in the update rule will make the network *un-learn*. Always check the loss decreases on the first few steps.
+
+## Further Reading
+
+- Rumelhart, Hinton & Williams (1986) — the original paper.
+- Karpathy's [\`micrograd\`](https://github.com/karpathy/micrograd) — backprop in 100 lines of Python.
+- Goodfellow et al., *Deep Learning*, chapter 6.
+
+Backpropagation is conceptually simple but easy to misimplement. When in doubt, gradient-check a small example by hand.
+`,
+    },
   ] as { label: string; code: string }[],
 }

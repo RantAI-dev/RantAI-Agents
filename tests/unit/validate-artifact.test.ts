@@ -244,12 +244,12 @@ describe("validateArtifactContent — image/svg+xml", () => {
     expect(r.warnings).toEqual([])
   })
 
-  it("warns on <style> blocks", () => {
+  it("rejects <style> blocks (CSS leaks into host page)", () => {
     const r = v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><style>.a{fill:red}</style><rect class="a"/></svg>`
     )
-    expect(r.ok).toBe(true)
-    expect(r.warnings.join(" ")).toMatch(/<style>/)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/<style>/)
   })
 
   it("warns on > 5 distinct colors", () => {
@@ -690,11 +690,18 @@ describe("validateArtifactContent — text/latex", () => {
     expect(r.warnings.join(" ")).toMatch(/math delimiter/i)
   })
 
-  it("warns on unsupported KaTeX commands", () => {
+  it("rejects fundamentally unsupported commands (\\includegraphics, figures, citations)", () => {
     const tex = `\\section{Plot}\n\n$$ \\includegraphics{a.png} $$\n`
     const r = validateArtifactContent("text/latex", tex)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/includegraphics/)
+  })
+
+  it("still warns (not errors) on softer unsupported commands like \\verb", () => {
+    const tex = `\\section{Notes}\n\n$x = 1$ — see \\verb|hello|.\n`
+    const r = validateArtifactContent("text/latex", tex)
     expect(r.ok).toBe(true)
-    expect(r.warnings.join(" ")).toMatch(/includegraphics/)
+    expect(r.warnings.join(" ")).toMatch(/verb/)
   })
 })
 
@@ -825,5 +832,372 @@ describe("validateArtifactContent — application/sheet (JSON)", () => {
     const r = validateArtifactContent("application/sheet", json)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/nested|object/i)
+  })
+})
+
+describe("validateArtifactContent — application/slides", () => {
+  const v = (c: string) => validateArtifactContent("application/slides", c)
+
+  const VALID_DECK = JSON.stringify({
+    theme: { primaryColor: "#0F172A", secondaryColor: "#3B82F6", fontFamily: "Inter" },
+    slides: [
+      { layout: "title", title: "The Talk", subtitle: "By Someone" },
+      { layout: "content", title: "Outline", bullets: ["A", "B", "C"] },
+      { layout: "closing", title: "Thanks" },
+    ],
+  })
+
+  it("accepts a well-formed deck", () => {
+    const r = v(VALID_DECK)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+  })
+
+  it("rejects empty content", () => {
+    const r = v("")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/empty/i)
+  })
+
+  it("rejects markdown deck (legacy fallback discouraged)", () => {
+    const r = v("# Slide 1\n\nHello world")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/JSON/)
+  })
+
+  it("rejects malformed JSON", () => {
+    const r = v("{not json")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/parse/i)
+  })
+
+  it("rejects empty slides array", () => {
+    const r = v(`{"theme":{},"slides":[]}`)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/empty/i)
+  })
+
+  it("rejects an unknown layout", () => {
+    const r = v(
+      JSON.stringify({
+        theme: {},
+        slides: [{ layout: "carousel", title: "X" }],
+      }),
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/invalid layout/i)
+  })
+
+  it("rejects two-column missing left/right arrays", () => {
+    const r = v(
+      JSON.stringify({
+        theme: {},
+        slides: [
+          { layout: "title", title: "X" },
+          { layout: "two-column", title: "Compare" },
+        ],
+      }),
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/two-column/i)
+  })
+
+  it("warns when first slide is not title", () => {
+    const r = v(
+      JSON.stringify({
+        theme: {},
+        slides: [{ layout: "content", title: "Outline", bullets: ["A"] }],
+      }),
+    )
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/first slide/i)
+  })
+
+  it("warns when bullets exceed the cap", () => {
+    const r = v(
+      JSON.stringify({
+        theme: {},
+        slides: [
+          { layout: "title", title: "X", subtitle: "Y" },
+          {
+            layout: "content",
+            title: "Many",
+            bullets: ["1", "2", "3", "4", "5", "6", "7"],
+          },
+          { layout: "closing", title: "Bye" },
+        ],
+      }),
+    )
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/bullets/i)
+  })
+
+  it("warns when slide text contains markdown syntax", () => {
+    const r = v(
+      JSON.stringify({
+        theme: {},
+        slides: [
+          { layout: "title", title: "**Bold** Title", subtitle: "x" },
+          { layout: "closing", title: "Bye" },
+        ],
+      }),
+    )
+    expect(r.warnings.join(" ")).toMatch(/markdown syntax/i)
+  })
+})
+
+describe("validateArtifactContent — application/3d", () => {
+  const v = (c: string) => validateArtifactContent("application/3d", c)
+
+  const VALID_SCENE = `function Scene() {
+  const ref = useRef()
+  useFrame((state, delta) => { if (ref.current) ref.current.rotation.y += delta })
+  return (
+    <>
+      <mesh ref={ref}>
+        <boxGeometry args={[1,1,1]} />
+        <meshStandardMaterial color="hotpink" />
+      </mesh>
+    </>
+  )
+}
+
+export default Scene`
+
+  it("accepts a well-formed scene", () => {
+    const r = v(VALID_SCENE)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+  })
+
+  it("rejects empty content", () => {
+    const r = v("")
+    expect(r.ok).toBe(false)
+  })
+
+  it("rejects markdown fences", () => {
+    const r = v("```jsx\n" + VALID_SCENE + "\n```")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/code fences/i)
+  })
+
+  it("rejects <Canvas>", () => {
+    const r = v(`function Scene() { return <Canvas><mesh/></Canvas> }\nexport default Scene`)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/Canvas/)
+  })
+
+  it("rejects <OrbitControls>", () => {
+    const r = v(
+      `function Scene() { return <><OrbitControls /><mesh/></> }\nexport default Scene`,
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/OrbitControls/)
+  })
+
+  it("rejects document.* access", () => {
+    const r = v(
+      `function Scene() { document.getElementById('x'); return <></> }\nexport default Scene`,
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/document/i)
+  })
+
+  it("rejects requestAnimationFrame", () => {
+    const r = v(
+      `function Scene() { useEffect(() => { requestAnimationFrame(() => {}) }); return <></> }\nexport default Scene`,
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/requestAnimationFrame/)
+  })
+
+  it("rejects missing export default", () => {
+    const r = v(`function Scene() { return <></> }`)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/export default/)
+  })
+
+  it("warns on imports from non-whitelisted packages", () => {
+    const r = v(
+      `import { foo } from 'leva'\nfunction Scene() { return <></> }\nexport default Scene`,
+    )
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/leva/)
+  })
+
+  it("warns on non-whitelisted Drei symbols", () => {
+    const r = v(
+      `import { Bounds } from '@react-three/drei'\nfunction Scene() { return <></> }\nexport default Scene`,
+    )
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/Bounds/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// create_artifact tool — early-return guard rails
+// ---------------------------------------------------------------------------
+//
+// These tests cover the validation paths that fire BEFORE the tool reaches
+// Prisma / S3 — so we don't need to mock storage. The persistence path is
+// covered separately by integration tests.
+describe("create_artifact tool — guard rails", () => {
+  const VALID_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hi</title>
+</head>
+<body><h1>Hi</h1></body>
+</html>`
+
+  it("rejects type mismatch when canvas mode is locked to a specific type", async () => {
+    const { createArtifactTool } = await import(
+      "@/lib/tools/builtin/create-artifact"
+    )
+    const result = (await createArtifactTool.execute(
+      {
+        title: "Test",
+        type: "text/html",
+        content: VALID_HTML,
+      },
+      { canvasMode: "application/react" },
+    )) as { persisted: boolean; error?: string; validationErrors?: string[] }
+
+    expect(result.persisted).toBe(false)
+    expect(result.error).toMatch(/locked to "application\/react"/)
+    expect(result.validationErrors?.[0]).toMatch(/expected "application\/react"/)
+  })
+
+  it("allows the matching type when canvas mode is locked", async () => {
+    const { createArtifactTool } = await import(
+      "@/lib/tools/builtin/create-artifact"
+    )
+    // We don't actually want this to reach persistence, so use a content
+    // that fails downstream validation — that proves we got past the
+    // canvas-mode check.
+    const result = (await createArtifactTool.execute(
+      {
+        title: "Test",
+        type: "text/html",
+        content: "<not-html>",
+      },
+      { canvasMode: "text/html" },
+    )) as { error?: string }
+    // Should fail at HTML structural validation, not canvas-mode mismatch
+    expect(result.error).not.toMatch(/locked to/)
+  })
+
+  it("allows any type when canvas mode is 'auto'", async () => {
+    const { createArtifactTool } = await import(
+      "@/lib/tools/builtin/create-artifact"
+    )
+    const result = (await createArtifactTool.execute(
+      {
+        title: "Test",
+        type: "text/html",
+        content: "<not-html>",
+      },
+      { canvasMode: "auto" },
+    )) as { error?: string }
+    expect(result.error).not.toMatch(/locked to/)
+  })
+
+  it("rejects application/code without a language parameter", async () => {
+    const { createArtifactTool } = await import(
+      "@/lib/tools/builtin/create-artifact"
+    )
+    const result = (await createArtifactTool.execute(
+      {
+        title: "Snippet",
+        type: "application/code",
+        content: "console.log('hi')",
+      },
+      {},
+    )) as { persisted: boolean; error?: string; validationErrors?: string[] }
+
+    expect(result.persisted).toBe(false)
+    expect(result.error).toMatch(/require a `language` parameter/)
+    expect(result.validationErrors?.[0]).toMatch(/Missing required `language`/)
+  })
+
+  it("accepts application/code when language is provided", async () => {
+    const { createArtifactTool } = await import(
+      "@/lib/tools/builtin/create-artifact"
+    )
+    // Will likely fail downstream at persistence (no DB) but must pass the
+    // language check. We assert language is NOT mentioned in the error path.
+    const result = (await createArtifactTool.execute(
+      {
+        title: "Snippet",
+        type: "application/code",
+        content: "console.log('hi')",
+        language: "typescript",
+      },
+      {},
+    )) as { error?: string }
+    if (result.error !== undefined) {
+      expect(result.error).not.toMatch(/`language` parameter/)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Drift guard: Python prompt vs validator blacklist
+// ---------------------------------------------------------------------------
+//
+// The Python artifact prompt advertises a list of packages that are
+// auto-loaded by Pyodide. The validator carries a separate blacklist of
+// packages it knows are NOT in Pyodide. These two lists must never overlap —
+// if a package appears in both, the LLM is told it can `import` something
+// that the validator will simultaneously reject as unavailable.
+//
+// This test parses the prompt and asserts no overlap, so future edits to
+// either list cause the test to fail loudly instead of silently lying to
+// the model.
+describe("python prompt ↔ validator blacklist", () => {
+  it("auto-loaded packages claimed by the prompt are not in the validator blacklist", async () => {
+    const { pythonArtifact } = await import("@/lib/prompts/artifacts/python")
+
+    // Documented auto-load list (sourced from python.ts:13).
+    const documentedAutoLoad = [
+      "numpy",
+      "matplotlib",
+      "pandas",
+      "scipy",
+      "sympy",
+      "networkx",
+      "sklearn",
+      "PIL",
+      "pytz",
+      "dateutil",
+      "regex",
+      "bs4",
+      "lxml",
+      "yaml",
+    ]
+
+    // Sanity check the prompt actually mentions each one.
+    for (const pkg of documentedAutoLoad) {
+      expect(
+        pythonArtifact.rules.includes(pkg),
+        `python.ts rules section is missing documented package "${pkg}"`,
+      ).toBe(true)
+    }
+
+    // Round-trip every documented package through the validator with a
+    // synthetic `import` statement and confirm it does NOT trigger the
+    // unavailable-packages error.
+    for (const pkg of documentedAutoLoad) {
+      const r = validateArtifactContent(
+        "application/python",
+        `import ${pkg}\nprint(${pkg})\n`,
+      )
+      expect(
+        r.errors.find((e) => /unavailable packages/i.test(e)),
+        `validator falsely rejects documented package "${pkg}"`,
+      ).toBeUndefined()
+    }
   })
 })

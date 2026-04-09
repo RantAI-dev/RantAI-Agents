@@ -2,7 +2,7 @@ export const reactArtifact = {
   type: "application/react" as const,
   label: "React Component",
   summary:
-    "Single React 19 component with Recharts/Lucide/Motion globals, transpiled by Babel and rendered in an iframe.",
+    "Single React 18 component with Recharts/Lucide/Motion globals, transpiled by Babel and rendered in an iframe.",
   rules: `**application/react — Self-contained React Components**
 
 You are generating a single React component that will be transpiled by Babel-standalone and rendered into a sandboxed iframe at \`#root\`. Output must be v0/Lovable-quality.
@@ -12,7 +12,7 @@ You are generating a single React component that will be transpiled by Babel-sta
 
 | Global | What | Version |
 |---|---|---|
-| \`React\` + all hooks (\`useState\`, \`useEffect\`, \`useRef\`, \`useMemo\`, \`useCallback\`, \`useReducer\`, \`useContext\`, \`useId\`, \`useTransition\`, \`useDeferredValue\`, \`useLayoutEffect\`, \`createContext\`, \`forwardRef\`, \`memo\`, \`Fragment\`, \`Suspense\`, \`lazy\`, \`Children\`, \`cloneElement\`) — pre-destructured into scope | React | 19 |
+| \`React\` + all hooks (\`useState\`, \`useEffect\`, \`useRef\`, \`useMemo\`, \`useCallback\`, \`useReducer\`, \`useContext\`, \`useId\`, \`useTransition\`, \`useDeferredValue\`, \`useLayoutEffect\`, \`useSyncExternalStore\`, \`useInsertionEffect\`, \`createContext\`, \`forwardRef\`, \`memo\`, \`Fragment\`, \`Suspense\`, \`lazy\`, \`startTransition\`, \`createElement\`, \`isValidElement\`, \`Children\`, \`cloneElement\`) — pre-destructured into scope | React | 18 |
 | \`Recharts\` — \`<LineChart>\`, \`<BarChart>\`, \`<PieChart>\`, \`<AreaChart>\`, \`<ResponsiveContainer>\`, \`<Tooltip>\`, etc. | charts | 2 |
 | \`LucideReact\` — \`LucideReact.ArrowRight\`, \`LucideReact.Check\`, ... | icons | 0.454 |
 | \`Motion\` — \`Motion.motion.div\`, \`Motion.AnimatePresence\` | framer-motion | 11 |

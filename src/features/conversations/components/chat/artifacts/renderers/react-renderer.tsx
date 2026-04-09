@@ -2,6 +2,7 @@
 
 import { useMemo, useEffect, useState, useCallback, useRef } from "react"
 import { AlertTriangle, RotateCcw, Code, Loader2 } from "@/lib/icons"
+import { IFRAME_NAV_BLOCKER_SCRIPT } from "./_iframe-nav-blocker"
 
 interface ReactRendererProps {
   content: string
@@ -15,6 +16,39 @@ const IMPORT_GLOBALS: Record<string, string> = {
   "lucide-react": "LucideReact",
   "framer-motion": "Motion",
 }
+
+/**
+ * Names of React APIs already destructured into scope by the iframe template
+ * (see `buildSrcdoc`). When the user imports a `react` symbol that isn't on
+ * this list (e.g. `Profiler`, `StrictMode`), the preprocessor emits
+ * `const {Foo} = React;` so it isn't silently `undefined`.
+ */
+const REACT_PRE_DESTRUCTURED = new Set([
+  "useState",
+  "useEffect",
+  "useRef",
+  "useMemo",
+  "useCallback",
+  "useContext",
+  "useReducer",
+  "useId",
+  "useTransition",
+  "useDeferredValue",
+  "useSyncExternalStore",
+  "useInsertionEffect",
+  "useLayoutEffect",
+  "createContext",
+  "forwardRef",
+  "memo",
+  "Fragment",
+  "Suspense",
+  "lazy",
+  "startTransition",
+  "Children",
+  "cloneElement",
+  "createElement",
+  "isValidElement",
+])
 
 /**
  * Transform ES module imports → global destructuring and strip exports.
@@ -60,8 +94,26 @@ function preprocessCode(code: string): {
         return `// unsupported import: ${source}`
       }
 
-      // React hooks are already destructured in the template — skip entirely
-      if (source === "react") return ""
+      // React hooks are pre-destructured by the iframe template, but if the
+      // user imports a symbol the template doesn't expose (e.g. Profiler,
+      // StrictMode, version) we must emit `const {Foo} = React;` so it isn't
+      // silently undefined at runtime.
+      if (source === "react") {
+        const trimmedReact = imports.trim()
+        const namedOnly = trimmedReact.match(/^\{([^}]+)\}$/)
+        const mixedReact = trimmedReact.match(/^(\w+)\s*,\s*\{([^}]+)\}$/)
+        const namedSrc = namedOnly?.[1] ?? mixedReact?.[2] ?? null
+        if (namedSrc) {
+          const missing = namedSrc
+            .split(",")
+            .map((n) => n.trim().split(/\s+as\s+/)[0].trim())
+            .filter((n) => n && !REACT_PRE_DESTRUCTURED.has(n))
+          if (missing.length > 0) {
+            preamble.push(`const { ${missing.join(", ")} } = React;`)
+          }
+        }
+        return ""
+      }
 
       const trimmed = imports.trim()
 
@@ -197,52 +249,7 @@ function buildSrcdoc(code: string, componentName: string): string {
   <p style="color:#dc2626;font-weight:600;margin:0 0 8px;">Render Error</p>
   <pre id="error-message" style="color:#991b1b;font-size:12px;white-space:pre-wrap;margin:0;"></pre>
 </div>
-<script>
-// Block all navigation attempts in preview iframe (must run before user code)
-// 1. Override Location.prototype to block location.href=, location.assign(), etc.
-Location.prototype.assign = function() {};
-Location.prototype.replace = function() {};
-Location.prototype.reload = function() {};
-try {
-  var _hd = Object.getOwnPropertyDescriptor(Location.prototype, 'href');
-  Object.defineProperty(Location.prototype, 'href', {
-    get: _hd ? _hd.get : function() { return ''; },
-    set: function() {},
-    configurable: true
-  });
-} catch(e) {}
-try {
-  var _cl = window.location;
-  Object.defineProperty(window, 'location', {
-    get: function() { return _cl; },
-    set: function() {},
-    configurable: true
-  });
-} catch(e) {}
-// 2. Intercept link clicks (capture phase to fire before React)
-document.addEventListener('click', function(e) {
-  var a = e.target.closest('a');
-  if (a) {
-    var h = a.getAttribute('href');
-    if (h && !h.startsWith('#') && !h.startsWith('javascript:')) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-    }
-  }
-}, true);
-// 3. Block form submissions
-document.addEventListener('submit', function(e) {
-  e.preventDefault();
-  e.stopImmediatePropagation();
-}, true);
-// 4. Override history API to prevent React Router navigation
-var _origPush = history.pushState.bind(history);
-var _origReplace = history.replaceState.bind(history);
-history.pushState = function(s, t) { try { _origPush(s, t, ''); } catch(e){} };
-history.replaceState = function(s, t) { try { _origReplace(s, t, ''); } catch(e){} };
-// 5. Block window.open
-window.open = function() { return null; };
-<\/script>
+${IFRAME_NAV_BLOCKER_SCRIPT}
 <script type="text/babel" data-presets="react">
 try {
   // React APIs — available to all components
@@ -250,10 +257,58 @@ try {
 
   ${escapedCode}
 
+  // Error boundary so post-mount runtime errors render an error card
+  // instead of blanking the iframe. The boundary also forwards the error
+  // (with the React component stack) back to the host via postMessage.
+  class __ArtifactErrorBoundary extends React.Component {
+    constructor(props) {
+      super(props);
+      this.state = { error: null };
+    }
+    static getDerivedStateFromError(error) {
+      return { error };
+    }
+    componentDidCatch(error, info) {
+      try {
+        parent.postMessage({
+          type: 'error',
+          message: error && error.message ? error.message : String(error),
+          stack: error && error.stack ? String(error.stack) : '',
+          componentStack: info && info.componentStack ? String(info.componentStack) : '',
+        }, '*');
+      } catch (e) {}
+    }
+    render() {
+      if (this.state.error) {
+        return React.createElement('div', {
+          style: {
+            padding: '16px',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderRadius: '8px',
+            margin: '16px',
+            fontFamily: 'ui-monospace, monospace',
+            color: '#991b1b',
+            fontSize: '12px',
+            whiteSpace: 'pre-wrap',
+          }
+        }, [
+          React.createElement('div', { key: 'h', style: { color: '#dc2626', fontWeight: 600, marginBottom: 8 } }, 'Runtime error'),
+          (this.state.error.message || String(this.state.error)),
+        ]);
+      }
+      return this.props.children;
+    }
+  }
+
   const _Component = typeof ${componentName} !== 'undefined' ? ${componentName} : null;
   if (_Component) {
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(_Component));
+    root.render(
+      React.createElement(__ArtifactErrorBoundary, null,
+        React.createElement(_Component)
+      )
+    );
   } else {
     throw new Error('Component "${componentName}" not found. Make sure your component is exported with export default.');
   }
@@ -262,16 +317,29 @@ try {
   document.getElementById('root').style.display = 'none';
   document.getElementById('error-display').style.display = 'block';
   document.getElementById('error-message').textContent = err.message || String(err);
-  parent.postMessage({ type: 'error', message: err.message || String(err) }, '*');
+  parent.postMessage({
+    type: 'error',
+    message: err.message || String(err),
+    stack: err && err.stack ? String(err.stack) : '',
+  }, '*');
 }
 <\/script>
 <script>
-// Catch runtime errors that happen after initial render
-window.onerror = function(msg) {
-  parent.postMessage({ type: 'error', message: String(msg) }, '*');
+// Catch runtime errors that escape the error boundary
+window.onerror = function(msg, src, line, col, err) {
+  parent.postMessage({
+    type: 'error',
+    message: String(msg),
+    stack: err && err.stack ? String(err.stack) : '',
+  }, '*');
 };
 window.addEventListener('unhandledrejection', function(e) {
-  parent.postMessage({ type: 'error', message: String(e.reason) }, '*');
+  var reason = e.reason || {};
+  parent.postMessage({
+    type: 'error',
+    message: reason.message || String(e.reason),
+    stack: reason.stack ? String(reason.stack) : '',
+  }, '*');
 });
 <\/script>
 </body>

@@ -48,14 +48,323 @@ export function validateArtifactContent(
   if (type === "text/markdown") return validateMarkdown(content)
   if (type === "text/latex") return validateLatex(content)
   if (type === "application/sheet") return validateSheet(content)
+  if (type === "application/slides") return validateSlides(content)
+  if (type === "application/3d") return validate3d(content)
   return { ok: true, errors: [], warnings: [] }
+}
+
+// ---------------------------------------------------------------------------
+// Slides validation (JSON deck — application/slides)
+// ---------------------------------------------------------------------------
+//
+// Mirrors `src/lib/slides/types.ts` (SlideLayout, SlideData) and the
+// renderer at slides-renderer.tsx. Hard errors are conditions that would
+// produce an empty / broken deck silently; warnings are nags that pass.
+const SLIDE_LAYOUTS = new Set([
+  "title",
+  "content",
+  "two-column",
+  "section",
+  "quote",
+  "image-text",
+  "closing",
+])
+const MAX_SLIDE_BULLETS = 6
+
+function validateSlides(content: string): ArtifactValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!content.trim()) {
+    errors.push("Slides content is empty.")
+    return { ok: false, errors, warnings }
+  }
+
+  // The renderer falls back to a legacy markdown parser for non-JSON input.
+  // We discourage that path: prompts must produce JSON.
+  if (!content.trimStart().startsWith("{")) {
+    errors.push(
+      "Slides content must be a JSON object starting with `{`. The legacy markdown deck format is deprecated and may be removed.",
+    )
+    return { ok: false, errors, warnings }
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content)
+  } catch (err) {
+    errors.push(
+      `Slides JSON failed to parse: ${err instanceof Error ? err.message : String(err)}`,
+    )
+    return { ok: false, errors, warnings }
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    errors.push(
+      "Top-level slides JSON must be an object with `theme` and `slides` keys.",
+    )
+    return { ok: false, errors, warnings }
+  }
+  const root = parsed as Record<string, unknown>
+
+  if (!Array.isArray(root.slides)) {
+    errors.push('Missing `slides` array. Shape: `{ "theme": {...}, "slides": [...] }`.')
+    return { ok: false, errors, warnings }
+  }
+  const slides = root.slides as unknown[]
+  if (slides.length === 0) {
+    errors.push("`slides` array is empty — provide at least one slide.")
+    return { ok: false, errors, warnings }
+  }
+
+  // Per-slide structural checks
+  for (let i = 0; i < slides.length; i++) {
+    const slide = slides[i]
+    if (!slide || typeof slide !== "object" || Array.isArray(slide)) {
+      errors.push(`Slide ${i + 1} must be an object, got ${typeof slide}.`)
+      continue
+    }
+    const s = slide as Record<string, unknown>
+
+    if (typeof s.layout !== "string" || !SLIDE_LAYOUTS.has(s.layout)) {
+      errors.push(
+        `Slide ${i + 1} has invalid layout "${String(s.layout)}". Allowed: ${[
+          ...SLIDE_LAYOUTS,
+        ].join(", ")}.`,
+      )
+      continue
+    }
+
+    // Title slide should provide a title (and ideally a subtitle).
+    if (s.layout === "title") {
+      if (typeof s.title !== "string" || !s.title.trim()) {
+        errors.push(`Slide ${i + 1} (title layout) is missing a non-empty \`title\`.`)
+      }
+      if (typeof s.subtitle !== "string" || !s.subtitle.trim()) {
+        warnings.push(`Slide ${i + 1} (title layout) has no \`subtitle\`.`)
+      }
+    }
+
+    // Content slide must have either bullets or content
+    if (s.layout === "content") {
+      const hasBullets = Array.isArray(s.bullets) && s.bullets.length > 0
+      const hasContent = typeof s.content === "string" && s.content.trim().length > 0
+      if (!hasBullets && !hasContent) {
+        errors.push(
+          `Slide ${i + 1} (content layout) must provide either \`bullets\` (array) or \`content\` (string).`,
+        )
+      }
+    }
+
+    if (s.layout === "two-column") {
+      if (!Array.isArray(s.leftColumn) || !Array.isArray(s.rightColumn)) {
+        errors.push(
+          `Slide ${i + 1} (two-column layout) requires both \`leftColumn\` and \`rightColumn\` as arrays.`,
+        )
+      }
+    }
+
+    if (s.layout === "quote") {
+      if (typeof s.quote !== "string" || !s.quote.trim()) {
+        errors.push(`Slide ${i + 1} (quote layout) needs a non-empty \`quote\`.`)
+      }
+    }
+
+    // Bullet count guard
+    if (Array.isArray(s.bullets) && s.bullets.length > MAX_SLIDE_BULLETS) {
+      warnings.push(
+        `Slide ${i + 1} has ${s.bullets.length} bullets — keep slides to ≤ ${MAX_SLIDE_BULLETS} for readability.`,
+      )
+    }
+
+    // Markdown syntax leakage — slide text fields should be plain text
+    const textFields = ["title", "subtitle", "content", "quote", "attribution", "note"]
+    for (const f of textFields) {
+      const v = s[f]
+      if (typeof v !== "string") continue
+      if (/(\*\*|^##\s|`[^`\n]*`)/m.test(v)) {
+        warnings.push(
+          `Slide ${i + 1} \`${f}\` contains markdown syntax (\`**\`, \`##\`, backticks). Slide text fields are rendered as plain text.`,
+        )
+        break
+      }
+    }
+  }
+
+  // First slide should be a title; last slide should be a closing.
+  const firstLayout = (slides[0] as { layout?: string } | null)?.layout
+  if (firstLayout && firstLayout !== "title") {
+    warnings.push(
+      `First slide has layout "${firstLayout}" — convention is to open with a \`title\` slide.`,
+    )
+  }
+  const lastLayout = (slides[slides.length - 1] as { layout?: string } | null)?.layout
+  if (lastLayout && lastLayout !== "closing") {
+    warnings.push(
+      `Last slide has layout "${lastLayout}" — convention is to end with a \`closing\` slide.`,
+    )
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
+}
+
+// ---------------------------------------------------------------------------
+// 3D / R3F validation (application/3d)
+// ---------------------------------------------------------------------------
+//
+// Mirrors `r3f-renderer.tsx` — the renderer's `sanitizeSceneCode` strips
+// imports, exports, <Canvas>, <OrbitControls>, <Environment>, and <color>.
+// We surface the same constraints to the LLM so it doesn't unwittingly
+// produce code where critical elements get silently removed.
+const R3F_ALLOWED_DEPS = new Set([
+  // React
+  "React",
+  "useState",
+  "useEffect",
+  "useRef",
+  "useMemo",
+  "useCallback",
+  "Suspense",
+  "forwardRef",
+  "memo",
+  "createContext",
+  "useContext",
+  "Fragment",
+  // three.js
+  "THREE",
+  // @react-three/fiber
+  "useFrame",
+  "useThree",
+  // @react-three/drei
+  "useGLTF",
+  "useAnimations",
+  "Clone",
+  "Float",
+  "Sparkles",
+  "MeshDistortMaterial",
+  "MeshWobbleMaterial",
+  "Text",
+  "Sphere",
+  "RoundedBox",
+  "MeshTransmissionMaterial",
+  "Stars",
+  "Trail",
+  "Center",
+  "Billboard",
+  "Grid",
+  "Html",
+  "Line",
+  "GradientTexture",
+])
+
+function validate3d(content: string): ArtifactValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!content.trim()) {
+    errors.push("3D scene content is empty.")
+    return { ok: false, errors, warnings }
+  }
+
+  // Markdown fence wrap
+  if (/^\s*```/.test(content)) {
+    errors.push(
+      "Remove the markdown code fences (```jsx ... ```). Output the raw component code only.",
+    )
+    return { ok: false, errors, warnings }
+  }
+
+  // Forbidden constructs — they get silently stripped or break the wrapper
+  if (/<Canvas[\s>]/.test(content)) {
+    errors.push(
+      "Remove <Canvas> — the wrapper provides the Canvas. Your component should render scene contents (meshes, lights, groups) directly inside a Fragment.",
+    )
+  }
+  if (/<OrbitControls[\s>]/.test(content)) {
+    errors.push(
+      "Remove <OrbitControls> — the wrapper already provides camera controls.",
+    )
+  }
+  if (/<Environment[\s>]/.test(content)) {
+    errors.push(
+      "Remove <Environment> — the wrapper already provides scene lighting/HDRI.",
+    )
+  }
+  if (/\bdocument\.[A-Za-z]/.test(content)) {
+    errors.push(
+      "Remove `document.*` access — there is no DOM in the R3F scene. Use refs (`useRef`) and `useFrame` for per-frame logic.",
+    )
+  }
+  if (/\brequestAnimationFrame\s*\(/.test(content)) {
+    errors.push(
+      "Remove `requestAnimationFrame` — use `useFrame((state, delta) => ...)` from @react-three/fiber for animation loops.",
+    )
+  }
+  if (/new\s+THREE\.WebGLRenderer\b/.test(content)) {
+    errors.push(
+      "Remove `new THREE.WebGLRenderer` — the renderer is already created by the Canvas wrapper.",
+    )
+  }
+
+  if (!/\bexport\s+default\b/.test(content)) {
+    errors.push(
+      "Missing `export default` — the renderer keys off the default export to mount the scene.",
+    )
+  }
+
+  // Warn about non-whitelisted imports — they will be stripped by the
+  // sanitizer, so the LLM should know they're not actually available.
+  const importLines = content.match(/^\s*import\s+[\s\S]*?from\s+['"](.+?)['"]/gm) || []
+  const unknownImports = new Set<string>()
+  for (const line of importLines) {
+    const m = line.match(/from\s+['"](.+?)['"]/)
+    if (!m) continue
+    const source = m[1]
+    if (
+      source === "react" ||
+      source === "three" ||
+      source === "@react-three/fiber" ||
+      source === "@react-three/drei"
+    ) {
+      // Extract named imports and check against the allowed deps
+      const namedMatch = line.match(/\{([^}]+)\}/)
+      if (namedMatch) {
+        const names = namedMatch[1]
+          .split(",")
+          .map((n) => n.trim().split(/\s+as\s+/)[0].trim())
+          .filter(Boolean)
+        for (const name of names) {
+          if (!R3F_ALLOWED_DEPS.has(name)) {
+            unknownImports.add(name)
+          }
+        }
+      }
+      continue
+    }
+    // Imports from other packages are not available at all
+    unknownImports.add(source)
+  }
+  if (unknownImports.size > 0) {
+    warnings.push(
+      `Imports the renderer cannot provide: ${[...unknownImports]
+        .slice(0, 8)
+        .map((n) => `\`${n}\``)
+        .join(", ")}. The sanitizer strips all imports — only react, three, @react-three/fiber, and @react-three/drei symbols listed in the prompt are exposed.`,
+    )
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
 }
 
 // ---------------------------------------------------------------------------
 // Sheet validation (CSV or JSON-array-of-objects)
 // ---------------------------------------------------------------------------
 
-/** Inline CSV tokenizer matching the renderer's parseCSV semantics. */
+/**
+ * Inline CSV tokenizer matching the renderer's parseCSV semantics. Field
+ * values are preserved untrimmed so the validator and the renderer agree on
+ * exactly what bytes are in the document — trimming is a display concern.
+ */
 function tokenizeCsv(text: string): string[][] {
   const rows: string[][] = []
   let current: string[] = []
@@ -77,12 +386,12 @@ function tokenizeCsv(text: string): string[][] {
       if (ch === '"') {
         inQuotes = true
       } else if (ch === ",") {
-        current.push(field.trim())
+        current.push(field)
         field = ""
       } else if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
-        current.push(field.trim())
+        current.push(field)
         field = ""
-        if (current.some(Boolean)) rows.push(current)
+        if (current.some((c) => c.trim().length > 0)) rows.push(current)
         current = []
         if (ch === "\r") i++
       } else {
@@ -91,8 +400,8 @@ function tokenizeCsv(text: string): string[][] {
     }
   }
   if (field || current.length) {
-    current.push(field.trim())
-    if (current.some(Boolean)) rows.push(current)
+    current.push(field)
+    if (current.some((c) => c.trim().length > 0)) rows.push(current)
   }
   return rows
 }
@@ -229,6 +538,11 @@ function validateSheet(content: string): ArtifactValidationResult {
   const dataRows = rows.slice(1)
   const colCount = headers.length
 
+  // NOTE: the renderer (sheet-renderer.tsx) is more permissive than this
+  // validator — it pads short rows with empty strings rather than rejecting
+  // the whole sheet. We intentionally enforce the stricter contract here so
+  // mismatched column counts surface to the LLM as a retry signal instead of
+  // silently truncating user data at render time.
   for (let i = 0; i < dataRows.length; i++) {
     if (dataRows[i].length !== colCount) {
       errors.push(
@@ -266,7 +580,7 @@ function validateSheet(content: string): ArtifactValidationResult {
     for (const v of values) {
       if (CURRENCY_NUMBER.test(v) || THOUSANDS_NUMBER.test(v)) currencyHits++
     }
-    if (currencyHits >= 2) {
+    if (currencyHits >= 1) {
       warnings.push(
         `Column "${header}" contains currency symbols or thousand separators (e.g. \`$1,234\`). Store plain numbers (\`1234\`) — sorting is lexicographic and formatted strings sort wrong.`
       )
@@ -342,6 +656,54 @@ function validateMarkdown(content: string): ArtifactValidationResult {
     )
   }
 
+  // Raw HTML tags the prompt forbids — most renderers either drop them or
+  // render them inconsistently. Restrict the check to common offenders so we
+  // don't flag legitimate inline HTML like <br> or comment tags.
+  const RAW_HTML_DISALLOWED = [
+    "details",
+    "summary",
+    "kbd",
+    "mark",
+    "iframe",
+    "video",
+    "audio",
+    "object",
+    "embed",
+    "table",
+  ]
+  const rawHtmlHits = RAW_HTML_DISALLOWED.filter((tag) =>
+    new RegExp(`<\\s*${tag}[\\s>/]`, "i").test(content)
+  )
+  if (rawHtmlHits.length > 0) {
+    warnings.push(
+      `Raw HTML tags detected (${rawHtmlHits
+        .map((t) => `<${t}>`)
+        .join(", ")}). The markdown renderer either strips or mis-renders these — use markdown syntax instead, or switch to the \`text/html\` artifact type.`
+    )
+  }
+
+  // Fenced code blocks must declare a language for syntax highlighting.
+  // Match opening fences (``` at line start) that have NO trailing identifier.
+  const fenceLines = lines.filter((l) => /^\s*```/.test(l))
+  let unlabeledFences = 0
+  let inFence = false
+  for (const line of fenceLines) {
+    if (!inFence) {
+      // Opening fence — must have a non-empty language tag after the backticks
+      if (!/^\s*```[A-Za-z][A-Za-z0-9+_-]*/.test(line)) {
+        unlabeledFences++
+      }
+      inFence = true
+    } else {
+      inFence = false
+    }
+  }
+  if (unlabeledFences > 0) {
+    warnings.push(
+      `${unlabeledFences} fenced code block${unlabeledFences === 1 ? "" : "s"} missing a language tag. Always tag fences (\`\`\`ts, \`\`\`python, \`\`\`bash, …) so syntax highlighting works.`
+    )
+  }
+
   return { ok: errors.length === 0, errors, warnings }
 }
 
@@ -352,22 +714,29 @@ function validateMarkdown(content: string): ArtifactValidationResult {
 /**
  * KaTeX / our renderer cannot handle these commands. They almost always show
  * up when an LLM thinks it's writing for a full LaTeX engine (pdflatex etc.).
+ *
+ * `severity: "error"` — fundamentally cannot render in KaTeX, must be removed.
+ * `severity: "warning"` — silently dropped by the renderer; LLM should know.
  */
-const LATEX_UNSUPPORTED_COMMANDS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
-  { pattern: /\\includegraphics\b/, label: "\\includegraphics" },
-  { pattern: /\\bibliography\b/, label: "\\bibliography" },
-  { pattern: /\\cite\b/, label: "\\cite" },
-  { pattern: /\\input\b/, label: "\\input" },
-  { pattern: /\\include\b/, label: "\\include" },
-  { pattern: /\\begin\{tikzpicture\}/, label: "\\begin{tikzpicture}" },
-  { pattern: /\\begin\{figure\}/, label: "\\begin{figure}" },
-  { pattern: /\\begin\{table\}/, label: "\\begin{table}" },
-  { pattern: /\\begin\{tabular\}/, label: "\\begin{tabular}" },
-  { pattern: /\\begin\{verbatim\}/, label: "\\begin{verbatim}" },
-  { pattern: /\\verb\b/, label: "\\verb" },
-  { pattern: /\\label\{/, label: "\\label{}" },
-  { pattern: /\\ref\{/, label: "\\ref{}" },
-  { pattern: /\\eqref\{/, label: "\\eqref{}" },
+const LATEX_UNSUPPORTED_COMMANDS: ReadonlyArray<{
+  pattern: RegExp
+  label: string
+  severity: "error" | "warning"
+}> = [
+  { pattern: /\\includegraphics\b/, label: "\\includegraphics", severity: "error" },
+  { pattern: /\\bibliography\b/, label: "\\bibliography", severity: "error" },
+  { pattern: /\\cite\b/, label: "\\cite", severity: "error" },
+  { pattern: /\\input\b/, label: "\\input", severity: "error" },
+  { pattern: /\\include\b/, label: "\\include", severity: "error" },
+  { pattern: /\\begin\{tikzpicture\}/, label: "\\begin{tikzpicture}", severity: "error" },
+  { pattern: /\\begin\{figure\}/, label: "\\begin{figure}", severity: "error" },
+  { pattern: /\\begin\{table\}/, label: "\\begin{table}", severity: "error" },
+  { pattern: /\\begin\{tabular\}/, label: "\\begin{tabular}", severity: "error" },
+  { pattern: /\\begin\{verbatim\}/, label: "\\begin{verbatim}", severity: "warning" },
+  { pattern: /\\verb\b/, label: "\\verb", severity: "warning" },
+  { pattern: /\\label\{/, label: "\\label{}", severity: "warning" },
+  { pattern: /\\ref\{/, label: "\\ref{}", severity: "warning" },
+  { pattern: /\\eqref\{/, label: "\\eqref{}", severity: "warning" },
 ]
 
 function validateLatex(content: string): ArtifactValidationResult {
@@ -412,13 +781,24 @@ function validateLatex(content: string): ArtifactValidationResult {
     )
   }
 
-  const unsupportedHits: string[] = []
-  for (const { pattern, label } of LATEX_UNSUPPORTED_COMMANDS) {
-    if (pattern.test(content)) unsupportedHits.push(label)
+  const errorHits: string[] = []
+  const warningHits: string[] = []
+  for (const { pattern, label, severity } of LATEX_UNSUPPORTED_COMMANDS) {
+    if (!pattern.test(content)) continue
+    if (severity === "error") errorHits.push(label)
+    else warningHits.push(label)
   }
-  if (unsupportedHits.length > 0) {
+  if (errorHits.length > 0) {
+    errors.push(
+      `Found commands KaTeX/this renderer fundamentally cannot render: ${errorHits
+        .slice(0, 5)
+        .map((h) => `"${h}"`)
+        .join(", ")}. Remove them — figures, tables, citations, and external file inclusion are not supported.`
+    )
+  }
+  if (warningHits.length > 0) {
     warnings.push(
-      `Found commands not supported by KaTeX / this renderer: ${unsupportedHits
+      `Found commands not supported by KaTeX / this renderer: ${warningHits
         .slice(0, 5)
         .map((h) => `"${h}"`)
         .join(", ")}. They will be silently dropped or render as red error fragments.`
@@ -611,13 +991,25 @@ function validateMermaid(content: string): ArtifactValidationResult {
     )
   }
 
-  // Flowchart-style node count heuristic (noisy for ER/class but still
-  // useful as a warning for flowcharts, which is the common failure mode).
-  const nodeDefRegex = /^\s*[A-Za-z_][A-Za-z0-9_-]*\s*[[({]/gm
-  const nodeMatches = content.match(nodeDefRegex)
-  if (nodeMatches && nodeMatches.length > 15) {
+  // Flowchart-style node count heuristic — only meaningful for graph/flowchart;
+  // ER/class diagrams use brace blocks for attributes which trip the regex.
+  const isFlowish =
+    firstLine != null &&
+    (firstLine.startsWith("flowchart") || firstLine.startsWith("graph"))
+  if (isFlowish) {
+    const nodeDefRegex = /^\s*[A-Za-z_][A-Za-z0-9_-]*\s*[[({]/gm
+    const nodeMatches = content.match(nodeDefRegex)
+    if (nodeMatches && nodeMatches.length > 15) {
+      warnings.push(
+        `Detected ${nodeMatches.length} node definitions — flowcharts with more than 15 nodes become unreadable. Consider splitting into multiple diagrams.`
+      )
+    }
+  }
+
+  // Theme/init override — prompts forbid these because they break dark mode.
+  if (/%%\{\s*init\s*:[\s\S]*?theme[\s\S]*?\}%%/.test(content)) {
     warnings.push(
-      `Detected ${nodeMatches.length} node definitions — diagrams with more than 15 nodes become unreadable. Consider splitting into multiple diagrams.`
+      "Found a `%%{init: ... theme ...}%%` directive. Do not override Mermaid theme — the renderer manages light/dark theming based on the host app."
     )
   }
 
@@ -757,8 +1149,8 @@ function validateSvg(content: string): ArtifactValidationResult {
     )
   }
   if (styleBlockCount > 0) {
-    warnings.push(
-      "Inline <style> block detected. Because the renderer is not iframed, CSS inside <style> can leak into the host page. Prefer SVG presentation attributes (fill, stroke, stroke-width, opacity)."
+    errors.push(
+      "Inline <style> block detected. Because the renderer is not iframed, CSS inside <style> leaks into the host page. Use SVG presentation attributes (fill, stroke, stroke-width, opacity) instead."
     )
   }
   if (colorValues.size > 5) {
@@ -1075,9 +1467,9 @@ function validatePython(content: string): ArtifactValidationResult {
   }
 
   const sleepMatch = codeNoComments.match(/\btime\.sleep\s*\(\s*([\d.]+)\s*\)/)
-  if (sleepMatch && Number.parseFloat(sleepMatch[1]) > 5) {
+  if (sleepMatch && Number.parseFloat(sleepMatch[1]) > 2) {
     warnings.push(
-      `Found time.sleep(${sleepMatch[1]}) — sleeps longer than a few seconds feel stuck to the user. Trim or remove.`
+      `Found time.sleep(${sleepMatch[1]}) — sleeps longer than ~2 seconds feel stuck to the user. Trim or remove.`
     )
   }
 

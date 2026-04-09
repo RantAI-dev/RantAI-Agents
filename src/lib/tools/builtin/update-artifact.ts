@@ -15,6 +15,15 @@ const MAX_VERSION_HISTORY = 20
 /** Maximum artifact content size: 512 KB */
 const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
 
+/**
+ * Hard cap on inline-fallback content size when S3 archival fails.
+ * Without this, repeated edits on a 512 KB artifact with flaky S3 storage
+ * accumulate the previous content into `metadata.versions[*].content` on
+ * every update, ballooning the Postgres row indefinitely. 32 KB keeps small
+ * artifacts (markdown, code) recoverable while preventing the worst case.
+ */
+const MAX_INLINE_FALLBACK_BYTES = 32 * 1024
+
 export const updateArtifactTool: ToolDefinition = {
   name: "update_artifact",
   displayName: "Update Artifact",
@@ -81,6 +90,10 @@ export const updateArtifactTool: ToolDefinition = {
         // Archive old version to S3 and record lightweight metadata
         const meta = (existing.metadata as Record<string, unknown>) || {}
         const versions = (meta.versions as Array<unknown>) || []
+        const evictedVersionCount =
+          typeof meta.evictedVersionCount === "number"
+            ? meta.evictedVersionCount
+            : 0
         const versionNum = versions.length + 1
 
         // Upload old content to a versioned S3 key
@@ -97,17 +110,33 @@ export const updateArtifactTool: ToolDefinition = {
           })
         }
 
+        // When S3 archival fails, fall back to inlining the previous
+        // content into metadata — but only if it's small. For large artifacts
+        // we drop to a summary-only record to prevent unbounded row growth.
+        const previousBytes = Buffer.byteLength(existing.content, "utf-8")
+        const inlineFallback =
+          !versionS3Key && previousBytes <= MAX_INLINE_FALLBACK_BYTES
+            ? { content: existing.content }
+            : !versionS3Key
+              ? { archiveFailed: true as const }
+              : null
+
         versions.push({
           title: existing.title,
           timestamp: Date.now(),
-          contentLength: Buffer.byteLength(existing.content, "utf-8"),
-          ...(versionS3Key ? { s3Key: versionS3Key } : { content: existing.content }),
+          contentLength: previousBytes,
+          ...(versionS3Key ? { s3Key: versionS3Key } : {}),
+          ...(inlineFallback ?? {}),
         })
 
-        // Cap version history
+        // Track FIFO evictions in metadata so the UI can show
+        // "+N earlier versions evicted" instead of silently dropping history.
+        let newlyEvicted = 0
         if (versions.length > MAX_VERSION_HISTORY) {
-          versions.splice(0, versions.length - MAX_VERSION_HISTORY)
+          newlyEvicted = versions.length - MAX_VERSION_HISTORY
+          versions.splice(0, newlyEvicted)
         }
+        const totalEvicted = evictedVersionCount + newlyEvicted
 
         // Upload new content to S3
         if (existing.s3Key) {
@@ -129,6 +158,7 @@ export const updateArtifactTool: ToolDefinition = {
             metadata: {
               ...meta,
               versions,
+              ...(totalEvicted > 0 ? { evictedVersionCount: totalEvicted } : {}),
               ...(validationWarnings.length > 0
                 ? { validationWarnings }
                 : {}),
