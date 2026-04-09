@@ -697,3 +697,133 @@ describe("validateArtifactContent — text/latex", () => {
     expect(r.warnings.join(" ")).toMatch(/includegraphics/)
   })
 })
+
+describe("validateArtifactContent — application/sheet (CSV)", () => {
+  const VALID_CSV = `ID,Name,Department,Salary,Start Date
+001,Amelia Hartwell,Engineering,182000,2019-03-12
+002,Rohan Subramanian,Engineering,148000,2020-08-01
+003,Maya Chen,Design,165000,2018-11-05`
+
+  it("accepts a well-formed CSV", () => {
+    const r = validateArtifactContent("application/sheet", VALID_CSV)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+  })
+
+  it("accepts a CSV with a quoted field containing a comma", () => {
+    const csv = `ID,Title\n1,"Engineer, Senior"\n2,"Engineer, Staff"`
+    const r = validateArtifactContent("application/sheet", csv)
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects empty content", () => {
+    const r = validateArtifactContent("application/sheet", "")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/empty/i)
+  })
+
+  it("rejects whitespace-only content", () => {
+    const r = validateArtifactContent("application/sheet", "   \n  \n")
+    expect(r.ok).toBe(false)
+  })
+
+  it("rejects mismatched column count", () => {
+    const csv = `A,B,C\n1,2,3\n4,5`
+    const r = validateArtifactContent("application/sheet", csv)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/column/i)
+  })
+
+  it("rejects header-only CSV", () => {
+    const r = validateArtifactContent("application/sheet", "A,B,C")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/header/i)
+  })
+
+  it("warns on >100 rows", () => {
+    const lines = ["ID,Value"]
+    for (let i = 0; i < 120; i++) lines.push(`${i},val${i}`)
+    const r = validateArtifactContent("application/sheet", lines.join("\n"))
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/pagination|100/)
+  })
+
+  it("warns on >10 columns", () => {
+    const cols = Array.from({ length: 12 }, (_, i) => `C${i}`)
+    const csv = cols.join(",") + "\n" + cols.map((_, i) => i).join(",")
+    const r = validateArtifactContent("application/sheet", csv)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/columns|10/)
+  })
+
+  it("warns on all-identical column", () => {
+    const csv = `ID,Status\n1,Active\n2,Active\n3,Active`
+    const r = validateArtifactContent("application/sheet", csv)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/same value/i)
+  })
+
+  it("warns on currency symbols in numeric column", () => {
+    const csv = `Item,Price\nApple,$1.50\nPear,$2.25\nPlum,$3.00`
+    const r = validateArtifactContent("application/sheet", csv)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/currency|thousand/i)
+  })
+
+  it("warns on mixed date formats", () => {
+    const csv = `ID,Start Date\n1,2026-01-15\n2,2026-02-20\n3,Jan 15, 2026\n4,Feb 20, 2026`
+    // Note: the unquoted comma in "Jan 15, 2026" will trip column count.
+    // Use a properly quoted version:
+    const csvOk = `ID,Start Date\n1,2026-01-15\n2,2026-02-20\n3,"Jan 15, 2026"\n4,"Feb 20, 2026"`
+    const r = validateArtifactContent("application/sheet", csvOk)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/date/i)
+  })
+})
+
+describe("validateArtifactContent — application/sheet (JSON)", () => {
+  const VALID_JSON = `[
+  {"Month": "2026-01", "Revenue": 482300, "Orders": 3120},
+  {"Month": "2026-02", "Revenue": 511480, "Orders": 3284},
+  {"Month": "2026-03", "Revenue": 498220, "Orders": 3198}
+]`
+
+  it("accepts a valid JSON array of objects", () => {
+    const r = validateArtifactContent("application/sheet", VALID_JSON)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+  })
+
+  it("rejects invalid JSON", () => {
+    const r = validateArtifactContent("application/sheet", "[{not valid}]")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/parse/i)
+  })
+
+  it("rejects top-level object", () => {
+    const r = validateArtifactContent("application/sheet", `{"a": 1}`)
+    // Top-level object doesn't start with "[" so falls through to CSV branch — that's fine,
+    // but ensure it errors one way or another.
+    expect(r.ok).toBe(false)
+  })
+
+  it("rejects empty array", () => {
+    const r = validateArtifactContent("application/sheet", "[]")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/empty/i)
+  })
+
+  it("rejects inconsistent key sets", () => {
+    const json = `[{"a":1,"b":2},{"a":3,"c":4}]`
+    const r = validateArtifactContent("application/sheet", json)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/key/i)
+  })
+
+  it("warns on nested object values", () => {
+    const json = `[{"id":1,"meta":{"x":1}},{"id":2,"meta":{"x":2}}]`
+    const r = validateArtifactContent("application/sheet", json)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/nested|object/i)
+  })
+})

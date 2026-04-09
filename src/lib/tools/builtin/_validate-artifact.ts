@@ -47,7 +47,249 @@ export function validateArtifactContent(
   if (type === "application/code") return validateCode(content)
   if (type === "text/markdown") return validateMarkdown(content)
   if (type === "text/latex") return validateLatex(content)
+  if (type === "application/sheet") return validateSheet(content)
   return { ok: true, errors: [], warnings: [] }
+}
+
+// ---------------------------------------------------------------------------
+// Sheet validation (CSV or JSON-array-of-objects)
+// ---------------------------------------------------------------------------
+
+/** Inline CSV tokenizer matching the renderer's parseCSV semantics. */
+function tokenizeCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let current: string[] = []
+  let field = ""
+  let inQuotes = false
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') {
+        field += '"'
+        i++
+      } else if (ch === '"') {
+        inQuotes = false
+      } else {
+        field += ch
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true
+      } else if (ch === ",") {
+        current.push(field.trim())
+        field = ""
+      } else if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
+        current.push(field.trim())
+        field = ""
+        if (current.some(Boolean)) rows.push(current)
+        current = []
+        if (ch === "\r") i++
+      } else {
+        field += ch
+      }
+    }
+  }
+  if (field || current.length) {
+    current.push(field.trim())
+    if (current.some(Boolean)) rows.push(current)
+  }
+  return rows
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+const NON_ISO_DATE =
+  /^(\d{1,2}\/\d{1,2}\/\d{2,4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})$/
+const CURRENCY_NUMBER = /^[\$€£¥]\s*-?\d/
+const THOUSANDS_NUMBER = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/
+
+function validateSheet(content: string): ArtifactValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!content.trim()) {
+    errors.push("Sheet content is empty.")
+    return { ok: false, errors, warnings }
+  }
+
+  const trimmed = content.trimStart()
+
+  // ----- JSON branch -----
+  if (trimmed.startsWith("[")) {
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(content)
+    } catch (err) {
+      errors.push(
+        `JSON failed to parse: ${err instanceof Error ? err.message : String(err)}`
+      )
+      return { ok: false, errors, warnings }
+    }
+    if (!Array.isArray(parsed)) {
+      errors.push("Top-level JSON must be an array of objects.")
+      return { ok: false, errors, warnings }
+    }
+    if (parsed.length === 0) {
+      errors.push("JSON array is empty — provide at least one row.")
+      return { ok: false, errors, warnings }
+    }
+    const first = parsed[0]
+    if (
+      first === null ||
+      typeof first !== "object" ||
+      Array.isArray(first) ||
+      Object.keys(first as object).length === 0
+    ) {
+      errors.push(
+        "First JSON element must be a non-empty object whose keys become column headers."
+      )
+      return { ok: false, errors, warnings }
+    }
+
+    const headerKeys = Object.keys(first as object)
+    const headerSet = new Set(headerKeys)
+    let nestedValueSeen = false
+
+    for (let i = 0; i < parsed.length; i++) {
+      const row = parsed[i]
+      if (row === null || typeof row !== "object" || Array.isArray(row)) {
+        errors.push(`Row ${i} is not an object — every row must be a flat object.`)
+        return { ok: false, errors, warnings }
+      }
+      const rowKeys = Object.keys(row as object)
+      if (rowKeys.length !== headerKeys.length) {
+        errors.push(
+          `Row ${i} has ${rowKeys.length} keys but the schema (from row 0) has ${headerKeys.length}. Every object must have the same keys.`
+        )
+        return { ok: false, errors, warnings }
+      }
+      for (const k of rowKeys) {
+        if (!headerSet.has(k)) {
+          errors.push(
+            `Row ${i} has unexpected key "${k}" not present in row 0. Every object must have the same keys.`
+          )
+          return { ok: false, errors, warnings }
+        }
+      }
+      if (!nestedValueSeen) {
+        for (const k of headerKeys) {
+          const v = (row as Record<string, unknown>)[k]
+          if (v !== null && typeof v === "object") {
+            nestedValueSeen = true
+            break
+          }
+        }
+      }
+    }
+
+    if (parsed.length > 100) {
+      warnings.push(
+        `JSON has ${parsed.length} rows — the renderer has no pagination, all rows render at once. Aim for ≤ 100.`
+      )
+    }
+    if (headerKeys.length > 10) {
+      warnings.push(
+        `JSON has ${headerKeys.length} columns — wider than 10 becomes hard to read. Drop the least important columns.`
+      )
+    }
+    if (nestedValueSeen) {
+      warnings.push(
+        "Some JSON values are nested objects or arrays — these stringify as `[object Object]` in the table. Flatten them before emitting."
+      )
+    }
+    // All-identical column check
+    for (const k of headerKeys) {
+      const vals = new Set<string>()
+      for (const row of parsed as Record<string, unknown>[]) {
+        vals.add(String(row[k] ?? ""))
+        if (vals.size > 1) break
+      }
+      if (vals.size === 1 && parsed.length > 1) {
+        warnings.push(
+          `Column "${k}" has the same value in every row — adds no sort/filter value, consider removing it.`
+        )
+        break
+      }
+    }
+
+    return { ok: errors.length === 0, errors, warnings }
+  }
+
+  // ----- CSV branch -----
+  const rows = tokenizeCsv(content)
+  if (rows.length < 2) {
+    errors.push(
+      "CSV needs at least a header row and one data row. Found " +
+        rows.length +
+        "."
+    )
+    return { ok: false, errors, warnings }
+  }
+  const headers = rows[0]
+  const dataRows = rows.slice(1)
+  const colCount = headers.length
+
+  for (let i = 0; i < dataRows.length; i++) {
+    if (dataRows[i].length !== colCount) {
+      errors.push(
+        `CSV row ${i + 1} has ${dataRows[i].length} columns but the header has ${colCount}. Every row must have the same column count.`
+      )
+      return { ok: false, errors, warnings }
+    }
+  }
+
+  if (dataRows.length > 100) {
+    warnings.push(
+      `CSV has ${dataRows.length} data rows — the renderer has no pagination, all rows render at once. Aim for ≤ 100.`
+    )
+  }
+  if (colCount > 10) {
+    warnings.push(
+      `CSV has ${colCount} columns — wider than 10 becomes hard to read. Drop the least important columns.`
+    )
+  }
+
+  // Per-column heuristics
+  for (let c = 0; c < colCount; c++) {
+    const header = headers[c]
+    const values = dataRows.map((r) => r[c])
+
+    const distinct = new Set(values)
+    if (distinct.size === 1 && dataRows.length > 1) {
+      warnings.push(
+        `Column "${header}" has the same value in every row — adds no sort/filter value, consider removing it.`
+      )
+    }
+
+    // Currency / thousands inside numeric-looking column
+    let currencyHits = 0
+    for (const v of values) {
+      if (CURRENCY_NUMBER.test(v) || THOUSANDS_NUMBER.test(v)) currencyHits++
+    }
+    if (currencyHits >= 2) {
+      warnings.push(
+        `Column "${header}" contains currency symbols or thousand separators (e.g. \`$1,234\`). Store plain numbers (\`1234\`) — sorting is lexicographic and formatted strings sort wrong.`
+      )
+    }
+
+    // Mixed date formats — only fire on date-ish headers to avoid false positives
+    if (/date|day|month|time/i.test(header)) {
+      let isoHits = 0
+      let nonIsoHits = 0
+      for (const v of values) {
+        if (!v) continue
+        if (ISO_DATE.test(v)) isoHits++
+        else if (NON_ISO_DATE.test(v)) nonIsoHits++
+      }
+      if (isoHits >= 2 && nonIsoHits >= 2) {
+        warnings.push(
+          `Column "${header}" mixes ISO dates (\`YYYY-MM-DD\`) with other date formats. Pick one format — ISO sorts correctly as a string.`
+        )
+      }
+    }
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
 }
 
 // ---------------------------------------------------------------------------
