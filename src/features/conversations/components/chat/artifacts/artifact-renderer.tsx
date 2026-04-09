@@ -80,6 +80,14 @@ function RendererLoading() {
 
 interface ArtifactRendererProps {
   artifact: Artifact
+  /**
+   * "Fix this with AI" callback. Currently only the R3F renderer wires it
+   * because 3D scene compile errors are the hardest to debug visually —
+   * the other renderers expose `Retry` and `View source` buttons in their
+   * own error cards instead, which is enough for HTML/React/SVG/etc. If we
+   * later decide to extend this to more types, plumb the same `onFixWithAI`
+   * prop into the renderer's error card next to its `Retry` button.
+   */
   onFixWithAI?: (error: string) => void
 }
 
@@ -94,7 +102,7 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
     case "application/mermaid":
       return <MermaidRenderer content={artifact.content} />
     case "application/sheet":
-      return <SheetRenderer content={artifact.content} />
+      return <SheetRenderer content={artifact.content} title={artifact.title} />
     case "text/latex":
       return <LatexRenderer content={artifact.content} />
     case "application/slides":
@@ -103,13 +111,20 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
       return <PythonRenderer content={artifact.content} />
     case "application/3d":
       return <R3FRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
-    case "application/code":
+    case "application/code": {
+      // Pick a fence length one longer than the longest backtick run
+      // already inside the content, so code that itself contains ``` blocks
+      // doesn't break syntax highlighting.
+      const longestRun = (artifact.content.match(/`+/g) ?? [])
+        .reduce((max, run) => Math.max(max, run.length), 0)
+      const fence = "`".repeat(Math.max(3, longestRun + 1))
       return (
         <StreamdownContent
-          content={`\`\`\`${artifact.language || ""}\n${artifact.content}\n\`\`\``}
+          content={`${fence}${artifact.language || ""}\n${artifact.content}\n${fence}`}
           className="p-4"
         />
       )
+    }
     case "text/markdown":
       return <StreamdownContent content={artifact.content} className="p-4" />
     default:
