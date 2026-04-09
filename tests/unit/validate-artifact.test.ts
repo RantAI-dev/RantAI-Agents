@@ -608,3 +608,92 @@ describe("validateArtifactContent — application/code", () => {
     expect(result.warnings.join(" ")).toMatch(/truncation|placeholder/i)
   })
 })
+
+describe("validateArtifactContent — text/markdown", () => {
+  it("accepts a well-structured document with a top-level heading", () => {
+    const md = `# Title\n\nSome paragraph.\n\n## Section\n\nMore content.\n`
+    const r = validateArtifactContent("text/markdown", md)
+    expect(r.ok).toBe(true)
+    expect(r.warnings).toEqual([])
+  })
+
+  it("errors on empty content", () => {
+    const r = validateArtifactContent("text/markdown", "   \n  ")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/empty/i)
+  })
+
+  it("warns when the document has no top-level heading", () => {
+    const r = validateArtifactContent("text/markdown", "Just a paragraph, no heading.")
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/top-level heading/i)
+  })
+
+  it("warns when heading levels skip", () => {
+    const md = `# Title\n\n### Skipped H2\n`
+    const r = validateArtifactContent("text/markdown", md)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/skip/i)
+  })
+
+  it("warns on a <script> tag", () => {
+    const md = `# Title\n\n<script>alert(1)</script>\n`
+    const r = validateArtifactContent("text/markdown", md)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/script/i)
+  })
+})
+
+describe("validateArtifactContent — text/latex", () => {
+  it("accepts a display-math document", () => {
+    const r = validateArtifactContent("text/latex", "$$ x^2 + y^2 = z^2 $$")
+    expect(r.ok).toBe(true)
+    expect(r.warnings).toEqual([])
+  })
+
+  it("accepts an align environment", () => {
+    const tex = `\\section{Proof}\n\n\\begin{align}\na &= b \\\\\nc &= d\n\\end{align}\n`
+    const r = validateArtifactContent("text/latex", tex)
+    expect(r.ok).toBe(true)
+  })
+
+  it("errors on empty content", () => {
+    const r = validateArtifactContent("text/latex", "")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/empty/i)
+  })
+
+  it("errors on \\documentclass", () => {
+    const r = validateArtifactContent("text/latex", "\\documentclass{article}\n$$x$$")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/documentclass/i)
+  })
+
+  it("errors on \\usepackage", () => {
+    const r = validateArtifactContent("text/latex", "\\usepackage{amsmath}\n$$x$$")
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/usepackage/i)
+  })
+
+  it("errors on \\begin{document}", () => {
+    const r = validateArtifactContent(
+      "text/latex",
+      "\\begin{document}$$x$$\\end{document}"
+    )
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/begin\{document\}/i)
+  })
+
+  it("warns when there are no math delimiters", () => {
+    const r = validateArtifactContent("text/latex", "\\section{Intro}\n\nHello world.")
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/math delimiter/i)
+  })
+
+  it("warns on unsupported KaTeX commands", () => {
+    const tex = `\\section{Plot}\n\n$$ \\includegraphics{a.png} $$\n`
+    const r = validateArtifactContent("text/latex", tex)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/includegraphics/)
+  })
+})

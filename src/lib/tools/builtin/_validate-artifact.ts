@@ -45,7 +45,145 @@ export function validateArtifactContent(
   if (type === "application/mermaid") return validateMermaid(content)
   if (type === "application/python") return validatePython(content)
   if (type === "application/code") return validateCode(content)
+  if (type === "text/markdown") return validateMarkdown(content)
+  if (type === "text/latex") return validateLatex(content)
   return { ok: true, errors: [], warnings: [] }
+}
+
+// ---------------------------------------------------------------------------
+// Markdown validation
+// ---------------------------------------------------------------------------
+
+function validateMarkdown(content: string): ArtifactValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!content.trim()) {
+    errors.push("Markdown content is empty.")
+    return { ok: false, errors, warnings }
+  }
+
+  const lines = content.split("\n")
+  const firstNonBlank = lines.find((l) => l.trim().length > 0) ?? ""
+
+  if (!/^#\s+\S/.test(firstNonBlank)) {
+    warnings.push(
+      "Document does not begin with a top-level heading. Start with a single `# Title`."
+    )
+  }
+
+  // Heading level skip detection: track previous heading level, warn if a
+  // heading jumps more than one level deeper.
+  let prevLevel = 0
+  let firstHeadingSeen = false
+  for (const line of lines) {
+    const m = line.match(/^(#{1,6})\s+\S/)
+    if (!m) continue
+    const level = m[1].length
+    if (!firstHeadingSeen) {
+      firstHeadingSeen = true
+      prevLevel = level
+      continue
+    }
+    if (level > prevLevel + 1) {
+      warnings.push(
+        `Heading level jumps from h${prevLevel} to h${level} — never skip levels (e.g. \`#\` directly to \`###\`).`
+      )
+      break
+    }
+    prevLevel = level
+  }
+
+  if (/<script[\s>]/i.test(content)) {
+    warnings.push(
+      "Found a <script> tag. Markdown does not execute scripts — if you need an interactive page, use the `text/html` artifact type instead."
+    )
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
+}
+
+// ---------------------------------------------------------------------------
+// LaTeX validation
+// ---------------------------------------------------------------------------
+
+/**
+ * KaTeX / our renderer cannot handle these commands. They almost always show
+ * up when an LLM thinks it's writing for a full LaTeX engine (pdflatex etc.).
+ */
+const LATEX_UNSUPPORTED_COMMANDS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
+  { pattern: /\\includegraphics\b/, label: "\\includegraphics" },
+  { pattern: /\\bibliography\b/, label: "\\bibliography" },
+  { pattern: /\\cite\b/, label: "\\cite" },
+  { pattern: /\\input\b/, label: "\\input" },
+  { pattern: /\\include\b/, label: "\\include" },
+  { pattern: /\\begin\{tikzpicture\}/, label: "\\begin{tikzpicture}" },
+  { pattern: /\\begin\{figure\}/, label: "\\begin{figure}" },
+  { pattern: /\\begin\{table\}/, label: "\\begin{table}" },
+  { pattern: /\\begin\{tabular\}/, label: "\\begin{tabular}" },
+  { pattern: /\\begin\{verbatim\}/, label: "\\begin{verbatim}" },
+  { pattern: /\\verb\b/, label: "\\verb" },
+  { pattern: /\\label\{/, label: "\\label{}" },
+  { pattern: /\\ref\{/, label: "\\ref{}" },
+  { pattern: /\\eqref\{/, label: "\\eqref{}" },
+]
+
+function validateLatex(content: string): ArtifactValidationResult {
+  const errors: string[] = []
+  const warnings: string[] = []
+
+  if (!content.trim()) {
+    errors.push("LaTeX content is empty.")
+    return { ok: false, errors, warnings }
+  }
+
+  if (/\\documentclass\b/.test(content)) {
+    errors.push(
+      "Found \\documentclass — this renderer is KaTeX, not a full LaTeX engine. Remove the preamble; write the body directly with \\section, math environments, and inline math."
+    )
+  }
+  if (/\\usepackage\b/.test(content)) {
+    errors.push(
+      "Found \\usepackage — KaTeX has no package system. Remove all \\usepackage lines; the supported commands are built in."
+    )
+  }
+  if (/\\begin\{document\}/.test(content)) {
+    errors.push(
+      "Found \\begin{document} — KaTeX has no document environment. Remove \\begin{document} / \\end{document} and write the body directly."
+    )
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors, warnings }
+  }
+
+  // Math-delimiter sniff: $...$, $$...$$, \[...\], or any supported math env.
+  const hasMathDelimiter =
+    /\$[^$\n]+\$/.test(content) ||
+    /\$\$[\s\S]+?\$\$/.test(content) ||
+    /\\\[[\s\S]+?\\\]/.test(content) ||
+    /\\begin\{(equation|align|gather|multline|cases|eqnarray)\*?\}/.test(content)
+
+  if (!hasMathDelimiter) {
+    warnings.push(
+      "No math delimiters detected ($, $$, \\[, or a math environment). If this document has no math, prefer the `text/markdown` artifact type."
+    )
+  }
+
+  const unsupportedHits: string[] = []
+  for (const { pattern, label } of LATEX_UNSUPPORTED_COMMANDS) {
+    if (pattern.test(content)) unsupportedHits.push(label)
+  }
+  if (unsupportedHits.length > 0) {
+    warnings.push(
+      `Found commands not supported by KaTeX / this renderer: ${unsupportedHits
+        .slice(0, 5)
+        .map((h) => `"${h}"`)
+        .join(", ")}. They will be silently dropped or render as red error fragments.`
+    )
+  }
+
+  return { ok: errors.length === 0, errors, warnings }
 }
 
 // ---------------------------------------------------------------------------
