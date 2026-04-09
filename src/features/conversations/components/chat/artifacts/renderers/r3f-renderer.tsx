@@ -5,6 +5,93 @@ import { AlertTriangle, Wand2, Copy, Check, MonitorCog } from "@/lib/icons"
 
 /* ── Sanitize AI-generated scene code ──────────────────────── */
 
+/**
+ * Robust JSX-tag stripper that handles BOTH self-closing (`<X />`) and
+ * paired (`<X>...</X>`) forms, and that walks attribute strings character
+ * by character so a `>` inside a string literal doesn't terminate early.
+ *
+ * The previous regex (`<X[\s\S]*?\/>`) only matched self-closing form, and
+ * would chop tags early if any attribute contained a `>` character.
+ */
+function stripJsxTag(source: string, tagName: string, replacement = ""): string {
+    let result = ""
+    let i = 0
+    while (i < source.length) {
+        // Look for the next opening of `<tagName` followed by ` `, `/`, `>`,
+        // or end. Has to be a tag boundary, not e.g. `<tagNameFoo`.
+        const openIdx = findTagOpen(source, i, tagName)
+        if (openIdx === -1) {
+            result += source.slice(i)
+            break
+        }
+        result += source.slice(i, openIdx)
+
+        // Walk forward to find the end of the opening tag, respecting
+        // single- and double-quoted attribute string literals.
+        let j = openIdx + 1
+        let inQuote: '"' | "'" | null = null
+        let selfClosing = false
+        while (j < source.length) {
+            const ch = source[j]
+            if (inQuote) {
+                if (ch === inQuote) inQuote = null
+                j++
+                continue
+            }
+            if (ch === '"' || ch === "'") {
+                inQuote = ch
+                j++
+                continue
+            }
+            if (ch === "/" && source[j + 1] === ">") {
+                selfClosing = true
+                j += 2
+                break
+            }
+            if (ch === ">") {
+                j++
+                break
+            }
+            j++
+        }
+
+        if (selfClosing) {
+            result += replacement
+            i = j
+            continue
+        }
+
+        // Paired form — find the matching `</tagName>` (no nesting since
+        // these tags are not allowed to be nested inside themselves in our
+        // valid scenes). Bail out gracefully if not found.
+        const closeRe = new RegExp(`</\\s*${tagName}\\s*>`, "g")
+        closeRe.lastIndex = j
+        const closeMatch = closeRe.exec(source)
+        if (!closeMatch) {
+            // Unbalanced — skip just the opening tag
+            result += replacement
+            i = j
+            continue
+        }
+        result += replacement
+        i = closeMatch.index + closeMatch[0].length
+    }
+    return result
+}
+
+/** Find the next index where `<tagName` appears as a tag boundary. */
+function findTagOpen(source: string, from: number, tagName: string): number {
+    let i = from
+    while (i < source.length) {
+        const idx = source.indexOf(`<${tagName}`, i)
+        if (idx === -1) return -1
+        const after = source[idx + 1 + tagName.length]
+        if (after === undefined || /[\s/>]/.test(after)) return idx
+        i = idx + 1
+    }
+    return -1
+}
+
 function sanitizeSceneCode(code: string): string {
     let s = code
 
@@ -21,14 +108,17 @@ function sanitizeSceneCode(code: string): string {
     // Strip named exports
     s = s.replace(/export\s+(?=function|const|let|var|class)/g, "")
 
-    // Replace <Canvas ...> wrapping with fragment
-    s = s.replace(/<Canvas[\s\S]*?>/g, "<>")
-    s = s.replace(/<\/Canvas>/g, "</>")
+    // Replace <Canvas ...> with fragment (paired or self-closing)
+    s = stripJsxTag(s, "Canvas", "<>")
+    s = s.replace(/<\/\s*Canvas\s*>/g, "</>")
 
     // Remove components already provided by the App wrapper
-    s = s.replace(/<OrbitControls[\s\S]*?\/>/g, "")
-    s = s.replace(/<Environment[\s\S]*?\/>/g, "")
-    s = s.replace(/<color[\s\S]*?\/>/g, "")
+    s = stripJsxTag(s, "OrbitControls")
+    s = stripJsxTag(s, "Environment")
+    // Keep <color attach="background">. The wrapper sets a default dark
+    // background but if the LLM intentionally specifies a scene background
+    // we should honor it. (Previously this was stripped, silently dropping
+    // user-requested colors.)
 
     return s
 }

@@ -28,6 +28,13 @@ const PYODIDE_CDN = "https://cdn.jsdelivr.net/pyodide/v0.27.6/full/"
 
 /**
  * Inline Web Worker source that loads and runs Pyodide off the main thread.
+ *
+ * - numpy AND scikit-learn are pre-loaded at init so the documented
+ *   packages don't trigger first-import latency.
+ * - __plot_images__ is reset to [] at the start of every run so the
+ *   previous run's plots don't bleed into the current run's output.
+ * - matplotlib capture is installed once during initPyodide (not on
+ *   every run).
  */
 const workerSource = `
 const PYODIDE_CDN = "${PYODIDE_CDN}";
@@ -40,7 +47,30 @@ async function initPyodide() {
 
   importScripts(PYODIDE_CDN + "pyodide.js");
   pyodide = await self.loadPyodide({ indexURL: PYODIDE_CDN });
-  await pyodide.loadPackage(["numpy", "micropip"]);
+  // Pre-load common heavy packages so the first user import is instant.
+  await pyodide.loadPackage(["numpy", "micropip", "matplotlib", "scikit-learn"]);
+
+  // Install the matplotlib plt.show() interceptor exactly once. The
+  // global __plot_images__ list is also defined here; subsequent runs reset
+  // it from runPythonAsync (see onmessage below).
+  await pyodide.runPythonAsync(\`
+import io, base64
+__plot_images__ = []
+try:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+    _original_show = plt.show
+    def _capture_show(*args, **kwargs):
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+        buf.seek(0)
+        __plot_images__.append(base64.b64encode(buf.read()).decode())
+        plt.close('all')
+    plt.show = _capture_show
+except ImportError:
+    pass
+\`);
 
   self.postMessage({ type: "status", status: "ready" });
   return pyodide;
@@ -61,26 +91,9 @@ self.onmessage = async (e) => {
       batched: (text) => self.postMessage({ type: "stderr", text }),
     });
 
-    // Matplotlib capture setup
-    await py.runPythonAsync(\`
-import sys, io
-__plot_images__ = []
-try:
-    import matplotlib
-    matplotlib.use('Agg')
-    import matplotlib.pyplot as plt
-    _original_show = plt.show
-    def _capture_show(*args, **kwargs):
-        import base64
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
-        buf.seek(0)
-        __plot_images__.append(base64.b64encode(buf.read()).decode())
-        plt.close('all')
-    plt.show = _capture_show
-except ImportError:
-    pass
-\`);
+    // Reset the plot accumulator so a previous run's images don't leak
+    // into this one. The capture hook itself is installed in initPyodide.
+    await py.runPythonAsync("__plot_images__ = []");
 
     await py.runPythonAsync(e.data.code);
 
@@ -238,9 +251,11 @@ export function PythonRenderer({ content }: PythonRendererProps) {
         )}
       </div>
 
-      {/* Output panel */}
+      {/* Output panel — responsive max height so fullscreen / tall
+          panels can show more output. Falls back to 300px on the smallest
+          viewports and grows up to 60vh on larger screens. */}
       {(output.length > 0 || plots.length > 0 || error) && (
-        <div className="max-h-[300px] overflow-auto shrink-0">
+        <div className="max-h-[300px] sm:max-h-[40vh] lg:max-h-[60vh] overflow-auto shrink-0">
           {error && (
             <div className="px-4 py-2 bg-destructive/5 border-b border-destructive/20">
               <div className="flex items-center gap-2 text-destructive text-xs font-medium mb-1">

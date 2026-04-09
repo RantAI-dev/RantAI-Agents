@@ -145,8 +145,9 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
                 key={i}
                 type="button"
                 onClick={() =>
+                  // Absolute jumps use `index`, relative uses `direction`.
                   iframeRef.current?.contentWindow?.postMessage(
-                    { type: "navigate", direction: i },
+                    { type: "navigate", index: i },
                     "*"
                   )
                 }

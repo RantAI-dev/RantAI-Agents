@@ -8,6 +8,33 @@ interface MermaidRendererProps {
   content: string
 }
 
+/**
+ * Hoist mermaid loading and `initialize()` to module scope so we
+ * pay the dynamic-import cost once and re-initialize ONLY when the theme
+ * actually changes — not on every render. The `lastInitTheme` cache prevents
+ * redundant re-init calls when content updates but the theme stayed put.
+ */
+type MermaidModule = typeof import("mermaid").default
+let mermaidPromise: Promise<MermaidModule> | null = null
+let lastInitTheme: "dark" | "default" | null = null
+
+async function getMermaid(theme: "dark" | "default"): Promise<MermaidModule> {
+  if (!mermaidPromise) {
+    mermaidPromise = import("mermaid").then((m) => m.default)
+  }
+  const mermaid = await mermaidPromise
+  if (lastInitTheme !== theme) {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme,
+      securityLevel: "strict",
+      fontFamily: "system-ui, -apple-system, sans-serif",
+    })
+    lastInitTheme = theme
+  }
+  return mermaid
+}
+
 export function MermaidRenderer({ content }: MermaidRendererProps) {
   const [svg, setSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -26,17 +53,11 @@ export function MermaidRenderer({ content }: MermaidRendererProps) {
         setLoading(true)
         setError(null)
 
-        const mermaid = (await import("mermaid")).default
+        const theme = resolvedTheme === "dark" ? "dark" : "default"
+        const mermaid = await getMermaid(theme)
 
         // Generate a fresh ID for each render attempt to avoid DOM conflicts
         idRef.current = `mermaid-${crypto.randomUUID().slice(0, 8)}`
-
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: resolvedTheme === "dark" ? "dark" : "default",
-          securityLevel: "strict",
-          fontFamily: "system-ui, -apple-system, sans-serif",
-        })
 
         // Validate syntax first
         const isValid = await mermaid.parse(content, { suppressErrors: true })

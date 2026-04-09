@@ -423,12 +423,15 @@ ${sections}
   });
 
   window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'navigate') {
-      var d = e.data.direction;
-      if (d === 'next') show(current + 1);
-      else if (d === 'prev') show(current - 1);
-      else if (typeof d === 'number') show(d);
-    }
+    if (!e.data || e.data.type !== 'navigate') return;
+    // Standardized contract — direction "next"/"prev" for relative,
+    // index <number> for absolute jumps. Legacy direction:<number> still
+    // accepted so older clients keep working.
+    var d = e.data.direction;
+    if (typeof e.data.index === 'number') { show(e.data.index); return; }
+    if (d === 'next') show(current + 1);
+    else if (d === 'prev') show(current - 1);
+    else if (typeof d === 'number') show(d);
   });
 })();
 </script>

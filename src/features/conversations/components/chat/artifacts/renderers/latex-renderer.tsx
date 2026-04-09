@@ -29,6 +29,136 @@ function escapeHtml(text: string): string {
     .replace(/>/g, "&gt;")
 }
 
+/**
+ * Balanced-brace scanner. Given a source string and the index of
+ * the opening `{` of a LaTeX command argument, returns the substring inside
+ * the matched braces and the index of the closing brace (`endIndex`).
+ * Handles nested `{...}` correctly so things like `\section{$f(x)$}` and
+ * `\textbf{$x^2$}` survive.
+ *
+ * Returns `null` if no matching brace is found.
+ */
+function readBracedArg(
+  source: string,
+  openIndex: number,
+): { content: string; endIndex: number } | null {
+  if (source[openIndex] !== "{") return null
+  let depth = 1
+  let i = openIndex + 1
+  while (i < source.length) {
+    const ch = source[i]
+    // Honor backslash escaping so `\{` and `\}` don't affect depth.
+    if (ch === "\\" && i + 1 < source.length) {
+      i += 2
+      continue
+    }
+    if (ch === "{") depth++
+    else if (ch === "}") {
+      depth--
+      if (depth === 0) {
+        return { content: source.slice(openIndex + 1, i), endIndex: i }
+      }
+    }
+    i++
+  }
+  return null
+}
+
+/**
+ * Replace every `\command{...}` (with balanced braces) by a transformer.
+ * The transformer receives the inner text. Used for `\textbf`, `\section`,
+ * `\href`, etc. — replaces the previous regex which broke on nested braces.
+ */
+function replaceBracedCommand(
+  source: string,
+  command: string,
+  transform: (inner: string) => string,
+): string {
+  const re = new RegExp(`\\\\${command}(?:\\*)?\\s*\\{`, "g")
+  let result = ""
+  let cursor = 0
+  let match: RegExpExecArray | null
+  while ((match = re.exec(source)) !== null) {
+    const openBrace = match.index + match[0].length - 1
+    const arg = readBracedArg(source, openBrace)
+    if (!arg) {
+      // Unbalanced — leave as-is
+      continue
+    }
+    result += source.slice(cursor, match.index) + transform(arg.content)
+    cursor = arg.endIndex + 1
+    re.lastIndex = cursor
+  }
+  result += source.slice(cursor)
+  return result
+}
+
+/**
+ * Two-arg variant for commands like `\href{url}{text}`.
+ */
+function replaceTwoArgBracedCommand(
+  source: string,
+  command: string,
+  transform: (a: string, b: string) => string,
+): string {
+  const re = new RegExp(`\\\\${command}\\s*\\{`, "g")
+  let result = ""
+  let cursor = 0
+  let match: RegExpExecArray | null
+  while ((match = re.exec(source)) !== null) {
+    const firstOpen = match.index + match[0].length - 1
+    const first = readBracedArg(source, firstOpen)
+    if (!first) continue
+    let next = first.endIndex + 1
+    while (next < source.length && /\s/.test(source[next])) next++
+    if (source[next] !== "{") continue
+    const second = readBracedArg(source, next)
+    if (!second) continue
+    result +=
+      source.slice(cursor, match.index) + transform(first.content, second.content)
+    cursor = second.endIndex + 1
+    re.lastIndex = cursor
+  }
+  result += source.slice(cursor)
+  return result
+}
+
+/**
+ * Parse a single line that may begin with `\section`, `\subsection`, or
+ * `\subsubsection`. Returns the title (with balanced braces honored), the
+ * remainder of the line, and which level it was. Returns `null` if the line
+ * doesn't open with one of these commands.
+ */
+function parseSectioningHead(
+  line: string,
+): { kind: "section" | "subsection" | "subsubsection"; title: string; rest: string } | null {
+  const m = line.match(/^\s*\\(subsubsection|subsection|section)\*?\s*\{/)
+  if (!m) return null
+  const kind = m[1] as "section" | "subsection" | "subsubsection"
+  const openIdx = line.indexOf("{", m.index! + m[0].length - 1)
+  const arg = readBracedArg(line, openIdx)
+  if (!arg) return null
+  return {
+    kind,
+    title: arg.content,
+    rest: line.slice(arg.endIndex + 1),
+  }
+}
+
+/**
+ * Parse a `\paragraph{Title}rest...` line, balanced-brace aware.
+ */
+function parseParagraphHead(
+  line: string,
+): { title: string; rest: string } | null {
+  const m = line.match(/^\s*\\paragraph\*?\s*\{/)
+  if (!m) return null
+  const openIdx = line.indexOf("{", m.index! + m[0].length - 1)
+  const arg = readBracedArg(line, openIdx)
+  if (!arg) return null
+  return { title: arg.content, rest: line.slice(arg.endIndex + 1) }
+}
+
 /** Process inline LaTeX commands within a text line and return HTML */
 function processInlineLatex(text: string): string {
   let result = text
@@ -36,29 +166,19 @@ function processInlineLatex(text: string): string {
   // Inline math: $...$ (non-greedy, not $$)
   result = result.replace(/\$([^$]+?)\$/g, (_, math) => renderMath(math, false))
 
-  // \textbf{...}
-  result = result.replace(/\\textbf\{([^}]*)\}/g, "<strong>$1</strong>")
-
-  // \textit{...}
-  result = result.replace(/\\textit\{([^}]*)\}/g, "<em>$1</em>")
-
-  // \emph{...}
-  result = result.replace(/\\emph\{([^}]*)\}/g, "<em>$1</em>")
-
-  // \underline{...}
-  result = result.replace(/\\underline\{([^}]*)\}/g, "<u>$1</u>")
-
-  // \texttt{...}
-  result = result.replace(/\\texttt\{([^}]*)\}/g, "<code>$1</code>")
-
-  // \href{url}{text}
-  result = result.replace(
-    /\\href\{([^}]*)\}\{([^}]*)\}/g,
-    '<a href="$1">$2</a>'
+  // Balanced-brace text commands (no longer regex `[^}]*`).
+  result = replaceBracedCommand(result, "textbf", (inner) => `<strong>${processInlineLatex(inner)}</strong>`)
+  result = replaceBracedCommand(result, "textit", (inner) => `<em>${processInlineLatex(inner)}</em>`)
+  result = replaceBracedCommand(result, "emph", (inner) => `<em>${processInlineLatex(inner)}</em>`)
+  result = replaceBracedCommand(result, "underline", (inner) => `<u>${processInlineLatex(inner)}</u>`)
+  result = replaceBracedCommand(result, "texttt", (inner) => `<code>${processInlineLatex(inner)}</code>`)
+  result = replaceTwoArgBracedCommand(
+    result,
+    "href",
+    (url, txt) => `<a href="${escapeHtml(url)}">${processInlineLatex(txt)}</a>`,
   )
-
   // \text{...} (used inside math sometimes, just unwrap)
-  result = result.replace(/\\text\{([^}]*)\}/g, "$1")
+  result = replaceBracedCommand(result, "text", (inner) => inner)
 
   // Clean up remaining simple commands
   result = result.replace(/\\noindent\s*/g, "")
@@ -140,35 +260,22 @@ function latexToHtml(source: string): string {
       continue
     }
 
-    // \section{Title}
-    const sectionMatch = line.match(/\\section\*?\{([^}]*)\}(.*)/)
-    if (sectionMatch) {
+    // Sectioning commands with balanced-brace argument scanning so titles
+    // like `\section{$f(x)$}` and `\section{Reading: \emph{Notes}}` don't
+    // get clipped at the first `}`.
+    const sectionHead = parseSectioningHead(line)
+    if (sectionHead) {
       if (inList) { parts.push(`</${listType}>`); inList = false }
-      parts.push(`<h2>${processInlineLatex(sectionMatch[1])}</h2>`)
-      if (sectionMatch[2].trim()) {
-        parts.push(`<p>${processInlineLatex(sectionMatch[2].trim())}</p>`)
+      const tag =
+        sectionHead.kind === "section"
+          ? "h2"
+          : sectionHead.kind === "subsection"
+            ? "h3"
+            : "h4"
+      parts.push(`<${tag}>${processInlineLatex(sectionHead.title)}</${tag}>`)
+      if (sectionHead.rest.trim()) {
+        parts.push(`<p>${processInlineLatex(sectionHead.rest.trim())}</p>`)
       }
-      i++
-      continue
-    }
-
-    // \subsection{Title}
-    const subsectionMatch = line.match(/\\subsection\*?\{([^}]*)\}(.*)/)
-    if (subsectionMatch) {
-      if (inList) { parts.push(`</${listType}>`); inList = false }
-      parts.push(`<h3>${processInlineLatex(subsectionMatch[1])}</h3>`)
-      if (subsectionMatch[2].trim()) {
-        parts.push(`<p>${processInlineLatex(subsectionMatch[2].trim())}</p>`)
-      }
-      i++
-      continue
-    }
-
-    // \subsubsection{Title}
-    const subsubMatch = line.match(/\\subsubsection\*?\{([^}]*)\}(.*)/)
-    if (subsubMatch) {
-      if (inList) { parts.push(`</${listType}>`); inList = false }
-      parts.push(`<h4>${processInlineLatex(subsubMatch[1])}</h4>`)
       i++
       continue
     }
@@ -308,18 +415,24 @@ function latexToHtml(source: string): string {
       continue
     }
 
-    // \paragraph{Title}
-    const paraMatch = line.match(/\\paragraph\*?\{([^}]*)\}(.*)/)
-    if (paraMatch) {
+    // \paragraph{Title} rest — balanced-brace argument
+    const paraHead = parseParagraphHead(line)
+    if (paraHead) {
       if (inList) { parts.push(`</${listType}>`); inList = false }
       parts.push(
-        `<p><strong>${processInlineLatex(paraMatch[1])}</strong> ${processInlineLatex(paraMatch[2])}</p>`
+        `<p><strong>${processInlineLatex(paraHead.title)}</strong> ${processInlineLatex(paraHead.rest)}</p>`
       )
       i++
       continue
     }
 
-    // Regular text paragraph — collect consecutive non-command lines
+    // Regular text paragraph — collect consecutive non-command lines.
+    // LaTeX semantics: a blank line is a paragraph break, adjacent non-blank
+    // lines belong to the same paragraph. The outer `while` already skips
+    // blanks, so each <p> we emit corresponds to one source paragraph.
+    // We preserve embedded line breaks as `\n` rather than collapsing to a
+    // single space so manual `\\` line breaks survive when authors used
+    // `text\\\nmore` over multiple lines.
     if (inList) { parts.push(`</${listType}>`); inList = false }
     let paragraph = line
     i++
@@ -329,7 +442,7 @@ function latexToHtml(source: string): string {
       !lines[i].trim().startsWith("\\") &&
       !lines[i].trim().startsWith("$")
     ) {
-      paragraph += " " + lines[i].trim()
+      paragraph += "\n" + lines[i].trim()
       i++
     }
     parts.push(`<p>${processInlineLatex(paragraph)}</p>`)
