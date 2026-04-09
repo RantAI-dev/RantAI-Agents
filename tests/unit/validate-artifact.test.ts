@@ -944,6 +944,88 @@ describe("validateArtifactContent — application/slides", () => {
     )
     expect(r.warnings.join(" ")).toMatch(/markdown syntax/i)
   })
+
+  it("warns when a bullet exceeds 10 words", () => {
+    const r = v(
+      JSON.stringify({
+        theme: {},
+        slides: [
+          { layout: "title", title: "X", subtitle: "Y" },
+          {
+            layout: "content",
+            title: "Long",
+            bullets: [
+              "this bullet has way too many words and should trigger the validator warning",
+            ],
+          },
+          { layout: "closing", title: "Bye" },
+        ],
+      }),
+    )
+    expect(r.warnings.join(" ")).toMatch(/bullet 1 is \d+ words/)
+  })
+
+  it("warns on the deprecated image-text layout", () => {
+    const r = v(
+      JSON.stringify({
+        theme: {},
+        slides: [
+          { layout: "title", title: "X", subtitle: "Y" },
+          { layout: "image-text", title: "Visual", content: "..." },
+          { layout: "closing", title: "Bye" },
+        ],
+      }),
+    )
+    expect(r.warnings.join(" ")).toMatch(/image-text/)
+  })
+
+  it("warns when the deck is shorter than the convention", () => {
+    const r = v(
+      JSON.stringify({
+        theme: {},
+        slides: [
+          { layout: "title", title: "X", subtitle: "Y" },
+          { layout: "closing", title: "Bye" },
+        ],
+      }),
+    )
+    expect(r.warnings.join(" ")).toMatch(/convention is 7/)
+  })
+
+  it("warns when the deck is longer than the convention", () => {
+    const slides = [{ layout: "title", title: "X", subtitle: "Y" }]
+    for (let i = 0; i < 12; i++) {
+      slides.push({ layout: "content", title: `S${i}`, bullets: ["a"] } as never)
+    }
+    slides.push({ layout: "closing", title: "Bye" } as never)
+    const r = v(JSON.stringify({ theme: {}, slides }))
+    expect(r.warnings.join(" ")).toMatch(/convention is 7/)
+  })
+
+  it("warns when fewer than 3 distinct layouts are used in a long deck", () => {
+    // 8 slides using only 2 distinct layouts (title + content) should
+    // trip the diversity warning. Closing intentionally omitted to keep
+    // the layout count at exactly 2 for this assertion.
+    const slides = [{ layout: "title", title: "X", subtitle: "Y" }]
+    for (let i = 0; i < 7; i++) {
+      slides.push({ layout: "content", title: `S${i}`, bullets: ["a"] } as never)
+    }
+    const r = v(JSON.stringify({ theme: {}, slides }))
+    expect(r.warnings.join(" ")).toMatch(/layout type/)
+  })
+
+  it("warns when the closing slide has no title", () => {
+    const r = v(
+      JSON.stringify({
+        theme: {},
+        slides: [
+          { layout: "title", title: "X", subtitle: "Y" },
+          { layout: "closing" },
+        ],
+      }),
+    )
+    expect(r.warnings.join(" ")).toMatch(/closing layout.*title/)
+  })
 })
 
 describe("validateArtifactContent — application/3d", () => {

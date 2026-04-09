@@ -70,6 +70,9 @@ const SLIDE_LAYOUTS = new Set([
   "closing",
 ])
 const MAX_SLIDE_BULLETS = 6
+const MAX_BULLET_WORDS = 10
+const MIN_DECK_SLIDES = 7
+const MAX_DECK_SLIDES = 12
 
 function validateSlides(content: string): ArtifactValidationResult {
   const errors: string[] = []
@@ -177,6 +180,38 @@ function validateSlides(content: string): ArtifactValidationResult {
       )
     }
 
+    // Bullet length guard — bullets are takeaways, not full sentences.
+    if (Array.isArray(s.bullets)) {
+      for (let b = 0; b < s.bullets.length; b++) {
+        const bullet = s.bullets[b]
+        if (typeof bullet !== "string") continue
+        const wordCount = bullet.trim().split(/\s+/).filter(Boolean).length
+        if (wordCount > MAX_BULLET_WORDS) {
+          warnings.push(
+            `Slide ${i + 1} bullet ${b + 1} is ${wordCount} words — keep bullets ≤ ${MAX_BULLET_WORDS} words. If you need a sentence, use \`content\` instead.`,
+          )
+        }
+      }
+    }
+
+    // image-text is a deprecated alias for content (renderer + PPTX both
+    // treat it as content with no image support). Steer the LLM toward
+    // content explicitly.
+    if (s.layout === "image-text") {
+      warnings.push(
+        `Slide ${i + 1} uses \`image-text\` layout — this renders identically to \`content\` and adds no image support. Use \`content\` instead.`,
+      )
+    }
+
+    // Closing slides should have a title (the CTA / takeaway line).
+    if (s.layout === "closing") {
+      if (typeof s.title !== "string" || !s.title.trim()) {
+        warnings.push(
+          `Slide ${i + 1} (closing layout) has no \`title\` — closing slides should carry the CTA or final takeaway.`,
+        )
+      }
+    }
+
     // Markdown syntax leakage — slide text fields should be plain text
     const textFields = ["title", "subtitle", "content", "quote", "attribution", "note"]
     for (const f of textFields) {
@@ -189,6 +224,30 @@ function validateSlides(content: string): ArtifactValidationResult {
         break
       }
     }
+  }
+
+  // Deck size convention — outside this range and the deck reads as either
+  // too thin or too long for a single sitting.
+  if (slides.length < MIN_DECK_SLIDES) {
+    warnings.push(
+      `Deck has ${slides.length} slides — convention is ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. Fewer than ${MIN_DECK_SLIDES} feels thin.`,
+    )
+  } else if (slides.length > MAX_DECK_SLIDES) {
+    warnings.push(
+      `Deck has ${slides.length} slides — convention is ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. More than ${MAX_DECK_SLIDES} loses the audience.`,
+    )
+  }
+
+  // Layout diversity — a deck of all `content` slides is boring.
+  const distinctLayouts = new Set(
+    slides
+      .map((s) => (s as { layout?: string } | null)?.layout)
+      .filter((l): l is string => typeof l === "string"),
+  )
+  if (slides.length >= 5 && distinctLayouts.size < 3) {
+    warnings.push(
+      `Deck only uses ${distinctLayouts.size} layout type(s) across ${slides.length} slides — vary the layouts (try \`section\`, \`two-column\`, or \`quote\`) to keep the deck visually engaging.`,
+    )
   }
 
   // First slide should be a title; last slide should be a closing.
