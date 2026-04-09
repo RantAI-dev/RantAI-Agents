@@ -67,6 +67,47 @@ export const createArtifactTool: ToolDefinition = {
       }
     }
 
+    // Canvas-mode type enforcement. When the user has selected a
+    // specific artifact type, the LLM is required to use it. If it picks
+    // something else we surface a validation error so the SDK retry loop
+    // re-issues with the correct type instead of silently shipping the wrong
+    // artifact.
+    const canvasMode = context.canvasMode
+    if (
+      canvasMode &&
+      canvasMode !== "auto" &&
+      canvasMode !== type
+    ) {
+      return {
+        id,
+        title,
+        type,
+        content,
+        language,
+        persisted: false,
+        error: `Canvas mode is locked to "${canvasMode}" but you called create_artifact with type "${type}". Re-issue the call with type="${canvasMode}". The user explicitly chose this type — do not switch.`,
+        validationErrors: [
+          `Wrong artifact type: expected "${canvasMode}", got "${type}".`,
+        ],
+      }
+    }
+
+    // `application/code` requires `language` — it lives on the
+    // tool args (not content) so the validator can't see it. Enforce here.
+    if (type === "application/code" && !language) {
+      return {
+        id,
+        title,
+        type,
+        content,
+        language,
+        persisted: false,
+        error:
+          'application/code artifacts require a `language` parameter (e.g. "python", "typescript", "rust"). Re-issue the call with the language set — it controls syntax highlighting and the download file extension.',
+        validationErrors: ["Missing required `language` parameter for application/code."],
+      }
+    }
+
     // Structural validation for HTML/React. Failures are surfaced back to the
     // LLM so it can self-correct on the next tool call. Other artifact types
     // pass through unchanged.
