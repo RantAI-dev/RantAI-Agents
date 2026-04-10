@@ -15,20 +15,7 @@ export interface OrganizationListItem {
   name: string
   slug: string
   logoUrl: string | null
-  plan: string
   role: string
-  limits: {
-    maxMembers: number
-    maxAssistants: number
-    maxDocuments: number
-    maxApiKeys: number
-  }
-  counts: {
-    members: number
-    assistants: number
-    documents: number
-    apiKeys: number
-  }
   createdAt: string
   joinedAt: string | undefined
 }
@@ -52,20 +39,7 @@ export async function listOrganizationsForUser(
     name: membership.organization.name,
     slug: membership.organization.slug,
     logoUrl: membership.organization.logoUrl,
-    plan: membership.organization.plan,
     role: membership.role,
-    limits: {
-      maxMembers: membership.organization.maxMembers,
-      maxAssistants: membership.organization.maxAssistants,
-      maxDocuments: membership.organization.maxDocuments,
-      maxApiKeys: membership.organization.maxApiKeys,
-    },
-    counts: {
-      members: membership.organization._count.memberships,
-      assistants: membership.organization._count.assistants,
-      documents: membership.organization._count.documents,
-      apiKeys: membership.organization._count.embedKeys,
-    },
     createdAt: membership.organization.createdAt.toISOString(),
     joinedAt: membership.acceptedAt?.toISOString(),
   }))
@@ -107,20 +81,7 @@ export async function createOrganizationForUser(params: {
     name: organization.name,
     slug: organization.slug,
     logoUrl: organization.logoUrl,
-    plan: organization.plan,
     role: "owner",
-    limits: {
-      maxMembers: organization.maxMembers,
-      maxAssistants: organization.maxAssistants,
-      maxDocuments: organization.maxDocuments,
-      maxApiKeys: organization.maxApiKeys,
-    },
-    counts: {
-      members: organization._count.memberships,
-      assistants: organization._count.assistants,
-      documents: organization._count.documents,
-      apiKeys: organization._count.embedKeys,
-    },
     createdAt: organization.createdAt.toISOString(),
     joinedAt: undefined,
   }

@@ -24,20 +24,7 @@ interface OrganizationSettingsOrganization {
   id: string
   name: string
   slug: string
-  plan: string
   role: "owner" | "admin" | "member" | "viewer"
-  limits: {
-    maxMembers: number
-    maxAssistants: number
-    maxDocuments: number
-    maxApiKeys: number
-  }
-  counts: {
-    members: number
-    assistants: number
-    documents: number
-    apiKeys: number
-  }
 }
 
 const STORAGE_KEY = "rantai-active-organization"
@@ -166,17 +153,6 @@ function OrganizationSettingsContent({
     }
   }
 
-  const getPlanBadgeVariant = (plan: string) => {
-    switch (plan) {
-      case "enterprise":
-        return "default" as const
-      case "pro":
-        return "secondary" as const
-      default:
-        return "outline" as const
-    }
-  }
-
   return (
     <>
       <Card>
@@ -210,15 +186,6 @@ function OrganizationSettingsContent({
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="space-y-1">
-              <Label>Plan</Label>
-              <div>
-                <Badge variant={getPlanBadgeVariant(activeOrganization.plan)}>
-                  {activeOrganization.plan.charAt(0).toUpperCase() + activeOrganization.plan.slice(1)}
-                </Badge>
-              </div>
-            </div>
-
             <div className="space-y-1">
               <Label>Your Role</Label>
               <div>

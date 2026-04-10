@@ -26,18 +26,7 @@ describe("organizations service", () => {
           name: "Org 1",
           slug: "org-1",
           logoUrl: null,
-          plan: "pro",
-          maxMembers: 10,
-          maxAssistants: 5,
-          maxDocuments: 100,
-          maxApiKeys: 10,
           createdAt: new Date("2026-01-01T00:00:00.000Z"),
-          _count: {
-            memberships: 3,
-            assistants: 2,
-            documents: 7,
-            embedKeys: 1,
-          },
         },
       },
     ] as never)
@@ -48,7 +37,6 @@ describe("organizations service", () => {
       expect.objectContaining({
         id: "org_1",
         role: "admin",
-        counts: { members: 3, assistants: 2, documents: 7, apiKeys: 1 },
       }),
     ])
   })
@@ -76,18 +64,7 @@ describe("organizations service", () => {
       name: "My Org",
       slug: "my-org-azuo",
       logoUrl: null,
-      plan: "free",
-      maxMembers: 5,
-      maxAssistants: 3,
-      maxDocuments: 100,
-      maxApiKeys: 2,
       createdAt: new Date("2026-01-01T00:00:00.000Z"),
-      _count: {
-        memberships: 1,
-        assistants: 0,
-        documents: 0,
-        embedKeys: 0,
-      },
     } as never)
 
     const randomSpy = vi.spyOn(Math, "random").mockReturnValue(0.30544167)

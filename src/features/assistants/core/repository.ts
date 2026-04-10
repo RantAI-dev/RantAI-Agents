@@ -22,22 +22,6 @@ export async function listAssistantsByScope(organizationId: string | null) {
   })
 }
 
-export async function countAssistantsForOrganization(organizationId: string) {
-  return prisma.assistant.count({
-    where: { organizationId },
-  })
-}
-
-export async function findOrganizationById(organizationId: string) {
-  return prisma.organization.findUnique({
-    where: { id: organizationId },
-    select: {
-      id: true,
-      maxAssistants: true,
-    },
-  })
-}
-
 export async function createAssistant(
   data: Prisma.AssistantUncheckedCreateInput
 ) {

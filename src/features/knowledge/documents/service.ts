@@ -19,7 +19,6 @@ import {
   deleteKnowledgeDocument,
   findKnowledgeDocumentAccessById,
   findKnowledgeDocumentById,
-  findOrganizationDocumentStats,
   listKnowledgeDocumentsByScope,
   updateKnowledgeDocumentWithGroups,
 } from "./repository"
@@ -307,16 +306,6 @@ export async function createKnowledgeDocumentForDashboard(params: {
 }): Promise<Record<string, unknown> | ServiceError> {
   if (params.context.organizationId && params.context.role && !canEdit(params.context.role)) {
     return { status: 403, error: "Insufficient permissions" }
-  }
-
-  if (params.context.organizationId) {
-    const organization = await findOrganizationDocumentStats(params.context.organizationId)
-    if (organization && organization._count.documents >= organization.maxDocuments) {
-      return {
-        status: 400,
-        error: `Organization has reached the maximum of ${organization.maxDocuments} documents`,
-      }
-    }
   }
 
   const useEnhanced = params.input.useEnhanced

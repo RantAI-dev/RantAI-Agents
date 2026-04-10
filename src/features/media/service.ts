@@ -7,8 +7,6 @@ import {
   failMediaJob,
   type FinalizeAssetInput,
 } from "./repository"
-import { enforceMediaLimit } from "./limits"
-import { estimateMediaJobCostCents } from "./cost-estimator"
 import { uploadMediaBytes, downloadMediaBytes } from "./storage"
 import { generateImage, generateAudio, generateVideo } from "./provider/openrouter"
 import { getCapability } from "./model-capabilities"
@@ -49,17 +47,6 @@ async function logMediaAuditEvent(input: {
     })
   } catch (error) {
     console.warn("[media] audit log write failed:", error)
-  }
-}
-
-export class MediaLimitExceededError extends Error {
-  constructor(
-    public limitCents: number,
-    public usedCents: number,
-    public requestedCents: number
-  ) {
-    super(`Media generation limit exceeded: ${usedCents}+${requestedCents} > ${limitCents}`)
-    this.name = "MediaLimitExceededError"
   }
 }
 
@@ -144,24 +131,6 @@ export async function createMediaJob(input: CreateMediaJobInput) {
     )
   }
 
-  const estimatedCostCents = estimateMediaJobCostCents({
-    modality: input.modality,
-    model,
-    parameters: input.parameters,
-  })
-
-  const limit = await enforceMediaLimit({
-    userId: input.userId,
-    estimatedCostCents,
-  })
-  if (!limit.allowed) {
-    throw new MediaLimitExceededError(
-      limit.limitCents,
-      limit.usedCents,
-      limit.requestedCents
-    )
-  }
-
   const job = await createMediaJobRow({
     organizationId: input.organizationId,
     userId: input.userId,
@@ -170,7 +139,7 @@ export async function createMediaJob(input: CreateMediaJobInput) {
     prompt: input.prompt,
     parameters: input.parameters,
     referenceAssetIds: input.referenceAssetIds,
-    estimatedCostCents,
+    estimatedCostCents: 0,
   })
 
   emitToOrgRoom(input.organizationId, "media:job:update", {

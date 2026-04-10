@@ -70,10 +70,3 @@ export async function findAssistantById(assistantId: string) {
     },
   })
 }
-
-export async function findOrganizationById(id: string) {
-  return prisma.organization.findUnique({
-    where: { id },
-    include: { _count: { select: { agentApiKeys: true } } },
-  })
-}

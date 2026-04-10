@@ -4,7 +4,6 @@ import { getOrganizationContextWithFallback } from "@/lib/organization"
 import { CreateMediaJobInputSchema, ListJobsQuerySchema } from "@/features/media/schema"
 import {
   createMediaJob,
-  MediaLimitExceededError,
 } from "@/features/media/service"
 import { listJobsForUser } from "@/features/media/repository"
 
@@ -46,17 +45,6 @@ export async function POST(req: Request) {
     })
     return NextResponse.json(result)
   } catch (error) {
-    if (error instanceof MediaLimitExceededError) {
-      return NextResponse.json(
-        {
-          error: "Media generation limit exceeded",
-          limit: error.limitCents,
-          used: error.usedCents,
-          requested: error.requestedCents,
-        },
-        { status: 402 }
-      )
-    }
     // Log the full error server-side so it shows up in the dev console
     // regardless of how the client surfaces it.
     console.error("[media] POST /jobs failed:", error)

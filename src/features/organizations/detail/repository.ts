@@ -15,16 +15,6 @@ export async function findMembership(userId: string, organizationId: string) {
 export async function findOrganizationDetailById(organizationId: string) {
   return prisma.organization.findUnique({
     where: { id: organizationId },
-    include: {
-      _count: {
-        select: {
-          memberships: true,
-          assistants: true,
-          documents: true,
-          embedKeys: true,
-        },
-      },
-    },
   })
 }
 

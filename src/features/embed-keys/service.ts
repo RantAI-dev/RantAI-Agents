@@ -9,7 +9,6 @@ import {
   findDashboardAssistantsByIds,
   findDashboardEmbedApiKeyById,
   findDashboardEmbedApiKeysByOrganization,
-  findDashboardOrganizationById,
   updateDashboardEmbedApiKey,
 } from "./repository"
 import type {
@@ -117,16 +116,6 @@ export async function createDashboardEmbedKey(params: {
 }): Promise<DashboardEmbedKeyResponse | ServiceError> {
   if (params.context.role && !canManage(params.context.role)) {
     return { status: 403, error: "Insufficient permissions" }
-  }
-
-  if (params.context.organizationId) {
-    const organization = await findDashboardOrganizationById(params.context.organizationId)
-    if (organization && organization._count.embedKeys >= organization.maxApiKeys) {
-      return {
-        status: 400,
-        error: `Organization has reached the maximum of ${organization.maxApiKeys} API keys`,
-      }
-    }
   }
 
   const assistant = await findDashboardAssistantById(params.input.assistantId)

@@ -8,7 +8,6 @@ import {
   findAgentApiKeysByAssistantId,
   findAgentApiKeysByOrganization,
   findAssistantById,
-  findOrganizationById,
   updateAgentApiKey as updateKey,
 } from "./repository"
 import type { CreateAgentApiKeyInput, UpdateAgentApiKeyInput } from "./schema"
@@ -99,16 +98,6 @@ export async function createAgentApiKey(params: {
 }): Promise<AgentApiKeyResponse | ServiceError> {
   if (params.context.role && !canManage(params.context.role)) {
     return { status: 403, error: "Insufficient permissions" }
-  }
-
-  if (params.context.organizationId) {
-    const org = await findOrganizationById(params.context.organizationId)
-    if (org && org._count.agentApiKeys >= org.maxApiKeys) {
-      return {
-        status: 400,
-        error: `Organization has reached the maximum of ${org.maxApiKeys} API keys`,
-      }
-    }
   }
 
   const assistant = await findAssistantById(params.input.assistantId)

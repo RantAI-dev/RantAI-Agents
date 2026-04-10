@@ -22,7 +22,6 @@ model User {
   role                  Role           @default(USER)
   status                String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE (for live chat)
   avatarS3Key           String? // S3 key for avatar image
-  mediaLimitCentsPerDay Int?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
   conversations         Conversation[]
@@ -111,13 +110,6 @@ model Organization {
   slug      String  @unique // URL-friendly identifier
   logoUrl   String? // External URL for logo (backward compat)
   logoS3Key String? // S3 key for uploaded logo
-  plan      String  @default("free") // free, starter, pro, enterprise
-
-  // Limits based on plan
-  maxMembers    Int @default(5)
-  maxAssistants Int @default(3)
-  maxDocuments  Int @default(100)
-  maxApiKeys    Int @default(2)
 
   // Relationships
   memberships         OrganizationMember[]
@@ -126,7 +118,6 @@ model Organization {
   groups              KnowledgeBaseGroup[]
   embedKeys           EmbedApiKey[]
   dashboardSessions   DashboardSession[]
-  usageRecords        UsageRecord[]
   tools               Tool[]
   skills              Skill[]
   mcpServers          McpServerConfig[]
@@ -167,29 +158,6 @@ model OrganizationMember {
   @@index([organizationId])
   @@index([userId])
   @@index([userEmail])
-}
-
-// Usage tracking for analytics
-model UsageRecord {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  userId         String? // Who triggered (optional)
-
-  // What was used
-  resourceType String // "chat", "embedding", "api_call"
-  resourceId   String? // assistantId, documentId, etc.
-
-  // Metrics
-  tokensInput  Int      @default(0)
-  tokensOutput Int      @default(0)
-  cost         Decimal? // Estimated cost in USD
-
-  metadata  Json? // Additional context
-  createdAt DateTime @default(now())
-
-  @@index([organizationId, createdAt])
-  @@index([resourceType])
 }
 
 // AI Assistant configuration for chat

@@ -2,11 +2,9 @@ import { Prisma } from "@prisma/client"
 import { canEdit, canManage } from "@/lib/organization"
 import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models"
 import {
-  countAssistantsForOrganization,
   createAssistant,
   deleteAssistantById,
   findAssistantById,
-  findOrganizationById,
   listAssistantsByScope,
   updateAssistantById,
 } from "./repository"
@@ -140,19 +138,6 @@ export async function createAssistantForUser(params: {
   const selectedModel = params.input.model ?? DEFAULT_MODEL_ID
   if (!isValidModel(selectedModel)) {
     return { status: 400, error: "Invalid model selected" }
-  }
-
-  if (params.organizationId) {
-    const organization = await findOrganizationById(params.organizationId)
-    if (organization) {
-      const currentCount = await countAssistantsForOrganization(params.organizationId)
-      if (currentCount >= organization.maxAssistants) {
-        return {
-          status: 400,
-          error: `Organization has reached the maximum of ${organization.maxAssistants} assistants`,
-        }
-      }
-    }
   }
 
   const createData: Prisma.AssistantUncheckedCreateInput = {

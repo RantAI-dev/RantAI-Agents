@@ -14,7 +14,6 @@ vi.mock("./repository", () => ({
   deleteKnowledgeDocument: vi.fn(),
   findKnowledgeDocumentAccessById: vi.fn(),
   findKnowledgeDocumentById: vi.fn(),
-  findOrganizationDocumentStats: vi.fn(),
   listKnowledgeDocumentsByScope: vi.fn(),
   updateKnowledgeDocumentWithGroups: vi.fn(),
 }))
@@ -100,7 +99,6 @@ describe("dashboard knowledge documents service", () => {
   })
 
   it("creates a JSON knowledge document", async () => {
-    vi.mocked(repository.findOrganizationDocumentStats).mockResolvedValue(null as never)
     vi.mocked(repository.createKnowledgeDocument).mockResolvedValue({
       id: "doc_1",
       title: "Doc",

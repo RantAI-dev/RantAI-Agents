@@ -14,7 +14,6 @@ vi.mock("./repository", () => ({
   findDashboardAssistantsByIds: vi.fn(),
   findDashboardEmbedApiKeyById: vi.fn(),
   findDashboardEmbedApiKeysByOrganization: vi.fn(),
-  findDashboardOrganizationById: vi.fn(),
   updateDashboardEmbedApiKey: vi.fn(),
 }))
 

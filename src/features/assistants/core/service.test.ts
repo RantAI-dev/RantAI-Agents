@@ -9,11 +9,9 @@ import * as repository from "./repository"
 import * as models from "@/lib/models"
 
 vi.mock("./repository", () => ({
-  countAssistantsForOrganization: vi.fn(),
   createAssistant: vi.fn(),
   deleteAssistantById: vi.fn(),
   findAssistantById: vi.fn(),
-  findOrganizationById: vi.fn(),
   listAssistantsByScope: vi.fn(),
   updateAssistantById: vi.fn(),
 }))
@@ -172,12 +170,7 @@ describe("assistants service", () => {
     ])
   })
 
-  it("creates an assistant within org limits", async () => {
-    vi.mocked(repository.findOrganizationById).mockResolvedValue({
-      id: "org_1",
-      maxAssistants: 5,
-    })
-    vi.mocked(repository.countAssistantsForOrganization).mockResolvedValue(2)
+  it("creates an assistant for organization", async () => {
     vi.mocked(repository.createAssistant).mockResolvedValue({
       id: "assistant_new",
     } as never)

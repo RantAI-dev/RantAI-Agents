@@ -7,18 +7,7 @@ export async function findAcceptedMembershipsByUserId(userId: string) {
       acceptedAt: { not: null },
     },
     include: {
-      organization: {
-        include: {
-          _count: {
-            select: {
-              memberships: true,
-              assistants: true,
-              documents: true,
-              embedKeys: true,
-            },
-          },
-        },
-      },
+      organization: true,
     },
     orderBy: { organization: { name: "asc" } },
   })
@@ -49,16 +38,6 @@ export async function createOrganizationWithOwner(data: {
           userName: data.userName,
           role: "owner",
           acceptedAt: new Date(),
-        },
-      },
-    },
-    include: {
-      _count: {
-        select: {
-          memberships: true,
-          assistants: true,
-          documents: true,
-          embedKeys: true,
         },
       },
     },

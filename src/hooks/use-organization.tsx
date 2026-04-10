@@ -9,29 +9,12 @@ import {
   ReactNode,
 } from "react"
 
-export interface OrganizationLimits {
-  maxMembers: number
-  maxAssistants: number
-  maxDocuments: number
-  maxApiKeys: number
-}
-
-export interface OrganizationCounts {
-  members: number
-  assistants: number
-  documents: number
-  apiKeys: number
-}
-
 export interface Organization {
   id: string
   name: string
   slug: string
   logoUrl: string | null
-  plan: string
   role: "owner" | "admin" | "member" | "viewer"
-  limits: OrganizationLimits
-  counts: OrganizationCounts
   createdAt: string
   joinedAt?: string
 }

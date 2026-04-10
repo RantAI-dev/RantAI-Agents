@@ -4,7 +4,6 @@ import { useEffect } from "react"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
 import { MediaStudioPanel } from "./media-studio-panel"
-import { UsageIndicator } from "./usage-indicator"
 import { LibraryTab } from "./library-tab"
 import { useMediaStudioStore, type StoreAsset, type StoreJob } from "@/features/media/store"
 import { useMediaJobUpdates } from "@/features/media/use-media-job-updates"
@@ -25,8 +24,6 @@ interface Props {
   imageModels: ModelInfo[]
   audioModels: ModelInfo[]
   videoModels: ModelInfo[]
-  userLimitCents: number | null
-  usedTodayCents: number
   organizationId: string
   videoEnabled: boolean
 }
@@ -36,8 +33,6 @@ export default function MediaStudioClient({
   imageModels,
   audioModels,
   videoModels,
-  userLimitCents,
-  usedTodayCents,
   organizationId,
   videoEnabled,
 }: Props) {
@@ -78,7 +73,7 @@ export default function MediaStudioClient({
       <DashboardPageHeader
         title="Media Studio"
         subtitle="Generate images, audio, and video"
-        actions={<UsageIndicator usedCents={usedTodayCents} limitCents={userLimitCents} />}
+        actions={null}
       />
       <Tabs
         value={activeTab}

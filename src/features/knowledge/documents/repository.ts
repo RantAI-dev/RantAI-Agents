@@ -51,15 +51,6 @@ export async function findKnowledgeDocumentAccessById(id: string) {
   })
 }
 
-export async function findOrganizationDocumentStats(organizationId: string) {
-  return prisma.organization.findUnique({
-    where: { id: organizationId },
-    include: {
-      _count: { select: { documents: true } },
-    },
-  })
-}
-
 export async function createKnowledgeDocument(data: Prisma.DocumentCreateArgs["data"]) {
   return prisma.document.create({
     data,

@@ -40,13 +40,6 @@ export async function findDashboardAssistantById(id: string) {
   })
 }
 
-export async function findDashboardOrganizationById(id: string) {
-  return prisma.organization.findUnique({
-    where: { id },
-    include: { _count: { select: { embedKeys: true } } },
-  })
-}
-
 export async function createDashboardEmbedApiKey(
   data: Prisma.EmbedApiKeyUncheckedCreateInput
 ) {

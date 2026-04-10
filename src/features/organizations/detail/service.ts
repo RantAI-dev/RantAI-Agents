@@ -17,20 +17,7 @@ export interface OrganizationDetailResponse {
   name: string
   slug: string
   logoUrl: string | null
-  plan: string
   role: string
-  limits: {
-    maxMembers: number
-    maxAssistants: number
-    maxDocuments: number
-    maxApiKeys: number
-  }
-  counts: {
-    members: number
-    assistants: number
-    documents: number
-    apiKeys: number
-  }
   createdAt: string
   updatedAt: string
 }
@@ -41,19 +28,8 @@ function toOrganizationDetailResponse(params: {
     name: string
     slug: string
     logoUrl: string | null
-    plan: string
-    maxMembers: number
-    maxAssistants: number
-    maxDocuments: number
-    maxApiKeys: number
     createdAt: Date
     updatedAt: Date
-    _count: {
-      memberships: number
-      assistants: number
-      documents: number
-      embedKeys: number
-    }
   }
   role: string
 }): OrganizationDetailResponse {
@@ -62,20 +38,7 @@ function toOrganizationDetailResponse(params: {
     name: params.organization.name,
     slug: params.organization.slug,
     logoUrl: params.organization.logoUrl,
-    plan: params.organization.plan,
     role: params.role,
-    limits: {
-      maxMembers: params.organization.maxMembers,
-      maxAssistants: params.organization.maxAssistants,
-      maxDocuments: params.organization.maxDocuments,
-      maxApiKeys: params.organization.maxApiKeys,
-    },
-    counts: {
-      members: params.organization._count.memberships,
-      assistants: params.organization._count.assistants,
-      documents: params.organization._count.documents,
-      apiKeys: params.organization._count.embedKeys,
-    },
     createdAt: params.organization.createdAt.toISOString(),
     updatedAt: params.organization.updatedAt.toISOString(),
   }
@@ -112,7 +75,7 @@ export async function updateOrganizationDetail(params: {
   organizationId: string
   input: UpdateOrganizationInput
 }): Promise<
-  { id: string; name: string; slug: string; logoUrl: string | null; plan: string; updatedAt: string } | ServiceError
+  { id: string; name: string; slug: string; logoUrl: string | null; updatedAt: string } | ServiceError
 > {
   const membership = await findMembership(params.actorUserId, params.organizationId)
   if (!membership || !membership.acceptedAt) {
@@ -133,7 +96,6 @@ export async function updateOrganizationDetail(params: {
     name: organization.name,
     slug: organization.slug,
     logoUrl: organization.logoUrl,
-    plan: organization.plan,
     updatedAt: organization.updatedAt.toISOString(),
   }
 }

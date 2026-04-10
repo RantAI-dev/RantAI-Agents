@@ -91,20 +91,6 @@ export async function inviteOrganizationMember(params: {
     return { status: 404, error: "Organization not found" }
   }
 
-  if (organization.plan === "free") {
-    return {
-      status: 403,
-      error: "Organization management requires a paid plan. Please upgrade.",
-    }
-  }
-
-  if (organization._count.memberships >= organization.maxMembers) {
-    return {
-      status: 400,
-      error: `Organization has reached the maximum of ${organization.maxMembers} members`,
-    }
-  }
-
   const existingMember = await findMemberByEmailInOrganization(
     params.organizationId,
     normalizedEmail

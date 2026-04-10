@@ -1,4 +1,4 @@
-import { Settings, Wrench, Building2, CreditCard, BarChart3 } from "@/lib/icons"
+import { Settings, Wrench, Building2, BarChart3 } from "@/lib/icons"
 
 export const SETTINGS_NAV_ITEMS = [
   {
@@ -12,12 +12,6 @@ export const SETTINGS_NAV_ITEMS = [
     href: "/dashboard/settings/organization",
     icon: Building2,
     description: "Team, members & invitations",
-  },
-  {
-    title: "Billing",
-    href: "/dashboard/settings/billing",
-    icon: CreditCard,
-    description: "Plan, usage & payments",
   },
   {
     title: "Agent Config",
