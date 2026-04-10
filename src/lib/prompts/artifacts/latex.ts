@@ -166,7 +166,7 @@ $$
       label: "Lecture note with itemize, quote, and \\paragraph",
       code: `\\section{Lecture 4 — Limits of Sequences}
 
-\\paragraph{Motivation.} Before we can talk about derivatives or integrals, we need a precise notion of what it means for a sequence of numbers to ``approach'' a value. The intuitive idea is simple, but the formalization due to Cauchy and Weierstrass is one of the cornerstones of modern analysis.
+\\paragraph{Motivation.} Before we can talk about derivatives or integrals, we need a precise notion of what it means for a sequence of numbers to \`\`approach'' a value. The intuitive idea is simple, but the formalization due to Cauchy and Weierstrass is one of the cornerstones of modern analysis.
 
 \\subsection{Definition}
 
@@ -181,7 +181,7 @@ We write $\\lim_{n \\to \\infty} a_n = L$ or $a_n \\to L$.
 \\paragraph{Reading the definition.} The order of the quantifiers matters: $N$ is allowed to depend on $\\varepsilon$. The smaller you make $\\varepsilon$, the larger $N$ may need to be.
 
 \\begin{quote}
-\\textit{``A sequence converges to $L$ if, no matter how small a tolerance you give me, I can eventually keep every term inside that tolerance of $L$.''}
+\\textit{\`\`A sequence converges to $L$ if, no matter how small a tolerance you give me, I can eventually keep every term inside that tolerance of $L$.''}
 \\end{quote}
 
 \\subsection{Worked Examples}
