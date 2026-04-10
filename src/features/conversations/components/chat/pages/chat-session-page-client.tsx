@@ -104,6 +104,16 @@ export default function ChatSessionPageClient({
     }
   }, [id, sessions, setActiveSessionId])
 
+  // Once dbId resolves, update the URL so it persists across refreshes
+  useEffect(() => {
+    if (!activeSession?.dbId) return
+    if (id === activeSession.dbId) return
+    // URL still uses tempId — replace with real dbId
+    if (activeSession.id === id || id !== activeSession.dbId) {
+      router.replace(`/dashboard/chat/${activeSession.dbId}`)
+    }
+  }, [activeSession?.dbId, activeSession?.id, id, router])
+
   useEffect(() => {
     if (!activeSession?.assistantId) return
     if (getAssistantById(activeSession.assistantId)) return
@@ -123,11 +133,10 @@ export default function ChatSessionPageClient({
     }
   }, [updateSession, syncMessages])
 
-  const handleNewChat = useCallback(async () => {
+  const handleNewChat = useCallback(() => {
     if (selectedAssistant) {
-      const newSession = await createSession(selectedAssistant.id)
-      const urlId = newSession.dbId || newSession.id
-      router.push(`/dashboard/chat/${urlId}`)
+      const newSession = createSession(selectedAssistant.id)
+      router.push(`/dashboard/chat/${newSession.id}`)
     }
   }, [selectedAssistant, createSession, router])
 
