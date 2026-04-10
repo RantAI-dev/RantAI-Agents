@@ -104,12 +104,10 @@ export default function ChatSessionPageClient({
     }
   }, [id, sessions, setActiveSessionId])
 
-  // Once dbId resolves, update the URL so it persists across refreshes
+  // Once dbId resolves, replace tempId in URL with real dbId
   useEffect(() => {
     if (!activeSession?.dbId) return
-    if (id === activeSession.dbId) return
-    // URL still uses tempId — replace with real dbId
-    if (activeSession.id === id || id !== activeSession.dbId) {
+    if (activeSession.id === id) {
       router.replace(`/dashboard/chat/${activeSession.dbId}`)
     }
   }, [activeSession?.dbId, activeSession?.id, id, router])
