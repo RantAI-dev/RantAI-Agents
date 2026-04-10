@@ -42,6 +42,7 @@ interface MediaStudioState {
   toggleFavorite: (assetId: string, value: boolean) => void
   removeAsset: (assetId: string) => void
   addReference: (assetId: string) => void
+  removeReference: (assetId: string) => void
   clearReferences: () => void
 }
 
@@ -85,6 +86,10 @@ export const useMediaStudioStore = create<MediaStudioState>((set) => ({
       referenceAssetIds: state.referenceAssetIds.includes(assetId)
         ? state.referenceAssetIds
         : [...state.referenceAssetIds, assetId],
+    })),
+  removeReference: (assetId) =>
+    set((state) => ({
+      referenceAssetIds: state.referenceAssetIds.filter((id) => id !== assetId),
     })),
   clearReferences: () => set({ referenceAssetIds: [] }),
 }))

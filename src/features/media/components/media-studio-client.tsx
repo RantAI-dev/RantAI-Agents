@@ -1,18 +1,16 @@
 "use client"
 
 import { useEffect } from "react"
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs"
+import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { DashboardPageHeader } from "@/app/dashboard/_components/dashboard-page-header"
 import { MediaStudioPanel } from "./media-studio-panel"
 import { UsageIndicator } from "./usage-indicator"
 import { LibraryTab } from "./library-tab"
 import { useMediaStudioStore, type StoreAsset, type StoreJob } from "@/features/media/store"
 import { useMediaJobUpdates } from "@/features/media/use-media-job-updates"
+import { MODALITY_META } from "./studio-shared"
+import { cn } from "@/lib/utils"
+import { Library } from "lucide-react"
 
 interface ModelInfo {
   id: string
@@ -85,16 +83,51 @@ export default function MediaStudioClient({
       <Tabs
         value={activeTab}
         onValueChange={(v) => setActiveTab(v as typeof activeTab)}
-        className="flex-1"
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
       >
-        <TabsList className="mx-6 mt-4">
-          <TabsTrigger value="IMAGE">Image</TabsTrigger>
-          <TabsTrigger value="AUDIO">Audio</TabsTrigger>
-          <TabsTrigger value="VIDEO" disabled={!videoEnabled}>
-            Video {!videoEnabled && "(disabled)"}
-          </TabsTrigger>
-          <TabsTrigger value="LIBRARY">Library</TabsTrigger>
-        </TabsList>
+        <div className="mx-6 mt-4 inline-flex items-center gap-1 rounded-xl border bg-card/60 p-1 shadow-sm backdrop-blur">
+          {(["IMAGE", "AUDIO", "VIDEO"] as const).map((m) => {
+            const meta = MODALITY_META[m]
+            const Icon = meta.icon
+            const active = activeTab === m
+            const disabled = m === "VIDEO" && !videoEnabled
+            return (
+              <button
+                key={m}
+                type="button"
+                disabled={disabled}
+                onClick={() => setActiveTab(m)}
+                className={cn(
+                  "group inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all",
+                  active
+                    ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                    : "text-muted-foreground hover:text-foreground",
+                  disabled && "cursor-not-allowed opacity-40"
+                )}
+              >
+                <Icon className={cn("h-4 w-4", active && meta.accentText)} />
+                {meta.label}
+                {disabled && (
+                  <span className="ml-1 font-mono text-[9px] uppercase opacity-60">off</span>
+                )}
+              </button>
+            )
+          })}
+          <div className="mx-1 h-6 w-px bg-border" />
+          <button
+            type="button"
+            onClick={() => setActiveTab("LIBRARY")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all",
+              activeTab === "LIBRARY"
+                ? "bg-background text-foreground shadow-sm ring-1 ring-border"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Library className="h-4 w-4" />
+            Library
+          </button>
+        </div>
 
         <TabsContent value="IMAGE">
           <MediaStudioPanel modality="IMAGE" models={imageModels} organizationId={organizationId} />
