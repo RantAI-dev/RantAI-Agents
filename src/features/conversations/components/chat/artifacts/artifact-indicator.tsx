@@ -38,10 +38,11 @@ function buildPreviewSnippet(type: ArtifactType, content: string): string | null
     .filter((l) => {
       if (!l) return false
       if (/^<!doctype/i.test(l)) return false
-      if (/^<\/?(html|head|body|meta|link|script|style)\b/i.test(l)) return false
+      if (/^<\/?(html|head|body|meta|link|script|style|title|!--)\b/i.test(l)) return false
       if (/^import\b/.test(l)) return false
       if (/^['"]use client['"]/.test(l)) return false
       if (/^\\(documentclass|usepackage|begin|end)\b/.test(l)) return false
+      if (/^\/\/\s/.test(l)) return false
       return true
     })
     .join(" ")
