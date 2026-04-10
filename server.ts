@@ -1,3 +1,22 @@
+// Suppress known noisy warnings (baseline-browser-mapping staleness + Next.js
+// middleware->proxy deprecation). Both are non-actionable for us right now.
+const SUPPRESSED_WARNINGS = [
+  "baseline-browser-mapping",
+  'The "middleware" file convention is deprecated',
+]
+const origStderrWrite = process.stderr.write.bind(process.stderr)
+process.stderr.write = ((chunk: any, ...rest: any[]) => {
+  const str = typeof chunk === "string" ? chunk : chunk?.toString?.() ?? ""
+  if (SUPPRESSED_WARNINGS.some((s) => str.includes(s))) return true
+  return origStderrWrite(chunk, ...rest)
+}) as typeof process.stderr.write
+const origWarn = console.warn
+console.warn = (...args: any[]) => {
+  const str = args.map((a) => (typeof a === "string" ? a : "")).join(" ")
+  if (SUPPRESSED_WARNINGS.some((s) => str.includes(s))) return
+  origWarn(...args)
+}
+
 import { createServer as createHttpServer } from "http"
 import { createServer as createHttpsServer } from "https"
 import { parse } from "url"
