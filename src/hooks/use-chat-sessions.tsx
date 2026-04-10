@@ -117,7 +117,7 @@ interface ChatSessionsContextType {
   activeSession: ChatSession | undefined
   setActiveSessionId: (id: string | null) => void
   hydrateSessions: (sessions: SerializedChatSession[]) => void
-  createSession: (assistantId: string) => Promise<ChatSession>
+  createSession: (assistantId: string) => ChatSession
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => void
   deleteSession: (sessionId: string) => void
   syncMessages: (sessionId: string, messages: ChatMessage[]) => void
@@ -300,8 +300,9 @@ export function ChatSessionsProvider({
     setIsLoaded(true)
   }, [])
 
-  // Create a new session
-  const createSession = useCallback(async (assistantId: string): Promise<ChatSession> => {
+  // Create a new session — returns immediately with a temp session.
+  // DB persistence happens in the background; `dbId` is set once resolved.
+  const createSession = useCallback((assistantId: string): ChatSession => {
     const tempId = crypto.randomUUID()
     const newSession: ChatSession = {
       id: tempId,
@@ -315,33 +316,26 @@ export function ChatSessionsProvider({
     setActiveSessionId(tempId)
     loadedSessionsRef.current.add(tempId) // Mark as loaded (empty is valid)
 
-    try {
-      const response = await fetch("/api/dashboard/chat/sessions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assistantId }),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        // Keep tempId as the local session ID to avoid remounting ChatWorkspace.
-        // Store the real DB ID in `dbId` for API calls.
-        const persistedSession: ChatSession = {
-          ...newSession,
-          dbId: data.id,
-          title: data.title,
+    // Persist to DB in background
+    fetch("/api/dashboard/chat/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assistantId }),
+    })
+      .then(async (response) => {
+        if (response.ok) {
+          const data = await response.json()
+          loadedSessionsRef.current.add(data.id)
+          setSessions((prev) =>
+            prev.map((s) =>
+              s.id === tempId ? { ...s, dbId: data.id, title: data.title } : s
+            )
+          )
         }
-
-        loadedSessionsRef.current.add(data.id)
-        setSessions((prev) =>
-          prev.map((s) => (s.id === tempId ? persistedSession : s))
-        )
-        // Don't call setActiveSessionId — keep tempId to avoid key change & remount
-        return persistedSession
-      }
-    } catch (error) {
-      console.error("[ChatSessions] Failed to create session in database:", error)
-    }
+      })
+      .catch((error) => {
+        console.error("[ChatSessions] Failed to create session in database:", error)
+      })
 
     return newSession
   }, [])
