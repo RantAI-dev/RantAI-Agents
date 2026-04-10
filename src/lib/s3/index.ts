@@ -200,7 +200,8 @@ export async function uploadStream(
  */
 export async function getPresignedDownloadUrl(
   key: string,
-  expiresIn?: number
+  expiresIn?: number,
+  options?: { downloadFilename?: string }
 ): Promise<string> {
   const client = getS3Client()
 
@@ -209,6 +210,14 @@ export async function getPresignedDownloadUrl(
     new GetObjectCommand({
       Bucket: S3_CONFIG.bucket,
       Key: key,
+      // When a filename is provided, instruct S3 to force an attachment
+      // download with that filename instead of letting the browser render
+      // the response inline.
+      ...(options?.downloadFilename
+        ? {
+            ResponseContentDisposition: `attachment; filename="${options.downloadFilename.replace(/"/g, "")}"`,
+          }
+        : {}),
     }),
     { expiresIn: expiresIn || S3_CONFIG.presignedExpire }
   )
