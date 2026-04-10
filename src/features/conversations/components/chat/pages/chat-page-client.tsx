@@ -59,12 +59,12 @@ export default function ChatPageClient({
           const urlId = session?.dbId || id
           router.push(`/dashboard/chat/${urlId}`)
         }}
-        onCreateSession={async (assistantId, initialMessage, settings) => {
+        onCreateSession={(assistantId, initialMessage, settings) => {
           const targetAssistantId = initialMessage
             ? (selectedAssistantId ?? assistantId)
             : assistantId
 
-          const newSession = await createSession(targetAssistantId)
+          const newSession = createSession(targetAssistantId)
           if (settings) {
             const toolbarSnapshot = {
               selectedKBGroupIds: settings.knowledgeBaseGroupIds ?? null,
@@ -86,12 +86,6 @@ export default function ChatPageClient({
               `chat-toolbar-state:${newSession.id}`,
               serializedSnapshot
             )
-            if (newSession.dbId) {
-              sessionStorage.setItem(
-                `chat-toolbar-state:${newSession.dbId}`,
-                serializedSnapshot
-              )
-            }
           }
           let initToken: string | null = null
           if (initialMessage) {
@@ -100,7 +94,7 @@ export default function ChatPageClient({
               message: initialMessage,
               settings: settings ?? null,
               sessionId: newSession.id,
-              sessionDbId: newSession.dbId ?? null,
+              sessionDbId: null,
               assistantId: targetAssistantId,
               createdAt: Date.now(),
             }
@@ -112,11 +106,10 @@ export default function ChatPageClient({
             )
             sessionStorage.setItem("rantai-pending-chat-init", JSON.stringify(pendingPayload))
           }
-          const urlId = newSession.dbId || newSession.id
           router.push(
             initToken
-              ? `/dashboard/chat/${urlId}?initToken=${encodeURIComponent(initToken)}`
-              : `/dashboard/chat/${urlId}`
+              ? `/dashboard/chat/${newSession.id}?initToken=${encodeURIComponent(initToken)}`
+              : `/dashboard/chat/${newSession.id}`
           )
         }}
       />

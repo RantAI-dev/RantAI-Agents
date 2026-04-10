@@ -246,11 +246,10 @@ function ChatSectionContent({
   const router = useRouter()
   const { sessions, createSession, deleteSession } = useChatSessions()
 
-  const handleNewChat = async () => {
+  const handleNewChat = () => {
     if (selectedAssistant) {
-      const newSession = await createSession(selectedAssistant.id)
-      const urlId = newSession.dbId || newSession.id
-      router.push(`/dashboard/chat/${urlId}`)
+      const newSession = createSession(selectedAssistant.id)
+      router.push(`/dashboard/chat/${newSession.id}`)
     }
   }
 
