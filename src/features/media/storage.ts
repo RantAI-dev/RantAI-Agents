@@ -1,6 +1,26 @@
-import { PutObjectCommand } from "@aws-sdk/client-s3"
+import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3"
 import { getS3Client, getBucket } from "@/lib/s3"
 import type { MediaModality } from "./schema"
+
+export async function downloadMediaBytes(
+  s3Key: string
+): Promise<{ bytes: Uint8Array; mimeType: string }> {
+  const client = getS3Client()
+  const res = await client.send(
+    new GetObjectCommand({ Bucket: getBucket(), Key: s3Key })
+  )
+  const body = res.Body as
+    | { transformToByteArray?: () => Promise<Uint8Array> }
+    | undefined
+  if (!body?.transformToByteArray) {
+    throw new Error(`No body returned for ${s3Key}`)
+  }
+  const arr = await body.transformToByteArray()
+  return {
+    bytes: arr,
+    mimeType: res.ContentType ?? "application/octet-stream",
+  }
+}
 
 export interface BuildKeyInput {
   organizationId: string

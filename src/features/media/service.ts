@@ -9,8 +9,9 @@ import {
 } from "./repository"
 import { enforceMediaLimit } from "./limits"
 import { estimateMediaJobCostCents } from "./cost-estimator"
-import { uploadMediaBytes } from "./storage"
-import { generateImage, generateAudio, submitVideoJob } from "./provider/openrouter"
+import { uploadMediaBytes, downloadMediaBytes } from "./storage"
+import { generateImage, generateAudio, generateVideo } from "./provider/openrouter"
+import { getCapability } from "./model-capabilities"
 import type { MediaModality } from "./schema"
 
 export interface CreateMediaJobInput {
@@ -84,16 +85,64 @@ async function loadReferenceUrls(
     where: {
       id: { in: assetIds },
       organizationId,
+      modality: "IMAGE",
     },
     select: { id: true, s3Key: true, mimeType: true },
   })
-  // Phase 1 returns the S3 key as a path-style URL. The Phase 1.5 follow-up
-  // will swap this for presigned URLs once the asset download route is wired.
-  return assets.map((a) => `${process.env.S3_ENDPOINT}/${process.env.S3_BUCKET}/${a.s3Key}`)
+  // Fetch bytes and return as base64 data URIs. OpenRouter's image and video
+  // APIs both accept data URIs, so this avoids needing public S3 URLs.
+  const results: string[] = []
+  for (const a of assets) {
+    const { bytes, mimeType } = await downloadMediaBytes(a.s3Key)
+    const b64 = Buffer.from(bytes).toString("base64")
+    results.push(`data:${a.mimeType ?? mimeType};base64,${b64}`)
+  }
+  return results
 }
 
 export async function createMediaJob(input: CreateMediaJobInput) {
   const model = await loadModel(input.modelId)
+
+  // ── Per-model capability validation ──────────────────
+  const capability = getCapability(input.modelId, input.modality)
+
+  if (input.referenceAssetIds.length > capability.maxReferenceImages) {
+    throw new Error(
+      `${input.modelId} accepts at most ${capability.maxReferenceImages} reference image${
+        capability.maxReferenceImages === 1 ? "" : "s"
+      }, got ${input.referenceAssetIds.length}.`
+    )
+  }
+
+  if (
+    capability.supportedAspectRatios &&
+    typeof input.parameters.aspectRatio === "string" &&
+    !capability.supportedAspectRatios.includes(input.parameters.aspectRatio)
+  ) {
+    throw new Error(
+      `${input.modelId} does not support aspect ratio "${input.parameters.aspectRatio}". Supported: ${capability.supportedAspectRatios.join(", ")}.`
+    )
+  }
+
+  if (
+    capability.supportedDurationsSec &&
+    typeof input.parameters.durationSec === "number" &&
+    !capability.supportedDurationsSec.includes(input.parameters.durationSec)
+  ) {
+    throw new Error(
+      `${input.modelId} does not support duration ${input.parameters.durationSec}s. Supported: ${capability.supportedDurationsSec.join(", ")}s.`
+    )
+  }
+
+  if (
+    capability.supportedResolutions &&
+    typeof input.parameters.resolution === "string" &&
+    !capability.supportedResolutions.includes(input.parameters.resolution)
+  ) {
+    throw new Error(
+      `${input.modelId} does not support resolution "${input.parameters.resolution}". Supported: ${capability.supportedResolutions.join(", ")}.`
+    )
+  }
 
   const estimatedCostCents = estimateMediaJobCostCents({
     modality: input.modality,
@@ -165,9 +214,12 @@ export async function createMediaJob(input: CreateMediaJobInput) {
       return await runVideoJob({
         jobId: job.id,
         organizationId: input.organizationId,
+        userId: input.userId,
         modelId: input.modelId,
         prompt: input.prompt,
         parameters: input.parameters,
+        referenceAssetIds: input.referenceAssetIds,
+        estimatedCostCents,
       })
     }
 
@@ -315,26 +367,74 @@ async function runAudioJob(input: {
 async function runVideoJob(input: {
   jobId: string
   organizationId: string
+  userId: string
   modelId: string
   prompt: string
   parameters: Record<string, unknown>
+  referenceAssetIds: string[]
+  estimatedCostCents: number
 }) {
   const apiKey = getOpenRouterApiKey()
-  const submit = await submitVideoJob({
+  const referenceDataUrls = await loadReferenceUrls(
+    input.referenceAssetIds,
+    input.organizationId
+  )
+  // Alpha video API expects input_references in OpenAI content-part shape.
+  const inputReferences = referenceDataUrls.map((url) => ({
+    type: "image_url" as const,
+    image_url: { url },
+  }))
+  const result = await generateVideo({
     apiKey,
     modelId: input.modelId,
     prompt: input.prompt,
-    parameters: input.parameters,
+    parameters:
+      inputReferences.length > 0
+        ? { ...input.parameters, inputReferences }
+        : input.parameters,
   })
 
-  // Persist providerJobId, leave status RUNNING — cron poller finishes it
-  await prisma.mediaJob.update({
-    where: { id: input.jobId },
-    data: { providerJobId: submit.providerJobId, status: "RUNNING" },
+  const extension =
+    result.video.mimeType.split("/")[1]?.split(";")[0] ?? "mp4"
+  const upload = await uploadMediaBytes({
+    organizationId: input.organizationId,
+    modality: "VIDEO",
+    assetId: input.jobId,
+    mimeType: result.video.mimeType,
+    extension,
+    bytes: result.video.bytes,
   })
 
-  return prisma.mediaJob.findUniqueOrThrow({
-    where: { id: input.jobId },
-    include: { assets: true },
+  const videoCostCents = result.actualCostCents ?? input.estimatedCostCents
+  const finalized = await finalizeMediaJobAsSucceeded({
+    jobId: input.jobId,
+    costCents: videoCostCents,
+    assets: [
+      {
+        modality: "VIDEO",
+        mimeType: result.video.mimeType,
+        s3Key: upload.s3Key,
+        sizeBytes: upload.sizeBytes,
+        width: result.video.width ?? null,
+        height: result.video.height ?? null,
+        durationMs: result.video.durationMs ?? null,
+        metadata: { modelId: input.modelId },
+      },
+    ],
   })
+
+  await logMediaAuditEvent({
+    jobId: input.jobId,
+    organizationId: input.organizationId,
+    userId: input.userId,
+    modality: "VIDEO",
+    modelId: input.modelId,
+    costCents: videoCostCents,
+  })
+
+  emitToOrgRoom(input.organizationId, "media:job:update", {
+    jobId: input.jobId,
+    status: "SUCCEEDED",
+  })
+  return finalized
 }

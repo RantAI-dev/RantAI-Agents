@@ -8,6 +8,10 @@ import {
 } from "@/features/media/service"
 import { listJobsForUser } from "@/features/media/repository"
 
+// Video generation can take several minutes. Give the route plenty of
+// headroom beyond the default 60s for serverless environments.
+export const maxDuration = 800
+
 export async function POST(req: Request) {
   const session = await auth()
   if (!session?.user?.id) {
