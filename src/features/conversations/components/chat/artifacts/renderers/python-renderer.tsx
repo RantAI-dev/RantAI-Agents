@@ -1,11 +1,12 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import { Loader2, Play, Square, RotateCcw, AlertTriangle, Terminal } from "@/lib/icons"
+import { Loader2, Play, Square, RotateCcw, AlertTriangle, Terminal, Wand2 } from "@/lib/icons"
 import { StreamdownContent } from "../../streamdown-content"
 
 interface PythonRendererProps {
   content: string
+  onFixWithAI?: (error: string) => void
 }
 
 /**
@@ -121,7 +122,7 @@ function createWorker(): Worker {
   return worker
 }
 
-export function PythonRenderer({ content }: PythonRendererProps) {
+export function PythonRenderer({ content, onFixWithAI }: PythonRendererProps) {
   const [status, setStatus] = useState<
     "idle" | "loading" | "ready" | "running"
   >("idle")
@@ -258,9 +259,21 @@ export function PythonRenderer({ content }: PythonRendererProps) {
         <div className="max-h-[300px] sm:max-h-[40vh] lg:max-h-[60vh] overflow-auto shrink-0">
           {error && (
             <div className="px-4 py-2 bg-destructive/5 border-b border-destructive/20">
-              <div className="flex items-center gap-2 text-destructive text-xs font-medium mb-1">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                Error
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-2 text-destructive text-xs font-medium">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Error
+                </div>
+                {onFixWithAI && (
+                  <button
+                    type="button"
+                    onClick={() => onFixWithAI(error)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    <Wand2 className="h-3 w-3" />
+                    Fix with AI
+                  </button>
+                )}
               </div>
               <pre className="text-xs text-destructive/80 whitespace-pre-wrap font-mono">
                 {error}
