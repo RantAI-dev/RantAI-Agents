@@ -16,7 +16,7 @@ const HtmlRenderer = dynamic(
 const ReactRenderer = dynamic(
   () => import("./renderers/react-renderer").then((m) => ({ default: m.ReactRenderer })),
   {
-    loading: () => <RendererLoading />,
+    loading: () => <RendererLoading message="Transpiling React component..." />,
   }
 )
 
@@ -51,43 +51,36 @@ const LatexRenderer = dynamic(
 const SlidesRenderer = dynamic(
   () => import("./renderers/slides-renderer").then((m) => ({ default: m.SlidesRenderer })),
   {
-    loading: () => <RendererLoading />,
+    loading: () => <RendererLoading message="Building slide deck..." />,
   }
 )
 
 const PythonRenderer = dynamic(
   () => import("./renderers/python-renderer").then((m) => ({ default: m.PythonRenderer })),
   {
-    loading: () => <RendererLoading />,
+    loading: () => <RendererLoading message="Initializing Python runtime..." />,
   }
 )
 
 const R3FRenderer = dynamic(
   () => import("./renderers/r3f-renderer").then((m) => ({ default: m.R3FRenderer })),
   {
-    loading: () => <RendererLoading />,
+    loading: () => <RendererLoading message="Compiling 3D scene..." />,
   }
 )
 
-function RendererLoading() {
+function RendererLoading({ message = "Loading preview..." }: { message?: string }) {
   return (
     <div className="flex items-center justify-center p-8 text-muted-foreground">
       <Loader2 className="h-5 w-5 animate-spin mr-2" />
-      Loading preview...
+      {message}
     </div>
   )
 }
 
 interface ArtifactRendererProps {
   artifact: Artifact
-  /**
-   * "Fix this with AI" callback. Currently only the R3F renderer wires it
-   * because 3D scene compile errors are the hardest to debug visually —
-   * the other renderers expose `Retry` and `View source` buttons in their
-   * own error cards instead, which is enough for HTML/React/SVG/etc. If we
-   * later decide to extend this to more types, plumb the same `onFixWithAI`
-   * prop into the renderer's error card next to its `Retry` button.
-   */
+  /** Callback to send an artifact error to the LLM for automated repair. */
   onFixWithAI?: (error: string) => void
 }
 
@@ -96,7 +89,7 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
     case "text/html":
       return <HtmlRenderer content={artifact.content} />
     case "application/react":
-      return <ReactRenderer content={artifact.content} />
+      return <ReactRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
     case "image/svg+xml":
       return <SvgRenderer content={artifact.content} />
     case "application/mermaid":
@@ -108,7 +101,7 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
     case "application/slides":
       return <SlidesRenderer content={artifact.content} />
     case "application/python":
-      return <PythonRenderer content={artifact.content} />
+      return <PythonRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
     case "application/3d":
       return <R3FRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
     case "application/code": {
