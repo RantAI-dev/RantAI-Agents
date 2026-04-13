@@ -3286,9 +3286,10 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
             <ResizableHandle />
             <ResizablePanel defaultSize={50} minSize={25}>
               <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.15 }}
+                key={activeArtifactId}
+                initial={{ opacity: 0, x: 24 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
                 className="h-full"
               >
                 <ArtifactPanel
