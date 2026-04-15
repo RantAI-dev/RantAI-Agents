@@ -1406,3 +1406,18 @@ model MediaAsset {
   @@index([jobId])
   @@index([modality])
 }
+
+// =============================================================================
+// Image Resolution Cache (Unsplash)
+// =============================================================================
+
+model ResolvedImage {
+  id          String   @id @default(cuid())
+  query       String   @unique // Normalized search query (lowercase, trimmed)
+  url         String   // Resolved Unsplash URL
+  attribution String   // "Photo by X on Unsplash"
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime // Cache expiry (30 days from creation)
+
+  @@index([expiresAt])
+}
