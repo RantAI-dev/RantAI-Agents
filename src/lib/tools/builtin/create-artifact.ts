@@ -3,6 +3,7 @@ import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile, S3Paths, getArtifactExtension } from "@/lib/s3"
 import { indexArtifactContent } from "@/lib/rag"
+import { resolveImages } from "@/lib/unsplash"
 import {
   validateArtifactContent,
   formatValidationError,
@@ -126,6 +127,9 @@ export const createArtifactTool: ToolDefinition = {
       }
     }
 
+    // Resolve unsplash: URLs to real images for HTML artifacts
+    const finalContent = type === "text/html" ? await resolveImages(content) : content
+
     // Persist to S3 + Document (knowledge system)
     let persisted = true
     try {
@@ -141,7 +145,7 @@ export const createArtifactTool: ToolDefinition = {
 
       await uploadFile(
         s3Key,
-        Buffer.from(content, "utf-8"),
+        Buffer.from(finalContent, "utf-8"),
         mimeType
       )
 
@@ -149,7 +153,7 @@ export const createArtifactTool: ToolDefinition = {
         data: {
           id,
           title,
-          content,
+          content: finalContent,
           categories: ["ARTIFACT"],
           artifactType: type,
           sessionId: context.sessionId || null,
@@ -168,7 +172,7 @@ export const createArtifactTool: ToolDefinition = {
         },
       })
       // Background: chunk + embed so it's searchable in RAG
-      indexArtifactContent(id, title, content).catch((err) =>
+      indexArtifactContent(id, title, finalContent).catch((err) =>
         console.error("[create_artifact] Background indexing error:", err)
       )
     } catch (err) {
@@ -181,7 +185,7 @@ export const createArtifactTool: ToolDefinition = {
       id,
       title,
       type,
-      content,
+      content: finalContent,
       language,
       persisted,
       ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),

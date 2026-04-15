@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client"
 import { canEdit, canManage } from "@/lib/organization"
-import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models"
+import { DEFAULT_MODEL_ID, isValidModelAsync } from "@/lib/models"
 import {
   createAssistant,
   deleteAssistantById,
@@ -136,7 +136,7 @@ export async function createAssistantForUser(params: {
   }
 
   const selectedModel = params.input.model ?? DEFAULT_MODEL_ID
-  if (!isValidModel(selectedModel)) {
+  if (!(await isValidModelAsync(selectedModel))) {
     return { status: 400, error: "Invalid model selected" }
   }
 
@@ -195,7 +195,7 @@ export async function updateAssistantForUser(params: {
     return { status: 404, error: "Assistant not found" }
   }
 
-  if (params.input.model !== undefined && !isValidModel(params.input.model)) {
+  if (params.input.model !== undefined && !(await isValidModelAsync(params.input.model))) {
     return { status: 400, error: "Invalid model selected" }
   }
 

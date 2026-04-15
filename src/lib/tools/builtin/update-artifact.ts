@@ -4,6 +4,7 @@ import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile } from "@/lib/s3"
 import { indexArtifactContent } from "@/lib/rag"
+import { resolveImages } from "@/lib/unsplash"
 import {
   validateArtifactContent,
   formatValidationError,
@@ -87,6 +88,9 @@ export const updateArtifactTool: ToolDefinition = {
           }
         }
 
+        // Resolve unsplash: URLs to real images for HTML artifacts
+        const finalContent = existing.artifactType === "text/html" ? await resolveImages(content) : content
+
         // Archive old version to S3 and record lightweight metadata
         const meta = (existing.metadata as Record<string, unknown>) || {}
         const versions = (meta.versions as Array<unknown>) || []
@@ -142,7 +146,7 @@ export const updateArtifactTool: ToolDefinition = {
         if (existing.s3Key) {
           await uploadFile(
             existing.s3Key,
-            Buffer.from(content, "utf-8"),
+            Buffer.from(finalContent, "utf-8"),
             existing.mimeType || "text/plain"
           )
         }
@@ -152,7 +156,7 @@ export const updateArtifactTool: ToolDefinition = {
         await prisma.document.update({
           where: { id },
           data: {
-            content,
+            content: finalContent,
             title: updatedTitle,
             fileSize: contentBytes,
             metadata: {
@@ -167,7 +171,7 @@ export const updateArtifactTool: ToolDefinition = {
         })
 
         // Background: re-index updated content for RAG search
-        indexArtifactContent(id, updatedTitle, content, { isUpdate: true }).catch((err) =>
+        indexArtifactContent(id, updatedTitle, finalContent, { isUpdate: true }).catch((err) =>
           console.error("[update_artifact] Background re-indexing error:", err)
         )
       }

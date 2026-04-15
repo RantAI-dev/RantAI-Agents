@@ -14,6 +14,18 @@ You are generating a complete, production-quality HTML document that will render
 - **No external network** beyond Google Fonts and the Tailwind CDN. No \`fetch()\` to real APIs. Mock data inline.
 - \`localStorage\` works inside the iframe — use it for user preferences if relevant.
 
+## Images — Unsplash Syntax
+When you need a contextual photo, use the special \`unsplash:\` protocol:
+\`\`\`html
+<img src="unsplash:mountain sunset" alt="Mountain at sunset" />
+<img src="unsplash:coffee shop interior" alt="Cozy coffee shop" />
+\`\`\`
+The server resolves these to real Unsplash photos before rendering. Rules:
+- Use **descriptive keywords** (2-4 words) that describe the desired image
+- Only works in \`src\` attributes — not CSS \`background-image\` or JS
+- Always provide meaningful \`alt\` text (do NOT repeat the keyword verbatim)
+- If you need a placeholder/decorative shape, use inline SVG or Tailwind gradients instead
+
 ## Required Document Structure
 Every artifact MUST start with:
 \`\`\`html
@@ -75,7 +87,9 @@ Use semantic landmarks: \`<header>\`, \`<nav>\`, \`<main>\`, \`<section>\`, \`<a
 - ❌ \`<form action="/submit">\` — sandbox blocks submission
 - ❌ \`window.location = "..."\` — sandbox blocks navigation
 - ❌ More than 2 font families · more than 5 colors
-- ❌ Truncating "for brevity"`,
+- ❌ Truncating "for brevity"
+- ❌ External image URLs (use \`unsplash:keyword\` instead)
+- ❌ Picsum, placeholder.com, or random image services`,
   examples: [
     {
       label: "complete interactive widget",
