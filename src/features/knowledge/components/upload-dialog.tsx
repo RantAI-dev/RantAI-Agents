@@ -32,6 +32,13 @@ import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkl
 import { CategoryDialog, Category } from "./category-dialog"
 import { cn } from "@/lib/utils"
 
+class UpgradeRequiredError extends Error {
+  constructor(message: string, public upgradeType: string) {
+    super(message)
+    this.name = "UpgradeRequiredError"
+  }
+}
+
 // ─── Supported formats data ────────────────────────────────────────────────────
 const SUPPORTED_FORMAT_GROUPS = [
   {
@@ -330,6 +337,18 @@ export function UploadDialog({
 
       if (!response.ok) {
         const data = await response.json()
+
+        // Check for upgrade-related errors
+        if (data.upgradeRequired) {
+          const upgradeMessages: Record<string, string> = {
+            documents: "Document processing requires a paid plan. Free tier is for saving artifacts only.",
+            credits: "You've run out of AI credits. Please upgrade to continue processing documents.",
+            storage: "Storage limit reached. Please upgrade for more space.",
+          }
+          const message = upgradeMessages[data.upgradeRequired] || data.error
+          throw new UpgradeRequiredError(message, data.upgradeRequired)
+        }
+
         throw new Error(data.error || "Failed to upload document")
       }
 
@@ -614,7 +633,19 @@ export function UploadDialog({
             />
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+              <p>{error}</p>
+              {error.includes("upgrade") && (
+                <a
+                  href="/dashboard/settings/billing"
+                  className="mt-2 inline-flex items-center text-xs font-medium underline underline-offset-2 hover:text-destructive/80"
+                >
+                  View upgrade options →
+                </a>
+              )}
+            </div>
+          )}
 
           </form>
         </div>
