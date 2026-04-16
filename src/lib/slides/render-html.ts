@@ -1,19 +1,26 @@
 import type { PresentationData, SlideData } from "./types"
+import { chartToSvg } from "./chart-to-svg"
+import { cleanMarkdown, darkenColor, CHART_DIMENSIONS } from "./utils"
+import { resolveIconsInText, getIconSvg } from "./icons"
+
+/**
+ * Client-side fallback for unresolved unsplash: URLs.
+ * Normally URLs are resolved server-side before storage.
+ * This is a safety net for edge cases.
+ */
+function resolveImageUrl(url: string): string {
+  // URLs should already be resolved server-side
+  // This fallback uses placeholder if somehow an unsplash: URL slips through
+  if (url.startsWith("unsplash:")) {
+    const keyword = url.slice(9).trim()
+    const encoded = encodeURIComponent(keyword)
+    return `https://placehold.co/1200x800/f1f5f9/64748b?text=${encoded}`
+  }
+  return url
+}
 
 /** Strip markdown syntax that LLMs sometimes inject into slide text */
-function cleanText(text: string): string {
-  return text
-    .replace(/^#{1,6}\s+/gm, "")   // ### headings
-    .replace(/\*\*\*(.*?)\*\*\*/g, "$1") // ***bold italic***
-    .replace(/\*\*(.*?)\*\*/g, "$1")     // **bold**
-    .replace(/\*(.*?)\*/g, "$1")         // *italic*
-    .replace(/__(.*?)__/g, "$1")         // __underline__
-    .replace(/~~(.*?)~~/g, "$1")         // ~~strikethrough~~
-    .replace(/`([^`]+)`/g, "$1")         // `inline code`
-    .replace(/^>\s+/gm, "")             // > blockquote
-    .replace(/^[-*+]\s+/gm, "")         // - list items (when in content/title, not bullets)
-    .replace(/^\d+\.\s+/gm, "")         // 1. numbered list
-}
+const cleanText = cleanMarkdown
 
 function escapeHtml(text: string): string {
   return cleanText(text)
@@ -23,33 +30,43 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;")
 }
 
+/**
+ * Escape HTML then resolve icons.
+ * Icons are processed AFTER escaping so SVG tags are preserved.
+ * {icon:name} syntax survives HTML escaping since {}, : are not escaped.
+ */
+function renderText(text: string): string {
+  const escaped = escapeHtml(text)
+  return resolveIconsInText(escaped)
+}
+
 function renderSlideContent(slide: SlideData, index: number, total: number): string {
   const parts: string[] = []
 
   switch (slide.layout) {
     case "title":
       parts.push(`<div class="title-content">`)
-      if (slide.title) parts.push(`<h1>${escapeHtml(slide.title)}</h1>`)
+      if (slide.title) parts.push(`<h1>${renderText(slide.title)}</h1>`)
       parts.push(`<div class="accent-line"></div>`)
-      if (slide.subtitle) parts.push(`<p class="subtitle">${escapeHtml(slide.subtitle)}</p>`)
-      if (slide.note) parts.push(`<p class="footer-text">${escapeHtml(slide.note)}</p>`)
+      if (slide.subtitle) parts.push(`<p class="subtitle">${renderText(slide.subtitle)}</p>`)
+      if (slide.note) parts.push(`<p class="footer-text">${renderText(slide.note)}</p>`)
       parts.push(`</div>`)
       break
 
     case "section":
       parts.push(`<div class="section-content">`)
-      if (slide.title) parts.push(`<h1>${escapeHtml(slide.title)}</h1>`)
+      if (slide.title) parts.push(`<h1>${renderText(slide.title)}</h1>`)
       parts.push(`<div class="accent-line"></div>`)
-      if (slide.subtitle) parts.push(`<p class="subtitle">${escapeHtml(slide.subtitle)}</p>`)
+      if (slide.subtitle) parts.push(`<p class="subtitle">${renderText(slide.subtitle)}</p>`)
       parts.push(`</div>`)
       break
 
     case "closing":
       parts.push(`<div class="closing-content">`)
-      if (slide.title) parts.push(`<h1>${escapeHtml(slide.title)}</h1>`)
+      if (slide.title) parts.push(`<h1>${renderText(slide.title)}</h1>`)
       parts.push(`<div class="accent-line"></div>`)
       if (slide.subtitle || slide.content) {
-        parts.push(`<p class="subtitle">${escapeHtml(slide.subtitle || slide.content || "")}</p>`)
+        parts.push(`<p class="subtitle">${renderText(slide.subtitle || slide.content || "")}</p>`)
       }
       parts.push(`</div>`)
       break
@@ -60,14 +77,14 @@ function renderSlideContent(slide: SlideData, index: number, total: number): str
       if (slide.title) {
         parts.push(`<div class="content-header">`)
         parts.push(`<div class="title-accent-bar"></div>`)
-        parts.push(`<h2>${escapeHtml(slide.title)}</h2>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
         parts.push(`</div>`)
       }
       if (slide.bullets && slide.bullets.length > 0) {
-        parts.push(`<ul>${slide.bullets.map((b) => `<li>${escapeHtml(b)}</li>`).join("")}</ul>`)
+        parts.push(`<ul>${slide.bullets.map((b) => `<li>${renderText(b)}</li>`).join("")}</ul>`)
       }
       if (slide.content) {
-        parts.push(`<p class="body-text">${escapeHtml(slide.content)}</p>`)
+        parts.push(`<p class="body-text">${renderText(slide.content)}</p>`)
       }
       parts.push(`</div>`)
       break
@@ -77,24 +94,273 @@ function renderSlideContent(slide: SlideData, index: number, total: number): str
       if (slide.title) {
         parts.push(`<div class="content-header">`)
         parts.push(`<div class="title-accent-bar"></div>`)
-        parts.push(`<h2>${escapeHtml(slide.title)}</h2>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
         parts.push(`</div>`)
       }
       parts.push(`<div class="columns">`)
       const left = slide.leftColumn || []
       const right = slide.rightColumn || []
-      parts.push(`<div class="column"><ul>${left.map((b) => `<li>${escapeHtml(b)}</li>`).join("")}</ul></div>`)
+      parts.push(`<div class="column"><ul>${left.map((b) => `<li>${renderText(b)}</li>`).join("")}</ul></div>`)
       parts.push(`<div class="col-divider"></div>`)
-      parts.push(`<div class="column"><ul>${right.map((b) => `<li>${escapeHtml(b)}</li>`).join("")}</ul></div>`)
+      parts.push(`<div class="column"><ul>${right.map((b) => `<li>${renderText(b)}</li>`).join("")}</ul></div>`)
       parts.push(`</div>`)
       parts.push(`</div>`)
       break
 
     case "quote":
-      parts.push(`<div class="quote-layout">`)
+      const quoteStyle = slide.quoteStyle || "large"
+      parts.push(`<div class="quote-layout ${quoteStyle}">`)
       parts.push(`<div class="quote-mark">\u201C</div>`)
-      if (slide.quote) parts.push(`<blockquote>${escapeHtml(slide.quote)}</blockquote>`)
-      if (slide.attribution) parts.push(`<cite>\u2014 ${escapeHtml(slide.attribution)}</cite>`)
+      if (slide.quote) parts.push(`<blockquote>${renderText(slide.quote)}</blockquote>`)
+      if (slide.attribution || slide.quoteImage) {
+        parts.push(`<div class="quote-attribution">`)
+        if (slide.quoteImage) {
+          const avatarSrc = resolveImageUrl(slide.quoteImage)
+          parts.push(`<img src="${escapeHtml(avatarSrc)}" alt="" class="quote-avatar" crossorigin="anonymous" referrerpolicy="no-referrer" />`)
+        }
+        if (slide.attribution) {
+          parts.push(`<cite>\u2014 ${renderText(slide.attribution)}</cite>`)
+        }
+        parts.push(`</div>`)
+      }
+      parts.push(`</div>`)
+      break
+
+    case "diagram":
+      parts.push(`<div class="diagram-layout">`)
+      if (slide.title) {
+        parts.push(`<div class="content-header">`)
+        parts.push(`<div class="title-accent-bar"></div>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
+        parts.push(`</div>`)
+      }
+      if (slide.diagram) {
+        // Diagram code should NOT have icons resolved - it's Mermaid syntax
+        parts.push(`<div class="mermaid-diagram">${escapeHtml(slide.diagram)}</div>`)
+      }
+      parts.push(`</div>`)
+      break
+
+    case "image":
+      parts.push(`<div class="image-layout">`)
+      if (slide.imageUrl) {
+        const imgSrc = resolveImageUrl(slide.imageUrl)
+        parts.push(`<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(slide.imageCaption || slide.title || "Slide image")}" crossorigin="anonymous" referrerpolicy="no-referrer" loading="lazy" />`)
+      }
+      if (slide.imageCaption) {
+        parts.push(`<p class="caption">${renderText(slide.imageCaption)}</p>`)
+      }
+      parts.push(`</div>`)
+      break
+
+    case "chart":
+      parts.push(`<div class="chart-layout">`)
+      if (slide.title) {
+        parts.push(`<div class="content-header">`)
+        parts.push(`<div class="title-accent-bar"></div>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
+        parts.push(`</div>`)
+      }
+      if (slide.chart) {
+        const chartSvg = chartToSvg(slide.chart, CHART_DIMENSIONS.html.fullSlide.width, CHART_DIMENSIONS.html.fullSlide.height)
+        parts.push(`<div class="chart-container">${chartSvg}</div>`)
+      }
+      parts.push(`</div>`)
+      break
+
+    case "diagram-content":
+      parts.push(`<div class="split-layout">`)
+      parts.push(`<div class="visual-side">`)
+      if (slide.diagram) {
+        // Diagram code should NOT have icons resolved - it's Mermaid syntax
+        parts.push(`<div class="mermaid-diagram">${escapeHtml(slide.diagram)}</div>`)
+      }
+      parts.push(`</div>`)
+      parts.push(`<div class="content-side">`)
+      if (slide.title) {
+        parts.push(`<div class="content-header">`)
+        parts.push(`<div class="title-accent-bar"></div>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
+        parts.push(`</div>`)
+      }
+      if (slide.bullets && slide.bullets.length > 0) {
+        parts.push(`<ul>${slide.bullets.map((b) => `<li>${renderText(b)}</li>`).join("")}</ul>`)
+      }
+      if (slide.content) {
+        parts.push(`<p class="body-text">${renderText(slide.content)}</p>`)
+      }
+      parts.push(`</div>`)
+      parts.push(`</div>`)
+      break
+
+    case "image-content":
+      parts.push(`<div class="split-layout">`)
+      parts.push(`<div class="visual-side">`)
+      if (slide.imageUrl) {
+        const imgSrc = resolveImageUrl(slide.imageUrl)
+        parts.push(`<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(slide.title || "Slide image")}" crossorigin="anonymous" referrerpolicy="no-referrer" loading="lazy" />`)
+      }
+      parts.push(`</div>`)
+      parts.push(`<div class="content-side">`)
+      if (slide.title) {
+        parts.push(`<div class="content-header">`)
+        parts.push(`<div class="title-accent-bar"></div>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
+        parts.push(`</div>`)
+      }
+      if (slide.bullets && slide.bullets.length > 0) {
+        parts.push(`<ul>${slide.bullets.map((b) => `<li>${renderText(b)}</li>`).join("")}</ul>`)
+      }
+      if (slide.content) {
+        parts.push(`<p class="body-text">${renderText(slide.content)}</p>`)
+      }
+      parts.push(`</div>`)
+      parts.push(`</div>`)
+      break
+
+    case "chart-content":
+      parts.push(`<div class="split-layout">`)
+      parts.push(`<div class="visual-side">`)
+      if (slide.chart) {
+        const chartSvg = chartToSvg(slide.chart, CHART_DIMENSIONS.html.splitLayout.width, CHART_DIMENSIONS.html.splitLayout.height)
+        parts.push(`<div class="chart-container">${chartSvg}</div>`)
+      }
+      parts.push(`</div>`)
+      parts.push(`<div class="content-side">`)
+      if (slide.title) {
+        parts.push(`<div class="content-header">`)
+        parts.push(`<div class="title-accent-bar"></div>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
+        parts.push(`</div>`)
+      }
+      if (slide.bullets && slide.bullets.length > 0) {
+        parts.push(`<ul>${slide.bullets.map((b) => `<li>${renderText(b)}</li>`).join("")}</ul>`)
+      }
+      if (slide.content) {
+        parts.push(`<p class="body-text">${renderText(slide.content)}</p>`)
+      }
+      parts.push(`</div>`)
+      parts.push(`</div>`)
+      break
+
+    case "hero":
+      // Hero layout handled specially - background set via inline style
+      parts.push(`<div class="hero-content">`)
+      if (slide.title) parts.push(`<h1>${renderText(slide.title)}</h1>`)
+      if (slide.subtitle) parts.push(`<p class="subtitle">${renderText(slide.subtitle)}</p>`)
+      parts.push(`</div>`)
+      break
+
+    case "stats":
+      parts.push(`<div class="stats-layout">`)
+      if (slide.title) {
+        parts.push(`<div class="content-header">`)
+        parts.push(`<div class="title-accent-bar"></div>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
+        parts.push(`</div>`)
+      }
+      if (slide.stats && slide.stats.length > 0) {
+        parts.push(`<div class="stats-grid">`)
+        for (const stat of slide.stats) {
+          const trendClass = stat.trend === "up" ? " up" : stat.trend === "down" ? " down" : ""
+          const trendIcon = stat.trend === "up" ? "↑" : stat.trend === "down" ? "↓" : ""
+          parts.push(`<div class="stat-item">`)
+          parts.push(`<div class="stat-value">${renderText(stat.value)}</div>`)
+          parts.push(`<div class="stat-label">${renderText(stat.label)}</div>`)
+          if (stat.change) {
+            parts.push(`<div class="stat-change${trendClass}">${trendIcon} ${renderText(stat.change)}</div>`)
+          }
+          parts.push(`</div>`)
+        }
+        parts.push(`</div>`)
+      }
+      parts.push(`</div>`)
+      break
+
+    case "gallery":
+      parts.push(`<div class="gallery-layout">`)
+      if (slide.title) {
+        parts.push(`<div class="content-header">`)
+        parts.push(`<div class="title-accent-bar"></div>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
+        parts.push(`</div>`)
+      }
+      if (slide.gallery && slide.gallery.length > 0) {
+        // Auto-calculate columns based on item count if not specified
+        const cols = slide.galleryColumns || (slide.gallery.length <= 4 ? 2 : slide.gallery.length <= 6 ? 3 : 4)
+        parts.push(`<div class="gallery-grid cols-${cols}">`)
+        for (const item of slide.gallery) {
+          const imgSrc = resolveImageUrl(item.imageUrl)
+          parts.push(`<div class="gallery-item">`)
+          parts.push(`<img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(item.caption || "")}" crossorigin="anonymous" referrerpolicy="no-referrer" loading="lazy" />`)
+          if (item.caption) {
+            parts.push(`<span class="gallery-caption">${renderText(item.caption)}</span>`)
+          }
+          parts.push(`</div>`)
+        }
+        parts.push(`</div>`)
+      }
+      parts.push(`</div>`)
+      break
+
+    case "comparison":
+      parts.push(`<div class="comparison-layout">`)
+      if (slide.title) {
+        parts.push(`<div class="content-header">`)
+        parts.push(`<div class="title-accent-bar"></div>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
+        parts.push(`</div>`)
+      }
+      if (slide.comparisonHeaders && slide.comparisonRows) {
+        parts.push(`<table class="comparison-table">`)
+        parts.push(`<thead><tr>`)
+        for (const header of slide.comparisonHeaders) {
+          parts.push(`<th>${renderText(header)}</th>`)
+        }
+        parts.push(`</tr></thead>`)
+        parts.push(`<tbody>`)
+        for (const row of slide.comparisonRows) {
+          parts.push(`<tr>`)
+          parts.push(`<td class="feature-cell">${renderText(row.feature)}</td>`)
+          for (const val of row.values) {
+            if (val === true) {
+              parts.push(`<td class="check-cell yes">✓</td>`)
+            } else if (val === false) {
+              parts.push(`<td class="check-cell no">✗</td>`)
+            } else {
+              parts.push(`<td>${renderText(String(val))}</td>`)
+            }
+          }
+          parts.push(`</tr>`)
+        }
+        parts.push(`</tbody></table>`)
+      }
+      parts.push(`</div>`)
+      break
+
+    case "features":
+      parts.push(`<div class="features-layout">`)
+      if (slide.title) {
+        parts.push(`<div class="content-header">`)
+        parts.push(`<div class="title-accent-bar"></div>`)
+        parts.push(`<h2>${renderText(slide.title)}</h2>`)
+        parts.push(`</div>`)
+      }
+      if (slide.features && slide.features.length > 0) {
+        const cols = slide.featuresColumns || (slide.features.length <= 3 ? slide.features.length : 3)
+        parts.push(`<div class="features-grid cols-${cols}">`)
+        for (const feature of slide.features) {
+          const iconSvg = getIconSvg(feature.icon)
+          parts.push(`<div class="feature-item">`)
+          parts.push(`<div class="feature-icon">${iconSvg || ""}</div>`)
+          parts.push(`<h3 class="feature-title">${renderText(feature.title)}</h3>`)
+          if (feature.description) {
+            parts.push(`<p class="feature-desc">${renderText(feature.description)}</p>`)
+          }
+          parts.push(`</div>`)
+        }
+        parts.push(`</div>`)
+      }
       parts.push(`</div>`)
       break
   }
@@ -109,26 +375,23 @@ function isDarkSlide(layout: string): boolean {
   return layout === "title" || layout === "section" || layout === "closing"
 }
 
-function darkenHex(hex: string, amount: number): string {
-  const h = hex.replace("#", "")
-  const r = parseInt(h.substring(0, 2), 16)
-  const g = parseInt(h.substring(2, 4), 16)
-  const b = parseInt(h.substring(4, 6), 16)
-  const dr = Math.round(r * (1 - amount))
-  const dg = Math.round(g * (1 - amount))
-  const db = Math.round(b * (1 - amount))
-  return `#${dr.toString(16).padStart(2, "0")}${dg.toString(16).padStart(2, "0")}${db.toString(16).padStart(2, "0")}`
-}
-
 export function slidesToHtml(data: PresentationData): string {
   const theme = data.theme
   const slides = data.slides
   const total = slides.length
-  const darkerBg = darkenHex(theme.primaryColor, 0.3)
+  const darkerBg = darkenColor(theme.primaryColor, 0.3)
 
   const sections = slides
     .map((slide, i) => {
       const dark = isDarkSlide(slide.layout)
+      // Hero layout needs special handling for background image and overlay
+      if (slide.layout === "hero") {
+        const bgImage = slide.backgroundImage ? resolveImageUrl(slide.backgroundImage) : ""
+        const overlay = slide.overlay || "dark"
+        const overlayClass = overlay === "none" ? " overlay-none" : overlay === "light" ? " overlay-light" : ""
+        const bgStyle = bgImage ? ` style="background-image: url('${bgImage.replace(/'/g, "\\'")}')"` : ""
+        return `<section class="slide hero${overlayClass}"${bgStyle} data-index="${i}">${renderSlideContent(slide, i, total)}</section>`
+      }
       return `<section class="slide ${slide.layout}${dark ? " dark" : ""}" data-index="${i}">${renderSlideContent(slide, i, total)}</section>`
     })
     .join("\n")
@@ -151,6 +414,16 @@ export function slidesToHtml(data: PresentationData): string {
     height: 100vh;
   }
 
+  /* === Design tokens === */
+  :root {
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.12);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.16);
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+  }
+
   /* === Base slide === */
   .slide {
     position: absolute;
@@ -160,21 +433,35 @@ export function slidesToHtml(data: PresentationData): string {
     justify-content: center;
     padding: 64px 80px;
     opacity: 0;
-    transform: translateX(30px);
-    transition: opacity 0.45s ease, transform 0.45s ease;
     pointer-events: none;
     background: #FFFFFF;
     color: #1E293B;
   }
 
+  /* Entry animation - excluded for hero slides (full-bleed backgrounds) */
+  .slide:not(.hero) {
+    transform: translateX(30px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+  }
+
+  .slide.hero {
+    transition: opacity 0.45s ease;
+  }
+
   .slide.active {
     opacity: 1;
-    transform: translateX(0);
     pointer-events: auto;
+  }
+
+  .slide:not(.hero).active {
+    transform: translateX(0);
   }
 
   .slide.prev {
     opacity: 0;
+  }
+
+  .slide:not(.hero).prev {
     transform: translateX(-30px);
   }
 
@@ -365,6 +652,46 @@ export function slidesToHtml(data: PresentationData): string {
     font-weight: 500;
   }
 
+  /* Quote attribution with avatar */
+  .quote-attribution {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .quote-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Quote style variants */
+  .quote-layout.minimal .quote-mark {
+    font-size: 48px;
+    opacity: 0.15;
+  }
+
+  .quote-layout.minimal blockquote {
+    font-size: clamp(16px, 2vw, 22px);
+  }
+
+  .quote-layout.card {
+    background: #f8fafc;
+    border-radius: var(--radius-lg);
+    padding: 48px;
+    box-shadow: var(--shadow-md);
+    max-width: 80%;
+    margin: auto;
+  }
+
+  .quote-layout.card .quote-mark {
+    font-size: 60px;
+  }
+
   /* === Slide number === */
   .slide-num {
     position: absolute;
@@ -390,7 +717,565 @@ export function slidesToHtml(data: PresentationData): string {
     transition: width 0.45s ease;
     z-index: 10;
   }
+
+  /* === Visual layouts === */
+
+  /* Diagram layout */
+  .diagram-layout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100%;
+    width: 100%;
+  }
+
+  .diagram-layout .content-header {
+    margin-bottom: 24px;
+    align-self: flex-start;
+  }
+
+  .mermaid-diagram {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    width: 100%;
+    min-height: 300px;
+    max-height: 70vh;
+    overflow: visible;
+  }
+
+  .mermaid-diagram svg {
+    width: 100% !important;
+    max-width: 100%;
+    height: auto !important;
+    max-height: 100%;
+  }
+
+  /* Image layout */
+  .image-layout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+  }
+
+  .image-layout img {
+    max-width: 90%;
+    max-height: 65vh;
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    transition: box-shadow 0.3s ease;
+  }
+
+  .image-layout img:hover {
+    box-shadow: var(--shadow-lg), 0 0 0 2px rgba(59, 130, 246, 0.15);
+  }
+
+  .image-layout .caption {
+    font-size: 14px;
+    color: #64748b;
+    margin-top: 16px;
+    font-style: italic;
+  }
+
+  /* Chart layout */
+  .chart-layout {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100%;
+    width: 100%;
+  }
+
+  .chart-layout .content-header {
+    margin-bottom: 24px;
+    align-self: flex-start;
+  }
+
+  .chart-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    max-width: 100%;
+    background: #fafafa;
+    border-radius: var(--radius-md);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .chart-container svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* Split layouts (visual + content) */
+  .split-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    height: 100%;
+    width: 100%;
+    align-items: center;
+  }
+
+  .split-layout .visual-side {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+
+  .split-layout .visual-side img {
+    max-width: 100%;
+    max-height: 60vh;
+    object-fit: contain;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+
+  .split-layout .visual-side img:hover {
+    box-shadow: var(--shadow-lg), 0 0 0 2px rgba(59, 130, 246, 0.15);
+    transform: scale(1.01);
+  }
+
+  .split-layout .visual-side .mermaid-diagram {
+    width: 100%;
+    min-height: 200px;
+    max-height: 60vh;
+  }
+
+  .split-layout .visual-side .mermaid-diagram svg {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  .split-layout .visual-side .chart-container svg {
+    max-height: 55vh;
+  }
+
+  .split-layout .content-side {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    height: 100%;
+  }
+
+  .split-layout .content-side .content-header {
+    margin-bottom: 20px;
+  }
+
+  /* Hero layout - full-bleed background */
+  .slide.hero {
+    padding: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 100vh;
+  }
+
+  .slide.hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.6) 100%);
+    z-index: 1;
+  }
+
+  .slide.hero.overlay-light::before {
+    background: linear-gradient(to bottom, rgba(255,255,255,0.3) 0%, rgba(255,255,255,0.6) 100%);
+  }
+
+  .slide.hero.overlay-none::before {
+    display: none;
+  }
+
+  .hero-content {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+    height: 100%;
+    min-height: 100vh;
+    padding: 64px 80px;
+    box-sizing: border-box;
+  }
+
+  .slide.hero h1 {
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 700;
+    color: white;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    max-width: 80%;
+    line-height: 1.1;
+  }
+
+  .slide.hero .subtitle {
+    font-size: clamp(16px, 2.5vw, 26px);
+    font-weight: 300;
+    color: rgba(255,255,255,0.9);
+    text-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    margin-top: 16px;
+    max-width: 70%;
+  }
+
+  .slide.hero.overlay-light h1 {
+    color: #1e293b;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.5);
+  }
+
+  .slide.hero.overlay-light .subtitle {
+    color: #475569;
+    text-shadow: none;
+  }
+
+  /* Stats layout */
+  .stats-layout {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    width: 100%;
+    height: 100%;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 40px;
+    padding: 40px 20px;
+    flex: 1;
+    align-content: center;
+  }
+
+  .stat-item {
+    text-align: center;
+    padding: 24px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .stat-item:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .stat-value {
+    font-size: clamp(36px, 6vw, 56px);
+    font-weight: 700;
+    color: ${theme.secondaryColor};
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+
+  .stat-label {
+    font-size: clamp(14px, 1.5vw, 18px);
+    color: #64748b;
+    margin-top: 8px;
+    font-weight: 500;
+  }
+
+  .stat-change {
+    font-size: 14px;
+    margin-top: 8px;
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .stat-change.up {
+    color: #22c55e;
+  }
+
+  .stat-change.down {
+    color: #ef4444;
+  }
+
+  /* Gallery layout */
+  .gallery-layout {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    width: 100%;
+    height: 100%;
+  }
+
+  .gallery-grid {
+    display: grid;
+    gap: 24px;
+    padding: 24px 0;
+    flex: 1;
+    align-content: center;
+  }
+
+  .gallery-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .gallery-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .gallery-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+  .gallery-grid.cols-5 { grid-template-columns: repeat(5, 1fr); }
+  .gallery-grid.cols-6 { grid-template-columns: repeat(6, 1fr); }
+
+  .gallery-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .gallery-item img {
+    width: 100%;
+    height: auto;
+    max-height: 120px;
+    object-fit: contain;
+    filter: grayscale(100%);
+    opacity: 0.7;
+    transition: all 0.3s ease;
+    border-radius: var(--radius-sm);
+  }
+
+  .gallery-item:hover img {
+    filter: grayscale(0%);
+    opacity: 1;
+    transform: scale(1.05);
+  }
+
+  .gallery-caption {
+    font-size: 12px;
+    color: #64748b;
+    text-align: center;
+  }
+
+  /* Comparison layout */
+  .comparison-layout {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    width: 100%;
+    height: 100%;
+  }
+
+  .comparison-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+    font-size: clamp(12px, 1.3vw, 16px);
+  }
+
+  .comparison-table th {
+    background: ${theme.primaryColor};
+    color: white;
+    padding: 12px 16px;
+    text-align: center;
+    font-weight: 600;
+    border: 1px solid ${theme.primaryColor};
+  }
+
+  .comparison-table th:first-child {
+    text-align: left;
+    border-radius: var(--radius-sm) 0 0 0;
+  }
+
+  .comparison-table th:last-child {
+    border-radius: 0 var(--radius-sm) 0 0;
+  }
+
+  .comparison-table td {
+    padding: 12px 16px;
+    border: 1px solid #e2e8f0;
+    text-align: center;
+  }
+
+  .comparison-table tbody tr:nth-child(odd) {
+    background: #f8fafc;
+  }
+
+  .comparison-table tbody tr:nth-child(even) {
+    background: white;
+  }
+
+  .comparison-table .feature-cell {
+    text-align: left;
+    font-weight: 500;
+    color: #334155;
+  }
+
+  .comparison-table .check-cell {
+    font-size: 1.2em;
+    font-weight: 700;
+  }
+
+  .comparison-table .check-cell.yes {
+    color: #22c55e;
+  }
+
+  .comparison-table .check-cell.no {
+    color: #ef4444;
+  }
+
+  /* Features layout (icon grid) */
+  .features-layout {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    width: 100%;
+    height: 100%;
+  }
+
+  .features-grid {
+    display: grid;
+    gap: 32px;
+    padding: 32px 0;
+    flex: 1;
+    align-content: center;
+  }
+
+  .features-grid.cols-2 { grid-template-columns: repeat(2, 1fr); }
+  .features-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }
+  .features-grid.cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .feature-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 24px 16px;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .feature-item:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .feature-icon {
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: ${theme.secondaryColor};
+    border-radius: 50%;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 12px ${theme.secondaryColor}40;
+  }
+
+  .feature-icon svg {
+    width: 28px;
+    height: 28px;
+    stroke: white;
+  }
+
+  .feature-title {
+    font-size: clamp(16px, 2vw, 20px);
+    font-weight: 600;
+    color: ${theme.primaryColor};
+    margin-bottom: 8px;
+  }
+
+  .feature-desc {
+    font-size: clamp(12px, 1.3vw, 14px);
+    color: #64748b;
+    line-height: 1.5;
+    max-width: 200px;
+  }
+
+  /* V2 Polish - Images in all layouts get subtle styling */
+  .slide img:not(.hero img):not(.gallery-item img):not(.quote-avatar) {
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* Inline icons */
+  .slide-icon {
+    display: inline-block;
+    vertical-align: -0.125em;
+    width: 1em;
+    height: 1em;
+    margin: 0 0.15em;
+    flex-shrink: 0;
+  }
+
+  /* Icon color inherits from parent text */
+  .slide-icon {
+    stroke: currentColor;
+  }
+
+  /* Larger icons in headings */
+  h1 .slide-icon, h2 .slide-icon {
+    width: 0.9em;
+    height: 0.9em;
+  }
+
+  /* Stats icons */
+  .stat-value .slide-icon {
+    width: 0.8em;
+    height: 0.8em;
+    vertical-align: -0.1em;
+  }
 </style>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    themeVariables: {
+      background: '#ffffff',
+      primaryColor: '#f8fafc',
+      primaryTextColor: '#1e293b',
+      primaryBorderColor: '#cbd5e1',
+      lineColor: '#64748b',
+      secondaryColor: '#e2e8f0',
+      tertiaryColor: '#f1f5f9',
+      textColor: '#1e293b',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontSize: '16px'
+    },
+    flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis', padding: 20, nodeSpacing: 50, rankSpacing: 60 },
+    sequence: { useMaxWidth: true, mirrorActors: true, actorMargin: 80, messageMargin: 40, boxMargin: 20 },
+    gantt: { useMaxWidth: true },
+    pie: { useMaxWidth: true }
+  });
+  document.querySelectorAll('.mermaid-diagram').forEach(async (el) => {
+    const id = 'mermaid-' + Math.random().toString(36).slice(2);
+    try {
+      const { svg } = await mermaid.render(id, el.textContent.trim());
+      el.innerHTML = svg;
+      // Ensure SVG fills container properly
+      const svgEl = el.querySelector('svg');
+      if (svgEl) {
+        svgEl.removeAttribute('height');
+        svgEl.style.width = '100%';
+        svgEl.style.height = 'auto';
+        svgEl.style.maxHeight = '100%';
+      }
+    } catch (err) {
+      el.innerHTML = '<div style="color:#ef4444;font-size:14px;">Diagram error: ' + err.message + '</div>';
+    }
+  });
+</script>
 </head>
 <body>
 ${sections}

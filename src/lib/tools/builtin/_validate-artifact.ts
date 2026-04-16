@@ -68,6 +68,18 @@ const SLIDE_LAYOUTS = new Set([
   "quote",
   "image-text",
   "closing",
+  // Visual layouts
+  "diagram",
+  "image",
+  "chart",
+  "diagram-content",
+  "image-content",
+  "chart-content",
+  "hero",
+  "stats",
+  "gallery",
+  "comparison",
+  "features",
 ])
 const MAX_SLIDE_BULLETS = 6
 const MAX_BULLET_WORDS = 10
@@ -208,6 +220,230 @@ function validateSlides(content: string): ArtifactValidationResult {
       if (typeof s.title !== "string" || !s.title.trim()) {
         warnings.push(
           `Slide ${i + 1} (closing layout) has no \`title\` — closing slides should carry the CTA or final takeaway.`,
+        )
+      }
+    }
+
+    // Visual layouts validation
+    // Diagram layouts require diagram field
+    if (s.layout === "diagram" || s.layout === "diagram-content") {
+      if (typeof s.diagram !== "string" || !s.diagram.trim()) {
+        errors.push(
+          `Slide ${i + 1} (${s.layout} layout) requires a non-empty \`diagram\` field with Mermaid code.`,
+        )
+      } else {
+        // Warn if diagram doesn't start with a valid Mermaid declaration
+        const diagramTrimmed = (s.diagram as string).trim()
+        const validStarts = [
+          "flowchart",
+          "graph",
+          "sequenceDiagram",
+          "erDiagram",
+          "stateDiagram",
+          "classDiagram",
+          "gantt",
+          "pie",
+          "mindmap",
+          "gitGraph",
+          "journey",
+          "quadrantChart",
+          "timeline",
+        ]
+        const hasValidStart = validStarts.some(
+          (k) => diagramTrimmed.startsWith(k + " ") || diagramTrimmed.startsWith(k + "\n") || diagramTrimmed === k,
+        )
+        if (!hasValidStart) {
+          warnings.push(
+            `Slide ${i + 1} diagram may be invalid — should start with flowchart, sequenceDiagram, erDiagram, etc.`,
+          )
+        }
+      }
+    }
+
+    // Image layouts require imageUrl field
+    if (s.layout === "image" || s.layout === "image-content") {
+      if (typeof s.imageUrl !== "string" || !s.imageUrl.trim()) {
+        errors.push(
+          `Slide ${i + 1} (${s.layout} layout) requires a non-empty \`imageUrl\` field (URL or "unsplash:keyword").`,
+        )
+      }
+    }
+
+    // Chart layouts require chart object with type and data
+    if (s.layout === "chart" || s.layout === "chart-content") {
+      const chart = s.chart as Record<string, unknown> | undefined
+      if (!chart || typeof chart !== "object") {
+        errors.push(
+          `Slide ${i + 1} (${s.layout} layout) requires a \`chart\` object with type and data.`,
+        )
+      } else {
+        const validChartTypes = ["bar", "bar-horizontal", "line", "pie", "donut"]
+        if (!validChartTypes.includes(chart.type as string)) {
+          errors.push(
+            `Slide ${i + 1} chart has invalid type "${chart.type}". Allowed: ${validChartTypes.join(", ")}.`,
+          )
+        }
+        const hasData = Array.isArray(chart.data) && chart.data.length > 0
+        const hasSeries = Array.isArray(chart.series) && chart.series.length > 0
+        if (!hasData && !hasSeries) {
+          errors.push(
+            `Slide ${i + 1} chart requires either \`data\` (for bar/pie/donut) or \`series\` (for line).`,
+          )
+        }
+      }
+    }
+
+    // Hero layout requires backgroundImage
+    if (s.layout === "hero") {
+      if (typeof s.backgroundImage !== "string" || !s.backgroundImage.trim()) {
+        errors.push(
+          `Slide ${i + 1} (hero layout) requires a non-empty \`backgroundImage\` field (URL or "unsplash:keyword").`,
+        )
+      }
+      if (typeof s.title !== "string" || !s.title.trim()) {
+        errors.push(`Slide ${i + 1} (hero layout) requires a non-empty \`title\`.`)
+      }
+    }
+
+    // Stats layout requires stats array with 2-4 items
+    if (s.layout === "stats") {
+      const stats = s.stats as Array<{ value?: string; label?: string }> | undefined
+      if (!Array.isArray(stats) || stats.length === 0) {
+        errors.push(
+          `Slide ${i + 1} (stats layout) requires a \`stats\` array with 2-4 items.`,
+        )
+      } else {
+        if (stats.length < 2) {
+          warnings.push(
+            `Slide ${i + 1} (stats layout) has only ${stats.length} stat — use at least 2 for visual balance.`,
+          )
+        }
+        if (stats.length > 4) {
+          warnings.push(
+            `Slide ${i + 1} (stats layout) has ${stats.length} stats — more than 4 becomes crowded.`,
+          )
+        }
+        for (let j = 0; j < stats.length; j++) {
+          const stat = stats[j]
+          if (typeof stat?.value !== "string" || !stat.value.trim()) {
+            errors.push(
+              `Slide ${i + 1} stat ${j + 1} is missing a \`value\` (e.g. "42%", "$1.2M").`,
+            )
+          }
+          if (typeof stat?.label !== "string" || !stat.label.trim()) {
+            errors.push(
+              `Slide ${i + 1} stat ${j + 1} is missing a \`label\` (e.g. "Revenue Growth").`,
+            )
+          }
+        }
+      }
+    }
+
+    // Gallery layout requires gallery array with 4-12 items
+    if (s.layout === "gallery") {
+      const gallery = s.gallery as Array<{ imageUrl?: string }> | undefined
+      if (!Array.isArray(gallery) || gallery.length === 0) {
+        errors.push(
+          `Slide ${i + 1} (gallery layout) requires a \`gallery\` array with 4-12 items.`,
+        )
+      } else {
+        if (gallery.length < 4) {
+          warnings.push(
+            `Slide ${i + 1} (gallery layout) has only ${gallery.length} items — use at least 4 for a grid effect.`,
+          )
+        }
+        if (gallery.length > 12) {
+          warnings.push(
+            `Slide ${i + 1} (gallery layout) has ${gallery.length} items — more than 12 becomes too crowded.`,
+          )
+        }
+        for (let j = 0; j < gallery.length; j++) {
+          const item = gallery[j]
+          if (typeof item?.imageUrl !== "string" || !item.imageUrl.trim()) {
+            errors.push(
+              `Slide ${i + 1} gallery item ${j + 1} is missing an \`imageUrl\`.`,
+            )
+          }
+        }
+      }
+    }
+
+    // Comparison layout requires headers and rows
+    if (s.layout === "comparison") {
+      const headers = s.comparisonHeaders as string[] | undefined
+      const rows = s.comparisonRows as Array<{ feature?: string; values?: unknown[] }> | undefined
+
+      if (!Array.isArray(headers) || headers.length < 2) {
+        errors.push(
+          `Slide ${i + 1} (comparison layout) requires \`comparisonHeaders\` with at least 2 columns (feature + 1 comparison).`,
+        )
+      }
+      if (!Array.isArray(rows) || rows.length === 0) {
+        errors.push(
+          `Slide ${i + 1} (comparison layout) requires \`comparisonRows\` with at least 1 row.`,
+        )
+      } else {
+        for (let j = 0; j < rows.length; j++) {
+          const row = rows[j]
+          if (typeof row?.feature !== "string" || !row.feature.trim()) {
+            errors.push(
+              `Slide ${i + 1} comparison row ${j + 1} is missing a \`feature\` name.`,
+            )
+          }
+          if (!Array.isArray(row?.values)) {
+            errors.push(
+              `Slide ${i + 1} comparison row ${j + 1} is missing \`values\` array.`,
+            )
+          } else if (headers && row.values.length !== headers.length - 1) {
+            warnings.push(
+              `Slide ${i + 1} comparison row ${j + 1} has ${row.values.length} values but expected ${headers.length - 1} (one per column after feature).`,
+            )
+          }
+        }
+      }
+    }
+
+    // Features layout requires features array with 3-6 items
+    if (s.layout === "features") {
+      const features = s.features as Array<{ icon?: string; title?: string }> | undefined
+      if (!Array.isArray(features) || features.length === 0) {
+        errors.push(
+          `Slide ${i + 1} (features layout) requires a \`features\` array with 3-6 items.`,
+        )
+      } else {
+        if (features.length < 3) {
+          warnings.push(
+            `Slide ${i + 1} (features layout) has only ${features.length} items — use at least 3 for a grid effect.`,
+          )
+        }
+        if (features.length > 6) {
+          warnings.push(
+            `Slide ${i + 1} (features layout) has ${features.length} items — more than 6 becomes too crowded.`,
+          )
+        }
+        for (let j = 0; j < features.length; j++) {
+          const item = features[j]
+          if (typeof item?.icon !== "string" || !item.icon.trim()) {
+            errors.push(
+              `Slide ${i + 1} feature ${j + 1} is missing an \`icon\` (e.g. "rocket", "shield").`,
+            )
+          }
+          if (typeof item?.title !== "string" || !item.title.trim()) {
+            errors.push(
+              `Slide ${i + 1} feature ${j + 1} is missing a \`title\`.`,
+            )
+          }
+        }
+      }
+    }
+
+    // Split layouts (*-content) require bullets or content
+    if (s.layout === "diagram-content" || s.layout === "image-content" || s.layout === "chart-content") {
+      const hasBullets = Array.isArray(s.bullets) && s.bullets.length > 0
+      const hasContent = typeof s.content === "string" && s.content.trim().length > 0
+      if (!hasBullets && !hasContent) {
+        errors.push(
+          `Slide ${i + 1} (${s.layout} layout) requires either \`bullets\` or \`content\` alongside the visual.`,
         )
       }
     }
