@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "RantAI",
+    "slug": "rantai-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "rantai",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "bundleIdentifier": "ai.rantai.mobile",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Attach photos and videos to your conversations.",
+        "NSPhotoLibraryUsageDescription": "Attach photos from your library to conversations.",
+        "NSMicrophoneUsageDescription": "Use voice input to dictate messages.",
+        "NSFaceIDUsageDescription": "Unlock RantAI quickly with Face ID."
+      }
+    },
+    "android": {
+      "package": "ai.rantai.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": ["RECORD_AUDIO", "USE_BIOMETRIC", "USE_FINGERPRINT"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-local-authentication",
+      ["expo-notifications", { "icon": "./assets/notification-icon.png" }],
+      "expo-image-picker",
+      "expo-document-picker",
+      "expo-speech-recognition",
+      "expo-background-task",
+      "expo-font"
+    ],
+    "experiments": { "typedRoutes": true, "reactCompiler": true },
+    "runtimeVersion": { "policy": "appVersion" }
+  }
+}
