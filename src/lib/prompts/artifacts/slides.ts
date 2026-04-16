@@ -2,7 +2,7 @@ export const slidesArtifact = {
   type: "application/slides" as const,
   label: "Slides",
   summary:
-    "Presentation decks as JSON — 6 layouts, dark/light slide alternation, arrow-key navigation, and PPTX export.",
+    "Presentation decks as JSON — 17 layouts including diagrams, images, charts, stats, gallery, comparison tables, and icon-based feature grids, dark/light slide alternation, arrow-key navigation, and PPTX export.",
   rules: `**application/slides — Presentations**
 
 You are generating a complete slide deck as a JSON object that will render in an iframe with arrow-key navigation, dot pagination, and a "Download PPTX" button. The deck must look professional out of the box — title and section slides get a dark gradient background with white text; content/two-column/quote slides get a clean white background with dark text. **Both previews and PPTX export are driven from the same JSON, so what you write is exactly what the user gets.**
@@ -56,9 +56,11 @@ Top-level **must** have \`theme\` and \`slides\`. \`slides\` must be a non-empty
 
 **NEVER use:** white/near-white as \`primaryColor\`, bright saturated indigo (\`#4F46E5\`) as \`primaryColor\`, system colors like \`black\`, RGB/HSL syntax, or shorthand hex (\`#000\`). Always 6-digit hex with leading \`#\`.
 
-## Layouts — Six Valid Values
+## Layouts — Seventeen Valid Values
 
-There are six layouts you should use, listed below with their **required** and **optional** fields. A seventh value (\`image-text\`) exists for backwards compatibility but renders identically to \`content\` and adds nothing — **do not use it**, use \`content\`.
+There are seventeen layouts you can use. The first six are text-based; the remaining eleven support **visual elements** (diagrams, images, charts, stats, gallery, comparison, features). A deprecated value (\`image-text\`) exists for backwards compatibility but renders identically to \`content\` — **do not use it**.
+
+### Text Layouts (use for most slides)
 
 ### \`title\` — opening slide
 Dark gradient background, white text, centered. **Must be the first slide of every deck.**
@@ -104,6 +106,8 @@ White background, large quotation marks, centered blockquote. Use sparingly — 
 |---|---|---|
 | \`quote\` | **yes** | The quoted text. Plain prose, no quotation marks (the renderer adds them). 5–25 words. |
 | \`attribution\` | strongly recommended | \`Name, Title, Company\` format. |
+| \`quoteImage\` | optional | Avatar URL or \`unsplash:keyword\` for the person being quoted. Renders as circular photo next to attribution. |
+| \`quoteStyle\` | optional | \`large\` (default), \`minimal\`, or \`card\`. Card style adds a background panel with shadow. |
 
 ### \`closing\` — final slide
 Dark gradient background, white text, centered. **Must be the last slide of every deck.**
@@ -113,6 +117,246 @@ Dark gradient background, white text, centered. **Must be the last slide of ever
 | \`title\` | **yes** | The closing line — a CTA, a thank-you, or the headline takeaway. |
 | \`subtitle\` | optional | A short follow-up line. \`subtitle\` is preferred over \`content\` here; if both are set, \`subtitle\` wins. |
 | \`content\` | optional | Fallback if you didn't set \`subtitle\`. Same role. |
+
+### Visual Layouts
+
+These layouts support **diagrams**, **images**, and **charts**. Use them to make your deck more engaging and to visualize data or architecture.
+
+### \`diagram\` — full-slide Mermaid diagram
+White background, centered diagram. Use for architecture, flowcharts, sequence diagrams.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | optional | Heading above the diagram. |
+| \`diagram\` | **yes** | Mermaid code (\`flowchart TD\`, \`sequenceDiagram\`, \`erDiagram\`, etc.). Keep diagrams simple — ≤ 15 nodes. |
+| \`note\` | optional | Footer text. |
+
+### \`image\` — full-slide image
+White background, centered image with optional caption.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`imageUrl\` | **yes** | Image URL or \`unsplash:keyword\` (e.g. \`unsplash:technology\`). |
+| \`imageCaption\` | optional | Caption below the image. |
+| \`note\` | optional | Footer text. |
+
+### \`chart\` — full-slide data chart
+White background, centered chart visualization. Use for bar, line, pie, or donut charts.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | optional | Chart title (also in \`chart.title\`). |
+| \`chart\` | **yes** | ChartData object — see Chart Types below. |
+
+### \`diagram-content\` — diagram with text
+Two-column: diagram left, text/bullets right. Great for explaining architecture.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | recommended | Slide heading. |
+| \`diagram\` | **yes** | Mermaid code (keep simple — ≤ 10 nodes for split layout). |
+| \`bullets\` or \`content\` | one required | Explaining text. |
+
+### \`image-content\` — image with text
+Two-column: image left, text/bullets right.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | recommended | Slide heading. |
+| \`imageUrl\` | **yes** | URL or \`unsplash:keyword\`. |
+| \`bullets\` or \`content\` | one required | Describing text. |
+
+### \`chart-content\` — chart with text
+Two-column: chart left, text/bullets right. Great for explaining data.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | recommended | Slide heading. |
+| \`chart\` | **yes** | ChartData object. |
+| \`bullets\` or \`content\` | one required | Explaining text. |
+
+### \`hero\` — full-bleed background image
+Full-screen background image with text overlay. Canva-style dramatic slides for impact.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | **yes** | Main text overlay. |
+| \`subtitle\` | optional | Secondary text. |
+| \`backgroundImage\` | **yes** | URL or \`unsplash:keyword\`. |
+| \`overlay\` | optional | \`dark\` (default), \`light\`, or \`none\`. |
+
+### \`stats\` — key metrics / KPIs
+White background with 2-4 big numbers in a grid. Use for dashboards, key metrics, achievements.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | optional | Slide heading. |
+| \`stats\` | **yes** | Array of 2-4 stat objects. |
+
+**Stat object:**
+\`\`\`json
+{
+  "value": "$4.2M",
+  "label": "Annual Revenue",
+  "trend": "up",
+  "change": "+23% YoY"
+}
+\`\`\`
+
+| Stat Field | Required | Notes |
+|---|---|---|
+| \`value\` | **yes** | The big number: "42%", "$1.2M", "99.9%", "10x". Keep short. |
+| \`label\` | **yes** | What the number measures: "Customer Retention", "MRR". |
+| \`trend\` | optional | \`up\`, \`down\`, or \`neutral\`. Adds color + arrow. |
+| \`change\` | optional | Context: "+12% YoY", "vs. $3.4M last year". |
+
+### \`gallery\` — image grid
+White background with a grid of images. Perfect for logos, team photos, customer logos, or screenshot collections.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | optional | Slide heading. |
+| \`gallery\` | **yes** | Array of 4-12 gallery items. |
+| \`galleryColumns\` | optional | 2, 3, 4, 5, or 6 columns. Default: auto-calculated based on item count. |
+
+**Gallery item:**
+\`\`\`json
+{
+  "imageUrl": "unsplash:logo company",
+  "caption": "Acme Corp"
+}
+\`\`\`
+
+| Item Field | Required | Notes |
+|---|---|---|
+| \`imageUrl\` | **yes** | Image URL or \`unsplash:keyword\`. |
+| \`caption\` | optional | Small text below the image. |
+
+**Note:** In HTML preview, gallery images are grayscale and transition to color on hover. PPTX export shows full color.
+
+### \`comparison\` — feature comparison table
+White background with a clean comparison table. Perfect for feature matrices, pricing tiers, or competitive analysis.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | optional | Slide heading. |
+| \`comparisonHeaders\` | **yes** | Column headers. First column is "Feature", rest are comparison targets. |
+| \`comparisonRows\` | **yes** | Array of comparison rows. |
+
+**Comparison row:**
+\`\`\`json
+{
+  "feature": "Real-time sync",
+  "values": [true, false, "Partial"]
+}
+\`\`\`
+
+| Row Field | Required | Notes |
+|---|---|---|
+| \`feature\` | **yes** | The feature being compared (first column). |
+| \`values\` | **yes** | Array of values for each comparison column. Use \`true\` for ✓, \`false\` for ✗, or a string for custom values. |
+
+**Example:**
+\`\`\`json
+{
+  "layout": "comparison",
+  "title": "Feature Comparison",
+  "comparisonHeaders": ["Feature", "Us", "Competitor A", "Competitor B"],
+  "comparisonRows": [
+    { "feature": "Real-time sync", "values": [true, false, true] },
+    { "feature": "Offline mode", "values": [true, true, false] },
+    { "feature": "API access", "values": ["Unlimited", "100/day", "Paid add-on"] }
+  ]
+}
+\`\`\`
+
+### \`features\` — icon-based feature grid (visual variant of \`content\`)
+A **visual alternative to \`content\` bullets**. Instead of text-heavy bullet points, this layout uses large icons as focal points with minimal text. The icon IS the content — text is secondary.
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | optional | Slide heading. |
+| \`features\` | **yes** | Array of 3-6 feature items. |
+| \`featuresColumns\` | optional | 2, 3, or 4 columns. Default: auto-calculated. |
+
+**Feature item:**
+\`\`\`json
+{ "icon": "rocket", "title": "Fast" }
+\`\`\`
+
+| Item Field | Required | Notes |
+|---|---|---|
+| \`icon\` | **yes** | Lucide icon name. The icon is the star — pick one that instantly communicates the concept. |
+| \`title\` | **yes** | 1-3 words. Keep it punchy. |
+| \`description\` | optional | Only add if the icon+title isn't self-explanatory. Max 8 words. |
+
+**Example — minimal (icon + title only):**
+\`\`\`json
+{
+  "layout": "features",
+  "title": "Platform Capabilities",
+  "features": [
+    { "icon": "zap", "title": "Lightning Fast" },
+    { "icon": "shield", "title": "Bank-Grade Security" },
+    { "icon": "globe", "title": "Global Scale" },
+    { "icon": "clock", "title": "24/7 Uptime" }
+  ]
+}
+\`\`\`
+
+**Example — with descriptions:**
+\`\`\`json
+{
+  "layout": "features",
+  "features": [
+    { "icon": "rocket", "title": "Fast", "description": "Deploy in seconds" },
+    { "icon": "lock", "title": "Secure", "description": "End-to-end encrypted" },
+    { "icon": "users", "title": "Collaborative", "description": "Real-time sync" }
+  ]
+}
+\`\`\`
+
+**\`features\` vs \`content\` — when to use which:**
+| Use \`features\` when... | Use \`content\` when... |
+|---|---|
+| You have 3-6 distinct items | You have 2-6 bullet points |
+| Each item maps to a clear icon | Items need explanation |
+| Audience should scan quickly | Audience should read carefully |
+| "What we offer" / "Key benefits" | "How it works" / "Details" |
+
+## Chart Types
+
+When using \`chart\` or \`chart-content\` layouts, provide a \`chart\` object:
+
+\`\`\`json
+{
+  "type": "bar",
+  "title": "Revenue by Quarter",
+  "data": [
+    { "label": "Q1", "value": 120000 },
+    { "label": "Q2", "value": 150000 },
+    { "label": "Q3", "value": 180000 }
+  ]
+}
+\`\`\`
+
+**Chart types:**
+- \`bar\` — Vertical bar chart. Use \`data\` array with \`{ label, value }\`.
+- \`bar-horizontal\` — Horizontal bar chart. Same format.
+- \`line\` — Line chart for trends. Use \`labels\` (x-axis) and \`series\` (lines):
+  \`\`\`json
+  { "type": "line", "labels": ["Jan", "Feb", "Mar"], "series": [{ "name": "Revenue", "values": [100, 120, 140] }] }
+  \`\`\`
+- \`pie\` — Pie chart. Use \`data\` array.
+- \`donut\` — Donut chart (pie with center hole). Use \`data\` array.
+
+## Mermaid Guidelines
+
+When using \`diagram\` or \`diagram-content\`:
+- Start with a valid declaration: \`flowchart TD\`, \`sequenceDiagram\`, \`erDiagram\`, \`stateDiagram-v2\`, \`classDiagram\`, \`gantt\`, \`pie\`, \`mindmap\`, \`gitGraph\`, \`journey\`.
+- Keep diagrams simple — max 15 nodes for full-slide, max 10 for split layout.
+- Do NOT use \`%%{init}%%\` directives — the renderer handles theming.
+- Use short, clear node labels.
 
 ## Deck Structure Rules
 
@@ -133,6 +377,30 @@ Dark gradient background, white text, centered. **Must be the last slide of ever
 - **Title slide title is the deck name**, not "Welcome" or "Introduction". Subtitle is the framing, not "by AI".
 - **Closing slide is a CTA or a takeaway**, not "Thank You" alone. "Thank you — questions?" or "Next: pilot launch in May" is acceptable.
 - **\`note\` field is visible**, not just speaker notes. It renders as small footer text in the preview AND as a footer in the PPTX export. Use it for source citations, "Internal", or dates — not for stage directions.
+
+## Icons (Optional)
+
+You can embed inline icons in any text field using the \`{icon:name}\` syntax. Icons render inline with text and inherit the text color.
+
+**Syntax:** \`{icon:icon-name}\` — use kebab-case names from the Lucide icon set.
+
+**Examples:**
+- \`"bullets": ["{icon:check} GDPR compliant", "{icon:lock} End-to-end encrypted"]\`
+- \`"title": "{icon:rocket} Launch Metrics"\`
+- \`"value": "{icon:trending-up} 42%"\` (in stats layout)
+
+**Common icons:**
+- Status: \`check\`, \`x\`, \`alert-circle\`, \`info\`
+- Arrows: \`arrow-right\`, \`trending-up\`, \`trending-down\`
+- Business: \`dollar-sign\`, \`users\`, \`briefcase\`, \`building\`
+- Tech: \`code\`, \`database\`, \`cloud\`, \`server\`, \`lock\`
+- Actions: \`rocket\`, \`target\`, \`zap\`, \`star\`
+
+**Guidelines:**
+- Use sparingly — 1-3 icons per slide max.
+- Icons add emphasis; don't use them on every bullet.
+- Icons only render in HTML preview; they're stripped in PPTX export.
+- See full list at https://lucide.dev/icons
 
 ## Tone — match the user's request
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
-import { ChevronLeft, ChevronRight, Download, Loader2 } from "@/lib/icons"
+import { ChevronLeft, ChevronRight } from "@/lib/icons"
 import type { PresentationData } from "@/lib/slides/types"
 import { DEFAULT_THEME } from "@/lib/slides/types"
 import { slidesToHtml } from "@/lib/slides/render-html"
@@ -32,7 +32,6 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [currentSlide, setCurrentSlide] = useState(0)
   const [totalSlides, setTotalSlides] = useState(0)
-  const [downloading, setDownloading] = useState(false)
 
   const presentation = useMemo(() => parsePresentation(content), [content])
   const srcdoc = useMemo(() => slidesToHtml(presentation), [presentation])
@@ -74,24 +73,6 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
     return () => window.removeEventListener("keydown", handler)
   }, [navigate])
 
-  const handleDownloadPptx = useCallback(async () => {
-    setDownloading(true)
-    try {
-      const { generatePptx } = await import("@/lib/slides/generate-pptx")
-      const blob = await generatePptx(presentation)
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${(presentation.slides[0]?.title || "presentation").replace(/[^a-z0-9]/gi, "-").toLowerCase()}.pptx`
-      a.click()
-      URL.revokeObjectURL(url)
-    } catch (err) {
-      console.error("[SlidesRenderer] PPTX generation failed:", err)
-    } finally {
-      setDownloading(false)
-    }
-  }, [presentation])
-
   if (presentation.slides.length === 0) {
     return (
       <div className="flex items-center justify-center p-8 text-muted-foreground">
@@ -107,7 +88,7 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
         <iframe
           ref={iframeRef}
           srcDoc={srcdoc}
-          sandbox="allow-scripts"
+          sandbox="allow-scripts allow-same-origin"
           className="w-full h-full border-0"
           title="Slide Preview"
         />
@@ -160,20 +141,6 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
             ))}
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={handleDownloadPptx}
-          disabled={downloading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/20 transition-colors disabled:opacity-50"
-        >
-          {downloading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Download className="h-3.5 w-3.5" />
-          )}
-          {downloading ? "Generating..." : "Download PPTX"}
-        </button>
       </div>
     </div>
   )
