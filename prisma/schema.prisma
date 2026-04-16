@@ -26,6 +26,8 @@ model User {
   updatedAt             DateTime       @updatedAt
   conversations         Conversation[]
   mediaJobs             MediaJob[]
+  mobileSessions        MobileSession[]
+  mobilePushTokens      MobilePushToken[]
 
   @@map("Agent")
 }
@@ -1420,4 +1422,36 @@ model ResolvedImage {
   expiresAt   DateTime // Cache expiry (30 days from creation)
 
   @@index([expiresAt])
+}
+
+model MobileSession {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId         String
+  deviceName       String
+  platform         String
+  refreshTokenHash String    @unique
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+}
+
+model MobilePushToken {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId      String
+  expoPushToken String    @unique
+  platform      String
+  createdAt     DateTime  @default(now())
+  lastSeenAt    DateTime  @default(now())
+  revokedAt     DateTime?
+
+  @@unique([userId, deviceId])
+  @@index([userId])
 }
