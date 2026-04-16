@@ -27,7 +27,7 @@
         "./src/*"
       ],
       "@cloud/*": [
-        "../../apps/cloud/src/*"
+        "./src/cloud-shim/*"
       ]
     }
   },
