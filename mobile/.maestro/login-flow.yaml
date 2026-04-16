@@ -1,0 +1,10 @@
+appId: ai.rantai.mobile
+---
+- launchApp
+- assertVisible: "Sign in"
+- tapOn: "Email"
+- inputText: "test@example.com"
+- tapOn: "Password"
+- inputText: "test-password"
+- tapOn: "Sign in"
+- assertVisible: "Chat — coming in Phase B."
