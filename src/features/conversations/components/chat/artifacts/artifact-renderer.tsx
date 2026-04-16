@@ -93,7 +93,7 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
     case "image/svg+xml":
       return <SvgRenderer content={artifact.content} />
     case "application/mermaid":
-      return <MermaidRenderer content={artifact.content} />
+      return <MermaidRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
     case "application/sheet":
       return <SheetRenderer content={artifact.content} title={artifact.title} />
     case "text/latex":
