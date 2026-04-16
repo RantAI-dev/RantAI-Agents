@@ -315,6 +315,12 @@ Use this order for coordinated updates:
 
 ---
 
+## Mobile app
+
+The iOS + Android client lives in [`mobile/`](./mobile/README.md). It shares this Next.js backend; mobile-only routes are namespaced under `/api/mobile/*` and protected by a shared `requireUserAndOrg()` helper that accepts either a NextAuth session cookie (web) or a mobile JWT bearer token. See `docs/superpowers/specs/2026-04-16-mobile-app-react-native-design.md` for the full design.
+
+---
+
 ## Project Structure
 
 ```
