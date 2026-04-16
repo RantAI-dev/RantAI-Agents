@@ -131,6 +131,9 @@ export async function createMediaJob(input: CreateMediaJobInput) {
     )
   }
 
+  // TODO: Calculate estimated cost based on model pricing
+  const estimatedCostCents = 0
+
   const job = await createMediaJobRow({
     organizationId: input.organizationId,
     userId: input.userId,
@@ -139,7 +142,7 @@ export async function createMediaJob(input: CreateMediaJobInput) {
     prompt: input.prompt,
     parameters: input.parameters,
     referenceAssetIds: input.referenceAssetIds,
-    estimatedCostCents: 0,
+    estimatedCostCents,
   })
 
   emitToOrgRoom(input.organizationId, "media:job:update", {

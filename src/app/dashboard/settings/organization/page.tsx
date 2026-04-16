@@ -1,5 +1,5 @@
-import OrganizationUnified from "@/features/settings/components/organization-unified"
+import { redirect } from "next/navigation"
 
-export default function Page({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
-  return <OrganizationUnified searchParams={searchParams} />
+export default function OrganizationSettingsPage() {
+  redirect("/dashboard/settings/general?tab=organization")
 }

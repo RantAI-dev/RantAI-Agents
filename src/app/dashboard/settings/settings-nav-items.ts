@@ -1,18 +1,26 @@
-import { Settings, Wrench, Building2, BarChart3 } from "@/lib/icons"
+import { Settings, Wrench, BarChart3, CreditCard } from "@/lib/icons"
 
-export const SETTINGS_NAV_ITEMS = [
+const isCloudEdition = process.env.NEXT_PUBLIC_EDITION === "cloud"
+
+const baseNavItems = [
   {
     title: "General",
     href: "/dashboard/settings/general",
     icon: Settings,
-    description: "Features & system info",
+    description: "Organization, beta features & system info",
   },
+]
+
+const cloudOnlyNavItems = [
   {
-    title: "Organization",
-    href: "/dashboard/settings/organization",
-    icon: Building2,
-    description: "Team, members & invitations",
+    title: "Billing",
+    href: "/dashboard/settings/billing",
+    icon: CreditCard,
+    description: "Plan, usage & payments",
   },
+]
+
+const commonNavItems = [
   {
     title: "Agent Config",
     href: "/dashboard/settings/agent-config",
@@ -25,4 +33,10 @@ export const SETTINGS_NAV_ITEMS = [
     icon: BarChart3,
     description: "Memory & usage statistics",
   },
+]
+
+export const SETTINGS_NAV_ITEMS = [
+  ...baseNavItems,
+  ...(isCloudEdition ? cloudOnlyNavItems : []),
+  ...commonNavItems,
 ] as const

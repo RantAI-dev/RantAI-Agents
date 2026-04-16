@@ -42,10 +42,10 @@ const featureMeta: Record<
   { name: string; icon: typeof Headphones; description: string }
 > = {
   AGENT: {
-    name: "Agent Portal",
+    name: "Live Chat",
     icon: Headphones,
     description:
-      "Customer support queue and live chat with agents. When disabled, the Agent menu item will be hidden from the navigation.",
+      "Real-time customer support queue with agent handoff. When enabled, adds Live Chat to your navigation for managing customer conversations.",
   },
 }
 
@@ -122,9 +122,11 @@ const channelMeta: Record<string, ChannelMetaItem> = {
 export default function FeaturesSettingsClient({
   initialFeatures,
   initialChannels,
+  readOnly = false,
 }: {
   initialFeatures: FeatureConfig[]
   initialChannels: ChannelConfig[]
+  readOnly?: boolean
 }) {
   // Feature state
   const [features, setFeatures] = useState<FeatureConfig[]>(initialFeatures)
@@ -280,12 +282,20 @@ export default function FeaturesSettingsClient({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Feature Configuration</h2>
+        <h2 className="text-xl font-semibold">Beta Features</h2>
         <p className="text-sm text-muted-foreground">
-          Enable or disable application capabilities. Disabled features will be
-          hidden from the navigation.
+          Try out experimental features. These are still in development and may change.
+          Disabled features will be hidden from the navigation.
         </p>
       </div>
+
+      {readOnly && (
+        <div className="bg-muted/50 border border-dashed px-4 py-3 rounded-lg">
+          <p className="text-sm text-muted-foreground">
+            Only administrators can modify feature settings. Contact your admin for changes.
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg flex items-center gap-2">
@@ -331,29 +341,32 @@ export default function FeaturesSettingsClient({
                         onCheckedChange={(checked) =>
                           updateFeature(feature.feature, { enabled: checked })
                         }
+                        disabled={readOnly}
                       />
                     </div>
 
-                    <Button
-                      onClick={() => saveFeature(feature)}
-                      disabled={isSaving}
-                      size="sm"
-                    >
-                      {isSaving ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : isSaved ? (
-                        <CheckCircle className="h-4 w-4 mr-2 text-chart-2" />
-                      ) : (
-                        <Save className="h-4 w-4 mr-2" />
-                      )}
-                      {isSaved ? "Saved!" : "Save"}
-                    </Button>
+                    {!readOnly && (
+                      <Button
+                        onClick={() => saveFeature(feature)}
+                        disabled={isSaving}
+                        size="sm"
+                      >
+                        {isSaving ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : isSaved ? (
+                          <CheckCircle className="h-4 w-4 mr-2 text-chart-2" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        {isSaved ? "Saved!" : "Save"}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardHeader>
 
-              {/* Channel settings collapsible — only for AGENT feature when enabled */}
-              {feature.feature === "AGENT" && feature.enabled && (
+              {/* Channel settings collapsible — only for AGENT feature when enabled and user is admin */}
+              {feature.feature === "AGENT" && feature.enabled && !readOnly && (
                 <CardContent className="pt-0">
                   <Collapsible open={channelsOpen} onOpenChange={setChannelsOpen}>
                     <CollapsibleTrigger asChild>

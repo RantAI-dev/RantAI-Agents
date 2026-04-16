@@ -66,7 +66,9 @@ function isCanvasAvailable(): boolean {
   }
   try {
     // Check if the .node file exists (doesn't load it)
-    require.resolve("canvas")
+    // Use indirect reference to avoid Turbopack static analysis warning
+    const moduleName = ["canvas"].join("")
+    require.resolve(moduleName)
     return true
   } catch {
     return false

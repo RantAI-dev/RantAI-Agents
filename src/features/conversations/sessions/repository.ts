@@ -81,20 +81,26 @@ export async function createDashboardMessages(
   }>
 ) {
   return prisma.$transaction(
-    messages.map((message) =>
-      prisma.dashboardMessage.create({
-        data: {
-          id: message.id || undefined,
-          sessionId: message.sessionId,
-          role: message.role,
-          content: message.content,
-          replyTo: message.replyTo,
-          editHistory: message.editHistory as Prisma.InputJsonValue | undefined,
-          sources: message.sources as Prisma.InputJsonValue | undefined,
-          metadata: message.metadata as Prisma.InputJsonValue | undefined,
-        },
-      })
-    )
+    messages.map((message) => {
+      const data = {
+        sessionId: message.sessionId,
+        role: message.role,
+        content: message.content,
+        replyTo: message.replyTo,
+        editHistory: message.editHistory as Prisma.InputJsonValue | undefined,
+        sources: message.sources as Prisma.InputJsonValue | undefined,
+        metadata: message.metadata as Prisma.InputJsonValue | undefined,
+      }
+      // Use upsert if ID provided (handles retries/duplicates), create if not
+      if (message.id) {
+        return prisma.dashboardMessage.upsert({
+          where: { id: message.id },
+          create: { id: message.id, ...data },
+          update: data,
+        })
+      }
+      return prisma.dashboardMessage.create({ data })
+    })
   )
 }
 

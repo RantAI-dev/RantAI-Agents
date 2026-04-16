@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { getAdminFeatures } from "@/features/admin/features/service"
 import { getAdminChannels } from "@/features/admin/channels/service"
@@ -41,10 +40,16 @@ function normalizeChannel(row: Record<string, unknown>): ChannelConfig {
 export default async function FeaturesSettingsPage() {
   const session = await auth()
 
-  if (!session?.user?.id || session.user.role !== "ADMIN") {
-    redirect("/dashboard")
+  // Show empty state for non-authenticated users
+  if (!session?.user?.id) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        Please sign in to view settings.
+      </div>
+    )
   }
 
+  // Features settings available to all authenticated users
   const [rawFeatures, rawChannels] = await Promise.all([
     getAdminFeatures(),
     getAdminChannels(),

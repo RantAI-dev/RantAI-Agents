@@ -1,4 +1,5 @@
 import { parseSkillMarkdown } from "@/lib/skills/parser"
+import { ensurePlatformSkills } from "@/lib/skills/seed"
 import { Prisma } from "@prisma/client"
 import {
   createDashboardSkill as createDashboardSkillEntity,
@@ -77,6 +78,7 @@ function toListItem(skill: {
 export async function listDashboardSkills(
   context: DashboardSkillsContext
 ) {
+  await ensurePlatformSkills()
   const skills = await findDashboardSkillsByOrganization(context.organizationId)
   return skills.map(toListItem)
 }

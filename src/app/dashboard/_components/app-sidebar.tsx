@@ -83,7 +83,7 @@ interface AppSidebarProps {
   onSearchOpen?: () => void
 }
 
-type FeatureKey = "AGENT" | null
+type FeatureKey = "AGENT" | "DIGITAL_EMPLOYEES" | null
 
 interface NavItem {
   title: string
@@ -98,7 +98,7 @@ const allNavItems: NavItem[] = [
   { title: "Chat", url: "/dashboard/chat", icon: MessageSquare, feature: null },
   { title: "Agent Builder", url: "/dashboard/agent-builder", icon: Blocks, feature: null },
   { title: "Workflows", url: "/dashboard/workflows", icon: GitBranch, feature: null },
-  { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: null },
+  { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: "DIGITAL_EMPLOYEES" },
 
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
   { title: "Media Studio", url: "/dashboard/media", icon: Clapperboard, feature: null },
@@ -347,7 +347,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { isAgentEnabled } = useFeaturesContext()
+  const { isAgentEnabled, isDigitalEmployeesEnabled } = useFeaturesContext()
 
   const { avatarUrl, fetchProfile } = useProfileStore()
 
@@ -356,6 +356,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
   // Filter nav items based on enabled features
   const mainNavItems = allNavItems.filter((item) => {
     if (item.feature === "AGENT") return isAgentEnabled
+    if (item.feature === "DIGITAL_EMPLOYEES") return isDigitalEmployeesEnabled
     return true
   })
 
@@ -404,13 +405,17 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
 
   const { assistant: defaultAssistant } = useDefaultAssistant()
   const { workflows } = useWorkflows()
+
+  // Only load digital employees when feature is enabled
   const { employees: digitalEmployees, fetchEmployees: refreshEmployees } = useDigitalEmployees()
 
   // Auto-refresh employee list when navigating back to sidebar or after creation
   useEffect(() => {
-    // Refresh when pathname changes (e.g. after creating a new employee and navigating)
-    refreshEmployees()
-  }, [pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Only refresh when feature is enabled
+    if (isDigitalEmployeesEnabled) {
+      refreshEmployees()
+    }
+  }, [pathname, isDigitalEmployeesEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null)
@@ -435,8 +440,9 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
     if (pathname.startsWith("/dashboard/chat")) return sections.chat
     if (pathname.startsWith("/dashboard/agent-builder")) return sections.agentBuilder
     if (pathname.startsWith("/dashboard/workflows")) return sections.workflows
-    if (pathname.startsWith("/dashboard/digital-employees")) return sections.digitalEmployees
-    if (pathname.startsWith("/dashboard/groups")) return sections.digitalEmployees
+    // Skip digital employees section if feature is disabled
+    if (isDigitalEmployeesEnabled && pathname.startsWith("/dashboard/digital-employees")) return sections.digitalEmployees
+    if (isDigitalEmployeesEnabled && pathname.startsWith("/dashboard/groups")) return sections.digitalEmployees
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/media")) return sections.media
     if (pathname.startsWith("/dashboard/files")) return sections.knowledge
@@ -835,7 +841,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
             </div>
           )}
 
-          {currentSection === sections.digitalEmployees && (
+          {isDigitalEmployeesEnabled && currentSection === sections.digitalEmployees && (
             <div className="space-y-1">
               {[...digitalEmployees]
                 .sort((a, b) => {
