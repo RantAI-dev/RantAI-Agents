@@ -148,6 +148,14 @@ export default function ChatSessionPageClient({
     )
   }
 
+  // Session not found (possibly deleted) - redirect to chat home
+  // Only redirect if sessions have loaded (length > 0) to avoid redirecting during initial load
+  useEffect(() => {
+    if (sessions.length > 0 && !activeSession) {
+      router.replace("/dashboard/chat")
+    }
+  }, [sessions.length, activeSession, router])
+
   if (!activeSession || !activeSessionAssistant) {
     return (
       <div className="flex flex-col h-full">
