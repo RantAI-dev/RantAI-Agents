@@ -11,6 +11,7 @@ import { brand } from "@/lib/branding"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { GlobalApprovalBanner } from "./_components/global-approval-banner"
 import { GlobalSearch } from "./_components/global-search"
+import { UpgradeModalProvider } from "@cloud/components/upgrade-modal-provider"
 
 const DASHBOARD_TITLES: Record<string, string> = {
   "/dashboard": "Chat",
@@ -90,6 +91,7 @@ export default function DashboardLayout({
       <FeaturesProvider>
         <OrganizationProvider>
         <ChatSessionsProvider>
+        <UpgradeModalProvider>
           <div className="flex h-screen w-full overflow-hidden">
           {/* Single Unified Sidebar */}
           <Suspense fallback={null}>
@@ -105,6 +107,7 @@ export default function DashboardLayout({
             </ErrorBoundary>
           </main>
         </div>
+        </UpgradeModalProvider>
         </ChatSessionsProvider>
         </OrganizationProvider>
       </FeaturesProvider>
