@@ -329,6 +329,27 @@ export async function addDashboardChatSessionMessages(params: {
     }))
   )) as DashboardChatSessionMessageRow[]
 
+  // Fire-and-forget: if an assistant message was appended, nudge the owner
+  // via push so their mobile app can surface it even if the stream isn't
+  // being watched. Best-effort — never blocks the response.
+  const hasAssistantReply = createdMessages.some((m) => m.role === "assistant")
+  if (hasAssistantReply) {
+    void import("@/lib/push/sender").then(({ sendPushToUser }) => {
+      const last = createdMessages.filter((m) => m.role === "assistant").pop()
+      if (!last) return
+      const preview =
+        last.content.length > 120
+          ? last.content.slice(0, 120).trimEnd() + "…"
+          : last.content
+      sendPushToUser(params.userId, {
+        title: "New reply",
+        body: preview,
+        data: { url: `rantai://conversation/${params.sessionId}` },
+        categoryId: "conversation-reply",
+      }).catch(() => {})
+    })
+  }
+
   return {
     messages: createdMessages.map((message) => ({
       id: message.id,
