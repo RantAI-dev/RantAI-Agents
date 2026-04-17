@@ -42,6 +42,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import type { TabStatus } from "@/features/assistants/core/completeness"
 
 export type TabId = "configure" | "model" | "tools" | "skills" | "workflows" | "mcp" | "knowledge" | "memory" | "guardrails" | "chat" | "test" | "deploy"
 
@@ -67,6 +68,7 @@ interface AgentEditorLayoutProps {
   isDirty: boolean
   isSaving: boolean
   activeTab: TabId
+  tabStatuses: Record<TabId, TabStatus>
   onTabChange: (tab: TabId) => void
   onSave: () => void
   onDuplicate?: () => void
@@ -83,6 +85,7 @@ export function AgentEditorLayout({
   isDirty,
   isSaving,
   activeTab,
+  tabStatuses,
   onTabChange,
   onSave,
   onDuplicate,
@@ -178,6 +181,7 @@ export function AgentEditorLayout({
           {TABS.map((tab) => {
             const Icon = tab.icon
             const active = activeTab === tab.id
+            const status = tabStatuses[tab.id]
             return (
               <button
                 key={tab.id}
@@ -190,7 +194,16 @@ export function AgentEditorLayout({
                 )}
               >
                 <Icon className="h-4 w-4 shrink-0" />
-                {tab.label}
+                <span className="flex-1 truncate">{tab.label}</span>
+                <span
+                  aria-hidden
+                  className={cn(
+                    "h-2 w-2 rounded-full shrink-0",
+                    status === "required-missing" && "bg-destructive",
+                    status === "filled" && "bg-emerald-500",
+                    status === "empty" && "border border-muted-foreground/40"
+                  )}
+                />
               </button>
             )
           })}

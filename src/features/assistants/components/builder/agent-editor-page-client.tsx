@@ -11,6 +11,11 @@ import { useAssistantWorkflows } from "@/hooks/use-assistant-workflows"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
 import { useModels } from "@/hooks/use-models"
 import { AgentEditorLayout, type TabId } from "@/features/assistants/components/builder/agent-editor-layout"
+import {
+  computeTabStatus,
+  type CompletenessFormState,
+  type TabStatus,
+} from "@/features/assistants/core/completeness"
 import { TabConfigure } from "@/features/assistants/components/builder/tab-configure"
 import { TabModel } from "@/features/assistants/components/builder/tab-model"
 import { TabTools } from "@/features/assistants/components/builder/tab-tools"
@@ -440,6 +445,37 @@ export default function AgentEditorPageClient({
   const modelSupportsFunctionCalling = model?.capabilities.functionCalling ?? false
   const isDefault = defaultAssistant?.id === id
 
+  const completenessForm: CompletenessFormState = {
+    name: form.name,
+    description: form.description,
+    systemPrompt: form.systemPrompt,
+    model: form.model,
+    openingMessage: form.openingMessage,
+    openingQuestions: form.openingQuestions,
+    liveChatEnabled: form.liveChatEnabled,
+    selectedToolIds: form.selectedToolIds,
+    selectedSkillIds: form.selectedSkillIds,
+    selectedMcpServerIds: form.selectedMcpServerIds,
+    selectedWorkflowIds: form.selectedWorkflowIds,
+    useKnowledgeBase: form.useKnowledgeBase,
+    knowledgeBaseGroupIds: form.knowledgeBaseGroupIds,
+    memoryConfig: (form.memoryConfig ?? {}) as Record<string, unknown>,
+    modelConfig: (form.modelConfig ?? {}) as Record<string, unknown>,
+    chatConfig: (form.chatConfig ?? {}) as Record<string, unknown>,
+    guardRails: (form.guardRails ?? {}) as Record<string, unknown>,
+    availableModelIds: models.map((m) => m.id),
+  }
+
+  const TAB_IDS: TabId[] = [
+    "configure", "model", "tools", "skills", "workflows", "mcp",
+    "knowledge", "memory", "guardrails", "chat", "test", "deploy",
+  ]
+
+  const tabStatuses = TAB_IDS.reduce<Record<TabId, TabStatus>>((acc, id) => {
+    acc[id] = computeTabStatus(completenessForm, id)
+    return acc
+  }, {} as Record<TabId, TabStatus>)
+
   if (isLoading && !isNew) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -456,6 +492,7 @@ export default function AgentEditorPageClient({
       isDirty={isDirty}
       isSaving={isSaving}
       activeTab={activeTab}
+      tabStatuses={tabStatuses}
       onTabChange={setActiveTab}
       onSave={handleSave}
       onDuplicate={isNew ? undefined : handleDuplicate}
