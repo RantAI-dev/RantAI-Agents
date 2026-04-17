@@ -132,6 +132,14 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
     prisma.assistant.count({ where: { organizationId: args.organizationId } }),
   ])
 
+  const known = {
+    models: new Set(models.map((m) => m.id)),
+    tools: new Set(tools.map((t) => t.id)),
+    skills: new Set(skills.map((s) => s.id)),
+    mcp: new Set(mcp.map((m) => m.id)),
+    kbs: new Set(kbs.map((k) => k.id)),
+  }
+
   const system = buildWizardSystemPrompt({
     organizationId: args.organizationId,
     userRole: args.userRole,
@@ -147,6 +155,14 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
     orgId: args.organizationId,
     userId: args.userId,
     deps,
+    onProposal: (payload) => {
+      const { payload: clean } = sanitizeProposal(payload, known)
+      payload.model = clean.model
+      payload.selectedToolIds = clean.selectedToolIds
+      payload.selectedSkillIds = clean.selectedSkillIds
+      payload.selectedMcpServerIds = clean.selectedMcpServerIds
+      payload.knowledgeBaseGroupIds = clean.knowledgeBaseGroupIds
+    },
   })
 
   // Convert WizardMessage (content: string) to UIMessage format (parts array)

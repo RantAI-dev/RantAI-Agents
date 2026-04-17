@@ -122,6 +122,15 @@ export function WizardPageClient({ initialAssistants, catalogs }: Props) {
           })
         )
       }
+      if ((d.selectedWorkflowIds ?? []).length > 0) {
+        bindings.push(
+          fetch(`/api/assistants/${created.id}/workflows`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ workflowIds: d.selectedWorkflowIds }),
+          })
+        )
+      }
       await Promise.all(bindings)
       refetch()
       router.replace(`/dashboard/agent-builder/${created.id}`)
