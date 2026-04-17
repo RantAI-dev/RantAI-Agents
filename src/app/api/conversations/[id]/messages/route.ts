@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { ConversationIdParamsSchema } from "@/features/chat-public/schema"
 import {
   isChatPublicServiceError,
@@ -7,11 +7,11 @@ import {
 } from "@/features/chat-public/service"
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const userId = await getUserId(request)
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { CreateConversationBodySchema } from "@/features/chat-public/schema"
 import {
   createConversationRecord,
@@ -7,9 +7,9 @@ import {
   listConversations,
 } from "@/features/chat-public/service"
 
-export async function GET() {
-  const session = await auth()
-  if (!session?.user?.id) {
+export async function GET(req: Request) {
+  const userId = await getUserId(req)
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -22,8 +22,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const userId = await getUserId(request)
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 

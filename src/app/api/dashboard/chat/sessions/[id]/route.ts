@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import {
   DashboardChatSessionIdParamsSchema,
   DashboardChatSessionUpdateBodySchema,
@@ -16,8 +16,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -27,7 +27,7 @@ export async function GET(
     }
 
     const result = await getDashboardChatSession({
-      userId: session.user.id,
+      userId,
       sessionId: parsedParams.data.id,
     })
 
@@ -47,8 +47,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -59,7 +59,7 @@ export async function PATCH(
 
     const parsedBody = DashboardChatSessionUpdateBodySchema.safeParse(await req.json())
     const result = await updateDashboardChatSession({
-      userId: session.user.id,
+      userId,
       sessionId: parsedParams.data.id,
       input: parsedBody.data,
     })
@@ -80,8 +80,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -91,7 +91,7 @@ export async function DELETE(
     }
 
     const result = await deleteDashboardChatSession({
-      userId: session.user.id,
+      userId,
       sessionId: parsedParams.data.id,
     })
 

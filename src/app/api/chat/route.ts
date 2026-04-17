@@ -6,16 +6,21 @@ import {
   isChatPublicServiceError,
   runChat,
 } from "@/features/chat-public/service"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
+import { prisma } from "@/lib/prisma"
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const userId = await getUserId(req)
+  if (!userId) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     })
   }
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true },
+  })
 
   const parsedHeaders = ChatRequestHeadersSchema.safeParse({
     assistantId: req.headers.get("X-Assistant-Id"),
@@ -49,8 +54,8 @@ export async function POST(req: Request) {
 
   const result = await runChat({
     body: parsedBody.data,
-    userId: session.user.id,
-    userName: session.user.name,
+    userId,
+    userName: user?.name ?? null,
     headers: parsedHeaders.data,
   })
 
