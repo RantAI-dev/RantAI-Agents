@@ -13,6 +13,7 @@ import { useModels } from "@/hooks/use-models"
 import { AgentEditorLayout, type TabId } from "@/features/assistants/components/builder/agent-editor-layout"
 import {
   computeTabStatus,
+  isDeployReady,
   type CompletenessFormState,
   type TabStatus,
 } from "@/features/assistants/core/completeness"
@@ -476,6 +477,8 @@ export default function AgentEditorPageClient({
     return acc
   }, {} as Record<TabId, TabStatus>)
 
+  const readiness = isDeployReady(completenessForm)
+
   if (isLoading && !isNew) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -607,6 +610,8 @@ export default function AgentEditorPageClient({
           agentModel={form.model}
           agentCreatedAt={formAssistant.createdAt}
           isNew={isNew}
+          readiness={readiness}
+          onJumpToTab={setActiveTab}
         />
       )}
     </AgentEditorLayout>
