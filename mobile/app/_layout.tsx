@@ -10,6 +10,8 @@ import { queryClient, queryPersister } from "@/lib/query-client"
 import { useAuthStore } from "@/auth/use-auth-store"
 import { initSentry } from "@/lib/sentry"
 import { registerPushToken } from "@/push/register"
+import { configureNotifications } from "@/push/handler"
+import { subscribeDeepLinks } from "@/lib/deep-links"
 
 initSentry()
 
@@ -20,6 +22,15 @@ export default function RootLayout() {
   const [pushAttempted, setPushAttempted] = useState(false)
 
   useEffect(() => { void bootstrap() }, [bootstrap])
+
+  useEffect(() => {
+    const unsubNotifications = configureNotifications()
+    const unsubDeepLinks = subscribeDeepLinks()
+    return () => {
+      unsubNotifications()
+      unsubDeepLinks()
+    }
+  }, [])
 
   useEffect(() => {
     if (activeAccount && !pushAttempted) {
