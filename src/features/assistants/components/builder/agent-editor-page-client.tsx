@@ -170,6 +170,13 @@ export default function AgentEditorPageClient({
   const [isDirty, setIsDirty] = useState(isNew)
   const initializedRef = useRef(false)
 
+  // Defensive redirect: /dashboard/agent-builder/new should use the dedicated wizard route
+  useEffect(() => {
+    if (id === "new") {
+      router.replace("/dashboard/agent-builder/new")
+    }
+  }, [id, router])
+
   // Load existing agent data
   useEffect(() => {
     if (isNew || isLoading || initializedRef.current) return
