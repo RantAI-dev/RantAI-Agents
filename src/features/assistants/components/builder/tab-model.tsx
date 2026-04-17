@@ -14,6 +14,7 @@ import { ModelSelectorDropdown } from "./model-selector-dropdown"
 import { ModelParamSlider } from "./model-param-slider"
 import { getModelById, type LLMModel } from "@/lib/models"
 import type { ModelConfig } from "@/lib/types/assistant"
+import { isModelValid } from "@/features/assistants/core/completeness"
 
 interface TabModelProps {
   model: string
@@ -54,13 +55,19 @@ export function TabModel({
       {/* Model Selection */}
       <section className="space-y-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Model</h2>
+          <h2 className="text-sm font-semibold text-foreground">Model <span className="text-destructive">*</span></h2>
           <p className="text-xs text-muted-foreground mt-1">
             Choose the LLM that powers this agent.
           </p>
         </div>
 
         <ModelSelectorDropdown selectedModelId={model} onSelect={onModelChange} models={models} />
+
+        {!isModelValid(model, (models ?? []).map((m) => m.id)) && (
+          <p className="text-xs text-destructive">
+            Select a model to continue.
+          </p>
+        )}
 
         {/* Selected model details card */}
         {modelInfo && (

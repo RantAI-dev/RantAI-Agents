@@ -13,6 +13,7 @@ import { StructuredPromptEditor } from "./structured-prompt-editor"
 import { PromptTemplatePicker } from "./prompt-template-picker"
 import { AiPromptGenerator } from "./ai-prompt-generator"
 import { PromptVariables } from "./prompt-variables"
+import { isNameValid, isSystemPromptValid } from "@/features/assistants/core/completeness"
 
 interface TabConfigureProps {
   name: string
@@ -60,6 +61,10 @@ export function TabConfigure({
   onTagsChange,
 }: TabConfigureProps) {
   const [tagInput, setTagInput] = useState("")
+  const [nameTouched, setNameTouched] = useState(false)
+  const [promptTouched, setPromptTouched] = useState(false)
+  const nameError = nameTouched && !isNameValid(name)
+  const promptError = promptTouched && !isSystemPromptValid(systemPrompt)
 
   const addTag = (value: string) => {
     const trimmed = value.trim()
@@ -72,8 +77,13 @@ export function TabConfigure({
   const removeTag = (tag: string) => {
     onTagsChange(tags.filter((t) => t !== tag))
   }
+  const handleSystemPromptChange = (v: string) => {
+    onSystemPromptChange(v)
+    setPromptTouched(true)
+  }
+
   const handleTemplatePick = (prompt: string, templateEmoji: string) => {
-    onSystemPromptChange(prompt)
+    handleSystemPromptChange(prompt)
     onEmojiChange(templateEmoji)
   }
 
@@ -96,13 +106,21 @@ export function TabConfigure({
           {/* Name & Description */}
           <div className="flex-1 space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="agent-name">Name</Label>
+              <Label htmlFor="agent-name">
+                Name <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="agent-name"
                 value={name}
                 onChange={(e) => onNameChange(e.target.value)}
+                onBlur={() => setNameTouched(true)}
                 placeholder="My Agent"
+                aria-invalid={nameError}
+                className={nameError ? "border-destructive" : ""}
               />
+              {nameError && (
+                <p className="text-xs text-destructive">Name is required.</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="agent-description">Description</Label>
@@ -169,12 +187,14 @@ export function TabConfigure({
 
       {/* System Prompt */}
       <section className="space-y-4">
-        <h2 className="text-sm font-semibold text-foreground">System Prompt</h2>
+        <h2 className="text-sm font-semibold text-foreground">
+          System Prompt <span className="text-destructive">*</span>
+        </h2>
 
         <AiPromptGenerator
           currentPrompt={systemPrompt}
           onGenerated={({ systemPrompt: prompt, suggestedName, suggestedEmoji }) => {
-            onSystemPromptChange(prompt)
+            handleSystemPromptChange(prompt)
             if (suggestedName) onNameChange(suggestedName)
             if (suggestedEmoji) onEmojiChange(suggestedEmoji)
           }}
@@ -187,15 +207,21 @@ export function TabConfigure({
 
         <StructuredPromptEditor
           systemPrompt={systemPrompt}
-          onSystemPromptChange={onSystemPromptChange}
+          onSystemPromptChange={handleSystemPromptChange}
           defaultStructured={isNew}
         />
 
         <PromptVariables
           onInsert={(token) => {
-            onSystemPromptChange(systemPrompt + token)
+            handleSystemPromptChange(systemPrompt + token)
           }}
         />
+
+        {promptError && (
+          <p className="text-xs text-destructive">
+            System prompt must be at least 20 characters.
+          </p>
+        )}
       </section>
 
       {/* Live Chat Handoff */}
