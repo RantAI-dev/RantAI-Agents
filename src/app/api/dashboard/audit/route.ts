@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   listDashboardAuditLogs,
@@ -16,12 +16,12 @@ function isServiceError(value: unknown): value is ServiceError {
 // GET /api/dashboard/audit — query audit logs with filters
 export async function GET(req: Request) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, userId)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }

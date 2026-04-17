@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { getOrganizationContext } from "@/lib/organization"
 import {
   DashboardDigitalEmployeeIdParamsSchema,
@@ -18,13 +18,13 @@ interface RouteParams {
 
 export async function GET(req: Request, { params }: RouteParams) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContext(req, userId)
     const result = await getDashboardDigitalEmployee({
       id,
       organizationId: orgContext?.organizationId ?? null,
@@ -42,13 +42,13 @@ export async function GET(req: Request, { params }: RouteParams) {
 
 export async function PUT(req: Request, { params }: RouteParams) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContext(req, userId)
     const parsed = DashboardDigitalEmployeeUpdateBodySchema.safeParse(await req.json())
     if (!parsed.success) {
       return NextResponse.json(
@@ -62,7 +62,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
       context: {
         organizationId: orgContext?.organizationId ?? null,
         role: orgContext?.membership.role ?? null,
-        userId: session.user.id,
+        userId: userId,
       },
       input: parsed.data,
     })
@@ -79,19 +79,19 @@ export async function PUT(req: Request, { params }: RouteParams) {
 
 export async function DELETE(req: Request, { params }: RouteParams) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContext(req, userId)
     const result = await deleteDashboardDigitalEmployee({
       id,
       context: {
         organizationId: orgContext?.organizationId ?? null,
         role: orgContext?.membership.role ?? null,
-        userId: session.user.id,
+        userId: userId,
       },
     })
     if (isServiceError(result)) {

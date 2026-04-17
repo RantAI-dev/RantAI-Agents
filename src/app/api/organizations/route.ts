@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { CreateOrganizationSchema } from "@/features/organizations/core/schema"
 import {
   createOrganizationForUser,
@@ -8,14 +8,14 @@ import {
 import { isHttpServiceError } from "@/features/shared/http-service-error"
 
 // GET /api/organizations - List all organizations for the current user
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const organizations = await listOrganizationsForUser(session.user.id)
+    const organizations = await listOrganizationsForUser(userId)
     return NextResponse.json(organizations)
   } catch (error) {
     console.error("[Organizations API] GET error:", error)
@@ -29,7 +29,7 @@ export async function GET() {
 // POST /api/organizations - Create a new organization
 export async function POST(req: Request) {
   try {
-    const session = await auth()
+    const userId = await getUserId(req)
     if (!session?.user?.id || !session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
     const organization = await createOrganizationForUser({
       input: parsed.data,
-      userId: session.user.id,
+      userId: userId,
       userEmail: session.user.email,
       userName: session.user.name ?? undefined,
     })

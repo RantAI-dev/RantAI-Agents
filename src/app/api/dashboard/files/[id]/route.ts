@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { getOrganizationContext } from "@/lib/organization"
 import {
   KnowledgeDocumentIdParamsSchema,
@@ -18,8 +18,8 @@ interface RouteParams {
 
 // GET - Get a single document with chunks
 export async function GET(request: Request, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const userId = await getUserId(request)
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid document id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
     const result = await getKnowledgeDocumentForDashboard({
       documentId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
@@ -48,8 +48,8 @@ export async function GET(request: Request, { params }: RouteParams) {
 
 // PUT - Update document metadata, categories, and groups
 export async function PUT(request: Request, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const userId = await getUserId(request)
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -59,7 +59,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid document id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
     const parsedBody = KnowledgeDocumentUpdateSchema.safeParse(await request.json())
     if (!parsedBody.success) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
@@ -85,8 +85,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
 // DELETE - Delete a document, its chunks, entities, and relations
 export async function DELETE(request: Request, { params }: RouteParams) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const userId = await getUserId(request)
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -96,7 +96,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid document id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
     const result = await deleteKnowledgeDocumentForDashboard({
       documentId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,

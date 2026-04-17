@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { getOrganizationContext } from "@/lib/organization"
 import {
   KnowledgeDocumentCreateSchema,
@@ -42,13 +42,13 @@ function parseDelimitedList(value: FormDataEntryValue | null): string[] {
 
 // GET - List all documents
 export async function GET(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const userId = await getUserId(request)
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
     const parsedQuery = KnowledgeDocumentListQuerySchema.safeParse({
       groupId: new URL(request.url).searchParams.get("groupId") || undefined,
     })
@@ -73,13 +73,13 @@ export async function GET(request: Request) {
 
 // POST - Create a new document
 export async function POST(request: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const userId = await getUserId(request)
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
     const searchParams = new URL(request.url).searchParams
     const useEnhanced = searchParams.get("enhanced") === "true"
     const useCombined = searchParams.get("combined") !== "false"
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
 
       const result = await createKnowledgeDocumentForDashboard({
         context: {
-          userId: session.user.id,
+          userId: userId,
           organizationId: orgContext?.organizationId ?? null,
           role: orgContext?.membership.role ?? null,
         },
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
 
     const result = await createKnowledgeDocumentForDashboard({
       context: {
-        userId: session.user.id,
+        userId: userId,
         organizationId: orgContext?.organizationId ?? null,
         role: orgContext?.membership.role ?? null,
       },

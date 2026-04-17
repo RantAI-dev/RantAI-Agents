@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import {
   OrganizationDetailParamsSchema,
   UpdateOrganizationSchema,
@@ -17,8 +17,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -28,7 +28,7 @@ export async function GET(
     }
 
     const organization = await getOrganizationDetail({
-      actorUserId: session.user.id,
+      actorUserId: userId,
       organizationId: parsedParams.data.id,
     })
     if (isHttpServiceError(organization)) {
@@ -51,8 +51,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -70,7 +70,7 @@ export async function PATCH(
     }
 
     const organization = await updateOrganizationDetail({
-      actorUserId: session.user.id,
+      actorUserId: userId,
       organizationId: parsedParams.data.id,
       input: parsedBody.data,
     })
@@ -94,8 +94,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -105,7 +105,7 @@ export async function DELETE(
     }
 
     const result = await deleteOrganizationDetail({
-      actorUserId: session.user.id,
+      actorUserId: userId,
       organizationId: parsedParams.data.id,
     })
     if (isHttpServiceError(result)) {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { getOrganizationContext } from "@/lib/organization"
 import {
   CreateAssistantSchema,
@@ -14,12 +14,12 @@ import { isHttpServiceError } from "@/features/shared/http-service-error"
 // Built-in assistants are created by seed.ts during setup (bun run setup)
 export async function GET(request: Request) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(request)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
     const assistants = await listAssistantsForUser({
       organizationId: orgContext?.organizationId ?? null,
       role: orgContext?.membership.role ?? null,
@@ -37,12 +37,12 @@ export async function GET(request: Request) {
 // POST /api/assistants - Create new assistant
 export async function POST(request: Request) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(request)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
     const parsed = CreateAssistantSchema.safeParse(await request.json())
     if (!parsed.success) {
       return NextResponse.json(
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     }
 
     const assistant = await createAssistantForUser({
-      userId: session.user.id,
+      userId: userId,
       input: parsed.data,
       organizationId: orgContext?.organizationId ?? null,
       role: orgContext?.membership.role ?? null,

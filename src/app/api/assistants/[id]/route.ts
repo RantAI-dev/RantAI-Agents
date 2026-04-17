@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { getOrganizationContext } from "@/lib/organization"
 import {
   AssistantIdParamsSchema,
@@ -19,8 +19,8 @@ interface RouteParams {
 // GET /api/assistants/[id] - Get single assistant
 export async function GET(request: Request, { params }: RouteParams) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(request)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -28,7 +28,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
     const assistant = await getAssistantForUser({
       id: parsedParams.data.id,
       context: {
@@ -53,8 +53,8 @@ export async function GET(request: Request, { params }: RouteParams) {
 // PUT /api/assistants/[id] - Update assistant
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(request)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -62,7 +62,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
     const bodyParse = UpdateAssistantSchema.safeParse(await request.json())
     if (!bodyParse.success) {
       return NextResponse.json(
@@ -72,7 +72,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
     const assistant = await updateAssistantForUser({
       id: parsedParams.data.id,
-      userId: session.user.id,
+      userId: userId,
       input: bodyParse.data,
       context: {
         organizationId: orgContext?.organizationId ?? null,
@@ -96,8 +96,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
 // DELETE /api/assistants/[id] - Delete assistant
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(request)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -105,7 +105,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContext(request, userId)
 
     const result = await deleteAssistantForUser({
       id: parsedParams.data.id,

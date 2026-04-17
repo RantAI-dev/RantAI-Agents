@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getUserId } from "@/lib/get-user-id"
 import { getOrganizationContext, getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   createDashboardDigitalEmployee,
@@ -12,12 +12,12 @@ import {
 // GET /api/dashboard/digital-employees - List employees
 export async function GET(req: Request) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await getOrganizationContext(req, userId)
     const employees = await listDashboardDigitalEmployees({
       organizationId: orgContext?.organizationId ?? null,
     })
@@ -32,12 +32,12 @@ export async function GET(req: Request) {
 // POST /api/dashboard/digital-employees - Create employee
 export async function POST(req: Request) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(req, userId)
     const parsed = DashboardDigitalEmployeeCreateBodySchema.safeParse(await req.json())
     if (!parsed.success) {
       return NextResponse.json(
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
       context: {
         organizationId: orgContext?.organizationId ?? null,
         role: orgContext?.membership.role ?? null,
-        userId: session.user.id,
+        userId: userId,
         userEmail: session.user.email ?? null,
         userName: session.user.name ?? null,
       },
