@@ -8,6 +8,21 @@ import {
   isSystemPromptValid,
 } from "@/features/assistants/core/completeness"
 
+function uncertaintyKeyFor(field: keyof WizardDraft, id: string): string {
+  switch (field) {
+    case "selectedToolIds":
+      return `tool:${id}`
+    case "selectedSkillIds":
+      return `skill:${id}`
+    case "selectedMcpServerIds":
+      return `mcp:${id}`
+    case "knowledgeBaseGroupIds":
+      return `kb:${id}`
+    default:
+      return String(field)
+  }
+}
+
 interface CatalogEntry {
   id: string
   name: string
@@ -99,19 +114,22 @@ export function WizardPreview({ draft, uncertainty, catalogs, onUserEdit }: Prop
                 <p className="text-xs text-muted-foreground">—</p>
               ) : (
                 <div className="flex flex-wrap gap-1.5">
-                  {ids.map((id) => (
-                    <WizardChip
-                      key={id}
-                      label={entryLabel(id, catalog)}
-                      suggested={uncertainty[key] === "ai-suggested"}
-                      onRemove={() =>
-                        onUserEdit(
-                          key,
-                          ids.filter((x) => x !== id) as WizardDraft[typeof key]
-                        )
-                      }
-                    />
-                  ))}
+                  {ids.map((id) => {
+                    const ukey = uncertaintyKeyFor(key, id)
+                    return (
+                      <WizardChip
+                        key={id}
+                        label={entryLabel(id, catalog)}
+                        suggested={uncertainty[ukey] === "ai-suggested"}
+                        onRemove={() =>
+                          onUserEdit(
+                            key,
+                            ids.filter((x) => x !== id) as WizardDraft[typeof key]
+                          )
+                        }
+                      />
+                    )
+                  })}
                 </div>
               )}
             </section>

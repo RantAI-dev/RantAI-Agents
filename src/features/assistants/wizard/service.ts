@@ -40,7 +40,11 @@ Rules:
 4. If the user corrects something mid-conversation, call refineAgent with a partial patch.
 5. Pick a sensible default model from listModels (prefer function-calling if tools are needed).
 6. System prompt must be at least 20 characters. Use the structure: ## Goal / ## Skills / ## Workflow / ## Constraints.
-7. Stop after proposeAgent succeeds unless the user asks for changes.`
+7. Stop after proposeAgent succeeds unless the user asks for changes.
+8. When emitting the \`uncertainty\` field in proposeAgent / refineAgent:
+   - For scalar fields, use the field name as the key (e.g., "name", "model", "systemPrompt", "openingMessage", "emoji", "description").
+   - For collection items, key = "<type>:<id>" — examples: "tool:tool_abc123", "skill:skl_def456", "mcp:mcp_789", "kb:kbg_012".
+   - Mark every field/item you propose with value "ai-suggested". Omit any keys for fields you did not set.`
 }
 
 export interface StreamAssistantWizardArgs {
@@ -165,15 +169,17 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
     },
   })
 
-  // Convert WizardMessage (content: string) to UIMessage format (parts array)
-  // that convertToModelMessages expects
-  const uiMessages = args.messages.map((m) => ({
-    id: `msg_${Math.random().toString(36).slice(2)}`,
-    role: m.role,
-    parts: [{ type: "text" as const, text: m.content }],
-  }))
+  // System context comes via streamText({ system }), so drop any system role
+  // messages from the conversation log before conversion.
+  const uiMessages = args.messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      id: `msg_${Math.random().toString(36).slice(2)}`,
+      role: m.role as "user" | "assistant",
+      parts: [{ type: "text" as const, text: m.content }],
+    }))
 
-  const modelMessages = await convertToModelMessages(uiMessages as never)
+  const modelMessages = await convertToModelMessages(uiMessages)
 
   return streamText({
     model: openrouter(WIZARD_MODEL_ID),

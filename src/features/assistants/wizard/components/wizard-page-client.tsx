@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useMemo, useState } from "react"
+import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useModels } from "@/hooks/use-models"
@@ -94,44 +95,57 @@ export function WizardPageClient({ initialAssistants, catalogs }: Props) {
       })
       if (!created) return
 
-      const bindings: Promise<unknown>[] = []
-      if ((d.selectedToolIds ?? []).length > 0) {
-        bindings.push(
-          fetch(`/api/assistants/${created.id}/tools`, {
+      const bindingResults: Array<{ kind: string; ok: boolean }> = []
+      const runBinding = async (kind: string, url: string, body: unknown) => {
+        try {
+          const res = await fetch(url, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ toolIds: d.selectedToolIds }),
+            body: JSON.stringify(body),
+          })
+          bindingResults.push({ kind, ok: res.ok })
+        } catch {
+          bindingResults.push({ kind, ok: false })
+        }
+      }
+
+      const tasks: Promise<void>[] = []
+      if ((d.selectedToolIds ?? []).length > 0) {
+        tasks.push(
+          runBinding("tools", `/api/assistants/${created.id}/tools`, {
+            toolIds: d.selectedToolIds,
           })
         )
       }
       if ((d.selectedSkillIds ?? []).length > 0) {
-        bindings.push(
-          fetch(`/api/assistants/${created.id}/skills`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ skillIds: d.selectedSkillIds }),
+        tasks.push(
+          runBinding("skills", `/api/assistants/${created.id}/skills`, {
+            skillIds: d.selectedSkillIds,
           })
         )
       }
       if ((d.selectedMcpServerIds ?? []).length > 0) {
-        bindings.push(
-          fetch(`/api/assistants/${created.id}/mcp-servers`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mcpServerIds: d.selectedMcpServerIds }),
+        tasks.push(
+          runBinding("MCP servers", `/api/assistants/${created.id}/mcp-servers`, {
+            mcpServerIds: d.selectedMcpServerIds,
           })
         )
       }
       if ((d.selectedWorkflowIds ?? []).length > 0) {
-        bindings.push(
-          fetch(`/api/assistants/${created.id}/workflows`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ workflowIds: d.selectedWorkflowIds }),
+        tasks.push(
+          runBinding("workflows", `/api/assistants/${created.id}/workflows`, {
+            workflowIds: d.selectedWorkflowIds,
           })
         )
       }
-      await Promise.all(bindings)
+      await Promise.all(tasks)
+
+      const failed = bindingResults.filter((r) => !r.ok).map((r) => r.kind)
+      if (failed.length > 0) {
+        toast.warning(
+          `Agent created, but failed to attach: ${failed.join(", ")}. You can re-add them in the editor.`
+        )
+      }
       refetch()
       router.replace(`/dashboard/agent-builder/${created.id}`)
     } finally {

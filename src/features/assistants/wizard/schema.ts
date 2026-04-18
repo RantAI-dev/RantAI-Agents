@@ -1,9 +1,9 @@
 import { z } from "zod"
 
 export const WizardMessageSchema = z.object({
-  id: z.string(),
+  id: z.string().max(64),
   role: z.enum(["user", "assistant", "system"]),
-  content: z.string(),
+  content: z.string().max(4000),
 })
 
 export type WizardMessage = z.infer<typeof WizardMessageSchema>
@@ -67,7 +67,7 @@ export const RefineAgentInputSchema = ProposeAgentInputSchema.partial().extend({
 export type RefineAgentInput = z.infer<typeof RefineAgentInputSchema>
 
 export const WizardStreamRequestSchema = z.object({
-  messages: z.array(WizardMessageSchema),
+  messages: z.array(WizardMessageSchema).max(40),
   draft: WizardDraftSchema,
 })
 
