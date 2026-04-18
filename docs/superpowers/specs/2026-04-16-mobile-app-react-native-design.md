@@ -100,8 +100,9 @@ app/
 │   │   └── [id].tsx                  # conversation detail
 │   ├── agents/
 │   │   ├── index.tsx                 # tabbed: assistants / digital-employees
+│   │   ├── assistants/new.tsx        # AI-first wizard (mirrors web /agent-builder/new)
 │   │   ├── assistants/[id].tsx
-│   │   ├── assistants/[id]/edit.tsx  # agent-builder
+│   │   ├── assistants/[id]/edit.tsx  # agent-builder editor
 │   │   └── digital-employees/[id].tsx
 │   ├── knowledge/
 │   │   ├── index.tsx                 # tabbed: files / media / groups / marketplace
@@ -129,7 +130,8 @@ Workflows surfaces are absent from the tab bar; any deep link or backend referen
 For every existing dashboard route in `src/app/dashboard/*` (except workflows), there is a mobile screen in the corresponding `mobile/src/features/*` folder. Highlights of non-obvious adaptations:
 
 - **Chat detail** — virtualized FlashList of messages, bottom composer (attach / voice / send), streaming token rendering via `useChat`, keyboard-avoiding behavior, swipe-down-to-dismiss
-- **Agent builder** — react-native-reusables `Form` for fields; bottom-sheet pickers for model/tool/MCP selection. Any "canvas-style" features (visual graph editing, if added later) show "Manage on web" CTA
+- **Agent creation (`assistants/new.tsx`)** — AI-first wizard mirroring the web `/dashboard/agent-builder/new` (see `docs/superpowers/specs/2026-04-17-agent-builder-wizard-design.md`). Mobile adaptation of the desktop split view: full-screen streaming chat takes the whole screen with a sticky bottom **Readiness card** (name / prompt / model dots + "Create Agent" CTA + "Preview" trigger). Tapping Preview opens a bottom-sheet (snap points 50% / 90%) showing the live draft — identity, model chip, capability chips with per-chip "AI-suggested" badges and tap-to-remove (X), and the readiness strip. Action bar: native header with Back / **Skip to manual editor** / **Start over**. Reuses the existing `POST /api/assistants/wizard/stream` endpoint via the unified `authenticateRequest()` helper added in Phase A (cookie + Bearer), so no mobile-specific endpoint is needed. SSE parsing uses the same pattern as chat streaming. The reducer (`useWizardDraft`) and Zod schemas from `src/features/assistants/wizard/{schema,tools,service}.ts` are imported directly via the mobile `tsconfig` paths alias — no duplicated types.
+- **Agent builder editor (`assistants/[id]/edit.tsx`)** — react-native-reusables `Form` for fields; bottom-sheet pickers for model/tool/MCP selection. **Required-field flagging** parity with web: inline red `*` markers on Name / System Prompt / Model + section header status dots (red / green / hollow) on the form's accordion sections, driven by the shared pure helper `src/features/assistants/core/completeness.ts`. Deploy section shows a `DeployReadinessPanel`-equivalent card with field jump-to (taps scroll to and focus the missing field). Any "canvas-style" features (visual graph editing, if added later) show "Manage on web" CTA.
 - **Files / Knowledge** — chunked upload via `expo-document-picker` → multipart to existing `/api/files` upload route; PDF preview via `react-native-pdf`; unsupported types open the system share-sheet
 - **Marketplace** — same listing API as web; install confirmation as a bottom sheet
 - **Audit** — paginated FlashList with filter chips; tap row → detail screen
@@ -289,7 +291,7 @@ Additive only — no breaking changes to web:
 - `src/app/api/mobile/push/{register,unregister}/route.ts`
 - A handful of `src/app/api/mobile/*` slim-payload endpoints — added only where a measured web payload exceeds **50 KB** for a typical user OR where the response embeds rendered HTML/markup that mobile cannot consume directly. Initial candidates: `GET /api/mobile/conversations` (list), `GET /api/mobile/assistants` (list), `GET /api/mobile/files` (list with thumbnails). Each gets justified with a payload measurement before implementation
 - `src/lib/auth-mobile.ts` — JWT issue/verify/refresh, deviceId binding
-- `src/lib/auth-helpers.ts` — refactored to `authenticateRequest()` accepting both cookie and Bearer
+- `src/lib/auth-helpers.ts` — refactored to `authenticateRequest()` accepting both cookie and Bearer. Phase A migration must include `src/app/api/assistants/wizard/stream/route.ts` (and any other endpoints the mobile reuses) so the wizard works from mobile
 - `src/lib/push/sender.ts` + 4–6 small trigger hooks in existing services (chat, runtime, audit, organization)
 - New Prisma models: `MobileSession`, `MobilePushToken`
 
