@@ -11,7 +11,6 @@ import { AvatarPicker } from "./avatar-picker"
 import { OpeningSettings } from "./opening-settings"
 import { StructuredPromptEditor } from "./structured-prompt-editor"
 import { PromptTemplatePicker } from "./prompt-template-picker"
-import { AiPromptGenerator } from "./ai-prompt-generator"
 import { PromptVariables } from "./prompt-variables"
 import { isNameValid, isSystemPromptValid } from "@/features/assistants/core/completeness"
 
@@ -190,15 +189,6 @@ export function TabConfigure({
         <h2 className="text-sm font-semibold text-foreground">
           System Prompt <span className="text-destructive">*</span>
         </h2>
-
-        <AiPromptGenerator
-          currentPrompt={systemPrompt}
-          onGenerated={({ systemPrompt: prompt, suggestedName, suggestedEmoji }) => {
-            handleSystemPromptChange(prompt)
-            if (suggestedName) onNameChange(suggestedName)
-            if (suggestedEmoji) onEmojiChange(suggestedEmoji)
-          }}
-        />
 
         <PromptTemplatePicker
           currentPrompt={systemPrompt}
