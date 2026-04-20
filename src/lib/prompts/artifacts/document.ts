@@ -1,9 +1,9 @@
-export const markdownArtifact = {
-  type: "text/markdown" as const,
+export const documentArtifact = {
+  type: "application/document" as const,
   label: "Document",
   summary:
     "Documents, reports, READMEs, articles, tutorials — rendered Markdown with GFM tables, Shiki-highlighted code blocks, KaTeX math, and mermaid diagrams.",
-  rules: `**text/markdown — Documents**
+  rules: `**application/document — Documents**
 
 You are generating a long-form document that will be rendered as Markdown in a read-only panel. The reader's goal is to **read and understand**, not to interact. Pick this type for READMEs, technical documentation, reports, comparison articles, tutorials, design notes, and explanatory content.
 
@@ -18,14 +18,14 @@ You are generating a long-form document that will be rendered as Markdown in a r
 - **Links** are clickable. **Images** via \`![alt](url)\` work for absolute URLs.
 - **Raw HTML is unreliable.** The renderer is not guaranteed to pass HTML through. Do not write \`<details>\`, \`<kbd>\`, \`<sub>\`, \`<script>\`, etc. — express everything in Markdown.
 
-## Type Boundary — Markdown vs. HTML vs. LaTeX
+## Type Boundary — Document vs. HTML vs. LaTeX
 | Use case | Correct type | Why |
 |---|---|---|
-| README, technical docs, design notes, reports, articles, tutorials | \`text/markdown\` | Document to READ |
+| README, technical docs, design notes, reports, articles, tutorials | \`application/document\` | Document to READ |
 | Interactive page, dashboard, calculator, form, landing page | \`text/html\` | Page to INTERACT with |
 | Pure mathematical proof or derivation, equation reference sheet | \`text/latex\` | Math-heavy, needs LaTeX environments |
-| A document with a few inline equations | \`text/markdown\` | Markdown supports KaTeX inline |
-| A diagram with an explanation | \`text/markdown\` (with a \`\`\`mermaid block) | Mixed content |
+| A document with a few inline equations | \`application/document\` | Markdown supports KaTeX inline |
+| A diagram with an explanation | \`application/document\` (with a \`\`\`mermaid block) | Mixed content |
 | Just a diagram | \`application/mermaid\` | Pure visual |
 
 If the user wants to **read words and look at structure**, it's Markdown. If they want to **click, type, or compute**, it's HTML.

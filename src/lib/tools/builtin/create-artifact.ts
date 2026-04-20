@@ -23,7 +23,7 @@ export const createArtifactTool: ToolDefinition = {
     type: z
       .enum([
         "text/html",
-        "text/markdown",
+        "application/document",
         "image/svg+xml",
         "application/react",
         "application/mermaid",
@@ -35,7 +35,7 @@ export const createArtifactTool: ToolDefinition = {
         "application/3d",
       ])
       .describe(
-        "The artifact format. Choose based on content: text/html (interactive pages, dashboards, games), application/react (UI components, data visualizations), image/svg+xml (graphics, icons), application/mermaid (flowcharts, diagrams), application/code (source code), text/markdown (documents, reports), application/sheet (CSV tables), text/latex (math equations), application/slides (presentations as JSON), application/python (executable scripts), application/3d (R3F 3D scenes)"
+        "The artifact format. Choose based on content: text/html (interactive pages, dashboards, games), application/react (UI components, data visualizations), image/svg+xml (graphics, icons), application/mermaid (flowcharts, diagrams), application/code (source code), application/document (documents, reports), application/sheet (CSV tables), text/latex (math equations), application/slides (presentations as JSON), application/python (executable scripts), application/3d (R3F 3D scenes)"
       ),
     content: z
       .string()

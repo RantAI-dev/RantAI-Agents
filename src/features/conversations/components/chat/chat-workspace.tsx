@@ -1112,7 +1112,7 @@ export function ChatWorkspace({
 
   const handleDownloadArtifact = useCallback((artifact: Artifact) => {
     const EXT_MAP: Record<string, string> = {
-      "text/html": ".html", "text/markdown": ".md", "image/svg+xml": ".svg",
+      "text/html": ".html", "application/document": ".md", "image/svg+xml": ".svg",
       "application/react": ".tsx", "application/mermaid": ".mmd", "application/sheet": ".csv",
       "text/latex": ".tex", "application/slides": ".pptx", "application/python": ".py",
       "application/3d": ".tsx", "application/code": `.${artifact.language || "txt"}`,

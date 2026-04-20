@@ -736,7 +736,7 @@ function getExtension(artifact: Artifact): string {
   switch (artifact.type) {
     case "text/html":
       return ".html"
-    case "text/markdown":
+    case "application/document":
       return ".md"
     case "image/svg+xml":
       return ".svg"
@@ -789,7 +789,7 @@ function getCodeLanguage(artifact: Artifact): string {
   switch (artifact.type) {
     case "text/html":
       return "html"
-    case "text/markdown":
+    case "application/document":
       return "markdown"
     case "image/svg+xml":
       return "svg"
