@@ -13,6 +13,11 @@ import {
 } from "@/lib/icons"
 import type { ArtifactType } from "./types"
 
+// Labels are canonical in src/lib/prompts/artifacts (each type's sub-file
+// co-locates `label` with its `summary` + `rules`). Re-export as
+// TYPE_LABELS so UI consumers keep their existing import path.
+export { ARTIFACT_LABELS as TYPE_LABELS } from "@/lib/prompts/artifacts"
+
 export const TYPE_ICONS: Record<ArtifactType, typeof Globe> = {
   "text/html": Globe,
   "application/react": FileCode,
@@ -25,20 +30,6 @@ export const TYPE_ICONS: Record<ArtifactType, typeof Globe> = {
   "application/slides": Presentation,
   "application/python": Terminal,
   "application/3d": Box,
-}
-
-export const TYPE_LABELS: Record<ArtifactType, string> = {
-  "text/html": "HTML Page",
-  "application/react": "React Component",
-  "image/svg+xml": "SVG Graphic",
-  "application/mermaid": "Mermaid Diagram",
-  "text/markdown": "Document",
-  "application/code": "Code",
-  "application/sheet": "Spreadsheet",
-  "text/latex": "LaTeX / Math",
-  "application/slides": "Slides",
-  "application/python": "Python Script",
-  "application/3d": "3D Scene",
 }
 
 export const TYPE_COLORS: Record<ArtifactType, string> = {

@@ -9,7 +9,11 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    include: ["tests/**/*.test.ts", "src/features/**/*.test.ts"],
+    include: [
+      "tests/**/*.test.ts",
+      "src/features/**/*.test.ts",
+      "src/lib/**/*.test.ts",
+    ],
     testTimeout: 60000,
     hookTimeout: 60000,
     fileParallelism: false,
