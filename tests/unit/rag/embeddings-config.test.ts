@@ -6,6 +6,8 @@ describe("generateEmbedding model selection", () => {
 
   beforeEach(() => {
     process.env.OPENROUTER_API_KEY = "test-key"
+    delete process.env.KB_EMBEDDING_MODEL
+    delete process.env.KB_EMBEDDING_DIM
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ data: [{ embedding: new Array(4096).fill(0.1) }] }),

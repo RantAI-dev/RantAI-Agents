@@ -21,14 +21,14 @@ describe("getRagConfig", () => {
 
   it("returns SOTA defaults when no env vars set", () => {
     const cfg = getRagConfig()
+    expect(cfg.extractPrimary).toBe("openai/gpt-4.1-nano")
+    expect(cfg.extractFallback).toBe("google/gemini-3-flash-preview")
     expect(cfg.embeddingModel).toBe("qwen/qwen3-embedding-8b")
     expect(cfg.embeddingDim).toBe(4096)
     expect(cfg.rerankEnabled).toBe(false)
+    expect(cfg.rerankModel).toBe("google/gemini-3-flash-preview")
     expect(cfg.rerankInitialK).toBe(20)
     expect(cfg.rerankFinalK).toBe(5)
-    expect(cfg.extractPrimary).toBeTruthy()
-    expect(cfg.extractFallback).toBeTruthy()
-    expect(cfg.rerankModel).toBeTruthy()
   })
 
   it("reads overrides from env", () => {

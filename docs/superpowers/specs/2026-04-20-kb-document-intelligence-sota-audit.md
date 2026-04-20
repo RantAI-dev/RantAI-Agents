@@ -11,7 +11,11 @@ author: kleopas + claude-opus-4.7
 
 Using OpenRouter-reachable models only (no GPU available locally), we benchmarked the current RantAI-Agents knowledge-base pipeline against every reachable SOTA alternative. The current pipeline has **three high-confidence wins** available, ordered by impact-per-engineering-effort:
 
-1. **Replace `unpdf` with a vision-LLM extractor for PDFs.** `unpdf` produces 0 headings, 0 tables, 0 equations on a 15-page arxiv paper. Every vision-LLM tested produces proper markdown structure. This is the highest-impact change because **it cascades into chunking quality** — without paragraph/heading breaks, `SmartChunker` silently falls back to sentence splitting, throwing away section metadata. Pick **`google/gemini-3-flash-preview`** as primary (balanced: compact output, fast 4-5s, ~$0.02/doc, strong across doc types) with **`anthropic/claude-sonnet-4.6`** as "premium" fallback for equation/math-heavy docs. Avoid `gemini-2.5-flash-lite` and `gemini-2.5-flash` on table-heavy PDFs — they emit absurdly padded markdown tables (400K+ chars for 4 pages) that bloat both storage and subsequent LLM context.
+1. **Replace `unpdf` with a vision-LLM extractor for PDFs.** `unpdf` produces 0 headings, 0 tables, 0 equations on a 15-page arxiv paper. Every vision-LLM tested produces proper markdown structure. Cascades into chunking quality — without paragraph/heading breaks, `SmartChunker` silently falls back to sentence splitting, throwing away section metadata.
+
+   **Cost-aware pick (default):** `openai/gpt-4.1-nano` at **$0.00031/page** (~$87/month for 5K pages/day). Measured 2-4s latency, clean markdown with proper headings, preserves all numerical data on the financial-table stress doc. Fallback: `google/gemini-3-flash-preview` at $0.0024/page — best table structure fidelity, kicks in when the primary fails.
+
+   **Avoided:** `gemini-2.5-flash` and `gemini-2.5-flash-lite` without the compact-tables prompt fix (they emitted 400K+ char padded tables for a 4-page doc). The repo's current `VisionLlmExtractor` prompt includes the compact fix, so either is safe to pick via `KB_EXTRACT_PRIMARY`. `amazon/nova-lite-v1`, `openai/gpt-5-nano`, `bytedance-seed/seed-1.6-flash`, `qwen3-vl-{8b,32b,235b}`, `pixtral-large` either returned 0 chars, timed out, or were more expensive than `gpt-4.1-nano` for comparable quality.
 
 2. **Swap the embedding model** from `openai/text-embedding-3-small` → **`qwen/qwen3-embedding-8b`**. Measured: +14.3 pts hit@1 (0.771 → 0.914), +7.9 pts MRR (0.864 → 0.943), 4096-dim, and actually *faster* for batch embedding. Cost is ~2× (still $0.04/M tokens — negligible). Biggest single win on retrieval accuracy.
 
@@ -69,11 +73,28 @@ Structural comparison on `attention.pdf` (15-page arxiv paper, ground truth: 27 
 
 *Qualitative read (sampled lines 30-70 of each):* Claude Sonnet 4.6 produces the highest-fidelity LaTeX (`\sqrt{d_k}`, `\tag{1}` numbered equations, bold author names, italicized citations). Gemini-2.5-flash-lite is close behind at ~1/30th the cost. Unpdf produces a single flat blob with zero line breaks — when fed to `SmartChunker`, it hits the sentence-split fallback and loses section metadata entirely.
 
-**Decision:** primary = `google/gemini-3-flash-preview` (best balance: compact output, 4-5s latency, 26 headings, 214 equations captured, good on table-heavy docs). Runner-up = `anthropic/claude-haiku-4.5` (31 headings — most of any model — but slower at 10s). Premium fallback = `anthropic/claude-sonnet-4.6` for equation/math-critical docs.
+#### Cost-focused re-bench (post-initial-audit)
 
-Why NOT `gemini-2.5-flash-lite`: on `apple-10k` (table-heavy, 4 pages) it emitted **403,326 characters** of output — padded markdown tables with hundreds of spaces per cell. Both storage and downstream LLM context get bloated. The same model on `attention.pdf` (prose) was fine. Pattern-sensitive — safer to avoid.
+When we factored in "what if the user ingests 5K pages/day?", the original pick of `gemini-3-flash-preview` came out to ~$345/mo. Re-ran with cost priority. Both numbers below are measured.
 
-**Cost per doc (Gemini 3 Flash Preview):** ~$0.02 per 15-page paper. For 10K docs that's $200. Affordable.
+| Model | attention.pdf | apple-10k | $/page | $/mo @ 5K pg/day | notes |
+|---|---|---|---|---|---|
+| **openai/gpt-4.1-nano** | 2.1s, $0.0047 | 3.8s, $0.0023 | **$0.00031** | **$87** | 🥇 cost-aware default. Markdown + numerical data preserved. |
+| google/gemini-2.5-flash-lite | 5.6s, $0.0050 | 4.5s, **255K chars bloat** | $0.00067 | $101 | even with compact-tables prompt, bloats on tables. avoid. |
+| openai/gpt-5-nano | timeout on attention | 2.9s, $0.0057 | — | — | flaky on longer docs |
+| bytedance-seed/seed-1.6-flash | 0 chars | 9.4K chars, $0.010 | — | — | fails on attention |
+| amazon/nova-lite-v1 | 7.8s, $0.032 | 5.6s, $0.009 | ~$0.002 | $273 | OR-routed image tokens blow up cost |
+| x-ai/grok-4-fast | 4.5s, $0.0078, truncated? | — | — | — | fastest, short output — suspicious |
+| google/gemini-3-flash-preview | 4.8s, $0.036 | 4.3s, $0.024 | $0.0024 | $345 | quality-first fallback |
+| anthropic/claude-sonnet-4.6 | 10s, $0.15 | 6s, $0.06 | $0.010 | $1,500 | premium only |
+
+**Decision:** primary = `openai/gpt-4.1-nano`. Fallback = `google/gemini-3-flash-preview`. Premium escalation available via `KB_EXTRACT_PRIMARY=anthropic/claude-sonnet-4.6` per-deployment.
+
+Why nano works for RAG despite imperfect table cell alignment: retrieval matches against the *content* (numbers, entity names, phrases). The markdown structure needs to carry section boundaries (it does — nano emits proper `#`/`##`) and keep content intact (it does — all numbers present). Cell-border alignment doesn't affect retrieval.
+
+**Why NOT `gemini-2.5-flash-lite`:** on `apple-10k` (table-heavy, 4 pages) it emitted **255K-400K characters** of output even with a prompt explicitly demanding compact tables. Bloat is model-inherent. Both storage and downstream LLM context get wrecked.
+
+**Cost per doc (gpt-4.1-nano):** ~$0.005 per 15-page paper. For 10K docs that's $50. For 5K pages/day over a year: ~$570.
 
 ### 2. Chunking
 
@@ -159,9 +180,9 @@ No hallucinations observed on either model. Zero-hallucination at top-5 context 
               ┌─────────────────────────────────────────────┐
               │  INGESTION                                   │
               │                                              │
- upload ─►    │  if PDF:    gemini-3-flash-preview           │
-              │             (fallback: claude-sonnet-4.6)    │
-              │  if image:  gemini-3-flash-preview           │
+ upload ─►    │  if PDF:    gpt-4.1-nano                     │
+              │             (fallback: gemini-3-flash-preview)│
+              │  if image:  gpt-4.1-nano                     │
               │  if HTML:   strip → markdown                 │
               │  if MD/txt: passthrough                      │
               │                          │                    │
@@ -200,16 +221,16 @@ No hallucinations observed on either model. Zero-hallucination at top-5 context 
 ### Model defaults
 | role | default | premium fallback | notes |
 |---|---|---|---|
-| PDF extraction | `google/gemini-3-flash-preview` | `anthropic/claude-sonnet-4.6` | 4-5s, compact output, handles tables+prose |
-| Image OCR | `google/gemini-3-flash-preview` | `anthropic/claude-sonnet-4.6` | same |
+| PDF extraction | `openai/gpt-4.1-nano` | `google/gemini-3-flash-preview` | $0.00031/page (~$87/mo @ 5K pages/day). Quality fallback kicks in on primary error. |
+| Image OCR | `openai/gpt-4.1-nano` | `google/gemini-3-flash-preview` | same |
 | Embedding (doc + query) | `qwen/qwen3-embedding-8b` | — | 4096-dim, multilingual, 0.914 hit@1 measured |
 | Reranker (off by default) | OFF (raw cosine top-5) | LLM-rerank `google/gemini-3-flash-preview` on "quality" mode | +5.7 pts hit@1, +1700ms. Never enable `cohere/rerank-v3.5` on this stack — it *hurts* hit@1. |
 | Chat generator | `google/gemini-3-flash-preview` (fast, cheap, **4.54/5** measured) | `anthropic/claude-sonnet-4.6` | `gemini-2.5-flash-lite` is budget option (4.0/5, ¼ price) |
 
 ### Config surface
 - New env vars:
-  - `KB_EXTRACT_PRIMARY=google/gemini-3-flash-preview`
-  - `KB_EXTRACT_FALLBACK=anthropic/claude-sonnet-4.6`
+  - `KB_EXTRACT_PRIMARY=openai/gpt-4.1-nano` (cost-aware default; swap to `google/gemini-3-flash-preview` for quality-first)
+  - `KB_EXTRACT_FALLBACK=google/gemini-3-flash-preview`
   - `KB_EMBEDDING_MODEL=qwen/qwen3-embedding-8b`
   - `KB_RERANK_ENABLED=false` (default; set true for "quality" mode)
   - `KB_RERANK_MODEL=google/gemini-3-flash-preview` (only if enabled)

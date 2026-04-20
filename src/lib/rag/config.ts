@@ -10,8 +10,8 @@ export interface RagConfig {
 }
 
 const DEFAULTS: RagConfig = {
-  extractPrimary: "google/gemini-3-flash-preview",
-  extractFallback: "anthropic/claude-sonnet-4.6",
+  extractPrimary: "openai/gpt-4.1-nano",
+  extractFallback: "google/gemini-3-flash-preview",
   embeddingModel: "qwen/qwen3-embedding-8b",
   embeddingDim: 4096,
   rerankEnabled: false,
