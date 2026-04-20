@@ -5,83 +5,21 @@ import {
   HybridSearchResult,
   HybridSearchStats,
 } from "./hybrid-search";
+import { getRagConfig } from "./config";
+import { getDefaultReranker } from "./rerankers";
 
 /**
- * RAG Retriever - retrieves relevant context for user queries
- * Supports both basic vector search and hybrid search (vector + entity)
+ * RAG Retriever — retrieves relevant context for user queries.
+ *
+ * Supports:
+ *  - basic vector search (this file's retrieveContext / smartRetrieve)
+ *  - hybrid search (vector + entity/graph RRF, see hybrid-search.ts)
+ *  - optional LLM-as-reranker (top-20 → top-5), enabled via KB_RERANK_ENABLED
+ *
+ * The 2026-04-20 SOTA audit measured qwen/qwen3-embedding-8b as multilingual-
+ * native — Bahasa queries hit 0.914+ hit@1 without translation. The old
+ * detect-then-translate hop has been removed accordingly.
  */
-
-// Simple heuristic: common non-ASCII or Indonesian/Malay stop words
-const NON_ENGLISH_INDICATORS = [
-  "apa", "ada", "yang", "dan", "untuk", "dari", "ini", "itu", "saya",
-  "bisa", "mau", "bagaimana", "berapa", "dimana", "kapan", "siapa",
-  "apakah", "tolong", "halo", "selamat", "terima", "kasih", "dengan",
-  "tidak", "juga", "sudah", "belum", "produk", "asuransi", "klaim",
-  "premi", "polis", "pertanggungan", "manfaat", "biaya",
-];
-
-/**
- * Detect if a query is likely non-English
- */
-function isLikelyNonEnglish(query: string): boolean {
-  // Strip punctuation before checking
-  const words = query.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(Boolean);
-  const matches = words.filter((w) => NON_ENGLISH_INDICATORS.includes(w));
-  // If 30%+ of words match non-English indicators, treat as non-English
-  return matches.length >= Math.max(1, Math.ceil(words.length * 0.3));
-}
-
-/**
- * Translate a non-English query to English for better embedding match.
- * Uses a fast/cheap model via OpenRouter.
- */
-async function translateQueryForSearch(query: string): Promise<string> {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    console.log("[RAG] No OPENROUTER_API_KEY, skipping translation");
-    return query;
-  }
-
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "xiaomi/mimo-v2-flash",
-        messages: [
-          {
-            role: "system",
-            content: "Translate the following user question to English for semantic search over an insurance knowledge base. Keep the searchable intent precise — omit greetings like 'halo/hi/hello'. For broad questions (e.g. 'what products do you have?'), expand to include insurance context (e.g. 'What insurance products and plans are available?'). If already in English, output it as-is. Output ONLY the translated search query, nothing else.",
-          },
-          { role: "user", content: query },
-        ],
-        max_tokens: 200,
-        temperature: 0,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.warn(`[RAG] Translation API error: ${response.status} - ${errorText.slice(0, 200)}`);
-      return query;
-    }
-
-    const data = await response.json();
-    const translated = data.choices?.[0]?.message?.content?.trim();
-    if (translated && translated.length > 0) {
-      console.log(`[RAG] Translated query: "${query}" → "${translated}"`);
-      return translated;
-    }
-    console.warn("[RAG] Translation returned empty response");
-  } catch (error) {
-    console.warn("[RAG] Translation failed:", (error as Error).message);
-  }
-
-  return query;
-}
 
 export interface HybridRetrievalResult {
   context: string;
@@ -123,19 +61,43 @@ export async function retrieveContext(
     groupIds,
   } = options || {};
 
-  // Translate non-English queries for better embedding match
-  const searchQuery = isLikelyNonEnglish(query)
-    ? await translateQueryForSearch(query)
-    : query;
+  const cfg = getRagConfig();
+  const reranker = getDefaultReranker();
+  // When rerank is on, pull a wider pool and let the reranker prune to maxChunks.
+  const fetchLimit = reranker ? Math.max(cfg.rerankInitialK, maxChunks) : maxChunks;
 
-  // Search for similar chunks
-  const chunks = await searchWithThreshold(
-    searchQuery,
+  // Search for similar chunks — qwen3-embedding-8b handles Bahasa natively,
+  // so no translation hop is needed.
+  let chunks = await searchWithThreshold(
+    query,
     minSimilarity,
-    maxChunks,
+    fetchLimit,
     categoryFilter,
     groupIds
   );
+
+  if (reranker && chunks.length > maxChunks) {
+    const candidates = chunks.map((c, i) => ({
+      id: c.id,
+      text: c.content,
+      originalRank: i,
+      originalScore: c.similarity,
+    }));
+    try {
+      const ranked = await reranker.rerank(query, candidates, maxChunks);
+      const byId = new Map(chunks.map((c) => [c.id, c]));
+      chunks = ranked
+        .map((r) => byId.get(r.id))
+        .filter((c): c is SearchResult => c !== undefined);
+    } catch (err) {
+      console.warn(
+        `[RAG] rerank (${reranker.name}) failed, falling back to raw cosine order: ${(err as Error).message.slice(0, 120)}`
+      );
+      chunks = chunks.slice(0, maxChunks);
+    }
+  } else {
+    chunks = chunks.slice(0, maxChunks);
+  }
 
   if (chunks.length === 0) {
     return {
@@ -372,11 +334,6 @@ export async function hybridRetrieve(
     categoryFilter,
   } = options || {};
 
-  // Translate non-English queries for better embedding match
-  const searchQuery = isLikelyNonEnglish(query)
-    ? await translateQueryForSearch(query)
-    : query;
-
   const searchConfig: HybridSearchConfig = {
     vectorWeight,
     entityWeight,
@@ -387,7 +344,7 @@ export async function hybridRetrieve(
   };
 
   const hybridSearch = new HybridSearch(searchConfig);
-  const { results, stats } = await hybridSearch.search(searchQuery, maxResults);
+  const { results, stats } = await hybridSearch.search(query, maxResults);
 
   if (results.length === 0) {
     return {
