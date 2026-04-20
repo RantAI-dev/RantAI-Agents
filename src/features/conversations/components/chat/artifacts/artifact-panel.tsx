@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import type { Artifact } from "./types"
+import { TYPE_LABELS } from "./constants"
 import { ArtifactRenderer } from "./artifact-renderer"
 import { StreamdownContent } from "../streamdown-content"
 
@@ -49,20 +50,6 @@ interface ArtifactPanelProps {
   onDeleteArtifact?: (artifactId: string) => void
   onFixWithAI?: (artifactId: string, error: string) => void
   sessionId?: string
-}
-
-const TYPE_LABELS: Record<string, string> = {
-  "text/html": "HTML",
-  "text/markdown": "Markdown",
-  "image/svg+xml": "SVG",
-  "application/react": "React",
-  "application/mermaid": "Mermaid",
-  "application/code": "Code",
-  "application/sheet": "Spreadsheet",
-  "text/latex": "LaTeX",
-  "application/slides": "Slides",
-  "application/python": "Python",
-  "application/3d": "R3F Scene",
 }
 
 export function ArtifactPanel({

@@ -1,6 +1,6 @@
 export const r3fArtifact = {
   type: "application/3d" as const,
-  label: "R3F 3D Scene",
+  label: "3D Scene",
   summary:
     "Interactive 3D scenes with React Three Fiber — primitives, glTF models, and animations inside a pre-existing Canvas with OrbitControls and Environment.",
   rules: `**application/3d — Interactive 3D R3F Scenes**

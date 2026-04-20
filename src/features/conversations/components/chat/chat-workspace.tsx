@@ -60,7 +60,7 @@ import { ToolCallIndicator } from "./tool-call-indicator"
 import { useArtifacts } from "./artifacts/use-artifacts"
 import { ArtifactIndicator } from "./artifacts/artifact-indicator"
 import { ArtifactPanel } from "./artifacts/artifact-panel"
-import { isValidArtifactType, type Artifact, type ArtifactType } from "./artifacts/types"
+import { isArtifactType, type Artifact, type ArtifactType } from "./artifacts/types"
 import { TYPE_ICONS, TYPE_LABELS } from "./artifacts/constants"
 import { consumeSseChunk } from "./transports/sse"
 import { reduceEmployeePollEvents, type EmployeePollEvent } from "./transports/polling"
@@ -2150,7 +2150,7 @@ export function ChatWorkspace({
                       tc.args
                     ) {
                       const args = tc.args
-                      if (args.type && args.content && isValidArtifactType(args.type)) {
+                      if (args.type && args.content && isArtifactType(args.type)) {
                         const streamingId = tc.toolName === "update_artifact" && args.id
                           ? args.id as string
                           : `streaming-${part.toolCallId as string}`
@@ -2175,7 +2175,7 @@ export function ChatWorkspace({
                     // Handle create_artifact — replace streaming placeholder with final
                     if (tc.toolName === "create_artifact" && part.output && typeof part.output === "object") {
                       const out = part.output as Record<string, unknown>
-                      if (out.id && out.title && isValidArtifactType(out.type) && out.content) {
+                      if (out.id && out.title && isArtifactType(out.type) && out.content) {
                         // Remove streaming placeholder, add final artifact
                         removeArtifact(`streaming-${toolCallId}`)
                         addOrUpdateArtifact({

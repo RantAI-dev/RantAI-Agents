@@ -2,6 +2,7 @@ import {
   ALL_ARTIFACTS,
   ARTIFACT_TYPE_INSTRUCTIONS,
   ARTIFACT_TYPE_SUMMARIES,
+  isArtifactType,
 } from "./index"
 import { getDesignSystemContext } from "../design-system"
 
@@ -28,7 +29,7 @@ export function assembleArtifactContext(
       .join("\n")
     return `Choose the right artifact type:\n${lines}`
   }
-  if (!type) return ""
+  if (!type || !isArtifactType(type)) return ""
   const parts: string[] = []
   const rules = ARTIFACT_TYPE_INSTRUCTIONS[type]
   if (rules) parts.push(rules)
