@@ -2,8 +2,13 @@
  * RAG (Retrieval Augmented Generation) Module
  *
  * This module provides semantic search capabilities for RantAI Agents.
- * It uses OpenAI embeddings and SurrealDB for efficient vector similarity search.
+ * It uses OpenRouter-hosted embeddings and SurrealDB for efficient vector similarity search.
+ * Model choice is env-driven — see RagConfig.
  */
+
+// Config
+export { getRagConfig } from "./config";
+export type { RagConfig } from "./config";
 
 // Embeddings
 export { generateEmbedding, generateEmbeddings } from "./embeddings";
