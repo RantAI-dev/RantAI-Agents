@@ -63,18 +63,29 @@ export function cosine(a: number[], b: number[]): number {
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
 
-export function writeJson(p: string, data: any) {
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(data, null, 2));
+// Resolve paths relative to the bench-kb root (two levels up from this file)
+// so scripts work whether invoked from repo root or tests/bench-kb.
+const BENCH_ROOT = path.resolve(import.meta.dirname, "..");
+export function benchPath(p: string): string {
+  if (path.isAbsolute(p)) return p;
+  if (p.startsWith("./")) return path.resolve(BENCH_ROOT, p.slice(2));
+  return path.resolve(BENCH_ROOT, p);
 }
 
-export function readJson<T>(p: string): T { return JSON.parse(fs.readFileSync(p, "utf-8")); }
+export function writeJson(p: string, data: any) {
+  const abs = benchPath(p);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, JSON.stringify(data, null, 2));
+}
+
+export function readJson<T>(p: string): T { return JSON.parse(fs.readFileSync(benchPath(p), "utf-8")); }
 
 export function pdfToBase64(p: string): string {
-  return fs.readFileSync(p).toString("base64");
+  return fs.readFileSync(benchPath(p)).toString("base64");
 }
 
 export async function extractWithUnpdf(pdfPath: string): Promise<{ text: string; ms: number; pages: number }> {
+  pdfPath = benchPath(pdfPath);
   const t0 = Date.now();
   const { extractText, getDocumentProxy } = await import("unpdf");
   const buf = fs.readFileSync(pdfPath);

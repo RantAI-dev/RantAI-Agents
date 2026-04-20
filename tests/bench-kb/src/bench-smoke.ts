@@ -15,17 +15,34 @@ async function run() {
   const corpus = readJson<any[]>("./results/corpus-unpdf.json");
   const qa = readJson<any[]>("./results/qa.json").slice(0, SUBSET_SIZE);
   const allChunks = corpus.flatMap((d) => d.chunks);
+
+  // Subsample to cap the distractor pool — match audit methodology (355 chunks).
+  // Always include every expected-answer chunk; fill the rest evenly from the remainder.
+  const MAX_TOTAL = 400;
+  const expectedSet = new Set(qa.flatMap((q: any) => q.expected_chunk_ids as string[]));
+  let finalChunks = allChunks;
+  if (allChunks.length > MAX_TOTAL) {
+    const required = allChunks.filter((c: any) => expectedSet.has(c.id));
+    const others = allChunks.filter((c: any) => !expectedSet.has(c.id));
+    const step = Math.max(1, Math.ceil(others.length / (MAX_TOTAL - required.length)));
+    finalChunks = [
+      ...required,
+      ...others.filter((_, i) => i % step === 0).slice(0, MAX_TOTAL - required.length),
+    ];
+    finalChunks.sort((a: any, b: any) => a.id.localeCompare(b.id));
+  }
+
   const idxMap: Record<string, number> = {};
-  allChunks.forEach((c, i) => {
+  finalChunks.forEach((c: any, i: number) => {
     idxMap[c.id] = i;
   });
 
   const model = process.env.KB_EMBEDDING_MODEL ?? "qwen/qwen3-embedding-8b";
-  const chunkTexts = allChunks.map(
+  const chunkTexts = finalChunks.map(
     (c: any) =>
       (c.section ? `Section: ${c.section}\n\n` : "") + c.text.slice(0, 3000)
   );
-  console.log(`smoke: model=${model}, chunks=${allChunks.length}, queries=${qa.length}`);
+  console.log(`smoke: model=${model}, chunks=${finalChunks.length}/${allChunks.length}, queries=${qa.length}`);
 
   // Embed in one batched call each (chunks then queries) for speed + cost.
   const chunkRes = await embed(model, chunkTexts);
