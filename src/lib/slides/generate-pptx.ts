@@ -1,7 +1,11 @@
 import PptxGenJS from "pptxgenjs"
 import type { PresentationData, SlideData, SlideTheme } from "./types"
 import { chartToSvg } from "./chart-to-svg"
-import { svgToBase64Png, fetchImageAsBase64, mermaidToBase64Png } from "./svg-to-png"
+import {
+  renderSvgToPng,
+  fetchImageAsDataUrl,
+  renderMermaidToPng,
+} from "@/lib/rendering"
 import {
   cleanMarkdown,
   lightenColor,
@@ -397,7 +401,7 @@ async function renderQuoteSlide(
   const attrY = isCard ? 5 : 4.8
 
   if (slide.quoteImage) {
-    const imageData = await fetchImageAsBase64(slide.quoteImage)
+    const imageData = await fetchImageAsDataUrl(slide.quoteImage)
     if (imageData) {
       // Avatar image (circular effect via small rounding)
       s.addImage({
@@ -501,7 +505,7 @@ async function renderDiagramSlide(
   }
 
   if (slide.diagram) {
-    const pngData = await mermaidToBase64Png(slide.diagram, MERMAID_DIMENSIONS.fullSlide.width, MERMAID_DIMENSIONS.fullSlide.height)
+    const pngData = await renderMermaidToPng(slide.diagram, MERMAID_DIMENSIONS.fullSlide.width, MERMAID_DIMENSIONS.fullSlide.height)
     if (pngData) {
       s.addImage({
         data: pngData,
@@ -539,7 +543,7 @@ async function renderImageSlide(
   s.background = { fill: "FFFFFF" }
 
   if (slide.imageUrl) {
-    const imageData = await fetchImageAsBase64(slide.imageUrl)
+    const imageData = await fetchImageAsDataUrl(slide.imageUrl)
     if (imageData) {
       s.addImage({
         data: imageData,
@@ -618,7 +622,7 @@ async function renderChartSlide(
 
   if (slide.chart) {
     const svgString = chartToSvg(slide.chart, CHART_DIMENSIONS.pptx.fullSlide.width, CHART_DIMENSIONS.pptx.fullSlide.height)
-    const pngData = await svgToBase64Png(svgString, 900, 500)
+    const pngData = await renderSvgToPng(svgString, 900, 500)
     s.addImage({
       data: pngData,
       x: 1.5,
@@ -659,7 +663,7 @@ async function renderDiagramContentSlide(
 
   // Diagram on left
   if (slide.diagram) {
-    const pngData = await mermaidToBase64Png(slide.diagram, MERMAID_DIMENSIONS.splitLayout.width, MERMAID_DIMENSIONS.splitLayout.height)
+    const pngData = await renderMermaidToPng(slide.diagram, MERMAID_DIMENSIONS.splitLayout.width, MERMAID_DIMENSIONS.splitLayout.height)
     if (pngData) {
       s.addImage({
         data: pngData,
@@ -736,7 +740,7 @@ async function renderImageContentSlide(
 
   // Image on left
   if (slide.imageUrl) {
-    const imageData = await fetchImageAsBase64(slide.imageUrl)
+    const imageData = await fetchImageAsDataUrl(slide.imageUrl)
     if (imageData) {
       s.addImage({
         data: imageData,
@@ -823,7 +827,7 @@ async function renderChartContentSlide(
   // Chart on left
   if (slide.chart) {
     const svgString = chartToSvg(slide.chart, CHART_DIMENSIONS.pptx.splitLayout.width, CHART_DIMENSIONS.pptx.splitLayout.height)
-    const pngData = await svgToBase64Png(svgString, 600, 450)
+    const pngData = await renderSvgToPng(svgString, 600, 450)
     s.addImage({
       data: pngData,
       x: 0.5,
@@ -882,7 +886,7 @@ async function renderHeroSlide(
 
   // Set background image if available
   if (slide.backgroundImage) {
-    const imageData = await fetchImageAsBase64(slide.backgroundImage)
+    const imageData = await fetchImageAsDataUrl(slide.backgroundImage)
     if (imageData) {
       s.background = { data: imageData }
     } else {
@@ -1089,7 +1093,7 @@ async function renderGallerySlide(
       const x = 1 + col * cellWidth + (cellWidth - imgSize) / 2
       const y = yOffset + row * cellHeight
 
-      const imageData = await fetchImageAsBase64(item.imageUrl)
+      const imageData = await fetchImageAsDataUrl(item.imageUrl)
       if (imageData) {
         s.addImage({
           data: imageData,
