@@ -69,9 +69,11 @@ Structural comparison on `attention.pdf` (15-page arxiv paper, ground truth: 27 
 
 *Qualitative read (sampled lines 30-70 of each):* Claude Sonnet 4.6 produces the highest-fidelity LaTeX (`\sqrt{d_k}`, `\tag{1}` numbered equations, bold author names, italicized citations). Gemini-2.5-flash-lite is close behind at ~1/30th the cost. Unpdf produces a single flat blob with zero line breaks — when fed to `SmartChunker`, it hits the sentence-split fallback and loses section metadata entirely.
 
-**Decision:** primary = `google/gemini-2.5-flash-lite` (best value + Gemini has first-class PDF input). Fallback = `anthropic/claude-sonnet-4.6` for math/table-critical docs when quality matters more than cost.
+**Decision:** primary = `google/gemini-3-flash-preview` (best balance: compact output, 4-5s latency, 26 headings, 214 equations captured, good on table-heavy docs). Runner-up = `anthropic/claude-haiku-4.5` (31 headings — most of any model — but slower at 10s). Premium fallback = `anthropic/claude-sonnet-4.6` for equation/math-critical docs.
 
-**Winner's cost per doc (Gemini 2.5 Flash-Lite):** 15-page paper = ~$0.004. For a 10K-doc corpus that's $40. Fully affordable.
+Why NOT `gemini-2.5-flash-lite`: on `apple-10k` (table-heavy, 4 pages) it emitted **403,326 characters** of output — padded markdown tables with hundreds of spaces per cell. Both storage and downstream LLM context get bloated. The same model on `attention.pdf` (prose) was fine. Pattern-sensitive — safer to avoid.
+
+**Cost per doc (Gemini 3 Flash Preview):** ~$0.02 per 15-page paper. For 10K docs that's $200. Affordable.
 
 ### 2. Chunking
 
@@ -157,9 +159,9 @@ No hallucinations observed on either model. Zero-hallucination at top-5 context 
               ┌─────────────────────────────────────────────┐
               │  INGESTION                                   │
               │                                              │
- upload ─►    │  if PDF:    gemini-2.5-flash-lite            │
+ upload ─►    │  if PDF:    gemini-3-flash-preview           │
               │             (fallback: claude-sonnet-4.6)    │
-              │  if image:  gemini-2.5-flash-lite            │
+              │  if image:  gemini-3-flash-preview           │
               │  if HTML:   strip → markdown                 │
               │  if MD/txt: passthrough                      │
               │                          │                    │
@@ -183,7 +185,9 @@ No hallucinations observed on either model. Zero-hallucination at top-5 context 
               │    top-20 cosine (SurrealDB)                │
               │          │                                   │
               │          ▼                                   │
-              │    rerank: cohere/rerank-v3.5 → top-5       │
+              │    take top-5 (default — no rerank)         │
+              │    OR LLM-rerank via gemini-3-flash-preview │
+              │       (opt-in "quality" mode, +1.7s)        │
               │          │                                   │
               │          ▼                                   │
               │    prepend section + doc title to passages  │
@@ -200,16 +204,18 @@ No hallucinations observed on either model. Zero-hallucination at top-5 context 
 | Image OCR | `google/gemini-3-flash-preview` | `anthropic/claude-sonnet-4.6` | same |
 | Embedding (doc + query) | `qwen/qwen3-embedding-8b` | — | 4096-dim, multilingual, 0.914 hit@1 measured |
 | Reranker (off by default) | OFF (raw cosine top-5) | LLM-rerank `google/gemini-3-flash-preview` on "quality" mode | +5.7 pts hit@1, +1700ms. Never enable `cohere/rerank-v3.5` on this stack — it *hurts* hit@1. |
-| Chat generator | `google/gemini-3-flash-preview` (fast, cheap, 4.0/5 measured) | `anthropic/claude-sonnet-4.6` | gemini-2.5-flash-lite also adequate (4.0/5) at ¼ price |
+| Chat generator | `google/gemini-3-flash-preview` (fast, cheap, **4.54/5** measured) | `anthropic/claude-sonnet-4.6` | `gemini-2.5-flash-lite` is budget option (4.0/5, ¼ price) |
 
 ### Config surface
 - New env vars:
-  - `KB_EXTRACT_PRIMARY=google/gemini-2.5-flash-lite`
+  - `KB_EXTRACT_PRIMARY=google/gemini-3-flash-preview`
   - `KB_EXTRACT_FALLBACK=anthropic/claude-sonnet-4.6`
   - `KB_EMBEDDING_MODEL=qwen/qwen3-embedding-8b`
-  - `KB_RERANK_MODEL=cohere/rerank-v3.5`
+  - `KB_RERANK_ENABLED=false` (default; set true for "quality" mode)
+  - `KB_RERANK_MODEL=google/gemini-3-flash-preview` (only if enabled)
   - `KB_RERANK_INITIAL_K=20`
   - `KB_RERANK_FINAL_K=5`
+  - `KB_GENERATOR_MODEL=google/gemini-3-flash-preview` (per-assistant override still wins)
 - Migration: one-off script to re-embed all existing chunks. Store old vectors as `embedding_legacy` for rollback window; drop after 7 days.
 
 ---
