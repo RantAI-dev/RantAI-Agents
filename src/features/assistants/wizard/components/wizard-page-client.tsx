@@ -3,12 +3,17 @@
 import { useCallback, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useModels } from "@/hooks/use-models"
 import { useWizardDraft } from "../hooks/use-wizard-draft"
-import { WizardChat } from "./wizard-chat"
-import { WizardPreview } from "./wizard-preview"
+import { useWizardStream } from "../hooks/use-wizard-stream"
 import { WizardActionBar } from "./wizard-action-bar"
+import { WizardHero } from "./wizard-hero"
+import { WizardAgentCard } from "./wizard-agent-card"
+import { WizardSimpleView } from "./wizard-simple-view"
+import { WizardAdvancedView } from "./wizard-advanced-view"
+import { WizardRefineBar } from "./wizard-refine-bar"
 import {
   isNameValid,
   isSystemPromptValid,
@@ -54,6 +59,10 @@ export function WizardPageClient({ initialAssistants, catalogs }: Props) {
   const { models } = useModels()
   const { state, applyProposal, applyRefinement, userEdit, reset } =
     useWizardDraft()
+  const stream = useWizardStream({
+    onProposal: applyProposal,
+    onRefinement: applyRefinement,
+  })
   const [isCreating, setIsCreating] = useState(false)
 
   const modelCatalog: CatalogEntry[] = useMemo(
@@ -66,10 +75,33 @@ export function WizardPageClient({ initialAssistants, catalogs }: Props) {
     [models]
   )
 
+  const fullCatalogs = useMemo(
+    () => ({ models: modelCatalog, ...catalogs }),
+    [modelCatalog, catalogs]
+  )
+
+  const hasDraft = Boolean(state.draft.name || state.draft.systemPrompt)
+
   const canCreate =
     isNameValid(state.draft.name ?? "") &&
     isSystemPromptValid(state.draft.systemPrompt ?? "") &&
     Boolean(state.draft.model)
+
+  const handleSend = useCallback(
+    (text: string) => {
+      stream.send({
+        text,
+        draft: state.draft,
+        history: stream.turns,
+      })
+    },
+    [stream, state.draft]
+  )
+
+  const handleReset = useCallback(() => {
+    reset()
+    stream.reset()
+  }, [reset, stream])
 
   const handleCreate = useCallback(async () => {
     if (!canCreate) return
@@ -126,9 +158,11 @@ export function WizardPageClient({ initialAssistants, catalogs }: Props) {
       }
       if ((d.selectedMcpServerIds ?? []).length > 0) {
         tasks.push(
-          runBinding("MCP servers", `/api/assistants/${created.id}/mcp-servers`, {
-            mcpServerIds: d.selectedMcpServerIds,
-          })
+          runBinding(
+            "MCP servers",
+            `/api/assistants/${created.id}/mcp-servers`,
+            { mcpServerIds: d.selectedMcpServerIds }
+          )
         )
       }
       if ((d.selectedWorkflowIds ?? []).length > 0) {
@@ -168,31 +202,72 @@ export function WizardPageClient({ initialAssistants, catalogs }: Props) {
   }, [addAssistant, refetch, router])
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-background">
       <WizardActionBar
+        hasDraft={hasDraft}
         canCreate={canCreate}
         isCreating={isCreating}
         onCreate={handleCreate}
-        onReset={reset}
+        onReset={handleReset}
         onSkipToManual={handleSkipToManual}
       />
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 min-w-0">
-          <WizardChat
-            draft={state.draft}
-            onProposal={applyProposal}
-            onRefinement={applyRefinement}
+
+      <div className="flex-1 overflow-y-auto">
+        {!hasDraft ? (
+          <WizardHero
+            turns={stream.turns}
+            streaming={stream.streaming}
+            error={stream.error}
+            onSend={handleSend}
           />
-        </div>
-        <div className="w-[380px] shrink-0 hidden lg:block">
-          <WizardPreview
-            draft={state.draft}
-            uncertainty={state.uncertainty}
-            catalogs={{ models: modelCatalog, ...catalogs }}
-            onUserEdit={userEdit}
-          />
-        </div>
+        ) : (
+          <div className="mx-auto max-w-3xl px-4 sm:px-6 py-6 space-y-6 pb-32">
+            <WizardAgentCard
+              draft={state.draft}
+              uncertainty={state.uncertainty}
+              onUserEdit={userEdit}
+            />
+
+            <Tabs defaultValue="simple" className="w-full">
+              <TabsList className="w-full max-w-xs">
+                <TabsTrigger value="simple" className="flex-1">
+                  Simple
+                </TabsTrigger>
+                <TabsTrigger value="advanced" className="flex-1">
+                  Advanced
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="simple" className="pt-4">
+                <WizardSimpleView
+                  draft={state.draft}
+                  uncertainty={state.uncertainty}
+                  catalogs={fullCatalogs}
+                  onUserEdit={userEdit}
+                />
+              </TabsContent>
+
+              <TabsContent value="advanced" className="pt-4">
+                <WizardAdvancedView
+                  draft={state.draft}
+                  uncertainty={state.uncertainty}
+                  catalogs={fullCatalogs}
+                  onUserEdit={userEdit}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
       </div>
+
+      {hasDraft && (
+        <WizardRefineBar
+          turns={stream.turns}
+          streaming={stream.streaming}
+          error={stream.error}
+          onSend={handleSend}
+        />
+      )}
     </div>
   )
 }
