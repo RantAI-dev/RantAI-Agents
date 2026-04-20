@@ -78,7 +78,7 @@ Inside math mode, KaTeX additionally supports:
 - ❌ \`\\label{...}\` / \`\\ref{...}\` / \`\\eqref{...}\` — cross-references are not resolved by this renderer.
 - ❌ \`\\bibliography{...}\` / \`\\cite{...}\` — no bibliography pipeline.
 - ❌ \`\\includegraphics{...}\` — no image inclusion.
-- ❌ \`\\begin{tikzpicture}\`, \`\\begin{figure}\`, \`\\begin{table}\`, \`\\begin{tabular}\` — not supported. Use \`pmatrix\`/\`array\` for tabular math; switch to \`text/markdown\` for non-math tables.
+- ❌ \`\\begin{tikzpicture}\`, \`\\begin{figure}\`, \`\\begin{table}\`, \`\\begin{tabular}\` — not supported. Use \`pmatrix\`/\`array\` for tabular math; switch to \`application/document\` for non-math tables.
 - ❌ \`\\verb\` / \`\\begin{verbatim}\` — use \`\\texttt{...}\` instead.
 - ❌ Multiple separate \`$$...$$\` blocks for what should be one \`align\` derivation.
 - ❌ Bare English words inside \`$...$\` without wrapping them in \`\\text{...}\`.

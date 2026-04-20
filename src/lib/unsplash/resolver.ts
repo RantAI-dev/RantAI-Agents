@@ -1,6 +1,10 @@
 /**
- * Image resolution logic for HTML artifacts.
- * Resolves unsplash:keyword URLs to real Unsplash photos.
+ * Resolve `unsplash:<keyword>` pseudo-URLs to real Unsplash photos.
+ *
+ * Two public entry points (HTML and Slides) share a generic
+ * `resolveContentImages` helper — the shared helper owns the cache
+ * + Unsplash lookup, and each consumer plugs in its own format-specific
+ * extract/rewrite callbacks.
  */
 
 import { prisma } from "@/lib/prisma"
@@ -8,6 +12,15 @@ import { searchPhoto } from "./client"
 
 /** Regex to match src="unsplash:keyword" or src='unsplash:keyword' */
 const UNSPLASH_REGEX = /src=["']unsplash:([^"']+)["']/gi
+
+/**
+ * Regex to match markdown image syntax `![alt](unsplash:keyword)` or
+ * `![alt](unsplash:keyword "title")`. Captures alt (group 1), keyword
+ * (group 2), and the optional title suffix (group 3, includes any
+ * leading space).
+ */
+const UNSPLASH_MARKDOWN_REGEX =
+  /!\[([^\]]*)\]\(unsplash:([^)"\s]+)(\s+"[^"]*")?\)/g
 
 /** Cache duration in days */
 const CACHE_DAYS = 30
@@ -33,25 +46,47 @@ function fallbackUrl(query: string): string {
 }
 
 /**
- * Resolve all unsplash:keyword URLs in HTML content to real Unsplash photos.
+ * Generic content-image resolver — takes a content string, a format-
+ * specific extract callback (raw queries present in the content) and a
+ * rewrite callback (produce new content with resolved URLs substituted).
+ *
+ * Shared by `resolveHtmlImages` and `resolveSlideImages`; intended to
+ * be the one-stop API for any future artifact type (docx, pdf, etc.)
+ * that needs `unsplash:` resolution.
+ */
+export async function resolveContentImages({
+  content,
+  extract,
+  rewrite,
+}: {
+  content: string
+  /** Extract raw (un-normalized) query strings from the content. */
+  extract: (content: string) => string[]
+  /** Rewrite the content given a resolved Map keyed by NORMALIZED query. */
+  rewrite: (content: string, resolved: Map<string, string>) => string
+}): Promise<string> {
+  const rawQueries = extract(content)
+  if (rawQueries.length === 0) return content
+
+  const uniqueQueries = [...new Set(rawQueries.map(normalize))]
+  const resolved = await resolveUnsplashQueries(uniqueQueries)
+
+  return rewrite(content, resolved)
+}
+
+/**
+ * Resolve all `unsplash:keyword` URLs in HTML content to real Unsplash photos.
  * Falls back to placehold.co if Unsplash is unavailable.
  */
 export async function resolveHtmlImages(content: string): Promise<string> {
-  // 1. Extract all unsplash: URLs
-  const matches = [...content.matchAll(UNSPLASH_REGEX)]
-  if (matches.length === 0) {
-    return content
-  }
-
-  // 2. Dedupe and normalize queries
-  const queries = [...new Set(matches.map((m) => normalize(m[1])))]
-  const resolved = await resolveQueries(queries)
-
-  // 3. Replace all unsplash: URLs with resolved URLs
-  return content.replace(UNSPLASH_REGEX, (_, rawQuery) => {
-    const normalizedQuery = normalize(rawQuery)
-    const url = resolved.get(normalizedQuery) ?? fallbackUrl(rawQuery)
-    return `src="${url}"`
+  return resolveContentImages({
+    content,
+    extract: (c) => [...c.matchAll(UNSPLASH_REGEX)].map((m) => m[1]),
+    rewrite: (c, resolved) =>
+      c.replace(UNSPLASH_REGEX, (_, rawQuery) => {
+        const url = resolved.get(normalize(rawQuery)) ?? fallbackUrl(rawQuery)
+        return `src="${url}"`
+      }),
   })
 }
 
@@ -63,86 +98,127 @@ interface SlideForResolver {
   gallery?: Array<{ imageUrl?: string; caption?: string }>
 }
 
-/**
- * Resolve unsplash:keyword URLs in slides JSON content.
- * Handles: imageUrl, backgroundImage, quoteImage, gallery[].imageUrl
- */
-export async function resolveSlideImages(content: string): Promise<string> {
-  // Try to parse as JSON
-  let data: { slides?: SlideForResolver[] }
+interface SlidesJson {
+  slides?: SlideForResolver[]
+}
+
+/** Parse slides JSON; null if it isn't a slides document we can walk. */
+function parseSlidesJson(content: string): SlidesJson | null {
   try {
-    data = JSON.parse(content)
+    const data = JSON.parse(content) as SlidesJson
+    if (!data.slides || !Array.isArray(data.slides)) return null
+    return data
   } catch {
-    return content // Not valid JSON, return as-is
+    return null
   }
+}
 
-  if (!data.slides || !Array.isArray(data.slides)) {
-    return content
-  }
-
-  // 1. Collect all unsplash: URLs from slides
-  const unsplashUrls: string[] = []
-  for (const slide of data.slides) {
+/** Collect all unsplash:* URLs from the slide image fields. */
+function collectSlideUnsplashQueries(data: SlidesJson): string[] {
+  const queries: string[] = []
+  for (const slide of data.slides ?? []) {
     if (slide.imageUrl?.startsWith("unsplash:")) {
-      unsplashUrls.push(normalize(slide.imageUrl.slice(9)))
+      queries.push(slide.imageUrl.slice(9))
     }
     if (slide.backgroundImage?.startsWith("unsplash:")) {
-      unsplashUrls.push(normalize(slide.backgroundImage.slice(9)))
+      queries.push(slide.backgroundImage.slice(9))
     }
     if (slide.quoteImage?.startsWith("unsplash:")) {
-      unsplashUrls.push(normalize(slide.quoteImage.slice(9)))
+      queries.push(slide.quoteImage.slice(9))
     }
-    // Gallery items
     if (slide.gallery && Array.isArray(slide.gallery)) {
       for (const item of slide.gallery) {
         if (item.imageUrl?.startsWith("unsplash:")) {
-          unsplashUrls.push(normalize(item.imageUrl.slice(9)))
+          queries.push(item.imageUrl.slice(9))
         }
       }
     }
   }
+  return queries
+}
 
-  if (unsplashUrls.length === 0) {
-    return content
+/** Rewrite each unsplash:* field in-place on the parsed JSON. */
+function rewriteSlideUnsplashFields(
+  data: SlidesJson,
+  resolved: Map<string, string>,
+): void {
+  const resolve = (raw: string): string => {
+    const query = normalize(raw.slice(9))
+    return resolved.get(query) ?? fallbackUrl(raw.slice(9))
   }
-
-  // 2. Resolve all unique queries
-  const queries = [...new Set(unsplashUrls)]
-  const resolved = await resolveQueries(queries)
-
-  // 3. Replace unsplash: URLs in slides
-  for (const slide of data.slides) {
+  for (const slide of data.slides ?? []) {
     if (slide.imageUrl?.startsWith("unsplash:")) {
-      const query = normalize(slide.imageUrl.slice(9))
-      slide.imageUrl = resolved.get(query) ?? fallbackUrl(query)
+      slide.imageUrl = resolve(slide.imageUrl)
     }
     if (slide.backgroundImage?.startsWith("unsplash:")) {
-      const query = normalize(slide.backgroundImage.slice(9))
-      slide.backgroundImage = resolved.get(query) ?? fallbackUrl(query)
+      slide.backgroundImage = resolve(slide.backgroundImage)
     }
     if (slide.quoteImage?.startsWith("unsplash:")) {
-      const query = normalize(slide.quoteImage.slice(9))
-      slide.quoteImage = resolved.get(query) ?? fallbackUrl(query)
+      slide.quoteImage = resolve(slide.quoteImage)
     }
-    // Gallery items
     if (slide.gallery && Array.isArray(slide.gallery)) {
       for (const item of slide.gallery) {
         if (item.imageUrl?.startsWith("unsplash:")) {
-          const query = normalize(item.imageUrl.slice(9))
-          item.imageUrl = resolved.get(query) ?? fallbackUrl(query)
+          item.imageUrl = resolve(item.imageUrl)
         }
       }
     }
   }
-
-  return JSON.stringify(data)
 }
 
 /**
- * Resolve a list of queries to URLs (with caching).
- * Shared logic between HTML and Slides resolvers.
+ * Resolve `unsplash:keyword` URLs embedded in markdown image syntax
+ * `![alt](unsplash:keyword)` or `![alt](unsplash:keyword "title")`.
+ *
+ * Used by `application/document` artifacts where image references live
+ * inline in markdown. HTML `src="..."` shape goes through
+ * `resolveHtmlImages` instead; these two regexes are disjoint so they
+ * don't step on each other if the document content happens to contain
+ * raw HTML image tags.
  */
-async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
+export async function resolveDocumentImages(content: string): Promise<string> {
+  return resolveContentImages({
+    content,
+    extract: (c) => [...c.matchAll(UNSPLASH_MARKDOWN_REGEX)].map((m) => m[2]),
+    rewrite: (c, resolved) =>
+      c.replace(
+        UNSPLASH_MARKDOWN_REGEX,
+        (_, alt: string, rawQuery: string, titleSuffix: string | undefined) => {
+          const url = resolved.get(normalize(rawQuery)) ?? fallbackUrl(rawQuery)
+          return `![${alt}](${url}${titleSuffix ?? ""})`
+        },
+      ),
+  })
+}
+
+/**
+ * Resolve `unsplash:keyword` URLs in slides JSON content.
+ * Handles: imageUrl, backgroundImage, quoteImage, gallery[].imageUrl
+ */
+export async function resolveSlideImages(content: string): Promise<string> {
+  return resolveContentImages({
+    content,
+    extract: (c) => {
+      const data = parseSlidesJson(c)
+      return data ? collectSlideUnsplashQueries(data) : []
+    },
+    rewrite: (c, resolved) => {
+      const data = parseSlidesJson(c)
+      if (!data) return c
+      rewriteSlideUnsplashFields(data, resolved)
+      return JSON.stringify(data)
+    },
+  })
+}
+
+/**
+ * Resolve a list of normalized queries to URLs (cache-first, Unsplash-second,
+ * placeholder-fallback). Exported so other artifact types can reuse the
+ * cache+lookup core without re-implementing it.
+ */
+export async function resolveUnsplashQueries(
+  queries: string[],
+): Promise<Map<string, string>> {
   const resolved = new Map<string, string>()
 
   // 1. Check cache first
@@ -186,7 +262,7 @@ async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
         // Unsplash failed - use placeholder with keyword text
         resolved.set(query, fallbackUrl(query))
       }
-    })
+    }),
   )
 
   return resolved

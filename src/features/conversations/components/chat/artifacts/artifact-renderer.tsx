@@ -118,7 +118,7 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
         />
       )
     }
-    case "text/markdown":
+    case "application/document":
       return <StreamdownContent content={artifact.content} className="p-4" />
     default:
       return (

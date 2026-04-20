@@ -3,10 +3,8 @@
  * Single source of truth — used by chat/route.ts, widget/chat/route.ts, and chatflow.ts.
  */
 
-import { CANVAS_TYPE_LABELS } from "./artifacts"
+import { ARTIFACT_LABELS, isArtifactType } from "./artifacts"
 import { assembleArtifactContext } from "./artifacts/context"
-
-export { CANVAS_TYPE_LABELS } from "./artifacts"
 
 /** Language consistency — appended to ALL chat prompts */
 export const LANGUAGE_INSTRUCTION = `\n\nIMPORTANT: You must ALWAYS reply in the same language as the user's last message. If they speak Indonesian, reply in Indonesian. If they speak English, reply in English. Do not mix languages unless necessary for technical terms.`
@@ -35,12 +33,9 @@ export function buildToolInstruction(
     if (canvasMode === true || canvasMode === "auto") {
       // Auto mode: inject summary of all types
       instruction += `\n\n## Canvas Mode (ACTIVE)\nThe user has enabled Canvas mode. You MUST use the create_artifact tool for your response content. Render your output as a live artifact in the preview panel instead of inline text. ${assembleArtifactContext(null, "summary")}\n\n${DESIGN_QUALITY_REMINDER}`
-    } else if (
-      typeof canvasMode === "string" &&
-      canvasMode in CANVAS_TYPE_LABELS
-    ) {
+    } else if (isArtifactType(canvasMode)) {
       // Specific type: inject ONLY the relevant type's full instructions
-      const label = CANVAS_TYPE_LABELS[canvasMode]
+      const label = ARTIFACT_LABELS[canvasMode]
       instruction += `\n\n## Canvas Mode (ACTIVE — ${label})\nThe user has enabled Canvas mode with a specific artifact type. You MUST use the create_artifact tool with type="${canvasMode}". The user wants a ${label} artifact. Render your output as a live artifact in the preview panel instead of inline text.\n\n${assembleArtifactContext(canvasMode, "full")}\n\n${DESIGN_QUALITY_REMINDER}`
     } else {
       // No canvas mode: inject summary with usage guidance
@@ -51,12 +46,9 @@ export function buildToolInstruction(
       instruction += `\n\nWhen the user asks to modify, fix, or change an existing artifact, use update_artifact with the artifact's ID (from the create_artifact result) instead of creating a new one. Always provide the full updated content, not just the diff.`
 
       if (targetArtifactId) {
-        if (
-          typeof canvasMode === "string" &&
-          canvasMode in CANVAS_TYPE_LABELS
-        ) {
+        if (isArtifactType(canvasMode)) {
           // Canvas mode requests a specific type — don't suggest updating the old artifact
-          instruction += `\n\nThe user was viewing a different artifact ("${targetArtifactId}"), but they have now requested a new ${CANVAS_TYPE_LABELS[canvasMode]} artifact. Use create_artifact with type="${canvasMode}" to create a NEW artifact. Do NOT update the previous artifact.`
+          instruction += `\n\nThe user was viewing a different artifact ("${targetArtifactId}"), but they have now requested a new ${ARTIFACT_LABELS[canvasMode]} artifact. Use create_artifact with type="${canvasMode}" to create a NEW artifact. Do NOT update the previous artifact.`
         } else {
           instruction += `\n\nThe user is currently viewing artifact "${targetArtifactId}". When they ask for changes, modifications, or updates to "the artifact", "this", or the current content, use update_artifact with id="${targetArtifactId}".`
         }

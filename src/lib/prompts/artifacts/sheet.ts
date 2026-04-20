@@ -46,7 +46,7 @@ So:
 |---|---|---|
 | 50+ rows of data | \`application/sheet\` | Too big for markdown table |
 | Sortable / filterable / exportable table | \`application/sheet\` | Only sheet has these |
-| Small comparison table inside a doc | \`text/markdown\` table | Inline reading |
+| Small comparison table inside a doc | \`application/document\` table | Inline reading |
 | Visually styled pricing/feature card | \`text/html\` | Needs design, not data grid |
 | Dashboard combining table + charts | \`application/react\` | Needs interactivity beyond a table |
 | CSV the user will download | \`application/sheet\` | Has Download button |

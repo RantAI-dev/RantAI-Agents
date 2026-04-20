@@ -1421,3 +1421,34 @@ model ResolvedImage {
 
   @@index([expiresAt])
 }
+
+// =============================================================================
+// Mermaid Render Cache
+// =============================================================================
+// Content-addressed cache for mermaid -> PNG rendering. Scoped per organization
+// at the QUERY level (not in the hash) so `hash` stays a pure function of
+// content. Server resolves organizationId from session; client cannot spoof.
+//
+// No @@unique([hash, organizationId]): PostgreSQL NULL != NULL makes upserts
+// on nullable compound unique silently duplicate. Insert via findFirst +
+// conditional create. Rare duplicates are acceptable — same hash produces
+// identical Bytes, future LRU cleanup dedupes.
+//
+// Follow-up: cleanup cron at /api/cron/cleanup-mermaid-cache (LRU by
+// lastAccessedAt), mirroring the cleanup-attachments pattern. Storage
+// backend is swappable (current: Bytes; potential: S3 via a pointer field)
+// without changing the getCachedMermaid/putCachedMermaid helper signatures.
+model MermaidRender {
+  id             String   @id @default(cuid())
+  hash           String   // sha256(source + theme + width + height + mermaidVersion)
+  organizationId String?  // null = global/orphan session (matches Document.organizationId pattern)
+  png            Bytes    // Rendered PNG. Entries > 2MB skip cache write (logged client-side).
+  width          Int
+  height         Int
+  mermaidVersion String
+  createdAt      DateTime @default(now())
+  lastAccessedAt DateTime @default(now())
+
+  @@index([hash, organizationId]) // primary lookup path
+  @@index([lastAccessedAt])       // future LRU cleanup cron
+}

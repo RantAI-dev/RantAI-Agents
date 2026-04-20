@@ -45,7 +45,7 @@ export function validateArtifactContent(
   if (type === "application/mermaid") return validateMermaid(content)
   if (type === "application/python") return validatePython(content)
   if (type === "application/code") return validateCode(content)
-  if (type === "text/markdown") return validateMarkdown(content)
+  if (type === "application/document") return validateMarkdown(content)
   if (type === "text/latex") return validateLatex(content)
   if (type === "application/sheet") return validateSheet(content)
   if (type === "application/slides") return validateSlides(content)
@@ -1072,7 +1072,7 @@ function validateLatex(content: string): ArtifactValidationResult {
 
   if (!hasMathDelimiter) {
     warnings.push(
-      "No math delimiters detected ($, $$, \\[, or a math environment). If this document has no math, prefer the `text/markdown` artifact type."
+      "No math delimiters detected ($, $$, \\[, or a math environment). If this document has no math, prefer the `application/document` artifact type."
     )
   }
 
