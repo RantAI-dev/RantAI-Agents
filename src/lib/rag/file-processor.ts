@@ -115,7 +115,8 @@ async function processPdf(
   try {
     const dataBuffer = fs.readFileSync(filePath);
 
-    // If OCR pipeline is enabled, use it for automatic scanned PDF detection
+    // Legacy OCR pipeline opt-in remains first — callers that set useOCRPipeline
+    // want scanned-PDF detection via Ollama, not vision-LLM text extraction.
     if (options?.useOCRPipeline) {
       try {
         const { processDocumentOCR } = await import("@/lib/ocr");
@@ -123,21 +124,19 @@ async function processPdf(
           documentType: options.documentType,
           outputFormat: options.outputFormat || "markdown",
         });
-
-        // Handle batch result from PDF processing
-        const text = "combinedText" in result ? result.combinedText : result.text;
-        return text;
+        return "combinedText" in result ? result.combinedText : result.text;
       } catch (error) {
-        console.warn("[processPdf] OCR pipeline failed, falling back to unpdf:", error);
-        // Fall through to unpdf
+        console.warn("[processPdf] OCR pipeline failed, falling back to extractor dispatch:", error);
       }
     }
 
-    // Default: Use unpdf for serverless-compatible text extraction
-    const { extractText, getDocumentProxy } = await import("unpdf");
-    const pdf = await getDocumentProxy(new Uint8Array(dataBuffer));
-    const { text } = await extractText(pdf, { mergePages: true });
-    return text;
+    // Default: route through the extractor dispatch (vision-LLM primary, configured
+    // in src/lib/rag/config.ts, with unpdf available via KB_EXTRACT_PRIMARY=unpdf).
+    const { getDefaultExtractor, getFallbackExtractor, extractWithFallback } = await import("./extractors");
+    const primary = getDefaultExtractor();
+    const fallback = getFallbackExtractor();
+    const result = await extractWithFallback(dataBuffer, primary, fallback);
+    return result.text;
   } catch (error) {
     console.error("PDF processing error:", error);
     throw new Error(`Failed to process PDF: ${error instanceof Error ? error.message : "Unknown error"}`);
