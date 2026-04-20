@@ -6,7 +6,7 @@ import { slidesArtifact } from "./slides"
 import { codeArtifact } from "./code"
 import { pythonArtifact } from "./python"
 import { sheetArtifact } from "./sheet"
-import { markdownArtifact } from "./markdown"
+import { documentArtifact } from "./document"
 import { latexArtifact } from "./latex"
 import { r3fArtifact } from "./r3f"
 
@@ -19,7 +19,7 @@ export const ALL_ARTIFACTS = [
   codeArtifact,
   pythonArtifact,
   sheetArtifact,
-  markdownArtifact,
+  documentArtifact,
   latexArtifact,
   r3fArtifact,
 ] as const

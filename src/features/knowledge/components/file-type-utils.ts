@@ -32,7 +32,7 @@ const ARTIFACT_TYPE_MAP: Record<string, FileTypeInfo> = {
     iconColor: "text-purple-500",
     accentColor: "#a855f7",
   },
-  "text/markdown": {
+  "application/document": {
     Icon: FileText,
     bgColor: "bg-gray-500/10 dark:bg-gray-500/20",
     iconColor: "text-gray-500",
@@ -130,7 +130,7 @@ const ARTIFACT_EXTENSION_MAP: Record<string, string> = {
   "application/react": ".TSX",
   "image/svg+xml": ".SVG",
   "application/mermaid": ".MMD",
-  "text/markdown": ".MD",
+  "application/document": ".MD",
   "application/code": ".CODE",
   "application/sheet": ".CSV",
   "text/latex": ".TEX",

@@ -480,8 +480,8 @@ describe("validateArtifactContent — application/python", () => {
 })
 
 describe("validateArtifactContent — other types pass through", () => {
-  it("returns ok for text/markdown", () => {
-    const r = validateArtifactContent("text/markdown", "# anything")
+  it("returns ok for application/document", () => {
+    const r = validateArtifactContent("application/document", "# anything")
     expect(r.ok).toBe(true)
   })
 })
@@ -609,36 +609,36 @@ describe("validateArtifactContent — application/code", () => {
   })
 })
 
-describe("validateArtifactContent — text/markdown", () => {
+describe("validateArtifactContent — application/document", () => {
   it("accepts a well-structured document with a top-level heading", () => {
     const md = `# Title\n\nSome paragraph.\n\n## Section\n\nMore content.\n`
-    const r = validateArtifactContent("text/markdown", md)
+    const r = validateArtifactContent("application/document", md)
     expect(r.ok).toBe(true)
     expect(r.warnings).toEqual([])
   })
 
   it("errors on empty content", () => {
-    const r = validateArtifactContent("text/markdown", "   \n  ")
+    const r = validateArtifactContent("application/document", "   \n  ")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/empty/i)
   })
 
   it("warns when the document has no top-level heading", () => {
-    const r = validateArtifactContent("text/markdown", "Just a paragraph, no heading.")
+    const r = validateArtifactContent("application/document", "Just a paragraph, no heading.")
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/top-level heading/i)
   })
 
   it("warns when heading levels skip", () => {
     const md = `# Title\n\n### Skipped H2\n`
-    const r = validateArtifactContent("text/markdown", md)
+    const r = validateArtifactContent("application/document", md)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/skip/i)
   })
 
   it("warns on a <script> tag", () => {
     const md = `# Title\n\n<script>alert(1)</script>\n`
-    const r = validateArtifactContent("text/markdown", md)
+    const r = validateArtifactContent("application/document", md)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/script/i)
   })

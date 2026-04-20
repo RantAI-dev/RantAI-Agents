@@ -4,7 +4,11 @@ import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile } from "@/lib/s3"
 import { indexArtifactContent } from "@/lib/rag"
-import { resolveImages, resolveSlideImages } from "@/lib/unsplash"
+import {
+  resolveImages,
+  resolveSlideImages,
+  resolveDocumentImages,
+} from "@/lib/unsplash"
 import {
   validateArtifactContent,
   formatValidationError,
@@ -88,12 +92,14 @@ export const updateArtifactTool: ToolDefinition = {
           }
         }
 
-        // Resolve unsplash: URLs to real images for HTML and slides artifacts
+        // Resolve unsplash: URLs to real images for HTML, slides, and document artifacts
         let finalContent = content
         if (existing.artifactType === "text/html") {
           finalContent = await resolveImages(content)
         } else if (existing.artifactType === "application/slides") {
           finalContent = await resolveSlideImages(content)
+        } else if (existing.artifactType === "application/document") {
+          finalContent = await resolveDocumentImages(content)
         }
 
         // Archive old version to S3 and record lightweight metadata

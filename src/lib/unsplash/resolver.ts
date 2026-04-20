@@ -13,6 +13,15 @@ import { searchPhoto } from "./client"
 /** Regex to match src="unsplash:keyword" or src='unsplash:keyword' */
 const UNSPLASH_REGEX = /src=["']unsplash:([^"']+)["']/gi
 
+/**
+ * Regex to match markdown image syntax `![alt](unsplash:keyword)` or
+ * `![alt](unsplash:keyword "title")`. Captures alt (group 1), keyword
+ * (group 2), and the optional title suffix (group 3, includes any
+ * leading space).
+ */
+const UNSPLASH_MARKDOWN_REGEX =
+  /!\[([^\]]*)\]\(unsplash:([^)"\s]+)(\s+"[^"]*")?\)/g
+
 /** Cache duration in days */
 const CACHE_DAYS = 30
 
@@ -155,6 +164,31 @@ function rewriteSlideUnsplashFields(
       }
     }
   }
+}
+
+/**
+ * Resolve `unsplash:keyword` URLs embedded in markdown image syntax
+ * `![alt](unsplash:keyword)` or `![alt](unsplash:keyword "title")`.
+ *
+ * Used by `application/document` artifacts where image references live
+ * inline in markdown. HTML `src="..."` shape goes through
+ * `resolveHtmlImages` instead; these two regexes are disjoint so they
+ * don't step on each other if the document content happens to contain
+ * raw HTML image tags.
+ */
+export async function resolveDocumentImages(content: string): Promise<string> {
+  return resolveContentImages({
+    content,
+    extract: (c) => [...c.matchAll(UNSPLASH_MARKDOWN_REGEX)].map((m) => m[2]),
+    rewrite: (c, resolved) =>
+      c.replace(
+        UNSPLASH_MARKDOWN_REGEX,
+        (_, alt: string, rawQuery: string, titleSuffix: string | undefined) => {
+          const url = resolved.get(normalize(rawQuery)) ?? fallbackUrl(rawQuery)
+          return `![${alt}](${url}${titleSuffix ?? ""})`
+        },
+      ),
+  })
 }
 
 /**

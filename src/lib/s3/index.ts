@@ -113,7 +113,7 @@ export const S3Paths = {
 export function getArtifactExtension(type: string): string {
   const map: Record<string, string> = {
     "text/html": ".html",
-    "text/markdown": ".md",
+    "application/document": ".md",
     "image/svg+xml": ".svg",
     "application/react": ".tsx",
     "application/mermaid": ".mmd",
