@@ -3,7 +3,11 @@ import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile, S3Paths, getArtifactExtension } from "@/lib/s3"
 import { indexArtifactContent } from "@/lib/rag"
-import { resolveImages, resolveSlideImages } from "@/lib/unsplash"
+import {
+  resolveImages,
+  resolveSlideImages,
+  resolveDocumentImages,
+} from "@/lib/unsplash"
 import {
   validateArtifactContent,
   formatValidationError,
@@ -127,12 +131,14 @@ export const createArtifactTool: ToolDefinition = {
       }
     }
 
-    // Resolve unsplash: URLs to real images for HTML and slides artifacts
+    // Resolve unsplash: URLs to real images for HTML, slides, and document artifacts
     let finalContent = content
     if (type === "text/html") {
       finalContent = await resolveImages(content)
     } else if (type === "application/slides") {
       finalContent = await resolveSlideImages(content)
+    } else if (type === "application/document") {
+      finalContent = await resolveDocumentImages(content)
     }
 
     // Persist to S3 + Document (knowledge system)
