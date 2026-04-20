@@ -20,8 +20,11 @@ DEFINE FIELD embedding ON document_chunk TYPE array<float>;
 DEFINE FIELD metadata ON document_chunk TYPE option<object>;
 DEFINE FIELD created_at ON document_chunk TYPE datetime DEFAULT time::now();
 
--- Vector index for similarity search (OpenAI text-embedding-3-small = 1536 dimensions)
-DEFINE INDEX embedding_idx ON document_chunk FIELDS embedding MTREE DIMENSION 1536 DIST COSINE;
+-- Vector index for similarity search.
+-- Dimension MUST match KB_EMBEDDING_DIM (default 4096 for qwen/qwen3-embedding-8b).
+-- To change KB_EMBEDDING_MODEL: drop this index, run `bun run kb:migrate` which
+-- re-embeds every chunk and re-creates the index at the new dimension.
+DEFINE INDEX embedding_idx ON document_chunk FIELDS embedding MTREE DIMENSION 4096 DIST COSINE;
 
 -- Indexes for filtering and lookups
 DEFINE INDEX document_id_idx ON document_chunk FIELDS document_id;
@@ -67,8 +70,9 @@ DEFINE FIELD embedding ON conversation_memory TYPE array<float>;
 DEFINE FIELD metadata ON conversation_memory TYPE option<object>;
 DEFINE FIELD createdAt ON conversation_memory TYPE datetime DEFAULT time::now();
 
--- Vector index for similarity search (1536 dimensions for text-embedding-3-small)
-DEFINE INDEX conversation_embedding_idx ON conversation_memory FIELDS embedding MTREE DIMENSION 1536 DIST COSINE;
+-- Vector index for similarity search.
+-- Dimension MUST match KB_EMBEDDING_DIM (default 4096 for qwen/qwen3-embedding-8b).
+DEFINE INDEX conversation_embedding_idx ON conversation_memory FIELDS embedding MTREE DIMENSION 4096 DIST COSINE;
 
 -- Indexes for filtering
 DEFINE INDEX conversation_user_idx ON conversation_memory FIELDS userId;

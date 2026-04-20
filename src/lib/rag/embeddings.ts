@@ -1,6 +1,7 @@
 /**
- * Embeddings module using OpenRouter API
- * Uses OpenAI's text-embedding-3-small model via OpenRouter
+ * Embeddings module using OpenRouter API.
+ * Model is selected via KB_EMBEDDING_MODEL env (see src/lib/rag/config.ts).
+ * Default from the 2026-04-20 SOTA audit: qwen/qwen3-embedding-8b (4096d).
  *
  * Features:
  * - Retry logic with exponential backoff for transient errors
@@ -8,11 +9,12 @@
  * - Batch processing with rate limiting
  */
 
+import { getRagConfig } from "./config";
+
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/embeddings";
-const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
-const BATCH_SIZE = 50; // Reduced from 100 to prevent rate limiting
+const BATCH_SIZE = 50;
 
 /**
  * Sleep for specified milliseconds
@@ -61,7 +63,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: EMBEDDING_MODEL,
+          model: getRagConfig().embeddingModel,
           input: text,
         }),
       });
@@ -133,7 +135,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: EMBEDDING_MODEL,
+            model: getRagConfig().embeddingModel,
             input: batch,
           }),
         });
