@@ -138,6 +138,17 @@ export default function ChatSessionPageClient({
     }
   }, [selectedAssistant, createSession, router])
 
+  // Session not found (possibly deleted) - redirect to chat home.
+  // MUST run before any early return so hook order stays stable across
+  // renders (React Rules of Hooks: all hooks run unconditionally in the
+  // same order). Only redirect if sessions have loaded (length > 0) to
+  // avoid redirecting during initial load.
+  useEffect(() => {
+    if (sessions.length > 0 && !activeSession) {
+      router.replace("/dashboard/chat")
+    }
+  }, [sessions.length, activeSession, router])
+
   if (assistantsLoading || !pendingRead) {
     return (
       <div className="flex flex-col h-full">
@@ -147,14 +158,6 @@ export default function ChatSessionPageClient({
       </div>
     )
   }
-
-  // Session not found (possibly deleted) - redirect to chat home
-  // Only redirect if sessions have loaded (length > 0) to avoid redirecting during initial load
-  useEffect(() => {
-    if (sessions.length > 0 && !activeSession) {
-      router.replace("/dashboard/chat")
-    }
-  }, [sessions.length, activeSession, router])
 
   if (!activeSession || !activeSessionAssistant) {
     return (
