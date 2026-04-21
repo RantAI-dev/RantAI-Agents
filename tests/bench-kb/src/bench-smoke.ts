@@ -4,13 +4,33 @@
 //
 // Thresholds:
 //   KB_HYBRID_BM25_ENABLED=true (default): hit@1 >= 0.90
-//   KB_HYBRID_BM25_ENABLED=false:          hit@1 >= 0.85  (same as before)
+//   KB_HYBRID_BM25_ENABLED=false:          hit@1 >= 0.85
 //   recall@5 >= 0.95 in both cases
 //
 // Runtime: ~30-90s + <$0.10 per run.
+//
+// Note: the in-process BM25 here is a faithful BM25 (IDF + length norm +
+// stopword filter) — NOT the full SurrealDB analyzer which also does
+// snowball stemming. Numbers will closely match production on this corpus
+// but are not identical.
 import { embed, cosine, readJson } from "./lib";
 
 const SUBSET_SIZE = 10;
+
+// Minimal English stopword set — matches what the production `kb_en` analyzer
+// will effectively drop via snowball stemming + low IDF.
+const STOPWORDS = new Set([
+  "a","an","the","and","or","but","of","in","on","at","to","for","with","by","from",
+  "is","are","was","were","be","been","being","have","has","had","do","does","did",
+  "this","that","these","those","it","its","as","if","so","no","not","what","which",
+  "who","whom","whose","where","when","why","how","can","could","should","would","may",
+  "might","will","shall","about","into","through","during","before","after","above",
+  "below","between","s","t",
+]);
+
+function tokenize(s: string): string[] {
+  return (s.toLowerCase().match(/[a-z0-9]{2,}/g) || []).filter((t) => !STOPWORDS.has(t));
+}
 
 async function run() {
   const corpus = readJson<any[]>("./results/corpus-unpdf.json");
@@ -47,14 +67,40 @@ async function run() {
   const chunkRes = await embed(model, chunkTexts);
   const queryRes = await embed(model, qa.map((q) => q.q));
 
-  // Naive token-overlap score as a BM25 stand-in — the real SurrealDB SEARCH
-  // index isn't running in CI, so we simulate the hybrid behaviour.
-  function naiveTokenScore(query: string, chunk: string): number {
-    const qTokens = new Set(query.toLowerCase().match(/[a-z0-9]+/g) || []);
-    const cTokens = chunk.toLowerCase().match(/[a-z0-9]+/g) || [];
-    let hits = 0;
-    for (const t of cTokens) if (qTokens.has(t)) hits++;
-    return hits;
+  // Precompute BM25 statistics once per run.
+  const N = finalChunks.length;
+  const chunkTokens: string[][] = finalChunks.map((c: any) => tokenize(c.text));
+  const chunkLens = chunkTokens.map((ts) => ts.length);
+  const avgLen = chunkLens.reduce((a, b) => a + b, 0) / Math.max(1, N);
+  const df = new Map<string, number>();
+  for (const ts of chunkTokens) {
+    const uniq = new Set(ts);
+    for (const t of uniq) df.set(t, (df.get(t) || 0) + 1);
+  }
+  // Per-chunk term-frequency maps (lazily on demand).
+  const chunkTf: Array<Map<string, number>> = chunkTokens.map((ts) => {
+    const m = new Map<string, number>();
+    for (const t of ts) m.set(t, (m.get(t) || 0) + 1);
+    return m;
+  });
+
+  const k1 = 1.2;
+  const b = 0.75;
+
+  function bm25Score(queryTokens: string[], i: number): number {
+    const tf = chunkTf[i];
+    const dl = chunkLens[i];
+    let score = 0;
+    for (const q of queryTokens) {
+      const termTf = tf.get(q);
+      if (!termTf) continue;
+      const dfQ = df.get(q) ?? 0;
+      const idf = Math.log((N - dfQ + 0.5) / (dfQ + 0.5) + 1);
+      const num = termTf * (k1 + 1);
+      const denom = termTf + k1 * (1 - b + b * (dl / Math.max(1, avgLen)));
+      score += idf * (num / denom);
+    }
+    return score;
   }
 
   let h1 = 0, r5 = 0;
@@ -71,13 +117,14 @@ async function run() {
 
     let finalOrder: number[];
     if (bm25Enabled) {
+      const qTokens = tokenize(q.q);
       const bm25Ranked = finalChunks
-        .map((c: any, idx: number) => ({ idx, s: naiveTokenScore(q.q, c.text) }))
-        .filter((x: any) => x.s > 0)
-        .sort((a: any, b: any) => b.s - a.s)
-        .map((x: any) => x.idx);
+        .map((_: any, idx: number) => ({ idx, s: bm25Score(qTokens, idx) }))
+        .filter((x) => x.s > 0)
+        .sort((a, b) => b.s - a.s)
+        .map((x) => x.idx);
 
-      // RRF merge of dense + naive-BM25, top 20
+      // RRF merge of dense + BM25, top 20 from each arm
       const k = 60;
       const rrf = new Map<number, number>();
       denseRanked.slice(0, 20).forEach((idx, rank) => rrf.set(idx, (rrf.get(idx) || 0) + 1 / (k + rank + 1)));
