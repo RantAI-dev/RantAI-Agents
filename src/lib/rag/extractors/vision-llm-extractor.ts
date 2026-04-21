@@ -1,3 +1,5 @@
+import { PDFDocument } from "pdf-lib";
+import { splitPdfByPageCount, getPdfPageCount } from "./pdf-splitter";
 import type { Extractor, ExtractionResult } from "./types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -9,6 +11,11 @@ const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
  * (Gemini, Claude) and — via OpenRouter's image conversion — most other vision
  * models (at higher token cost).
  *
+ * For PDFs exceeding `segmentPages` (default 25), splits into page-segments and
+ * extracts each segment concurrently via Promise.all. This dodges the vision
+ * model's single-call output-token budget which otherwise truncates at ~2-8%
+ * of a 100-page doc.
+ *
  * Prompt intentionally asks for COMPACT tables (single-space padding). This
  * prevents the padding-bloat failure mode observed with gemini-2.5-flash and
  * gemini-2.5-flash-lite on table-heavy PDFs (400K+ char output for a 4-page doc).
@@ -17,14 +24,82 @@ export class VisionLlmExtractor implements Extractor {
   readonly name: string;
   private readonly model: string;
   private readonly maxTokens: number;
+  private readonly segmentPages: number;
+  private readonly segmentConcurrency: number;
 
-  constructor(model: string, opts: { maxTokens?: number } = {}) {
+  constructor(
+    model: string,
+    opts: { maxTokens?: number; segmentPages?: number; segmentConcurrency?: number } = {}
+  ) {
     this.name = model;
     this.model = model;
     this.maxTokens = opts.maxTokens ?? 16000;
+    this.segmentPages = opts.segmentPages ?? 25;
+    this.segmentConcurrency = opts.segmentConcurrency ?? 4;
   }
 
   async extract(pdfBuffer: Buffer): Promise<ExtractionResult> {
+    const pageCount = await getPdfPageCount(pdfBuffer).catch(() => 0);
+
+    // Small docs (or unreadable — treat as single call).
+    if (pageCount === 0 || pageCount <= this.segmentPages) {
+      return this.extractSingleCall(pdfBuffer, "document.pdf", pageCount);
+    }
+
+    // Large docs — split + parallel.
+    const segments = await splitPdfByPageCount(pdfBuffer, this.segmentPages);
+    const tStart = Date.now();
+
+    // Run up to segmentConcurrency segments in parallel, preserving order.
+    const results: ExtractionResult[] = new Array(segments.length);
+    let nextIdx = 0;
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const idx = nextIdx++;
+        if (idx >= segments.length) return;
+        try {
+          results[idx] = await this.extractSingleCall(
+            segments[idx],
+            `document-segment-${idx + 1}-of-${segments.length}.pdf`,
+            this.segmentPages
+          );
+        } catch (err) {
+          throw new Error(
+            `[VisionLlmExtractor segment ${idx + 1}/${segments.length}] ${(err as Error).message}`
+          );
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(this.segmentConcurrency, segments.length) }, () => worker())
+    );
+
+    const concatText = results.map((r) => r.text).join("\n\n");
+    const totalPromptTokens = results.reduce((s, r) => s + (r.usage?.prompt_tokens ?? 0), 0);
+    const totalCompletionTokens = results.reduce(
+      (s, r) => s + (r.usage?.completion_tokens ?? 0),
+      0
+    );
+    const totalCost = results.reduce((s, r) => s + (r.usage?.cost ?? 0), 0);
+
+    return {
+      text: concatText,
+      ms: Date.now() - tStart,
+      pages: pageCount,
+      model: `${this.model} (${segments.length} segments × ${this.segmentPages}pg)`,
+      usage: {
+        prompt_tokens: totalPromptTokens,
+        completion_tokens: totalCompletionTokens,
+        cost: totalCost,
+      },
+    };
+  }
+
+  private async extractSingleCall(
+    pdfBuffer: Buffer,
+    filename: string,
+    pages: number
+  ): Promise<ExtractionResult> {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
 
@@ -38,7 +113,7 @@ export class VisionLlmExtractor implements Extractor {
             {
               type: "file",
               file: {
-                filename: "document.pdf",
+                filename,
                 file_data: `data:application/pdf;base64,${base64}`,
               },
             },
@@ -71,7 +146,7 @@ export class VisionLlmExtractor implements Extractor {
       usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
     };
     const text = data.choices?.[0]?.message?.content ?? "";
-    return { text, ms, model: this.model, usage: data.usage };
+    return { text, ms, model: this.model, pages: pages || undefined, usage: data.usage };
   }
 }
 

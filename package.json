@@ -160,6 +160,7 @@
     "openai": "^6.16.0",
     "parse5": "^8.0.0",
     "pdf-img-convert": "^2.0.0",
+    "pdf-lib": "^1.17.1",
     "pptxgenjs": "^4.0.1",
     "prisma": "^5.22.0",
     "qrcode": "^1.5.4",
