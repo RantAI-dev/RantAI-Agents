@@ -80,4 +80,33 @@ describe("expandQuery", () => {
     const result = await expandQuery("same-query")
     expect(result).toEqual(["same-query", "new one"])
   })
+
+  it("does not cache on failure (retries next call)", async () => {
+    ;(global.fetch as any)
+      .mockRejectedValueOnce(new Error("ECONNRESET"))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '["x","y","z"]' } }] }),
+      })
+    const { expandQuery } = await import("@/lib/rag/query-expansion")
+    const first = await expandQuery("q")
+    expect(first).toEqual(["q"])
+    const second = await expandQuery("q")  // should retry, not hit cache
+    expect(second).toEqual(["q", "x", "y", "z"])
+    expect((global.fetch as any).mock.calls.length).toBe(2)
+  })
+
+  it("dedupes case- and whitespace-insensitively against original", async () => {
+    ;(global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: '["WHO is Claude","who  is  claude","Claude the AI"]' } }],
+      }),
+    })
+    const { expandQuery } = await import("@/lib/rag/query-expansion")
+    const result = await expandQuery("who is claude")
+    // First two paraphrases are case/whitespace variants of original → deduped.
+    // Third is genuinely new.
+    expect(result).toEqual(["who is claude", "Claude the AI"])
+  })
 })

@@ -32,6 +32,7 @@ export async function expandQuery(query: string): Promise<string[]> {
 Question: ${q}`;
 
   let paraphrases: string[] = [];
+  let success = false;
   try {
     const res = await fetch(OPENROUTER_URL, {
       method: "POST",
@@ -48,20 +49,26 @@ Question: ${q}`;
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const raw = data.choices?.[0]?.message?.content ?? "";
     const match = raw.match(/\[[\s\S]*\]/);
-    if (match) paraphrases = JSON.parse(match[0]);
+    if (match) { paraphrases = JSON.parse(match[0]); success = true; }
   } catch (err) {
     console.warn(`[query-expansion] failed (${(err as Error).message.slice(0, 100)}); using original query only`);
   }
 
-  // Dedupe against original + normalize to strings
-  const seen = new Set<string>([q]);
+  // Dedupe against original + normalize to strings.
+  // Normalize for comparison (case- and whitespace-insensitive), keep original casing in output.
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ");
+  const seen = new Set<string>([norm(q)]);
   const cleaned = [q];
   for (const p of paraphrases) {
     if (typeof p !== "string") continue;
     const trimmed = p.trim();
-    if (trimmed && !seen.has(trimmed)) { cleaned.push(trimmed); seen.add(trimmed); }
+    if (trimmed && !seen.has(norm(trimmed))) {
+      cleaned.push(trimmed);
+      seen.add(norm(trimmed));
+    }
   }
 
-  CACHE.set(q, cleaned);
+  // Only cache successful expansions — failed ones retry on the next call.
+  if (success) CACHE.set(q, cleaned);
   return cleaned;
 }
