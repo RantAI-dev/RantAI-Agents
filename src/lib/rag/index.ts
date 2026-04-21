@@ -104,3 +104,14 @@ export {
   getSupportedExtensions,
 } from "./file-processor";
 export type { ProcessedFile, SupportedFileType } from "./file-processor";
+
+// Phase 7
+export { bm25Search } from "./bm25-search";
+export type { Bm25Result } from "./bm25-search";
+export { reciprocalRankFusion } from "./hybrid-merge";
+export type { RrfOptions, RrfItem, RrfResult } from "./hybrid-merge";
+export { expandQuery } from "./query-expansion";
+export { generateContextualPrefixes } from "./contextual-retrieval";
+export { LruCache } from "./lru-cache";
+export type { LruCacheOptions } from "./lru-cache";
+export { searchByVector, searchSimilarBatch } from "./vector-store";
