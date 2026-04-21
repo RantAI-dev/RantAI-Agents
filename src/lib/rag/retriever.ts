@@ -55,7 +55,7 @@ export async function retrieveContext(
   }
 ): Promise<RetrievalResult> {
   const {
-    minSimilarity = 0.30, // Lower threshold to capture broad/overview queries
+    minSimilarity = 0.30,
     maxChunks = 5,
     categoryFilter,
     groupIds,
@@ -63,19 +63,50 @@ export async function retrieveContext(
 
   const cfg = getRagConfig();
   const reranker = getDefaultReranker();
-  // When rerank is on, pull a wider pool and let the reranker prune to maxChunks.
   const fetchLimit = reranker ? Math.max(cfg.rerankInitialK, maxChunks) : maxChunks;
 
-  // Search for similar chunks — qwen3-embedding-8b handles Bahasa natively,
-  // so no translation hop is needed.
-  let chunks = await searchWithThreshold(
-    query,
-    minSimilarity,
-    fetchLimit,
-    categoryFilter,
-    groupIds
-  );
+  // Phase 7: run vector and BM25 IN PARALLEL — max, not sum, of the two latencies.
+  const { bm25Search } = await import("./bm25-search");
+  const { reciprocalRankFusion } = await import("./hybrid-merge");
 
+  const [vectorChunks, bm25Chunks] = await Promise.all([
+    searchWithThreshold(query, minSimilarity, fetchLimit, categoryFilter, groupIds),
+    cfg.hybridBm25Enabled ? bm25Search(query, fetchLimit).catch(() => [] as any[]) : Promise.resolve([] as any[]),
+  ]);
+
+  // Build a single chunk pool keyed by chunk.id; vector wins metadata ties.
+  const pool = new Map<string, SearchResult>();
+  for (const v of vectorChunks) pool.set(v.id, v);
+  for (const b of bm25Chunks) {
+    if (pool.has(b.id)) continue;
+    pool.set(b.id, {
+      id: b.id,
+      documentId: b.documentId,
+      documentTitle: "", // not returned by bm25 query; could be enriched in future
+      content: b.content,
+      categories: [],
+      subcategory: null,
+      section: null,
+      similarity: 0,
+    });
+  }
+
+  // Fuse ranks via RRF across the two arms.
+  const fused = cfg.hybridBm25Enabled && bm25Chunks.length > 0
+    ? reciprocalRankFusion(
+        [
+          vectorChunks.map((v) => ({ id: v.id })),
+          bm25Chunks.map((b) => ({ id: b.id })),
+        ],
+        { limit: fetchLimit }
+      )
+    : vectorChunks.map((v) => ({ id: v.id, rrfScore: v.similarity, sources: [0], first: { id: v.id } }));
+
+  let chunks: SearchResult[] = fused
+    .map((f) => pool.get(f.id))
+    .filter((c): c is SearchResult => c !== undefined);
+
+  // Existing reranker block — unchanged logic, applies to the fused set.
   if (reranker && chunks.length > maxChunks) {
     const candidates = chunks.map((c, i) => ({
       id: c.id,
@@ -91,7 +122,7 @@ export async function retrieveContext(
         .filter((c): c is SearchResult => c !== undefined);
     } catch (err) {
       console.warn(
-        `[RAG] rerank (${reranker.name}) failed, falling back to raw cosine order: ${(err as Error).message.slice(0, 120)}`
+        `[RAG] rerank (${reranker.name}) failed, falling back to fused order: ${(err as Error).message.slice(0, 120)}`
       );
       chunks = chunks.slice(0, maxChunks);
     }
