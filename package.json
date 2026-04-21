@@ -22,6 +22,7 @@
     "start": "NODE_ENV=production bun server.ts",
     "db:seed": "bun prisma/seed.ts",
     "kb:migrate": "bun scripts/kb-migrate-embeddings.ts",
+    "kb:apply-fts-schema": "bun scripts/kb-apply-fts-schema.ts",
     "bench:kb:extraction": "bun tests/bench-kb/src/bench-extraction.ts",
     "bench:kb:embedding": "bun tests/bench-kb/src/bench-embedding.ts",
     "bench:kb:rerank": "bun tests/bench-kb/src/bench-rerank.ts",

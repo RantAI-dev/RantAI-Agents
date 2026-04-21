@@ -18,6 +18,8 @@ DEFINE FIELD content ON document_chunk TYPE string;
 DEFINE FIELD chunk_index ON document_chunk TYPE int;
 DEFINE FIELD embedding ON document_chunk TYPE array<float>;
 DEFINE FIELD metadata ON document_chunk TYPE option<object>;
+-- Phase 7c: contextual prefix generated at ingest. Prepended to `content` during embedding prep.
+DEFINE FIELD IF NOT EXISTS contextual_prefix ON document_chunk TYPE option<string>;
 DEFINE FIELD created_at ON document_chunk TYPE datetime DEFAULT time::now();
 
 -- Vector index for similarity search.
@@ -25,6 +27,19 @@ DEFINE FIELD created_at ON document_chunk TYPE datetime DEFAULT time::now();
 -- To change KB_EMBEDDING_MODEL: drop this index, run `bun run kb:migrate` which
 -- re-embeds every chunk and re-creates the index at the new dimension.
 DEFINE INDEX embedding_idx ON document_chunk FIELDS embedding MTREE DIMENSION 4096 DIST COSINE;
+
+-- =====================================
+-- Phase 7: BM25 full-text search on chunks
+-- =====================================
+-- English analyzer: class tokenizer + lowercase + snowball stemmer.
+-- Adjust or clone (e.g. kb_id with indonesian stemmer) if you support more langs.
+DEFINE ANALYZER IF NOT EXISTS kb_en TOKENIZERS class FILTERS lowercase, snowball(english);
+
+-- SEARCH index enables @@ BM25 lookups on content field.
+-- BM25(1.2, 0.75) are standard Robertson–Sparck Jones parameters.
+DEFINE INDEX IF NOT EXISTS content_search_idx
+  ON document_chunk FIELDS content
+  SEARCH ANALYZER kb_en BM25(1.2, 0.75) HIGHLIGHTS;
 
 -- Indexes for filtering and lookups
 DEFINE INDEX document_id_idx ON document_chunk FIELDS document_id;
