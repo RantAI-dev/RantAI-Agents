@@ -65,12 +65,33 @@ export async function retrieveContext(
   const reranker = getDefaultReranker();
   const fetchLimit = reranker ? Math.max(cfg.rerankInitialK, maxChunks) : maxChunks;
 
+  // Phase 7b: query expansion (optional). Fires an extra LLM call to get paraphrases;
+  // expandQuery returns [original] when disabled or on any failure (never throws).
+  const { expandQuery } = await import("./query-expansion");
+  const expanded = await expandQuery(query);
+
   // Phase 7: run vector and BM25 IN PARALLEL — max, not sum, of the two latencies.
   const { bm25Search } = await import("./bm25-search");
   const { reciprocalRankFusion } = await import("./hybrid-merge");
 
   const [vectorChunks, bm25Chunks] = await Promise.all([
-    searchWithThreshold(query, minSimilarity, fetchLimit, categoryFilter, groupIds),
+    expanded.length > 1
+      ? (async () => {
+          const { searchSimilarBatch } = await import("./vector-store");
+          const lists = await searchSimilarBatch(expanded, fetchLimit, categoryFilter, groupIds);
+          const union = new Map<string, SearchResult>();
+          for (const list of lists) {
+            for (const r of list) {
+              if (r.similarity < minSimilarity) continue;
+              const prev = union.get(r.id);
+              if (!prev || r.similarity > prev.similarity) union.set(r.id, r);
+            }
+          }
+          return Array.from(union.values())
+            .sort((a, b) => b.similarity - a.similarity)
+            .slice(0, fetchLimit);
+        })()
+      : searchWithThreshold(query, minSimilarity, fetchLimit, categoryFilter, groupIds),
     cfg.hybridBm25Enabled ? bm25Search(query, fetchLimit).catch(() => [] as any[]) : Promise.resolve([] as any[]),
   ]);
 

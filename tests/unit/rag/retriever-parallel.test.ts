@@ -61,3 +61,58 @@ describe("retriever — parallel vector + BM25", () => {
     expect(bm25Mock).not.toHaveBeenCalled()
   })
 })
+
+describe("retriever — query expansion with parallel embed", () => {
+  const originalEnv = { ...process.env }
+  beforeEach(() => {
+    process.env.OPENROUTER_API_KEY = "test"
+    process.env.KB_HYBRID_BM25_ENABLED = "false"
+    process.env.KB_RERANK_ENABLED = "false"
+    process.env.KB_QUERY_EXPANSION_ENABLED = "true"
+    process.env.KB_QUERY_EXPANSION_PARAPHRASES = "2"
+    vi.resetModules()
+  })
+  afterEach(() => { process.env = { ...originalEnv } })
+
+  it("expands query, embeds all variants in ONE batched call, runs N searches in parallel", async () => {
+    const embedFetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [0,1,2].map(() => ({ embedding: new Array(4096).fill(0.1) })) }),
+    })
+    const chatFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '["para1","para2"]' } }] }),
+    })
+    global.fetch = (async (url: string, init: any) => {
+      if (url.endsWith("/embeddings")) return embedFetch(url, init)
+      return chatFetch(url, init)
+    }) as any
+
+    const vectorMock = vi.fn().mockResolvedValue([
+      { id: "v", content: "", documentId: "d", documentTitle: "t", categories: [], subcategory: null, section: null, similarity: 0.9 },
+    ])
+    vi.doMock("@/lib/rag/vector-store", () => ({
+      searchWithThreshold: vectorMock,
+      searchSimilar: vi.fn(),
+      searchByVector: vectorMock,
+      searchSimilarBatch: async (queries: string[], limit: number) => {
+        // Simulate batched embed then per-query search
+        const embedRes = await embedFetch("https://openrouter.ai/api/v1/embeddings", { body: JSON.stringify({ input: queries }) })
+        await embedRes.json()
+        return Promise.all(queries.map(() => vectorMock()))
+      },
+    }))
+    vi.doMock("@/lib/rag/bm25-search", () => ({ bm25Search: async () => [] }))
+
+    const { retrieveContext } = await import("@/lib/rag/retriever")
+    await retrieveContext("original question", { maxChunks: 5 })
+
+    // One /embeddings batch call with 3 inputs (original + 2 paraphrases).
+    expect(embedFetch).toHaveBeenCalledTimes(1)
+    const embedBody = JSON.parse(embedFetch.mock.calls[0][1].body)
+    expect(embedBody.input).toEqual(["original question", "para1", "para2"])
+
+    // 3 vector searches fanned out in parallel.
+    expect(vectorMock).toHaveBeenCalledTimes(3)
+  })
+})

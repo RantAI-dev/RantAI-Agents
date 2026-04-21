@@ -399,6 +399,106 @@ export async function searchByDocumentIds(
 }
 
 /**
+ * Same cosine search as `searchSimilar`, but takes a precomputed embedding.
+ * Used by searchSimilarBatch so we don't re-embed the same query.
+ */
+export async function searchByVector(
+  queryEmbedding: number[],
+  limit: number = 5,
+  categoryFilter?: string,
+  groupIds?: string[]
+): Promise<SearchResult[]> {
+  const surrealClient = await getSurrealClient();
+
+  let documentIds: string[] | null = null;
+  if (categoryFilter || (groupIds && groupIds.length > 0)) {
+    const whereClause: {
+      categories?: { has: string };
+      groups?: { some: { groupId: { in: string[] } } };
+    } = {};
+    if (categoryFilter) whereClause.categories = { has: categoryFilter };
+    if (groupIds && groupIds.length > 0) {
+      whereClause.groups = { some: { groupId: { in: groupIds } } };
+    }
+    const filteredDocs = await prisma.document.findMany({
+      where: whereClause,
+      select: { id: true },
+    });
+    documentIds = filteredDocs.map((d) => d.id);
+    if (documentIds.length === 0) return [];
+  }
+
+  let sql: string;
+  const vars: Record<string, unknown> = {
+    embedding: queryEmbedding,
+    limit,
+  };
+  if (documentIds) {
+    sql = `
+      SELECT id, document_id, content, metadata,
+        vector::similarity::cosine(embedding, $embedding) AS similarity
+      FROM document_chunk
+      WHERE document_id IN $document_ids
+      ORDER BY similarity DESC
+      LIMIT $limit
+    `;
+    vars.document_ids = documentIds;
+  } else {
+    sql = `
+      SELECT id, document_id, content, metadata,
+        vector::similarity::cosine(embedding, $embedding) AS similarity
+      FROM document_chunk
+      ORDER BY similarity DESC
+      LIMIT $limit
+    `;
+  }
+
+  const surrealResults = await surrealClient.query<SurrealChunk>(sql, vars);
+  const chunks = surrealResults[0]?.result || [];
+  if (chunks.length === 0) return [];
+
+  const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
+  const documents = await prisma.document.findMany({
+    where: { id: { in: resultDocIds } },
+    select: { id: true, title: true, categories: true, subcategory: true },
+  });
+  const docMap = new Map(documents.map((d) => [d.id, d]));
+
+  return chunks.map((chunk) => {
+    const doc = docMap.get(chunk.document_id);
+    const md = (chunk.metadata as Record<string, unknown> | null) ?? {};
+    return {
+      id: chunk.id,
+      content: chunk.content,
+      documentId: chunk.document_id,
+      documentTitle: doc?.title || "Unknown",
+      categories: doc?.categories || [],
+      subcategory: doc?.subcategory || null,
+      section: (md.section as string | undefined) ?? null,
+      similarity: chunk.similarity,
+    };
+  });
+}
+
+/**
+ * Phase 7: batch-embed N queries in ONE OpenRouter call, then search each in
+ * parallel via Promise.all. Returns array-of-arrays aligned with the input.
+ */
+export async function searchSimilarBatch(
+  queries: string[],
+  limit: number = 5,
+  categoryFilter?: string,
+  groupIds?: string[]
+): Promise<SearchResult[][]> {
+  if (queries.length === 0) return [];
+  const vectors = await generateEmbeddings(queries);
+  const searches = vectors.map((vec) =>
+    searchByVector(vec, limit, categoryFilter, groupIds)
+  );
+  return await Promise.all(searches);
+}
+
+/**
  * Store chunks for an existing document (used by knowledge API)
  */
 export async function storeChunks(
