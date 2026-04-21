@@ -21,6 +21,7 @@
     "lint": "eslint .",
     "start": "NODE_ENV=production bun server.ts",
     "db:seed": "bun prisma/seed.ts",
+    "kb:backfill-contextual": "bun scripts/kb-backfill-contextual-prefixes.ts",
     "kb:migrate": "bun scripts/kb-migrate-embeddings.ts",
     "kb:apply-fts-schema": "bun scripts/kb-apply-fts-schema.ts",
     "bench:kb:extraction": "bun tests/bench-kb/src/bench-extraction.ts",
