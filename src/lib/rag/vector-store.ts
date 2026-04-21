@@ -79,6 +79,7 @@ export async function storeDocument(
         chunk_index = $chunk_index,
         embedding = $embedding,
         metadata = $metadata,
+        contextual_prefix = $contextual_prefix,
         created_at = time::now()`,
       {
         id: chunkId,
@@ -87,6 +88,7 @@ export async function storeDocument(
         chunk_index: chunk.metadata.chunkIndex,
         embedding: embedding,
         metadata: chunk.metadata,
+        contextual_prefix: chunk.metadata.contextualPrefix ?? null,
       }
     );
   }
@@ -419,6 +421,7 @@ export async function storeChunks(
         chunk_index = $chunk_index,
         embedding = $embedding,
         metadata = $metadata,
+        contextual_prefix = $contextual_prefix,
         created_at = time::now()`,
       {
         id: chunkId,
@@ -427,6 +430,7 @@ export async function storeChunks(
         chunk_index: chunk.metadata.chunkIndex,
         embedding: embedding,
         metadata: chunk.metadata,
+        contextual_prefix: chunk.metadata.contextualPrefix ?? null,
       }
     );
   }

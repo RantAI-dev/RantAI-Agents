@@ -11,6 +11,7 @@ export interface Chunk {
     subcategory?: string;
     section?: string;
     chunkIndex: number;
+    contextualPrefix?: string;  // Phase 7 — added at ingest
   };
 }
 
@@ -182,19 +183,13 @@ export function chunkDocuments(
  */
 export function prepareChunkForEmbedding(chunk: Chunk): string {
   const parts: string[] = [];
-
   parts.push(`Category: ${chunk.metadata.category}`);
-
-  if (chunk.metadata.subcategory) {
-    parts.push(`Topic: ${chunk.metadata.subcategory}`);
+  if (chunk.metadata.subcategory) parts.push(`Topic: ${chunk.metadata.subcategory}`);
+  if (chunk.metadata.section) parts.push(`Section: ${chunk.metadata.section}`);
+  if (chunk.metadata.contextualPrefix && chunk.metadata.contextualPrefix.trim()) {
+    parts.push(`Context: ${chunk.metadata.contextualPrefix.trim()}`);
   }
-
-  if (chunk.metadata.section) {
-    parts.push(`Section: ${chunk.metadata.section}`);
-  }
-
   parts.push("");
   parts.push(chunk.content);
-
   return parts.join("\n");
 }
