@@ -14,7 +14,8 @@ import { getRagConfig } from "./config";
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/embeddings";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 128;
+const EMBED_CONCURRENCY = 4;
 
 /**
  * Sleep for specified milliseconds
@@ -113,98 +114,95 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 /**
  * Generate embeddings for multiple texts in batch
  * More efficient than calling generateEmbedding multiple times
- * Includes retry logic and response validation
+ * Runs EMBED_CONCURRENCY worker tasks in parallel, each picking the next
+ * unfinished batch index from a shared counter. Results are indexed by batch
+ * position so output order always matches input order.
  */
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-  if (texts.length === 0) {
-    return [];
+  if (texts.length === 0) return [];
+
+  // Split into batches.
+  const batches: string[][] = [];
+  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
+    batches.push(texts.slice(i, i + BATCH_SIZE));
   }
 
-  const allEmbeddings: number[][] = [];
+  // Results indexed by batch position so output order matches input order.
+  const results: number[][][] = new Array(batches.length);
 
-  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    const batch = texts.slice(i, i + BATCH_SIZE);
-    let lastError: Error | null = null;
+  let nextIdx = 0;
+  async function worker(): Promise<void> {
+    while (true) {
+      const idx = nextIdx++;
+      if (idx >= batches.length) return;
+      const batch = batches[idx];
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const response = await fetch(OPENROUTER_API_URL, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: getRagConfig().embeddingModel,
-            input: batch,
-          }),
-        });
+      let lastError: Error | null = null;
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const response = await fetch(OPENROUTER_API_URL, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              model: getRagConfig().embeddingModel,
+              input: batch,
+            }),
+          });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-
-          // Retry on transient errors
-          if (isTransientError(response.status) && attempt < MAX_RETRIES) {
-            const delay = Math.min(RETRY_DELAY_MS * Math.pow(2, attempt - 1), 10000);
-            console.warn(
-              `[Embeddings] Batch ${Math.floor(i / BATCH_SIZE) + 1} attempt ${attempt}/${MAX_RETRIES} failed (${response.status}), retrying in ${delay}ms...`
-            );
-            await sleep(delay);
-            continue;
+          if (!response.ok) {
+            const errorText = await response.text();
+            if (isTransientError(response.status) && attempt < MAX_RETRIES) {
+              const delay = Math.min(RETRY_DELAY_MS * Math.pow(2, attempt - 1), 10000);
+              console.warn(
+                `[Embeddings] Batch ${idx + 1}/${batches.length} attempt ${attempt}/${MAX_RETRIES} failed (${response.status}), retrying in ${delay}ms...`
+              );
+              await sleep(delay);
+              continue;
+            }
+            throw new Error(`OpenRouter embedding API error: ${response.status} - ${errorText}`);
           }
 
-          throw new Error(`OpenRouter embedding API error: ${response.status} - ${errorText}`);
-        }
-
-        const data = await response.json();
-
-        // Validate response structure
-        if (!validateEmbeddingResponse(data)) {
-          throw new Error(`Invalid embedding response structure: ${JSON.stringify(data).slice(0, 500)}`);
-        }
-
-        if (data.data.length === 0) {
-          console.warn("[Embeddings] Received empty data array from API");
-          // Continue with empty array rather than failing
+          const data = await response.json();
+          if (!validateEmbeddingResponse(data)) {
+            throw new Error(`Invalid embedding response structure: ${JSON.stringify(data).slice(0, 500)}`);
+          }
+          if (data.data.length === 0) {
+            console.warn("[Embeddings] Received empty data array from API");
+            results[idx] = [];
+            break;
+          }
+          const embeddings = data.data.map((item: { embedding: number[] }, i: number) => {
+            if (!item?.embedding || !Array.isArray(item.embedding)) {
+              throw new Error(`Invalid embedding item at index ${i}: ${JSON.stringify(item).slice(0, 200)}`);
+            }
+            return item.embedding;
+          });
+          results[idx] = embeddings;
+          lastError = null;
           break;
-        }
-
-        // Validate each item before mapping
-        const embeddings = data.data.map((item: { embedding: number[] }, idx: number) => {
-          if (!item?.embedding || !Array.isArray(item.embedding)) {
-            throw new Error(
-              `Invalid embedding item at index ${idx}: ${JSON.stringify(item).slice(0, 200)}`
+        } catch (error) {
+          lastError = error as Error;
+          if (attempt === MAX_RETRIES) {
+            console.error(
+              `[Embeddings] Batch ${idx + 1}/${batches.length} failed after ${MAX_RETRIES} retries:`,
+              lastError.message
             );
           }
-          return item.embedding;
-        });
-
-        allEmbeddings.push(...embeddings);
-        lastError = null;
-        break; // Success, exit retry loop
-
-      } catch (error) {
-        lastError = error as Error;
-        if (attempt === MAX_RETRIES) {
-          console.error(
-            `[Embeddings] Batch ${Math.floor(i / BATCH_SIZE) + 1} failed after ${MAX_RETRIES} retries:`,
-            lastError.message
-          );
         }
       }
-    }
-
-    // If all retries failed for this batch, throw
-    if (lastError) {
-      throw lastError;
-    }
-
-    // Small delay between batches to prevent rate limiting
-    if (i + BATCH_SIZE < texts.length) {
-      await sleep(100);
+      if (lastError) throw lastError;
     }
   }
 
+  // Run EMBED_CONCURRENCY workers in parallel.
+  await Promise.all(Array.from({ length: Math.min(EMBED_CONCURRENCY, batches.length) }, () => worker()));
+
+  // Flatten results in original order.
+  const allEmbeddings: number[][] = [];
+  for (const batchResult of results) allEmbeddings.push(...batchResult);
   return allEmbeddings;
 }
 
