@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest"
-import { getRagConfig } from "@/lib/rag/config"
+import { getRagConfig, resolveApiKey } from "@/lib/rag/config"
 
 describe("getRagConfig", () => {
   const originalEnv = { ...process.env }
@@ -13,6 +13,10 @@ describe("getRagConfig", () => {
     delete process.env.KB_RERANK_MODEL
     delete process.env.KB_RERANK_INITIAL_K
     delete process.env.KB_RERANK_FINAL_K
+    delete process.env.KB_EXTRACT_VISION_BASE_URL
+    delete process.env.KB_EXTRACT_VISION_API_KEY
+    delete process.env.KB_EMBEDDING_BASE_URL
+    delete process.env.KB_EMBEDDING_API_KEY
   })
 
   afterEach(() => {
@@ -73,6 +77,11 @@ describe("getRagConfig", () => {
     expect(cfg.queryExpansionModel).toBe("openai/gpt-4.1-nano")
     expect(cfg.queryExpansionParaphrases).toBe(3)
     expect(cfg.contextualRetrievalModel).toBe("openai/gpt-4.1-nano")
+    // on-prem URL defaults
+    expect(cfg.extractVisionBaseUrl).toBe("https://openrouter.ai/api/v1/chat/completions")
+    expect(cfg.extractVisionApiKey).toBe("")
+    expect(cfg.embeddingBaseUrl).toBe("https://openrouter.ai/api/v1/embeddings")
+    expect(cfg.embeddingApiKey).toBe("")
   })
 
   it("phase 7 env overrides are honored", () => {
@@ -87,5 +96,23 @@ describe("getRagConfig", () => {
     expect(cfg.queryExpansionEnabled).toBe(true)
     expect(cfg.queryExpansionParaphrases).toBe(5)
     expect(cfg.contextualRetrievalModel).toBe("anthropic/claude-haiku-4.5")
+  })
+
+  it("on-prem base URL overrides are honored", () => {
+    process.env.KB_EXTRACT_VISION_BASE_URL = "http://vllm:8000/v1/chat/completions"
+    process.env.KB_EXTRACT_VISION_API_KEY = "vllm-token"
+    process.env.KB_EMBEDDING_BASE_URL = "http://tei:8080/embed"
+    process.env.KB_EMBEDDING_API_KEY = "tei-token"
+    const cfg = getRagConfig()
+    expect(cfg.extractVisionBaseUrl).toBe("http://vllm:8000/v1/chat/completions")
+    expect(cfg.extractVisionApiKey).toBe("vllm-token")
+    expect(cfg.embeddingBaseUrl).toBe("http://tei:8080/embed")
+    expect(cfg.embeddingApiKey).toBe("tei-token")
+  })
+
+  it("resolveApiKey uses override when set, else falls back to OPENROUTER_API_KEY", () => {
+    process.env.OPENROUTER_API_KEY = "global-key"
+    expect(resolveApiKey("")).toBe("global-key")
+    expect(resolveApiKey("override-key")).toBe("override-key")
   })
 })

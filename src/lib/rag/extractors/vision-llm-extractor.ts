@@ -2,8 +2,6 @@ import { PDFDocument } from "pdf-lib";
 import { splitPdfByPageCount, getPdfPageCount } from "./pdf-splitter";
 import type { Extractor, ExtractionResult } from "./types";
 
-const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-
 /**
  * Vision-LLM PDF extractor. Sends the PDF to OpenRouter via the `file` content
  * type and asks for clean, compact Markdown preserving headings, tables, math,
@@ -100,8 +98,10 @@ export class VisionLlmExtractor implements Extractor {
     filename: string,
     pages: number
   ): Promise<ExtractionResult> {
-    const apiKey = process.env.OPENROUTER_API_KEY;
-    if (!apiKey) throw new Error("OPENROUTER_API_KEY is not set");
+    const { getRagConfig, resolveApiKey } = await import("../config");
+    const cfg = getRagConfig();
+    const apiKey = resolveApiKey(cfg.extractVisionApiKey);
+    if (!apiKey) throw new Error("No API key configured: set KB_EXTRACT_VISION_API_KEY or OPENROUTER_API_KEY");
 
     const base64 = pdfBuffer.toString("base64");
     const body = {
@@ -126,7 +126,7 @@ export class VisionLlmExtractor implements Extractor {
     };
 
     const t0 = Date.now();
-    const res = await fetch(OPENROUTER_URL, {
+    const res = await fetch(cfg.extractVisionBaseUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,

@@ -14,6 +14,14 @@ export interface RagConfig {
   queryExpansionEnabled: boolean;
   queryExpansionModel: string;
   queryExpansionParaphrases: number;
+  /** Base URL for vision-LLM extraction. Default: OpenRouter /chat/completions. Override for on-prem vLLM. */
+  extractVisionBaseUrl: string;
+  /** Explicit API key for the extraction endpoint. Falls back to OPENROUTER_API_KEY when empty. */
+  extractVisionApiKey: string;
+  /** Base URL for embedding endpoint. Default: OpenRouter /embeddings. Override for on-prem TEI. */
+  embeddingBaseUrl: string;
+  /** Explicit API key for the embedding endpoint. Falls back to OPENROUTER_API_KEY when empty. */
+  embeddingApiKey: string;
 }
 
 const DEFAULTS: RagConfig = {
@@ -32,7 +40,17 @@ const DEFAULTS: RagConfig = {
   queryExpansionEnabled: false,         // opt-in: adds ~400ms to each query
   queryExpansionModel: "openai/gpt-4.1-nano",
   queryExpansionParaphrases: 3,
+  extractVisionBaseUrl: "https://openrouter.ai/api/v1/chat/completions",
+  extractVisionApiKey: "",
+  embeddingBaseUrl: "https://openrouter.ai/api/v1/embeddings",
+  embeddingApiKey: "",
 };
+
+/** Resolve an API key: use the per-endpoint override if set, else fall back to OPENROUTER_API_KEY. */
+export function resolveApiKey(override: string): string {
+  if (override) return override;
+  return process.env.OPENROUTER_API_KEY || "";
+}
 
 function parseIntEnv(key: string, fallback: number): number {
   const raw = process.env[key];
@@ -60,5 +78,9 @@ export function getRagConfig(): RagConfig {
     queryExpansionEnabled: process.env.KB_QUERY_EXPANSION_ENABLED === "true",
     queryExpansionModel: process.env.KB_QUERY_EXPANSION_MODEL || DEFAULTS.queryExpansionModel,
     queryExpansionParaphrases: parseIntEnv("KB_QUERY_EXPANSION_PARAPHRASES", DEFAULTS.queryExpansionParaphrases),
+    extractVisionBaseUrl: process.env.KB_EXTRACT_VISION_BASE_URL || DEFAULTS.extractVisionBaseUrl,
+    extractVisionApiKey: process.env.KB_EXTRACT_VISION_API_KEY || DEFAULTS.extractVisionApiKey,
+    embeddingBaseUrl: process.env.KB_EMBEDDING_BASE_URL || DEFAULTS.embeddingBaseUrl,
+    embeddingApiKey: process.env.KB_EMBEDDING_API_KEY || DEFAULTS.embeddingApiKey,
   };
 }

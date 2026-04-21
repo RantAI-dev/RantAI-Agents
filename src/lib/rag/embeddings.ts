@@ -9,9 +9,7 @@
  * - Batch processing with rate limiting
  */
 
-import { getRagConfig } from "./config";
-
-const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/embeddings";
+import { getRagConfig, resolveApiKey } from "./config";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 const BATCH_SIZE = 128;
@@ -54,17 +52,20 @@ function validateEmbeddingResponse(data: unknown): data is { data: Array<{ embed
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
   let lastError: Error | null = null;
+  const cfg = getRagConfig();
+  const apiKey = resolveApiKey(cfg.embeddingApiKey);
+  if (!apiKey) throw new Error("No API key configured: set KB_EMBEDDING_API_KEY or OPENROUTER_API_KEY");
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(OPENROUTER_API_URL, {
+      const response = await fetch(cfg.embeddingBaseUrl, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+          Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: getRagConfig().embeddingModel,
+          model: cfg.embeddingModel,
           input: text,
         }),
       });
@@ -121,6 +122,10 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   if (texts.length === 0) return [];
 
+  const cfg = getRagConfig();
+  const apiKey = resolveApiKey(cfg.embeddingApiKey);
+  if (!apiKey) throw new Error("No API key configured: set KB_EMBEDDING_API_KEY or OPENROUTER_API_KEY");
+
   // Split into batches.
   const batches: string[][] = [];
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
@@ -140,14 +145,14 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
       let lastError: Error | null = null;
       for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-          const response = await fetch(OPENROUTER_API_URL, {
+          const response = await fetch(cfg.embeddingBaseUrl, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: getRagConfig().embeddingModel,
+              model: cfg.embeddingModel,
               input: batch,
             }),
           });

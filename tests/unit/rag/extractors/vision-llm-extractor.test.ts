@@ -13,6 +13,9 @@ describe("VisionLlmExtractor", () => {
   afterEach(() => {
     global.fetch = originalFetch
     process.env.OPENROUTER_API_KEY = originalKey
+    delete process.env.KB_EXTRACT_VISION_BASE_URL
+    delete process.env.KB_EXTRACT_VISION_API_KEY
+    vi.resetModules()
   })
 
   it("sends PDF as file content-type to OpenRouter and returns markdown", async () => {
@@ -59,6 +62,25 @@ describe("VisionLlmExtractor", () => {
     delete process.env.OPENROUTER_API_KEY
     const extractor = new VisionLlmExtractor("google/gemini-3-flash-preview")
     await expect(extractor.extract(Buffer.from("x"))).rejects.toThrow(/OPENROUTER_API_KEY/)
+  })
+
+  it("uses KB_EXTRACT_VISION_BASE_URL when set (on-prem vLLM)", async () => {
+    process.env.KB_EXTRACT_VISION_BASE_URL = "http://vllm:8000/v1/chat/completions"
+    process.env.KB_EXTRACT_VISION_API_KEY = "vllm-token"
+    ;(global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "ok" } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      }),
+    })
+    vi.resetModules()
+    const { VisionLlmExtractor } = await import("@/lib/rag/extractors/vision-llm-extractor")
+    const extractor = new VisionLlmExtractor("Qwen/Qwen3-VL-30B-A3B-Instruct-FP8")
+    await extractor.extract(Buffer.from("%PDF-1.5\nfake"))
+    const call = (global.fetch as any).mock.calls[0]
+    expect(call[0]).toBe("http://vllm:8000/v1/chat/completions")
+    expect(call[1].headers.Authorization).toBe("Bearer vllm-token")
   })
 })
 
