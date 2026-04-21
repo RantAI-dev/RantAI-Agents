@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
-import { chunkDocument, ChunkOptions } from "./chunker";
+import { chunkDocument, ChunkOptions, Chunk } from "./chunker";
+import { generateContextualPrefixes } from "./contextual-retrieval";
 import { storeDocument, clearAllDocuments } from "./vector-store";
 import {
   processFile,
@@ -9,6 +10,17 @@ import {
   isSupportedFile,
   getSupportedExtensions,
 } from "./file-processor";
+
+async function enrichChunksWithContext(
+  fullText: string,
+  chunks: Chunk[]
+): Promise<Chunk[]> {
+  const prefixes = await generateContextualPrefixes(fullText, chunks.map((c) => c.content));
+  return chunks.map((c, i) => ({
+    ...c,
+    metadata: { ...c.metadata, contextualPrefix: prefixes[i] || undefined },
+  }));
+}
 
 /**
  * Ingestion script for loading knowledge base documents into the vector store
@@ -120,17 +132,20 @@ export async function ingestKnowledgeBase(
 
     console.log(`  - Created ${chunks.length} chunks`);
 
+    const enriched = await enrichChunksWithContext(content, chunks);
+    console.log(`  - Generated contextual prefixes for ${enriched.filter((c) => c.metadata.contextualPrefix).length}/${enriched.length} chunks`);
+
     // Store document and chunks with embeddings
     await storeDocument(
       config.title,
       content,
       [config.category],
       config.subcategory,
-      chunks,
+      enriched,
       groupIds
     );
 
-    totalChunks += chunks.length;
+    totalChunks += enriched.length;
   }
 
   console.log(`\n✓ Ingestion complete!`);
@@ -157,17 +172,10 @@ export async function ingestSingleDocument(
 
   const content = fs.readFileSync(filePath, "utf-8");
 
-  const chunks = chunkDocument(
-    content,
-    title,
-    category,
-    subcategory,
-    CHUNK_OPTIONS
-  );
-
-  await storeDocument(title, content, [category], subcategory ?? null, chunks);
-
-  console.log(`✓ Document ingested with ${chunks.length} chunks`);
+  const chunks = chunkDocument(content, title, category, subcategory, CHUNK_OPTIONS);
+  const enriched = await enrichChunksWithContext(content, chunks);
+  await storeDocument(title, content, [category], subcategory ?? null, enriched);
+  console.log(`✓ Document ingested with ${enriched.length} chunks`);
 }
 
 /**
@@ -199,27 +207,15 @@ export async function ingestFile(
   const content = processed.content;
 
   // Chunk the content
-  const chunks = chunkDocument(
-    content,
-    title,
-    category,
-    subcategory,
-    CHUNK_OPTIONS
-  );
+  const chunks = chunkDocument(content, title, category, subcategory, CHUNK_OPTIONS);
+  const enriched = await enrichChunksWithContext(content, chunks);
 
   // Store document and chunks
-  await storeDocument(
-    title,
-    content,
-    [category],
-    subcategory ?? null,
-    chunks,
-    groupIds
-  );
+  await storeDocument(title, content, [category], subcategory ?? null, enriched, groupIds);
 
-  console.log(`✓ ${fileType.toUpperCase()} ingested with ${chunks.length} chunks`);
+  console.log(`✓ ${fileType.toUpperCase()} ingested with ${enriched.length} chunks`);
 
-  return { chunks: chunks.length, fileType };
+  return { chunks: enriched.length, fileType };
 }
 
 /**
