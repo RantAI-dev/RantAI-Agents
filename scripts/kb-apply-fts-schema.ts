@@ -2,6 +2,8 @@
 // Idempotent — uses IF NOT EXISTS. Safe to re-run.
 //
 // Usage: bun run kb:apply-fts-schema
+//
+// Keep STATEMENTS in sync with the Phase 7 section of src/lib/surrealdb/schema.surql.
 import { getSurrealClient } from "@/lib/surrealdb";
 
 const STATEMENTS = [
@@ -13,8 +15,10 @@ const STATEMENTS = [
 async function main() {
   const surreal = await getSurrealClient();
   for (const sql of STATEMENTS) {
-    console.log(`[fts-schema] ${sql.slice(0, 80)}...`);
-    await surreal.query(sql);
+    console.log(`[fts-schema] ${sql}`);
+    const res = await surreal.query(sql);
+    const bad = (res as Array<{ status?: string }>).find((r) => r?.status === "ERR");
+    if (bad) throw new Error(`DDL returned ERR: ${JSON.stringify(bad)} for: ${sql}`);
   }
   console.log("[fts-schema] done");
   process.exit(0);
