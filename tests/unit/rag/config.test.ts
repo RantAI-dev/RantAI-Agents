@@ -58,4 +58,34 @@ describe("getRagConfig", () => {
     process.env.KB_RERANK_ENABLED = "true"
     expect(getRagConfig().rerankEnabled).toBe(true)
   })
+
+  it("phase 7 defaults: BM25 on, CR off, query-expansion off", () => {
+    delete process.env.KB_HYBRID_BM25_ENABLED
+    delete process.env.KB_CONTEXTUAL_RETRIEVAL_ENABLED
+    delete process.env.KB_QUERY_EXPANSION_ENABLED
+    delete process.env.KB_QUERY_EXPANSION_MODEL
+    delete process.env.KB_QUERY_EXPANSION_PARAPHRASES
+    delete process.env.KB_CONTEXTUAL_RETRIEVAL_MODEL
+    const cfg = getRagConfig()
+    expect(cfg.hybridBm25Enabled).toBe(true)
+    expect(cfg.contextualRetrievalEnabled).toBe(false)
+    expect(cfg.queryExpansionEnabled).toBe(false)
+    expect(cfg.queryExpansionModel).toBe("openai/gpt-4.1-nano")
+    expect(cfg.queryExpansionParaphrases).toBe(3)
+    expect(cfg.contextualRetrievalModel).toBe("openai/gpt-4.1-nano")
+  })
+
+  it("phase 7 env overrides are honored", () => {
+    process.env.KB_HYBRID_BM25_ENABLED = "false"
+    process.env.KB_CONTEXTUAL_RETRIEVAL_ENABLED = "true"
+    process.env.KB_QUERY_EXPANSION_ENABLED = "true"
+    process.env.KB_QUERY_EXPANSION_PARAPHRASES = "5"
+    process.env.KB_CONTEXTUAL_RETRIEVAL_MODEL = "anthropic/claude-haiku-4.5"
+    const cfg = getRagConfig()
+    expect(cfg.hybridBm25Enabled).toBe(false)
+    expect(cfg.contextualRetrievalEnabled).toBe(true)
+    expect(cfg.queryExpansionEnabled).toBe(true)
+    expect(cfg.queryExpansionParaphrases).toBe(5)
+    expect(cfg.contextualRetrievalModel).toBe("anthropic/claude-haiku-4.5")
+  })
 })
