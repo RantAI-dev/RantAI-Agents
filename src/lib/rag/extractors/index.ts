@@ -3,10 +3,11 @@ import { VisionLlmExtractor } from "./vision-llm-extractor";
 import { UnpdfExtractor } from "./unpdf-extractor";
 import { MineruExtractor } from "./mineru-extractor";
 import { HybridExtractor } from "./hybrid-extractor";
+import { SmartRouterExtractor } from "./smart-router-extractor";
 import type { Extractor, ExtractionResult } from "./types";
 
 export type { Extractor, ExtractionResult };
-export { VisionLlmExtractor, UnpdfExtractor, MineruExtractor, HybridExtractor };
+export { VisionLlmExtractor, UnpdfExtractor, MineruExtractor, HybridExtractor, SmartRouterExtractor };
 
 /**
  * Build an extractor from a model-id sentinel:
@@ -25,6 +26,12 @@ function buildExtractor(modelId: string): Extractor {
   if (modelId === "hybrid") {
     const mineruUrl = getRagConfig().extractMineruBaseUrl;
     return new HybridExtractor(new MineruExtractor(mineruUrl), new UnpdfExtractor());
+  }
+  if (modelId === "smart") {
+    const cfg = getRagConfig();
+    // Recursively build the fallback from its sentinel / model id.
+    const fallback = buildExtractor(cfg.extractSmartFallback);
+    return new SmartRouterExtractor(new UnpdfExtractor(), fallback);
   }
   return new VisionLlmExtractor(modelId);
 }

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, afterEach } from "vitest"
 import { SmartRouterExtractor } from "@/lib/rag/extractors/smart-router-extractor"
 import type { Extractor, ExtractionResult } from "@/lib/rag/extractors/types"
 
@@ -83,5 +83,30 @@ describe("SmartRouterExtractor / fallback path", () => {
     const router = new SmartRouterExtractor(textLayer, fallback, { minCharsPerPage: 1000 })
     const result = await router.extract(Buffer.from("x"))
     expect(result.text).toBe("ocr result") // fallback used because 200 < 1000
+  })
+})
+
+describe("SmartRouterExtractor / integration with buildExtractor", () => {
+  const originalEnv = { ...process.env }
+  afterEach(() => { process.env = { ...originalEnv }; vi.resetModules() })
+
+  it("KB_EXTRACT_PRIMARY=smart builds a SmartRouterExtractor", async () => {
+    process.env.KB_EXTRACT_PRIMARY = "smart"
+    process.env.KB_EXTRACT_SMART_FALLBACK = "openai/gpt-4.1-nano"
+    const { getDefaultExtractor } = await import("@/lib/rag/extractors")
+    const ex = getDefaultExtractor()
+    expect(ex.name).toMatch(/^SmartRouter\(/)
+    expect(ex.name).toContain("unpdf")
+    expect(ex.name).toContain("openai/gpt-4.1-nano")
+  })
+
+  it("KB_EXTRACT_PRIMARY=smart with KB_EXTRACT_SMART_FALLBACK=mineru uses MineruExtractor", async () => {
+    process.env.KB_EXTRACT_PRIMARY = "smart"
+    process.env.KB_EXTRACT_SMART_FALLBACK = "mineru"
+    process.env.KB_EXTRACT_MINERU_BASE_URL = "http://localhost:8100"
+    const { getDefaultExtractor } = await import("@/lib/rag/extractors")
+    const ex = getDefaultExtractor()
+    expect(ex.name).toMatch(/^SmartRouter\(/)
+    expect(ex.name).toContain("MineruExtractor")
   })
 })
