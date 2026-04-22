@@ -18,6 +18,12 @@ export interface RagConfig {
   extractVisionBaseUrl: string;
   /** Explicit API key for the extraction endpoint. Falls back to OPENROUTER_API_KEY when empty. */
   extractVisionApiKey: string;
+  /**
+   * Base URL of a MinerU2.5-Pro sidecar (see services/mineru-server/).
+   * When set AND extractPrimary === "mineru", the ingest path sends PDFs
+   * here instead of an OpenRouter vision LLM. Example: "http://localhost:8100".
+   */
+  extractMineruBaseUrl: string;
   /** Base URL for embedding endpoint. Default: OpenRouter /embeddings. Override for on-prem TEI. */
   embeddingBaseUrl: string;
   /** Explicit API key for the embedding endpoint. Falls back to OPENROUTER_API_KEY when empty. */
@@ -25,12 +31,17 @@ export interface RagConfig {
 }
 
 const DEFAULTS: RagConfig = {
+  // Cloud default = gpt-4.1-nano (consistent accuracy, ~$0.00031/page, no catastrophic
+  // failure modes seen in our benches). On-prem deployments override to "mineru" +
+  // extractMineruBaseUrl to use the local MinerU2.5-Pro sidecar.
   extractPrimary: "openai/gpt-4.1-nano",
-  extractFallback: "google/gemini-3-flash-preview",
+  // Fallback = unpdf (text-layer only) so ingest still progresses when the primary
+  // extractor is unavailable / throws. No cloud fallback — keep the stack single-vendor.
+  extractFallback: "unpdf",
   embeddingModel: "qwen/qwen3-embedding-8b",
   embeddingDim: 4096,
   rerankEnabled: false,
-  rerankModel: "google/gemini-3-flash-preview",
+  rerankModel: "openai/gpt-4.1-nano",
   rerankInitialK: 20,
   rerankFinalK: 5,
   // Phase 7
@@ -42,6 +53,7 @@ const DEFAULTS: RagConfig = {
   queryExpansionParaphrases: 3,
   extractVisionBaseUrl: "https://openrouter.ai/api/v1/chat/completions",
   extractVisionApiKey: "",
+  extractMineruBaseUrl: "",
   embeddingBaseUrl: "https://openrouter.ai/api/v1/embeddings",
   embeddingApiKey: "",
 };
@@ -80,6 +92,7 @@ export function getRagConfig(): RagConfig {
     queryExpansionParaphrases: parseIntEnv("KB_QUERY_EXPANSION_PARAPHRASES", DEFAULTS.queryExpansionParaphrases),
     extractVisionBaseUrl: process.env.KB_EXTRACT_VISION_BASE_URL || DEFAULTS.extractVisionBaseUrl,
     extractVisionApiKey: process.env.KB_EXTRACT_VISION_API_KEY || DEFAULTS.extractVisionApiKey,
+    extractMineruBaseUrl: process.env.KB_EXTRACT_MINERU_BASE_URL || DEFAULTS.extractMineruBaseUrl,
     embeddingBaseUrl: process.env.KB_EMBEDDING_BASE_URL || DEFAULTS.embeddingBaseUrl,
     embeddingApiKey: process.env.KB_EMBEDDING_API_KEY || DEFAULTS.embeddingApiKey,
   };

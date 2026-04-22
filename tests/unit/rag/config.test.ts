@@ -26,13 +26,20 @@ describe("getRagConfig", () => {
   it("returns SOTA defaults when no env vars set", () => {
     const cfg = getRagConfig()
     expect(cfg.extractPrimary).toBe("openai/gpt-4.1-nano")
-    expect(cfg.extractFallback).toBe("google/gemini-3-flash-preview")
+    expect(cfg.extractFallback).toBe("unpdf")
     expect(cfg.embeddingModel).toBe("qwen/qwen3-embedding-8b")
     expect(cfg.embeddingDim).toBe(4096)
     expect(cfg.rerankEnabled).toBe(false)
-    expect(cfg.rerankModel).toBe("google/gemini-3-flash-preview")
+    expect(cfg.rerankModel).toBe("openai/gpt-4.1-nano")
     expect(cfg.rerankInitialK).toBe(20)
     expect(cfg.rerankFinalK).toBe(5)
+    expect(cfg.extractMineruBaseUrl).toBe("")
+  })
+
+  it("reads KB_EXTRACT_MINERU_BASE_URL into extractMineruBaseUrl", () => {
+    process.env.KB_EXTRACT_MINERU_BASE_URL = "http://localhost:8100"
+    const cfg = getRagConfig()
+    expect(cfg.extractMineruBaseUrl).toBe("http://localhost:8100")
   })
 
   it("reads overrides from env", () => {
