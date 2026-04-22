@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { isUnpdfSufficient, hasColumnarLines } from "@/lib/rag/extractors/text-layer-signals"
+import { isUnpdfSufficient, hasColumnarLines, hasDenseCurrency } from "@/lib/rag/extractors/text-layer-signals"
 
 const DEFAULTS = { minCharsPerPage: 300, maxColumnarLines: 5, maxCurrencyMatches: 10 }
 
@@ -64,5 +64,40 @@ describe("isUnpdfSufficient / columnar gate", () => {
     // Padded with prose so volume gate passes
     const padding = "prose text ".repeat(40)
     expect(isUnpdfSufficient(tabular + "\n" + padding, 1, DEFAULTS)).toBe(false)
+  })
+})
+
+describe("hasDenseCurrency", () => {
+  it("returns false on prose with no currency", () => {
+    expect(hasDenseCurrency("just some words here", 10)).toBe(false)
+  })
+
+  it("returns false when currency count is below threshold", () => {
+    const text = Array.from({ length: 5 }, () => "$1,234").join(" ")
+    expect(hasDenseCurrency(text, 10)).toBe(false)
+  })
+
+  it("returns true when currency count exceeds threshold", () => {
+    const text = Array.from({ length: 11 }, () => "$1,234").join(" ")
+    expect(hasDenseCurrency(text, 10)).toBe(true)
+  })
+
+  it("matches dollar amounts with optional space after $ and decimals", () => {
+    const text = Array.from({ length: 11 }, () => "$ 29,943.50").join("\n")
+    expect(hasDenseCurrency(text, 10)).toBe(true)
+  })
+})
+
+describe("isUnpdfSufficient / currency gate", () => {
+  it("returns false when currency density exceeds threshold", () => {
+    // Enough chars, no columns — but many $ amounts means tables likely exist
+    const padded = "description text ".repeat(40) // 680 chars prose
+    const currency = Array.from({ length: 11 }, () => "$29,943").join(" ")
+    expect(isUnpdfSufficient(padded + " " + currency, 1, DEFAULTS)).toBe(false)
+  })
+
+  it("returns true on pure prose with enough volume", () => {
+    const prose = "The quick brown fox jumps over the lazy dog. ".repeat(20)
+    expect(isUnpdfSufficient(prose, 1, DEFAULTS)).toBe(true)
   })
 })

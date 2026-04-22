@@ -50,6 +50,16 @@ export function hasColumnarLines(text: string, threshold: number): boolean {
   return false;
 }
 
+/**
+ * Count `$X,XXX(.XX)?` currency patterns in text. Returns true if the count
+ * exceeds `threshold`. Financial tables contain many; plain prose rarely
+ * does.
+ */
+export function hasDenseCurrency(text: string, threshold: number): boolean {
+  const matches = text.match(/\$\s?[\d,]+(?:\.\d+)?/g);
+  return matches ? matches.length > threshold : false;
+}
+
 export function isUnpdfSufficient(
   text: string,
   pageCount: number,
@@ -57,5 +67,6 @@ export function isUnpdfSufficient(
 ): boolean {
   if (!text || text.length < opts.minCharsPerPage * pageCount) return false;
   if (hasColumnarLines(text, opts.maxColumnarLines)) return false;
+  if (hasDenseCurrency(text, opts.maxCurrencyMatches)) return false;
   return true;
 }
