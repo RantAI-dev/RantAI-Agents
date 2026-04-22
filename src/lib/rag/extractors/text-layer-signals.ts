@@ -30,11 +30,32 @@ export const DEFAULT_ROUTER_OPTS: RouterOpts = {
   maxCurrencyMatches: 10,
 };
 
+/**
+ * Count lines that look columnar: 2+ runs of 3+ whitespace chars between
+ * visible text tokens. Tables flatten to these when extracted as text layer.
+ * Returns true if the count exceeds `threshold`.
+ */
+export function hasColumnarLines(text: string, threshold: number): boolean {
+  const lines = text.split("\n");
+  let count = 0;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (line.length < 10) continue;
+    const matches = line.match(/\S\s{3,}\S/g);
+    if (matches && matches.length >= 2) {
+      count++;
+      if (count > threshold) return true;
+    }
+  }
+  return false;
+}
+
 export function isUnpdfSufficient(
   text: string,
   pageCount: number,
   opts: RouterOpts = DEFAULT_ROUTER_OPTS,
 ): boolean {
   if (!text || text.length < opts.minCharsPerPage * pageCount) return false;
+  if (hasColumnarLines(text, opts.maxColumnarLines)) return false;
   return true;
 }

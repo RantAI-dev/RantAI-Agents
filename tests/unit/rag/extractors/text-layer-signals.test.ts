@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { isUnpdfSufficient } from "@/lib/rag/extractors/text-layer-signals"
+import { isUnpdfSufficient, hasColumnarLines } from "@/lib/rag/extractors/text-layer-signals"
 
 const DEFAULTS = { minCharsPerPage: 300, maxColumnarLines: 5, maxCurrencyMatches: 10 }
 
@@ -22,5 +22,47 @@ describe("isUnpdfSufficient / volume gate", () => {
     const text = "x".repeat(400) // enough for 1 page, not for 2
     expect(isUnpdfSufficient(text, 1, DEFAULTS)).toBe(true)
     expect(isUnpdfSufficient(text, 2, DEFAULTS)).toBe(false)
+  })
+})
+
+describe("hasColumnarLines", () => {
+  it("returns false on plain prose", () => {
+    const text = [
+      "This is a paragraph about running.",
+      "Another paragraph describing cats.",
+      "A third line with ordinary prose content.",
+    ].join("\n")
+    expect(hasColumnarLines(text, 5)).toBe(false)
+  })
+
+  it("returns true when multi-whitespace columnar lines exceed the threshold", () => {
+    // Six lines each with 2+ runs of 3+ whitespace chars between words → table-like
+    const tabular = Array.from({ length: 6 }, () =>
+      "Cash   $29,943   $29,965"
+    ).join("\n")
+    expect(hasColumnarLines(tabular, 5)).toBe(true)
+  })
+
+  it("ignores short lines even if they look columnar", () => {
+    const text = Array.from({ length: 10 }, () => "A   B   C").join("\n") // <10 chars each trimmed
+    expect(hasColumnarLines(text, 5)).toBe(false)
+  })
+
+  it("the threshold is exclusive — exactly N columnar lines is not enough", () => {
+    const text = Array.from({ length: 5 }, () =>
+      "Long row   $1,000   $2,000"
+    ).join("\n")
+    expect(hasColumnarLines(text, 5)).toBe(false)
+  })
+})
+
+describe("isUnpdfSufficient / columnar gate", () => {
+  it("returns false when columnar lines exceed threshold even with enough chars", () => {
+    const tabular = Array.from({ length: 6 }, () =>
+      "Cash   $29,943   $29,965"
+    ).join("\n")
+    // Padded with prose so volume gate passes
+    const padding = "prose text ".repeat(40)
+    expect(isUnpdfSufficient(tabular + "\n" + padding, 1, DEFAULTS)).toBe(false)
   })
 })
