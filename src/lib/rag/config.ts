@@ -24,6 +24,13 @@ export interface RagConfig {
    * here instead of an OpenRouter vision LLM. Example: "http://localhost:8100".
    */
   extractMineruBaseUrl: string;
+  /**
+   * Model id the SmartRouterExtractor falls through to when the text layer
+   * is insufficient. Recognizes the same sentinels as extractPrimary:
+   * "mineru", "unpdf", "hybrid", or any OpenRouter model id. Default:
+   * "openai/gpt-4.1-nano" (cloud). Set to "mineru" for on-prem.
+   */
+  extractSmartFallback: string;
   /** Base URL for embedding endpoint. Default: OpenRouter /embeddings. Override for on-prem TEI. */
   embeddingBaseUrl: string;
   /** Explicit API key for the embedding endpoint. Falls back to OPENROUTER_API_KEY when empty. */
@@ -54,6 +61,7 @@ const DEFAULTS: RagConfig = {
   extractVisionBaseUrl: "https://openrouter.ai/api/v1/chat/completions",
   extractVisionApiKey: "",
   extractMineruBaseUrl: "",
+  extractSmartFallback: "openai/gpt-4.1-nano",
   embeddingBaseUrl: "https://openrouter.ai/api/v1/embeddings",
   embeddingApiKey: "",
 };
@@ -93,6 +101,7 @@ export function getRagConfig(): RagConfig {
     extractVisionBaseUrl: process.env.KB_EXTRACT_VISION_BASE_URL || DEFAULTS.extractVisionBaseUrl,
     extractVisionApiKey: process.env.KB_EXTRACT_VISION_API_KEY || DEFAULTS.extractVisionApiKey,
     extractMineruBaseUrl: process.env.KB_EXTRACT_MINERU_BASE_URL || DEFAULTS.extractMineruBaseUrl,
+    extractSmartFallback: process.env.KB_EXTRACT_SMART_FALLBACK || DEFAULTS.extractSmartFallback,
     embeddingBaseUrl: process.env.KB_EMBEDDING_BASE_URL || DEFAULTS.embeddingBaseUrl,
     embeddingApiKey: process.env.KB_EMBEDDING_API_KEY || DEFAULTS.embeddingApiKey,
   };

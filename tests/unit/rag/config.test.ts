@@ -122,4 +122,16 @@ describe("getRagConfig", () => {
     expect(resolveApiKey("")).toBe("global-key")
     expect(resolveApiKey("override-key")).toBe("override-key")
   })
+
+  it("defaults extractSmartFallback to openai/gpt-4.1-nano", () => {
+    delete process.env.KB_EXTRACT_SMART_FALLBACK
+    const cfg = getRagConfig()
+    expect(cfg.extractSmartFallback).toBe("openai/gpt-4.1-nano")
+  })
+
+  it("reads KB_EXTRACT_SMART_FALLBACK override", () => {
+    process.env.KB_EXTRACT_SMART_FALLBACK = "mineru"
+    const cfg = getRagConfig()
+    expect(cfg.extractSmartFallback).toBe("mineru")
+  })
 })
