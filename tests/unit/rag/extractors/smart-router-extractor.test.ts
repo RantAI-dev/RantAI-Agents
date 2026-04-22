@@ -109,4 +109,11 @@ describe("SmartRouterExtractor / integration with buildExtractor", () => {
     expect(ex.name).toMatch(/^SmartRouter\(/)
     expect(ex.name).toContain("MineruExtractor")
   })
+
+  it("throws a descriptive error if KB_EXTRACT_SMART_FALLBACK is also \"smart\"", async () => {
+    process.env.KB_EXTRACT_PRIMARY = "smart"
+    process.env.KB_EXTRACT_SMART_FALLBACK = "smart"
+    const { getDefaultExtractor } = await import("@/lib/rag/extractors")
+    expect(() => getDefaultExtractor()).toThrow(/KB_EXTRACT_SMART_FALLBACK cannot be "smart"/)
+  })
 })

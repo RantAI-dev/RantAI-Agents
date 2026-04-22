@@ -29,6 +29,13 @@ function buildExtractor(modelId: string): Extractor {
   }
   if (modelId === "smart") {
     const cfg = getRagConfig();
+    if (cfg.extractSmartFallback === "smart") {
+      throw new Error(
+        `KB_EXTRACT_SMART_FALLBACK cannot be "smart" — that would recurse infinitely. ` +
+        `Set it to a terminal extractor sentinel ("unpdf", "mineru", "hybrid") or ` +
+        `an OpenRouter model id (e.g. "openai/gpt-4.1-nano").`
+      );
+    }
     // Recursively build the fallback from its sentinel / model id.
     const fallback = buildExtractor(cfg.extractSmartFallback);
     return new SmartRouterExtractor(new UnpdfExtractor(), fallback);
