@@ -32,7 +32,7 @@ export class SmartRouterExtractor implements Extractor {
     try {
       textLayerResult = await this.textLayer.extract(pdfBuffer);
     } catch (err) {
-      textLayerErr = err as Error;
+      textLayerErr = err instanceof Error ? err : new Error(String(err));
       console.warn(
         `[rag/smart-router] text-layer extractor ${this.textLayer.name} threw (${textLayerErr.message.slice(0, 100)}), falling through to ${this.fallback.name}`,
       );
@@ -55,7 +55,7 @@ export class SmartRouterExtractor implements Extractor {
         model: `smart(fallback:${fallbackResult.model ?? this.fallback.name})`,
       };
     } catch (err) {
-      const fbMsg = (err as Error).message.slice(0, 150);
+      const fbMsg = (err instanceof Error ? err.message : String(err)).slice(0, 150);
       const tlMsg = textLayerErr ? textLayerErr.message.slice(0, 150) : "insufficient output";
       throw new Error(
         `Both extractors failed — textLayer(${this.textLayer.name}): ${tlMsg}; fallback(${this.fallback.name}): ${fbMsg}`,
