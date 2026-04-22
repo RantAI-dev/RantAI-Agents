@@ -26,15 +26,40 @@ export class SmartRouterExtractor implements Extractor {
   }
 
   async extract(pdfBuffer: Buffer): Promise<ExtractionResult> {
-    const textLayerResult = await this.textLayer.extract(pdfBuffer);
-    const pageCount = textLayerResult.pages ?? 1;
-    if (isUnpdfSufficient(textLayerResult.text, pageCount, this.opts)) {
-      return {
-        ...textLayerResult,
-        model: `smart(${textLayerResult.model ?? this.textLayer.name})`,
-      };
+    let textLayerResult: ExtractionResult | null = null;
+    let textLayerErr: Error | null = null;
+
+    try {
+      textLayerResult = await this.textLayer.extract(pdfBuffer);
+    } catch (err) {
+      textLayerErr = err as Error;
+      console.warn(
+        `[rag/smart-router] text-layer extractor ${this.textLayer.name} threw (${textLayerErr.message.slice(0, 100)}), falling through to ${this.fallback.name}`,
+      );
     }
-    // Fall-through path — task 5 implements the fallback branch
-    throw new Error("not implemented — fallback branch not yet wired");
+
+    if (textLayerResult) {
+      const pageCount = textLayerResult.pages ?? 1;
+      if (isUnpdfSufficient(textLayerResult.text, pageCount, this.opts)) {
+        return {
+          ...textLayerResult,
+          model: `smart(${textLayerResult.model ?? this.textLayer.name})`,
+        };
+      }
+    }
+
+    try {
+      const fallbackResult = await this.fallback.extract(pdfBuffer);
+      return {
+        ...fallbackResult,
+        model: `smart(fallback:${fallbackResult.model ?? this.fallback.name})`,
+      };
+    } catch (err) {
+      const fbMsg = (err as Error).message.slice(0, 150);
+      const tlMsg = textLayerErr ? textLayerErr.message.slice(0, 150) : "insufficient output";
+      throw new Error(
+        `Both extractors failed — textLayer(${this.textLayer.name}): ${tlMsg}; fallback(${this.fallback.name}): ${fbMsg}`,
+      );
+    }
   }
 }

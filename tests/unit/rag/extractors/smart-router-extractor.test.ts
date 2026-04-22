@@ -31,3 +31,57 @@ describe("SmartRouterExtractor", () => {
     expect(result.ms).toBe(42)
   })
 })
+
+describe("SmartRouterExtractor / fallback path", () => {
+  it("falls through to the fallback when text layer is empty", async () => {
+    const textLayer = mockExtractor("unpdf", { text: "", ms: 5, model: "unpdf", pages: 1 })
+    const fallback = mockExtractor("mineru", {
+      text: "# From OCR\n\nBody.",
+      ms: 4000,
+      model: "mineru-2.5-pro",
+    })
+    const router = new SmartRouterExtractor(textLayer, fallback)
+    const result = await router.extract(Buffer.from("x"))
+    expect(textLayer.extract).toHaveBeenCalledTimes(1)
+    expect(fallback.extract).toHaveBeenCalledTimes(1)
+    expect(result.text).toContain("From OCR")
+    expect(result.model).toBe("smart(fallback:mineru-2.5-pro)")
+  })
+
+  it("falls through when text-layer volume is below threshold", async () => {
+    const textLayer = mockExtractor("unpdf", { text: "tiny", ms: 3, model: "unpdf", pages: 1 })
+    const fallback = mockExtractor("mineru", { text: "full ocr output", ms: 4000, model: "mineru" })
+    const router = new SmartRouterExtractor(textLayer, fallback)
+    const result = await router.extract(Buffer.from("x"))
+    expect(result.text).toBe("full ocr output")
+  })
+
+  it("falls through when text-layer extraction throws", async () => {
+    const textLayer = mockExtractor("unpdf", new Error("pdf corrupt"))
+    const fallback = mockExtractor("mineru", { text: "recovered by OCR", ms: 4000, model: "mineru" })
+    const router = new SmartRouterExtractor(textLayer, fallback)
+    const result = await router.extract(Buffer.from("x"))
+    expect(result.text).toBe("recovered by OCR")
+  })
+
+  it("throws combined error when both extractors fail", async () => {
+    const textLayer = mockExtractor("unpdf", new Error("pdf corrupt"))
+    const fallback = mockExtractor("mineru", new Error("sidecar down"))
+    const router = new SmartRouterExtractor(textLayer, fallback)
+    await expect(router.extract(Buffer.from("x"))).rejects.toThrow(/both extractors failed/i)
+  })
+
+  it("accepts custom opts and uses them", async () => {
+    // Very strict threshold — prose that was sufficient under defaults now triggers fallback
+    const textLayer = mockExtractor("unpdf", {
+      text: "The quick brown fox ".repeat(10), // 200 chars
+      ms: 5,
+      model: "unpdf",
+      pages: 1,
+    })
+    const fallback = mockExtractor("mineru", { text: "ocr result", ms: 4000, model: "mineru" })
+    const router = new SmartRouterExtractor(textLayer, fallback, { minCharsPerPage: 1000 })
+    const result = await router.extract(Buffer.from("x"))
+    expect(result.text).toBe("ocr result") // fallback used because 200 < 1000
+  })
+})
