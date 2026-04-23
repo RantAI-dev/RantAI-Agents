@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, lazy, Suspense } from "react"
 import {
   useReactTable,
   getCoreRowModel,
@@ -11,22 +11,66 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table"
 import { ArrowUpDown, Download, Search, AlertTriangle } from "@/lib/icons"
+import { detectShape } from "@/lib/spreadsheet/parse"
+
+const SpecWorkbookView = lazy(() =>
+  import("./sheet-spec-view").then((m) => ({ default: m.SpecWorkbookView }))
+)
 
 interface SheetRendererProps {
   content: string
-  /** Optional artifact title — used to derive a download filename. */
   title?: string
+  onDownloadXlsx?: () => void
 }
 
 type RowData = Record<string, string>
 
-export function SheetRenderer({ content, title }: SheetRendererProps) {
+export function SheetRenderer({
+  content,
+  title,
+  onDownloadXlsx,
+}: SheetRendererProps) {
+  const shape = useMemo(() => detectShape(content), [content])
+
+  if (shape === "spec") {
+    return (
+      <Suspense fallback={<SheetLoading />}>
+        <SpecWorkbookView
+          content={content}
+          title={title}
+          onDownloadXlsx={onDownloadXlsx ?? (() => {})}
+        />
+      </Suspense>
+    )
+  }
+
+  return <CsvOrArrayView content={content} title={title} />
+}
+
+function SheetLoading() {
+  return (
+    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+      Loading workbook…
+    </div>
+  )
+}
+
+/**
+ * Legacy renderer for CSV and JSON-array content. Behavior preserved verbatim
+ * from the pre-upgrade implementation.
+ */
+function CsvOrArrayView({
+  content,
+  title,
+}: {
+  content: string
+  title?: string
+}) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
 
   const { headers, rows, parseError } = useMemo(() => {
     try {
-      // Try JSON array first
       if (content.trimStart().startsWith("[")) {
         const data = JSON.parse(content)
         if (Array.isArray(data) && data.length > 0) {
@@ -41,7 +85,6 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
           return { headers, rows, parseError: null }
         }
       }
-      // Fall back to CSV parsing
       const lines = parseCSV(content)
       if (lines.length < 2)
         return { headers: [], rows: [], parseError: "No data rows found" }
@@ -84,10 +127,7 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
     getFilteredRowModel: getFilteredRowModel(),
   })
 
-  // Whether the active filter is hiding any rows. Affects the download
-  // button label so users know they're getting the filtered subset.
-  const isFiltered =
-    table.getRowModel().rows.length !== rows.length
+  const isFiltered = table.getRowModel().rows.length !== rows.length
 
   const handleExportCSV = useCallback(() => {
     const escape = (v: string) =>
@@ -97,18 +137,14 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
     const csvRows = [headers.map(escape).join(",")]
     table.getRowModel().rows.forEach((row) => {
       csvRows.push(
-        headers
-          .map((h) => escape(row.original[h] || ""))
-          .join(",")
+        headers.map((h) => escape(row.original[h] || "")).join(",")
       )
     })
-    // Slugify the artifact title for the filename so multiple downloads from
-    // the same session don't collide on `export.csv`. Falls back to "sheet"
-    // when the renderer is used without a title.
-    const slug = (title ?? "sheet")
-      .replace(/[^a-z0-9]+/gi, "-")
-      .replace(/^-+|-+$/g, "")
-      .toLowerCase() || "sheet"
+    const slug =
+      (title ?? "sheet")
+        .replace(/[^a-z0-9]+/gi, "-")
+        .replace(/^-+|-+$/g, "")
+        .toLowerCase() || "sheet"
     const filename = isFiltered ? `${slug}-filtered.csv` : `${slug}.csv`
     const blob = new Blob([csvRows.join("\n")], { type: "text/csv" })
     const url = URL.createObjectURL(blob)
@@ -125,9 +161,7 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden">
           <div className="flex items-center gap-2 px-3 py-2.5 text-amber-500">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            <span className="text-sm font-medium">
-              Could not parse table data
-            </span>
+            <span className="text-sm font-medium">Could not parse table data</span>
           </div>
           <div className="px-3 py-2 border-t border-amber-500/20 text-xs text-amber-500/80">
             {parseError}
@@ -142,7 +176,6 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Toolbar */}
       <div className="flex items-center gap-2 px-4 py-2 border-b shrink-0">
         <Search className="h-4 w-4 text-muted-foreground shrink-0" />
         <input
@@ -154,11 +187,7 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
         <button
           type="button"
           onClick={handleExportCSV}
-          title={
-            isFiltered
-              ? "Download only the rows currently matching the filter"
-              : "Download all rows as CSV"
-          }
+          title={isFiltered ? "Download only matching rows" : "Download all rows as CSV"}
           className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted transition-colors"
         >
           <Download className="h-3.5 w-3.5" />
@@ -168,8 +197,6 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
           {table.getRowModel().rows.length} rows
         </span>
       </div>
-
-      {/* Table */}
       <div className="flex-1 overflow-auto">
         <table className="w-full text-sm">
           <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
@@ -182,10 +209,7 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
                     className="px-3 py-2 text-left text-xs font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none border-b whitespace-nowrap"
                   >
                     <div className="flex items-center gap-1">
-                      {flexRender(
-                        header.column.columnDef.header,
-                        header.getContext()
-                      )}
+                      {flexRender(header.column.columnDef.header, header.getContext())}
                       <ArrowUpDown className="h-3 w-3 opacity-50" />
                     </div>
                   </th>
@@ -195,15 +219,9 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
           </thead>
           <tbody>
             {table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                className="border-b border-border/50 hover:bg-muted/30"
-              >
+              <tr key={row.id} className="border-b border-border/50 hover:bg-muted/30">
                 {row.getVisibleCells().map((cell) => (
-                  <td
-                    key={cell.id}
-                    className="px-3 py-1.5 text-sm whitespace-nowrap"
-                  >
+                  <td key={cell.id} className="px-3 py-1.5 text-sm whitespace-nowrap">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -216,12 +234,6 @@ export function SheetRenderer({ content, title }: SheetRendererProps) {
   )
 }
 
-/**
- * Simple RFC 4180 CSV parser handling quoted fields. Field values are
- * preserved as-is (no `.trim()` on push) so leading/trailing whitespace the
- * author intentionally included survives the round-trip; trimming for
- * display purposes is left to the table cell renderer.
- */
 function parseCSV(text: string): string[][] {
   const rows: string[][] = []
   let current: string[] = []
