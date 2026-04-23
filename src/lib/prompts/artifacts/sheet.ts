@@ -2,87 +2,117 @@ export const sheetArtifact = {
   type: "application/sheet" as const,
   label: "Spreadsheet",
   summary:
-    "Tabular data as CSV or a JSON array of objects — rendered as an interactive sortable, filterable table with CSV export.",
-  rules: `**application/sheet — Tabular Data**
+    "Tabular data for interactive preview and Excel download. Accepts CSV or a JSON array for flat tables; accepts a JSON spec (kind: \"spreadsheet/v1\") for workbooks with formulas, number formats, merged cells, named ranges, and multi-sheet layouts.",
+  rules: `**application/sheet — Tabular Data and Workbooks**
 
-You are generating tabular data that will render in an interactive data table (TanStack React Table). The user can click any column header to sort, type into a global filter box to substring-search across all columns, and click a Download button to export the data as a CSV file. **There is no pagination** — every row renders at once, so size matters.
+You are generating content for an interactive spreadsheet artifact. Three content shapes are supported — **pick the simplest one that fits the task**.
 
-## Accepted Input Formats — TWO Options
+## Shape Decision Table
 
-The renderer accepts EITHER of these. Pick ONE per artifact and stick with it.
-
-### Option A — CSV (default for most data)
-- First row MUST be the header row.
-- Comma (\`,\`) delimiter only. No tabs, no semicolons.
-- Quote any field that contains a comma, a double quote, or a newline by wrapping it in double quotes: \`"Engineer, Senior"\`.
-- Escape a literal double quote inside a quoted field by doubling it: \`"She said ""hi"""\`.
-- **Every row MUST have the same number of columns as the header.** Mismatched column counts are the #1 cause of broken sheets.
-- No trailing comma at end of row. No BOM. UTF-8.
-- Use \`\\n\` line endings (or \`\\r\\n\`).
-
-### Option B — JSON array of objects
-- Top level MUST be a non-empty array: \`[{"col1": "val1", "col2": 42}, ...]\`
-- Every object MUST have **the same keys in the same order** — the first object's keys become the column headers, in order.
-- Do NOT nest objects or arrays inside values. Nested values stringify as \`[object Object]\` in the table — flatten first.
-- JSON is the safer choice when your data contains commas, quotes, or newlines, because there's no quoting to get wrong.
-
-## CRITICAL: All Values Become Strings
-
-The renderer coerces every cell value to a string before TanStack sees it. This has two consequences you MUST design around:
-
-1. **Sorting is lexicographic**, not numeric and not date-aware. \`"10"\` sorts before \`"2"\`. \`"Jan 15, 2026"\` sorts before \`"Mar 1, 2025"\`.
-2. **Numbers and dates have no auto-formatting.** What you write is what shows up.
-
-So:
-- **Dates → ISO 8601** (\`YYYY-MM-DD\`, e.g. \`2026-04-09\`). ISO sorts correctly as a string. Never mix \`2026-01-15\` with \`Jan 15, 2026\` in the same column.
-- **Numbers → plain numerals.** Write \`1234.50\`, NOT \`$1,234.50\`. No currency symbols, no thousand separators. The column header (\`Salary (USD)\`) communicates units.
-- **IDs → zero-pad** if numeric ordering matters: \`"007"\`, \`"008"\`, \`"010"\` — not \`7\`, \`8\`, \`10\`.
-- **Booleans → consistent spelling**: pick \`true\`/\`false\` OR \`Yes\`/\`No\` and use it everywhere in the column.
-- **Empty cells → empty string** (\`""\`) or \`null\` in JSON. Don't write \`N/A\`, \`-\`, \`TBD\` unless that's literal data.
-
-## Type Boundary — When to Use Sheet vs Other Types
-
-| User wants… | Correct type | Why |
+| User's intent | Shape to emit | Download |
 |---|---|---|
-| 50+ rows of data | \`application/sheet\` | Too big for markdown table |
-| Sortable / filterable / exportable table | \`application/sheet\` | Only sheet has these |
-| Small comparison table inside a doc | \`text/markdown\` table | Inline reading |
-| Visually styled pricing/feature card | \`text/html\` | Needs design, not data grid |
-| Dashboard combining table + charts | \`application/react\` | Needs interactivity beyond a table |
-| CSV the user will download | \`application/sheet\` | Has Download button |
+| A simple list / directory / static dataset | **CSV** (Shape A) | .csv |
+| Same thing, but commas in values make CSV quoting annoying | **JSON array** (Shape B) | .csv |
+| A financial model, budget, cap table, scenario compare, or anything with **formulas**, **number formatting** (\`$1,234.50\`, \`15.0%\`), **multi-sheet** structure, **merged cells**, or **cell notes** | **JSON spec** (Shape C) | .xlsx |
 
-## Column Design
+If any formula, percentage format, currency format, date format, multi-sheet layout, merged header, named range, or cell comment is called for, use Shape C. CSV and JSON-array shapes CANNOT express these.
 
-- **Headers in Title Case**, descriptive: \`Full Name\` not \`name\`, \`Unit Price\` not \`price\`, \`Start Date\` not \`startDate\`.
-- **Column order**: identifier first → descriptive attributes → numeric metrics → dates → status. Example: \`ID, Full Name, Department, Salary, Start Date, Status\`.
-- **≤ 10 columns.** Wider tables become unreadable. If you need more, drop the least important.
-- For JSON, the **insertion order of keys** in the first object IS the column order — author it deliberately.
+---
 
-## Data Quality
+## Shape A — CSV
 
-- **Realistic mock data, never placeholder.** No \`foo\`, \`bar\`, \`test\`, \`John Doe\`, \`Company A\`, \`example@example.com\`. Use names, companies, addresses, amounts that feel real.
-- **Row count**: 10–30 for typical demos, up to ~50 for datasets. **Hard cap ~100 rows** — there is no pagination, all rows render at once.
-- **Vary the values.** A column where every row is the same string is useless (nothing to sort, nothing to filter). Aim for 3–7 distinct categories in categorical columns.
-- **Consistent precision** within numeric columns: pick 0 or 2 decimals and stay there.
-- **NEVER truncate.** No \`... 90 more rows ...\`, no \`// truncated for brevity\`. Output every row.
+First row is the header. Comma delimiter only. Quote any field containing a comma, quote, or newline with double-quotes. Escape internal quotes by doubling them. Every row must have the same column count. No trailing comma. UTF-8. Line endings \`\\n\` or \`\\r\\n\`.
 
-## Anti-Patterns
+## Shape B — JSON array of objects
 
-- ❌ Mismatched column count (rows with more or fewer fields than the header)
-- ❌ Unquoted CSV field containing a comma, quote, or newline
-- ❌ Currency symbols or thousand separators inside numeric columns (\`$1,234\`)
-- ❌ Mixed date formats in one column
-- ❌ Missing header row
-- ❌ Trailing comma or empty trailing column
-- ❌ JSON top-level that is an object instead of an array
-- ❌ JSON objects with inconsistent key sets
-- ❌ Nested objects/arrays as JSON values
-- ❌ Placeholder data (\`foo\`, \`bar\`, \`John Doe\`, \`example.com\`)
-- ❌ More than 100 rows (no pagination, performance)
-- ❌ More than 10 columns (unreadable)
-- ❌ All-identical column (useless for sort/filter)
-- ❌ Truncation markers (\`...more rows...\`)
-- ❌ Wrapping output in markdown fences (\`\`\`csv … \`\`\`)`,
+Top level is a non-empty array. Every object has the same keys in the same order. First object's keys become the column headers, in order. Do NOT nest objects or arrays inside values.
+
+## Shape C — JSON spec (kind: "spreadsheet/v1")
+
+A full workbook specification. The renderer evaluates formulas live and exports a real .xlsx file.
+
+### Schema (all fields not marked "optional" are required)
+
+\`\`\`json
+{
+  "kind": "spreadsheet/v1",
+  "theme": {
+    "font": "Arial",
+    "inputColor": "#0000FF",
+    "formulaColor": "#000000",
+    "crossSheetColor": "#008000",
+    "highlightFill": "#FFFF00"
+  },
+  "namedRanges": {
+    "GrowthRate": "Assumptions!B3"
+  },
+  "sheets": [
+    {
+      "name": "Assumptions",
+      "columns": [
+        { "width": 24 },
+        { "width": 14, "format": "$#,##0" }
+      ],
+      "frozen": { "rows": 1, "columns": 0 },
+      "cells": [
+        { "ref": "A1", "value": "Starting Revenue", "style": "header" },
+        { "ref": "B1", "value": 1200000, "format": "$#,##0", "style": "input", "note": "Source: Q4 2025 actuals" },
+        { "ref": "B3", "formula": "=B1*(1+GrowthRate)", "format": "$#,##0", "style": "formula" }
+      ],
+      "merges": ["A1:C1"]
+    }
+  ]
+}
+\`\`\`
+
+### Hard caps (validator rejects otherwise)
+- Max **8 sheets** per workbook
+- Max **500 cells** per sheet (roughly 50 rows × 10 cols; pick what fits, don't fill the cap)
+- Max **200 formulas** per workbook
+- Max **64 named ranges**
+- Sheet names: letters, numbers, spaces, underscores only; ≤ 31 characters
+
+### Cell rules
+- \`ref\` is A1 notation (\`"A1"\`, \`"$B$12"\`). Required.
+- Provide **either** \`value\` **or** \`formula\`, never both.
+- \`formula\` must start with \`=\`. Use A1 refs and named ranges freely. Functions supported: SUM, AVERAGE, MIN, MAX, IF, IFERROR, VLOOKUP, INDEX, MATCH, SUMIF, SUMIFS, AVERAGEIFS, COUNTIFS, NPV, IRR, XIRR, PMT, RATE, DATE, EOMONTH, NETWORKDAYS, TEXT, LEFT, RIGHT, MID, LEN, CONCATENATE, ROUND, ABS, and most common Excel functions.
+- Cross-sheet refs: \`Sheet2!A1\`. Same-sheet refs: \`A1\`.
+- \`format\` is an Excel number format string. Common presets:
+  - Currency: \`"$#,##0"\`, \`"$#,##0.00"\`, \`"$#,##0;($#,##0);-"\` (dash for zero)
+  - Percentage: \`"0.0%"\`, \`"0.00%"\`
+  - Multiples (P/E, EV/EBITDA): \`"0.0x"\`
+  - Plain thousands: \`"#,##0"\`
+  - Dates: \`"yyyy-mm-dd"\`, \`"mmm d, yyyy"\`
+- \`style\` is one of: \`"header"\`, \`"input"\`, \`"formula"\`, \`"cross-sheet"\`, \`"highlight"\`, \`"note"\`.
+  - Use \`"input"\` for hardcoded numbers the user is expected to change (assumptions, drivers).
+  - Use \`"formula"\` for calculated cells.
+  - Use \`"cross-sheet"\` for formulas pulling from another sheet.
+  - Use \`"highlight"\` for cells needing user attention.
+- \`note\` is a cell comment. Use it to cite sources for hardcoded numbers: \`"Source: Company 10-K, FY2024, Page 45"\`.
+
+### Financial model conventions (apply when the user asks for a model)
+- Put **all assumptions** (growth rates, margins, multiples, tax rates) in a dedicated \`Assumptions\` sheet. Cells use \`style: "input"\`.
+- Reference assumptions from other sheets via **named ranges** or cross-sheet refs (never hardcode the same number twice).
+- **Never mix number and letter dates in a column.** Pick ISO (\`"2026-04-23"\`) and stay.
+- Years as text: \`"2026"\` value with format \`"0"\` (so Excel doesn't add thousand-separator).
+- Use negative-in-parens format for currency: \`"$#,##0;($#,##0);-"\`.
+- Round where precision adds noise: \`=ROUND(B2, 0)\` rather than ten decimal places.
+
+## Anti-patterns (validator rejects)
+
+- ❌ \`"kind": "spreadsheet/v2"\` or any value other than \`"spreadsheet/v1"\`
+- ❌ Cell with both \`value\` and \`formula\`
+- ❌ Cell with neither \`value\` nor \`formula\`
+- ❌ Formula referencing an undefined cell (\`=Z99*2\` when Z99 is not in \`cells\`)
+- ❌ Circular reference (\`A1: =B1+1\`, \`B1: =A1+1\`)
+- ❌ Duplicate \`ref\` inside one sheet
+- ❌ Duplicate sheet names
+- ❌ Sheet name with \`!\`, \`:\`, \`*\`, \`?\`, \`/\`, \`\\\`, \`[\`, \`]\`
+- ❌ Unknown \`style\` name (typos)
+- ❌ More than 8 sheets / 500 cells per sheet / 200 formulas / 64 named ranges
+- ❌ Using Shape A or B when the user's intent requires Shape C (formulas, formatting, multi-sheet)
+- ❌ Markdown fences wrapping the JSON (\`\`\`json ... \`\`\`) — emit raw JSON only
+- ❌ Placeholder data (\`"John Doe"\`, \`"Company A"\`, \`foo\`, \`bar\`) — use realistic names, companies, amounts`,
   examples: [
     {
       label: "CSV — employee directory (15 rows, demonstrates quoted comma in Job Title)",
@@ -117,6 +147,63 @@ So:
   { "Month": "2026-03", "Revenue": 601330.20, "Orders": 3589, "Avg Order Value": 167.55, "Refund Rate": 0.019, "Top Category": "Audio" },
   { "Month": "2026-04", "Revenue": 578410.85, "Orders": 3478, "Avg Order Value": 166.30, "Refund Rate": 0.018, "Top Category": "Audio" }
 ]`,
+    },
+    {
+      label: "JSON spec — 3-year revenue projection with Assumptions and Projections sheets",
+      code: JSON.stringify(
+        {
+          kind: "spreadsheet/v1",
+          theme: { font: "Arial", inputColor: "#0000FF", formulaColor: "#000000" },
+          namedRanges: {
+            StartingRevenue: "Assumptions!B2",
+            GrowthRate: "Assumptions!B3",
+            EbitdaMargin: "Assumptions!B4",
+          },
+          sheets: [
+            {
+              name: "Assumptions",
+              columns: [{ width: 28 }, { width: 16, format: "$#,##0" }],
+              frozen: { rows: 1 },
+              cells: [
+                { ref: "A1", value: "Driver", style: "header" },
+                { ref: "B1", value: "Value", style: "header" },
+                { ref: "A2", value: "Starting Revenue (FY25)" },
+                { ref: "B2", value: 4200000, format: "$#,##0", style: "input", note: "Source: FY25 actuals" },
+                { ref: "A3", value: "Annual Growth Rate" },
+                { ref: "B3", value: 0.18, format: "0.0%", style: "input" },
+                { ref: "A4", value: "EBITDA Margin" },
+                { ref: "B4", value: 0.28, format: "0.0%", style: "input" },
+              ],
+            },
+            {
+              name: "Projections",
+              columns: [
+                { width: 18 },
+                { width: 16, format: "$#,##0" },
+                { width: 16, format: "$#,##0" },
+                { width: 16, format: "$#,##0" },
+              ],
+              frozen: { rows: 1 },
+              cells: [
+                { ref: "A1", value: "Metric", style: "header" },
+                { ref: "B1", value: "FY26", style: "header" },
+                { ref: "C1", value: "FY27", style: "header" },
+                { ref: "D1", value: "FY28", style: "header" },
+                { ref: "A2", value: "Revenue" },
+                { ref: "B2", formula: "=StartingRevenue*(1+GrowthRate)", style: "cross-sheet", format: "$#,##0" },
+                { ref: "C2", formula: "=B2*(1+GrowthRate)", style: "formula", format: "$#,##0" },
+                { ref: "D2", formula: "=C2*(1+GrowthRate)", style: "formula", format: "$#,##0" },
+                { ref: "A3", value: "EBITDA" },
+                { ref: "B3", formula: "=B2*EbitdaMargin", style: "cross-sheet", format: "$#,##0" },
+                { ref: "C3", formula: "=C2*EbitdaMargin", style: "cross-sheet", format: "$#,##0" },
+                { ref: "D3", formula: "=D2*EbitdaMargin", style: "cross-sheet", format: "$#,##0" },
+              ],
+            },
+          ],
+        },
+        null,
+        2
+      ),
     },
   ],
 }
