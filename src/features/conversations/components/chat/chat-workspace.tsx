@@ -61,7 +61,7 @@ import { useArtifacts } from "./artifacts/use-artifacts"
 import { ArtifactIndicator } from "./artifacts/artifact-indicator"
 import { ArtifactPanel } from "./artifacts/artifact-panel"
 import { isValidArtifactType, type Artifact, type ArtifactType } from "./artifacts/types"
-import { TYPE_ICONS, TYPE_LABELS } from "./artifacts/constants"
+import { TYPE_ICONS, TYPE_LABELS, getArtifactRegistryEntry } from "./artifacts/registry"
 import { consumeSseChunk } from "./transports/sse"
 import { reduceEmployeePollEvents, type EmployeePollEvent } from "./transports/polling"
 import type { TransportToolCallMap } from "./transports/types"
@@ -1111,13 +1111,10 @@ export function ChatWorkspace({
   const [artifactsSheetOpen, setArtifactsSheetOpen] = useState(false)
 
   const handleDownloadArtifact = useCallback((artifact: Artifact) => {
-    const EXT_MAP: Record<string, string> = {
-      "text/html": ".html", "text/markdown": ".md", "image/svg+xml": ".svg",
-      "application/react": ".tsx", "application/mermaid": ".mmd", "application/sheet": ".csv",
-      "text/latex": ".tex", "application/slides": ".pptx", "application/python": ".py",
-      "application/3d": ".tsx", "application/code": `.${artifact.language || "txt"}`,
-    }
-    const ext = EXT_MAP[artifact.type] || ".txt"
+    const ext =
+      artifact.type === "application/code"
+        ? `.${artifact.language || "txt"}`
+        : (getArtifactRegistryEntry(artifact.type)?.extension ?? ".txt")
     const filename = `${artifact.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}${ext}`
     const blob = new Blob([artifact.content], { type: "text/plain" })
     const url = URL.createObjectURL(blob)

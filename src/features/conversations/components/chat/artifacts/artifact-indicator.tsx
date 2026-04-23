@@ -4,7 +4,7 @@ import { motion } from "framer-motion"
 import { Code, ChevronRight } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import type { ArtifactType } from "./types"
-import { TYPE_ICONS, TYPE_LABELS, TYPE_COLORS } from "./constants"
+import { TYPE_ICONS, TYPE_LABELS, TYPE_COLORS } from "./registry"
 
 interface ArtifactIndicatorProps {
   title: string

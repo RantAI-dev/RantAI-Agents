@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { DynamicIcon } from "@/components/ui/dynamic-icon"
-import { TYPE_ICONS, TYPE_LABELS, TYPE_COLORS } from "./artifacts/constants"
+import { TYPE_ICONS, TYPE_LABELS, TYPE_COLORS, ARTIFACT_TYPES } from "./artifacts/registry"
 import type { Artifact, ArtifactType } from "./artifacts/types"
 
 export type CanvasMode = false | "auto" | ArtifactType
@@ -137,20 +137,6 @@ const BUILTIN_TOOL_ICON_NAMES: Record<string, string> = {
   create_artifact: "\u2728",
   update_artifact: "\uD83D\uDD27",
 }
-
-const ARTIFACT_TYPES: ArtifactType[] = [
-  "text/html",
-  "application/react",
-  "image/svg+xml",
-  "application/mermaid",
-  "text/markdown",
-  "application/code",
-  "application/sheet",
-  "text/latex",
-  "application/slides",
-  "application/python",
-  "application/3d",
-]
 
 function getCanvasLabel(mode: CanvasMode): string {
   if (mode === false) return "Canvas: Off"

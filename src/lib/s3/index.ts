@@ -9,6 +9,7 @@ import {
   HeadBucketCommand,
 } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+import { getArtifactRegistryEntry } from "@/features/conversations/components/chat/artifacts/registry"
 
 // S3 configuration from environment variables
 const S3_CONFIG = {
@@ -108,23 +109,12 @@ export const S3Paths = {
 }
 
 /**
- * Get file extension for an artifact type
+ * Get file extension for an artifact type. Derived from the central artifact
+ * registry — to add a new type, edit
+ * `src/features/conversations/components/chat/artifacts/registry.ts`.
  */
 export function getArtifactExtension(type: string): string {
-  const map: Record<string, string> = {
-    "text/html": ".html",
-    "text/markdown": ".md",
-    "image/svg+xml": ".svg",
-    "application/react": ".tsx",
-    "application/mermaid": ".mmd",
-    "application/code": ".txt",
-    "application/sheet": ".csv",
-    "text/latex": ".tex",
-    "application/slides": ".pptx",
-    "application/python": ".py",
-    "application/3d": ".tsx",
-  }
-  return map[type] || ".txt"
+  return getArtifactRegistryEntry(type)?.extension ?? ".txt"
 }
 
 /**

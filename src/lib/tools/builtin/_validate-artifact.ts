@@ -16,6 +16,7 @@
 
 import { parse as parseHtml } from "parse5"
 import { parse as parseJs } from "@babel/parser"
+import type { ArtifactType } from "@/features/conversations/components/chat/artifacts/registry"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -35,23 +36,47 @@ const REACT_IMPORT_WHITELIST = new Set([
 /** Maximum non-blank lines allowed inside inline <style> blocks. */
 const MAX_INLINE_STYLE_LINES = 10
 
+/**
+ * Per-artifact-type content validators. The `Record<ArtifactType, …>`
+ * constraint makes this exhaustive: adding a new entry to the artifact
+ * registry without a validator branch here is a compile-time error.
+ */
+const VALIDATORS: Record<ArtifactType, (content: string) => ArtifactValidationResult> = {
+  "text/html": validateHtml,
+  "application/react": validateReact,
+  "image/svg+xml": validateSvg,
+  "application/mermaid": validateMermaid,
+  "application/python": validatePython,
+  "application/code": validateCode,
+  "text/markdown": validateMarkdown,
+  "text/document": validateDocument,
+  "text/latex": validateLatex,
+  "application/sheet": validateSheet,
+  "application/slides": validateSlides,
+  "application/3d": validate3d,
+}
+
 export function validateArtifactContent(
   type: string,
   content: string
 ): ArtifactValidationResult {
-  if (type === "text/html") return validateHtml(content)
-  if (type === "application/react") return validateReact(content)
-  if (type === "image/svg+xml") return validateSvg(content)
-  if (type === "application/mermaid") return validateMermaid(content)
-  if (type === "application/python") return validatePython(content)
-  if (type === "application/code") return validateCode(content)
-  if (type === "text/markdown") return validateMarkdown(content)
-  if (type === "text/latex") return validateLatex(content)
-  if (type === "application/sheet") return validateSheet(content)
-  if (type === "application/slides") return validateSlides(content)
-  if (type === "application/3d") return validate3d(content)
+  const validator = VALIDATORS[type as ArtifactType]
+  if (!validator) return { ok: true, errors: [], warnings: [] }
+  return validator(content)
+}
+
+// ---------------------------------------------------------------------------
+// Document validation — placeholder
+// ---------------------------------------------------------------------------
+// Permissive no-op while the text/document pipeline is being rebuilt around
+// LLM-authored construction code. A real validator will land alongside the
+// new pipeline (sandbox-safety check on the JS payload + structural checks).
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function validateDocument(_content: string): ArtifactValidationResult {
   return { ok: true, errors: [], warnings: [] }
 }
+
 
 // ---------------------------------------------------------------------------
 // Slides validation (JSON deck — application/slides)

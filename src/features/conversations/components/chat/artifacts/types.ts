@@ -1,29 +1,18 @@
-export const VALID_ARTIFACT_TYPES = new Set([
-  "text/html",
-  "text/markdown",
-  "image/svg+xml",
-  "application/react",
-  "application/mermaid",
-  "application/code",
-  "application/sheet",
-  "text/latex",
-  "application/slides",
-  "application/python",
-  "application/3d",
-] as const)
+/**
+ * Artifact data shapes consumed across chat UI, hooks, and persistence.
+ *
+ * `ArtifactType` and `VALID_ARTIFACT_TYPES` are derived from `./registry` —
+ * the single source of truth for artifact type metadata. To add a new
+ * artifact type, edit `./registry.ts`.
+ */
 
-export type ArtifactType =
-  | "text/html"
-  | "text/markdown"
-  | "image/svg+xml"
-  | "application/react"
-  | "application/mermaid"
-  | "application/code"
-  | "application/sheet"
-  | "text/latex"
-  | "application/slides"
-  | "application/python"
-  | "application/3d"
+export {
+  ARTIFACT_TYPES,
+  VALID_ARTIFACT_TYPES,
+} from "./registry"
+export type { ArtifactType } from "./registry"
+
+import { VALID_ARTIFACT_TYPES, type ArtifactType } from "./registry"
 
 export function isValidArtifactType(value: unknown): value is ArtifactType {
   return typeof value === "string" && VALID_ARTIFACT_TYPES.has(value as ArtifactType)

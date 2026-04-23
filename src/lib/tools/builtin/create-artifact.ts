@@ -5,6 +5,10 @@ import { uploadFile, S3Paths, getArtifactExtension } from "@/lib/s3"
 import { indexArtifactContent } from "@/lib/rag"
 import { resolveImages, resolveSlideImages } from "@/lib/unsplash"
 import {
+  ARTIFACT_TYPES,
+  type ArtifactType,
+} from "@/features/conversations/components/chat/artifacts/registry"
+import {
   validateArtifactContent,
   formatValidationError,
 } from "./_validate-artifact"
@@ -21,21 +25,9 @@ export const createArtifactTool: ToolDefinition = {
   parameters: z.object({
     title: z.string().describe("A concise, descriptive title (3-8 words) that clearly identifies the artifact content"),
     type: z
-      .enum([
-        "text/html",
-        "text/markdown",
-        "image/svg+xml",
-        "application/react",
-        "application/mermaid",
-        "application/code",
-        "application/sheet",
-        "text/latex",
-        "application/slides",
-        "application/python",
-        "application/3d",
-      ])
+      .enum(ARTIFACT_TYPES as unknown as [ArtifactType, ...ArtifactType[]])
       .describe(
-        "The artifact format. Choose based on content: text/html (interactive pages, dashboards, games), application/react (UI components, data visualizations), image/svg+xml (graphics, icons), application/mermaid (flowcharts, diagrams), application/code (source code), text/markdown (documents, reports), application/sheet (CSV tables), text/latex (math equations), application/slides (presentations as JSON), application/python (executable scripts), application/3d (R3F 3D scenes)"
+        "The artifact format. Choose based on content: text/html (interactive pages, dashboards, games), application/react (UI components, data visualizations), image/svg+xml (graphics, icons), application/mermaid (flowcharts, diagrams), application/code (source code), text/markdown (documents, reports), application/sheet (CSV tables), text/latex (math equations), application/slides (presentations as JSON), application/python (executable scripts), application/3d (R3F 3D scenes), text/document (formal deliverables with frontmatter, Unsplash images, DOCX/PDF export)"
       ),
     content: z
       .string()
