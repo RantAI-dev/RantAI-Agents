@@ -70,7 +70,7 @@ export const updateArtifactTool: ToolDefinition = {
         // Structural validation against the artifact's known type. Failures
         // are surfaced back to the LLM so it can self-correct.
         if (existing.artifactType) {
-          const validation = validateArtifactContent(
+          const validation = await validateArtifactContent(
             existing.artifactType,
             content
           )

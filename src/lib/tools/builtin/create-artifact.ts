@@ -104,7 +104,7 @@ export const createArtifactTool: ToolDefinition = {
     // Structural validation for HTML/React. Failures are surfaced back to the
     // LLM so it can self-correct on the next tool call. Other artifact types
     // pass through unchanged.
-    const validation = validateArtifactContent(type, content)
+    const validation = await validateArtifactContent(type, content)
     let validationWarnings: string[] = validation.warnings
     if (!validation.ok) {
       return {
@@ -119,8 +119,10 @@ export const createArtifactTool: ToolDefinition = {
       }
     }
 
-    // Resolve unsplash: URLs to real images for HTML and slides artifacts
-    let finalContent = content
+    // Resolve unsplash: URLs to real images for HTML and slides artifacts.
+    // For text/document the validator already resolved Unsplash and returned
+    // the transformed AST JSON via validation.content.
+    let finalContent = validation.content ?? content
     if (type === "text/html") {
       finalContent = await resolveImages(content)
     } else if (type === "application/slides") {

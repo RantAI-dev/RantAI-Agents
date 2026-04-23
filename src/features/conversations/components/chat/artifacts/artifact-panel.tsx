@@ -260,11 +260,25 @@ export function ArtifactPanel({
         setIsExporting(true)
 
         if (format === "docx") {
-          // Placeholder — DOCX export is being rebuilt. Until the new pipeline
-          // ships, surface a friendly error and steer users to the Markdown option.
-          throw new Error(
-            "Word (.docx) export sedang dibangun ulang. Sementara, gunakan opsi Markdown untuk download source content.",
+          if (!sessionId) {
+            throw new Error(
+              "Session context missing; reload the page and retry the download."
+            )
+          }
+          const res = await fetch(
+            `/api/dashboard/chat/sessions/${sessionId}/artifacts/${displayArtifact.id}/download?format=docx`
           )
+          if (!res.ok) {
+            const payload = (await res.json().catch(() => null)) as
+              | { error?: string }
+              | null
+            throw new Error(
+              payload?.error ?? `Download failed (HTTP ${res.status})`
+            )
+          }
+          const blob = await res.blob()
+          triggerDownload(blob, `${slug}.docx`)
+          return
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err)
@@ -274,7 +288,7 @@ export function ArtifactPanel({
         setIsExporting(false)
       }
     },
-    [displayArtifact, isExporting]
+    [displayArtifact, isExporting, sessionId]
   )
 
   const goToPrevVersion = useCallback(() => {

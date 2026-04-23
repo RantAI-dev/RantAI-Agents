@@ -1,5 +1,12 @@
-import { describe, it, expect, afterEach } from "vitest"
+import { describe, it, expect, afterEach, vi } from "vitest"
 import { validateArtifactContent } from "@/lib/tools/builtin/_validate-artifact"
+
+vi.mock("@/lib/unsplash/client", () => ({
+  searchPhoto: vi.fn(async (q: string) => ({
+    urls: { regular: `https://images.unsplash.com/photo-${encodeURIComponent(q)}` },
+    user: { name: "Photographer" },
+  })),
+}))
 
 const VALID_HTML = `<!DOCTYPE html>
 <html lang="en">
@@ -26,14 +33,14 @@ function App() {
 export default App;`
 
 describe("validateArtifactContent — text/html", () => {
-  it("accepts a well-formed document", () => {
-    const r = validateArtifactContent("text/html", VALID_HTML)
+  it("accepts a well-formed document", async () => {
+    const r = await validateArtifactContent("text/html", VALID_HTML)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("rejects missing doctype", () => {
-    const r = validateArtifactContent(
+  it("rejects missing doctype", async () => {
+    const r = await validateArtifactContent(
       "text/html",
       VALID_HTML.replace("<!DOCTYPE html>", "")
     )
@@ -41,8 +48,8 @@ describe("validateArtifactContent — text/html", () => {
     expect(r.errors.join(" ")).toMatch(/DOCTYPE/)
   })
 
-  it("rejects missing viewport meta", () => {
-    const r = validateArtifactContent(
+  it("rejects missing viewport meta", async () => {
+    const r = await validateArtifactContent(
       "text/html",
       VALID_HTML.replace(/<meta name="viewport"[^>]*\/>/, "")
     )
@@ -50,8 +57,8 @@ describe("validateArtifactContent — text/html", () => {
     expect(r.errors.join(" ")).toMatch(/viewport/)
   })
 
-  it("rejects missing title", () => {
-    const r = validateArtifactContent(
+  it("rejects missing title", async () => {
+    const r = await validateArtifactContent(
       "text/html",
       VALID_HTML.replace("<title>Hello</title>", "")
     )
@@ -59,55 +66,55 @@ describe("validateArtifactContent — text/html", () => {
     expect(r.errors.join(" ")).toMatch(/title/i)
   })
 
-  it("rejects empty title", () => {
-    const r = validateArtifactContent(
+  it("rejects empty title", async () => {
+    const r = await validateArtifactContent(
       "text/html",
       VALID_HTML.replace("<title>Hello</title>", "<title></title>")
     )
     expect(r.ok).toBe(false)
   })
 
-  it("rejects <form action='...'>", () => {
+  it("rejects <form action='...'>", async () => {
     const html = VALID_HTML.replace(
       "<h1>Hi</h1>",
       '<form action="/submit"><input name="x" /></form>'
     )
-    const r = validateArtifactContent("text/html", html)
+    const r = await validateArtifactContent("text/html", html)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/form/i)
   })
 
-  it("warns on long inline <style> blocks", () => {
+  it("warns on long inline <style> blocks", async () => {
     const longStyle = Array.from({ length: 15 }, (_, i) => `.x${i} { color: red; }`).join("\n")
     const html = VALID_HTML.replace(
       "</head>",
       `<style>${longStyle}</style></head>`
     )
-    const r = validateArtifactContent("text/html", html)
+    const r = await validateArtifactContent("text/html", html)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/style/i)
   })
 })
 
 describe("validateArtifactContent — application/react", () => {
-  it("accepts a well-formed function component", () => {
-    const r = validateArtifactContent("application/react", VALID_REACT)
+  it("accepts a well-formed function component", async () => {
+    const r = await validateArtifactContent("application/react", VALID_REACT)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("accepts a component using whitelisted imports", () => {
+  it("accepts a component using whitelisted imports", async () => {
     const src = `// @aesthetic: industrial
 import { useState } from 'react';
 import { LineChart } from 'recharts';
 import { Check } from 'lucide-react';
 ${VALID_REACT}`
-    const r = validateArtifactContent("application/react", src)
+    const r = await validateArtifactContent("application/react", src)
     expect(r.ok).toBe(true)
   })
 
-  it("rejects missing export default", () => {
-    const r = validateArtifactContent(
+  it("rejects missing export default", async () => {
+    const r = await validateArtifactContent(
       "application/react",
       VALID_REACT.replace("export default App;", "")
     )
@@ -115,45 +122,45 @@ ${VALID_REACT}`
     expect(r.errors.join(" ")).toMatch(/export default/)
   })
 
-  it("rejects non-whitelisted imports", () => {
+  it("rejects non-whitelisted imports", async () => {
     const src = `// @aesthetic: industrial\nimport create from 'zustand';\n${VALID_REACT}`
-    const r = validateArtifactContent("application/react", src)
+    const r = await validateArtifactContent("application/react", src)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/zustand/)
   })
 
-  it("rejects class components", () => {
+  it("rejects class components", async () => {
     const src = `// @aesthetic: industrial
 class App extends React.Component {
   render() { return <div />; }
 }
 export default App;`
-    const r = validateArtifactContent("application/react", src)
+    const r = await validateArtifactContent("application/react", src)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/class/i)
   })
 
-  it("rejects document.querySelector usage", () => {
+  it("rejects document.querySelector usage", async () => {
     const src = `// @aesthetic: industrial
 function App() {
   const el = document.querySelector('#x');
   return <div />;
 }
 export default App;`
-    const r = validateArtifactContent("application/react", src)
+    const r = await validateArtifactContent("application/react", src)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/querySelector|getElementById/)
   })
 
-  it("rejects CSS imports", () => {
+  it("rejects CSS imports", async () => {
     const src = `// @aesthetic: industrial\nimport './styles.css';\n${VALID_REACT}`
-    const r = validateArtifactContent("application/react", src)
+    const r = await validateArtifactContent("application/react", src)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/CSS/i)
   })
 
-  it("rejects JSX that fails to parse", () => {
-    const r = validateArtifactContent(
+  it("rejects JSX that fails to parse", async () => {
+    const r = await validateArtifactContent(
       "application/react",
       "// @aesthetic: industrial\nfunction App() { return <div<<<>; } export default App;"
     )
@@ -163,102 +170,102 @@ export default App;`
 })
 
 describe("validateArtifactContent — image/svg+xml", () => {
-  const v = (svg: string) => validateArtifactContent("image/svg+xml", svg)
+  const v = async (svg: string) => await validateArtifactContent("image/svg+xml", svg)
 
   const VALID_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="t">
   <title id="t">Bell</title>
   <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" fill="none" stroke="currentColor" stroke-width="2"/>
 </svg>`
 
-  it("accepts a valid icon SVG", () => {
-    const r = v(VALID_ICON)
+  it("accepts a valid icon SVG", async () => {
+    const r = await v(VALID_ICON)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
     expect(r.warnings).toEqual([])
   })
 
-  it("errors on missing xmlns", () => {
-    const r = v(`<svg viewBox="0 0 24 24"><title>x</title></svg>`)
+  it("errors on missing xmlns", async () => {
+    const r = await v(`<svg viewBox="0 0 24 24"><title>x</title></svg>`)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/xmlns/)
   })
 
-  it("errors on missing viewBox", () => {
-    const r = v(`<svg xmlns="http://www.w3.org/2000/svg"><title>x</title></svg>`)
+  it("errors on missing viewBox", async () => {
+    const r = await v(`<svg xmlns="http://www.w3.org/2000/svg"><title>x</title></svg>`)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/viewBox/)
   })
 
-  it("errors on hardcoded width/height", () => {
-    const r = v(
+  it("errors on hardcoded width/height", async () => {
+    const r = await v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="200" height="200"><title>x</title></svg>`
     )
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/width\/height/)
   })
 
-  it("errors on <script>", () => {
-    const r = v(
+  it("errors on <script>", async () => {
+    const r = await v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><script>alert(1)</script></svg>`
     )
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/<script>/)
   })
 
-  it("errors on <foreignObject>", () => {
-    const r = v(
+  it("errors on <foreignObject>", async () => {
+    const r = await v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><foreignObject></foreignObject></svg>`
     )
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/foreignObject/)
   })
 
-  it("errors on external href", () => {
-    const r = v(
+  it("errors on external href", async () => {
+    const r = await v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><image href="https://evil.com/x.png"/></svg>`
     )
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/external href/)
   })
 
-  it("errors on event handler attributes", () => {
-    const r = v(
+  it("errors on event handler attributes", async () => {
+    const r = await v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><rect onclick="x()" width="10" height="10"/></svg>`
     )
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/event handler/)
   })
 
-  it("errors on empty content", () => {
-    const r = v("   ")
+  it("errors on empty content", async () => {
+    const r = await v("   ")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/empty/)
   })
 
-  it("warns on missing <title> when not aria-hidden", () => {
-    const r = v(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="10" height="10"/></svg>`)
+  it("warns on missing <title> when not aria-hidden", async () => {
+    const r = await v(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="10" height="10"/></svg>`)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/<title>/)
   })
 
-  it("does not warn when aria-hidden=\"true\"", () => {
-    const r = v(
+  it("does not warn when aria-hidden=\"true\"", async () => {
+    const r = await v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true"><rect width="10" height="10"/></svg>`
     )
     expect(r.ok).toBe(true)
     expect(r.warnings).toEqual([])
   })
 
-  it("rejects <style> blocks (CSS leaks into host page)", () => {
-    const r = v(
+  it("rejects <style> blocks (CSS leaks into host page)", async () => {
+    const r = await v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><style>.a{fill:red}</style><rect class="a"/></svg>`
     )
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/<style>/)
   })
 
-  it("warns on > 5 distinct colors", () => {
-    const r = v(
+  it("warns on > 5 distinct colors", async () => {
+    const r = await v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title>` +
         `<rect fill="#111"/><rect fill="#222"/><rect fill="#333"/><rect fill="#444"/><rect fill="#555"/><rect fill="#666"/><rect fill="#777"/>` +
         `</svg>`
@@ -267,16 +274,16 @@ describe("validateArtifactContent — image/svg+xml", () => {
     expect(r.warnings.join(" ")).toMatch(/distinct colors/)
   })
 
-  it("warns on high path precision", () => {
-    const r = v(
+  it("warns on high path precision", async () => {
+    const r = await v(
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><path d="M12.456789 34.567890"/></svg>`
     )
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/decimal places/)
   })
 
-  it("accepts a valid illustration with title, desc, role, grouped", () => {
-    const r = v(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-labelledby="t d">
+  it("accepts a valid illustration with title, desc, role, grouped", async () => {
+    const r = await v(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-labelledby="t d">
   <title id="t">Empty</title>
   <desc id="d">Desc</desc>
   <g id="bg"><rect x="0" y="0" width="400" height="300" fill="#F1F5F9"/></g>
@@ -290,203 +297,203 @@ describe("validateArtifactContent — image/svg+xml", () => {
 })
 
 describe("validateArtifactContent — application/mermaid", () => {
-  const v = (src: string) => validateArtifactContent("application/mermaid", src)
+  const v = async (src: string) => await validateArtifactContent("application/mermaid", src)
 
-  it("accepts a valid flowchart", () => {
-    const r = v(`flowchart TD\n  A[Start] --> B[End]`)
+  it("accepts a valid flowchart", async () => {
+    const r = await v(`flowchart TD\n  A[Start] --> B[End]`)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("accepts a valid sequence diagram", () => {
-    const r = v(`sequenceDiagram\n  Alice->>Bob: Hello`)
+  it("accepts a valid sequence diagram", async () => {
+    const r = await v(`sequenceDiagram\n  Alice->>Bob: Hello`)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("accepts a valid ER diagram", () => {
-    const r = v(`erDiagram\n  CUSTOMER ||--o{ ORDER : places`)
+  it("accepts a valid ER diagram", async () => {
+    const r = await v(`erDiagram\n  CUSTOMER ||--o{ ORDER : places`)
     expect(r.ok).toBe(true)
   })
 
-  it("accepts a valid stateDiagram-v2", () => {
-    const r = v(`stateDiagram-v2\n  [*] --> Draft\n  Draft --> [*]`)
+  it("accepts a valid stateDiagram-v2", async () => {
+    const r = await v(`stateDiagram-v2\n  [*] --> Draft\n  Draft --> [*]`)
     expect(r.ok).toBe(true)
   })
 
-  it("accepts a valid gantt chart", () => {
-    const r = v(
+  it("accepts a valid gantt chart", async () => {
+    const r = await v(
       `gantt\n  title Roadmap\n  dateFormat YYYY-MM-DD\n  section A\n  Task :a1, 2025-01-01, 5d`
     )
     expect(r.ok).toBe(true)
   })
 
-  it("accepts a valid classDiagram", () => {
-    const r = v(`classDiagram\n  class Animal\n  Animal <|-- Dog`)
+  it("accepts a valid classDiagram", async () => {
+    const r = await v(`classDiagram\n  class Animal\n  Animal <|-- Dog`)
     expect(r.ok).toBe(true)
   })
 
-  it("accepts a flowchart preceded by leading frontmatter", () => {
-    const r = v(`---\ntitle: My Chart\n---\nflowchart TD\n  A --> B`)
+  it("accepts a flowchart preceded by leading frontmatter", async () => {
+    const r = await v(`---\ntitle: My Chart\n---\nflowchart TD\n  A --> B`)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("accepts a flowchart preceded by a %% comment line", () => {
-    const r = v(`%% leading comment\nflowchart TD\n  A --> B`)
+  it("accepts a flowchart preceded by a %% comment line", async () => {
+    const r = await v(`%% leading comment\nflowchart TD\n  A --> B`)
     expect(r.ok).toBe(true)
   })
 
-  it("accepts a flowchart preceded by an init directive", () => {
-    const r = v(`%%{init: {'theme':'default'}}%%\nflowchart TD\n  A --> B`)
+  it("accepts a flowchart preceded by an init directive", async () => {
+    const r = await v(`%%{init: {'theme':'default'}}%%\nflowchart TD\n  A --> B`)
     expect(r.ok).toBe(true)
   })
 
-  it("rejects empty content", () => {
-    const r = v("   \n  \n")
+  it("rejects empty content", async () => {
+    const r = await v("   \n  \n")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/empty/i)
   })
 
-  it("rejects content wrapped in markdown fences", () => {
-    const r = v("```mermaid\nflowchart TD\n  A --> B\n```")
+  it("rejects content wrapped in markdown fences", async () => {
+    const r = await v("```mermaid\nflowchart TD\n  A --> B\n```")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/markdown code fences/i)
   })
 
-  it("rejects content with no diagram declaration", () => {
-    const r = v(`A[Start] --> B[End]`)
+  it("rejects content with no diagram declaration", async () => {
+    const r = await v(`A[Start] --> B[End]`)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/diagram type declaration/i)
   })
 
-  it("rejects content with an unknown diagram type", () => {
-    const r = v(`uwuDiagram\n  A --> B`)
+  it("rejects content with an unknown diagram type", async () => {
+    const r = await v(`uwuDiagram\n  A --> B`)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/diagram type declaration/i)
   })
 
-  it("warns on very long content", () => {
+  it("warns on very long content", async () => {
     const padding = "  A --> B\n".repeat(400) // > 3000 chars
-    const r = v(`flowchart TD\n${padding}`)
+    const r = await v(`flowchart TD\n${padding}`)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/chars/i)
   })
 
-  it("warns on more than 15 flowchart node definitions", () => {
+  it("warns on more than 15 flowchart node definitions", async () => {
     const nodes = Array.from({ length: 18 }, (_, i) => `  N${i}[Node ${i}]`).join("\n")
-    const r = v(`flowchart TD\n${nodes}`)
+    const r = await v(`flowchart TD\n${nodes}`)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/15 nodes/i)
   })
 })
 
 describe("validateArtifactContent — application/python", () => {
-  const v = (code: string) => validateArtifactContent("application/python", code)
+  const v = async (code: string) => await validateArtifactContent("application/python", code)
 
-  it("accepts a valid numpy + print script", () => {
-    const r = v(`import numpy as np\n\nx = np.arange(10)\nprint("sum =", int(x.sum()))\n`)
+  it("accepts a valid numpy + print script", async () => {
+    const r = await v(`import numpy as np\n\nx = np.arange(10)\nprint("sum =", int(x.sum()))\n`)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("accepts a valid matplotlib script", () => {
-    const r = v(
+  it("accepts a valid matplotlib script", async () => {
+    const r = await v(
       `import numpy as np\nimport matplotlib.pyplot as plt\n\nplt.figure(figsize=(10, 6))\nplt.plot(np.arange(10))\nplt.title("demo")\nplt.xlabel("x")\nplt.ylabel("y")\nplt.tight_layout()\nplt.show()\n`
     )
     expect(r.ok).toBe(true)
   })
 
-  it("accepts pandas (Pyodide auto-loads it)", () => {
-    const r = v(`import pandas as pd\n\nprint(pd.Series([1, 2, 3]).mean())\n`)
+  it("accepts pandas (Pyodide auto-loads it)", async () => {
+    const r = await v(`import pandas as pd\n\nprint(pd.Series([1, 2, 3]).mean())\n`)
     expect(r.ok).toBe(true)
   })
 
-  it("rejects empty content", () => {
-    const r = v("   \n  ")
+  it("rejects empty content", async () => {
+    const r = await v("   \n  ")
     expect(r.ok).toBe(false)
     expect(r.errors[0]).toMatch(/empty/i)
   })
 
-  it("rejects markdown fence wrap", () => {
-    const r = v("```python\nprint('hi')\n```")
+  it("rejects markdown fence wrap", async () => {
+    const r = await v("```python\nprint('hi')\n```")
     expect(r.ok).toBe(false)
     expect(r.errors[0]).toMatch(/markdown code fences/i)
   })
 
-  it("rejects `import requests`", () => {
-    const r = v(`import requests\n\nprint(requests.get("https://x").text)\n`)
+  it("rejects `import requests`", async () => {
+    const r = await v(`import requests\n\nprint(requests.get("https://x").text)\n`)
     expect(r.ok).toBe(false)
     expect(r.errors[0]).toMatch(/requests/)
   })
 
-  it("rejects `from flask import Flask`", () => {
-    const r = v(`from flask import Flask\n\napp = Flask(__name__)\n`)
+  it("rejects `from flask import Flask`", async () => {
+    const r = await v(`from flask import Flask\n\napp = Flask(__name__)\n`)
     expect(r.ok).toBe(false)
     expect(r.errors[0]).toMatch(/flask/)
   })
 
-  it("rejects `import torch`", () => {
-    const r = v(`import torch\nprint(torch.tensor([1.0]))\n`)
+  it("rejects `import torch`", async () => {
+    const r = await v(`import torch\nprint(torch.tensor([1.0]))\n`)
     expect(r.ok).toBe(false)
     expect(r.errors[0]).toMatch(/torch/)
   })
 
-  it("does NOT reject a substring match like `requestsx`", () => {
-    const r = v(`requestsx = 1\nprint(requestsx)\n`)
+  it("does NOT reject a substring match like `requestsx`", async () => {
+    const r = await v(`requestsx = 1\nprint(requestsx)\n`)
     expect(r.ok).toBe(true)
   })
 
-  it("ignores unavailable-package names that appear only inside comments", () => {
-    const r = v(`# import requests  -- not used\nprint("ok")\n`)
+  it("ignores unavailable-package names that appear only inside comments", async () => {
+    const r = await v(`# import requests  -- not used\nprint("ok")\n`)
     expect(r.ok).toBe(true)
   })
 
-  it("rejects input()", () => {
-    const r = v(`name = input("name? ")\nprint(name)\n`)
+  it("rejects input()", async () => {
+    const r = await v(`name = input("name? ")\nprint(name)\n`)
     expect(r.ok).toBe(false)
     expect(r.errors.some((e) => /input\(\)/.test(e))).toBe(true)
   })
 
-  it("rejects open() with write mode", () => {
-    const r = v(`with open("out.txt", "w") as f:\n    f.write("hi")\n`)
+  it("rejects open() with write mode", async () => {
+    const r = await v(`with open("out.txt", "w") as f:\n    f.write("hi")\n`)
     expect(r.ok).toBe(false)
     expect(r.errors.some((e) => /open\(\)/.test(e))).toBe(true)
   })
 
-  it("allows open() with read mode", () => {
-    const r = v(`try:\n    open("x.txt", "r")\nexcept Exception as e:\n    print(e)\n`)
+  it("allows open() with read mode", async () => {
+    const r = await v(`try:\n    open("x.txt", "r")\nexcept Exception as e:\n    print(e)\n`)
     expect(r.ok).toBe(true)
   })
 
-  it("warns when there is no print() and no plt.show()", () => {
-    const r = v(`x = 1 + 1\ny = x * 2\n`)
+  it("warns when there is no print() and no plt.show()", async () => {
+    const r = await v(`x = 1 + 1\ny = x * 2\n`)
     expect(r.ok).toBe(true)
     expect(r.warnings.some((w) => /no print\(\) or plt\.show\(\)/.test(w))).toBe(true)
   })
 
-  it("warns on long time.sleep", () => {
-    const r = v(`import time\ntime.sleep(30)\nprint("done")\n`)
+  it("warns on long time.sleep", async () => {
+    const r = await v(`import time\ntime.sleep(30)\nprint("done")\n`)
     expect(r.ok).toBe(true)
     expect(r.warnings.some((w) => /time\.sleep/.test(w))).toBe(true)
   })
 
-  it("warns on `while True` with no break", () => {
-    const r = v(`while True:\n    print("spin")\n`)
+  it("warns on `while True` with no break", async () => {
+    const r = await v(`while True:\n    print("spin")\n`)
     expect(r.ok).toBe(true)
     expect(r.warnings.some((w) => /while True/.test(w))).toBe(true)
   })
 
-  it("does not warn on `while True` that has a break", () => {
-    const r = v(`i = 0\nwhile True:\n    i += 1\n    if i > 5:\n        break\nprint(i)\n`)
+  it("does not warn on `while True` that has a break", async () => {
+    const r = await v(`i = 0\nwhile True:\n    i += 1\n    if i > 5:\n        break\nprint(i)\n`)
     expect(r.ok).toBe(true)
     expect(r.warnings.some((w) => /while True/.test(w))).toBe(false)
   })
 })
 
 describe("validateArtifactContent — other types pass through", () => {
-  it("returns ok for text/markdown", () => {
-    const r = validateArtifactContent("text/markdown", "# anything")
+  it("returns ok for text/markdown", async () => {
+    const r = await validateArtifactContent("text/markdown", "# anything")
     expect(r.ok).toBe(true)
   })
 })
@@ -543,32 +550,32 @@ impl Store {
 `
 
 describe("validateArtifactContent — application/code", () => {
-  it("accepts valid TypeScript", () => {
-    const result = validateArtifactContent("application/code", TS_GOOD)
+  it("accepts valid TypeScript", async () => {
+    const result = await validateArtifactContent("application/code", TS_GOOD)
     expect(result.ok).toBe(true)
     expect(result.errors).toHaveLength(0)
   })
 
-  it("accepts valid Python", () => {
-    const result = validateArtifactContent("application/code", PY_GOOD)
+  it("accepts valid Python", async () => {
+    const result = await validateArtifactContent("application/code", PY_GOOD)
     expect(result.ok).toBe(true)
     expect(result.errors).toHaveLength(0)
   })
 
-  it("accepts valid Rust", () => {
-    const result = validateArtifactContent("application/code", RS_GOOD)
+  it("accepts valid Rust", async () => {
+    const result = await validateArtifactContent("application/code", RS_GOOD)
     expect(result.ok).toBe(true)
     expect(result.errors).toHaveLength(0)
   })
 
-  it("rejects empty content", () => {
-    const result = validateArtifactContent("application/code", "   \n  \n")
+  it("rejects empty content", async () => {
+    const result = await validateArtifactContent("application/code", "   \n  \n")
     expect(result.ok).toBe(false)
     expect(result.errors[0]).toMatch(/empty/i)
   })
 
-  it("rejects HTML document (wrong type)", () => {
-    const result = validateArtifactContent(
+  it("rejects HTML document (wrong type)", async () => {
+    const result = await validateArtifactContent(
       "application/code",
       "<!DOCTYPE html>\n<html><body>hi</body></html>"
     )
@@ -576,8 +583,8 @@ describe("validateArtifactContent — application/code", () => {
     expect(result.errors[0]).toMatch(/text\/html/)
   })
 
-  it("rejects markdown-fenced content", () => {
-    const result = validateArtifactContent(
+  it("rejects markdown-fenced content", async () => {
+    const result = await validateArtifactContent(
       "application/code",
       "```ts\nexport const x = 1\n```"
     )
@@ -585,103 +592,103 @@ describe("validateArtifactContent — application/code", () => {
     expect(result.errors[0]).toMatch(/markdown code fences/i)
   })
 
-  it("warns on truncation marker '// ... rest of implementation'", () => {
+  it("warns on truncation marker '// ... rest of implementation'", async () => {
     const content = `export function big() {
   doStep1()
   // ... rest of implementation
 }`
-    const result = validateArtifactContent("application/code", content)
+    const result = await validateArtifactContent("application/code", content)
     expect(result.ok).toBe(true)
     expect(result.warnings.join(" ")).toMatch(/truncation|placeholder/i)
   })
 
-  it("warns on '// TODO: implement'", () => {
+  it("warns on '// TODO: implement'", async () => {
     const content = `export function foo() {
   // TODO: implement
 }`
-    const result = validateArtifactContent("application/code", content)
+    const result = await validateArtifactContent("application/code", content)
     expect(result.ok).toBe(true)
     expect(result.warnings.join(" ")).toMatch(/truncation|placeholder/i)
   })
 
-  it("warns on Rust 'unimplemented!()'", () => {
+  it("warns on Rust 'unimplemented!()'", async () => {
     const content = `pub fn compute() -> i32 {
     unimplemented!()
 }`
-    const result = validateArtifactContent("application/code", content)
+    const result = await validateArtifactContent("application/code", content)
     expect(result.ok).toBe(true)
     expect(result.warnings.join(" ")).toMatch(/truncation|placeholder/i)
   })
 })
 
 describe("validateArtifactContent — text/markdown", () => {
-  it("accepts a well-structured document with a top-level heading", () => {
+  it("accepts a well-structured document with a top-level heading", async () => {
     const md = `# Title\n\nSome paragraph.\n\n## Section\n\nMore content.\n`
-    const r = validateArtifactContent("text/markdown", md)
+    const r = await validateArtifactContent("text/markdown", md)
     expect(r.ok).toBe(true)
     expect(r.warnings).toEqual([])
   })
 
-  it("errors on empty content", () => {
-    const r = validateArtifactContent("text/markdown", "   \n  ")
+  it("errors on empty content", async () => {
+    const r = await validateArtifactContent("text/markdown", "   \n  ")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/empty/i)
   })
 
-  it("warns when the document has no top-level heading", () => {
-    const r = validateArtifactContent("text/markdown", "Just a paragraph, no heading.")
+  it("warns when the document has no top-level heading", async () => {
+    const r = await validateArtifactContent("text/markdown", "Just a paragraph, no heading.")
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/top-level heading/i)
   })
 
-  it("warns when heading levels skip", () => {
+  it("warns when heading levels skip", async () => {
     const md = `# Title\n\n### Skipped H2\n`
-    const r = validateArtifactContent("text/markdown", md)
+    const r = await validateArtifactContent("text/markdown", md)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/skip/i)
   })
 
-  it("warns on a <script> tag", () => {
+  it("warns on a <script> tag", async () => {
     const md = `# Title\n\n<script>alert(1)</script>\n`
-    const r = validateArtifactContent("text/markdown", md)
+    const r = await validateArtifactContent("text/markdown", md)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/script/i)
   })
 })
 
 describe("validateArtifactContent — text/latex", () => {
-  it("accepts a display-math document", () => {
-    const r = validateArtifactContent("text/latex", "$$ x^2 + y^2 = z^2 $$")
+  it("accepts a display-math document", async () => {
+    const r = await validateArtifactContent("text/latex", "$$ x^2 + y^2 = z^2 $$")
     expect(r.ok).toBe(true)
     expect(r.warnings).toEqual([])
   })
 
-  it("accepts an align environment", () => {
+  it("accepts an align environment", async () => {
     const tex = `\\section{Proof}\n\n\\begin{align}\na &= b \\\\\nc &= d\n\\end{align}\n`
-    const r = validateArtifactContent("text/latex", tex)
+    const r = await validateArtifactContent("text/latex", tex)
     expect(r.ok).toBe(true)
   })
 
-  it("errors on empty content", () => {
-    const r = validateArtifactContent("text/latex", "")
+  it("errors on empty content", async () => {
+    const r = await validateArtifactContent("text/latex", "")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/empty/i)
   })
 
-  it("errors on \\documentclass", () => {
-    const r = validateArtifactContent("text/latex", "\\documentclass{article}\n$$x$$")
+  it("errors on \\documentclass", async () => {
+    const r = await validateArtifactContent("text/latex", "\\documentclass{article}\n$$x$$")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/documentclass/i)
   })
 
-  it("errors on \\usepackage", () => {
-    const r = validateArtifactContent("text/latex", "\\usepackage{amsmath}\n$$x$$")
+  it("errors on \\usepackage", async () => {
+    const r = await validateArtifactContent("text/latex", "\\usepackage{amsmath}\n$$x$$")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/usepackage/i)
   })
 
-  it("errors on \\begin{document}", () => {
-    const r = validateArtifactContent(
+  it("errors on \\begin{document}", async () => {
+    const r = await validateArtifactContent(
       "text/latex",
       "\\begin{document}$$x$$\\end{document}"
     )
@@ -689,22 +696,22 @@ describe("validateArtifactContent — text/latex", () => {
     expect(r.errors.join(" ")).toMatch(/begin\{document\}/i)
   })
 
-  it("warns when there are no math delimiters", () => {
-    const r = validateArtifactContent("text/latex", "\\section{Intro}\n\nHello world.")
+  it("warns when there are no math delimiters", async () => {
+    const r = await validateArtifactContent("text/latex", "\\section{Intro}\n\nHello world.")
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/math delimiter/i)
   })
 
-  it("rejects fundamentally unsupported commands (\\includegraphics, figures, citations)", () => {
+  it("rejects fundamentally unsupported commands (\\includegraphics, figures, citations)", async () => {
     const tex = `\\section{Plot}\n\n$$ \\includegraphics{a.png} $$\n`
-    const r = validateArtifactContent("text/latex", tex)
+    const r = await validateArtifactContent("text/latex", tex)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/includegraphics/)
   })
 
-  it("still warns (not errors) on softer unsupported commands like \\verb", () => {
+  it("still warns (not errors) on softer unsupported commands like \\verb", async () => {
     const tex = `\\section{Notes}\n\n$x = 1$ — see \\verb|hello|.\n`
-    const r = validateArtifactContent("text/latex", tex)
+    const r = await validateArtifactContent("text/latex", tex)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/verb/)
   })
@@ -716,78 +723,78 @@ describe("validateArtifactContent — application/sheet (CSV)", () => {
 002,Rohan Subramanian,Engineering,148000,2020-08-01
 003,Maya Chen,Design,165000,2018-11-05`
 
-  it("accepts a well-formed CSV", () => {
-    const r = validateArtifactContent("application/sheet", VALID_CSV)
+  it("accepts a well-formed CSV", async () => {
+    const r = await validateArtifactContent("application/sheet", VALID_CSV)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("accepts a CSV with a quoted field containing a comma", () => {
+  it("accepts a CSV with a quoted field containing a comma", async () => {
     const csv = `ID,Title\n1,"Engineer, Senior"\n2,"Engineer, Staff"`
-    const r = validateArtifactContent("application/sheet", csv)
+    const r = await validateArtifactContent("application/sheet", csv)
     expect(r.ok).toBe(true)
   })
 
-  it("rejects empty content", () => {
-    const r = validateArtifactContent("application/sheet", "")
+  it("rejects empty content", async () => {
+    const r = await validateArtifactContent("application/sheet", "")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/empty/i)
   })
 
-  it("rejects whitespace-only content", () => {
-    const r = validateArtifactContent("application/sheet", "   \n  \n")
+  it("rejects whitespace-only content", async () => {
+    const r = await validateArtifactContent("application/sheet", "   \n  \n")
     expect(r.ok).toBe(false)
   })
 
-  it("rejects mismatched column count", () => {
+  it("rejects mismatched column count", async () => {
     const csv = `A,B,C\n1,2,3\n4,5`
-    const r = validateArtifactContent("application/sheet", csv)
+    const r = await validateArtifactContent("application/sheet", csv)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/column/i)
   })
 
-  it("rejects header-only CSV", () => {
-    const r = validateArtifactContent("application/sheet", "A,B,C")
+  it("rejects header-only CSV", async () => {
+    const r = await validateArtifactContent("application/sheet", "A,B,C")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/header/i)
   })
 
-  it("warns on >100 rows", () => {
+  it("warns on >100 rows", async () => {
     const lines = ["ID,Value"]
     for (let i = 0; i < 120; i++) lines.push(`${i},val${i}`)
-    const r = validateArtifactContent("application/sheet", lines.join("\n"))
+    const r = await validateArtifactContent("application/sheet", lines.join("\n"))
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/pagination|100/)
   })
 
-  it("warns on >10 columns", () => {
+  it("warns on >10 columns", async () => {
     const cols = Array.from({ length: 12 }, (_, i) => `C${i}`)
     const csv = cols.join(",") + "\n" + cols.map((_, i) => i).join(",")
-    const r = validateArtifactContent("application/sheet", csv)
+    const r = await validateArtifactContent("application/sheet", csv)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/columns|10/)
   })
 
-  it("warns on all-identical column", () => {
+  it("warns on all-identical column", async () => {
     const csv = `ID,Status\n1,Active\n2,Active\n3,Active`
-    const r = validateArtifactContent("application/sheet", csv)
+    const r = await validateArtifactContent("application/sheet", csv)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/same value/i)
   })
 
-  it("warns on currency symbols in numeric column", () => {
+  it("warns on currency symbols in numeric column", async () => {
     const csv = `Item,Price\nApple,$1.50\nPear,$2.25\nPlum,$3.00`
-    const r = validateArtifactContent("application/sheet", csv)
+    const r = await validateArtifactContent("application/sheet", csv)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/currency|thousand/i)
   })
 
-  it("warns on mixed date formats", () => {
+  it("warns on mixed date formats", async () => {
     const csv = `ID,Start Date\n1,2026-01-15\n2,2026-02-20\n3,Jan 15, 2026\n4,Feb 20, 2026`
     // Note: the unquoted comma in "Jan 15, 2026" will trip column count.
     // Use a properly quoted version:
     const csvOk = `ID,Start Date\n1,2026-01-15\n2,2026-02-20\n3,"Jan 15, 2026"\n4,"Feb 20, 2026"`
-    const r = validateArtifactContent("application/sheet", csvOk)
+    const r = await validateArtifactContent("application/sheet", csvOk)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/date/i)
   })
@@ -800,48 +807,48 @@ describe("validateArtifactContent — application/sheet (JSON)", () => {
   {"Month": "2026-03", "Revenue": 498220, "Orders": 3198}
 ]`
 
-  it("accepts a valid JSON array of objects", () => {
-    const r = validateArtifactContent("application/sheet", VALID_JSON)
+  it("accepts a valid JSON array of objects", async () => {
+    const r = await validateArtifactContent("application/sheet", VALID_JSON)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("rejects invalid JSON", () => {
-    const r = validateArtifactContent("application/sheet", "[{not valid}]")
+  it("rejects invalid JSON", async () => {
+    const r = await validateArtifactContent("application/sheet", "[{not valid}]")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/parse/i)
   })
 
-  it("rejects top-level object", () => {
-    const r = validateArtifactContent("application/sheet", `{"a": 1}`)
+  it("rejects top-level object", async () => {
+    const r = await validateArtifactContent("application/sheet", `{"a": 1}`)
     // Top-level object doesn't start with "[" so falls through to CSV branch — that's fine,
     // but ensure it errors one way or another.
     expect(r.ok).toBe(false)
   })
 
-  it("rejects empty array", () => {
-    const r = validateArtifactContent("application/sheet", "[]")
+  it("rejects empty array", async () => {
+    const r = await validateArtifactContent("application/sheet", "[]")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/empty/i)
   })
 
-  it("rejects inconsistent key sets", () => {
+  it("rejects inconsistent key sets", async () => {
     const json = `[{"a":1,"b":2},{"a":3,"c":4}]`
-    const r = validateArtifactContent("application/sheet", json)
+    const r = await validateArtifactContent("application/sheet", json)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/key/i)
   })
 
-  it("warns on nested object values", () => {
+  it("warns on nested object values", async () => {
     const json = `[{"id":1,"meta":{"x":1}},{"id":2,"meta":{"x":2}}]`
-    const r = validateArtifactContent("application/sheet", json)
+    const r = await validateArtifactContent("application/sheet", json)
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/nested|object/i)
   })
 })
 
 describe("validateArtifactContent — application/slides", () => {
-  const v = (c: string) => validateArtifactContent("application/slides", c)
+  const v = async (c: string) => await validateArtifactContent("application/slides", c)
 
   const VALID_DECK = JSON.stringify({
     theme: { primaryColor: "#0F172A", secondaryColor: "#3B82F6", fontFamily: "Inter" },
@@ -852,38 +859,38 @@ describe("validateArtifactContent — application/slides", () => {
     ],
   })
 
-  it("accepts a well-formed deck", () => {
-    const r = v(VALID_DECK)
+  it("accepts a well-formed deck", async () => {
+    const r = await v(VALID_DECK)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("rejects empty content", () => {
-    const r = v("")
+  it("rejects empty content", async () => {
+    const r = await v("")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/empty/i)
   })
 
-  it("rejects markdown deck (legacy fallback discouraged)", () => {
-    const r = v("# Slide 1\n\nHello world")
+  it("rejects markdown deck (legacy fallback discouraged)", async () => {
+    const r = await v("# Slide 1\n\nHello world")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/JSON/)
   })
 
-  it("rejects malformed JSON", () => {
-    const r = v("{not json")
+  it("rejects malformed JSON", async () => {
+    const r = await v("{not json")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/parse/i)
   })
 
-  it("rejects empty slides array", () => {
-    const r = v(`{"theme":{},"slides":[]}`)
+  it("rejects empty slides array", async () => {
+    const r = await v(`{"theme":{},"slides":[]}`)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/empty/i)
   })
 
-  it("rejects an unknown layout", () => {
-    const r = v(
+  it("rejects an unknown layout", async () => {
+    const r = await v(
       JSON.stringify({
         theme: {},
         slides: [{ layout: "carousel", title: "X" }],
@@ -893,8 +900,8 @@ describe("validateArtifactContent — application/slides", () => {
     expect(r.errors.join(" ")).toMatch(/invalid layout/i)
   })
 
-  it("rejects two-column missing left/right arrays", () => {
-    const r = v(
+  it("rejects two-column missing left/right arrays", async () => {
+    const r = await v(
       JSON.stringify({
         theme: {},
         slides: [
@@ -907,8 +914,8 @@ describe("validateArtifactContent — application/slides", () => {
     expect(r.errors.join(" ")).toMatch(/two-column/i)
   })
 
-  it("warns when first slide is not title", () => {
-    const r = v(
+  it("warns when first slide is not title", async () => {
+    const r = await v(
       JSON.stringify({
         theme: {},
         slides: [{ layout: "content", title: "Outline", bullets: ["A"] }],
@@ -918,8 +925,8 @@ describe("validateArtifactContent — application/slides", () => {
     expect(r.warnings.join(" ")).toMatch(/first slide/i)
   })
 
-  it("warns when bullets exceed the cap", () => {
-    const r = v(
+  it("warns when bullets exceed the cap", async () => {
+    const r = await v(
       JSON.stringify({
         theme: {},
         slides: [
@@ -937,8 +944,8 @@ describe("validateArtifactContent — application/slides", () => {
     expect(r.warnings.join(" ")).toMatch(/bullets/i)
   })
 
-  it("warns when slide text contains markdown syntax", () => {
-    const r = v(
+  it("warns when slide text contains markdown syntax", async () => {
+    const r = await v(
       JSON.stringify({
         theme: {},
         slides: [
@@ -950,8 +957,8 @@ describe("validateArtifactContent — application/slides", () => {
     expect(r.warnings.join(" ")).toMatch(/markdown syntax/i)
   })
 
-  it("warns when a bullet exceeds 10 words", () => {
-    const r = v(
+  it("warns when a bullet exceeds 10 words", async () => {
+    const r = await v(
       JSON.stringify({
         theme: {},
         slides: [
@@ -970,8 +977,8 @@ describe("validateArtifactContent — application/slides", () => {
     expect(r.warnings.join(" ")).toMatch(/bullet 1 is \d+ words/)
   })
 
-  it("warns on the deprecated image-text layout", () => {
-    const r = v(
+  it("warns on the deprecated image-text layout", async () => {
+    const r = await v(
       JSON.stringify({
         theme: {},
         slides: [
@@ -984,8 +991,8 @@ describe("validateArtifactContent — application/slides", () => {
     expect(r.warnings.join(" ")).toMatch(/image-text/)
   })
 
-  it("warns when the deck is shorter than the convention", () => {
-    const r = v(
+  it("warns when the deck is shorter than the convention", async () => {
+    const r = await v(
       JSON.stringify({
         theme: {},
         slides: [
@@ -997,17 +1004,17 @@ describe("validateArtifactContent — application/slides", () => {
     expect(r.warnings.join(" ")).toMatch(/convention is 7/)
   })
 
-  it("warns when the deck is longer than the convention", () => {
+  it("warns when the deck is longer than the convention", async () => {
     const slides = [{ layout: "title", title: "X", subtitle: "Y" }]
     for (let i = 0; i < 12; i++) {
       slides.push({ layout: "content", title: `S${i}`, bullets: ["a"] } as never)
     }
     slides.push({ layout: "closing", title: "Bye" } as never)
-    const r = v(JSON.stringify({ theme: {}, slides }))
+    const r = await v(JSON.stringify({ theme: {}, slides }))
     expect(r.warnings.join(" ")).toMatch(/convention is 7/)
   })
 
-  it("warns when fewer than 3 distinct layouts are used in a long deck", () => {
+  it("warns when fewer than 3 distinct layouts are used in a long deck", async () => {
     // 8 slides using only 2 distinct layouts (title + content) should
     // trip the diversity warning. Closing intentionally omitted to keep
     // the layout count at exactly 2 for this assertion.
@@ -1015,12 +1022,12 @@ describe("validateArtifactContent — application/slides", () => {
     for (let i = 0; i < 7; i++) {
       slides.push({ layout: "content", title: `S${i}`, bullets: ["a"] } as never)
     }
-    const r = v(JSON.stringify({ theme: {}, slides }))
+    const r = await v(JSON.stringify({ theme: {}, slides }))
     expect(r.warnings.join(" ")).toMatch(/layout type/)
   })
 
-  it("warns when the closing slide has no title", () => {
-    const r = v(
+  it("warns when the closing slide has no title", async () => {
+    const r = await v(
       JSON.stringify({
         theme: {},
         slides: [
@@ -1034,7 +1041,7 @@ describe("validateArtifactContent — application/slides", () => {
 })
 
 describe("validateArtifactContent — application/3d", () => {
-  const v = (c: string) => validateArtifactContent("application/3d", c)
+  const v = async (c: string) => await validateArtifactContent("application/3d", c)
 
   const VALID_SCENE = `function Scene() {
   const ref = useRef()
@@ -1051,69 +1058,69 @@ describe("validateArtifactContent — application/3d", () => {
 
 export default Scene`
 
-  it("accepts a well-formed scene", () => {
-    const r = v(VALID_SCENE)
+  it("accepts a well-formed scene", async () => {
+    const r = await v(VALID_SCENE)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("rejects empty content", () => {
-    const r = v("")
+  it("rejects empty content", async () => {
+    const r = await v("")
     expect(r.ok).toBe(false)
   })
 
-  it("rejects markdown fences", () => {
-    const r = v("```jsx\n" + VALID_SCENE + "\n```")
+  it("rejects markdown fences", async () => {
+    const r = await v("```jsx\n" + VALID_SCENE + "\n```")
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/code fences/i)
   })
 
-  it("rejects <Canvas>", () => {
-    const r = v(`function Scene() { return <Canvas><mesh/></Canvas> }\nexport default Scene`)
+  it("rejects <Canvas>", async () => {
+    const r = await v(`function Scene() { return <Canvas><mesh/></Canvas> }\nexport default Scene`)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/Canvas/)
   })
 
-  it("rejects <OrbitControls>", () => {
-    const r = v(
+  it("rejects <OrbitControls>", async () => {
+    const r = await v(
       `function Scene() { return <><OrbitControls /><mesh/></> }\nexport default Scene`,
     )
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/OrbitControls/)
   })
 
-  it("rejects document.* access", () => {
-    const r = v(
+  it("rejects document.* access", async () => {
+    const r = await v(
       `function Scene() { document.getElementById('x'); return <></> }\nexport default Scene`,
     )
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/document/i)
   })
 
-  it("rejects requestAnimationFrame", () => {
-    const r = v(
+  it("rejects requestAnimationFrame", async () => {
+    const r = await v(
       `function Scene() { useEffect(() => { requestAnimationFrame(() => {}) }); return <></> }\nexport default Scene`,
     )
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/requestAnimationFrame/)
   })
 
-  it("rejects missing export default", () => {
-    const r = v(`function Scene() { return <></> }`)
+  it("rejects missing export default", async () => {
+    const r = await v(`function Scene() { return <></> }`)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/export default/)
   })
 
-  it("warns on imports from non-whitelisted packages", () => {
-    const r = v(
+  it("warns on imports from non-whitelisted packages", async () => {
+    const r = await v(
       `import { foo } from 'leva'\nfunction Scene() { return <></> }\nexport default Scene`,
     )
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/leva/)
   })
 
-  it("warns on non-whitelisted Drei symbols", () => {
-    const r = v(
+  it("warns on non-whitelisted Drei symbols", async () => {
+    const r = await v(
       `import { Bounds } from '@react-three/drei'\nfunction Scene() { return <></> }\nexport default Scene`,
     )
     expect(r.ok).toBe(true)
@@ -1277,7 +1284,7 @@ describe("python prompt ↔ validator blacklist", () => {
     // synthetic `import` statement and confirm it does NOT trigger the
     // unavailable-packages error.
     for (const pkg of documentedAutoLoad) {
-      const r = validateArtifactContent(
+      const r = await validateArtifactContent(
         "application/python",
         `import ${pkg}\nprint(${pkg})\n`,
       )
@@ -1344,7 +1351,7 @@ describe("ARTIFACT_REGISTRY", () => {
     const doc = getArtifactRegistryEntry("text/document")
     expect(doc).toBeDefined()
     expect(doc?.label).toBe("Document")
-    expect(doc?.extension).toBe(".md")
+    expect(doc?.extension).toBe(".docx")
     expect(doc?.hasCodeTab).toBe(false)
   })
 
@@ -1432,38 +1439,38 @@ describe("validateArtifactContent — application/react — aesthetic directive"
 }
 export default App`
 
-  it("accepts a valid @aesthetic directive", () => {
+  it("accepts a valid @aesthetic directive", async () => {
     const code = `// @aesthetic: editorial\n${MINIMAL_BODY}`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(true)
     expect(r.errors).toEqual([])
   })
 
-  it("accepts all 7 valid direction names", () => {
+  it("accepts all 7 valid direction names", async () => {
     for (const dir of ["editorial", "brutalist", "luxury", "playful", "industrial", "organic", "retro-futuristic"]) {
       const code = `// @aesthetic: ${dir}\n${MINIMAL_BODY}`
-      const r = validateArtifactContent("application/react", code)
+      const r = await validateArtifactContent("application/react", code)
       expect(r.ok, `direction ${dir} should validate`).toBe(true)
     }
   })
 
-  it("hard-errors when @aesthetic directive is missing", () => {
-    const r = validateArtifactContent("application/react", MINIMAL_BODY)
+  it("hard-errors when @aesthetic directive is missing", async () => {
+    const r = await validateArtifactContent("application/react", MINIMAL_BODY)
     expect(r.ok).toBe(false)
     expect(r.errors.join("\n")).toContain("@aesthetic")
     expect(r.errors.join("\n")).toContain("line 1")
   })
 
-  it("hard-errors when @aesthetic value is unknown", () => {
+  it("hard-errors when @aesthetic value is unknown", async () => {
     const code = `// @aesthetic: synthwave\n${MINIMAL_BODY}`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(false)
     expect(r.errors.join("\n")).toMatch(/unknown aesthetic/i)
   })
 
-  it("hard-errors when @aesthetic is not on line 1", () => {
+  it("hard-errors when @aesthetic is not on line 1", async () => {
     const code = `// intro\n// @aesthetic: editorial\n${MINIMAL_BODY}`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(false)
     expect(r.errors.join("\n")).toContain("@aesthetic")
   })
@@ -1472,41 +1479,41 @@ export default App`
 describe("validateArtifactContent — application/react — fonts directive", () => {
   const MINIMAL_BODY = `function App() { return <div/> }\nexport default App`
 
-  it("accepts well-formed @fonts directive", () => {
+  it("accepts well-formed @fonts directive", async () => {
     const code = `// @aesthetic: editorial
 // @fonts: Fraunces:wght@300..900 | Inter:wght@400;500;700
 ${MINIMAL_BODY}`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(true)
   })
 
-  it("hard-errors on malformed @fonts spec", () => {
+  it("hard-errors on malformed @fonts spec", async () => {
     const code = `// @aesthetic: editorial
 // @fonts: lowercase:wght@400
 ${MINIMAL_BODY}`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(false)
     expect(r.errors.join("\n")).toMatch(/malformed.*@fonts/i)
   })
 
-  it("hard-errors when more than 3 families declared", () => {
+  it("hard-errors when more than 3 families declared", async () => {
     const code = `// @aesthetic: editorial
 // @fonts: Inter:wght@400 | Lora:wght@400 | Roboto:wght@400 | Poppins:wght@400
 ${MINIMAL_BODY}`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(false)
     expect(r.errors.join("\n")).toMatch(/too many font families/i)
   })
 
-  it("accepts artifacts with @aesthetic but no @fonts directive", () => {
+  it("accepts artifacts with @aesthetic but no @fonts directive", async () => {
     const code = `// @aesthetic: editorial\n${MINIMAL_BODY}`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(true)
   })
 })
 
 describe("validateArtifactContent — application/react — palette soft-warn", () => {
-  it("warns when editorial + heavy slate/indigo usage", () => {
+  it("warns when editorial + heavy slate/indigo usage", async () => {
     const code = `// @aesthetic: editorial
 function App() {
   return (
@@ -1516,12 +1523,12 @@ function App() {
   )
 }
 export default App`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(true)
     expect(r.warnings.join("\n")).toMatch(/palette.*industrial/i)
   })
 
-  it("does NOT warn when industrial + slate usage", () => {
+  it("does NOT warn when industrial + slate usage", async () => {
     const code = `// @aesthetic: industrial
 function App() {
   return (
@@ -1529,71 +1536,71 @@ function App() {
   )
 }
 export default App`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(true)
     expect(r.warnings.join("\n")).not.toMatch(/palette/i)
   })
 
-  it("does NOT warn on sparse slate usage (< 6 matches)", () => {
+  it("does NOT warn on sparse slate usage (< 6 matches)", async () => {
     const code = `// @aesthetic: editorial
 function App() {
   return <div className="bg-slate-50 text-slate-900 border-slate-200">hi</div>
 }
 export default App`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.warnings.join("\n")).not.toMatch(/palette/i)
   })
 })
 
 describe("validateArtifactContent — application/react — font soft-warn", () => {
-  it("warns when editorial direction has no serif in @fonts", () => {
+  it("warns when editorial direction has no serif in @fonts", async () => {
     const code = `// @aesthetic: editorial
 // @fonts: Inter:wght@400;500;700 | Space Mono:wght@400;700
 function App() { return <div/> }
 export default App`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(true)
     expect(r.warnings.join("\n")).toMatch(/serif/i)
   })
 
-  it("does NOT warn when editorial + Fraunces declared", () => {
+  it("does NOT warn when editorial + Fraunces declared", async () => {
     const code = `// @aesthetic: editorial
 // @fonts: Fraunces:wght@300..900 | Inter:wght@400;500;700
 function App() { return <div/> }
 export default App`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.warnings.join("\n")).not.toMatch(/serif/i)
   })
 
-  it("does NOT warn when editorial uses default fonts (no @fonts directive)", () => {
+  it("does NOT warn when editorial uses default fonts (no @fonts directive)", async () => {
     const code = `// @aesthetic: editorial
 function App() { return <div/> }
 export default App`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     // Defaults for editorial include Fraunces → no warn
     expect(r.warnings.join("\n")).not.toMatch(/serif/i)
   })
 })
 
 describe("validateArtifactContent — application/react — motion-in-industrial soft-warn", () => {
-  it("warns when industrial uses Motion.motion", () => {
+  it("warns when industrial uses Motion.motion", async () => {
     const code = `// @aesthetic: industrial
 function App() {
   return <Motion.motion.div animate={{ x: 100 }}>hi</Motion.motion.div>
 }
 export default App`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.ok).toBe(true)
     expect(r.warnings.join("\n")).toMatch(/motion/i)
   })
 
-  it("does NOT warn when playful uses Motion.motion", () => {
+  it("does NOT warn when playful uses Motion.motion", async () => {
     const code = `// @aesthetic: playful
 function App() {
   return <Motion.motion.div animate={{ x: 100 }}>hi</Motion.motion.div>
 }
 export default App`
-    const r = validateArtifactContent("application/react", code)
+    const r = await validateArtifactContent("application/react", code)
     expect(r.warnings.join("\n")).not.toMatch(/motion/i)
   })
 })
@@ -1607,22 +1614,48 @@ describe("validateArtifactContent — application/react — rollback flag", () =
     else process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = orig
   })
 
-  it("hard-errors on missing directive by default (flag unset)", () => {
+  it("hard-errors on missing directive by default (flag unset)", async () => {
     delete process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
-    const r = validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
+    const r = await validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
     expect(r.ok).toBe(false)
   })
 
-  it("hard-errors on missing directive when flag='true' (explicit)", () => {
+  it("hard-errors on missing directive when flag='true' (explicit)", async () => {
     process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = "true"
-    const r = validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
+    const r = await validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
     expect(r.ok).toBe(false)
   })
 
-  it("passes when flag='false' even without directive", () => {
+  it("passes when flag='false' even without directive", async () => {
     process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = "false"
-    const r = validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
+    const r = await validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
     expect(r.ok).toBe(true)
     expect(r.warnings.join("\n")).toMatch(/@aesthetic.*missing/i)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// NEW — text/document AST pipeline tests
+// ---------------------------------------------------------------------------
+
+import { proposalExample } from "@/lib/document-ast/examples/proposal"
+
+describe("validateArtifactContent — text/document (AST)", () => {
+  it("accepts a valid DocumentAst JSON", async () => {
+    const result = await validateArtifactContent("text/document", JSON.stringify(proposalExample))
+    expect(result.ok).toBe(true)
+  })
+
+  it("rejects non-JSON content", async () => {
+    const result = await validateArtifactContent("text/document", "# A markdown doc\n\nBody.")
+    expect(result.ok).toBe(false)
+  })
+
+  it("rejects invalid AST shape (empty body)", async () => {
+    const result = await validateArtifactContent(
+      "text/document",
+      JSON.stringify({ meta: { title: "T" }, body: [] })
+    )
+    expect(result.ok).toBe(false)
   })
 })
