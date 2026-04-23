@@ -1360,3 +1360,63 @@ describe("ARTIFACT_REGISTRY", () => {
     }
   })
 })
+
+describe("validateArtifactContent — application/sheet (JSON spec)", () => {
+  const VALID_SPEC = JSON.stringify({
+    kind: "spreadsheet/v1",
+    sheets: [
+      {
+        name: "Sheet1",
+        cells: [
+          { ref: "A1", value: "Header" },
+          { ref: "B1", value: 42 },
+          { ref: "B2", formula: "=B1*2" },
+        ],
+      },
+    ],
+  })
+
+  it("accepts a valid spec", () => {
+    const r = validateArtifactContent("application/sheet", VALID_SPEC)
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects a spec with an undefined cell reference", () => {
+    const bad = JSON.stringify({
+      kind: "spreadsheet/v1",
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [{ ref: "A1", formula: "=Z99*2" }],
+        },
+      ],
+    })
+    const r = validateArtifactContent("application/sheet", bad)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/Z99|undefined|REF/i)
+  })
+
+  it("rejects a spec with a circular reference", () => {
+    const bad = JSON.stringify({
+      kind: "spreadsheet/v1",
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            { ref: "A1", formula: "=B1+1" },
+            { ref: "B1", formula: "=A1+1" },
+          ],
+        },
+      ],
+    })
+    const r = validateArtifactContent("application/sheet", bad)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/circular|cycle/i)
+  })
+
+  it("still accepts legacy CSV content unchanged", () => {
+    const csv = "A,B\n1,2\n3,4"
+    const r = validateArtifactContent("application/sheet", csv)
+    expect(r.ok).toBe(true)
+  })
+})

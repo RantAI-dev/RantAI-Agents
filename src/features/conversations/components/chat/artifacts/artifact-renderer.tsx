@@ -89,9 +89,11 @@ interface ArtifactRendererProps {
   artifact: Artifact
   /** Callback to send an artifact error to the LLM for automated repair. */
   onFixWithAI?: (error: string) => void
+  /** Callback to trigger .xlsx download for spreadsheet/v1 spec content. */
+  onDownloadXlsx?: () => void
 }
 
-export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProps) {
+export function ArtifactRenderer({ artifact, onFixWithAI, onDownloadXlsx }: ArtifactRendererProps) {
   switch (artifact.type) {
     case "text/html":
       return <HtmlRenderer content={artifact.content} />
@@ -102,7 +104,7 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
     case "application/mermaid":
       return <MermaidRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
     case "application/sheet":
-      return <SheetRenderer content={artifact.content} title={artifact.title} />
+      return <SheetRenderer content={artifact.content} title={artifact.title} onDownloadXlsx={onDownloadXlsx} />
     case "text/latex":
       return <LatexRenderer content={artifact.content} />
     case "application/slides":

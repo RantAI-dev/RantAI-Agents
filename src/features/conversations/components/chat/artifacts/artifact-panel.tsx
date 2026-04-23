@@ -175,6 +175,38 @@ export function ArtifactPanel({
       return
     }
 
+    // Spreadsheet JSON spec → real .xlsx via ExcelJS
+    if (displayArtifact.type === "application/sheet") {
+      const trimmed = displayArtifact.content.trimStart()
+      if (trimmed.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(trimmed)
+          if (parsed?.kind === "spreadsheet/v1") {
+            const { parseSpec } = await import("@/lib/spreadsheet/parse")
+            const { evaluateWorkbook } = await import("@/lib/spreadsheet/formulas")
+            const { generateXlsx } = await import("@/lib/spreadsheet/generate-xlsx")
+            const result = parseSpec(displayArtifact.content)
+            if (!result.ok || !result.spec) {
+              console.error("[ArtifactPanel] Spreadsheet spec invalid:", result.errors)
+              return
+            }
+            const values = evaluateWorkbook(result.spec)
+            const blob = await generateXlsx(result.spec, values)
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement("a")
+            a.href = url
+            a.download = filename
+            a.click()
+            URL.revokeObjectURL(url)
+            return
+          }
+        } catch (err) {
+          console.error("[ArtifactPanel] Spreadsheet download failed:", err)
+          // fall through to CSV text path
+        }
+      }
+    }
+
     // LaTeX artifacts are KaTeX fragments — they have no preamble and won't
     // compile in pdflatex as-is. Wrap them in a minimal article document on
     // download so users get a `.tex` file they can actually compile.
@@ -681,6 +713,7 @@ export function ArtifactPanel({
           <ArtifactRenderer
             artifact={displayArtifact}
             onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+            onDownloadXlsx={handleDownload}
           />
         ) : isEditing ? (
           /* Code tab — edit mode */
@@ -848,6 +881,18 @@ function codeExtension(language: string | undefined): string {
 
 function getExtension(artifact: Artifact): string {
   if (artifact.type === "application/code") return codeExtension(artifact.language)
+  if (artifact.type === "application/sheet") {
+    try {
+      const trimmed = artifact.content.trimStart()
+      if (trimmed.startsWith("{")) {
+        const parsed = JSON.parse(trimmed)
+        if (parsed?.kind === "spreadsheet/v1") return ".xlsx"
+      }
+    } catch {
+      // fall through to csv
+    }
+    return ".csv"
+  }
   return getArtifactRegistryEntry(artifact.type)?.extension ?? ".txt"
 }
 

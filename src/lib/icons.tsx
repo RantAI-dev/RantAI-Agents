@@ -388,6 +388,7 @@ export const Tag = createIcon(StarFatSolid, "Tag")
 // Data / Charts
 export const TrendingDown = createIcon(TrendUp1Solid, "TrendingDown")
 export const Sigma = createIcon(BarChart4Solid, "Sigma")
+export const FunctionSquare = createIcon(Calculator1Solid, "FunctionSquare")
 
 // Misc
 export const Calendar = createIcon(CalendarDaysSolid, "Calendar")

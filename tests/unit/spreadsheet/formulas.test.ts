@@ -1,0 +1,131 @@
+import { describe, it, expect } from "vitest"
+import { evaluateWorkbook } from "@/lib/spreadsheet/formulas"
+import type { SpreadsheetSpec } from "@/lib/spreadsheet/types"
+
+function spec(cells: Array<{ ref: string; value?: unknown; formula?: string }>): SpreadsheetSpec {
+  return {
+    kind: "spreadsheet/v1",
+    sheets: [{ name: "Sheet1", cells: cells as never }],
+  }
+}
+
+describe("evaluateWorkbook — values pass through", () => {
+  it("returns plain values unchanged", () => {
+    const v = evaluateWorkbook(spec([{ ref: "A1", value: 42 }]))
+    expect(v.get("Sheet1!A1")?.value).toBe(42)
+    expect(v.get("Sheet1!A1")?.error).toBeUndefined()
+  })
+
+  it("returns strings and booleans unchanged", () => {
+    const v = evaluateWorkbook(
+      spec([
+        { ref: "A1", value: "hello" },
+        { ref: "A2", value: true },
+      ])
+    )
+    expect(v.get("Sheet1!A1")?.value).toBe("hello")
+    expect(v.get("Sheet1!A2")?.value).toBe(true)
+  })
+})
+
+describe("evaluateWorkbook — formulas", () => {
+  it("evaluates SUM over a range", () => {
+    const v = evaluateWorkbook(
+      spec([
+        { ref: "A1", value: 1 },
+        { ref: "A2", value: 2 },
+        { ref: "A3", value: 3 },
+        { ref: "B1", formula: "=SUM(A1:A3)" },
+      ])
+    )
+    expect(v.get("Sheet1!B1")?.value).toBe(6)
+  })
+
+  it("evaluates nested arithmetic with refs", () => {
+    const v = evaluateWorkbook(
+      spec([
+        { ref: "A1", value: 100 },
+        { ref: "A2", value: 0.15 },
+        { ref: "A3", formula: "=A1*(1+A2)" },
+      ])
+    )
+    expect(v.get("Sheet1!A3")?.value).toBeCloseTo(115, 5)
+  })
+
+  it("evaluates IF correctly", () => {
+    const v = evaluateWorkbook(
+      spec([
+        { ref: "A1", value: 10 },
+        { ref: "A2", formula: "=IF(A1>5,\"high\",\"low\")" },
+      ])
+    )
+    expect(v.get("Sheet1!A2")?.value).toBe("high")
+  })
+
+  it("resolves dependencies across cells (topo order)", () => {
+    const v = evaluateWorkbook(
+      spec([
+        { ref: "B1", formula: "=A1*2" },
+        { ref: "A1", value: 21 },
+      ])
+    )
+    expect(v.get("Sheet1!B1")?.value).toBe(42)
+  })
+
+  it("returns #REF! when formula references an undefined cell", () => {
+    const v = evaluateWorkbook(spec([{ ref: "A1", formula: "=Z99*2" }]))
+    expect(v.get("Sheet1!A1")?.error).toMatch(/REF|NAME/)
+  })
+
+  it("detects circular references", () => {
+    const v = evaluateWorkbook(
+      spec([
+        { ref: "A1", formula: "=B1+1" },
+        { ref: "B1", formula: "=A1+1" },
+      ])
+    )
+    expect(v.get("Sheet1!A1")?.error).toMatch(/circular|cycle/i)
+    expect(v.get("Sheet1!B1")?.error).toMatch(/circular|cycle/i)
+  })
+})
+
+describe("evaluateWorkbook — named ranges", () => {
+  it("resolves named ranges to their cell value", () => {
+    const sp: SpreadsheetSpec = {
+      kind: "spreadsheet/v1",
+      namedRanges: { GrowthRate: "Sheet1!B1" },
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [
+            { ref: "A1", value: 1000 },
+            { ref: "B1", value: 0.1 },
+            { ref: "C1", formula: "=A1*(1+GrowthRate)" },
+          ],
+        },
+      ],
+    }
+    const v = evaluateWorkbook(sp)
+    expect(v.get("Sheet1!C1")?.value).toBeCloseTo(1100, 5)
+  })
+})
+
+describe("evaluateWorkbook — cross-sheet refs", () => {
+  it("resolves Sheet2!A1 from Sheet1 formula", () => {
+    const sp: SpreadsheetSpec = {
+      kind: "spreadsheet/v1",
+      sheets: [
+        {
+          name: "Sheet1",
+          cells: [{ ref: "A1", formula: "=Sheet2!A1*2" }],
+        },
+        {
+          name: "Sheet2",
+          cells: [{ ref: "A1", value: 7 }],
+        },
+      ],
+    }
+    const v = evaluateWorkbook(sp)
+    expect(v.get("Sheet1!A1")?.value).toBe(14)
+  })
+})

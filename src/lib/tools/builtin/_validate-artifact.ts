@@ -17,6 +17,8 @@
 import { parse as parseHtml } from "parse5"
 import { parse as parseJs } from "@babel/parser"
 import type { ArtifactType } from "@/features/conversations/components/chat/artifacts/registry"
+import { detectShape, parseSpec } from "@/lib/spreadsheet/parse"
+import { evaluateWorkbook } from "@/lib/spreadsheet/formulas"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -742,6 +744,38 @@ function validateSheet(content: string): ArtifactValidationResult {
   }
 
   const trimmed = content.trimStart()
+
+  // ----- Spec branch -----
+  const shape = detectShape(content)
+
+  if (shape === "spec") {
+    const parsed = parseSpec(content)
+    if (!parsed.ok || !parsed.spec) {
+      return { ok: false, errors: parsed.errors, warnings: parsed.warnings }
+    }
+
+    const values = evaluateWorkbook(parsed.spec)
+    const cellErrors: string[] = []
+    for (const [key, v] of values) {
+      if (v.error === "CIRCULAR") {
+        cellErrors.push(`Cell ${key} is part of a circular reference.`)
+      } else if (v.error === "REF" || v.error === "NAME") {
+        cellErrors.push(
+          `Cell ${key} references an undefined cell or name (#${v.error}!).`
+        )
+      }
+    }
+    if (cellErrors.length > 0) {
+      const deduped = Array.from(new Set(cellErrors))
+      return { ok: false, errors: deduped, warnings: parsed.warnings }
+    }
+
+    return {
+      ok: true,
+      errors: [],
+      warnings: parsed.warnings,
+    }
+  }
 
   // ----- JSON branch -----
   if (trimmed.startsWith("[")) {
