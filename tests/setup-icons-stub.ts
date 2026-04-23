@@ -31,7 +31,11 @@ const ICON_NAMES = [
 
 const stubModule: Record<string, unknown> = {}
 for (const name of ICON_NAMES) {
-  stubModule[name] = { __mockIcon: name, displayName: name }
+  // Use a named function so React can render it as a component AND
+  // non-rendering tests can still treat it as a truthy object.
+  const fn = () => null
+  ;(fn as any).displayName = name
+  stubModule[name] = fn
 }
 stubModule.default = stubModule
 

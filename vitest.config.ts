@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    include: ["tests/**/*.test.ts", "src/features/**/*.test.ts"],
+    include: ["tests/**/*.{test.ts,test.tsx}", "src/features/**/*.{test.ts,test.tsx}"],
     testTimeout: 60000,
     hookTimeout: 60000,
     fileParallelism: false,
@@ -20,5 +20,10 @@ export default defineConfig({
     // only need icon symbols to exist as truthy objects — they never render
     // the components.
     setupFiles: ["./tests/setup-icons-stub.ts"],
+    // Keep default environment as node; only JSX/DOM tests need jsdom.
+    environmentMatchGlobs: [
+      ["**/*.test.tsx", "jsdom"],
+      ["**/artifacts/renderers/__tests__/**", "jsdom"],
+    ],
   },
 })
