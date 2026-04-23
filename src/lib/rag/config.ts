@@ -38,12 +38,20 @@ export interface RagConfig {
 }
 
 const DEFAULTS: RagConfig = {
-  // Cloud default = gpt-4.1-nano (consistent accuracy, ~$0.00031/page, no catastrophic
-  // failure modes seen in our benches). On-prem deployments override to "mineru" +
-  // extractMineruBaseUrl to use the local MinerU2.5-Pro sidecar.
-  extractPrimary: "openai/gpt-4.1-nano",
-  // Fallback = unpdf (text-layer only) so ingest still progresses when the primary
-  // extractor is unavailable / throws. No cloud fallback — keep the stack single-vendor.
+  // Default = smart router (SmartRouterExtractor). Runs unpdf first (50 ms,
+  // free), falls through to extractSmartFallback only on scan/table/garbled
+  // signals. Benched at 98% coverage / 1.1 s avg on a 40-doc mixed corpus,
+  // beats always-OCR on both quality and latency. See:
+  //   docs/superpowers/specs/2026-04-22-smart-router-extractor-design.md
+  //
+  // The smart fallback default below (extractSmartFallback = "openai/gpt-4.1-nano")
+  // means a fresh deployment with just OPENROUTER_API_KEY set works out of the
+  // box. On-prem deployments should set KB_EXTRACT_SMART_FALLBACK="mineru" +
+  // KB_EXTRACT_MINERU_BASE_URL.
+  extractPrimary: "smart",
+  // Fallback extractor used by the always-OCR path (KB_EXTRACT_PRIMARY set to
+  // a model id, not "smart"). Unpdf-only so ingest still progresses when the
+  // primary throws.
   extractFallback: "unpdf",
   embeddingModel: "qwen/qwen3-embedding-8b",
   embeddingDim: 4096,

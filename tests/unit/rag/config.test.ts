@@ -25,7 +25,7 @@ describe("getRagConfig", () => {
 
   it("returns SOTA defaults when no env vars set", () => {
     const cfg = getRagConfig()
-    expect(cfg.extractPrimary).toBe("openai/gpt-4.1-nano")
+    expect(cfg.extractPrimary).toBe("smart")
     expect(cfg.extractFallback).toBe("unpdf")
     expect(cfg.embeddingModel).toBe("qwen/qwen3-embedding-8b")
     expect(cfg.embeddingDim).toBe(4096)
