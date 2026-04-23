@@ -128,6 +128,7 @@
     "ai": "6.0.39",
     "autoprefixer": "^10.4.20",
     "bcryptjs": "^3.0.3",
+    "canvas": "^3.2.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
