@@ -1283,3 +1283,80 @@ describe("python prompt ↔ validator blacklist", () => {
     }
   })
 })
+
+// ---------------------------------------------------------------------------
+// ARTIFACT_REGISTRY — single source of truth for artifact type metadata
+// ---------------------------------------------------------------------------
+
+describe("ARTIFACT_REGISTRY", () => {
+  it("every entry has all required fields populated", async () => {
+    const { ARTIFACT_REGISTRY } = await import(
+      "@/features/conversations/components/chat/artifacts/registry"
+    )
+    expect(ARTIFACT_REGISTRY.length).toBeGreaterThan(0)
+    for (const entry of ARTIFACT_REGISTRY) {
+      expect(typeof entry.type).toBe("string")
+      expect(entry.type).toMatch(/.+\/.+/) // MIME-style
+      expect(typeof entry.label).toBe("string")
+      expect(entry.label.length).toBeGreaterThan(0)
+      expect(typeof entry.shortLabel).toBe("string")
+      expect(entry.shortLabel.length).toBeGreaterThan(0)
+      expect(entry.icon).toBeTruthy()
+      expect(typeof entry.colorClasses).toBe("string")
+      expect(entry.colorClasses).toMatch(/text-/)
+      expect(typeof entry.extension).toBe("string")
+      expect(entry.extension.startsWith(".")).toBe(true)
+      expect(typeof entry.codeLanguage).toBe("string") // may be empty
+      expect(typeof entry.hasCodeTab).toBe("boolean")
+    }
+  })
+
+  it("ARTIFACT_TYPES list mirrors the registry entries", async () => {
+    const { ARTIFACT_REGISTRY, ARTIFACT_TYPES } = await import(
+      "@/features/conversations/components/chat/artifacts/registry"
+    )
+    expect(ARTIFACT_TYPES.length).toBe(ARTIFACT_REGISTRY.length)
+    for (const entry of ARTIFACT_REGISTRY) {
+      expect(ARTIFACT_TYPES).toContain(entry.type)
+    }
+  })
+
+  it("derived TYPE_ICONS / TYPE_LABELS / TYPE_SHORT_LABELS / TYPE_COLORS are exhaustive", async () => {
+    const { ARTIFACT_REGISTRY, TYPE_ICONS, TYPE_LABELS, TYPE_SHORT_LABELS, TYPE_COLORS } =
+      await import("@/features/conversations/components/chat/artifacts/registry")
+    for (const entry of ARTIFACT_REGISTRY) {
+      expect(TYPE_ICONS[entry.type]).toBeTruthy()
+      expect(TYPE_LABELS[entry.type]).toBe(entry.label)
+      expect(TYPE_SHORT_LABELS[entry.type]).toBe(entry.shortLabel)
+      expect(TYPE_COLORS[entry.type]).toBe(entry.colorClasses)
+    }
+  })
+
+  it("getArtifactRegistryEntry returns the exact entry for a known type", async () => {
+    const { getArtifactRegistryEntry } = await import(
+      "@/features/conversations/components/chat/artifacts/registry"
+    )
+    const doc = getArtifactRegistryEntry("text/document")
+    expect(doc).toBeDefined()
+    expect(doc?.label).toBe("Document")
+    expect(doc?.extension).toBe(".md")
+    expect(doc?.hasCodeTab).toBe(false)
+  })
+
+  it("getArtifactRegistryEntry returns undefined for an unknown type", async () => {
+    const { getArtifactRegistryEntry } = await import(
+      "@/features/conversations/components/chat/artifacts/registry"
+    )
+    expect(getArtifactRegistryEntry("application/totally-fake")).toBeUndefined()
+  })
+
+  it("VALID_ARTIFACT_TYPES Set matches the registry", async () => {
+    const { ARTIFACT_REGISTRY, VALID_ARTIFACT_TYPES } = await import(
+      "@/features/conversations/components/chat/artifacts/registry"
+    )
+    expect(VALID_ARTIFACT_TYPES.size).toBe(ARTIFACT_REGISTRY.length)
+    for (const entry of ARTIFACT_REGISTRY) {
+      expect(VALID_ARTIFACT_TYPES.has(entry.type)).toBe(true)
+    }
+  })
+})
