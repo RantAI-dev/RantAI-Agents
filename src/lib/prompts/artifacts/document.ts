@@ -1,23 +1,28 @@
+import { proposalExample } from "@/lib/document-ast/examples/proposal"
+import { reportExample } from "@/lib/document-ast/examples/report"
+import { letterExample } from "@/lib/document-ast/examples/letter"
+
 export const documentArtifact = {
   type: "text/document" as const,
   label: "Document",
   summary:
-    "Formal deliverables (proposals, reports, book chapters, letters, white papers) rendered as A4-style documents with YAML frontmatter, Unsplash images, Mermaid diagrams, and DOCX/PDF export.",
+    "Formal deliverables (proposals, reports, book chapters, letters, white papers) authored as a structured JSON document tree — renders as an A4 preview and exports to .docx with native Word styling, tables, images, TOC, footnotes, and headers/footers.",
   rules: `**text/document — Formal Deliverables**
 
 You are generating a formal document that someone will print, sign, send, archive, or submit. The reader is a client, executive, editor, regulator, or counterpart — not a developer scanning a README. Pick this type when the output is a **deliverable**: a proposal, an executive report, a book chapter, an official letter, a tender response, a legal memo, a research paper, or a white paper.
 
-## Runtime Environment
-- **Source format:** Markdown body with an optional YAML frontmatter block at the very top.
-- **Rendering:** A4-style paper surface in the artifact panel (cover header from frontmatter + body prose).
-- **Export:** \`.md\` source plus \`.docx\` for Word. Write content that will still read well after that conversion — no constructs that rely on browser-only behavior.
-- **Code blocks** are syntax-highlighted by Shiki — tag every fenced block with a language (\`\`\`python, \`\`\`typescript, \`\`\`bash, \`\`\`sql, etc.).
-- **Tables** (GFM pipe tables) render natively. Use them for structured comparison.
-- **Math:** LaTeX notation is **not supported**. Express calculations in plain prose (see "Mathematical Expressions" below).
-- **Mermaid diagrams:** \`\`\`mermaid fenced blocks render as live diagrams in the web preview and are rasterized in DOCX/PDF export.
-- **Raw HTML is not supported.** Anything that depends on \`<details>\`, \`<kbd>\`, \`<script>\` will be dropped on export. Express everything in Markdown.
+## Output Format — JSON ONLY
 
-## When to Use text/document vs. text/markdown
+Output **a single JSON object** matching the \`DocumentAst\` schema described below. Nothing else.
+
+- **NO markdown fences.** Do not wrap the JSON in \`\`\`json or any other fence.
+- **NO text outside the JSON object** — no commentary, no "Here is your document", no trailing prose, no preamble.
+- The entire response must be \`JSON.parse\`-able as-is.
+
+The renderer parses raw JSON. Any text before \`{\` or after the closing \`}\` will break the validator.
+
+## When to Use text/document vs. text/markdown vs. text/html
+
 | Use case | Correct type | Why |
 |---|---|---|
 | Client proposal, tender response, statement of work | \`text/document\` | Deliverable — will be signed or submitted |
@@ -27,272 +32,277 @@ You are generating a formal document that someone will print, sign, send, archiv
 | README, CONTRIBUTING, developer docs | \`text/markdown\` | Reference read on screen in a repo |
 | Technical notes, design doc, quick draft | \`text/markdown\` | Internal thinking, not a deliverable |
 | Blog post, changelog, release notes | \`text/markdown\` | Web-native, no cover page, no export requirement |
-| Tutorial with mermaid + code samples | \`text/markdown\` | On-screen learning material |
+| Tutorial with code samples | \`text/markdown\` | On-screen learning material |
+| Landing page, styled web content | \`text/html\` | Browser-only, CSS-driven layout |
 
 **Heuristic:** if someone will **print, sign, send, or archive** it, it's \`text/document\`. If someone will **read it on a screen once**, it's \`text/markdown\`.
 
-## YAML Frontmatter
-Frontmatter is strongly recommended for formal deliverables — it produces the cover header (title, author, date, document number). Open with \`---\` on its own line and close with \`---\` on its own line before the body begins. Fields:
+## Top-Level Shape
 
-- \`title\` (required for formal documents): the document title.
-- \`subtitle\` (optional): a supporting line under the title.
-- \`author\` (recommended): person or organization name.
-- \`date\` (recommended): ISO 8601 \`YYYY-MM-DD\`.
-- \`organization\` (optional): company or institution name.
-- \`documentNumber\` (optional): for proposals/letters with numbering like \`PROP/NQT/2026/001\`.
-- \`pageNumbers\` (optional, boolean): whether PDF/DOCX export shows page numbers.
+The top-level JSON object has five keys:
 
-Frontmatter is optional. If you omit it, the document renders without a cover header and the body opens directly. For letters and memos a frontmatter block is always appropriate. For a research chapter you can omit it and open with \`# Chapter Title\` instead.
-
-Example:
-
-\`\`\`
----
-title: Infrastructure Migration Proposal
-subtitle: NQRust-HV Platform Transition for PT Contoh
-author: NQ Technology
-date: 2026-04-21
-organization: NQ Technology Indonesia
-documentNumber: PROP/NQT/2026/001
-pageNumbers: true
----
-
-## Executive Summary
-
-PT Contoh operates a three-tier Java monolith...
-\`\`\`
-
-## Body Conventions
-- **Prose-dominant.** Formal documents are paragraphs, not bullet lists. Paragraphs are 2–5 sentences each. Use bullets only for genuinely enumerable items (list of deliverables, list of risks, itemized costs).
-- **Single \`# Title\`** at the top of the body — or omit the H1 entirely if the frontmatter already carries \`title\`. Never have two H1s.
-- **Consistent heading hierarchy:** \`##\` for major sections, \`###\` for subsections, \`####\` for sub-subsections. **Never skip levels** (no \`##\` followed directly by \`####\`).
-- **Executive Summary** is the conventional first section for proposals, reports, and white papers — keep it under 200 words.
-- **Tables** for structured comparison (options, pricing tiers, risk × mitigation). Keep cells concise and align the pipes in the source for readability.
-- **No LaTeX math.** This artifact type doesn't render \`$...$\` or \`$$...$$\`. Calculations belong in prose (e.g. "Total Rp 100 juta dibagi 10 cabang menghasilkan rata-rata Rp 10 juta per cabang"). See "Mathematical Expressions" below.
-- **Mermaid diagrams** in \`\`\`mermaid fenced blocks for architecture diagrams, process flows, and timelines. Keep them under 15 nodes so they remain readable after DOCX/PDF rasterization.
-- **Code blocks** always with a language tag. Code is rare in formal documents; prefer prose descriptions unless the deliverable is technical (e.g., a white paper, an engineering report).
-- **Links** use descriptive text: \`[our 2025 annual report](https://example.com/annual-2025)\`, not a raw URL.
-
-## Images
-- **Unsplash syntax** for hero images and illustrations: \`![descriptive alt text](unsplash:keyword phrase)\`. The server resolves the keyword to a real Unsplash URL at create/update time, cached for 30 days. On resolution failure (API down, timeout), falls back to a \`placehold.co\` placeholder with the keyword visible.
-- **Absolute URLs** also work: \`![alt](https://cdn.example.com/chart.png)\`.
-- **Alt text is required** for every image. Screen readers and DOCX accessibility tooling depend on it.
-- Keep images load-bearing. Don't decorate a proposal with stock photos of people pointing at laptops.
-
-## Visual Elements: Diagrams and Charts
-Documents support two distinct fenced-block types for visuals. Pick the right one for your data.
-
-**Mermaid** (\`\`\`mermaid): flowcharts, sequence diagrams, ER, state, class, Gantt, mindmap, pie charts, xychart scatter/bubble, sankey flow, timeline, quadrant matrix. Same syntax as the standalone mermaid artifact. Keep to **15 nodes or fewer** per diagram for export readability.
-
-**Chart JSON** (\`\`\`chart): structured data visualizations — \`bar\`, \`bar-horizontal\`, \`line\`, \`pie\`, \`donut\`. The block body is **valid JSON** matching the \`ChartData\` schema:
-
-\`\`\`typescript
-type ChartData =
-  | { type: "bar" | "bar-horizontal" | "pie" | "donut"; data: { label: string; value: number }[]; title?: string }
-  | { type: "line"; labels: string[]; series: { name: string; values: number[] }[]; title?: string }
-\`\`\`
-
-Example — bar chart:
-
-\`\`\`chart
+\`\`\`json
 {
-  "type": "bar",
-  "title": "Pendapatan Triwulanan 2025",
-  "data": [
-    { "label": "Q1", "value": 120 },
-    { "label": "Q2", "value": 145 },
-    { "label": "Q3", "value": 132 },
-    { "label": "Q4", "value": 168 }
-  ]
+  "meta": {
+    "title": "Infrastructure Migration Proposal",
+    "author": "NQ Technology Solutions",
+    "date": "2026-04-23",
+    "subtitle": "Java Monolith to NQRust-HV — Phased Modernisation",
+    "organization": "NQ Technology",
+    "documentNumber": "PROP/NQT/2026/001",
+    "pageSize": "letter",
+    "showPageNumbers": true
+  },
+  "coverPage": {
+    "title": "Infrastructure Migration Proposal",
+    "subtitle": "Java Monolith to NQRust-HV — Phased Modernisation",
+    "author": "NQ Technology Solutions",
+    "date": "2026-04-23",
+    "organization": "NQ Technology"
+  },
+  "header": { "children": [ /* block nodes */ ] },
+  "footer": { "children": [ /* block nodes */ ] },
+  "body": [ /* block nodes */ ]
 }
 \`\`\`
 
-Example — multi-series line:
+| Key | Required | Notes |
+|---|---|---|
+| \`meta\` | yes | Document metadata — drives DOCX properties and the web preview header |
+| \`coverPage\` | optional | When present, generates a styled cover page before \`body\` |
+| \`header\` | optional | Repeating page header — use for letterhead, document title stripe, or logo |
+| \`footer\` | optional | Repeating page footer — use for page numbers, document number, confidentiality notice |
+| \`body\` | yes | Array of block nodes — the main document content |
 
-\`\`\`chart
+### meta fields
+
+| Field | Required | Notes |
+|---|---|---|
+| \`title\` | yes | Document title (1–200 chars) |
+| \`author\` | optional | Person or organization name |
+| \`date\` | optional | ISO 8601 \`YYYY-MM-DD\` |
+| \`subtitle\` | optional | Supporting tagline under the title |
+| \`organization\` | optional | Company or institution |
+| \`documentNumber\` | optional | Reference number, e.g. \`PROP/NQT/2026/001\` |
+| \`pageSize\` | optional | \`"letter"\` (default) or \`"a4"\` |
+| \`orientation\` | optional | \`"portrait"\` (default) or \`"landscape"\` |
+| \`margins\` | optional | Object with \`top\`, \`bottom\`, \`left\`, \`right\` in DXA (default: 1440 each = 1 in) |
+| \`font\` | optional | Font family string, default \`"Arial"\` |
+| \`fontSize\` | optional | Point size 8–24, default \`12\` |
+| \`showPageNumbers\` | optional | Boolean, default \`false\` |
+
+## Block Node Types
+
+Block nodes are the direct children of \`body\`, \`header.children\`, \`footer.children\`, \`blockquote.children\`, \`list item children\`, and \`table cell children\`.
+
+| Type | When to use | Required fields | Minimal example |
+|---|---|---|---|
+| \`paragraph\` | Running prose — the default container for text | \`children\` (≥ 1 inline) | \`{ "type": "paragraph", "children": [{ "type": "text", "text": "Hello." }] }\` |
+| \`heading\` | Section titles at levels 1–6 | \`level\`, \`children\` (≥ 1 inline) | \`{ "type": "heading", "level": 2, "children": [{ "type": "text", "text": "Executive Summary" }] }\` |
+| \`list\` | Bullet or numbered items | \`ordered\`, \`items\` (≥ 1) | \`{ "type": "list", "ordered": false, "items": [{ "children": [{ "type": "paragraph", "children": [{ "type": "text", "text": "Item one" }] }] }] }\` |
+| \`table\` | Structured data — pricing, features, comparison | \`columnWidths\`, \`width\`, \`rows\` | See Table Sizing below |
+| \`image\` | Illustrations, hero shots, charts as images | \`src\`, \`alt\`, \`width\`, \`height\` | \`{ "type": "image", "src": "unsplash:mountain landscape", "alt": "Mountain range at dusk", "width": 600, "height": 300 }\` |
+| \`blockquote\` | Pull quotes, expert citations, highlighted notes | \`children\` (≥ 1 block) | \`{ "type": "blockquote", "children": [{ "type": "paragraph", "children": [{ "type": "text", "text": "Premature optimisation is the root of all evil." }] }], "attribution": "Donald Knuth" }\` |
+| \`codeBlock\` | Technical content — config files, code snippets | \`language\`, \`code\` | \`{ "type": "codeBlock", "language": "bash", "code": "cargo build --release" }\` |
+| \`horizontalRule\` | Visual separator between major sections | — | \`{ "type": "horizontalRule" }\` |
+| \`pageBreak\` | Force a new page (e.g. before appendices) | — | \`{ "type": "pageBreak" }\` |
+| \`toc\` | Table of contents — insert near the top, after the exec summary | \`maxLevel\` | \`{ "type": "toc", "maxLevel": 2, "title": "Table of Contents" }\` |
+
+### paragraph optional fields
+
+| Field | Notes |
+|---|---|
+| \`align\` | \`"left"\` (default), \`"center"\`, \`"right"\`, \`"justify"\` |
+| \`spacing\` | \`{ "before": 120, "after": 120 }\` — values in twips (DXA) |
+| \`indent\` | \`{ "left": 720, "hanging": 360, "firstLine": 360 }\` — values in DXA |
+
+### heading optional fields
+
+| Field | Notes |
+|---|---|
+| \`bookmarkId\` | String identifier — set this on H2s (and H1s if desired) that should appear in the TOC and be linkable via \`anchor\` inline nodes. Must be unique within the document. Example: \`"section-executive-summary"\` |
+
+### list optional fields
+
+| Field | Notes |
+|---|---|
+| \`startAt\` | Starting number for ordered lists (default: 1) |
+| \`items[].subList\` | Nested list: \`{ "ordered": false, "items": [...] }\` |
+
+## Inline Node Types
+
+Inline nodes live inside \`paragraph.children\`, \`heading.children\`, \`link.children\`, and \`anchor.children\`.
+
+| Type | When to use | Required fields | Notes |
+|---|---|---|---|
+| \`text\` | Plain or styled text — the most common inline node | \`text\` (string) | Style flags: \`bold\`, \`italic\`, \`underline\`, \`strike\`, \`code\`, \`superscript\`, \`subscript\` (all boolean, optional); \`color\` (\`#rrggbb\` hex string, optional) |
+| \`link\` | Hyperlink to an external URL | \`href\` (full URL), \`children\` (≥ 1 inline) | \`{ "type": "link", "href": "https://example.com", "children": [{ "type": "text", "text": "our report" }] }\` |
+| \`anchor\` | Internal cross-reference to a bookmark declared on a heading | \`bookmarkId\`, \`children\` (≥ 1 inline) | \`bookmarkId\` must match a \`heading.bookmarkId\` in the same document |
+| \`footnote\` | Footnote — content appears at the bottom of the page in DOCX | \`children\` (≥ 1 block node) | Use sparingly; each footnote is a small block tree |
+| \`lineBreak\` | Soft line break within a paragraph (not a new paragraph) | — | \`{ "type": "lineBreak" }\` |
+| \`pageNumber\` | Current page number — only valid inside \`header\` or \`footer\` | — | \`{ "type": "pageNumber" }\` |
+| \`tab\` | Horizontal tab stop — useful in letters for right-aligning dates | \`leader\` (\`"none"\` or \`"dot"\`, optional) | \`{ "type": "tab", "leader": "dot" }\` — dot leader creates the dotted line effect used in TOC-style layouts |
+
+### text style flags reference
+
+\`\`\`json
 {
-  "type": "line",
-  "title": "Trafik Pengunjung Per Bulan",
-  "labels": ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun"],
-  "series": [
-    { "name": "Web", "values": [1200, 1350, 1400, 1580, 1720, 1900] },
-    { "name": "Mobile", "values": [800, 920, 1050, 1180, 1290, 1400] }
-  ]
+  "type": "text",
+  "text": "Important figure",
+  "bold": true,
+  "italic": false,
+  "underline": false,
+  "strike": false,
+  "code": false,
+  "superscript": false,
+  "subscript": false,
+  "color": "#1a56db"
 }
 \`\`\`
 
-Guidance on picking:
-- Use \`\`\`chart when you have clean numeric data to display faithfully with axis labels.
-- Use \`mermaid pie\` or \`mermaid xychart-beta\` for quick inline viz that doesn't warrant a JSON schema.
-- For anything with multiple series over time (multi-line trends, grouped bars), always prefer \`\`\`chart.
+All style flags are optional and default to \`false\`/absent. Combine as needed — e.g. \`bold + italic\` is valid.
 
-## Mathematical Expressions
+## Images and Unsplash
 
-Do NOT use LaTeX math notation (\`$...$\` or \`$$...$$\`) in document artifacts. The rendering pipeline does not support LaTeX equations — if any slip through they appear as raw italic source text in the export, which is ugly and not what the reader expects.
+The \`image.src\` field accepts two forms:
 
-Express calculations in **natural prose** instead. Show the inputs, the operation, and the result in one or two sentences.
+1. **Full URL** — \`"https://cdn.example.com/chart.png"\` — fetched directly.
+2. **Unsplash keyword** — \`"unsplash:keyword phrase"\` — the server resolves this to a real Unsplash photo URL at create/update time, cached for 30 days. On resolution failure (API unavailable, timeout), falls back to a placeholder image with the keyword visible.
 
-✓ "Rasio lancar koperasi tercatat 1.8, dihitung dari aset lancar Rp 3,6 miliar dibagi kewajiban lancar Rp 2 miliar."
+**Alt text is required** on every image. Screen readers and DOCX accessibility tooling depend on it. The schema enforces \`alt\` as a non-empty string.
 
-✓ "Pertumbuhan SHU mencapai 18%, naik dari Rp 1,2 miliar tahun 2024 menjadi Rp 1,42 miliar tahun 2025."
+Captions are optional (\`caption\` field — plain string). Width and height are in pixels (used for aspect-ratio hints in the renderer; DOCX export scales to fit the page body width while preserving ratio).
 
-✓ "Rata-rata SHU per anggota sebesar Rp 826 ribu, dihasilkan dari total SHU Rp 1,42 miliar dibagi 1.720 anggota aktif."
+Alignment defaults to \`"center"\`. Set \`"left"\` or \`"right"\` to wrap text around the image.
 
-✗ Do not write: \`$\\text{Rasio Lancar} = \\frac{\\text{Aset Lancar}}{\\text{Kewajiban Lancar}}$\`
+Keep images load-bearing. A hero image on a proposal cover page is appropriate; decorative stock photos of people pointing at laptops are not.
 
-If the user's brief genuinely needs formal mathematical notation (academic paper, engineering spec, anything with subscripts/Greek/integrals), recommend they switch workflow — e.g. compose the document here for the structure, then add equations in Word's native equation editor after downloading.
+## Bookmarks and TOC
 
-## Chart Auto-Generation
+To build a navigable table of contents:
 
-Users describe data intent in natural language. Emit a \`\`\`chart fenced block automatically when the intent matches these patterns, even if the user never uses the word "chart".
+1. Add \`"bookmarkId": "section-id"\` to each \`heading\` node you want listed (H1 and H2 are most common).
+2. Insert a \`{ "type": "toc", "maxLevel": 2, "title": "Table of Contents" }\` block early in \`body\` (after the executive summary is conventional).
+3. Use \`{ "type": "anchor", "bookmarkId": "section-id", "children": [...] }\` anywhere in the document to create in-document hyperlinks to those headings.
 
-### When to auto-generate charts
+The TOC block renders as a formatted table-of-contents in both the web preview and the DOCX export. The \`maxLevel\` controls which heading levels appear (e.g. \`maxLevel: 2\` includes H1 and H2 only).
 
-- User mentions "grafik", "chart", "visualisasi", "visualization", "diagram data".
-- User describes a **comparison between categories** ("bandingkan pendapatan per departemen") → bar chart.
-- User describes a **trend over time** ("tampilkan pertumbuhan penjualan bulanan") → line chart.
-- User describes **proportion / breakdown** ("alokasi anggaran per pos") → bar chart (the current chart system has pie/donut available too but bar reads most clearly for budget breakdowns).
-- User provides tabular numerical data that benefits from visualisation more than a table.
+Bookmark IDs must be unique within the document and must not contain spaces. Use kebab-case: \`"section-executive-summary"\`, \`"section-pricing"\`.
 
-### Chart type selection
+## Page Size, Margins, and Orientation
 
-- **bar** — comparisons between categories, ranked values, categorical breakdowns.
-- **bar-horizontal** — same use cases as bar but with long category labels that would overlap on a vertical x-axis.
-- **line** — time-series data, trends over periods, multiple series over time.
-- **pie** / **donut** — proportional parts of a whole when you have ≤ 6 slices and the eye can reliably compare angles; prefer **bar** if slice count goes up.
+Defaults: US Letter (\`"letter"\`), portrait, 1-inch margins on all sides (1440 DXA each).
 
-### Realistic data
+To switch to A4: set \`meta.pageSize: "a4"\`.
+To switch to landscape: set \`meta.orientation: "landscape"\`.
+To set custom margins: set \`meta.margins: { "top": 1440, "bottom": 1440, "left": 1800, "right": 1800 }\`.
 
-When the user doesn't provide specific numbers, **generate realistic domain-appropriate data**. Example: if the user asks for "quarterly revenue chart for an Indonesian IT services company", generate plausible IDR values (billions of rupiah), realistic growth pattern, proper quarter labels ("Q1 2025", "Q2 2025", …). Do NOT emit \`[TODO]\` or placeholder values.
+DXA (Document eXchange Absolute) units: 1 inch = 1440 DXA. Common conversions:
+- 0.5 in = 720 DXA
+- 1 in = 1440 DXA
+- 1.25 in = 1800 DXA
+- 1.5 in = 2160 DXA
 
-### Title and labels
+## Table Sizing
 
-Always include:
-- A descriptive title **with units** (e.g. "Pendapatan per Kuartal 2025 (Miliar IDR)").
-- Clear category labels.
-- For line charts: a \`labels\` array of time-period strings.
-- For multi-series line: meaningful \`name\` on every \`series\` entry.
+Table column widths are specified in DXA. The sum of all \`columnWidths\` must equal \`width\`.
 
-### Format reminder (full syntax in "Visual Elements" above)
+Standard body width for US Letter with 1-inch margins: **9360 DXA** (8.5 in − 2 × 1 in = 6.5 in × 1440).
+Standard body width for A4 with 1-inch margins: **8568 DXA** (approximately).
 
-\`\`\`chart
+Common splits for US Letter (9360 DXA total):
+- 2 equal columns: \`[4680, 4680]\`
+- 3 equal columns: \`[3120, 3120, 3120]\`
+- 4 equal columns: \`[2340, 2340, 2340, 2340]\`
+- Label + content: \`[2340, 7020]\` (25% / 75%)
+- Label + content + notes: \`[2340, 4680, 2340]\`
+
+Row cell count (accounting for \`colspan\`) must equal the number of columns declared in \`columnWidths\`. A header row looks like:
+
+\`\`\`json
 {
-  "type": "bar",
-  "title": "Title with Unit (Unit)",
-  "data": [
-    { "label": "Category A", "value": 100 },
-    { "label": "Category B", "value": 150 }
-  ]
+  "type": "table",
+  "columnWidths": [3120, 3120, 3120],
+  "width": 9360,
+  "rows": [
+    {
+      "isHeader": true,
+      "cells": [
+        { "children": [{ "type": "paragraph", "children": [{ "type": "text", "text": "Phase", "bold": true }] }] },
+        { "children": [{ "type": "paragraph", "children": [{ "type": "text", "text": "Duration", "bold": true }] }] },
+        { "children": [{ "type": "paragraph", "children": [{ "type": "text", "text": "Cost (USD)", "bold": true }] }] }
+      ]
+    }
+  ],
+  "shading": "striped"
 }
 \`\`\`
-
-### When NOT to use charts
-
-- User explicitly requests a table (use a GFM pipe table instead).
-- Data has more than ~15 categories (becomes unreadable at A4 width).
-- Data is purely qualitative (use prose or a table).
-- User asks for narrative analysis — charts **supplement** prose, they don't replace it.
-
-## Mermaid Diagram Auto-Generation
-
-Emit a \`\`\`mermaid fenced block automatically when user intent maps to diagrammatic content, without being asked to use mermaid syntax.
-
-### When to auto-generate mermaid
-
-- User describes a **process / workflow** ("alur kerja", "proses", "workflow") → \`flowchart LR\` or \`flowchart TD\`.
-- User describes **system architecture** ("arsitektur sistem", "struktur", "topology") → \`flowchart\` with \`subgraph\` grouping.
-- User describes an **organisational hierarchy** ("struktur organisasi", "hierarki", "reporting line") → \`flowchart TD\`.
-- User describes a **timeline / project phases** ("timeline proyek", "rencana implementasi", "jadwal", "roadmap") → \`gantt\`.
-- User describes **states / statuses that change** ("state machine", "alur status", "lifecycle") → \`stateDiagram-v2\`.
-- User describes **relationships between entities** ("relasi", "hubungan", "schema") → \`flowchart\` or \`erDiagram\`.
-- User describes **interactions between actors over time** ("siapa memanggil siapa", "request–response") → \`sequenceDiagram\`.
-
-### Diagram type selection
-
-- **flowchart TD** (top-down) — hierarchies, decision trees, vertical process flow.
-- **flowchart LR** (left-right) — horizontal workflow, pipeline, sequential process.
-- **gantt** — project timelines with dated phases.
-- **sequenceDiagram** — interactions between actors/systems over time.
-- **stateDiagram-v2** — state transitions.
-- **erDiagram** — database entity relationships.
-
-### Flowchart styling best practices
-
-Apply \`classDef\` to differentiate node roles (start/end, decisions, actions). Don't override theme colours via \`%%{init}%%\` — the renderer handles dark/light sync.
-
-\`\`\`mermaid
-flowchart TD
-    A[Start] --> B{Decision}
-    B -->|Yes| C[Action 1]
-    B -->|No| D[Action 2]
-    C --> E[End]
-    D --> E
-
-    classDef startEnd fill:#2563eb,stroke:#1e40af,color:#fff
-    classDef decision fill:#f59e0b,stroke:#d97706,color:#fff
-    classDef action fill:#10b981,stroke:#059669,color:#fff
-
-    class A,E startEnd
-    class B decision
-    class C,D action
-\`\`\`
-
-### Gantt best practices
-
-Include \`dateFormat YYYY-MM-DD\`, group tasks into \`section\` blocks, and give every task a stable ID so dependencies (\`after a1\`) work:
-
-\`\`\`mermaid
-gantt
-    title Project Timeline
-    dateFormat YYYY-MM-DD
-    section Discovery
-    Task A :a1, 2026-01-01, 30d
-    Task B :a2, after a1, 20d
-    section Build
-    Task C :b1, after a2, 45d
-\`\`\`
-
-### Scale appropriately
-
-- Minimum meaningful size: ~5–6 nodes / phases — below that, prose reads better.
-- Maximum flowchart size: ~20 nodes — beyond that, split into multiple diagrams.
-- Use \`subgraph\` to group related nodes when the count exceeds ~10.
-
-### When NOT to use mermaid
-
-- Simple linear sequence with fewer than 4 steps (use prose).
-- Content is conceptual / abstract without clear structure.
-- User explicitly requests prose-only content.
-- The data is better shown as a table (\`schema definitions with types and constraints → GFM table, not erDiagram unless relationships matter\`).
-
-### Format reminder
-
-Always fence with \`\`\`mermaid (never \`\`\`diagram or other variants); the renderer keys off the language tag.
 
 ## Content Quality
+
 - **Substantive prose.** Every paragraph must add real information. If a section reads like filler, cut it.
 - **Specifics over vagueness.** Use numbers, names, dates, versions, and currency amounts. Write "reduces p95 latency from 420 ms to 110 ms" not "improves performance significantly."
-- **No placeholders ever.** Never write \`Lorem ipsum\`, \`[TODO]\`, \`[Add company name]\`, \`...\`, \`(content omitted)\`, or "and so on." If you don't have a real value, invent a plausible one that is clearly fictional (e.g., "PT Contoh" for a placeholder client) — and keep the invention consistent throughout the document.
-- **Minimum length** for proposals, reports, and book chapters: ~500 words. Letters and memos can be shorter, but they still need a real recipient, date, and signature block.
-- **Output the COMPLETE document.** Do not truncate. Do not write "the rest is left as an exercise for the reader" or "see full version attached." The artifact *is* the full version.
+- **No placeholders ever.** Never write \`Lorem ipsum\`, \`[TODO]\`, \`[Add company name]\`, \`...\`, \`(content omitted)\`, or "and so on." If you don't have a real value, invent a plausible one clearly marked as fictional (e.g., "PT Contoh" for a placeholder client) — and keep it consistent throughout.
+- **Minimum length** for proposals, reports, and book chapters: ~400 words of actual prose. Letters and memos can be shorter, but they still need a real recipient, date, and signature block.
+- **Complete documents only.** Do not truncate. Do not write "the rest is left as an exercise for the reader" or "see full version attached." The artifact is the full version.
 - **Close the document.** Proposals end with a Call to Action or Next Steps. Reports end with a Conclusion or Recommendations. Letters end with a signature block. Don't trail off.
 
-## Anti-Patterns (Do NOT do these)
-- ❌ Bullet-dominant structure when prose would read better. Formal documents are paragraphs first, lists second.
-- ❌ Skipping heading levels (\`##\` then \`####\` with no \`###\` in between).
-- ❌ Frontmatter with quoted values where plain works. Write \`title: My Proposal\`, not \`title: "My Proposal"\`. Quote only when the value contains a colon or starts with a special YAML character.
-- ❌ Raw HTML tags (\`<details>\`, \`<script>\`, \`<kbd>\`, etc.) — they are not portable to DOCX/PDF export.
-- ❌ More than one \`# H1\` per document (and don't duplicate a frontmatter \`title\` with an H1 of the same text).
-- ❌ Placeholders, \`Lorem ipsum\`, truncation, or "add content here" markers.
-- ❌ Mermaid diagrams in a fence without the \`mermaid\` language tag — they'll render as plain code in export.
-- ❌ Using \`text/document\` for a README or a quick internal note. Use \`text/markdown\` instead.
-- ❌ Missing alt text on images.
-- ❌ Unsplash references without a keyword phrase (\`unsplash:\` alone is not valid).
-- ❌ Opening without an Executive Summary on a proposal or report longer than ~800 words.
-- ❌ Using \`\`\`chart with malformed JSON (must be valid JSON, not a JavaScript object literal — property names MUST be double-quoted).
-- ❌ Mixing \`mermaid pie\` and \`\`\`chart pie in the same document (pick one style per document for consistency).
-- ❌ Chart with \`data\` array containing non-numeric \`value\` field (must be a number, not a string).
-- ❌ Using LaTeX math syntax (\`$...$\` or \`$$...$$\`). This artifact type doesn't render equations — write the calculation in prose instead.
+### \`mermaid\` block
+
+Use for flowcharts, sequence, class, state, ER, pie, gantt, mindmap, timeline, and similar schematic diagrams. Embed \`mermaid\` blocks directly in the document — they render as PNG in the docx export and as inline SVG in the preview.
+
+\`\`\`ts
+{ type: "mermaid", code: string, caption?: string, width?: 200..1600, height?: 150..1200, alt?: string }
+\`\`\`
+
+- \`code\`: valid Mermaid syntax. First non-empty token MUST be one of \`flowchart\`, \`graph\`, \`sequenceDiagram\`, \`classDiagram\`, \`stateDiagram\`, \`stateDiagram-v2\`, \`erDiagram\`, \`gantt\`, \`pie\`, \`mindmap\`, \`timeline\`, \`journey\`, \`c4Context\`, \`gitGraph\`, \`quadrantChart\`, or \`requirementDiagram\`.
+- Keep diagrams simple — ≤ 15 nodes for flowcharts; ≤ 10 for split-layout contexts.
+- NEVER wrap \`code\` in markdown fences (no \`\`\`mermaid). The \`code\` field IS raw mermaid syntax.
+- \`width\`/\`height\` default to 1200×800.
+
+### \`chart\` block
+
+Use for data visualizations (bar, bar-horizontal, line, pie, donut). The \`chart\` field follows the same \`ChartData\` schema used by \`application/slides\`.
+
+\`\`\`ts
+{ type: "chart", chart: ChartData, caption?: string, width?: 200..1600, height?: 150..1200, alt?: string }
+\`\`\`
+
+- \`ChartData\`: \`{ type, title?, data?: [{label, value, color?}], labels?: string[], series?: [{name, values[], color?}], showValues?, showLegend? }\`
+- \`width\`/\`height\` default to 1200×600.
+
+Prefer \`mermaid\` for qualitative structure (flows, relations), \`chart\` for quantitative data (numbers, categories). Don't stuff prose into diagrams.
+
+## Anti-Patterns
+
+- ❌ Output anything before the opening \`{\` or after the closing \`}\` — commentary, markdown fences, or explanation will break the parser.
+- ❌ Wrap the JSON in \`\`\`json fences or any other fence.
+- ❌ Markdown syntax inside \`text.text\` values. No \`**bold**\`, no \`## heading\`, no backtick spans, no \`*italic*\`. Use the inline node style flags (\`bold: true\`, etc.) instead.
+- ❌ Empty \`children\` arrays on \`paragraph\`, \`heading\`, or \`blockquote\` — the schema requires at least one child.
+- ❌ \`anchor.bookmarkId\` referencing an ID not declared on any \`heading.bookmarkId\` in the same document.
+- ❌ \`pageNumber\` inline node outside \`header.children\` or \`footer.children\` — it only renders in those contexts.
+- ❌ Tables where \`sum(columnWidths) !== width\`, or where row cell count (accounting for \`colspan\`) does not equal the number of columns.
+- ❌ \`unsplash:\` with an empty keyword — \`"src": "unsplash:"\` is not valid. Always provide a keyword phrase.
+- ❌ Missing \`alt\` text on images.
+- ❌ Math notation — this type does not render LaTeX equations (\`$...$\` or \`$$...$$\`). Express calculations in prose.
+- ❌ Using \`text/document\` for a README, internal note, or developer doc — use \`text/markdown\`.
+- ❌ Truncation, \`Lorem ipsum\`, \`[TODO]\`, \`(content omitted)\`, or placeholder markers of any kind.
 `,
-  examples: [] as { label: string; code: string }[],
+  examples: [
+    {
+      label:
+        "Business proposal — cover page, TOC, comparison table, footnote, image, anchor",
+      code: JSON.stringify(proposalExample, null, 2),
+    },
+    {
+      label:
+        "Research report — abstract, codeBlock, horizontal rule, blockquote, image with caption, ordered list of findings",
+      code: JSON.stringify(reportExample, null, 2),
+    },
+    {
+      label:
+        "Formal letter — letterhead header, right-aligned date, recipient block, signature block, dot-leader tab",
+      code: JSON.stringify(letterExample, null, 2),
+    },
+  ] as { label: string; code: string }[],
 }

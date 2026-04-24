@@ -5,11 +5,16 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
+      // Next.js ships "server-only" as a sentinel that throws if a client
+      // component imports it. In vitest there is no "react-server" resolver
+      // condition, so we alias it to the empty shim the package provides
+      // for exactly this case.
+      "server-only": path.resolve(__dirname, "node_modules/server-only/empty.js"),
     },
   },
   test: {
     globals: true,
-    include: ["tests/**/*.test.ts", "src/features/**/*.test.ts"],
+    include: ["tests/**/*.{test.ts,test.tsx}", "src/features/**/*.{test.ts,test.tsx}"],
     testTimeout: 60000,
     hookTimeout: 60000,
     fileParallelism: false,
@@ -20,5 +25,7 @@ export default defineConfig({
     // only need icon symbols to exist as truthy objects — they never render
     // the components.
     setupFiles: ["./tests/setup-icons-stub.ts"],
+    // Keep default environment as node; tests that need jsdom declare it
+    // per-file via `// @vitest-environment jsdom` (vitest 4 idiom).
   },
 })

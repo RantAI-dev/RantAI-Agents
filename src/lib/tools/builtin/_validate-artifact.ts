@@ -27,11 +27,15 @@ import {
   validateFontSpec,
   type AestheticDirection,
 } from "@/features/conversations/components/chat/artifacts/renderers/_react-directives"
+import { validateDocumentAst } from "@/lib/document-ast/validate"
+import { resolveUnsplashInAst } from "@/lib/document-ast/resolve-unsplash"
 
 export interface ArtifactValidationResult {
   ok: boolean
   errors: string[]
   warnings: string[]
+  /** Resolved/transformed content to persist in place of the original (optional). */
+  content?: string
 }
 
 /** React libraries the renderer exposes as window globals. */
@@ -50,8 +54,14 @@ const MAX_INLINE_STYLE_LINES = 10
  * Per-artifact-type content validators. The `Record<ArtifactType, …>`
  * constraint makes this exhaustive: adding a new entry to the artifact
  * registry without a validator branch here is a compile-time error.
+ *
+ * Validators may be sync or async — `validateArtifactContent` awaits the
+ * result so callers always get a resolved `ArtifactValidationResult`.
  */
-const VALIDATORS: Record<ArtifactType, (content: string) => ArtifactValidationResult> = {
+const VALIDATORS: Record<
+  ArtifactType,
+  (content: string) => ArtifactValidationResult | Promise<ArtifactValidationResult>
+> = {
   "text/html": validateHtml,
   "application/react": validateReact,
   "image/svg+xml": validateSvg,
@@ -66,25 +76,44 @@ const VALIDATORS: Record<ArtifactType, (content: string) => ArtifactValidationRe
   "application/3d": validate3d,
 }
 
-export function validateArtifactContent(
+export async function validateArtifactContent(
   type: string,
   content: string
-): ArtifactValidationResult {
+): Promise<ArtifactValidationResult> {
   const validator = VALIDATORS[type as ArtifactType]
   if (!validator) return { ok: true, errors: [], warnings: [] }
   return validator(content)
 }
 
 // ---------------------------------------------------------------------------
-// Document validation — placeholder
+// Document validation — DocumentAst + Unsplash resolver
 // ---------------------------------------------------------------------------
-// Permissive no-op while the text/document pipeline is being rebuilt around
-// LLM-authored construction code. A real validator will land alongside the
-// new pipeline (sandbox-safety check on the JS payload + structural checks).
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function validateDocument(_content: string): ArtifactValidationResult {
-  return { ok: true, errors: [], warnings: [] }
+async function validateDocument(content: string): Promise<ArtifactValidationResult> {
+  let raw: unknown
+  try {
+    raw = JSON.parse(content)
+  } catch (e) {
+    return {
+      ok: false,
+      errors: [`text/document content must be JSON: ${(e as Error).message}`],
+      warnings: [],
+    }
+  }
+  const v = validateDocumentAst(raw)
+  if (!v.ok) return { ok: false, errors: [v.error], warnings: [] }
+  let resolved = v.ast
+  try {
+    resolved = await resolveUnsplashInAst(v.ast)
+  } catch (e) {
+    // resolver never throws per its contract — but be defensive
+    return {
+      ok: false,
+      errors: [`Unsplash resolution failed: ${(e as Error).message}`],
+      warnings: [],
+    }
+  }
+  return { ok: true, errors: [], warnings: [], content: JSON.stringify(resolved) }
 }
 
 

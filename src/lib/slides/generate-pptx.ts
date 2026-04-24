@@ -1,7 +1,8 @@
 import PptxGenJS from "pptxgenjs"
 import type { PresentationData, SlideData, SlideTheme } from "./types"
-import { chartToSvg } from "./chart-to-svg"
-import { svgToBase64Png, fetchImageAsBase64, mermaidToBase64Png } from "./svg-to-png"
+import { chartToSvg } from "@/lib/rendering/chart-to-svg"
+import { svgToBase64Png, fetchImageAsBase64 } from "@/lib/rendering/client/svg-to-png"
+import { mermaidToBase64Png } from "@/lib/rendering/client/mermaid-to-png"
 import {
   cleanMarkdown,
   lightenColor,

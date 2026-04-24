@@ -7,7 +7,7 @@
 
 import * as d3Scale from "d3-scale"
 import * as d3Shape from "d3-shape"
-import type { ChartData, ChartDataPoint, ChartSeries } from "./types"
+import type { ChartData, ChartDataPoint, ChartSeries } from "@/lib/slides/types"
 
 // Default color palette (matches mermaid-config.ts pie colors)
 const DEFAULT_COLORS = [

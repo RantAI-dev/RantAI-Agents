@@ -116,7 +116,7 @@ export const ARTIFACT_REGISTRY = [
     shortLabel: "Document",
     icon: BookOpen,
     colorClasses: "text-amber-500 bg-amber-500/10 border-amber-500/20",
-    extension: ".md",
+    extension: ".docx",
     codeLanguage: "",
     hasCodeTab: false,
   },

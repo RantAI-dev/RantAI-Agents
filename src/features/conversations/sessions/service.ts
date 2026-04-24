@@ -457,7 +457,7 @@ export async function updateDashboardChatSessionArtifact(params: {
   // formatted error message + raw error list so the panel can display the
   // exact issues inline in edit mode instead of silently saving garbage.
   if (existing.artifactType) {
-    const validation = validateArtifactContent(
+    const validation = await validateArtifactContent(
       existing.artifactType,
       String(content),
     )
@@ -543,6 +543,30 @@ export async function updateDashboardChatSessionArtifact(params: {
     content: updated.content,
     artifactType: updated.artifactType,
     metadata: updated.metadata,
+  }
+}
+
+export async function getDashboardChatSessionArtifact(params: {
+  userId: string
+  sessionId: string
+  artifactId: string
+}): Promise<DashboardChatSessionArtifact & { artifactType: string } | ServiceError> {
+  const chatSession = await findDashboardSessionBasicByIdAndUser(params.sessionId, params.userId)
+  if (!chatSession) {
+    return { status: 404, error: "Session not found" }
+  }
+
+  const artifact = await findDashboardArtifactByIdAndSession(params.artifactId, params.sessionId)
+  if (!artifact) {
+    return { status: 404, error: "Artifact not found" }
+  }
+
+  return {
+    id: artifact.id,
+    title: artifact.title,
+    content: artifact.content,
+    artifactType: artifact.artifactType ?? "",
+    metadata: (artifact.metadata as Record<string, unknown> | null) ?? null,
   }
 }
 
