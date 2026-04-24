@@ -155,6 +155,28 @@ def run_bench(name: str, url: str) -> dict:
 
 results = [run_bench(k, v) for k, v in ENDPOINTS.items()]`,
     },
+    {
+      type: "mermaid",
+      code: `flowchart LR
+  Data["Raw data"] --> Clean["Clean + validate"]
+  Clean --> Model["Fit model"]
+  Model --> Eval["Evaluate"]
+  Eval --> Report["Publish report"]`,
+      caption: "Methodology pipeline",
+    },
+    {
+      type: "chart",
+      chart: {
+        type: "bar",
+        title: "Experiment results by cohort",
+        data: [
+          { label: "Cohort A", value: 74 },
+          { label: "Cohort B", value: 82 },
+          { label: "Cohort C", value: 91 },
+        ],
+      },
+      caption: "Accuracy (%) by cohort",
+    },
 
     // ── Results ───────────────────────────────────
     {
