@@ -21,9 +21,11 @@ import { detectShape, parseSpec } from "@/lib/spreadsheet/parse"
 import { evaluateWorkbook } from "@/lib/spreadsheet/formulas"
 import {
   AESTHETIC_DIRECTIONS,
+  DEFAULT_FONTS_BY_DIRECTION,
   MAX_FONT_FAMILIES,
   parseDirectives,
   validateFontSpec,
+  type AestheticDirection,
 } from "@/features/conversations/components/chat/artifacts/renderers/_react-directives"
 
 export interface ArtifactValidationResult {
@@ -1643,6 +1645,65 @@ function validateHtml(content: string): ArtifactValidationResult {
 // React validation
 // ---------------------------------------------------------------------------
 
+/** Serif families that the renderer ships as defaults for at least one direction. */
+const KNOWN_SERIF_FAMILIES = [
+  "Fraunces",
+  "Playfair",
+  "DM Serif",
+  "Cormorant",
+  "Newsreader",
+  "Crimson Pro",
+  "Lora",
+]
+
+/** Threshold above which slate/indigo density is considered "industrial-coded". */
+const PALETTE_MISMATCH_THRESHOLD = 6
+
+function appendAestheticWarnings(
+  content: string,
+  aesthetic: AestheticDirection,
+  fonts: string[] | null,
+  warnings: string[]
+): void {
+  // Palette-direction mismatch: non-industrial + dense slate/indigo usage.
+  if (aesthetic !== "industrial") {
+    const slateIndigoCount = (
+      content.match(/\b(slate|indigo)-(\d{2,3})\b/g) ?? []
+    ).length
+    if (slateIndigoCount >= PALETTE_MISMATCH_THRESHOLD) {
+      warnings.push(
+        `You declared @aesthetic: ${aesthetic} but the palette reads industrial ` +
+          `(${slateIndigoCount} slate/indigo class references). Consider reviewing ` +
+          `the color palette for the ${aesthetic} direction.`
+      )
+    }
+  }
+
+  // Font-direction mismatch: editorial or luxury without a serif.
+  if (aesthetic === "editorial" || aesthetic === "luxury") {
+    const fontsToCheck = fonts ?? DEFAULT_FONTS_BY_DIRECTION[aesthetic]
+    const hasSerif = fontsToCheck.some((spec) =>
+      KNOWN_SERIF_FAMILIES.some((family) => spec.startsWith(family))
+    )
+    if (!hasSerif) {
+      warnings.push(
+        `@aesthetic: ${aesthetic} typically pairs with a serif display face. ` +
+          `No known serif detected in @fonts directive.`
+      )
+    }
+  }
+
+  // Motion-in-industrial: Motion library usage under industrial direction.
+  if (aesthetic === "industrial") {
+    if (/\bMotion\.(motion|AnimatePresence)\b/.test(content)) {
+      warnings.push(
+        `Industrial direction favors minimal or no motion. Consider plain CSS ` +
+          `transitions instead of framer-motion.`
+      )
+    }
+  }
+}
+
 function stripDirectiveLines(
   content: string,
   directives: { rawAestheticLine: string | null; rawFontsLine: string | null }
@@ -1788,6 +1849,11 @@ function validateReact(content: string): ArtifactValidationResult {
         .join(", ")}. Only react, react-dom, recharts, lucide-react, and framer-motion are available (as window globals: React, Recharts, LucideReact, Motion). Remove the imports and use the globals instead.`
     )
   }
+
+  // 4. Soft-warn heuristics — aesthetic/style mismatches that should be
+  //    surfaced to the author but not block creation. Deliberately simple:
+  //    precision over recall, fewer false positives > catching every nit.
+  appendAestheticWarnings(content, directives.aesthetic, directives.fonts, warnings)
 
   return { ok: errors.length === 0, errors, warnings }
 }

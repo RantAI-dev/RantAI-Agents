@@ -1504,3 +1504,96 @@ ${MINIMAL_BODY}`
     expect(r.ok).toBe(true)
   })
 })
+
+describe("validateArtifactContent — application/react — palette soft-warn", () => {
+  it("warns when editorial + heavy slate/indigo usage", () => {
+    const code = `// @aesthetic: editorial
+function App() {
+  return (
+    <div className="bg-slate-50 text-slate-900">
+      <div className="text-slate-700 bg-indigo-600 border-slate-200 text-indigo-500 bg-slate-100">hi</div>
+    </div>
+  )
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).toMatch(/palette.*industrial/i)
+  })
+
+  it("does NOT warn when industrial + slate usage", () => {
+    const code = `// @aesthetic: industrial
+function App() {
+  return (
+    <div className="bg-slate-50 text-slate-900 border-slate-200 bg-slate-100 text-slate-700 text-indigo-500">hi</div>
+  )
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).not.toMatch(/palette/i)
+  })
+
+  it("does NOT warn on sparse slate usage (< 6 matches)", () => {
+    const code = `// @aesthetic: editorial
+function App() {
+  return <div className="bg-slate-50 text-slate-900 border-slate-200">hi</div>
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.warnings.join("\n")).not.toMatch(/palette/i)
+  })
+})
+
+describe("validateArtifactContent — application/react — font soft-warn", () => {
+  it("warns when editorial direction has no serif in @fonts", () => {
+    const code = `// @aesthetic: editorial
+// @fonts: Inter:wght@400;500;700, Space Mono:wght@400;700
+function App() { return <div/> }
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).toMatch(/serif/i)
+  })
+
+  it("does NOT warn when editorial + Fraunces declared", () => {
+    const code = `// @aesthetic: editorial
+// @fonts: Fraunces:wght@300..900, Inter:wght@400;500;700
+function App() { return <div/> }
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.warnings.join("\n")).not.toMatch(/serif/i)
+  })
+
+  it("does NOT warn when editorial uses default fonts (no @fonts directive)", () => {
+    const code = `// @aesthetic: editorial
+function App() { return <div/> }
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    // Defaults for editorial include Fraunces → no warn
+    expect(r.warnings.join("\n")).not.toMatch(/serif/i)
+  })
+})
+
+describe("validateArtifactContent — application/react — motion-in-industrial soft-warn", () => {
+  it("warns when industrial uses Motion.motion", () => {
+    const code = `// @aesthetic: industrial
+function App() {
+  return <Motion.motion.div animate={{ x: 100 }}>hi</Motion.motion.div>
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).toMatch(/motion/i)
+  })
+
+  it("does NOT warn when playful uses Motion.motion", () => {
+    const code = `// @aesthetic: playful
+function App() {
+  return <Motion.motion.div animate={{ x: 100 }}>hi</Motion.motion.div>
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.warnings.join("\n")).not.toMatch(/motion/i)
+  })
+})
