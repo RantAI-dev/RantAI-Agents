@@ -155,9 +155,10 @@ export default App;`
   it("rejects JSX that fails to parse", () => {
     const r = validateArtifactContent(
       "application/react",
-      "function App() { return <div<<<>; } export default App;"
+      "// @aesthetic: industrial\nfunction App() { return <div<<<>; } export default App;"
     )
     expect(r.ok).toBe(false)
+    expect(r.errors.join("\n")).toMatch(/failed to parse|parse/i)
   })
 })
 
