@@ -40,6 +40,8 @@ S3_ACCESS_KEY_ID={s3_access_key}
 S3_SECRET_ACCESS_KEY={s3_secret_key}
 S3_BUCKET={s3_bucket}
 S3_REGION=us-east-1
+S3_ENABLE_PATH_STYLE="1"
+S3_PRESIGNED_URL_EXPIRE="7200"
 
 # ── Authentication ──
 NEXTAUTH_SECRET={nextauth_secret}
@@ -80,9 +82,32 @@ KB_RERANK_FINAL_K="5"
 # ── Code Interpreter (Piston) ──
 PISTON_URL={piston_url}
 
+# ── Ollama (local vision / OCR backend) ──
+OLLAMA_ENDPOINT="http://localhost:11434"
+OLLAMA_TIMEOUT="120000"
+
+# ── OCR (Ollama vision models) ──
+OCR_MODEL_DEFAULT="glm-ocr"
+OCR_MODEL_HANDWRITTEN="glm-ocr"
+OCR_MODEL_TABLE="glm-ocr"
+OCR_MODEL_FIGURE="glm-ocr"
+OCR_ENABLE_FALLBACK="true"
+OCR_FALLBACK_MODEL="openai/gpt-4o-mini"
+
+# ── Artifact validation ──
+ARTIFACT_REACT_AESTHETIC_REQUIRED=
+
 # ── Web Search ──
+# Installer defaults to "local" (uses the SearXNG instance brought up by this install).
+# Change to "perplexity" / "serper" / "duckduckgo" for other providers.
 WEB_SEARCH_MODE=local
 SEARCH_API_URL={searxng_url}
+
+# ── WhatsApp / Twilio (optional) ──
+# Remove the leading `#` and fill in your credentials to enable WhatsApp integration.
+# TWILIO_ACCOUNT_SID=
+# TWILIO_AUTH_TOKEN=
+# TWILIO_WHATSAPP_NUMBER=+14155238886
 
 # ── Admin ──
 ADMIN_EMAIL={admin_email}

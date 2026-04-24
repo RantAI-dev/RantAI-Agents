@@ -34,7 +34,9 @@ fn env_has_all_kb_extract_keys() {
 fn env_drops_legacy_ocr_keys() {
     let cfg = InstallConfig::default();
     let env = render_env(&cfg);
-    for key in ["OCR_PROVIDER", "OCR_MODEL", "OCR_API_URL"] {
+    // Use `KEY=` form to avoid matching legitimate keys that share a prefix
+    // (e.g. OCR_MODEL_DEFAULT would trigger a bare "OCR_MODEL" match).
+    for key in ["OCR_PROVIDER=", "OCR_MODEL=", "OCR_API_URL="] {
         assert!(
             !env.contains(key),
             ".env template still has legacy key: {key}"
@@ -82,6 +84,52 @@ fn generate_config_fills_secrets_then_renders() {
     assert!(contents.contains("KB_EXTRACT_PRIMARY=\"smart\""));
 
     std::fs::remove_dir_all(&tmp).ok();
+}
+
+#[test]
+fn env_has_all_runtime_keys() {
+    let cfg = InstallConfig::default();
+    let env = render_env(&cfg);
+    for key in [
+        "OCR_MODEL_DEFAULT",
+        "OCR_MODEL_HANDWRITTEN",
+        "OCR_MODEL_TABLE",
+        "OCR_MODEL_FIGURE",
+        "OCR_ENABLE_FALLBACK",
+        "OCR_FALLBACK_MODEL",
+        "OLLAMA_ENDPOINT",
+        "OLLAMA_TIMEOUT",
+        "S3_ENABLE_PATH_STYLE",
+        "S3_PRESIGNED_URL_EXPIRE",
+        "ARTIFACT_REACT_AESTHETIC_REQUIRED",
+        "WEB_SEARCH_MODE",
+    ] {
+        assert!(
+            env.contains(key),
+            ".env template missing required key: {key}"
+        );
+    }
+}
+
+#[test]
+fn env_twilio_keys_present_but_commented() {
+    let cfg = InstallConfig::default();
+    let env = render_env(&cfg);
+    // Keys are referenced (as documentation) but commented by default so the
+    // runtime treats them as unset unless the operator edits.
+    for key in [
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_AUTH_TOKEN",
+        "TWILIO_WHATSAPP_NUMBER",
+    ] {
+        assert!(env.contains(key), "missing commented key: {key}");
+        // Commented form: `# TWILIO_ACCOUNT_SID=...`
+        let commented = format!("# {key}");
+        assert!(
+            env.contains(&commented),
+            "key {key} should appear in a commented line"
+        );
+    }
 }
 
 #[test]
