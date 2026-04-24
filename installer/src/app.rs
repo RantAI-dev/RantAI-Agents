@@ -510,7 +510,10 @@ impl App {
             },
         ];
 
-        if !self.mode.includes_docker_services() || self.mode == InstallMode::Minimal {
+        let profile_app = c.profile.includes_app();
+        let profile_sidecars = c.profile.includes_sidecars();
+
+        if profile_app && (!self.mode.includes_docker_services() || self.mode == InstallMode::Minimal) {
             fields.extend([
                 ConfigField {
                     key: "db_host".into(),
@@ -526,19 +529,19 @@ impl App {
                 },
                 ConfigField {
                     key: "db_name".into(),
-                    label: "Database Name".into(),
+                    label: "PostgreSQL DB Name".into(),
                     value: c.db_name.clone(),
                     secret: false,
                 },
                 ConfigField {
                     key: "db_user".into(),
-                    label: "Database User".into(),
+                    label: "PostgreSQL User".into(),
                     value: c.db_user.clone(),
                     secret: false,
                 },
                 ConfigField {
                     key: "db_password".into(),
-                    label: "Database Password".into(),
+                    label: "PostgreSQL Password (blank = auto)".into(),
                     value: c.db_password.clone(),
                     secret: true,
                 },
@@ -549,60 +552,179 @@ impl App {
                     secret: false,
                 },
                 ConfigField {
+                    key: "surrealdb_user".into(),
+                    label: "SurrealDB User".into(),
+                    value: c.surrealdb_user.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "surrealdb_pass".into(),
+                    label: "SurrealDB Password".into(),
+                    value: c.surrealdb_pass.clone(),
+                    secret: true,
+                },
+                ConfigField {
                     key: "s3_endpoint".into(),
                     label: "S3 Endpoint".into(),
                     value: c.s3_endpoint.clone(),
                     secret: false,
                 },
+                ConfigField {
+                    key: "s3_access_key".into(),
+                    label: "S3 Access Key (blank = auto)".into(),
+                    value: c.s3_access_key.clone(),
+                    secret: true,
+                },
+                ConfigField {
+                    key: "s3_secret_key".into(),
+                    label: "S3 Secret Key (blank = auto)".into(),
+                    value: c.s3_secret_key.clone(),
+                    secret: true,
+                },
+                ConfigField {
+                    key: "s3_bucket".into(),
+                    label: "S3 Bucket".into(),
+                    value: c.s3_bucket.clone(),
+                    secret: false,
+                },
             ]);
         }
 
-        fields.extend([
-            ConfigField {
-                key: "nextauth_url".into(),
-                label: "App URL".into(),
-                value: c.nextauth_url.clone(),
-                secret: false,
-            },
-            ConfigField {
-                key: "openrouter_api_key".into(),
-                label: "OpenRouter API Key".into(),
-                value: c.openrouter_api_key.clone(),
-                secret: true,
-            },
-            ConfigField {
-                key: "admin_email".into(),
-                label: "Admin Email".into(),
-                value: c.admin_email.clone(),
-                secret: false,
-            },
-            ConfigField {
-                key: "admin_password".into(),
-                label: "Admin Password".into(),
-                value: c.admin_password.clone(),
-                secret: true,
-            },
-        ]);
+        if profile_app {
+            fields.extend([
+                ConfigField {
+                    key: "nextauth_secret".into(),
+                    label: "NextAuth Secret (blank = auto)".into(),
+                    value: c.nextauth_secret.clone(),
+                    secret: true,
+                },
+                ConfigField {
+                    key: "nextauth_url".into(),
+                    label: "NextAuth URL".into(),
+                    value: c.nextauth_url.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "openrouter_api_key".into(),
+                    label: "OpenRouter API Key".into(),
+                    value: c.openrouter_api_key.clone(),
+                    secret: true,
+                },
+                ConfigField {
+                    key: "admin_email".into(),
+                    label: "Admin Email".into(),
+                    value: c.admin_email.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "admin_password".into(),
+                    label: "Admin Password (blank = auto)".into(),
+                    value: c.admin_password.clone(),
+                    secret: true,
+                },
+                // Sidecar URLs — where the app will reach them.
+                ConfigField {
+                    key: "mineru_base_url".into(),
+                    label: "MinerU Base URL".into(),
+                    value: c.sidecar.mineru_base_url.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "rerank_base_url".into(),
+                    label: "Rerank Base URL".into(),
+                    value: c.sidecar.rerank_base_url.clone(),
+                    secret: false,
+                },
+            ]);
+        }
+
+        if profile_sidecars {
+            fields.extend([
+                ConfigField {
+                    key: "gpu_device_id".into(),
+                    label: "GPU Device ID (0 = first card)".into(),
+                    value: c.sidecar.gpu_device_id.to_string(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "python_venv_dir".into(),
+                    label: "Python venv directory".into(),
+                    value: c.sidecar.python_venv_dir.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "hf_cache_dir".into(),
+                    label: "HuggingFace cache directory".into(),
+                    value: c.sidecar.hf_cache_dir.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "rerank_model".into(),
+                    label: "Rerank model ID".into(),
+                    value: c.sidecar.rerank_model.clone(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "mineru_port".into(),
+                    label: "MinerU sidecar port".into(),
+                    value: c.sidecar.mineru_port.to_string(),
+                    secret: false,
+                },
+                ConfigField {
+                    key: "rerank_port".into(),
+                    label: "Rerank sidecar port".into(),
+                    value: c.sidecar.rerank_port.to_string(),
+                    secret: false,
+                },
+            ]);
+        }
 
         self.config_items = fields;
     }
 
     pub fn apply_config_fields(&mut self) {
         for field in &self.config_items {
+            let value = &field.value;
             match field.key.as_str() {
-                "install_dir" => self.config.install_dir = field.value.clone(),
-                "data_dir" => self.config.data_dir = field.value.clone(),
-                "db_host" => self.config.db_host = field.value.clone(),
-                "db_port" => self.config.db_port = field.value.clone(),
-                "db_name" => self.config.db_name = field.value.clone(),
-                "db_user" => self.config.db_user = field.value.clone(),
-                "db_password" => self.config.db_password = field.value.clone(),
-                "surrealdb_url" => self.config.surrealdb_url = field.value.clone(),
-                "s3_endpoint" => self.config.s3_endpoint = field.value.clone(),
-                "nextauth_url" => self.config.nextauth_url = field.value.clone(),
-                "openrouter_api_key" => self.config.openrouter_api_key = field.value.clone(),
-                "admin_email" => self.config.admin_email = field.value.clone(),
-                "admin_password" => self.config.admin_password = field.value.clone(),
+                "install_dir" => self.config.install_dir = value.clone(),
+                "data_dir" => self.config.data_dir = value.clone(),
+                "db_host" => self.config.db_host = value.clone(),
+                "db_port" => self.config.db_port = value.clone(),
+                "db_name" => self.config.db_name = value.clone(),
+                "db_user" => self.config.db_user = value.clone(),
+                "db_password" => self.config.db_password = value.clone(),
+                "surrealdb_url" => self.config.surrealdb_url = value.clone(),
+                "surrealdb_user" => self.config.surrealdb_user = value.clone(),
+                "surrealdb_pass" => self.config.surrealdb_pass = value.clone(),
+                "s3_endpoint" => self.config.s3_endpoint = value.clone(),
+                "s3_access_key" => self.config.s3_access_key = value.clone(),
+                "s3_secret_key" => self.config.s3_secret_key = value.clone(),
+                "s3_bucket" => self.config.s3_bucket = value.clone(),
+                "nextauth_secret" => self.config.nextauth_secret = value.clone(),
+                "nextauth_url" => self.config.nextauth_url = value.clone(),
+                "openrouter_api_key" => self.config.openrouter_api_key = value.clone(),
+                "admin_email" => self.config.admin_email = value.clone(),
+                "admin_password" => self.config.admin_password = value.clone(),
+                "mineru_base_url" => self.config.sidecar.mineru_base_url = value.clone(),
+                "rerank_base_url" => self.config.sidecar.rerank_base_url = value.clone(),
+                "gpu_device_id" => {
+                    if let Ok(n) = value.parse::<u32>() {
+                        self.config.sidecar.gpu_device_id = n;
+                    }
+                }
+                "python_venv_dir" => self.config.sidecar.python_venv_dir = value.clone(),
+                "hf_cache_dir" => self.config.sidecar.hf_cache_dir = value.clone(),
+                "rerank_model" => self.config.sidecar.rerank_model = value.clone(),
+                "mineru_port" => {
+                    if let Ok(n) = value.parse::<u16>() {
+                        self.config.sidecar.mineru_port = n;
+                    }
+                }
+                "rerank_port" => {
+                    if let Ok(n) = value.parse::<u16>() {
+                        self.config.sidecar.rerank_port = n;
+                    }
+                }
                 _ => {}
             }
         }
