@@ -8,6 +8,7 @@ import {
   type BlockNode,
   type InlineNode,
 } from "@/lib/document-ast/schema"
+import { MERMAID_INIT_OPTIONS } from "@/lib/rendering/mermaid-theme"
 
 type FootnoteSink = {
   push: (blocks: BlockNode[]) => number
@@ -304,6 +305,9 @@ function renderBlock(
         </figure>
       )
 
+    case "mermaid":
+      return <MermaidPreviewBlock key={key} code={node.code} caption={node.caption} />
+
     case "toc": {
       const filtered = tocEntries.filter((e) => e.level <= node.maxLevel)
       return (
@@ -490,6 +494,82 @@ export function DocumentRenderer({ content }: DocumentRendererProps) {
         )}
       </article>
     </div>
+  )
+}
+
+function MermaidPreviewBlock({ code, caption }: { code: string; caption?: string }) {
+  const [svg, setSvg] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        // jsdom (vitest) does not implement SVG layout methods that mermaid's
+        // dagre layout depends on. Shim fixed-metric stand-ins so rendering
+        // completes in the test environment. No-op in real browsers where the
+        // prototypes already provide native implementations.
+        if (typeof window !== "undefined" && typeof SVGElement !== "undefined") {
+          const svgProto = SVGElement.prototype as unknown as {
+            getBBox?: (this: { textContent?: string | null }) => DOMRect
+          }
+          if (!svgProto.getBBox) {
+            svgProto.getBBox = function getBBox(this: { textContent?: string | null }) {
+              const text = this.textContent ?? ""
+              return {
+                x: 0,
+                y: 0,
+                width: text.length * 8,
+                height: 16,
+                top: 0,
+                right: text.length * 8,
+                bottom: 16,
+                left: 0,
+                toJSON: () => ({}),
+              } as unknown as DOMRect
+            }
+          }
+          const tcElement = (window as unknown as {
+            SVGTextContentElement?: { prototype: { getComputedTextLength?: (this: { textContent?: string | null }) => number } }
+          }).SVGTextContentElement
+          if (tcElement && !tcElement.prototype.getComputedTextLength) {
+            tcElement.prototype.getComputedTextLength = function (this: { textContent?: string | null }) {
+              return (this.textContent ?? "").length * 8
+            }
+          }
+        }
+
+        const mermaid = (await import("mermaid")).default
+        mermaid.initialize(MERMAID_INIT_OPTIONS)
+        const id = `mmd-${Math.random().toString(36).slice(2)}`
+        const { svg } = await mermaid.render(id, code.trim())
+        if (!cancelled) setSvg(svg)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Render failed")
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [code])
+
+  return (
+    <figure className="my-4 flex flex-col items-center">
+      {error ? (
+        <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+          Mermaid error: {error}
+        </div>
+      ) : svg ? (
+        <div dangerouslySetInnerHTML={{ __html: svg }} />
+      ) : (
+        <div className="text-sm text-muted-foreground">Rendering diagram…</div>
+      )}
+      {caption && (
+        <figcaption className="mt-2 text-center text-sm italic text-muted-foreground">
+          {caption}
+        </figcaption>
+      )}
+    </figure>
   )
 }
 

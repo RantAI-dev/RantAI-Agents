@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest"
-import { render } from "@testing-library/react"
+import { render, waitFor } from "@testing-library/react"
 import { DocumentRenderer } from "../document-renderer"
 import { proposalExample } from "@/lib/document-ast/examples/proposal"
 import { reportExample } from "@/lib/document-ast/examples/report"
@@ -39,5 +39,22 @@ describe("DocumentRenderer", () => {
     const content = '{"not":"a document"}'
     const { container } = render(<DocumentRenderer content={content} />)
     expect(container.textContent?.toLowerCase()).toContain("generating")
+  })
+})
+
+describe("DocumentRenderer — mermaid block", () => {
+  const minimalMeta = { title: "T", pageSize: "letter", orientation: "portrait", font: "Arial", fontSize: 12, showPageNumbers: false }
+
+  it("renders mermaid SVG into the document flow", async () => {
+    const ast = {
+      meta: minimalMeta,
+      body: [{ type: "mermaid", code: "flowchart TD\n  A --> B", caption: "Flow caption" }],
+    }
+    const content = JSON.stringify(ast)
+    const { container, findByText } = render(<DocumentRenderer content={content} />)
+    await waitFor(() => {
+      expect(container.querySelector("svg")).toBeTruthy()
+    })
+    expect(await findByText("Flow caption")).toBeTruthy()
   })
 })
