@@ -15,12 +15,16 @@
 | **Recharts** | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
 | **Mermaid diagrams** | ✗ | ✗ | ✗ | – | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ | ✗ |
 | **Mermaid charts** | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ |
+| **Aesthetic menu (7 dir)** | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| **Dynamic Google Fonts** | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | **Chart fence (D3)** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
 | **Framer Motion** | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | **Lucide icons** | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
 | **Tailwind CSS** | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | **Interactive forms** | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | **Sort + filter** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| **Formulas + multi-sheet** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| **XLSX export** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | **Matplotlib plots** | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | **KaTeX math** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ |
 | **YAML frontmatter** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
@@ -91,7 +95,7 @@
 ## 2. React Artifact — `application/react`
 
 **Label:** React Component
-**Ringkasan:** Single React 18 component, transpiled by Babel, rendered di iframe dengan pre-injected globals.
+**Ringkasan:** Single React 18 component, transpiled by Babel, rendered di iframe dengan pre-injected globals. **Upgraded 2026-04-24:** aesthetic direction menu + dynamic Google Fonts — no more hard-locked Inter/slate+indigo default.
 
 ### Runtime Environment
 
@@ -110,31 +114,55 @@ const {
 
 | Library | Symbol | Version | Usage | Notes |
 |---------|--------|---------|-------|-------|
-| **Recharts** | `Recharts` | 2 | `<Recharts.LineChart>`, `<Recharts.BarChart>`, `<Recharts.PieChart>`, `<Recharts.AreaChart>`, `<Recharts.ResponsiveContainer>`, `<Recharts.Tooltip>` | Charts ONLY — no other chart libs |
-| **Lucide React** | `LucideReact` | 0.454 | `<LucideReact.ArrowRight>`, `<LucideReact.Check>` (icon names PascalCase) | Icons as React components |
+| **Recharts** | `Recharts` | 2 | `<Recharts.LineChart>`, `<Recharts.BarChart>`, `<Recharts.PieChart>`, `<Recharts.AreaChart>`, `<Recharts.ResponsiveContainer>`, `<Recharts.Tooltip>` | Charts ONLY |
+| **Lucide React** | `LucideReact` | 0.454 | `<LucideReact.ArrowRight>`, `<LucideReact.Check>` | Icons as React components |
 | **Framer Motion** | `Motion` | 11 | `Motion.motion.div`, `Motion.AnimatePresence` | Animations & transitions |
 | **Tailwind CSS** | – | v3 CDN | Classes (`.bg-slate-50`, `.text-indigo-600`) | Styling |
 
-**Chart Types via Recharts:**
-- `<LineChart>` — line graphs with optional area fill
-- `<BarChart>` — vertical bars (also `<BarChart layout="vertical">` for horizontal)
-- `<PieChart>` — pie charts
-- `<AreaChart>` — stacked area charts
-- Components: `<XAxis>`, `<YAxis>`, `<CartesianGrid>`, `<Legend>`, `<Tooltip>`, `<ResponsiveContainer>`
+**Sandbox:** `allow-scripts` only — no real form POST, no `window.open`, no navigation. Mock all data.
 
-**Sandbox:** `allow-scripts` only
-- NO real form POST
-- NO `window.open()`
-- NO `location.href = "..."`
-- All forms use `onSubmit` + `e.preventDefault()`
+### Directives (NEW — 2026-04-24)
+
+Line 1 is REQUIRED: `// @aesthetic: <direction>`. Line 2 is OPTIONAL: `// @fonts: Family:spec | Family:spec` (pipe-separated, max 3 families).
+
+Valid directions (7):
+`editorial | brutalist | luxury | playful | industrial | organic | retro-futuristic`
+
+Renderer loads fonts dynamically from `fonts.googleapis.com` (only host whitelist); malformed `@fonts` falls back to direction defaults. Validator hard-errors on missing `@aesthetic`, unknown value, or malformed `@fonts`. Soft-warns on:
+- Non-industrial direction + ≥ 6 `slate-*` / `indigo-*` references (palette-direction mismatch)
+- Editorial/luxury direction without a known serif family in `@fonts` (font-direction mismatch)
+- Industrial direction using `Motion.motion` / `Motion.AnimatePresence` (motion-in-industrial)
+
+### Aesthetic Direction Menu
+
+| Direction | When to pick | Default fonts |
+|---|---|---|
+| editorial | articles, brand pages, storytelling, long-form | Fraunces + Inter |
+| brutalist | indie tools, manifestos, dev products, "raw" | Space Grotesk + JetBrains Mono |
+| luxury | premium, hospitality, fashion | DM Serif Display + DM Sans |
+| playful | onboarding, kids, creative tools | Fredoka |
+| industrial | dashboards, admin, monitoring | Inter Tight + Space Mono |
+| organic | wellness, food, crafts | Fraunces + Public Sans |
+| retro-futuristic | gaming, sci-fi, events | VT323 + Space Mono |
+
+Each direction ships a full design system (palette, spacing, component conventions, motion character). See [src/lib/prompts/artifacts/react.ts](../../src/lib/prompts/artifacts/react.ts) for the canonical spec. Prompt fixtures cover 4 directions; test fixtures at [tests/fixtures/react-artifacts/](../../tests/fixtures/react-artifacts/) cover all 7.
+
+### Chart Types via Recharts
+Same as before: `<LineChart>`, `<BarChart>` (also `layout="vertical"`), `<PieChart>`, `<AreaChart>`, with `<XAxis>`, `<YAxis>`, `<CartesianGrid>`, `<Legend>`, `<Tooltip>`, `<ResponsiveContainer>`.
 
 ### Anti-Patterns ❌
-- ❌ `import { Card } from 'shadcn/ui'` (NOT available — build from Tailwind)
-- ❌ `import './styles.css'` (silently dropped)
-- ❌ Class components (`class X extends React.Component`)
-- ❌ `document.getElementById()` / `document.querySelector()` (use `useRef`)
-- ❌ Real `fetch()` calls (mock data only)
-- ❌ Truncation (no `/* ...rest of component */`)
+- ❌ Missing `// @aesthetic:` directive on line 1 (hard-error)
+- ❌ Unknown aesthetic direction name (hard-error)
+- ❌ Malformed `@fonts` spec (hard-error)
+- ❌ More than 3 font families (hard-error)
+- ❌ Mixing directions within one artifact
+- ❌ Silently defaulting to slate+indigo without `@aesthetic: industrial` (palette-mismatch warn)
+- ❌ `import { Card } from 'shadcn/ui'` — NOT available (Phase 2 will ship `RantaiUI` bundle)
+- ❌ `import './styles.css'`
+- ❌ `class X extends React.Component`
+- ❌ `document.getElementById()` / `document.querySelector()`
+- ❌ Real `fetch()` calls
+- ❌ Truncation
 
 ---
 
@@ -335,57 +363,207 @@ plt.show()  # This is captured + rendered
 
 ## 7. Sheet Artifact — `application/sheet`
 
-**Label:** Spreadsheet (Interactive Table)
-**Ringkasan:** Tabular data sebagai CSV atau JSON array → rendered sebagai interactive sortable, filterable table dengan export button.
+**Label:** Spreadsheet (Interactive Table / Workbook)
+**Ringkasan:** Tabular data sebagai CSV, JSON array, atau JSON spec `spreadsheet/v1` → rendered sebagai interactive sortable/filterable table (flat data) atau multi-sheet workbook dengan formulas, named ranges, dan XLSX export (financial-model grade).
 
-### Input Formats — CHOOSE ONE
+**Status (2026-04-23):** upgraded dari CSV-only menjadi financial-model grade dengan 3 content shapes, formula evaluator, dan real `.xlsx` export via ExcelJS (setara skill xlsx Claude AI, tanpa LibreOffice dependency).
 
-**Option A: CSV** (default, comma-delimited)
+### Input Formats — 3 Content Shapes
+
+**Shape A: CSV** (default, flat tabular data)
 - Header row REQUIRED
 - Quote fields containing comma/quote/newline: `"Engineer, Senior"`
 - Escape literal quotes by doubling: `"She said ""hi"""`
 - Every row MUST have matching column count
 - No trailing comma, no BOM, UTF-8
+- Download: `.csv`
 
-**Option B: JSON array of objects**
+**Shape B: JSON array of objects** (flat tabular data, JSON-friendly)
 - Top level: non-empty array `[{...}, {...}]`
 - Every object MUST have same keys, same order
 - First object's keys = column headers, in order
 - NO nested objects/arrays (stringify as `[object Object]`)
+- Download: `.csv`
 
-### Critical Constraint: All Values → Strings
-- **Sorting is lexicographic**, not numeric or date-aware
-- `"10"` sorts before `"2"` (string comparison)
-- `"Jan 15, 2026"` sorts before `"Mar 1, 2025"` (string order)
+**Shape C: JSON spec `spreadsheet/v1`** ⭐ NEW (workbook with formulas)
+- Top level: object `{ "kind": "spreadsheet/v1", "sheets": [...], ... }`
+- Multi-sheet workbook dengan formulas, named ranges, merged cells, cell notes, frozen panes
+- 6 named cell styles, Excel number formats, theme colors
+- Download: `.xlsx` (via ExcelJS dengan cached formula values — tidak perlu F9 recalc)
+- Preview: `SpecWorkbookView` (lazy-loaded, sheet tabs, A/B/C columns, ƒx toggle, click-a-cell footer)
 
-**Workarounds:**
-- **Dates:** ISO 8601 (`YYYY-MM-DD`) — sorts correctly as string
-- **Numbers:** Plain numerals (`1234.50`, no `$1,234.50`, no separators)
-- **IDs:** Zero-pad if numeric order matters (`"007"`, `"008"`, `"010"`)
-- **Booleans:** Consistent spelling (`true`/`false` OR `Yes`/`No`)
-- **Empty:** Empty string `""` or `null` in JSON (not `N/A`, `TBD`, `-`)
+### Shape C: Spec Schema
 
-### Table Capabilities
-- **Sorting:** Click column header (lexicographic)
-- **Filtering:** Global text filter box (substring search, case-insensitive)
-- **Export:** Download button → CSV file
-- **No pagination** — all rows render at once (hard cap ~100 rows for performance)
+```json
+{
+  "kind": "spreadsheet/v1",
+  "title": "Revenue Projection 2026",
+  "theme": { "primaryColor": "#0F172A", "accentColor": "#3B82F6" },
+  "namedRanges": [
+    { "name": "GrowthRate", "ref": "Assumptions!B2" }
+  ],
+  "sheets": [
+    {
+      "name": "Assumptions",
+      "frozenRows": 1,
+      "columnWidths": { "A": 24, "B": 16 },
+      "cells": [
+        { "ref": "A1", "value": "Metric", "style": "header" },
+        { "ref": "B1", "value": "Value", "style": "header" },
+        { "ref": "A2", "value": "Starting Revenue" },
+        { "ref": "B2", "value": 4200000, "format": "$#,##0", "style": "input" },
+        { "ref": "A3", "value": "Growth Rate" },
+        { "ref": "B3", "value": 0.18, "format": "0.0%", "style": "input", "note": "Based on Q4 trend" }
+      ],
+      "merges": []
+    },
+    {
+      "name": "Projections",
+      "cells": [
+        { "ref": "A1", "value": "Year 1", "style": "header" },
+        { "ref": "B1", "formula": "Assumptions!B2 * (1 + GrowthRate)", "format": "$#,##0", "style": "formula" }
+      ]
+    }
+  ]
+}
+```
 
-### Column Design
+### Hard Caps (validator-enforced)
+
+| Limit | Max |
+|---|---|
+| Sheets per workbook | 8 |
+| Cells per sheet | 500 |
+| Formulas per workbook | 200 |
+| Named ranges | 64 |
+| Sheet name length | 31 chars |
+| Columns per sheet | 26 (A–Z) |
+
+### Cell Rules
+- **`value` XOR `formula`** — never both on same cell
+- `ref` is A1 notation (`A1`, `B25`, `AA10`) uppercase
+- `formula` strings start with `=` OR without; validator normalizes
+- Sheet names: alphanumeric + space/underscore, no `!`, `:`, `[`, `]`, `?`, `*`, `/`, `\`
+- Cross-sheet refs: `Sheet2!A1` (must reference existing sheet)
+- Named ranges: resolve transparently inside formulas
+
+### Formula Evaluator
+- **Library:** `fast-formula-parser@1.0.19` (MIT) + `@formulajs/formulajs@4.6.0` (MIT)
+- **Rejected:** HyperFormula (GPL-3.0 incompatible)
+- **Dep graph:** `DepParser` extracts cell-level dependencies
+- **Execution:** Kahn topological sort; cycle detection emits `error: "CIRCULAR"`
+- **Cross-sheet refs** and **named ranges** resolve transparently
+- **Built-in functions:** SUM, IF, VLOOKUP, HLOOKUP, INDEX, MATCH, IFERROR, XIRR, NPV, IRR, PMT, FV, PV, ROUND, AVERAGE, COUNT, COUNTIF, SUMIF, MAX, MIN, CONCAT, TEXT, DATE, YEAR, MONTH, DAY, TODAY, AND, OR, NOT — ~500 Excel functions total
+- **Lazy-loaded:** zero bundle cost until user opens a spec artifact
+- **Errors surfaced:** `#REF!` (undefined refs), `#NAME?` (unknown names), `#DIV/0!`, `#VALUE!`, `CIRCULAR`
+
+### Cell Styles (6 named, theme-aware)
+| Style | Use | Rendering |
+|---|---|---|
+| `header` | Column/row headers | Bold, primary color fill, white text |
+| `input` | User-editable values | Blue text (`#2563EB`), no fill |
+| `formula` | Computed cells | Black text, subtle background |
+| `cross-sheet` | References other sheets | Green text (`#059669`) |
+| `highlight` | Important figures | Yellow fill (`#FEF3C7`) |
+| `note` | Annotations | Italic, gray text |
+
+### Number Formats (Excel-compatible)
+- Currency: `"$#,##0"`, `"$#,##0.00"`
+- Currency negatives in parens: `"$#,##0;($#,##0);-"`
+- Percent: `"0%"`, `"0.0%"`, `"0.00%"`
+- Multiples: `"0.0x"` (for ratios)
+- Thousands: `"#,##0"`
+- Dates: `"mmm d, yyyy"`, `"yyyy-mm-dd"`
+- Segmented: `"positive;negative;zero"` (Excel syntax)
+
+### Rich Preview (SpecWorkbookView)
+- Sheet tabs at bottom (hidden when single sheet)
+- Column letters (A/B/C…) and row numbers (1/2/3…) Excel-style
+- `ƒx` toggle: computed values ↔ raw formulas
+- Click-a-cell footer: ref + formula + format + note
+- Style-aware cells (blue input / black formula / green cross-sheet / yellow highlight)
+- Error cells (`#REF!`, `#NAME?`, `#DIV/0!`, `CIRCULAR`) shown in red
+- Frozen panes respected visually
+- Lazy-loaded evaluator — zero main bundle cost
+
+### XLSX Export (Shape C only)
+- **Library:** `exceljs@4.4.0` (MIT) — writes formulas WITH cached computed values
+- Excel / LibreOffice / Google Sheets / Numbers open file with values **already visible**, no F9 recalc needed
+- Exports: merges, named ranges, frozen panes, styles (font color, fill, bold, italic), column widths, cell notes
+- Lazy-loaded at download click — zero main bundle impact
+- **Dual-button toolbar:** `.csv` (flattened active sheet) + `.xlsx` (full workbook)
+- Cell format: `{ formula: "A1*(1+A2)", result: cachedValue }`
+- Fallback: if spec invalid or export fails → CSV path (no silent corruption)
+
+### Validator Behavior
+- **Shape detection:** peeks first char: `{` + `kind` field → spec, `[` → array, else csv
+- **Spec errors surfaced at authoring time:** undefined refs, circular refs, unknown named ranges, bad sheet names, cap violations, style name typos, invalid A1 refs, `value`+`formula` both set
+- **Semantic errors** surfaced per cell with actionable messages
+- **145 validate-artifact tests + 44 new spec tests green** — zero regression on CSV/JSON-array path
+
+### Shape Decision Table
+
+| User wants... | Shape | Download | Renderer |
+|---|---|---|---|
+| Flat list (employees, products, SKU table) | A (CSV) | `.csv` | TanStack table (sort + filter) |
+| JSON-native structured data for API/code context | B (JSON array) | `.csv` | TanStack table (sort + filter) |
+| Financial model, budget, forecast, cap table, P&L | **C (spec)** | **`.xlsx`** | SpecWorkbookView (workbook) |
+| Any formulas needed (SUM, IF, VLOOKUP, growth chain) | **C (spec)** | **`.xlsx`** | SpecWorkbookView |
+| Multi-sheet (Assumptions + Projections + Summary) | **C (spec)** | **`.xlsx`** | SpecWorkbookView |
+
+### Critical Constraint: Flat Data (Shapes A/B) Still Lexicographic
+- Sorting in Shape A/B TanStack table is string-based (e.g. `"10"` before `"2"`)
+- For sortable numeric/date columns use ISO 8601 dates, zero-padded IDs, plain numerals
+- **Shape C bypasses this** — spec stores proper types; XLSX export writes native numbers/dates
+
+### Column Design (Shapes A/B)
 - Headers: Title Case, descriptive (`Full Name` not `name`)
 - Order: ID → descriptive → numeric → dates → status
 - **Max 10 columns** (wider becomes unreadable)
-- **10–30 rows** typical, up to ~50 for large datasets
+- **10–30 rows** typical, up to ~100 for large datasets
+
+### Financial Model Conventions (Shape C)
+- **Dedicated `Assumptions` sheet** for all inputs, referenced via named ranges
+- Use named ranges for repeatable constants (`GrowthRate`, `TaxRate`, `DiscountRate`)
+- Currency columns: parens-negative format `"$#,##0;($#,##0);-"`
+- Dates: ISO 8601 (`yyyy-mm-dd`) or long form (`mmm d, yyyy`)
+- Freeze header row (`frozenRows: 1`) on every sheet
+- Cell notes (`note` field) document assumption sources
+- Style `input` for editable cells, `formula` for computed
 
 ### Anti-Patterns ❌
-- ❌ Mismatched column counts (rows with more/fewer fields than header)
+**Shapes A/B:**
+- ❌ Mismatched column counts
 - ❌ Unquoted CSV with comma/quote/newline in field
-- ❌ Currency symbols or thousand separators (`$1,234`)
+- ❌ Currency symbols or thousand separators (`$1,234`) — use Shape C instead
 - ❌ Mixed date formats in one column
 - ❌ JSON top-level that is object (not array)
 - ❌ JSON objects with inconsistent keys
 - ❌ More than 100 rows (performance)
-- ❌ Truncation markers (`...more rows...`)
+
+**Shape C:**
+- ❌ `"kind": "spreadsheet/v2"` or other version strings (only `spreadsheet/v1`)
+- ❌ Cell with both `value` and `formula` set
+- ❌ Formulas referencing undefined cells (`=A1*Foo!B99` when `Foo` sheet or `B99` doesn't exist)
+- ❌ Circular refs (`A1 = B1 + 1`, `B1 = A1 + 1`)
+- ❌ Sheet names with `!`, `:`, `[`, `]`, `?`, `*`, `/`, `\` or > 31 chars
+- ❌ Bare English inside formula: `=Assumptions!B2 kali growth` (use `*`)
+- ❌ Using Shape C for flat tabular data (prefer A/B)
+- ❌ Hardcoding computed values — trust the evaluator
+- ❌ Cell style name typos: `"heading"`, `"inputs"`, `"bold"` (only 6 valid names)
+- ❌ Invalid A1 refs: `"1A"`, `"A"`, `"0"`, lowercase `"a1"`
+- ❌ More than 8 sheets, 500 cells/sheet, 200 formulas, or 64 named ranges
+
+**Universal:**
+- ❌ Truncation markers (`...more rows...`, `/* remaining cells */`)
+
+### Dependencies
+- `exceljs@4.4.0` (MIT) — workbook builder
+- `@formulajs/formulajs@4.6.0` (MIT) — ~500 Excel functions
+- `fast-formula-parser@1.0.19` (MIT) — AST parser + DepParser
+- All lazy-loaded — zero main bundle cost
+- **Zero new runtime deps:** no LibreOffice, no Pyodide coupling, no server-side recalc endpoint
+- All execution client-side, deterministic
 
 ---
 
@@ -838,7 +1016,7 @@ Tabel di atas (bagian "TL;DR — Matrix Kapabilitas") merangkum semua fitur per 
 - **Slides:** Unsplash images (imageUrl, backgroundImage, quoteImage, gallery), Mermaid diagrams, Lucide icons (inline `{icon:name}`), charts (bar, line, pie, donut), stats, gallery, comparison tables
 - **Mermaid:** Flowcharts, sequence, ER, state, class, Gantt, pie, quadrant, xychart, sankey, timeline, gitgraph, mindmap, journey (max 15 nodes each)
 - **Python:** Matplotlib plots, numpy, pandas, scipy, scikit-learn, pre-loaded packages
-- **Sheet:** Sort (lexicographic), filter (substring), export CSV
+- **Sheet:** 3 shapes (CSV / JSON array / spec `spreadsheet/v1`), sort + filter (flat data), formulas + named ranges + multi-sheet (spec), real `.xlsx` export dengan cached values, 6 cell styles, Excel number formats, frozen panes, merges, cell notes
 - **Markdown:** Inline/display KaTeX math, GFM tables, Mermaid diagrams inline, code blocks with syntax highlighting
 - **LaTeX:** KaTeX full symbol support, align/gather/cases environments, document structure
 
@@ -850,6 +1028,7 @@ Tabel di atas (bagian "TL;DR — Matrix Kapabilitas") merangkum semua fitur per 
 - **Python:** `requests`, `tensorflow`, `torch`, file I/O, `input()`, `threading`
 - **Slides:** Markdown syntax in text fields, real network images (use unsplash: protocol)
 - **Markdown:** Raw HTML tags, embedded images via data: URIs
+- **Sheet:** More than 8 sheets / 500 cells per sheet / 200 formulas / 64 named ranges, circular refs, HyperFormula-only functions (GPL rejected), server-side recalc (all client-side)
 
 ---
 
@@ -863,7 +1042,7 @@ Tabel di atas (bagian "TL;DR — Matrix Kapabilitas") merangkum semua fitur per 
 4. **Mermaid** — **Full chart suite** (pie, xychart, sankey, timeline) + diagrams
 5. **Code** — Display-only dengan syntax highlighting
 6. **Python** — **Matplotlib plots** + numpy/pandas/scipy, executable
-7. **Sheet** — **Sort + filter + CSV export** for tabular data
+7. **Sheet** — **3 content shapes** (CSV / JSON array / spec `spreadsheet/v1`) — flat tables get sort + filter + CSV, workbooks get **formulas + multi-sheet + named ranges + real XLSX export** (financial-model grade)
 8. **Markdown** — **KaTeX math + inline Mermaid** + GFM tables
 9. **LaTeX** — **Full KaTeX symbol set** + document structure
 10. **Slides** — **17 layouts dengan Unsplash images, Mermaid, icons, charts**
@@ -874,5 +1053,6 @@ Tabel di atas (bagian "TL;DR — Matrix Kapabilitas") merangkum semua fitur per 
 - ✓ HTML + images: `unsplash:keyword` protocol, or inline SVG, no external URLs
 - ✓ Mermaid charts: Pie, quadrant, xychart, sankey, timeline, gitgraph semua supported (v11)
 - ✓ Slides: Embed images, Mermaid, charts, icons, comparison tables semuanya bisa
-- ✓ React libraries: Recharts, Framer Motion, Lucide (pre-injected globals, no imports)
+- ✓ React (2026-04-24): upgraded dengan 7 aesthetic directions (editorial, brutalist, luxury, playful, industrial, organic, retro-futuristic) + dynamic Google Fonts via `// @aesthetic:` + `// @fonts:` directives. Validator hard-errors on missing directive, soft-warns on palette/font/motion direction mismatch. Zero new runtime deps, zero server-side bundler. Recharts + Framer Motion + Lucide tetap pre-injected globals.
 - ✓ Python: Pre-loaded numpy, matplotlib, pandas, scipy, scikit-learn
+- ✓ Sheet (2026-04-23): upgraded ke financial-model grade — spec `spreadsheet/v1` dengan formulas + multi-sheet + named ranges + real XLSX export via ExcelJS (cached values, no F9 recalc), `fast-formula-parser` + `@formulajs/formulajs` untuk eval (MIT, HyperFormula GPL ditolak), zero new runtime deps (semua client-side lazy-loaded), setara skill xlsx Claude AI tanpa LibreOffice
