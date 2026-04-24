@@ -1474,7 +1474,7 @@ describe("validateArtifactContent — application/react — fonts directive", ()
 
   it("accepts well-formed @fonts directive", () => {
     const code = `// @aesthetic: editorial
-// @fonts: Fraunces:wght@300..900, Inter:wght@400;500;700
+// @fonts: Fraunces:wght@300..900 | Inter:wght@400;500;700
 ${MINIMAL_BODY}`
     const r = validateArtifactContent("application/react", code)
     expect(r.ok).toBe(true)
@@ -1491,7 +1491,7 @@ ${MINIMAL_BODY}`
 
   it("hard-errors when more than 3 families declared", () => {
     const code = `// @aesthetic: editorial
-// @fonts: Inter:wght@400, Lora:wght@400, Roboto:wght@400, Poppins:wght@400
+// @fonts: Inter:wght@400 | Lora:wght@400 | Roboto:wght@400 | Poppins:wght@400
 ${MINIMAL_BODY}`
     const r = validateArtifactContent("application/react", code)
     expect(r.ok).toBe(false)
@@ -1548,7 +1548,7 @@ export default App`
 describe("validateArtifactContent — application/react — font soft-warn", () => {
   it("warns when editorial direction has no serif in @fonts", () => {
     const code = `// @aesthetic: editorial
-// @fonts: Inter:wght@400;500;700, Space Mono:wght@400;700
+// @fonts: Inter:wght@400;500;700 | Space Mono:wght@400;700
 function App() { return <div/> }
 export default App`
     const r = validateArtifactContent("application/react", code)
@@ -1558,7 +1558,7 @@ export default App`
 
   it("does NOT warn when editorial + Fraunces declared", () => {
     const code = `// @aesthetic: editorial
-// @fonts: Fraunces:wght@300..900, Inter:wght@400;500;700
+// @fonts: Fraunces:wght@300..900 | Inter:wght@400;500;700
 function App() { return <div/> }
 export default App`
     const r = validateArtifactContent("application/react", code)

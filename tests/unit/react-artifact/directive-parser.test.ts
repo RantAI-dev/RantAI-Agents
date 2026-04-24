@@ -82,7 +82,7 @@ export default () => null`
 describe("parseDirectives — fonts extraction", () => {
   it("extracts @fonts from line 2", () => {
     const code = `// @aesthetic: editorial
-// @fonts: Fraunces:wght@300..900, Inter:wght@400;500;700
+// @fonts: Fraunces:wght@300..900 | Inter:wght@400;500;700
 export default () => null`
     const result = parseDirectives(code)
     expect(result.fonts).toEqual([
@@ -106,7 +106,7 @@ export default App`
 
   it("trims whitespace from each family spec", () => {
     const code = `// @aesthetic: editorial
-// @fonts:   Fraunces:wght@300..900  ,  Inter:wght@400;500;700
+// @fonts:   Fraunces:wght@300..900  |  Inter:wght@400;500;700
 export default () => null`
     const result = parseDirectives(code)
     expect(result.fonts).toEqual([

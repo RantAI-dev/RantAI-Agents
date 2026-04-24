@@ -1,5 +1,5 @@
 // @aesthetic: brutalist
-// @fonts: Archivo Black:wght@400, JetBrains Mono:wght@400;700
+// @fonts: Archivo Black:wght@400 | JetBrains Mono:wght@400;700
 
 function App() {
   const [selected, setSelected] = useState('unused');

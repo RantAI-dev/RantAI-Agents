@@ -25,14 +25,14 @@ You CAN write \`import\` lines — the preprocessor strips them — but only fro
 ## Required Component Shape
 \`\`\`jsx
 // @aesthetic: editorial
-// @fonts: Fraunces:wght@300..900, Inter:wght@400;500;700
+// @fonts: Fraunces:wght@300..900 | Inter:wght@400;500;700
 function App() {
   return <div className="min-h-screen bg-[#faf5ef] text-[#0a0a0a] font-['Inter'] antialiased">...</div>;
 }
 export default App;
 \`\`\`
 - **Line 1 MUST be** \`// @aesthetic: <direction>\` (required).
-- **Line 2 MAY be** \`// @fonts: Family:spec, Family:spec\` (optional, defaults applied per direction).
+- **Line 2 MAY be** \`// @fonts: Family:spec | Family:spec\` (optional, defaults applied per direction).
 - **MUST** have \`export default\` (function or const).
 - **MUST** be a function component. **NEVER** \`class extends React.Component\`.
 - **NEVER** \`document.querySelector\` / \`document.getElementById\`. Use \`useRef\`.
@@ -61,7 +61,7 @@ For every React artifact, pick a distinctive aesthetic direction BEFORE writing 
 **Line 1 of the file (required, no preamble, no leading blank lines, no other comments before it):** \`// @aesthetic: <direction>\` where \`<direction>\` is exactly one of:
 \`editorial | brutalist | luxury | playful | industrial | organic | retro-futuristic\`
 
-**Line 2 of the file (optional, immediately after @aesthetic):** \`// @fonts: Family:spec, Family:spec\` — comma-separated Google Fonts family specs. Max 3 families. Omit to use the direction's default pairing.
+**Line 2 of the file (optional, immediately after @aesthetic):** \`// @fonts: Family:spec | Family:spec\` — pipe-separated Google Fonts family specs (pipe \`|\` because variable-axis specs like \`Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900\` already contain commas internally). Max 3 families. Omit to use the direction's default pairing.
 
 Valid family spec shapes:
 - \`Inter:wght@400;500;700\`
@@ -170,7 +170,7 @@ Valid family spec shapes:
     {
       label: "editorial — small-roaster brand page",
       code: `// @aesthetic: editorial
-// @fonts: Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900, Inter:wght@400;500;700
+// @fonts: Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900 | Inter:wght@400;500;700
 
 const SEASONAL = [
   { id: 'ETH-YIRG-2026', name: 'Yirgacheffe Kochere', origin: 'Ethiopia', notes: 'bergamot, jasmine, black tea', price: 22 },
@@ -228,7 +228,7 @@ export default App;`,
     {
       label: "brutalist — CLI tool homepage",
       code: `// @aesthetic: brutalist
-// @fonts: Space Grotesk:wght@400;500;700, JetBrains Mono:wght@400;700
+// @fonts: Space Grotesk:wght@400;500;700 | JetBrains Mono:wght@400;700
 
 function App() {
   const [copied, setCopied] = useState(false);
@@ -293,7 +293,7 @@ export default App;`,
     {
       label: "industrial — revenue dashboard with Recharts",
       code: `// @aesthetic: industrial
-// @fonts: Inter Tight:wght@400;500;700, Space Mono:wght@400;700
+// @fonts: Inter Tight:wght@400;500;700 | Space Mono:wght@400;700
 
 const REVENUE = [
   { month: 'Jan', revenue: 12400, orders: 142 },

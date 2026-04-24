@@ -1756,8 +1756,8 @@ function validateReact(content: string): ArtifactValidationResult {
     const bad = directives.fonts.filter((s) => !validateFontSpec(s))
     if (bad.length > 0) {
       errors.push(
-        `Malformed @fonts directive. Expected comma-separated Google Fonts specs like ` +
-          `"Fraunces:wght@300..900, Inter:wght@400;500;700". Bad: ${bad
+        `Malformed @fonts directive. Expected pipe-separated Google Fonts specs like ` +
+          `"Fraunces:wght@300..900 | Inter:wght@400;500;700". Bad: ${bad
             .map((s) => `"${s}"`)
             .join(", ")}.`
       )

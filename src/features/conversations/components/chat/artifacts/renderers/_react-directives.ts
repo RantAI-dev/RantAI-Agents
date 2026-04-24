@@ -89,7 +89,7 @@ export function parseDirectives(code: string): ParsedDirectives {
   const fontsMatch = line2.match(FONTS_LINE_REGEX)
   const fonts = fontsMatch
     ? fontsMatch[1]
-        .split(",")
+        .split("|")
         .map((s) => s.trim())
         .filter((s) => s.length > 0)
     : null

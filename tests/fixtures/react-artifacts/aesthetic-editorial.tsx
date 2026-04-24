@@ -1,5 +1,5 @@
 // @aesthetic: editorial
-// @fonts: Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900, Inter:wght@400;500;700
+// @fonts: Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900 | Inter:wght@400;500;700
 
 const ISSUES = [
   { no: 'No. 14', date: 'April 2026', title: 'The Quiet Renaissance of Small Print' },

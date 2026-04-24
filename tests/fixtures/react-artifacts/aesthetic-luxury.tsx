@@ -1,5 +1,5 @@
 // @aesthetic: luxury
-// @fonts: DM Serif Display:wght@400, DM Sans:wght@300;400;500;700
+// @fonts: DM Serif Display:wght@400 | DM Sans:wght@300;400;500;700
 
 function App() {
   return (
