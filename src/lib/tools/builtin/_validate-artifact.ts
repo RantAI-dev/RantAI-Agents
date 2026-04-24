@@ -19,6 +19,12 @@ import { parse as parseJs } from "@babel/parser"
 import type { ArtifactType } from "@/features/conversations/components/chat/artifacts/registry"
 import { detectShape, parseSpec } from "@/lib/spreadsheet/parse"
 import { evaluateWorkbook } from "@/lib/spreadsheet/formulas"
+import {
+  AESTHETIC_DIRECTIONS,
+  MAX_FONT_FAMILIES,
+  parseDirectives,
+  validateFontSpec,
+} from "@/features/conversations/components/chat/artifacts/renderers/_react-directives"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -1637,14 +1643,73 @@ function validateHtml(content: string): ArtifactValidationResult {
 // React validation
 // ---------------------------------------------------------------------------
 
+function stripDirectiveLines(
+  content: string,
+  directives: { rawAestheticLine: string | null; rawFontsLine: string | null }
+): string {
+  const lines = content.split("\n")
+  if (directives.rawFontsLine && lines[1] === directives.rawFontsLine) {
+    lines[1] = ""
+  }
+  if (directives.rawAestheticLine && lines[0] === directives.rawAestheticLine) {
+    lines[0] = ""
+  }
+  return lines.join("\n")
+}
+
 function validateReact(content: string): ArtifactValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
-  // 1. Must parse as JSX/ES2022
+  // 0. Directive enforcement — before any JS parsing, so bad directives
+  //    surface a clear author-time error instead of a confusing parse fail.
+  const directives = parseDirectives(content)
+
+  if (!directives.rawAestheticLine) {
+    errors.push(
+      'Missing "// @aesthetic: <direction>" directive on line 1. Pick one of: ' +
+        AESTHETIC_DIRECTIONS.join(", ") +
+        ". See prompt rules for direction selection heuristic."
+    )
+    return { ok: false, errors, warnings }
+  }
+  if (!directives.aesthetic) {
+    // rawAestheticLine is present but value was unrecognized
+    const badValue = directives.rawAestheticLine
+      .replace(/^\s*\/\/\s*@aesthetic\s*:\s*/, "")
+      .trim()
+    errors.push(
+      `Unknown aesthetic direction "${badValue}". Valid: ` +
+        AESTHETIC_DIRECTIONS.join(", ") +
+        "."
+    )
+    return { ok: false, errors, warnings }
+  }
+  if (directives.fonts) {
+    if (directives.fonts.length > MAX_FONT_FAMILIES) {
+      errors.push(
+        `Too many font families in @fonts directive (${directives.fonts.length}). Max is ${MAX_FONT_FAMILIES}.`
+      )
+      return { ok: false, errors, warnings }
+    }
+    const bad = directives.fonts.filter((s) => !validateFontSpec(s))
+    if (bad.length > 0) {
+      errors.push(
+        `Malformed @fonts directive. Expected comma-separated Google Fonts specs like ` +
+          `"Fraunces:wght@300..900, Inter:wght@400;500;700". Bad: ${bad
+            .map((s) => `"${s}"`)
+            .join(", ")}.`
+      )
+      return { ok: false, errors, warnings }
+    }
+  }
+
+  // 1. Must parse as JSX/ES2022 — strip directive lines first so Babel
+  //    doesn't see top-level comments that vary each artifact.
+  const contentForParse = stripDirectiveLines(content, directives)
   let ast
   try {
-    ast = parseJs(content, {
+    ast = parseJs(contentForParse, {
       sourceType: "module",
       allowReturnOutsideFunction: true,
       plugins: ["jsx"],
