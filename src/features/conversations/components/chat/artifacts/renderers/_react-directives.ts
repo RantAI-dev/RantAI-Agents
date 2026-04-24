@@ -97,3 +97,68 @@ export function parseDirectives(code: string): ParsedDirectives {
 
   return { aesthetic, fonts, rawAestheticLine, rawFontsLine }
 }
+
+/**
+ * Validate a Google Fonts CSS2 family spec. The regex matches the four
+ * canonical axis forms: wght, ital+wght, opsz+wght, ital+opsz+wght.
+ *
+ * Rejects specs with characters outside the safe set (anything beyond
+ * alphanumeric, spaces, colons, semicolons, commas, dots, and `@`).
+ * This prevents URL injection into the fonts.googleapis.com href.
+ */
+const FONT_SPEC_REGEX =
+  /^[A-Z][A-Za-z0-9 ]{1,40}:(wght@[\d;.]+|ital,wght@[\d;,.]+|opsz,wght@[\d;,.]+|ital,opsz,wght@[\d;,.]+)$/
+
+export function validateFontSpec(spec: string): boolean {
+  return FONT_SPEC_REGEX.test(spec)
+}
+
+/**
+ * Build `<link>` tags for Google Fonts. Called by the renderer's
+ * `buildSrcdoc` to inject webfonts into the sandbox.
+ *
+ * Rules:
+ *  - If `fonts` is null, use the direction's default specs.
+ *  - If any entry in `fonts` fails `validateFontSpec`, fall back to the
+ *    direction default (precision > partial trust).
+ *  - If `fonts` exceeds MAX_FONT_FAMILIES, fall back to the direction default.
+ *  - Always emit preconnect hints + the stylesheet link.
+ */
+export function buildFontLinks(
+  aesthetic: AestheticDirection,
+  fonts: string[] | null
+): string {
+  const specs = resolveSpecs(aesthetic, fonts)
+  const familyParams = specs
+    .map((spec) => `family=${encodeFontSpec(spec)}`)
+    .join("&")
+  const url = `https://fonts.googleapis.com/css2?${familyParams}&display=swap`
+  return [
+    `<link rel="preconnect" href="https://fonts.googleapis.com">`,
+    `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>`,
+    `<link href="${url}" rel="stylesheet">`,
+  ].join("\n")
+}
+
+function resolveSpecs(
+  aesthetic: AestheticDirection,
+  fonts: string[] | null
+): string[] {
+  if (!fonts) return DEFAULT_FONTS_BY_DIRECTION[aesthetic]
+  if (fonts.length === 0 || fonts.length > MAX_FONT_FAMILIES) {
+    return DEFAULT_FONTS_BY_DIRECTION[aesthetic]
+  }
+  if (!fonts.every(validateFontSpec)) {
+    return DEFAULT_FONTS_BY_DIRECTION[aesthetic]
+  }
+  return fonts
+}
+
+/**
+ * Google Fonts css2 endpoint uses `+` for spaces in family names but
+ * keeps `:`, `;`, `,`, `.`, `@`, and digits literal. Standard
+ * encodeURIComponent would over-escape these.
+ */
+function encodeFontSpec(spec: string): string {
+  return spec.replace(/ /g, "+")
+}
