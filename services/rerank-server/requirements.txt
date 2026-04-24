@@ -1,0 +1,9 @@
+# Pinned for rerank-server sidecar. Loads nvidia/llama-nemotron-rerank-1b-v2.
+# Install into an isolated venv: python -m venv ~/vllm-env && ~/vllm-env/bin/pip install -r requirements.txt
+transformers>=4.57.0,<4.60
+torch>=2.8.0,<2.11
+fastapi>=0.135,<0.140
+uvicorn[standard]>=0.32,<0.40
+pydantic>=2.8
+accelerate>=0.34
+tokenizers>=0.20

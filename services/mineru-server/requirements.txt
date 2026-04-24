@@ -1,0 +1,7 @@
+# Pinned for mineru-server sidecar. MinerU is the real heavy lifter; this file only
+# captures the glue deps. mineru-vl-utils + vllm should already be present in the
+# venv (installed alongside the MinerU model pull).
+fastapi>=0.135,<0.140
+uvicorn[standard]>=0.32,<0.40
+pydantic>=2.8
+mineru-vl-utils>=2.5
