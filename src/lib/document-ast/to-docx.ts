@@ -31,6 +31,7 @@ import type { BlockNode, InlineNode } from "./schema"
 import { mermaidToSvg } from "@/lib/rendering/server/mermaid-to-svg"
 import { svgToPng } from "@/lib/rendering/server/svg-to-png"
 import { resizeSvg } from "@/lib/rendering/resize-svg"
+import { chartToSvg } from "@/lib/rendering/chart-to-svg"
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -231,6 +232,45 @@ async function renderMermaid(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Chart rendering
+// ────────────────────────────────────────────────────────────────────────────
+
+async function renderChart(
+  node: Extract<BlockNode, { type: "chart" }>,
+  _ctx: RenderCtx,
+): Promise<Paragraph[]> {
+  const w = node.width ?? 1200
+  const h = node.height ?? 600
+  const alt = node.alt ?? node.caption ?? "Chart"
+
+  const rawSvg = chartToSvg(node.chart, w, h)
+  const sizedSvg = resizeSvg(rawSvg, w, h)
+  const pngBuffer = await svgToPng(sizedSvg, w, h)
+
+  const image = new Paragraph({
+    alignment: AlignmentType.CENTER,
+    children: [
+      new ImageRun({
+        type: "png",
+        data: pngBuffer,
+        transformation: { width: w, height: h },
+        altText: { title: alt, description: alt, name: alt },
+      }),
+    ],
+  })
+  const paragraphs: Paragraph[] = [image]
+  if (node.caption) {
+    paragraphs.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: node.caption, italics: true, size: 18 })],
+      }),
+    )
+  }
+  return paragraphs
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Block rendering
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -322,6 +362,9 @@ async function renderBlock(node: BlockNode, ctx: RenderCtx): Promise<(Paragraph 
 
     case "mermaid":
       return renderMermaid(node, ctx)
+
+    case "chart":
+      return renderChart(node, ctx)
 
     case "pageBreak":
       return [new Paragraph({ children: [new PageBreak()] })]

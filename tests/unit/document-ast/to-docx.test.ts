@@ -460,3 +460,45 @@ describe("astToDocx — mermaid block", () => {
   // in renderMermaid returns a red-italic caption paragraph on mermaid parse
   // failure. End-to-end mock coverage would add complexity without proportional value.
 })
+
+describe("astToDocx — chart block", () => {
+  const meta = {
+    title: "T",
+    pageSize: "letter" as const,
+    orientation: "portrait" as const,
+    font: "Arial",
+    fontSize: 12,
+    showPageNumbers: false,
+  }
+
+  it("embeds a bar chart as an image part", async () => {
+    const buf = await astToDocx({
+      meta,
+      body: [
+        {
+          type: "chart",
+          chart: { type: "bar", title: "Revenue", data: [{ label: "Q1", value: 100 }, { label: "Q2", value: 200 }] },
+          caption: "Revenue by quarter",
+        },
+      ],
+    })
+    expect(buf[0]).toBe(0x50)
+    expect(buf.length).toBeGreaterThan(5_000)
+    expect(buf.toString("binary")).toMatch(/word\/media\//)
+  })
+
+  it("emits the caption paragraph", async () => {
+    const buf = await astToDocx({
+      meta,
+      body: [
+        {
+          type: "chart",
+          chart: { type: "pie", data: [{ label: "A", value: 1 }, { label: "B", value: 2 }] },
+          caption: "Pie caption",
+        },
+      ],
+    })
+    const text = (await mammoth.extractRawText({ buffer: buf })).value
+    expect(text).toContain("Pie caption")
+  })
+})
