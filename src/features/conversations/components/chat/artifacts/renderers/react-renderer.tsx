@@ -5,6 +5,7 @@ import { AlertTriangle, RotateCcw, Code, Loader2, Wand2 } from "@/lib/icons"
 import { IFRAME_NAV_BLOCKER_SCRIPT } from "./_iframe-nav-blocker"
 import {
   parseDirectives,
+  buildFontLinks,
   type AestheticDirection,
   type ParsedDirectives,
 } from "./_react-directives"
@@ -241,10 +242,16 @@ function preprocessCode(code: string): {
 function buildSrcdoc(
   code: string,
   componentName: string,
-  _directives: ParsedDirectives
+  directives: ParsedDirectives
 ): string {
   // Escape </script> inside user code to prevent breaking out of the script tag
   const escapedCode = code.replace(/<\/script>/gi, "<\\/script>")
+
+  // Pick fonts based on declared @aesthetic + @fonts directives. Falls back
+  // to "industrial" defaults if the aesthetic is somehow null at this point
+  // (validator should have caught it upstream, but defend anyway).
+  const aesthetic: AestheticDirection = directives.aesthetic ?? "industrial"
+  const fontLinks = buildFontLinks(aesthetic, directives.fonts)
 
   return `<!DOCTYPE html>
 <html>
@@ -252,9 +259,7 @@ function buildSrcdoc(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdn.tailwindcss.com"><\/script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+${fontLinks}
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
@@ -264,7 +269,7 @@ function buildSrcdoc(
 <script crossorigin src="https://unpkg.com/framer-motion@11/dist/framer-motion.js"><\/script>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
-  body { margin: 0; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
   #root { min-height: 100vh; }
 </style>
 </head>
