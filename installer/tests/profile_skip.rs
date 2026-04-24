@@ -22,7 +22,10 @@ fn rerank_provider_labels_are_unique() {
         RerankProvider::Cohere.as_str(),
     ];
     assert_eq!(
-        labels.iter().collect::<std::collections::HashSet<_>>().len(),
+        labels
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
         3
     );
 }
@@ -54,7 +57,10 @@ fn profile_labels_are_unique() {
     ];
     assert_eq!(labels.len(), 3);
     assert_eq!(
-        labels.iter().collect::<std::collections::HashSet<_>>().len(),
+        labels
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
         3,
         "labels must be distinct"
     );
