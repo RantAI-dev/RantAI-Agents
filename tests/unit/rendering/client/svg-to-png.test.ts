@@ -9,10 +9,15 @@ describe("svgToBase64Png — upscale allowed (sizing bug regression)", () => {
   beforeEach(() => {
     drawImageArgs = []
 
-    // Stub HTMLCanvasElement getContext to capture drawImage arguments
+    // Stub HTMLCanvasElement getContext to capture drawImage arguments.
+    // Cast-through-unknown because getContext's type is a signature union
+    // across 2d/bitmaprenderer/webgl/webgl2/webgpu overloads — the stub only
+    // needs the 2d path and falls through to the real impl for others.
     const realGetContext = HTMLCanvasElement.prototype.getContext
     HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string) {
-      if (type !== "2d") return realGetContext.call(this, type as "2d")
+      if (type !== "2d") {
+        return (realGetContext as unknown as (t: string) => RenderingContext | null).call(this, type)
+      }
       return {
         fillStyle: "",
         fillRect: () => {},
@@ -23,7 +28,7 @@ describe("svgToBase64Png — upscale allowed (sizing bug regression)", () => {
           drawImageArgs.push([x, y, w, h])
         },
       } as unknown as CanvasRenderingContext2D
-    }
+    } as unknown as typeof HTMLCanvasElement.prototype.getContext
 
     // Stub canvas.toDataURL so the promise resolves
     HTMLCanvasElement.prototype.toDataURL = () => "data:image/png;base64,stub"
