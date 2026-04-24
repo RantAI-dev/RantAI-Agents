@@ -20,10 +20,7 @@ export default defineConfig({
     // only need icon symbols to exist as truthy objects — they never render
     // the components.
     setupFiles: ["./tests/setup-icons-stub.ts"],
-    // Keep default environment as node; only JSX/DOM tests need jsdom.
-    environmentMatchGlobs: [
-      ["**/*.test.tsx", "jsdom"],
-      ["**/artifacts/renderers/__tests__/**", "jsdom"],
-    ],
+    // Keep default environment as node; tests that need jsdom declare it
+    // per-file via `// @vitest-environment jsdom` (vitest 4 idiom).
   },
 })
