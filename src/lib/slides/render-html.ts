@@ -1,5 +1,5 @@
 import type { PresentationData, SlideData } from "./types"
-import { chartToSvg } from "./chart-to-svg"
+import { chartToSvg } from "@/lib/rendering/chart-to-svg"
 import { cleanMarkdown, darkenColor, CHART_DIMENSIONS } from "./utils"
 import { resolveIconsInText, getIconSvg } from "./icons"
 
