@@ -63,3 +63,37 @@ export interface ParsedDirectives {
   /** Raw fonts line if present (for stripping from source). */
   rawFontsLine: string | null
 }
+
+const AESTHETIC_LINE_REGEX = /^\s*\/\/\s*@aesthetic\s*:\s*([a-z-]+)\s*$/
+const FONTS_LINE_REGEX = /^\s*\/\/\s*@fonts\s*:\s*(.+?)\s*$/
+
+/**
+ * Extract `// @aesthetic:` and `// @fonts:` directives from the first two
+ * lines of a React artifact. Neither directive is altered in the returned
+ * code — the caller is responsible for stripping `rawAestheticLine` /
+ * `rawFontsLine` before passing to Babel.
+ */
+export function parseDirectives(code: string): ParsedDirectives {
+  const lines = code.split("\n")
+  const line1 = lines[0] ?? ""
+  const line2 = lines[1] ?? ""
+
+  const aestheticMatch = line1.match(AESTHETIC_LINE_REGEX)
+  const aestheticValue = aestheticMatch?.[1] ?? null
+  const aesthetic: AestheticDirection | null =
+    aestheticValue && (AESTHETIC_DIRECTIONS as readonly string[]).includes(aestheticValue)
+      ? (aestheticValue as AestheticDirection)
+      : null
+  const rawAestheticLine = aestheticMatch ? line1 : null
+
+  const fontsMatch = line2.match(FONTS_LINE_REGEX)
+  const fonts = fontsMatch
+    ? fontsMatch[1]
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+    : null
+  const rawFontsLine = fontsMatch ? line2 : null
+
+  return { aesthetic, fonts, rawAestheticLine, rawFontsLine }
+}
