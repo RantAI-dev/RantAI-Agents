@@ -28,6 +28,9 @@ import {
 } from "docx"
 import type { DocumentAst } from "./schema"
 import type { BlockNode, InlineNode } from "./schema"
+import { mermaidToSvg } from "@/lib/rendering/server/mermaid-to-svg"
+import { svgToPng } from "@/lib/rendering/server/svg-to-png"
+import { resizeSvg } from "@/lib/rendering/resize-svg"
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -180,6 +183,54 @@ async function renderImage(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Mermaid rendering
+// ────────────────────────────────────────────────────────────────────────────
+
+async function renderMermaid(
+  node: Extract<BlockNode, { type: "mermaid" }>,
+  _ctx: RenderCtx,
+): Promise<Paragraph[]> {
+  const w = node.width ?? 1200
+  const h = node.height ?? 800
+  const alt = node.alt ?? node.caption ?? "Diagram"
+
+  try {
+    const rawSvg = await mermaidToSvg(node.code)
+    const sizedSvg = resizeSvg(rawSvg, w, h)
+    const pngBuffer = await svgToPng(sizedSvg, w, h)
+
+    const image = new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [
+        new ImageRun({
+          type: "png",
+          data: pngBuffer,
+          transformation: { width: w, height: h },
+          altText: { title: alt, description: alt, name: alt },
+        }),
+      ],
+    })
+    const paragraphs: Paragraph[] = [image]
+    if (node.caption) {
+      paragraphs.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [new TextRun({ text: node.caption, italics: true, size: 20 })],
+        }),
+      )
+    }
+    return paragraphs
+  } catch {
+    return [
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new TextRun({ text: node.caption ?? "[diagram failed to render]", italics: true, color: "AA0000" })],
+      }),
+    ]
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Block rendering
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -268,6 +319,9 @@ async function renderBlock(node: BlockNode, ctx: RenderCtx): Promise<(Paragraph 
 
     case "image":
       return renderImage(node, ctx)
+
+    case "mermaid":
+      return renderMermaid(node, ctx)
 
     case "pageBreak":
       return [new Paragraph({ children: [new PageBreak()] })]

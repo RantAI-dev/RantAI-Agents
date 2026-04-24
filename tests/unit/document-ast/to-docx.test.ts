@@ -410,3 +410,53 @@ describe("astToDocx — tables", () => {
     expect(text).toContain("c")
   })
 })
+
+describe("astToDocx — mermaid block", () => {
+  const meta = {
+    title: "T",
+    pageSize: "letter" as const,
+    orientation: "portrait" as const,
+    font: "Arial",
+    fontSize: 12,
+    showPageNumbers: false,
+  }
+
+  it("embeds the rendered diagram as an image part", async () => {
+    const buf = await astToDocx({
+      meta,
+      body: [{ type: "mermaid", code: "flowchart TD\n  A --> B", caption: "Fig 1" }],
+    })
+    expect(buf[0]).toBe(0x50) // zip magic
+    expect(buf.length).toBeGreaterThan(5_000)
+    const zipContent = buf.toString("binary")
+    expect(zipContent).toMatch(/word\/media\//)
+  })
+
+  it("emits a caption paragraph after the diagram", async () => {
+    const buf = await astToDocx({
+      meta,
+      body: [{ type: "mermaid", code: "flowchart TD\n  A --> B", caption: "My caption" }],
+    })
+    const text = (await mammoth.extractRawText({ buffer: buf })).value
+    expect(text).toContain("My caption")
+  })
+
+  it("renders two mermaid blocks in the same process without DOMPurify singleton corruption", async () => {
+    // First render
+    const buf1 = await astToDocx({
+      meta,
+      body: [{ type: "mermaid", code: "flowchart TD\n  A --> B" }],
+    })
+    expect(buf1.toString("binary")).toMatch(/word\/media\//)
+
+    // Second render — if DOMPurify broke, this would return a zip with no image (empty SVG)
+    const buf2 = await astToDocx({
+      meta,
+      body: [{ type: "mermaid", code: "sequenceDiagram\n  Alice->>Bob: hello" }],
+    })
+    expect(buf2.toString("binary")).toMatch(/word\/media\//)
+  })
+  // Fallback path is covered at implementation-inspection time: the try/catch
+  // in renderMermaid returns a red-italic caption paragraph on mermaid parse
+  // failure. End-to-end mock coverage would add complexity without proportional value.
+})
