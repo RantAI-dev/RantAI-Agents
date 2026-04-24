@@ -1726,25 +1726,36 @@ function validateReact(content: string): ArtifactValidationResult {
   //    surface a clear author-time error instead of a confusing parse fail.
   const directives = parseDirectives(content)
 
+  const aestheticRequired =
+    process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"
+
   if (!directives.rawAestheticLine) {
-    errors.push(
-      'Missing "// @aesthetic: <direction>" directive on line 1. Pick one of: ' +
-        AESTHETIC_DIRECTIONS.join(", ") +
-        ". See prompt rules for direction selection heuristic."
-    )
-    return { ok: false, errors, warnings }
-  }
-  if (!directives.aesthetic) {
-    // rawAestheticLine is present but value was unrecognized
+    const message =
+      '@aesthetic directive missing on line 1. Pick one of: ' +
+      AESTHETIC_DIRECTIONS.join(", ") +
+      ". See prompt rules for direction selection heuristic."
+    if (aestheticRequired) {
+      errors.push(message)
+      return { ok: false, errors, warnings }
+    } else {
+      warnings.push(message)
+      // Continue without aesthetic — soft-warns below are skipped because
+      // directives.aesthetic is null.
+    }
+  } else if (!directives.aesthetic) {
     const badValue = directives.rawAestheticLine
       .replace(/^\s*\/\/\s*@aesthetic\s*:\s*/, "")
       .trim()
-    errors.push(
+    const message =
       `Unknown aesthetic direction "${badValue}". Valid: ` +
-        AESTHETIC_DIRECTIONS.join(", ") +
-        "."
-    )
-    return { ok: false, errors, warnings }
+      AESTHETIC_DIRECTIONS.join(", ") +
+      "."
+    if (aestheticRequired) {
+      errors.push(message)
+      return { ok: false, errors, warnings }
+    } else {
+      warnings.push(message)
+    }
   }
   if (directives.fonts) {
     if (directives.fonts.length > MAX_FONT_FAMILIES) {
@@ -1853,7 +1864,9 @@ function validateReact(content: string): ArtifactValidationResult {
   // 4. Soft-warn heuristics — aesthetic/style mismatches that should be
   //    surfaced to the author but not block creation. Deliberately simple:
   //    precision over recall, fewer false positives > catching every nit.
-  appendAestheticWarnings(content, directives.aesthetic, directives.fonts, warnings)
+  if (directives.aesthetic) {
+    appendAestheticWarnings(content, directives.aesthetic, directives.fonts, warnings)
+  }
 
   return { ok: errors.length === 0, errors, warnings }
 }

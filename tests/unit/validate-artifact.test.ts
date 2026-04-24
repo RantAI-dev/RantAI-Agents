@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, afterEach } from "vitest"
 import { validateArtifactContent } from "@/lib/tools/builtin/_validate-artifact"
 
 const VALID_HTML = `<!DOCTYPE html>
@@ -1595,5 +1595,34 @@ function App() {
 export default App`
     const r = validateArtifactContent("application/react", code)
     expect(r.warnings.join("\n")).not.toMatch(/motion/i)
+  })
+})
+
+describe("validateArtifactContent — application/react — rollback flag", () => {
+  const BODY_WITHOUT_DIRECTIVE = `function App() { return <div/> }\nexport default App`
+  const orig = process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
+
+  afterEach(() => {
+    if (orig === undefined) delete process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
+    else process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = orig
+  })
+
+  it("hard-errors on missing directive by default (flag unset)", () => {
+    delete process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
+    const r = validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
+    expect(r.ok).toBe(false)
+  })
+
+  it("hard-errors on missing directive when flag='true' (explicit)", () => {
+    process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = "true"
+    const r = validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
+    expect(r.ok).toBe(false)
+  })
+
+  it("passes when flag='false' even without directive", () => {
+    process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = "false"
+    const r = validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).toMatch(/@aesthetic.*missing/i)
   })
 })
