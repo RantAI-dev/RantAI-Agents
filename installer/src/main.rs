@@ -23,7 +23,8 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 
-use app::{App, InstallMode, Screen};
+use app::{App, InstallMode, InstallProfile, Screen};
+use ui::screens::profile_select;
 
 #[derive(Parser)]
 #[command(name = "rantai-agents-installer", about = "RantAI Agents Installer")]
@@ -211,9 +212,37 @@ fn run_event_loop(
                 }
 
                 match app.screen {
-                    Screen::Welcome => match key.code {
-                        KeyCode::Enter => app.screen = Screen::ModeSelect,
-                        KeyCode::Char('q') => app.should_quit = true,
+                    Screen::Welcome => {
+                        if let KeyCode::Enter = key.code {
+                            app.screen = Screen::ProfileSelect;
+                        }
+                        if let KeyCode::Char('q') = key.code {
+                            app.should_quit = true;
+                        }
+                    }
+                    Screen::ProfileSelect => match key.code {
+                        KeyCode::Up => {
+                            if app.profile_index > 0 {
+                                app.profile_index -= 1;
+                            }
+                        }
+                        KeyCode::Down => {
+                            if app.profile_index < 2 {
+                                app.profile_index += 1;
+                            }
+                        }
+                        KeyCode::Enter => {
+                            app.config.profile = profile_select::selected_profile(app);
+                            // SidecarOnly skips ModeSelect/OptionalServices — those are app-side decisions.
+                            app.screen = if app.config.profile == InstallProfile::SidecarOnly {
+                                Screen::Config
+                            } else {
+                                Screen::ModeSelect
+                            };
+                        }
+                        KeyCode::Esc => {
+                            app.screen = Screen::Welcome;
+                        }
                         _ => {}
                     },
                     Screen::ModeSelect => match key.code {
