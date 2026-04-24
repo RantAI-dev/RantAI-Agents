@@ -7,6 +7,7 @@
  */
 
 import { svgToBase64Png } from "./svg-to-png"
+import { MERMAID_INIT_OPTIONS } from "../mermaid-theme"
 
 /**
  * Render Mermaid diagram code to a base64 PNG data URL.
@@ -20,22 +21,9 @@ export async function mermaidToBase64Png(
   try {
     const mermaid = await import("mermaid").then((m) => m.default)
 
-    mermaid.initialize({
-      startOnLoad: false,
-      theme: "base",
-      themeVariables: {
-        background: "#ffffff",
-        primaryColor: "#ffffff",
-        primaryTextColor: "#1c1c1c",
-        primaryBorderColor: "#e2e1de",
-        lineColor: "#6b6b6b",
-        textColor: "#1c1c1c",
-        fontFamily: "system-ui, -apple-system, sans-serif",
-        fontSize: "14px",
-      },
-    })
+    mermaid.initialize(MERMAID_INIT_OPTIONS)
 
-    const id = `pptx-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    const id = `mmd-${Date.now()}-${Math.random().toString(36).slice(2)}`
     const { svg } = await mermaid.render(id, diagramCode.trim())
 
     return svgToBase64Png(svg, width, height)
