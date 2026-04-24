@@ -15,7 +15,7 @@ fn default_sidecar_config_is_vllm_localhost() {
 }
 
 #[test]
-fn rerank_provider_labels_are_unique() {
+fn rerank_provider_env_strings_are_unique() {
     let labels = [
         RerankProvider::Openrouter.as_str(),
         RerankProvider::Vllm.as_str(),
@@ -27,6 +27,23 @@ fn rerank_provider_labels_are_unique() {
             .collect::<std::collections::HashSet<_>>()
             .len(),
         3
+    );
+}
+
+#[test]
+fn rerank_provider_display_labels_are_unique() {
+    let labels = [
+        RerankProvider::Openrouter.label(),
+        RerankProvider::Vllm.label(),
+        RerankProvider::Cohere.label(),
+    ];
+    assert_eq!(
+        labels
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        3,
+        "display labels must be distinct (they appear in the TUI picker)"
     );
 }
 
@@ -83,6 +100,7 @@ fn sidecar_only_profile_skips_app_phases() {
     for phase in [
         Phase::Infrastructure,
         Phase::ApplicationSetup,
+        Phase::Configuration,
         Phase::Database,
         Phase::Services,
     ] {

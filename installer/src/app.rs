@@ -186,7 +186,7 @@ impl Default for SidecarConfig {
             rerank_provider: RerankProvider::Vllm,
             rerank_base_url: "http://localhost:8200".into(),
             rerank_port: 8200,
-            rerank_model: "nvidia/llama-nemotron-rerank-1b-v2".into(),
+            rerank_model: RerankProvider::Vllm.default_model().to_owned(),
             rerank_api_key: String::new(),
 
             gpu_device_id: 0,
