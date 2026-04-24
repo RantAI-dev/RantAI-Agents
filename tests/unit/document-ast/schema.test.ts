@@ -151,3 +151,55 @@ describe("DocumentAstSchema — mermaid block node", () => {
     expect(DocumentAstSchema.safeParse(ast).success).toBe(false)
   })
 })
+
+describe("DocumentAstSchema — chart block node", () => {
+  const baseMeta = {
+    title: "T",
+    pageSize: "letter" as const,
+    orientation: "portrait" as const,
+    font: "Arial",
+    fontSize: 12,
+    showPageNumbers: false,
+  }
+
+  it("accepts a bar chart block", () => {
+    const ast = {
+      meta: baseMeta,
+      body: [
+        {
+          type: "chart",
+          chart: {
+            type: "bar",
+            title: "Revenue",
+            data: [{ label: "Q1", value: 100 }, { label: "Q2", value: 150 }],
+          },
+        },
+      ],
+    }
+    expect(DocumentAstSchema.safeParse(ast).success).toBe(true)
+  })
+
+  it("accepts chart with caption and dimensions", () => {
+    const ast = {
+      meta: baseMeta,
+      body: [
+        {
+          type: "chart",
+          chart: { type: "pie", data: [{ label: "A", value: 1 }, { label: "B", value: 2 }] },
+          caption: "Share by segment",
+          width: 1000,
+          height: 500,
+        },
+      ],
+    }
+    expect(DocumentAstSchema.safeParse(ast).success).toBe(true)
+  })
+
+  it("rejects unknown chart type inside the chart field", () => {
+    const ast = {
+      meta: baseMeta,
+      body: [{ type: "chart", chart: { type: "radar", data: [] } }],
+    }
+    expect(DocumentAstSchema.safeParse(ast).success).toBe(false)
+  })
+})

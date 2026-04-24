@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { ChartDataSchema } from "@/lib/slides/types.zod"
+import type { ChartData } from "@/lib/slides/types"
 
 // ────────────────────────────────────────────────────────────────────────────
 // Meta & Cover
@@ -99,6 +101,14 @@ export type BlockNode =
   | {
       type: "mermaid"
       code: string
+      caption?: string
+      width?: number
+      height?: number
+      alt?: string
+    }
+  | {
+      type: "chart"
+      chart: ChartData
       caption?: string
       width?: number
       height?: number
@@ -306,6 +316,15 @@ export const BlockNodeSchema: z.ZodType<BlockNode> = z.lazy(() =>
       caption: z.string().max(200).optional(),
       width: z.number().int().positive().min(200).max(1600).optional().default(1200),
       height: z.number().int().positive().min(150).max(1200).optional().default(800),
+      alt: z.string().max(500).optional(),
+    }),
+    // chart
+    z.object({
+      type: z.literal("chart"),
+      chart: ChartDataSchema,
+      caption: z.string().max(200).optional(),
+      width: z.number().int().positive().min(200).max(1600).optional().default(1200),
+      height: z.number().int().positive().min(150).max(1200).optional().default(600),
       alt: z.string().max(500).optional(),
     }),
   ])
