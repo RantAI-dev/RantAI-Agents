@@ -3,6 +3,12 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from "react"
 import { AlertTriangle, RotateCcw, Code, Loader2, Wand2 } from "@/lib/icons"
 import { IFRAME_NAV_BLOCKER_SCRIPT } from "./_iframe-nav-blocker"
+import {
+  parseDirectives,
+  buildFontLinks,
+  type AestheticDirection,
+  type ParsedDirectives,
+} from "./_react-directives"
 
 interface ReactRendererProps {
   content: string
@@ -62,12 +68,27 @@ function preprocessCode(code: string): {
   processedCode: string
   componentName: string
   unsupportedImports: string[]
+  directives: ParsedDirectives
 } {
   const preamble: string[] = []
   const unsupportedImports: string[] = []
   let componentName = "App"
 
   let processed = code
+
+  // Extract directives from line 1 + line 2, strip them from the code that
+  // gets passed to Babel (the <link> tags are handled in buildSrcdoc).
+  const directives = parseDirectives(processed)
+  if (directives.rawAestheticLine || directives.rawFontsLine) {
+    const lines = processed.split("\n")
+    if (directives.rawAestheticLine && lines[0] === directives.rawAestheticLine) {
+      lines[0] = ""
+    }
+    if (directives.rawFontsLine && lines[1] === directives.rawFontsLine) {
+      lines[1] = ""
+    }
+    processed = lines.join("\n")
+  }
 
   // Hide template literal contents to avoid matching imports inside strings
   const tplStore: string[] = []
@@ -213,12 +234,16 @@ function preprocessCode(code: string): {
 
   const finalCode = preamble.join("\n") + "\n\n" + processed
 
-  return { processedCode: finalCode.trim(), componentName, unsupportedImports }
+  return { processedCode: finalCode.trim(), componentName, unsupportedImports, directives }
 }
 
 /* ── HTML template for the sandboxed iframe ─────────────────── */
 
-function buildSrcdoc(code: string, componentName: string): string {
+function buildSrcdoc(
+  code: string,
+  componentName: string,
+  directives: ParsedDirectives
+): string {
   // Escape </script> inside user code to prevent breaking out of the script tag
   const escapedCode = code.replace(/<\/script>/gi, "<\\/script>")
 
@@ -361,14 +386,17 @@ export function ReactRenderer({ content, onFixWithAI }: ReactRendererProps) {
   const { srcdoc, unsupported } = useMemo(() => {
     setError(null)
     try {
-      const { processedCode, componentName, unsupportedImports } = preprocessCode(content)
+      const { processedCode, componentName, unsupportedImports, directives } = preprocessCode(content)
       if (unsupportedImports.length > 0) {
         setError(
           `Unsupported ${unsupportedImports.length === 1 ? "library" : "libraries"}: ${unsupportedImports.join(", ")}. ` +
           `Available: react, recharts, lucide-react, framer-motion.`
         )
       }
-      return { srcdoc: buildSrcdoc(processedCode, componentName), unsupported: unsupportedImports }
+      return {
+        srcdoc: buildSrcdoc(processedCode, componentName, directives),
+        unsupported: unsupportedImports,
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process code")
       return { srcdoc: "", unsupported: [] }
