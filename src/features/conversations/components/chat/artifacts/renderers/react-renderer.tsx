@@ -5,7 +5,6 @@ import { AlertTriangle, RotateCcw, Code, Loader2, Wand2 } from "@/lib/icons"
 import { IFRAME_NAV_BLOCKER_SCRIPT } from "./_iframe-nav-blocker"
 import {
   parseDirectives,
-  buildFontLinks,
   type AestheticDirection,
   type ParsedDirectives,
 } from "./_react-directives"
@@ -242,7 +241,7 @@ function preprocessCode(code: string): {
 function buildSrcdoc(
   code: string,
   componentName: string,
-  directives: ParsedDirectives
+  _directives: ParsedDirectives
 ): string {
   // Escape </script> inside user code to prevent breaking out of the script tag
   const escapedCode = code.replace(/<\/script>/gi, "<\\/script>")
