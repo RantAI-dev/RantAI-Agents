@@ -58,3 +58,24 @@ describe("DocumentRenderer — mermaid block", () => {
     expect(await findByText("Flow caption")).toBeTruthy()
   })
 })
+
+describe("DocumentRenderer — chart block", () => {
+  const minimalMeta = { title: "T", pageSize: "letter", orientation: "portrait", font: "Arial", fontSize: 12, showPageNumbers: false }
+
+  it("renders a chart SVG into the document flow", () => {
+    const ast = {
+      meta: minimalMeta,
+      body: [
+        {
+          type: "chart",
+          chart: { type: "bar", title: "Rev", data: [{ label: "Q1", value: 100 }, { label: "Q2", value: 200 }] },
+          caption: "Chart caption",
+        },
+      ],
+    }
+    const content = JSON.stringify(ast)
+    const { container, getByText } = render(<DocumentRenderer content={content} />)
+    expect(container.querySelector("svg")).toBeTruthy()
+    expect(getByText("Chart caption")).toBeTruthy()
+  })
+})

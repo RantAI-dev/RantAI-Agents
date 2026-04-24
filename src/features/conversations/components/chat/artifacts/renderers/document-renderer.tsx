@@ -9,6 +9,8 @@ import {
   type InlineNode,
 } from "@/lib/document-ast/schema"
 import { MERMAID_INIT_OPTIONS } from "@/lib/rendering/mermaid-theme"
+import { chartToSvg } from "@/lib/rendering/chart-to-svg"
+import type { ChartData } from "@/lib/slides/types"
 
 type FootnoteSink = {
   push: (blocks: BlockNode[]) => number
@@ -308,6 +310,9 @@ function renderBlock(
     case "mermaid":
       return <MermaidPreviewBlock key={key} code={node.code} caption={node.caption} />
 
+    case "chart":
+      return <ChartPreviewBlock key={key} chart={node.chart} caption={node.caption} />
+
     case "toc": {
       const filtered = tocEntries.filter((e) => e.level <= node.maxLevel)
       return (
@@ -564,6 +569,20 @@ function MermaidPreviewBlock({ code, caption }: { code: string; caption?: string
       ) : (
         <div className="text-sm text-muted-foreground">Rendering diagram…</div>
       )}
+      {caption && (
+        <figcaption className="mt-2 text-center text-sm italic text-muted-foreground">
+          {caption}
+        </figcaption>
+      )}
+    </figure>
+  )
+}
+
+function ChartPreviewBlock({ chart, caption }: { chart: ChartData; caption?: string }) {
+  const svg = React.useMemo(() => chartToSvg(chart, 800, 400), [chart])
+  return (
+    <figure className="my-4 flex flex-col items-center">
+      <div dangerouslySetInnerHTML={{ __html: svg }} />
       {caption && (
         <figcaption className="mt-2 text-center text-sm italic text-muted-foreground">
           {caption}
