@@ -3,6 +3,12 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from "react"
 import { AlertTriangle, RotateCcw, Code, Loader2, Wand2 } from "@/lib/icons"
 import { IFRAME_NAV_BLOCKER_SCRIPT } from "./_iframe-nav-blocker"
+import {
+  parseDirectives,
+  buildFontLinks,
+  type AestheticDirection,
+  type ParsedDirectives,
+} from "./_react-directives"
 
 interface ReactRendererProps {
   content: string
@@ -62,12 +68,27 @@ function preprocessCode(code: string): {
   processedCode: string
   componentName: string
   unsupportedImports: string[]
+  directives: ParsedDirectives
 } {
   const preamble: string[] = []
   const unsupportedImports: string[] = []
   let componentName = "App"
 
   let processed = code
+
+  // Extract directives from line 1 + line 2, strip them from the code that
+  // gets passed to Babel (the <link> tags are handled in buildSrcdoc).
+  const directives = parseDirectives(processed)
+  if (directives.rawAestheticLine || directives.rawFontsLine) {
+    const lines = processed.split("\n")
+    if (directives.rawAestheticLine && lines[0] === directives.rawAestheticLine) {
+      lines[0] = ""
+    }
+    if (directives.rawFontsLine && lines[1] === directives.rawFontsLine) {
+      lines[1] = ""
+    }
+    processed = lines.join("\n")
+  }
 
   // Hide template literal contents to avoid matching imports inside strings
   const tplStore: string[] = []
@@ -213,14 +234,24 @@ function preprocessCode(code: string): {
 
   const finalCode = preamble.join("\n") + "\n\n" + processed
 
-  return { processedCode: finalCode.trim(), componentName, unsupportedImports }
+  return { processedCode: finalCode.trim(), componentName, unsupportedImports, directives }
 }
 
 /* ── HTML template for the sandboxed iframe ─────────────────── */
 
-function buildSrcdoc(code: string, componentName: string): string {
+function buildSrcdoc(
+  code: string,
+  componentName: string,
+  directives: ParsedDirectives
+): string {
   // Escape </script> inside user code to prevent breaking out of the script tag
   const escapedCode = code.replace(/<\/script>/gi, "<\\/script>")
+
+  // Pick fonts based on declared @aesthetic + @fonts directives. Falls back
+  // to "industrial" defaults if the aesthetic is somehow null at this point
+  // (validator should have caught it upstream, but defend anyway).
+  const aesthetic: AestheticDirection = directives.aesthetic ?? "industrial"
+  const fontLinks = buildFontLinks(aesthetic, directives.fonts)
 
   return `<!DOCTYPE html>
 <html>
@@ -228,9 +259,7 @@ function buildSrcdoc(code: string, componentName: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdn.tailwindcss.com"><\/script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+${fontLinks}
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
@@ -240,7 +269,7 @@ function buildSrcdoc(code: string, componentName: string): string {
 <script crossorigin src="https://unpkg.com/framer-motion@11/dist/framer-motion.js"><\/script>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
-  body { margin: 0; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+  body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
   #root { min-height: 100vh; }
 </style>
 </head>
@@ -361,14 +390,17 @@ export function ReactRenderer({ content, onFixWithAI }: ReactRendererProps) {
   const { srcdoc, unsupported } = useMemo(() => {
     setError(null)
     try {
-      const { processedCode, componentName, unsupportedImports } = preprocessCode(content)
+      const { processedCode, componentName, unsupportedImports, directives } = preprocessCode(content)
       if (unsupportedImports.length > 0) {
         setError(
           `Unsupported ${unsupportedImports.length === 1 ? "library" : "libraries"}: ${unsupportedImports.join(", ")}. ` +
           `Available: react, recharts, lucide-react, framer-motion.`
         )
       }
-      return { srcdoc: buildSrcdoc(processedCode, componentName), unsupported: unsupportedImports }
+      return {
+        srcdoc: buildSrcdoc(processedCode, componentName, directives),
+        unsupported: unsupportedImports,
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process code")
       return { srcdoc: "", unsupported: [] }

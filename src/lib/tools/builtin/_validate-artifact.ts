@@ -19,6 +19,14 @@ import { parse as parseJs } from "@babel/parser"
 import type { ArtifactType } from "@/features/conversations/components/chat/artifacts/registry"
 import { detectShape, parseSpec } from "@/lib/spreadsheet/parse"
 import { evaluateWorkbook } from "@/lib/spreadsheet/formulas"
+import {
+  AESTHETIC_DIRECTIONS,
+  DEFAULT_FONTS_BY_DIRECTION,
+  MAX_FONT_FAMILIES,
+  parseDirectives,
+  validateFontSpec,
+  type AestheticDirection,
+} from "@/features/conversations/components/chat/artifacts/renderers/_react-directives"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -1637,14 +1645,143 @@ function validateHtml(content: string): ArtifactValidationResult {
 // React validation
 // ---------------------------------------------------------------------------
 
+/** Serif families that the renderer ships as defaults for at least one direction. */
+const KNOWN_SERIF_FAMILIES = [
+  "Fraunces",
+  "Playfair",
+  "DM Serif",
+  "Cormorant",
+  "Newsreader",
+  "Crimson Pro",
+  "Lora",
+]
+
+/** Threshold above which slate/indigo density is considered "industrial-coded". */
+const PALETTE_MISMATCH_THRESHOLD = 6
+
+function appendAestheticWarnings(
+  content: string,
+  aesthetic: AestheticDirection,
+  fonts: string[] | null,
+  warnings: string[]
+): void {
+  // Palette-direction mismatch: non-industrial + dense slate/indigo usage.
+  if (aesthetic !== "industrial") {
+    const slateIndigoCount = (
+      content.match(/\b(slate|indigo)-(\d{2,3})\b/g) ?? []
+    ).length
+    if (slateIndigoCount >= PALETTE_MISMATCH_THRESHOLD) {
+      warnings.push(
+        `You declared @aesthetic: ${aesthetic} but the palette reads industrial ` +
+          `(${slateIndigoCount} slate/indigo class references). Consider reviewing ` +
+          `the color palette for the ${aesthetic} direction.`
+      )
+    }
+  }
+
+  // Font-direction mismatch: editorial or luxury without a serif.
+  if (aesthetic === "editorial" || aesthetic === "luxury") {
+    const fontsToCheck = fonts ?? DEFAULT_FONTS_BY_DIRECTION[aesthetic]
+    const hasSerif = fontsToCheck.some((spec) =>
+      KNOWN_SERIF_FAMILIES.some((family) => spec.startsWith(family))
+    )
+    if (!hasSerif) {
+      warnings.push(
+        `@aesthetic: ${aesthetic} typically pairs with a serif display face. ` +
+          `No known serif detected in @fonts directive.`
+      )
+    }
+  }
+
+  // Motion-in-industrial: Motion library usage under industrial direction.
+  if (aesthetic === "industrial") {
+    if (/\bMotion\.(motion|AnimatePresence)\b/.test(content)) {
+      warnings.push(
+        `Industrial direction favors minimal or no motion. Consider plain CSS ` +
+          `transitions instead of framer-motion.`
+      )
+    }
+  }
+}
+
+function stripDirectiveLines(
+  content: string,
+  directives: { rawAestheticLine: string | null; rawFontsLine: string | null }
+): string {
+  const lines = content.split("\n")
+  if (directives.rawFontsLine && lines[1] === directives.rawFontsLine) {
+    lines[1] = ""
+  }
+  if (directives.rawAestheticLine && lines[0] === directives.rawAestheticLine) {
+    lines[0] = ""
+  }
+  return lines.join("\n")
+}
+
 function validateReact(content: string): ArtifactValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
-  // 1. Must parse as JSX/ES2022
+  // 0. Directive enforcement — before any JS parsing, so bad directives
+  //    surface a clear author-time error instead of a confusing parse fail.
+  const directives = parseDirectives(content)
+
+  const aestheticRequired =
+    process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"
+
+  if (!directives.rawAestheticLine) {
+    const message =
+      '@aesthetic directive missing on line 1. Pick one of: ' +
+      AESTHETIC_DIRECTIONS.join(", ") +
+      ". See prompt rules for direction selection heuristic."
+    if (aestheticRequired) {
+      errors.push(message)
+      return { ok: false, errors, warnings }
+    } else {
+      warnings.push(message)
+      // Continue without aesthetic — soft-warns below are skipped because
+      // directives.aesthetic is null.
+    }
+  } else if (!directives.aesthetic) {
+    const badValue = directives.rawAestheticLine
+      .replace(/^\s*\/\/\s*@aesthetic\s*:\s*/, "")
+      .trim()
+    const message =
+      `Unknown aesthetic direction "${badValue}". Valid: ` +
+      AESTHETIC_DIRECTIONS.join(", ") +
+      "."
+    if (aestheticRequired) {
+      errors.push(message)
+      return { ok: false, errors, warnings }
+    } else {
+      warnings.push(message)
+    }
+  }
+  if (directives.fonts) {
+    if (directives.fonts.length > MAX_FONT_FAMILIES) {
+      errors.push(
+        `Too many font families in @fonts directive (${directives.fonts.length}). Max is ${MAX_FONT_FAMILIES}.`
+      )
+      return { ok: false, errors, warnings }
+    }
+    const bad = directives.fonts.filter((s) => !validateFontSpec(s))
+    if (bad.length > 0) {
+      errors.push(
+        `Malformed @fonts directive. Expected pipe-separated Google Fonts specs like ` +
+          `"Fraunces:wght@300..900 | Inter:wght@400;500;700". Bad: ${bad
+            .map((s) => `"${s}"`)
+            .join(", ")}.`
+      )
+      return { ok: false, errors, warnings }
+    }
+  }
+
+  // 1. Must parse as JSX/ES2022 — strip directive lines first so Babel
+  //    doesn't see top-level comments that vary each artifact.
+  const contentForParse = stripDirectiveLines(content, directives)
   let ast
   try {
-    ast = parseJs(content, {
+    ast = parseJs(contentForParse, {
       sourceType: "module",
       allowReturnOutsideFunction: true,
       plugins: ["jsx"],
@@ -1722,6 +1859,13 @@ function validateReact(content: string): ArtifactValidationResult {
         .map((s) => `"${s}"`)
         .join(", ")}. Only react, react-dom, recharts, lucide-react, and framer-motion are available (as window globals: React, Recharts, LucideReact, Motion). Remove the imports and use the globals instead.`
     )
+  }
+
+  // 4. Soft-warn heuristics — aesthetic/style mismatches that should be
+  //    surfaced to the author but not block creation. Deliberately simple:
+  //    precision over recall, fewer false positives > catching every nit.
+  if (directives.aesthetic) {
+    appendAestheticWarnings(content, directives.aesthetic, directives.fonts, warnings)
   }
 
   return { ok: errors.length === 0, errors, warnings }

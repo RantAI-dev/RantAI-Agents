@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, afterEach } from "vitest"
 import { validateArtifactContent } from "@/lib/tools/builtin/_validate-artifact"
 
 const VALID_HTML = `<!DOCTYPE html>
@@ -13,7 +13,8 @@ const VALID_HTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-const VALID_REACT = `function App() {
+const VALID_REACT = `// @aesthetic: industrial
+function App() {
   const [n, setN] = useState(0);
   return (
     <div className="p-6">
@@ -96,7 +97,8 @@ describe("validateArtifactContent — application/react", () => {
   })
 
   it("accepts a component using whitelisted imports", () => {
-    const src = `import { useState } from 'react';
+    const src = `// @aesthetic: industrial
+import { useState } from 'react';
 import { LineChart } from 'recharts';
 import { Check } from 'lucide-react';
 ${VALID_REACT}`
@@ -114,14 +116,15 @@ ${VALID_REACT}`
   })
 
   it("rejects non-whitelisted imports", () => {
-    const src = `import create from 'zustand';\n${VALID_REACT}`
+    const src = `// @aesthetic: industrial\nimport create from 'zustand';\n${VALID_REACT}`
     const r = validateArtifactContent("application/react", src)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/zustand/)
   })
 
   it("rejects class components", () => {
-    const src = `class App extends React.Component {
+    const src = `// @aesthetic: industrial
+class App extends React.Component {
   render() { return <div />; }
 }
 export default App;`
@@ -131,7 +134,8 @@ export default App;`
   })
 
   it("rejects document.querySelector usage", () => {
-    const src = `function App() {
+    const src = `// @aesthetic: industrial
+function App() {
   const el = document.querySelector('#x');
   return <div />;
 }
@@ -142,7 +146,7 @@ export default App;`
   })
 
   it("rejects CSS imports", () => {
-    const src = `import './styles.css';\n${VALID_REACT}`
+    const src = `// @aesthetic: industrial\nimport './styles.css';\n${VALID_REACT}`
     const r = validateArtifactContent("application/react", src)
     expect(r.ok).toBe(false)
     expect(r.errors.join(" ")).toMatch(/CSS/i)
@@ -151,9 +155,10 @@ export default App;`
   it("rejects JSX that fails to parse", () => {
     const r = validateArtifactContent(
       "application/react",
-      "function App() { return <div<<<>; } export default App;"
+      "// @aesthetic: industrial\nfunction App() { return <div<<<>; } export default App;"
     )
     expect(r.ok).toBe(false)
+    expect(r.errors.join("\n")).toMatch(/failed to parse|parse/i)
   })
 })
 
@@ -1418,5 +1423,206 @@ describe("validateArtifactContent — application/sheet (JSON spec)", () => {
     const csv = "A,B\n1,2\n3,4"
     const r = validateArtifactContent("application/sheet", csv)
     expect(r.ok).toBe(true)
+  })
+})
+
+describe("validateArtifactContent — application/react — aesthetic directive", () => {
+  const MINIMAL_BODY = `function App() {
+  return <div>hi</div>
+}
+export default App`
+
+  it("accepts a valid @aesthetic directive", () => {
+    const code = `// @aesthetic: editorial\n${MINIMAL_BODY}`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+    expect(r.errors).toEqual([])
+  })
+
+  it("accepts all 7 valid direction names", () => {
+    for (const dir of ["editorial", "brutalist", "luxury", "playful", "industrial", "organic", "retro-futuristic"]) {
+      const code = `// @aesthetic: ${dir}\n${MINIMAL_BODY}`
+      const r = validateArtifactContent("application/react", code)
+      expect(r.ok, `direction ${dir} should validate`).toBe(true)
+    }
+  })
+
+  it("hard-errors when @aesthetic directive is missing", () => {
+    const r = validateArtifactContent("application/react", MINIMAL_BODY)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join("\n")).toContain("@aesthetic")
+    expect(r.errors.join("\n")).toContain("line 1")
+  })
+
+  it("hard-errors when @aesthetic value is unknown", () => {
+    const code = `// @aesthetic: synthwave\n${MINIMAL_BODY}`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join("\n")).toMatch(/unknown aesthetic/i)
+  })
+
+  it("hard-errors when @aesthetic is not on line 1", () => {
+    const code = `// intro\n// @aesthetic: editorial\n${MINIMAL_BODY}`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join("\n")).toContain("@aesthetic")
+  })
+})
+
+describe("validateArtifactContent — application/react — fonts directive", () => {
+  const MINIMAL_BODY = `function App() { return <div/> }\nexport default App`
+
+  it("accepts well-formed @fonts directive", () => {
+    const code = `// @aesthetic: editorial
+// @fonts: Fraunces:wght@300..900 | Inter:wght@400;500;700
+${MINIMAL_BODY}`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+  })
+
+  it("hard-errors on malformed @fonts spec", () => {
+    const code = `// @aesthetic: editorial
+// @fonts: lowercase:wght@400
+${MINIMAL_BODY}`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join("\n")).toMatch(/malformed.*@fonts/i)
+  })
+
+  it("hard-errors when more than 3 families declared", () => {
+    const code = `// @aesthetic: editorial
+// @fonts: Inter:wght@400 | Lora:wght@400 | Roboto:wght@400 | Poppins:wght@400
+${MINIMAL_BODY}`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(false)
+    expect(r.errors.join("\n")).toMatch(/too many font families/i)
+  })
+
+  it("accepts artifacts with @aesthetic but no @fonts directive", () => {
+    const code = `// @aesthetic: editorial\n${MINIMAL_BODY}`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+  })
+})
+
+describe("validateArtifactContent — application/react — palette soft-warn", () => {
+  it("warns when editorial + heavy slate/indigo usage", () => {
+    const code = `// @aesthetic: editorial
+function App() {
+  return (
+    <div className="bg-slate-50 text-slate-900">
+      <div className="text-slate-700 bg-indigo-600 border-slate-200 text-indigo-500 bg-slate-100">hi</div>
+    </div>
+  )
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).toMatch(/palette.*industrial/i)
+  })
+
+  it("does NOT warn when industrial + slate usage", () => {
+    const code = `// @aesthetic: industrial
+function App() {
+  return (
+    <div className="bg-slate-50 text-slate-900 border-slate-200 bg-slate-100 text-slate-700 text-indigo-500">hi</div>
+  )
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).not.toMatch(/palette/i)
+  })
+
+  it("does NOT warn on sparse slate usage (< 6 matches)", () => {
+    const code = `// @aesthetic: editorial
+function App() {
+  return <div className="bg-slate-50 text-slate-900 border-slate-200">hi</div>
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.warnings.join("\n")).not.toMatch(/palette/i)
+  })
+})
+
+describe("validateArtifactContent — application/react — font soft-warn", () => {
+  it("warns when editorial direction has no serif in @fonts", () => {
+    const code = `// @aesthetic: editorial
+// @fonts: Inter:wght@400;500;700 | Space Mono:wght@400;700
+function App() { return <div/> }
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).toMatch(/serif/i)
+  })
+
+  it("does NOT warn when editorial + Fraunces declared", () => {
+    const code = `// @aesthetic: editorial
+// @fonts: Fraunces:wght@300..900 | Inter:wght@400;500;700
+function App() { return <div/> }
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.warnings.join("\n")).not.toMatch(/serif/i)
+  })
+
+  it("does NOT warn when editorial uses default fonts (no @fonts directive)", () => {
+    const code = `// @aesthetic: editorial
+function App() { return <div/> }
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    // Defaults for editorial include Fraunces → no warn
+    expect(r.warnings.join("\n")).not.toMatch(/serif/i)
+  })
+})
+
+describe("validateArtifactContent — application/react — motion-in-industrial soft-warn", () => {
+  it("warns when industrial uses Motion.motion", () => {
+    const code = `// @aesthetic: industrial
+function App() {
+  return <Motion.motion.div animate={{ x: 100 }}>hi</Motion.motion.div>
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).toMatch(/motion/i)
+  })
+
+  it("does NOT warn when playful uses Motion.motion", () => {
+    const code = `// @aesthetic: playful
+function App() {
+  return <Motion.motion.div animate={{ x: 100 }}>hi</Motion.motion.div>
+}
+export default App`
+    const r = validateArtifactContent("application/react", code)
+    expect(r.warnings.join("\n")).not.toMatch(/motion/i)
+  })
+})
+
+describe("validateArtifactContent — application/react — rollback flag", () => {
+  const BODY_WITHOUT_DIRECTIVE = `function App() { return <div/> }\nexport default App`
+  const orig = process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
+
+  afterEach(() => {
+    if (orig === undefined) delete process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
+    else process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = orig
+  })
+
+  it("hard-errors on missing directive by default (flag unset)", () => {
+    delete process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
+    const r = validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
+    expect(r.ok).toBe(false)
+  })
+
+  it("hard-errors on missing directive when flag='true' (explicit)", () => {
+    process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = "true"
+    const r = validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
+    expect(r.ok).toBe(false)
+  })
+
+  it("passes when flag='false' even without directive", () => {
+    process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = "false"
+    const r = validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).toMatch(/@aesthetic.*missing/i)
   })
 })
