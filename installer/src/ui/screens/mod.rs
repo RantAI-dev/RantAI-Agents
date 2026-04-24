@@ -4,6 +4,7 @@ pub mod error;
 pub mod mode_select;
 pub mod optional_services;
 pub mod preflight;
+pub mod profile_select;
 pub mod progress;
 pub mod verify;
 pub mod welcome;
