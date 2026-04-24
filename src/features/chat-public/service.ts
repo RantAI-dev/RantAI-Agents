@@ -22,6 +22,7 @@ import {
   resolveSkillsForAssistant,
 } from "@/lib/skills/resolver"
 import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow"
+import { resolveMaxSteps } from "@/features/chat-public/step-budget"
 import { extractAndSaveFacts, stripSources } from "@/lib/workflow/chatflow-memory"
 import {
   loadWorkingMemory,
@@ -937,7 +938,7 @@ export async function runChat(params: {
       system: systemPrompt,
       messages,
       tools: allTools,
-      stopWhen: hasAssistantTools ? stepCountIs(5) : stepCountIs(2),
+      stopWhen: stepCountIs(resolveMaxSteps(assistantModelConfig, hasAssistantTools)),
       // Per-assistant model parameters
       ...(assistantModelConfig?.temperature != null && { temperature: Number(assistantModelConfig.temperature) }),
       ...(assistantModelConfig?.topP != null && { topP: Number(assistantModelConfig.topP) }),
