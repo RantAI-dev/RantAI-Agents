@@ -27,7 +27,7 @@ You CAN write \`import\` lines — the preprocessor strips them — but only fro
 // @aesthetic: editorial
 // @fonts: Fraunces:wght@300..900, Inter:wght@400;500;700
 function App() {
-  return <div className="min-h-screen bg-bone text-ink font-['Inter'] antialiased">...</div>;
+  return <div className="min-h-screen bg-[#faf5ef] text-[#0a0a0a] font-['Inter'] antialiased">...</div>;
 }
 export default App;
 \`\`\`
@@ -58,10 +58,10 @@ For every React artifact, pick a distinctive aesthetic direction BEFORE writing 
 
 ## Directive Syntax
 
-**Line 1 (required):** \`// @aesthetic: <direction>\` where \`<direction>\` is exactly one of:
+**Line 1 of the file (required, no preamble, no leading blank lines, no other comments before it):** \`// @aesthetic: <direction>\` where \`<direction>\` is exactly one of:
 \`editorial | brutalist | luxury | playful | industrial | organic | retro-futuristic\`
 
-**Line 2 (optional):** \`// @fonts: Family:spec, Family:spec\` — comma-separated Google Fonts family specs. Max 3 families. Omit to use the direction's default pairing.
+**Line 2 of the file (optional, immediately after @aesthetic):** \`// @fonts: Family:spec, Family:spec\` — comma-separated Google Fonts family specs. Max 3 families. Omit to use the direction's default pairing.
 
 Valid family spec shapes:
 - \`Inter:wght@400;500;700\`
@@ -75,7 +75,7 @@ Valid family spec shapes:
 **Fonts:** \`Fraunces\` (display, variable ital+opsz+wght) + \`Inter\` (body). Optionally \`Newsreader\` for body as an alternative.
 **Palette:** bone (\`#faf5ef\`, \`#f5f0e6\`) + ink (\`#0a0a0a\`, \`#1c1917\`) + warm neutrals (\`#78716c\`) + ONE bold accent from: terracotta \`#c2410c\`, bottle green \`#065f46\`, deep burgundy \`#7f1d1d\`, ultramarine \`#1e3a8a\`.
 **Rhythm:** Generous whitespace. \`py-24 md:py-32\` sections. Asymmetric 12-col grids (7+5, 8+4). Pull quotes. Drop caps via \`first-letter:text-7xl first-letter:font-['Fraunces']\`.
-**Buttons:** \`px-6 py-3 border border-ink text-ink hover:bg-ink hover:text-bone transition\` — flat, bordered, no shadow.
+**Buttons:** \`px-6 py-3 border border-[#0a0a0a] text-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#faf5ef] transition\` — flat, bordered, no shadow.
 **Cards:** content blocks with top/bottom rules, no boxes.
 **Motion:** \`duration-500\` \`ease-[cubic-bezier(0.22,1,0.36,1)]\`. Stagger delays 80–120ms on scroll reveals.
 
@@ -83,7 +83,7 @@ Valid family spec shapes:
 **Fonts:** \`Space Grotesk\` 700 or \`Archivo Black\` (display) + \`JetBrains Mono\` or \`IBM Plex Mono\` (body/UI).
 **Palette:** pure white (\`#ffffff\`) + pure black (\`#000000\`) + ONE acid accent: acid yellow \`#facc15\`, alert red \`#dc2626\`, electric blue \`#2563eb\`, lime \`#84cc16\`. No gradients. No grays except \`#e5e5e5\` for rules.
 **Rhythm:** Dense. Visible grid (dashed borders). Sharp corners — \`rounded-none\`. Offset layouts (negative margins, intentional broken alignment).
-**Buttons:** \`px-4 py-2 bg-black text-white border-2 border-black hover:bg-[acid] hover:text-black transition-none\` — instant, no easing.
+**Buttons:** \`px-4 py-2 bg-black text-white border-2 border-black hover:bg-[#facc15] hover:text-black transition-none\` — instant, no easing.
 **Cards:** \`border-2 border-black rounded-none\`, no shadow.
 **Inputs:** \`border-b-2 border-black bg-transparent rounded-none\` or fully bordered sharp corners.
 **Motion:** \`duration-75\` to \`duration-150\`, \`ease-linear\` or no ease. Snap transitions, no fades.
@@ -116,16 +116,16 @@ Valid family spec shapes:
 **Fonts:** \`Fraunces\` (variable) or \`Public Sans\` 400/500/700 (display) + \`Public Sans\` 400/500 or \`Crimson Pro\` 400/500/600 (body). Mix humanist sans + soft serif.
 **Palette:** bone \`#faf5ef\` + moss \`#3f6212\` \`#65a30d\` + terracotta \`#c2410c\` \`#ea580c\` + sand/taupe \`#a8a29e\` \`#d6d3d1\`. Warm, earthy. No cool blues. No pure gray.
 **Rhythm:** Medium-generous. Soft curves — \`rounded-xl\` or \`rounded-2xl\` but never \`rounded-3xl\`. Asymmetric but gentle. Italic Fraunces as handwritten-style accents.
-**Buttons:** \`px-6 py-3 rounded-full bg-[moss] text-bone hover:bg-[moss-dark] transition-all duration-300\`.
-**Cards:** \`rounded-2xl bg-bone border border-taupe/20 shadow-[0_1px_2px_rgba(120,113,108,0.05)]\` — very soft shadow.
+**Buttons:** \`px-6 py-3 rounded-full bg-[#3f6212] text-[#faf5ef] hover:bg-[#2d4a0d] transition-all duration-300\`.
+**Cards:** \`rounded-2xl bg-[#faf5ef] border border-[#a8a29e]/20 shadow-[0_1px_2px_rgba(120,113,108,0.05)]\` — very soft shadow.
 **Motion:** Soft. \`duration-300\` to \`duration-500\`, \`ease-in-out\`.
 
 ### retro-futuristic — neon, tabular, glitch
 **Fonts:** \`VT323\` or \`Major Mono Display\` or \`Orbitron\` 400/700/900 (display) + \`Space Mono\` 400/700 or \`Share Tech Mono\` (body).
 **Palette:** black \`#030712\` or deep purple \`#1e0a2e\` bg + neon accents: cyan \`#22d3ee\`, magenta \`#e879f9\`, lime \`#84cc16\`, hot pink \`#f472b6\`, electric yellow \`#fde047\`. Optional gradient between two neons.
 **Rhythm:** Monospace tabular. Visible grid lines. Scanline textures via \`background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.03) 2px, rgba(255,255,255,0.03) 4px)\`. Chromatic aberration on hover (dual-color text-shadow offsets).
-**Buttons:** \`px-6 py-2 bg-transparent border border-[neon] text-[neon] hover:shadow-[0_0_20px_currentColor] transition\`.
-**Cards:** \`border border-[neon] bg-black/50 backdrop-blur-sm\`.
+**Buttons:** \`px-6 py-2 bg-transparent border border-[#22d3ee] text-[#22d3ee] hover:shadow-[0_0_20px_currentColor] transition\`.
+**Cards:** \`border border-[#22d3ee] bg-black/50 backdrop-blur-sm\`.
 **Text effects:** neon glow via \`drop-shadow-[0_0_10px_currentColor]\` or arbitrary \`text-shadow\` utility.
 **Motion:** Glitch effects, scanline scrolls, chromatic splits on hover. \`duration-75\` snap + subtle flicker loops via \`@keyframes\`.
 
@@ -164,7 +164,7 @@ Valid family spec shapes:
 - ❌ Emoji as functional icons (use \`LucideReact.X\`)
 - ❌ Real \`fetch()\` calls
 - ❌ \`<form action="/submit">\` — use \`onSubmit\` with \`e.preventDefault()\`
-- ❌ More than 5 colors per direction
+- ❌ More than 5 distinct hues per artifact (status colors in industrial — emerald/rose/amber — count as functional not decorative, and don't count toward the 5)
 - ❌ Truncating "for brevity"`,
   examples: [
     {
