@@ -100,8 +100,8 @@ Valid family spec shapes:
 **Fonts:** \`Fredoka\` 400/500/600/700 or \`Quicksand\` 400/500/700 (display + body — same family different weights is OK).
 **Palette:** pastel backgrounds from \`#fce7f3\` pink, \`#e0e7ff\` indigo, \`#dcfce7\` green, \`#fef3c7\` yellow, \`#fae8ff\` purple + ONE vivid anchor: \`#f97316\` orange, \`#a855f7\` purple, \`#06b6d4\` cyan, \`#ec4899\` pink.
 **Rhythm:** Rounded everything — \`rounded-2xl\`, \`rounded-3xl\`, \`rounded-full\`. Generous padding. Oversized type (\`text-5xl md:text-6xl\` hero).
-**Buttons:** \`px-6 py-3 bg-[vivid] text-white rounded-full shadow-[0_4px_0_rgba(0,0,0,0.1)] hover:shadow-[0_2px_0_rgba(0,0,0,0.1)] hover:translate-y-0.5 transition\`.
-**Cards:** \`rounded-3xl bg-[pastel] shadow-none border-none\`.
+**Buttons:** \`px-6 py-3 bg-[#f97316] text-white rounded-full shadow-[0_4px_0_rgba(0,0,0,0.1)] hover:shadow-[0_2px_0_rgba(0,0,0,0.1)] hover:translate-y-0.5 transition\`.
+**Cards:** \`rounded-3xl bg-[#fce7f3] shadow-none border-none\`.
 **Motion:** Bouncy springs via Motion library — \`Motion.motion.div\` with \`transition={{ type: "spring", stiffness: 200, damping: 15 }}\`. Overshoot, wobble, stagger.
 
 ### industrial — dense, functional, data-heavy
