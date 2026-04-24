@@ -107,14 +107,8 @@ pub fn draw(f: &mut Frame, app: &App) {
     // Sidecar URL panel — only shown when sidecars were installed
     if app.config.profile.includes_sidecars() {
         let hostname = resolve_hostname();
-        let mineru_url = format!(
-            "http://{}:{}",
-            hostname, app.config.sidecar.mineru_port
-        );
-        let rerank_url = format!(
-            "http://{}:{}",
-            hostname, app.config.sidecar.rerank_port
-        );
+        let mineru_url = format!("http://{}:{}", hostname, app.config.sidecar.mineru_port);
+        let rerank_url = format!("http://{}:{}", hostname, app.config.sidecar.rerank_port);
         let rerank_model = &app.config.sidecar.rerank_model;
 
         let box_width = 70usize;
@@ -153,11 +147,9 @@ pub fn draw(f: &mut Frame, app: &App) {
             Span::styled(
                 format!(
                     "{} │",
-                    " ".repeat(
-                        box_width.saturating_sub(
-                            "KB_EXTRACT_MINERU_BASE_URL=\"\"".len() + mineru_url.len() + 4
-                        )
-                    )
+                    " ".repeat(box_width.saturating_sub(
+                        "KB_EXTRACT_MINERU_BASE_URL=\"\"".len() + mineru_url.len() + 4
+                    ))
                 ),
                 theme::primary(),
             ),
@@ -184,14 +176,16 @@ pub fn draw(f: &mut Frame, app: &App) {
         ]));
         lines.push(Line::from(vec![
             Span::styled("│  ", theme::primary()),
-            Span::styled(format!("KB_RERANK_BASE_URL=\"{rerank_url}\""), theme::info()),
+            Span::styled(
+                format!("KB_RERANK_BASE_URL=\"{rerank_url}\""),
+                theme::info(),
+            ),
             Span::styled(
                 format!(
                     "{} │",
                     " ".repeat(
-                        box_width.saturating_sub(
-                            "KB_RERANK_BASE_URL=\"\"".len() + rerank_url.len() + 4
-                        )
+                        box_width
+                            .saturating_sub("KB_RERANK_BASE_URL=\"\"".len() + rerank_url.len() + 4)
                     )
                 ),
                 theme::primary(),
@@ -199,17 +193,13 @@ pub fn draw(f: &mut Frame, app: &App) {
         ]));
         lines.push(Line::from(vec![
             Span::styled("│  ", theme::primary()),
-            Span::styled(
-                format!("KB_RERANK_MODEL=\"{rerank_model}\""),
-                theme::info(),
-            ),
+            Span::styled(format!("KB_RERANK_MODEL=\"{rerank_model}\""), theme::info()),
             Span::styled(
                 format!(
                     "{} │",
                     " ".repeat(
-                        box_width.saturating_sub(
-                            "KB_RERANK_MODEL=\"\"".len() + rerank_model.len() + 4
-                        )
+                        box_width
+                            .saturating_sub("KB_RERANK_MODEL=\"\"".len() + rerank_model.len() + 4)
                     )
                 ),
                 theme::primary(),
