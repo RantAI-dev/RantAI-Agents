@@ -247,6 +247,32 @@ Row cell count (accounting for \`colspan\`) must equal the number of columns dec
 - **Complete documents only.** Do not truncate. Do not write "the rest is left as an exercise for the reader" or "see full version attached." The artifact is the full version.
 - **Close the document.** Proposals end with a Call to Action or Next Steps. Reports end with a Conclusion or Recommendations. Letters end with a signature block. Don't trail off.
 
+### \`mermaid\` block
+
+Use for flowcharts, sequence, class, state, ER, pie, gantt, mindmap, timeline, and similar schematic diagrams. Embed \`mermaid\` blocks directly in the document — they render as PNG in the docx export and as inline SVG in the preview.
+
+\`\`\`ts
+{ type: "mermaid", code: string, caption?: string, width?: 200..1600, height?: 150..1200, alt?: string }
+\`\`\`
+
+- \`code\`: valid Mermaid syntax. First non-empty token MUST be one of \`flowchart\`, \`graph\`, \`sequenceDiagram\`, \`classDiagram\`, \`stateDiagram\`, \`stateDiagram-v2\`, \`erDiagram\`, \`gantt\`, \`pie\`, \`mindmap\`, \`timeline\`, \`journey\`, \`c4Context\`, \`gitGraph\`, \`quadrantChart\`, or \`requirementDiagram\`.
+- Keep diagrams simple — ≤ 15 nodes for flowcharts; ≤ 10 for split-layout contexts.
+- NEVER wrap \`code\` in markdown fences (no \`\`\`mermaid). The \`code\` field IS raw mermaid syntax.
+- \`width\`/\`height\` default to 1200×800.
+
+### \`chart\` block
+
+Use for data visualizations (bar, bar-horizontal, line, pie, donut). The \`chart\` field follows the same \`ChartData\` schema used by \`application/slides\`.
+
+\`\`\`ts
+{ type: "chart", chart: ChartData, caption?: string, width?: 200..1600, height?: 150..1200, alt?: string }
+\`\`\`
+
+- \`ChartData\`: \`{ type, title?, data?: [{label, value, color?}], labels?: string[], series?: [{name, values[], color?}], showValues?, showLegend? }\`
+- \`width\`/\`height\` default to 1200×600.
+
+Prefer \`mermaid\` for qualitative structure (flows, relations), \`chart\` for quantitative data (numbers, categories). Don't stuff prose into diagrams.
+
 ## Anti-Patterns
 
 - ❌ Output anything before the opening \`{\` or after the closing \`}\` — commentary, markdown fences, or explanation will break the parser.
@@ -259,7 +285,6 @@ Row cell count (accounting for \`colspan\`) must equal the number of columns dec
 - ❌ \`unsplash:\` with an empty keyword — \`"src": "unsplash:"\` is not valid. Always provide a keyword phrase.
 - ❌ Missing \`alt\` text on images.
 - ❌ Math notation — this type does not render LaTeX equations (\`$...$\` or \`$$...$$\`). Express calculations in prose.
-- ❌ Mermaid or chart fenced blocks — those belong in \`text/markdown\`; this schema has no fenced block node type.
 - ❌ Using \`text/document\` for a README, internal note, or developer doc — use \`text/markdown\`.
 - ❌ Truncation, \`Lorem ipsum\`, \`[TODO]\`, \`(content omitted)\`, or placeholder markers of any kind.
 `,
