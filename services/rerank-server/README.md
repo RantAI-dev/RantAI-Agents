@@ -1,5 +1,23 @@
 # services/rerank-server
 
+## Quickest path — use the installer
+
+The Rust installer at `installer/` handles venv + pip + model download + systemd
+for this sidecar. From the GPU box:
+
+```bash
+git clone https://github.com/RantAI-dev/RantAI-Agents.git /opt/rantai-agents
+cd /opt/rantai-agents/installer
+cargo run --release
+
+# Pick: "Sidecars Only (GPU box)"
+```
+
+After install, the post-install summary prints the URL line to paste into the
+app server's `.env`.
+
+For manual setup, read on.
+
 Self-hosted cross-encoder rerank sidecar. Default model: `nvidia/llama-nemotron-rerank-1b-v2` (~2.5 GB VRAM in BF16). Wraps `transformers.AutoModelForSequenceClassification` in a tiny FastAPI app that exposes a Cohere-shaped `POST /rerank` so the platform's `VllmReranker` can hit it as a drop-in.
 
 Why this exists: serving Nemotron via the official vLLM container needs ~12 GB of disk for the image. This sidecar reuses an existing local Python venv and loads the model directly — same protocol as vLLM's `/rerank`, no Docker pull.

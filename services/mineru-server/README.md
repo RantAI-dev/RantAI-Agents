@@ -1,5 +1,23 @@
 # MinerU2.5-Pro extraction sidecar
 
+## Quickest path — use the installer
+
+The Rust installer at `installer/` handles venv + pip + model download + systemd
+for this sidecar. From the GPU box:
+
+```bash
+git clone https://github.com/RantAI-dev/RantAI-Agents.git /opt/rantai-agents
+cd /opt/rantai-agents/installer
+cargo run --release
+
+# Pick: "Sidecars Only (GPU box)"
+```
+
+After install, the post-install summary prints the URL line to paste into the
+app server's `.env`.
+
+For manual setup, read on.
+
 Tiny FastAPI service that wraps `opendatalab/MinerU2.5-Pro-2604-1.2B` behind a
 plain HTTP endpoint the Node KB pipeline can call. Lives out-of-process because
 MinerU's client (`mineru_vl_utils.MinerUClient.two_step_extract`) runs a custom
