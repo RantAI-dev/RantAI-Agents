@@ -147,3 +147,43 @@ fn selected_profile_matches_index() {
         InstallProfile::SidecarOnly
     );
 }
+
+#[test]
+fn validate_rejects_bad_urls_for_app_profile() {
+    use rantai_agents_installer::app::{InstallConfig, InstallProfile};
+    use rantai_agents_installer::validate::validate_config;
+    let mut cfg = InstallConfig::default();
+    cfg.profile = InstallProfile::AppOnly;
+    cfg.sidecar.mineru_base_url = "gpu-box:8100".into(); // no scheme
+    assert!(validate_config(&cfg).is_err());
+}
+
+#[test]
+fn validate_accepts_good_app_config() {
+    use rantai_agents_installer::app::{InstallConfig, InstallProfile};
+    use rantai_agents_installer::validate::validate_config;
+    let mut cfg = InstallConfig::default();
+    cfg.profile = InstallProfile::AppOnly;
+    // defaults use http://localhost:8100 / 8200, should pass
+    assert!(validate_config(&cfg).is_ok());
+}
+
+#[test]
+fn validate_rejects_bad_gpu_id_for_sidecar_profile() {
+    use rantai_agents_installer::app::{InstallConfig, InstallProfile};
+    use rantai_agents_installer::validate::validate_config;
+    let mut cfg = InstallConfig::default();
+    cfg.profile = InstallProfile::SidecarOnly;
+    cfg.sidecar.gpu_device_id = 99;
+    assert!(validate_config(&cfg).is_err());
+}
+
+#[test]
+fn validate_rejects_empty_venv_for_sidecar_profile() {
+    use rantai_agents_installer::app::{InstallConfig, InstallProfile};
+    use rantai_agents_installer::validate::validate_config;
+    let mut cfg = InstallConfig::default();
+    cfg.profile = InstallProfile::SidecarOnly;
+    cfg.sidecar.python_venv_dir = String::new();
+    assert!(validate_config(&cfg).is_err());
+}

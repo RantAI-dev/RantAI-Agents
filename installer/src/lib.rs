@@ -12,3 +12,4 @@ pub mod app;
 pub mod installer;
 pub mod theme;
 pub mod ui;
+pub mod validate;

@@ -10,6 +10,7 @@ mod app;
 mod installer;
 mod theme;
 mod ui;
+mod validate;
 
 use std::io;
 use std::time::Duration;
@@ -342,7 +343,13 @@ fn run_event_loop(
                                 }
                                 KeyCode::Tab => {
                                     app.apply_config_fields();
-                                    app.screen = Screen::Preflight;
+                                    match validate::validate_config(&app.config) {
+                                        Ok(()) => app.screen = Screen::Preflight,
+                                        Err(msg) => {
+                                            app.error_message = Some(msg);
+                                            // stay on Config
+                                        }
+                                    }
                                 }
                                 KeyCode::Esc => {
                                     if app.mode == InstallMode::Full {
