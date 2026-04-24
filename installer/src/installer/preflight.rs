@@ -2,7 +2,7 @@ use std::net::TcpListener;
 use sysinfo::System;
 
 use super::command_exists;
-use crate::app::{CheckItem, InstallConfig, Status};
+use crate::app::{CheckItem, InstallConfig, InstallProfile, Status};
 
 const MIN_RAM_MB: u64 = 2048;
 const RECOMMENDED_DISK_GB: u64 = 5;
@@ -25,6 +25,29 @@ pub fn run_preflight_checks(config: &InstallConfig) -> Vec<CheckItem> {
     let ports = get_required_ports(config);
     for (port, label) in ports {
         checks.push(check_port(port, &label));
+    }
+
+    if config.profile.includes_sidecars() {
+        checks.push(check_gpu());
+        checks.push(check_python_3_10());
+    }
+
+    if config.profile == InstallProfile::SidecarOnly {
+        let sentinel = format!("{}/services/rerank-server/server.py", config.install_dir);
+        let ok = std::path::Path::new(&sentinel).exists();
+        let msg = if ok {
+            format!("found {sentinel}")
+        } else {
+            format!(
+                "missing {sentinel} — clone the repo to {} before running SidecarOnly install",
+                config.install_dir
+            )
+        };
+        checks.push(CheckItem {
+            name: "Repo checked out at install_dir".into(),
+            status: if ok { Status::Success } else { Status::Error },
+            message: Some(msg),
+        });
     }
 
     checks
@@ -264,4 +287,64 @@ fn find_existing_ancestor(path: &str) -> String {
         }
     }
     p.to_string_lossy().to_string()
+}
+
+/// Check for nvidia-smi + at least one GPU. Used only when profile includes sidecars.
+fn check_gpu() -> CheckItem {
+    match super::run_command(
+        "nvidia-smi",
+        &["--query-gpu=name,memory.total", "--format=csv,noheader"],
+    ) {
+        Ok(out) => {
+            let lines: Vec<&str> = out.lines().filter(|l| !l.trim().is_empty()).collect();
+            if lines.is_empty() {
+                CheckItem {
+                    name: "NVIDIA GPU".into(),
+                    status: Status::Error,
+                    message: Some("nvidia-smi ran but reported zero GPUs".into()),
+                }
+            } else {
+                CheckItem {
+                    name: "NVIDIA GPU".into(),
+                    status: Status::Success,
+                    message: Some(format!("{} GPU(s): {}", lines.len(), lines.join(" | "))),
+                }
+            }
+        }
+        Err(e) => CheckItem {
+            name: "NVIDIA GPU".into(),
+            status: Status::Error,
+            message: Some(format!("nvidia-smi not available: {e}")),
+        },
+    }
+}
+
+fn check_python_3_10() -> CheckItem {
+    for candidate in &[
+        "python3.13",
+        "python3.12",
+        "python3.11",
+        "python3.10",
+        "python3",
+    ] {
+        if let Ok(out) = super::run_command(candidate, &["--version"]) {
+            let ver = out.trim().to_string();
+            if ver.contains("3.10")
+                || ver.contains("3.11")
+                || ver.contains("3.12")
+                || ver.contains("3.13")
+            {
+                return CheckItem {
+                    name: "Python 3.10+".into(),
+                    status: Status::Success,
+                    message: Some(format!("{candidate} → {ver}")),
+                };
+            }
+        }
+    }
+    CheckItem {
+        name: "Python 3.10+".into(),
+        status: Status::Error,
+        message: Some("No python3.10+ found on PATH".into()),
+    }
 }
