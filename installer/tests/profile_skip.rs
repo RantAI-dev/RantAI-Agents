@@ -124,3 +124,26 @@ fn all_in_one_skips_nothing() {
         );
     }
 }
+
+#[test]
+fn selected_profile_matches_index() {
+    use rantai_agents_installer::app::{App, InstallMode, InstallProfile};
+    use rantai_agents_installer::ui::screens::profile_select;
+
+    let mut app = App::new(InstallMode::Full);
+    app.profile_index = 0;
+    assert_eq!(
+        profile_select::selected_profile(&app),
+        InstallProfile::AllInOne
+    );
+    app.profile_index = 1;
+    assert_eq!(
+        profile_select::selected_profile(&app),
+        InstallProfile::AppOnly
+    );
+    app.profile_index = 2;
+    assert_eq!(
+        profile_select::selected_profile(&app),
+        InstallProfile::SidecarOnly
+    );
+}
