@@ -65,6 +65,55 @@ impl InstallMode {
     }
 }
 
+/// Orthogonal axis to `InstallMode`. Profile decides WHAT is installed.
+/// Mode decides HOW. They compose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallProfile {
+    /// Next.js app + infra. Points at external sidecars via env URLs.
+    /// Pick this when your GPU box is a separate machine.
+    AppOnly,
+    /// MinerU + rerank sidecars on a GPU box. No app, no infra.
+    /// Pick this on the GPU box when the app lives elsewhere.
+    SidecarOnly,
+    /// App + infra + sidecars on one machine. Dev or small deployments.
+    AllInOne,
+}
+
+impl InstallProfile {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::AppOnly => "App Only",
+            Self::SidecarOnly => "Sidecars Only (GPU box)",
+            Self::AllInOne => "All-in-one",
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            Self::AppOnly => {
+                "Install the Next.js app, PostgreSQL, SurrealDB, and object store on this machine. \
+                 You provide URLs pointing at MinerU and rerank sidecars running on a separate GPU box."
+            }
+            Self::SidecarOnly => {
+                "Install only the GPU-backed sidecars (MinerU OCR + Nemotron rerank) on this machine. \
+                 Requires an NVIDIA GPU with ≥8 GB VRAM. The URLs printed at the end go in the app server's .env."
+            }
+            Self::AllInOne => {
+                "Install everything on this machine. Suitable for development and small single-box \
+                 deployments. Requires an NVIDIA GPU if you want the on-prem OCR / rerank path."
+            }
+        }
+    }
+
+    pub fn includes_app(&self) -> bool {
+        matches!(self, Self::AppOnly | Self::AllInOne)
+    }
+
+    pub fn includes_sidecars(&self) -> bool {
+        matches!(self, Self::SidecarOnly | Self::AllInOne)
+    }
+}
+
 /// Installation phases executed in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {

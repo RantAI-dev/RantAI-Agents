@@ -8,6 +8,10 @@ description = "TUI installer for RantAI Agents platform"
 name = "rantai-agents-installer"
 path = "src/main.rs"
 
+[lib]
+name = "rantai_agents_installer"
+path = "src/lib.rs"
+
 [dependencies]
 ratatui = "0.29"
 crossterm = "0.28"
