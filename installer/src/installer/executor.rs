@@ -56,8 +56,13 @@ pub async fn run_installation(config: InstallConfig, tx: Sender<InstallMessage>)
     tx.send(InstallMessage::Done(Ok(()))).await.ok();
 }
 
-/// Determine whether a phase should be skipped based on install mode.
+/// Determine whether a phase should be skipped based on install profile + mode.
 fn should_skip_phase(phase: Phase, config: &InstallConfig) -> bool {
+    // Profile-based skip takes precedence over mode-based logic.
+    if crate::installer::profile::profile_skips_phase(config.profile, phase) {
+        return true;
+    }
+
     match phase {
         // Preflight always runs
         Phase::Preflight => false,
@@ -81,6 +86,9 @@ fn should_skip_phase(phase: Phase, config: &InstallConfig) -> bool {
 
         // Services: skip if systemd not wanted
         Phase::Services => !config.install_services,
+
+        // SidecarInstall: only run when the profile includes sidecars
+        Phase::SidecarInstall => !config.profile.includes_sidecars(),
 
         // Verification: always runs
         Phase::Verification => false,
@@ -159,6 +167,15 @@ async fn execute_phase(
         Phase::Database => super::database::run_database_migrations(config, tx).await,
 
         Phase::Services => super::services::install_services(config, tx).await,
+
+        Phase::SidecarInstall => {
+            tx.send(InstallMessage::Progress(
+                "GPU sidecar installation is not yet implemented — phase placeholder.".into(),
+            ))
+            .await
+            .ok();
+            Ok(())
+        }
 
         Phase::Verification => {
             tx.send(InstallMessage::Progress(

@@ -8,6 +8,7 @@ pub mod deps;
 pub mod executor;
 pub mod infrastructure;
 pub mod preflight;
+pub mod profile;
 pub mod services;
 pub mod verify;
 

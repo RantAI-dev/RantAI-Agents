@@ -206,6 +206,7 @@ pub enum Phase {
     Configuration,
     Database,
     Services,
+    SidecarInstall,
     Verification,
 }
 
@@ -219,6 +220,7 @@ impl Phase {
             Self::Configuration => "Generate Configuration",
             Self::Database => "Database Migrations",
             Self::Services => "Install Services",
+            Self::SidecarInstall => "Install GPU Sidecars",
             Self::Verification => "Verification",
         }
     }
@@ -232,7 +234,8 @@ impl Phase {
             Self::Configuration => 4,
             Self::Database => 5,
             Self::Services => 6,
-            Self::Verification => 7,
+            Self::SidecarInstall => 7,
+            Self::Verification => 8,
         }
     }
 
@@ -244,10 +247,11 @@ impl Phase {
         Phase::Configuration,
         Phase::Database,
         Phase::Services,
+        Phase::SidecarInstall,
         Phase::Verification,
     ];
 
-    pub const COUNT: usize = 8;
+    pub const COUNT: usize = 9;
 }
 
 /// Status of a check item or phase.

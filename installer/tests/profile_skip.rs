@@ -1,4 +1,5 @@
-use rantai_agents_installer::app::{InstallConfig, InstallProfile, RerankProvider};
+use rantai_agents_installer::app::{InstallConfig, InstallProfile, Phase, RerankProvider};
+use rantai_agents_installer::installer::profile as profile_logic;
 
 #[test]
 fn default_sidecar_config_is_vllm_localhost() {
@@ -57,4 +58,45 @@ fn profile_labels_are_unique() {
         3,
         "labels must be distinct"
     );
+}
+
+#[test]
+fn app_only_profile_skips_sidecar_install_phase() {
+    assert!(profile_logic::profile_skips_phase(
+        InstallProfile::AppOnly,
+        Phase::SidecarInstall,
+    ));
+    assert!(!profile_logic::profile_skips_phase(
+        InstallProfile::AppOnly,
+        Phase::Database,
+    ));
+}
+
+#[test]
+fn sidecar_only_profile_skips_app_phases() {
+    for phase in [
+        Phase::Infrastructure,
+        Phase::ApplicationSetup,
+        Phase::Database,
+        Phase::Services,
+    ] {
+        assert!(
+            profile_logic::profile_skips_phase(InstallProfile::SidecarOnly, phase),
+            "SidecarOnly should skip {phase:?}"
+        );
+    }
+    assert!(!profile_logic::profile_skips_phase(
+        InstallProfile::SidecarOnly,
+        Phase::SidecarInstall,
+    ));
+}
+
+#[test]
+fn all_in_one_skips_nothing() {
+    for phase in Phase::ALL {
+        assert!(
+            !profile_logic::profile_skips_phase(InstallProfile::AllInOne, *phase),
+            "AllInOne should not skip {phase:?}"
+        );
+    }
 }
