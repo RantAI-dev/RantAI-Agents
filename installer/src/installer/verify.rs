@@ -5,6 +5,22 @@ use std::time::Duration;
 use super::run_command;
 use crate::app::{CheckItem, InstallConfig, Status};
 
+/// Perform a synchronous GET request and return (success, message).
+fn http_get_ok(url: &str) -> (bool, String) {
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => return (false, format!("client build failed: {e}")),
+    };
+    match client.get(url).send() {
+        Ok(r) if r.status().is_success() => (true, format!("200 OK at {url}")),
+        Ok(r) => (false, format!("{} at {url}", r.status())),
+        Err(e) => (false, format!("failed: {e}")),
+    }
+}
+
 /// Run all post-install verification checks.
 pub fn run_verification(config: &InstallConfig) -> Vec<CheckItem> {
     let mut checks = Vec::new();
@@ -47,6 +63,28 @@ pub fn run_verification(config: &InstallConfig) -> Vec<CheckItem> {
                 "http://localhost:8080/healthz",
                 "SearXNG",
             ));
+        }
+    }
+
+    // ── Sidecar health checks ──
+    if config.profile.includes_sidecars() {
+        if config.sidecar.mineru_enabled {
+            let url = format!("http://localhost:{}/health", config.sidecar.mineru_port);
+            let (ok, msg) = http_get_ok(&url);
+            checks.push(CheckItem {
+                name: "MinerU sidecar /health".into(),
+                status: if ok { Status::Success } else { Status::Error },
+                message: Some(msg),
+            });
+        }
+        if config.sidecar.rerank_enabled {
+            let url = format!("http://localhost:{}/health", config.sidecar.rerank_port);
+            let (ok, msg) = http_get_ok(&url);
+            checks.push(CheckItem {
+                name: "Rerank sidecar /health".into(),
+                status: if ok { Status::Success } else { Status::Error },
+                message: Some(msg),
+            });
         }
     }
 
