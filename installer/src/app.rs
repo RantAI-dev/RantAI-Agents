@@ -114,6 +114,88 @@ impl InstallProfile {
     }
 }
 
+/// Which rerank implementation to use. Matches KB_RERANK_PROVIDER env.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RerankProvider {
+    /// LLM-as-reranker via OpenRouter chat completions.
+    Openrouter,
+    /// Self-hosted cross-encoder via the services/rerank-server/ sidecar (Nemotron 1B v2 default).
+    Vllm,
+    /// Cohere SaaS rerank (api.cohere.com/v2/rerank).
+    Cohere,
+}
+
+impl RerankProvider {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Openrouter => "openrouter",
+            Self::Vllm => "vllm",
+            Self::Cohere => "cohere",
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Openrouter => "OpenRouter (LLM-as-reranker)",
+            Self::Vllm => "Self-hosted (Nemotron via sidecar)",
+            Self::Cohere => "Cohere SaaS",
+        }
+    }
+
+    pub fn default_model(&self) -> &'static str {
+        match self {
+            Self::Openrouter => "openai/gpt-4.1-nano",
+            Self::Vllm => "nvidia/llama-nemotron-rerank-1b-v2",
+            Self::Cohere => "rerank-v4.0-pro",
+        }
+    }
+}
+
+/// Sidecar-facing config. Persisted into .env as KB_EXTRACT_MINERU_BASE_URL +
+/// KB_RERANK_* when profile includes the app, and used to drive systemd unit
+/// install when profile includes sidecars.
+#[derive(Debug, Clone)]
+pub struct SidecarConfig {
+    // MinerU
+    pub mineru_enabled: bool,
+    pub mineru_base_url: String,
+    pub mineru_port: u16,
+
+    // Rerank
+    pub rerank_enabled: bool,
+    pub rerank_provider: RerankProvider,
+    pub rerank_base_url: String,
+    pub rerank_port: u16,
+    pub rerank_model: String,
+    pub rerank_api_key: String,
+
+    // GPU + Python (only used when profile includes sidecars)
+    pub gpu_device_id: u32,
+    pub python_venv_dir: String,
+    pub hf_cache_dir: String,
+}
+
+impl Default for SidecarConfig {
+    fn default() -> Self {
+        Self {
+            mineru_enabled: true,
+            mineru_base_url: "http://localhost:8100".into(),
+            mineru_port: 8100,
+
+            rerank_enabled: true,
+            rerank_provider: RerankProvider::Vllm,
+            rerank_base_url: "http://localhost:8200".into(),
+            rerank_port: 8200,
+            rerank_model: "nvidia/llama-nemotron-rerank-1b-v2".into(),
+            rerank_api_key: String::new(),
+
+            gpu_device_id: 0,
+            python_venv_dir: "/home/rantai-agents/vllm-env".into(),
+            hf_cache_dir: "/home/rantai-agents/.cache/huggingface".into(),
+        }
+    }
+}
+
 /// Installation phases executed in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
@@ -246,6 +328,10 @@ pub struct InstallConfig {
     pub admin_email: String,
     pub admin_password: String,
 
+    // Profile + sidecar config
+    pub profile: InstallProfile,
+    pub sidecar: SidecarConfig,
+
     // Mode & flags
     pub mode: InstallMode,
     pub install_services: bool,
@@ -286,6 +372,9 @@ impl Default for InstallConfig {
 
             admin_email: "admin@rantai.local".into(),
             admin_password: String::new(),
+
+            profile: InstallProfile::AllInOne,
+            sidecar: SidecarConfig::default(),
 
             mode: InstallMode::Full,
             install_services: true,
