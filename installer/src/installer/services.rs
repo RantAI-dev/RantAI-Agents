@@ -114,8 +114,8 @@ pub async fn install_services(
     Ok(())
 }
 
-/// Create the rantai-agents system user if it doesn't exist.
-fn create_service_user() -> Result<(), String> {
+/// Create the rantai-agents system user if it doesn't exist. Idempotent.
+pub(crate) fn create_service_user() -> Result<(), String> {
     // Check if user already exists
     let check = run_command("id", &[SERVICE_USER]);
     if check.is_ok() {

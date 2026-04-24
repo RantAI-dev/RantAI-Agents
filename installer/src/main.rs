@@ -235,11 +235,12 @@ fn run_event_loop(
                         KeyCode::Enter => {
                             app.config.profile = profile_select::selected_profile(app);
                             // SidecarOnly skips ModeSelect/OptionalServices — those are app-side decisions.
-                            app.screen = if app.config.profile == InstallProfile::SidecarOnly {
-                                Screen::Config
+                            if app.config.profile == InstallProfile::SidecarOnly {
+                                app.build_config_fields();
+                                app.screen = Screen::Config;
                             } else {
-                                Screen::ModeSelect
-                            };
+                                app.screen = Screen::ModeSelect;
+                            }
                         }
                         KeyCode::Esc => {
                             app.screen = Screen::Welcome;
@@ -339,6 +340,7 @@ fn run_event_loop(
                                     if let Some(field) = app.config_items.get(app.config_index) {
                                         app.config_buffer = field.value.clone();
                                         app.config_editing = true;
+                                        app.error_message = None; // clear stale validation error
                                     }
                                 }
                                 KeyCode::Tab => {
@@ -352,7 +354,9 @@ fn run_event_loop(
                                     }
                                 }
                                 KeyCode::Esc => {
-                                    if app.mode == InstallMode::Full {
+                                    if app.config.profile == InstallProfile::SidecarOnly {
+                                        app.screen = Screen::ProfileSelect;
+                                    } else if app.mode == InstallMode::Full {
                                         app.screen = Screen::OptionalServices;
                                     } else {
                                         app.screen = Screen::ModeSelect;

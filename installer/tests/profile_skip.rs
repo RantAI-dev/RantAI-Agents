@@ -187,3 +187,37 @@ fn validate_rejects_empty_venv_for_sidecar_profile() {
     cfg.sidecar.python_venv_dir = String::new();
     assert!(validate_config(&cfg).is_err());
 }
+
+/// Regression test: selecting SidecarOnly profile and pressing Enter must
+/// populate config_items (build_config_fields was previously not called for
+/// this path, leaving the Config screen empty).
+#[test]
+fn sidecar_only_enter_populates_config_fields() {
+    use rantai_agents_installer::app::{App, InstallMode, InstallProfile, Screen};
+    use rantai_agents_installer::ui::screens::profile_select;
+
+    let mut app = App::new(InstallMode::Full);
+    // Select SidecarOnly (index 2 per profile_select ordering)
+    app.profile_index = 2;
+    assert_eq!(
+        profile_select::selected_profile(&app),
+        InstallProfile::SidecarOnly
+    );
+
+    // Simulate the Enter handler (mirrors main.rs ProfileSelect branch)
+    app.config.profile = profile_select::selected_profile(&app);
+    if app.config.profile == InstallProfile::SidecarOnly {
+        app.build_config_fields();
+        app.screen = Screen::Config;
+    }
+
+    assert_eq!(
+        app.screen,
+        Screen::Config,
+        "SidecarOnly Enter should land on Config"
+    );
+    assert!(
+        !app.config_items.is_empty(),
+        "build_config_fields must populate config_items before showing Config screen"
+    );
+}

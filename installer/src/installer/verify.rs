@@ -26,19 +26,21 @@ pub fn run_verification(config: &InstallConfig) -> Vec<CheckItem> {
     let mut checks = Vec::new();
     let install_dir = &config.install_dir;
 
-    // ── File system checks ──
-    checks.push(check_file_exists(
-        &format!("{install_dir}/.env"),
-        "Configuration (.env)",
-    ));
-    checks.push(check_dir_exists(
-        &format!("{install_dir}/node_modules"),
-        "Dependencies (node_modules)",
-    ));
-    checks.push(check_dir_exists(
-        &format!("{install_dir}/.next"),
-        "Build Output (.next)",
-    ));
+    // ── File system checks (app-only; SidecarOnly has no Next.js install) ──
+    if config.profile.includes_app() {
+        checks.push(check_file_exists(
+            &format!("{install_dir}/.env"),
+            "Configuration (.env)",
+        ));
+        checks.push(check_dir_exists(
+            &format!("{install_dir}/node_modules"),
+            "Dependencies (node_modules)",
+        ));
+        checks.push(check_dir_exists(
+            &format!("{install_dir}/.next"),
+            "Build Output (.next)",
+        ));
+    }
 
     // ── Service health checks ──
     if config.mode.includes_docker_services() {
@@ -88,8 +90,10 @@ pub fn run_verification(config: &InstallConfig) -> Vec<CheckItem> {
         }
     }
 
-    // ── Web UI check ──
-    checks.push(check_web_ui(&config.nextauth_url));
+    // ── Web UI check (app-only; SidecarOnly has no web UI) ──
+    if config.profile.includes_app() {
+        checks.push(check_web_ui(&config.nextauth_url));
+    }
 
     // ── Systemd service check ──
     if config.install_services {

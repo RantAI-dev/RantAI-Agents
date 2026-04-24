@@ -54,7 +54,10 @@ pub fn run_preflight_checks(config: &InstallConfig) -> Vec<CheckItem> {
 }
 
 fn get_required_ports(config: &InstallConfig) -> Vec<(u16, String)> {
-    let mut ports = vec![(3000, "Web UI (Next.js)".to_string())];
+    let mut ports = Vec::new();
+    if config.profile.includes_app() {
+        ports.push((3000, "Web UI (Next.js)".to_string()));
+    }
 
     if config.mode.includes_docker_services() {
         ports.push((5432, "PostgreSQL".to_string()));

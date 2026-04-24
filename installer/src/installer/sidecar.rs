@@ -167,6 +167,16 @@ pub async fn install_sidecar_services(
     repo_dir: &str,
     tx: &Sender<InstallMessage>,
 ) -> Result<(), String> {
+    // Ensure the service user exists. Idempotent — no-op if already created
+    // by Phase::Services (AllInOne runs that before SidecarInstall).
+    // For SidecarOnly, Phase::Services is skipped so we must do it here.
+    tx.send(InstallMessage::Progress(
+        "Ensuring service user exists...".into(),
+    ))
+    .await
+    .ok();
+    super::services::create_service_user()?;
+
     if config.sidecar.mineru_enabled {
         install_one("rantai-agents-mineru", &mineru_unit(config, repo_dir), tx).await?;
     }

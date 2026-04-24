@@ -30,6 +30,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         .constraints([
             Constraint::Length(2), // header
             Constraint::Min(0),    // fields
+            Constraint::Length(1), // error message (hidden when None)
             Constraint::Length(2), // key hints / edit box
         ])
         .split(inner);
@@ -76,9 +77,18 @@ pub fn draw(f: &mut Frame, app: &App) {
     let fields_para = Paragraph::new(lines);
     f.render_widget(fields_para, content_area[1]);
 
+    // Error message row (only rendered when validation failed)
+    if let Some(err) = &app.error_message {
+        let err_line = Paragraph::new(Line::from(vec![Span::styled(
+            format!("{}  {}", theme::SYM_WARN, err),
+            theme::error(),
+        )]));
+        f.render_widget(err_line, content_area[2]);
+    }
+
     // Bottom area: edit box or key hints
     if app.config_editing {
-        draw_edit_box(f, app, content_area[2]);
+        draw_edit_box(f, app, content_area[3]);
     } else {
         let hints = Paragraph::new(Line::from(vec![
             Span::styled("Up/Down", theme::key_hint()),
@@ -92,7 +102,7 @@ pub fn draw(f: &mut Frame, app: &App) {
             Span::styled("q", theme::key_hint()),
             Span::styled(" Quit", theme::muted()),
         ]));
-        f.render_widget(hints, content_area[2]);
+        f.render_widget(hints, content_area[3]);
     }
 }
 
