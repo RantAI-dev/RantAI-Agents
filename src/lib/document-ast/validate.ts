@@ -16,6 +16,24 @@ export type ValidateResult = ValidateOk | ValidateErr
 
 const SIZE_BUDGET = 128 * 1024 // 128 KB
 
+const MERMAID_DIAGRAM_TYPES = [
+  "flowchart", "graph", "sequenceDiagram", "classDiagram",
+  "stateDiagram", "stateDiagram-v2", "erDiagram", "gantt",
+  "pie", "mindmap", "timeline", "journey", "c4Context",
+  "gitGraph", "quadrantChart", "requirementDiagram",
+] as const
+
+function validateMermaidNode(code: string): string | null {
+  const trimmed = code.trim()
+  if (!trimmed) return "mermaid block has empty code"
+  const firstLine = trimmed.split("\n", 1)[0].trim()
+  const firstToken = firstLine.split(/\s+/, 1)[0]
+  if (!MERMAID_DIAGRAM_TYPES.includes(firstToken as (typeof MERMAID_DIAGRAM_TYPES)[number])) {
+    return `mermaid block: unknown diagram type "${firstToken}" (expected one of ${MERMAID_DIAGRAM_TYPES.join(", ")})`
+  }
+  return null
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Tree walker
 // ────────────────────────────────────────────────────────────────────────────
@@ -146,6 +164,11 @@ function semanticCheck(ast: DocumentAst): string | null {
             throw new _SemanticAbort(`unsplash image src must include a non-empty keyword after "unsplash:"`)
           }
         }
+      }
+
+      if (v.kind === "block" && v.node.type === "mermaid") {
+        const err = validateMermaidNode(v.node.code)
+        if (err) throw new _SemanticAbort(err)
       }
     })
   } catch (e) {

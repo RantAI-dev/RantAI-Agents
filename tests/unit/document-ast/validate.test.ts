@@ -129,3 +129,47 @@ describe("validateDocumentAst", () => {
     expect(r.ok).toBe(false)
   })
 })
+
+describe("validateDocumentAst — mermaid semantic checks", () => {
+  const baseMeta = {
+    title: "T",
+    pageSize: "letter" as const,
+    orientation: "portrait" as const,
+    font: "Arial",
+    fontSize: 12,
+    showPageNumbers: false,
+  }
+
+  it("accepts a flowchart with a valid diagram-type prefix", () => {
+    const result = validateDocumentAst({
+      meta: baseMeta,
+      body: [{ type: "mermaid", code: "flowchart TD\n  A --> B" }],
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it("accepts a sequenceDiagram", () => {
+    const result = validateDocumentAst({
+      meta: baseMeta,
+      body: [{ type: "mermaid", code: "sequenceDiagram\n  A->>B: hi" }],
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it("rejects whitespace-only code", () => {
+    const result = validateDocumentAst({
+      meta: baseMeta,
+      body: [{ type: "mermaid", code: "   \n  \t  " }],
+    })
+    expect(result.ok).toBe(false)
+  })
+
+  it("rejects an unknown diagram-type prefix", () => {
+    const result = validateDocumentAst({
+      meta: baseMeta,
+      body: [{ type: "mermaid", code: "notADiagram\n  A --> B" }],
+    })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toMatch(/mermaid|diagram type/i)
+  })
+})
