@@ -4,8 +4,27 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
 use crate::app::App;
+use crate::installer::run_command;
 use crate::theme;
 use crate::ui::widgets::status_bar;
+
+/// Resolve the FQDN of the current machine for the hand-off URL block.
+/// Tries `hostname -f` first, then `hostname -I` (first token), then falls back.
+fn resolve_hostname() -> String {
+    if let Ok(out) = run_command("hostname", &["-f"]) {
+        let s = out.trim().to_string();
+        if !s.is_empty() && !s.contains(' ') {
+            return s;
+        }
+    }
+    if let Ok(out) = run_command("hostname", &["-I"]) {
+        let s = out.split_whitespace().next().unwrap_or("").to_string();
+        if !s.is_empty() {
+            return s;
+        }
+    }
+    "<THIS-MACHINE>".to_string()
+}
 
 pub fn draw(f: &mut Frame, app: &App) {
     let size = f.area();
@@ -84,6 +103,128 @@ pub fn draw(f: &mut Frame, app: &App) {
     ]));
     lines.push(Line::from(""));
     lines.push(Line::from(""));
+
+    // Sidecar URL panel — only shown when sidecars were installed
+    if app.config.profile.includes_sidecars() {
+        let hostname = resolve_hostname();
+        let mineru_url = format!(
+            "http://{}:{}",
+            hostname, app.config.sidecar.mineru_port
+        );
+        let rerank_url = format!(
+            "http://{}:{}",
+            hostname, app.config.sidecar.rerank_port
+        );
+        let rerank_model = &app.config.sidecar.rerank_model;
+
+        let box_width = 70usize;
+        let divider = "─".repeat(box_width - 2);
+
+        lines.push(Line::from(Span::styled(
+            format!("┌{}┐", divider),
+            theme::primary(),
+        )));
+        lines.push(Line::from(vec![
+            Span::styled("│ ", theme::primary()),
+            Span::styled(
+                "SIDECAR URLs — paste these into your app server's .env",
+                theme::primary_bold(),
+            ),
+            Span::styled(" │", theme::primary()),
+        ]));
+        lines.push(Line::from(Span::styled(
+            format!("│{}│", " ".repeat(box_width - 2)),
+            theme::primary(),
+        )));
+        lines.push(Line::from(vec![
+            Span::styled("│  ", theme::primary()),
+            Span::styled("KB_EXTRACT_PRIMARY=\"smart\"", theme::info()),
+            Span::styled(
+                format!("{} │", " ".repeat(box_width.saturating_sub(27 + 4))),
+                theme::primary(),
+            ),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("│  ", theme::primary()),
+            Span::styled(
+                format!("KB_EXTRACT_MINERU_BASE_URL=\"{mineru_url}\""),
+                theme::info(),
+            ),
+            Span::styled(
+                format!(
+                    "{} │",
+                    " ".repeat(
+                        box_width.saturating_sub(
+                            "KB_EXTRACT_MINERU_BASE_URL=\"\"".len() + mineru_url.len() + 4
+                        )
+                    )
+                ),
+                theme::primary(),
+            ),
+        ]));
+        lines.push(Line::from(Span::styled(
+            format!("│{}│", " ".repeat(box_width - 2)),
+            theme::primary(),
+        )));
+        lines.push(Line::from(vec![
+            Span::styled("│  ", theme::primary()),
+            Span::styled("KB_RERANK_ENABLED=\"true\"", theme::info()),
+            Span::styled(
+                format!("{} │", " ".repeat(box_width.saturating_sub(24 + 4))),
+                theme::primary(),
+            ),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("│  ", theme::primary()),
+            Span::styled("KB_RERANK_PROVIDER=\"vllm\"", theme::info()),
+            Span::styled(
+                format!("{} │", " ".repeat(box_width.saturating_sub(25 + 4))),
+                theme::primary(),
+            ),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("│  ", theme::primary()),
+            Span::styled(format!("KB_RERANK_BASE_URL=\"{rerank_url}\""), theme::info()),
+            Span::styled(
+                format!(
+                    "{} │",
+                    " ".repeat(
+                        box_width.saturating_sub(
+                            "KB_RERANK_BASE_URL=\"\"".len() + rerank_url.len() + 4
+                        )
+                    )
+                ),
+                theme::primary(),
+            ),
+        ]));
+        lines.push(Line::from(vec![
+            Span::styled("│  ", theme::primary()),
+            Span::styled(
+                format!("KB_RERANK_MODEL=\"{rerank_model}\""),
+                theme::info(),
+            ),
+            Span::styled(
+                format!(
+                    "{} │",
+                    " ".repeat(
+                        box_width.saturating_sub(
+                            "KB_RERANK_MODEL=\"\"".len() + rerank_model.len() + 4
+                        )
+                    )
+                ),
+                theme::primary(),
+            ),
+        ]));
+        lines.push(Line::from(Span::styled(
+            format!("│{}│", " ".repeat(box_width - 2)),
+            theme::primary(),
+        )));
+        lines.push(Line::from(Span::styled(
+            format!("└{}┘", divider),
+            theme::primary(),
+        )));
+        lines.push(Line::from(""));
+    }
 
     // Key hints
     lines.push(Line::from(vec![
