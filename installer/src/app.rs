@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Welcome,
+    ProfileSelect,
     ModeSelect,
     OptionalServices,
     Config,
@@ -398,6 +399,9 @@ pub struct App {
     // Mode selection
     pub mode_index: usize,
 
+    // Profile selection
+    pub profile_index: usize,
+
     // Optional services toggles
     pub optional_index: usize,
 
@@ -453,6 +457,7 @@ impl App {
             mode,
             config,
             mode_index: 0,
+            profile_index: 0,
             optional_index: 0,
             config_items: Vec::new(),
             config_index: 0,
@@ -606,13 +611,14 @@ impl App {
     pub fn screen_step(&self) -> usize {
         match self.screen {
             Screen::Welcome => 1,
-            Screen::ModeSelect => 2,
-            Screen::OptionalServices => 3,
-            Screen::Config => 4,
-            Screen::Preflight => 5,
-            Screen::Progress => 6,
-            Screen::Verify => 7,
-            Screen::Complete => 8,
+            Screen::ProfileSelect => 2,
+            Screen::ModeSelect => 3,
+            Screen::OptionalServices => 4,
+            Screen::Config => 5,
+            Screen::Preflight => 6,
+            Screen::Progress => 7,
+            Screen::Verify => 8,
+            Screen::Complete => 9,
             Screen::Error => 0,
         }
     }

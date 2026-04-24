@@ -16,7 +16,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
         Span::styled("\u{2502}", theme::muted()),
         Span::styled(format!(" {} ", screen_label), theme::muted()),
         Span::styled("\u{2502}", theme::muted()),
-        Span::styled(format!(" Step {}/8 ", step), theme::muted()),
+        Span::styled(format!(" Step {}/9 ", step), theme::muted()),
         Span::styled("\u{2502}", theme::muted()),
         Span::styled(format!(" v{} ", theme::VERSION), theme::muted()),
     ]);
@@ -28,6 +28,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
 fn screen_name(screen: Screen) -> &'static str {
     match screen {
         Screen::Welcome => "Welcome",
+        Screen::ProfileSelect => "Profile Selection",
         Screen::ModeSelect => "Mode Selection",
         Screen::OptionalServices => "Optional Services",
         Screen::Config => "Configuration",
