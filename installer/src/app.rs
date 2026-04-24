@@ -513,7 +513,9 @@ impl App {
         let profile_app = c.profile.includes_app();
         let profile_sidecars = c.profile.includes_sidecars();
 
-        if profile_app && (!self.mode.includes_docker_services() || self.mode == InstallMode::Minimal) {
+        if profile_app
+            && (!self.mode.includes_docker_services() || self.mode == InstallMode::Minimal)
+        {
             fields.extend([
                 ConfigField {
                     key: "db_host".into(),
