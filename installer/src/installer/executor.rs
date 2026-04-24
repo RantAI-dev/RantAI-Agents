@@ -169,11 +169,23 @@ async fn execute_phase(
         Phase::Services => super::services::install_services(config, tx).await,
 
         Phase::SidecarInstall => {
-            tx.send(InstallMessage::Progress(
-                "GPU sidecar installation is not yet implemented — phase placeholder.".into(),
-            ))
-            .await
-            .ok();
+            use super::sidecar;
+            let repo = config.install_dir.clone();
+
+            sidecar::ensure_venv(config, tx).await?;
+
+            if config.sidecar.mineru_enabled {
+                let req = format!("{repo}/services/mineru-server/requirements.txt");
+                sidecar::pip_install_requirements(config, &req, tx).await?;
+            }
+            if config.sidecar.rerank_enabled {
+                let req = format!("{repo}/services/rerank-server/requirements.txt");
+                sidecar::pip_install_requirements(config, &req, tx).await?;
+                let model = config.sidecar.rerank_model.clone();
+                sidecar::prefetch_hf_model(config, &model, tx).await?;
+            }
+
+            sidecar::install_sidecar_services(config, &repo, tx).await?;
             Ok(())
         }
 
