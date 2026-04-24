@@ -96,6 +96,14 @@ export type BlockNode =
   | { type: "horizontalRule" }
   | { type: "pageBreak" }
   | { type: "toc"; maxLevel: 1 | 2 | 3 | 4 | 5 | 6; title?: string }
+  | {
+      type: "mermaid"
+      code: string
+      caption?: string
+      width?: number
+      height?: number
+      alt?: string
+    }
 
 export type ListItem = {
   children: BlockNode[]
@@ -290,6 +298,15 @@ export const BlockNodeSchema: z.ZodType<BlockNode> = z.lazy(() =>
         z.literal(6),
       ]),
       title: z.string().optional(),
+    }),
+    // mermaid
+    z.object({
+      type: z.literal("mermaid"),
+      code: z.string().min(1).max(10_000),
+      caption: z.string().max(200).optional(),
+      width: z.number().int().positive().min(200).max(1600).optional().default(1200),
+      height: z.number().int().positive().min(150).max(1200).optional().default(800),
+      alt: z.string().max(500).optional(),
     }),
   ])
 )

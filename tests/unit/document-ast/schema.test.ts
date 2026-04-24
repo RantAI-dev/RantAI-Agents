@@ -100,3 +100,54 @@ describe("DocumentAstSchema", () => {
     expect(result.success).toBe(true)
   })
 })
+
+describe("DocumentAstSchema — mermaid block node", () => {
+  const baseMeta = {
+    title: "T",
+    pageSize: "letter" as const,
+    orientation: "portrait" as const,
+    font: "Arial",
+    fontSize: 12,
+    showPageNumbers: false,
+  }
+
+  it("accepts a minimal mermaid block", () => {
+    const ast = {
+      meta: baseMeta,
+      body: [{ type: "mermaid", code: "flowchart TD\n  A --> B" }],
+    }
+    expect(DocumentAstSchema.safeParse(ast).success).toBe(true)
+  })
+
+  it("accepts mermaid with caption and dimensions", () => {
+    const ast = {
+      meta: baseMeta,
+      body: [
+        {
+          type: "mermaid",
+          code: "sequenceDiagram\n  A->>B: hi",
+          caption: "Login flow",
+          width: 900,
+          height: 600,
+          alt: "Login sequence diagram",
+        },
+      ],
+    }
+    expect(DocumentAstSchema.safeParse(ast).success).toBe(true)
+  })
+
+  it("rejects empty mermaid code", () => {
+    const ast = { meta: baseMeta, body: [{ type: "mermaid", code: "" }] }
+    expect(DocumentAstSchema.safeParse(ast).success).toBe(false)
+  })
+
+  it("rejects mermaid code longer than 10000 chars", () => {
+    const ast = { meta: baseMeta, body: [{ type: "mermaid", code: "x".repeat(10_001) }] }
+    expect(DocumentAstSchema.safeParse(ast).success).toBe(false)
+  })
+
+  it("rejects width outside bounds", () => {
+    const ast = { meta: baseMeta, body: [{ type: "mermaid", code: "graph TD;A-->B", width: 5000 }] }
+    expect(DocumentAstSchema.safeParse(ast).success).toBe(false)
+  })
+})
