@@ -46,9 +46,12 @@ export async function GET(
     try {
       ast = DocumentAstSchema.parse(JSON.parse(result.content))
     } catch (e) {
+      // Schema-shape failures map to 422 (Unprocessable Entity) — the
+      // request was syntactically valid but the stored content can't
+      // be processed. (409 would imply a concurrency conflict.)
       return NextResponse.json(
         { error: `Invalid document AST: ${(e as Error).message}` },
-        { status: 409 }
+        { status: 422 }
       )
     }
 

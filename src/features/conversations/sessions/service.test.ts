@@ -42,9 +42,40 @@ vi.mock("@/lib/rag/vector-store", () => ({
   deleteChunksByDocumentId: vi.fn(),
 }))
 
+vi.mock("@/lib/rag", () => ({
+  deleteChunksByDocumentId: vi.fn(),
+  // Return a resolved promise so the fire-and-forget `.catch(...)` chain
+  // in service.ts doesn't throw on undefined.
+  indexArtifactContent: vi.fn().mockResolvedValue(undefined),
+}))
+
+const { prismaMock } = vi.hoisted(() => ({
+  prismaMock: {
+    assistant: { findUnique: vi.fn() },
+    organizationMember: { findFirst: vi.fn() },
+    document: { deleteMany: vi.fn() },
+    dashboardSession: { delete: vi.fn() },
+    dashboardMessage: { findMany: vi.fn() },
+    $transaction: vi.fn(async (ops: unknown[]) => ops),
+  },
+}))
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: prismaMock,
+}))
+
 describe("dashboard chat sessions service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Default: assistant exists and is system-global, so the org-membership
+    // check short-circuits. Tests that exercise the org-scope path can
+    // override.
+    prismaMock.assistant.findUnique.mockResolvedValue({
+      id: "assistant_1",
+      organizationId: null,
+    } as never)
+    prismaMock.organizationMember.findFirst.mockResolvedValue(null as never)
+    prismaMock.$transaction.mockImplementation(async (ops: unknown[]) => ops)
   })
 
   it("lists chat sessions with summary fields", async () => {

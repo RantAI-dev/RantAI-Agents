@@ -284,7 +284,7 @@ export async function deleteFiles(keys: string[]): Promise<void> {
   }
 
   for (const chunk of chunks) {
-    await client.send(
+    const response = await client.send(
       new DeleteObjectsCommand({
         Bucket: S3_CONFIG.bucket,
         Delete: {
@@ -292,6 +292,19 @@ export async function deleteFiles(keys: string[]): Promise<void> {
         },
       })
     )
+    // S3 reports per-object failures in `response.Errors[]` even when
+    // the overall command "succeeds". Without inspecting them, a key
+    // that failed to delete (auth, missing, server error) would never
+    // be retried and would leak indefinitely. Log so the orphans show
+    // up in monitoring; don't throw because partial delete is the
+    // typical contract for callers.
+    if (response.Errors && response.Errors.length > 0) {
+      for (const err of response.Errors) {
+        console.error(
+          `[s3.deleteFiles] partial failure key=${err.Key} code=${err.Code} message=${err.Message}`,
+        )
+      }
+    }
   }
 }
 

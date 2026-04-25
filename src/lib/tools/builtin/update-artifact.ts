@@ -50,10 +50,10 @@ export const updateArtifactTool: ToolDefinition = {
     // Validate content size
     const contentBytes = Buffer.byteLength(content, "utf-8")
     if (contentBytes > MAX_ARTIFACT_CONTENT_BYTES) {
-      // Rescan N-8: title === undefined serializes to JSON-absent, leaving
-      // the LLM with no way to recall the artifact's actual title. We don't
-      // have `existing` yet at this guard, so emit the requested newTitle
-      // verbatim — it is at least what the model intended.
+      // We don't have `existing` yet at this early guard, so emit the
+      // requested newTitle verbatim. Later guards below resolve to
+      // `newTitle ?? existing.title` so the LLM can read the current
+      // title even when it didn't request a change.
       return {
         id,
         title: newTitle,
@@ -87,14 +87,11 @@ export const updateArtifactTool: ToolDefinition = {
       }
       existingForReturn = { title: existing.title }
 
-      // Fix #6 + rescan N-7: canvas-mode type enforcement. When the user
-      // has selected a specific artifact type, the LLM is required to keep
-      // using it. The previous guard short-circuited with
-      // `existing.artifactType &&` — meaning a Document row whose
-      // `artifactType` was null (legacy / accidental) bypassed the lock
-      // entirely. We now treat null `artifactType` as "any canvas-mode
-      // mismatches" and refuse the update; tools should not be the path
-      // that retypes an untyped Document.
+      // Canvas-mode type enforcement. When the user has selected a
+      // specific artifact type, the LLM is required to keep using it.
+      // A null stored `artifactType` (legacy / accidental untyped row)
+      // is treated as "any canvas-mode mismatches" — tools should not
+      // be the path that retypes an untyped Document.
       const canvasMode = context.canvasMode
       const canvasModeMismatch =
         canvasMode &&
@@ -126,8 +123,8 @@ export const updateArtifactTool: ToolDefinition = {
         if (!validation.ok) {
           return {
             id,
-            // N-8: prefer the requested title; fall back to the stored one
-            // so the LLM never sees a literal `undefined` for an artifact
+            // Prefer the requested title; fall back to the stored one so
+            // the LLM never sees a literal `undefined` for an artifact
             // whose title it didn't try to change.
             title: newTitle ?? existing.title,
             content,
@@ -256,9 +253,9 @@ export const updateArtifactTool: ToolDefinition = {
       persisted = false
     }
 
-    // Rescan N-9: when persistence threw, `updated: true` is misleading —
-    // the LLM (and the chat-workspace's `out.updated` gate) would believe
-    // the in-memory state is now backed by storage. Reflect reality.
+    // When persistence threw, `updated: true` would be misleading — the
+    // LLM (and the chat-workspace's `out.updated` gate) would believe the
+    // in-memory state is now backed by storage. Reflect reality instead.
     if (!persisted) {
       return {
         id,
@@ -272,8 +269,8 @@ export const updateArtifactTool: ToolDefinition = {
 
     return {
       id,
-      // N-8: when no title change was requested, surface the stored title
-      // so downstream code (LLM memory, chat-workspace) can recall it.
+      // When no title change was requested, surface the stored title so
+      // downstream code (LLM memory, chat-workspace) can recall it.
       title: newTitle ?? existingForReturn?.title,
       content: finalContent,
       updated: true,
