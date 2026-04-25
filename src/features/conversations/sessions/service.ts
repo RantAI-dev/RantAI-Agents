@@ -18,6 +18,7 @@ import {
   findDashboardSessionByIdAndUser,
   findDashboardSessionsByUser,
   updateDashboardArtifactById,
+  updateDashboardArtifactByIdLocked,
   updateDashboardMessageById,
   updateDashboardSessionTitle,
 } from "./repository"
@@ -526,16 +527,28 @@ export async function updateDashboardChatSessionArtifact(params: {
     )
   }
 
-  const updated = (await updateDashboardArtifactById(params.artifactId, {
-    content: String(content),
-    title: (title as string) || existing.title,
-    fileSize: Buffer.byteLength(String(content), "utf-8"),
-    metadata: {
-      ...meta,
-      versions,
-      ...(totalEvicted > 0 ? { evictedVersionCount: totalEvicted } : {}),
+  const updated = (await updateDashboardArtifactByIdLocked(
+    params.artifactId,
+    existing.updatedAt,
+    {
+      content: String(content),
+      title: (title as string) || existing.title,
+      fileSize: Buffer.byteLength(String(content), "utf-8"),
+      metadata: {
+        ...meta,
+        versions,
+        ...(totalEvicted > 0 ? { evictedVersionCount: totalEvicted } : {}),
+      },
     },
-  })) as DashboardChatSessionArtifactRow
+  )) as DashboardChatSessionArtifactRow | null
+
+  if (!updated) {
+    return {
+      status: 409,
+      error:
+        "Concurrent update detected: another writer changed this artifact while you were editing. Reload to see the latest version, then retry your save.",
+    }
+  }
 
   return {
     id: updated.id,

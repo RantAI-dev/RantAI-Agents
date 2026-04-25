@@ -203,10 +203,13 @@ export const updateArtifactTool: ToolDefinition = {
           )
         }
 
-        // Update Document record
+        // Update Document record with optimistic lock — `WHERE updatedAt = X`
+        // ensures concurrent writers don't clobber each other's metadata.versions
+        // array. updateMany returns { count: 0 } if another writer changed the
+        // row between our read and our write.
         const updatedTitle = newTitle || existing.title
-        await prisma.document.update({
-          where: { id },
+        const lockResult = await prisma.document.updateMany({
+          where: { id, updatedAt: existing.updatedAt },
           data: {
             content: finalContent,
             title: updatedTitle,
@@ -221,6 +224,20 @@ export const updateArtifactTool: ToolDefinition = {
             } as Prisma.InputJsonValue,
           },
         })
+
+        if (lockResult.count === 0) {
+          // Another writer beat us. Surface the conflict to the LLM so it can
+          // re-fetch and retry rather than silently dropping the update.
+          return {
+            id,
+            title: newTitle,
+            content,
+            updated: false,
+            persisted: false,
+            error:
+              "Concurrent update detected: another writer modified this artifact between read and write. Re-fetch the artifact and retry the update.",
+          }
+        }
 
         // Background: re-index updated content for RAG search
         indexArtifactContent(id, updatedTitle, finalContent, { isUpdate: true }).catch((err) =>

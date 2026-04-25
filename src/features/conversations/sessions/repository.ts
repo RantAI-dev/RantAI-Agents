@@ -167,6 +167,62 @@ export async function updateDashboardArtifactById(
   })
 }
 
+/**
+ * Optimistic-lock variant of {@link updateDashboardArtifactById}.
+ *
+ * Returns `null` when the row's `updatedAt` no longer matches the supplied
+ * token — meaning a concurrent writer changed the row between read and write.
+ * Caller must surface the conflict (don't silently retry or overwrite).
+ */
+export async function updateDashboardArtifactByIdLocked(
+  artifactId: string,
+  expectedUpdatedAt: Date,
+  data: {
+    content: string
+    title: string
+    fileSize: number
+    metadata: Record<string, unknown>
+  }
+) {
+  const result = await prisma.document.updateMany({
+    where: { id: artifactId, updatedAt: expectedUpdatedAt },
+    data: {
+      ...data,
+      metadata: data.metadata as Prisma.InputJsonValue,
+    },
+  })
+  if (result.count === 0) return null
+  return prisma.document.findUnique({ where: { id: artifactId } })
+}
+
+/**
+ * Optimistic-lock variant of {@link updateDashboardArtifactById}.
+ *
+ * Returns `null` when the row's `updatedAt` no longer matches the supplied
+ * token — meaning a concurrent writer changed the row between read and write.
+ * Caller must surface the conflict (don't silently retry or overwrite).
+ */
+export async function updateDashboardArtifactByIdLocked(
+  artifactId: string,
+  expectedUpdatedAt: Date,
+  data: {
+    content: string
+    title: string
+    fileSize: number
+    metadata: Record<string, unknown>
+  }
+) {
+  const result = await prisma.document.updateMany({
+    where: { id: artifactId, updatedAt: expectedUpdatedAt },
+    data: {
+      ...data,
+      metadata: data.metadata as Prisma.InputJsonValue,
+    },
+  })
+  if (result.count === 0) return null
+  return prisma.document.findUnique({ where: { id: artifactId } })
+}
+
 export async function deleteDashboardArtifactById(artifactId: string) {
   return prisma.document.delete({
     where: { id: artifactId },

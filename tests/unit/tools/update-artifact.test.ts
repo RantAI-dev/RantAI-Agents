@@ -1,9 +1,10 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-const { findUniqueMock, updateMock } = vi.hoisted(() => ({
+const { findUniqueMock, updateMock, updateManyMock } = vi.hoisted(() => ({
   findUniqueMock: vi.fn(),
   updateMock: vi.fn(),
+  updateManyMock: vi.fn(),
 }))
 
 vi.mock("@/lib/prisma", () => ({
@@ -11,6 +12,7 @@ vi.mock("@/lib/prisma", () => ({
     document: {
       findUnique: findUniqueMock,
       update: updateMock,
+      updateMany: updateManyMock,
     },
   },
 }))
@@ -46,6 +48,7 @@ import { updateArtifactTool } from "@/lib/tools/builtin/update-artifact"
 beforeEach(() => {
   findUniqueMock.mockReset()
   updateMock.mockReset()
+  updateManyMock.mockReset()
   validateMock.mockReset()
 })
 
@@ -83,6 +86,7 @@ describe("update_artifact tool", () => {
         s3Key: null,
         metadata: null,
         mimeType: null,
+        updatedAt: new Date(2026, 0, 1),
       })
 
       const result = await updateArtifactTool.execute(
@@ -94,7 +98,7 @@ describe("update_artifact tool", () => {
       expect(result.persisted).toBe(false)
       expect(result.error).toMatch(/canvas mode is locked/i)
       expect(validateMock).not.toHaveBeenCalled()
-      expect(updateMock).not.toHaveBeenCalled()
+      expect(updateManyMock).not.toHaveBeenCalled()
     })
 
     it("allows updates when canvas-mode is auto, null, or matches the artifact type", async () => {
@@ -106,9 +110,10 @@ describe("update_artifact tool", () => {
         s3Key: null,
         metadata: null,
         mimeType: null,
+        updatedAt: new Date(2026, 0, 1),
       })
       validateMock.mockResolvedValue({ ok: true, errors: [], warnings: [] })
-      updateMock.mockResolvedValue({})
+      updateManyMock.mockResolvedValue({ count: 1 })
 
       const result = await updateArtifactTool.execute(
         { id: "art-2", content: "<!doctype html><html><head><title>x</title><meta name=viewport content=x></head><body></body></html>" },
@@ -116,6 +121,59 @@ describe("update_artifact tool", () => {
       )
 
       expect(result.updated).toBe(true)
+    })
+  })
+
+  describe("NEW-2 — optimistic locking", () => {
+    it("returns persisted:false when a concurrent writer changed the row mid-update", async () => {
+      const oldUpdatedAt = new Date(2026, 0, 1)
+      findUniqueMock.mockResolvedValue({
+        id: "art-lock",
+        artifactType: "text/html",
+        title: "old",
+        content: "<!doctype html><html><head><title>x</title><meta name=viewport content=x></head><body></body></html>",
+        s3Key: "artifacts/o-1/s-1/art-lock.html",
+        metadata: null,
+        mimeType: null,
+        updatedAt: oldUpdatedAt,
+      })
+      validateMock.mockResolvedValue({ ok: true, errors: [], warnings: [] })
+      // Simulate another writer having changed the row — our updateMany
+      // returns count === 0 because the WHERE updatedAt = oldUpdatedAt
+      // no longer matches.
+      updateManyMock.mockResolvedValue({ count: 0 })
+
+      const result = await updateArtifactTool.execute(
+        { id: "art-lock", content: "<!doctype html><html><head><title>x</title><meta name=viewport content=x></head><body>fresh</body></html>" },
+        baseContext,
+      )
+
+      expect(result.persisted).toBe(false)
+      expect(result.error).toMatch(/concurrent|conflict|stale/i)
+    })
+
+    it("succeeds when updateMany matches exactly one row", async () => {
+      const oldUpdatedAt = new Date(2026, 0, 1)
+      findUniqueMock.mockResolvedValue({
+        id: "art-ok",
+        artifactType: "text/html",
+        title: "old",
+        content: "<!doctype html><html><head><title>x</title><meta name=viewport content=x></head><body></body></html>",
+        s3Key: null,
+        metadata: null,
+        mimeType: null,
+        updatedAt: oldUpdatedAt,
+      })
+      validateMock.mockResolvedValue({ ok: true, errors: [], warnings: [] })
+      updateManyMock.mockResolvedValue({ count: 1 })
+
+      const result = await updateArtifactTool.execute(
+        { id: "art-ok", content: "<!doctype html><html><head><title>x</title><meta name=viewport content=x></head><body>v2</body></html>" },
+        baseContext,
+      )
+
+      expect(result.updated).toBe(true)
+      expect(result.persisted).toBe(true)
     })
   })
 
@@ -129,6 +187,7 @@ describe("update_artifact tool", () => {
         s3Key: "artifacts/o-1/s-1/art-3.docx",
         metadata: null,
         mimeType: "text/plain",
+        updatedAt: new Date(2026, 0, 1),
       })
       const RAW_CONTENT = '{"meta":{"title":"x"},"body":[{"type":"image","src":"unsplash:mountain","alt":"a","width":100,"height":100}]}'
       const RESOLVED_CONTENT = '{"meta":{"title":"x"},"body":[{"type":"image","src":"https://example.com/resolved.jpg","alt":"a","width":100,"height":100}]}'
@@ -138,7 +197,7 @@ describe("update_artifact tool", () => {
         warnings: [],
         content: RESOLVED_CONTENT,
       })
-      updateMock.mockResolvedValue({})
+      updateManyMock.mockResolvedValue({ count: 1 })
 
       const result = await updateArtifactTool.execute(
         { id: "art-3", content: RAW_CONTENT },
@@ -146,8 +205,8 @@ describe("update_artifact tool", () => {
       )
 
       expect(result.updated).toBe(true)
-      expect(updateMock).toHaveBeenCalledOnce()
-      const updateArgs = updateMock.mock.calls[0][0]
+      expect(updateManyMock).toHaveBeenCalledOnce()
+      const updateArgs = updateManyMock.mock.calls[0][0]
       // The Prisma update must persist the resolved content, not the raw input.
       expect(updateArgs.data.content).toBe(RESOLVED_CONTENT)
     })
