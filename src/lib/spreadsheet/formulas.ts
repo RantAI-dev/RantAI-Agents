@@ -142,28 +142,54 @@ export function evaluateWorkbook(spec: SpreadsheetSpec): WorkbookValues {
     deps.set(key, cellDeps)
   }
 
-  // ── 4. Topological sort ─────────────────────────────────────
+  // ── 4. Topological sort (Kahn's algorithm) ─────────────────
+  //
+  // Build an in-degree map and a reverse-edge map so we can pop
+  // zero-degree nodes in O(1). Earlier code used a naive scan that
+  // re-iterated `remaining` on every outer loop iteration, making it
+  // O(n²) in the formula count. At the current 200-formula cap that
+  // was ~40k iterations — fine in practice but quadratic if anyone
+  // raises the cap. Kahn's runs in O(V + E).
   const order: string[] = []
-  const remaining = new Set(deps.keys())
+  const formulaCells = new Set(deps.keys())
+  const inDegree = new Map<string, number>()
+  const reverseEdges = new Map<string, string[]>()
 
-  while (remaining.size > 0) {
-    let progress = false
-    for (const key of [...remaining]) {
-      const myDeps = deps.get(key) ?? []
-      // A dep only blocks us if it is also a formula cell still pending
-      const unresolved = myDeps.filter((d) => remaining.has(d))
-      if (unresolved.length === 0) {
-        order.push(key)
-        remaining.delete(key)
-        progress = true
-      }
+  for (const key of formulaCells) {
+    const myDeps = deps.get(key) ?? []
+    // A dep only blocks us if it is also a formula cell still pending —
+    // dependencies on literal cells are always already-resolved.
+    const formulaDeps = myDeps.filter((d) => formulaCells.has(d) && d !== key)
+    inDegree.set(key, formulaDeps.length)
+    for (const dep of formulaDeps) {
+      const list = reverseEdges.get(dep) ?? []
+      list.push(key)
+      reverseEdges.set(dep, list)
     }
-    if (!progress) {
-      // Circular — mark all remaining formula cells
-      for (const key of remaining) {
-        values.set(key, { value: null, error: "CIRCULAR" })
-      }
-      break
+  }
+
+  const queue: string[] = []
+  for (const [key, degree] of inDegree) {
+    if (degree === 0) queue.push(key)
+  }
+
+  while (queue.length > 0) {
+    const key = queue.shift()!
+    order.push(key)
+    const dependents = reverseEdges.get(key) ?? []
+    for (const dependent of dependents) {
+      const remaining = (inDegree.get(dependent) ?? 0) - 1
+      inDegree.set(dependent, remaining)
+      if (remaining === 0) queue.push(dependent)
+    }
+  }
+
+  // Any cell whose in-degree is still > 0 is part of (or downstream of)
+  // a cycle. Mark them CIRCULAR so the renderer can flag the affected
+  // cells instead of leaving a stale empty value.
+  for (const [key, degree] of inDegree) {
+    if (degree > 0) {
+      values.set(key, { value: null, error: "CIRCULAR" })
     }
   }
 

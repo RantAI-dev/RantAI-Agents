@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback, lazy, Suspense } from "react"
+import { useState, useMemo, useCallback, useEffect, lazy, Suspense } from "react"
 import {
   useReactTable,
   getCoreRowModel,
@@ -68,6 +68,16 @@ function CsvOrArrayView({
 }) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState("")
+
+  // Reset table state when the artifact content changes (LLM update,
+  // historical version pick, manual save). Without this, sort/filter state
+  // keyed on the old column ids silently no-ops against new column ids
+  // (rare but confusing; a user sees "no sort applied" indicator but the
+  // table never reorders).
+  useEffect(() => {
+    setSorting([])
+    setGlobalFilter("")
+  }, [content])
 
   const { headers, rows, parseError } = useMemo(() => {
     try {

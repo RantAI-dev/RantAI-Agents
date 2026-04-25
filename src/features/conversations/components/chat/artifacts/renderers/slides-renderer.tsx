@@ -62,9 +62,23 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
     []
   )
 
-  // Keyboard navigation
+  // Keyboard navigation. The handler used to be bound at the window
+  // level with `e.preventDefault()` — that captured arrow keys in any
+  // unrelated text input on the page (chat composer, search bars) and
+  // navigated slides instead of moving the input cursor. We now ignore
+  // events while focus is on a typing element, so the slide-deck-only
+  // arrow-key shortcut still works without hijacking other inputs.
   useEffect(() => {
+    const isTextEntryElement = (el: Element | null): boolean => {
+      if (!el) return false
+      const tag = el.tagName
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true
+      // Rich-text editors (the chat composer is contenteditable).
+      if ((el as HTMLElement).isContentEditable) return true
+      return false
+    }
     const handler = (e: KeyboardEvent) => {
+      if (isTextEntryElement(document.activeElement)) return
       if (e.key === "ArrowRight" || e.key === "ArrowDown") {
         e.preventDefault()
         navigate("next")

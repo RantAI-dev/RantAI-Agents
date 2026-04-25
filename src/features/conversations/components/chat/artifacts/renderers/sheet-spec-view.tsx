@@ -56,6 +56,15 @@ export function SpecWorkbookView({
   const [values, setValues] = useState<WorkbookValues | null>(null)
   const [evalError, setEvalError] = useState<string | null>(null)
 
+  // Reset selection / active-sheet when the underlying content changes.
+  // An LLM update that drops sheets (e.g. 3 → 1) used to leave activeSheet
+  // pointing at an undefined index, and a stale selectedRef stayed
+  // highlighted on a cell that had been replaced.
+  useEffect(() => {
+    setActiveSheet(0)
+    setSelectedRef(null)
+  }, [content])
+
   const parsed = useMemo(() => parseSpec(content), [content])
   const spec: SpreadsheetSpec | null = parsed.ok ? parsed.spec! : null
 
