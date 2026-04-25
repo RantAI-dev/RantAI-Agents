@@ -339,6 +339,7 @@ pub struct InstallConfig {
 
     // Mode & flags
     pub mode: InstallMode,
+    pub update_mode: bool,
     pub install_services: bool,
     pub enable_ollama: bool,
     pub enable_piston: bool,
@@ -382,6 +383,7 @@ impl Default for InstallConfig {
             sidecar: SidecarConfig::default(),
 
             mode: InstallMode::Full,
+            update_mode: false,
             install_services: true,
             enable_ollama: true,
             enable_piston: true,
@@ -396,6 +398,7 @@ pub struct App {
     pub mode: InstallMode,
     pub config: InstallConfig,
     pub install_state: Option<crate::state::InstallState>,
+    pub update_mode: bool,
 
     // Mode selection
     pub mode_index: usize,
@@ -460,6 +463,7 @@ impl App {
             install_state: crate::state::InstallState::load_from(
                 &crate::state::InstallState::default_path(crate::installer::is_root()),
             ).unwrap_or(None),
+            update_mode: false,
             mode_index: 0,
             profile_index: 0,
             optional_index: 0,
