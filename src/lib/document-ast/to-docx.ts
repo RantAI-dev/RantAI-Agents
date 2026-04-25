@@ -476,12 +476,29 @@ async function renderTable(
 // Cover page rendering
 // ────────────────────────────────────────────────────────────────────────────
 
-// v1: logoUrl is intentionally skipped to keep cover page synchronous and
-// deterministic. The async image render path already supports logos if needed.
-function renderCoverPage(cover: NonNullable<DocumentAst["coverPage"]>): Paragraph[] {
+async function renderCoverPage(cover: NonNullable<DocumentAst["coverPage"]>): Promise<Paragraph[]> {
   const out: Paragraph[] = []
   // Top padding (~2 inches at 1440 twips/inch)
   out.push(new Paragraph({ spacing: { before: 2880 }, children: [] }))
+  // Optional centred logo image at the very top. Failures fall through silently
+  // — a missing logo shouldn't block the rest of the cover page.
+  if (cover.logoUrl) {
+    try {
+      const fetched = await fetchImage(cover.logoUrl)
+      out.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new ImageRun({
+          data: fetched.buf,
+          transformation: { width: 160, height: 160 },
+          type: fetched.type,
+        })],
+      }))
+      // Spacer between logo and title
+      out.push(new Paragraph({ spacing: { before: 480 }, children: [] }))
+    } catch (err) {
+      console.warn("[to-docx] cover logo fetch failed, skipping:", err)
+    }
+  }
   // Title
   out.push(new Paragraph({
     alignment: AlignmentType.CENTER,
@@ -541,7 +558,7 @@ export async function astToDocx(ast: DocumentAst): Promise<Buffer> {
     ? new Footer({ children: (await renderBlocks(ast.footer.children, ctx)) as any })
     : undefined
 
-  const coverChildren = ast.coverPage ? renderCoverPage(ast.coverPage) : []
+  const coverChildren = ast.coverPage ? await renderCoverPage(ast.coverPage) : []
   const bodyChildren = await renderBlocks(ast.body, ctx)
 
   // Collect footnote definitions accumulated during body (and header/footer) rendering.
