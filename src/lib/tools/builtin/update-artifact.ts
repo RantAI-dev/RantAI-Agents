@@ -4,7 +4,6 @@ import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile } from "@/lib/s3"
 import { indexArtifactContent } from "@/lib/rag"
-import { resolveImages, resolveSlideImages } from "@/lib/unsplash"
 import {
   validateArtifactContent,
   formatValidationError,
@@ -135,12 +134,8 @@ export const updateArtifactTool: ToolDefinition = {
         }
       }
 
-      // Resolve unsplash: URLs to real images for HTML and slides artifacts
-      if (existing.artifactType === "text/html") {
-        finalContent = await resolveImages(finalContent)
-      } else if (existing.artifactType === "application/slides") {
-        finalContent = await resolveSlideImages(finalContent)
-      }
+      // Unsplash resolution for HTML/slides happens inside the validator now;
+      // finalContent already carries resolved URLs via validation.content above.
 
       // Archive old version to S3 and record lightweight metadata
       {

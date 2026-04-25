@@ -95,11 +95,11 @@ export function __setValidateTimeoutMsForTesting(ms: number) {
 
 export async function validateArtifactContent(
   type: string,
-  content: string
+  content: string,
 ): Promise<ArtifactValidationResult> {
   const validator = VALIDATORS[type as ArtifactType]
   if (!validator) return { ok: true, errors: [], warnings: [] }
-  return Promise.race([
+  const result = await Promise.race([
     Promise.resolve().then(() => validator(content)),
     new Promise<ArtifactValidationResult>((resolve) => {
       setTimeout(() => {
@@ -113,6 +113,20 @@ export async function validateArtifactContent(
       }, VALIDATE_TIMEOUT_MS).unref?.()
     }),
   ])
+  // Post-validation: resolve unsplash:keyword URLs for HTML and slides so
+  // every entry-point (LLM tool, API route, manual edit via service.ts) gets
+  // resolved content without each having to call the resolvers itself.
+  // text/document already resolves inside validateDocument; other types skip.
+  if (!result.ok) return result
+  if (type === "text/html") {
+    const { resolveImages } = await import("@/lib/unsplash")
+    return { ...result, content: await resolveImages(result.content ?? content) }
+  }
+  if (type === "application/slides") {
+    const { resolveSlideImages } = await import("@/lib/unsplash")
+    return { ...result, content: await resolveSlideImages(result.content ?? content) }
+  }
+  return result
 }
 
 // ---------------------------------------------------------------------------

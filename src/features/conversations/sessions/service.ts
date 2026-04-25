@@ -457,6 +457,10 @@ export async function updateDashboardChatSessionArtifact(params: {
   // sanitation, …). Validation failures are returned as 422 with the
   // formatted error message + raw error list so the panel can display the
   // exact issues inline in edit mode instead of silently saving garbage.
+  // Validator runs structural checks AND post-resolves unsplash:keyword URLs
+  // for HTML/slides/documents — capture validation.content so the rewritten
+  // content is what we persist, not the raw textarea input.
+  let finalContent = String(content)
   if (existing.artifactType) {
     const validation = await validateArtifactContent(
       existing.artifactType,
@@ -467,6 +471,9 @@ export async function updateDashboardChatSessionArtifact(params: {
         status: 422,
         error: formatValidationError(existing.artifactType, validation),
       }
+    }
+    if (validation.content) {
+      finalContent = validation.content
     }
   }
 
@@ -522,7 +529,7 @@ export async function updateDashboardChatSessionArtifact(params: {
   if (existing.s3Key) {
     await uploadFile(
       existing.s3Key,
-      Buffer.from(String(content), "utf-8"),
+      Buffer.from(finalContent, "utf-8"),
       existing.mimeType || "text/plain"
     )
   }
@@ -531,9 +538,9 @@ export async function updateDashboardChatSessionArtifact(params: {
     params.artifactId,
     existing.updatedAt,
     {
-      content: String(content),
+      content: finalContent,
       title: (title as string) || existing.title,
-      fileSize: Buffer.byteLength(String(content), "utf-8"),
+      fileSize: Buffer.byteLength(finalContent, "utf-8"),
       metadata: {
         ...meta,
         versions,
