@@ -103,7 +103,7 @@ export const createArtifactTool: ToolDefinition = {
     // Structural validation for HTML/React. Failures are surfaced back to the
     // LLM so it can self-correct on the next tool call. Other artifact types
     // pass through unchanged.
-    const validation = await validateArtifactContent(type, content)
+    const validation = await validateArtifactContent(type, content, { isNew: true })
     let validationWarnings: string[] = validation.warnings
     if (!validation.ok) {
       return {
