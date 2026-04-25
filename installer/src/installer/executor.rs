@@ -105,9 +105,27 @@ fn should_skip_phase(phase: Phase, config: &InstallConfig) -> bool {
         return true;
     }
 
+    // Update phase only runs when update_mode is active.
+    if phase == Phase::Update && !config.update_mode {
+        return true;
+    }
+
+    // In update mode, skip phases that are already handled by the running system.
+    if config.update_mode
+        && matches!(
+            phase,
+            Phase::Infrastructure | Phase::ApplicationSetup | Phase::Services
+        )
+    {
+        return true;
+    }
+
     match phase {
         // Preflight always runs
         Phase::Preflight => false,
+
+        // Update: handled above (skipped when not update_mode)
+        Phase::Update => false,
 
         // Dependencies: skip in Docker-only mode (no native app)
         Phase::Dependencies => {
@@ -178,6 +196,34 @@ async fn execute_phase(
                 }
             }
 
+            Ok(())
+        }
+
+        Phase::Update => {
+            use super::update;
+            let branch =
+                std::env::var("RANTAI_AGENTS_BRANCH").unwrap_or_else(|_| "main".to_string());
+            let result = update::git_update(&config.install_dir, &branch, tx).await?;
+            tx.send(InstallMessage::Log(
+                crate::app::LogLevel::Info,
+                format!(
+                    "Pulled {} → {} ({}{})",
+                    result.old_sha,
+                    result.new_sha,
+                    if result.old_sha == result.new_sha {
+                        "no changes"
+                    } else {
+                        "updated"
+                    },
+                    if result.stash_used {
+                        "; stash auto-restored"
+                    } else {
+                        ""
+                    },
+                ),
+            ))
+            .await
+            .ok();
             Ok(())
         }
 

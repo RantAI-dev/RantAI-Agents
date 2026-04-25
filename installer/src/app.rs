@@ -202,6 +202,7 @@ impl Default for SidecarConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Phase {
     Preflight,
+    Update,
     Dependencies,
     Infrastructure,
     ApplicationSetup,
@@ -216,6 +217,7 @@ impl Phase {
     pub fn label(&self) -> &str {
         match self {
             Self::Preflight => "Preflight Checks",
+            Self::Update => "Pull Latest Code",
             Self::Dependencies => "Install Dependencies",
             Self::Infrastructure => "Start Infrastructure",
             Self::ApplicationSetup => "Application Setup",
@@ -230,19 +232,21 @@ impl Phase {
     pub fn index(&self) -> usize {
         match self {
             Self::Preflight => 0,
-            Self::Dependencies => 1,
-            Self::Infrastructure => 2,
-            Self::ApplicationSetup => 3,
-            Self::Configuration => 4,
-            Self::Database => 5,
-            Self::Services => 6,
-            Self::SidecarInstall => 7,
-            Self::Verification => 8,
+            Self::Update => 1,
+            Self::Dependencies => 2,
+            Self::Infrastructure => 3,
+            Self::ApplicationSetup => 4,
+            Self::Configuration => 5,
+            Self::Database => 6,
+            Self::Services => 7,
+            Self::SidecarInstall => 8,
+            Self::Verification => 9,
         }
     }
 
     pub const ALL: &'static [Phase] = &[
         Phase::Preflight,
+        Phase::Update,
         Phase::Dependencies,
         Phase::Infrastructure,
         Phase::ApplicationSetup,
@@ -253,7 +257,7 @@ impl Phase {
         Phase::Verification,
     ];
 
-    pub const COUNT: usize = 9;
+    pub const COUNT: usize = 10;
 }
 
 /// Status of a check item or phase.

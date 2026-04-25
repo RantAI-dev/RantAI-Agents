@@ -236,10 +236,14 @@ fn run_event_loop(
                     }
                     Screen::UpdateOrFresh => match key.code {
                         KeyCode::Up => {
-                            if app.update_or_fresh_index > 0 { app.update_or_fresh_index -= 1; }
+                            if app.update_or_fresh_index > 0 {
+                                app.update_or_fresh_index -= 1;
+                            }
                         }
                         KeyCode::Down => {
-                            if app.update_or_fresh_index < 2 { app.update_or_fresh_index += 1; }
+                            if app.update_or_fresh_index < 2 {
+                                app.update_or_fresh_index += 1;
+                            }
                         }
                         KeyCode::Enter => {
                             use ui::screens::update_or_fresh::{selected_action, UpdateAction};

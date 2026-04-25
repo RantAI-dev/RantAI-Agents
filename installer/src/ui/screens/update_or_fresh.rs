@@ -24,7 +24,10 @@ pub fn draw(f: &mut Frame, app: &App) {
     let main_block = Block::default()
         .borders(Borders::ALL)
         .border_style(theme::border_active())
-        .title(Span::styled(" Existing Install Detected ", theme::primary_bold()));
+        .title(Span::styled(
+            " Existing Install Detected ",
+            theme::primary_bold(),
+        ));
     let main_inner = main_block.inner(outer[0]);
     f.render_widget(main_block, outer[0]);
 
@@ -37,8 +40,16 @@ pub fn draw(f: &mut Frame, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, (label, _))| {
-            let arrow = if i == app.update_or_fresh_index { theme::SYM_ARROW } else { " " };
-            let style = if i == app.update_or_fresh_index { theme::primary_bold() } else { theme::text() };
+            let arrow = if i == app.update_or_fresh_index {
+                theme::SYM_ARROW
+            } else {
+                " "
+            };
+            let style = if i == app.update_or_fresh_index {
+                theme::primary_bold()
+            } else {
+                theme::text()
+            };
             ListItem::new(Line::from(vec![
                 Span::styled(format!(" {arrow} "), theme::primary()),
                 Span::styled(*label, style),
@@ -46,13 +57,18 @@ pub fn draw(f: &mut Frame, app: &App) {
         })
         .collect();
     let list = List::new(items).block(
-        Block::default().borders(Borders::RIGHT).border_style(theme::border_inactive()),
+        Block::default()
+            .borders(Borders::RIGHT)
+            .border_style(theme::border_inactive()),
     );
     f.render_widget(list, panels[0]);
 
     let mut details: Vec<Line> = Vec::new();
     if let Some(s) = &app.install_state {
-        details.push(Line::from(Span::styled("Existing install:", theme::muted())));
+        details.push(Line::from(Span::styled(
+            "Existing install:",
+            theme::muted(),
+        )));
         details.push(Line::from(format!("  Path:      {}", s.install_dir)));
         details.push(Line::from(format!("  Profile:   {:?}", s.profile)));
         details.push(Line::from(format!("  Mode:      {:?}", s.mode)));

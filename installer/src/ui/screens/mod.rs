@@ -1,5 +1,4 @@
 pub mod complete;
-pub mod update_or_fresh;
 pub mod config;
 pub mod error;
 pub mod mode_select;
@@ -7,5 +6,6 @@ pub mod optional_services;
 pub mod preflight;
 pub mod profile_select;
 pub mod progress;
+pub mod update_or_fresh;
 pub mod verify;
 pub mod welcome;

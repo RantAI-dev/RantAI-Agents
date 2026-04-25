@@ -23,6 +23,21 @@ fn http_get_ok(url: &str) -> (bool, String) {
 
 /// Run all post-install verification checks.
 pub fn run_verification(config: &InstallConfig) -> Vec<CheckItem> {
+    if config.update_mode {
+        if config.profile.includes_app() {
+            let _ = super::run_sudo("systemctl", &["restart", "rantai-agents"]);
+        }
+        if config.profile.includes_sidecars() {
+            if config.sidecar.mineru_enabled {
+                let _ = super::run_sudo("systemctl", &["restart", "rantai-agents-mineru"]);
+            }
+            if config.sidecar.rerank_enabled {
+                let _ = super::run_sudo("systemctl", &["restart", "rantai-agents-rerank"]);
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    }
+
     let mut checks = Vec::new();
     let install_dir = &config.install_dir;
 

@@ -148,6 +148,11 @@ PORT=3000
 /// Generate the .env file from the install configuration.
 /// Auto-generates random values for any secrets left empty.
 pub fn generate_config(config: &mut InstallConfig) -> Result<(), String> {
+    let env_path = format!("{}/.env", config.install_dir);
+    if config.update_mode && std::path::Path::new(&env_path).exists() {
+        return Ok(());
+    }
+
     // Auto-fill empty secrets
     if config.db_password.is_empty() {
         config.db_password = generate_random_string(16);

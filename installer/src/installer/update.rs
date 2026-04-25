@@ -20,12 +20,9 @@ pub async fn git_update(
 ) -> Result<UpdateResult, String> {
     let old_sha = sha_at(install_dir);
 
-    let dirty = !run_command(
-        "git",
-        &["-C", install_dir, "status", "--porcelain"],
-    )?
-    .trim()
-    .is_empty();
+    let dirty = !run_command("git", &["-C", install_dir, "status", "--porcelain"])?
+        .trim()
+        .is_empty();
 
     let stash_name = format!(
         "rantai-agents-installer-autostash-{}",
@@ -35,26 +32,40 @@ pub async fn git_update(
     if dirty {
         tx.send(InstallMessage::Progress(
             "Local changes detected — stashing...".into(),
-        )).await.ok();
+        ))
+        .await
+        .ok();
         run_command(
             "git",
-            &["-C", install_dir, "stash", "push", "--include-untracked",
-              "-m", &stash_name],
+            &[
+                "-C",
+                install_dir,
+                "stash",
+                "push",
+                "--include-untracked",
+                "-m",
+                &stash_name,
+            ],
         )?;
         stash_used = true;
     }
 
-    tx.send(InstallMessage::Progress(format!(
-        "Fetching {branch}..."
-    ))).await.ok();
+    tx.send(InstallMessage::Progress(format!("Fetching {branch}...")))
+        .await
+        .ok();
     run_command("git", &["-C", install_dir, "fetch", "origin", branch])?;
     run_command("git", &["-C", install_dir, "checkout", branch])?;
-    run_command("git", &["-C", install_dir, "pull", "--ff-only", "origin", branch])?;
+    run_command(
+        "git",
+        &["-C", install_dir, "pull", "--ff-only", "origin", branch],
+    )?;
 
     if stash_used {
         tx.send(InstallMessage::Progress(
             "Restoring stashed local changes...".into(),
-        )).await.ok();
+        ))
+        .await
+        .ok();
         if run_command("git", &["-C", install_dir, "stash", "pop"]).is_err() {
             tx.send(InstallMessage::Log(
                 crate::app::LogLevel::Warning,
@@ -62,7 +73,9 @@ pub async fn git_update(
                     "Stash {stash_name} could not be auto-popped (likely conflicts). \
                      Resolve manually: `git -C {install_dir} stash list`",
                 ),
-            )).await.ok();
+            ))
+            .await
+            .ok();
         }
     }
 
