@@ -435,6 +435,10 @@ export function ReactRenderer({ content, onFixWithAI }: ReactRendererProps) {
   // Listen for error messages from the iframe
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
+      // Only accept messages from our own iframe. Without this guard, other
+      // iframes on the page (or even cross-origin embedders) can fire fake
+      // error events and force this renderer into the error state.
+      if (e.source !== iframeRef.current?.contentWindow) return
       if (e.data?.type === "error" && typeof e.data.message === "string") {
         setError(e.data.message)
       }

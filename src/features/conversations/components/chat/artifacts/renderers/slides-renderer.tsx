@@ -39,6 +39,10 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
   // Listen for postMessage from iframe
   useEffect(() => {
     const handler = (e: MessageEvent) => {
+      // Reject messages that didn't come from our own iframe — other iframes
+      // on the page (e.g. an HTML artifact rendered concurrently) could
+      // otherwise spoof slideChange events and corrupt the slide counter.
+      if (e.source !== iframeRef.current?.contentWindow) return
       if (e.data?.type === "slideChange") {
         setCurrentSlide(e.data.current)
         setTotalSlides(e.data.total)
