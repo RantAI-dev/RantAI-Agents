@@ -209,7 +209,7 @@ const MAX_BULLET_WORDS = 10
 const MIN_DECK_SLIDES = 7
 const MAX_DECK_SLIDES = 12
 
-function validateSlides(content: string): ArtifactValidationResult {
+function validateSlides(content: string, ctx?: ValidationContext): ArtifactValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
@@ -329,13 +329,17 @@ function validateSlides(content: string): ArtifactValidationResult {
       }
     }
 
-    // image-text is a deprecated alias for content (renderer + PPTX both
-    // treat it as content with no image support). Steer the LLM toward
-    // content explicitly.
+    // image-text is deprecated. New artifacts must use `content` (renderer +
+    // PPTX both treat the two identically anyway, so there's no migration cost
+    // beyond renaming). Existing artifacts still validate to keep them
+    // editable until their next save replaces the layout.
     if (s.layout === "image-text") {
-      warnings.push(
-        `Slide ${i + 1} uses \`image-text\` layout — this renders identically to \`content\` and adds no image support. Use \`content\` instead.`,
-      )
+      const message = `Slide ${i + 1} uses \`image-text\` layout — this renders identically to \`content\` and adds no image support. Use \`content\` instead.`
+      if (ctx?.isNew) {
+        errors.push(message)
+      } else {
+        warnings.push(message)
+      }
     }
 
     // Closing slides should have a title (the CTA / takeaway line).
