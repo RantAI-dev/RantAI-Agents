@@ -92,7 +92,14 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
         <iframe
           ref={iframeRef}
           srcDoc={srcdoc}
-          sandbox="allow-scripts allow-same-origin"
+          /* allow-same-origin used to be set here, which combined with
+             allow-scripts removes most of the iframe sandbox (the slide
+             content gets parent-origin cookies / storage access). The
+             slide HTML doesn't need that — it only loads the Inter font
+             from fonts.googleapis.com (cross-origin works fine without
+             allow-same-origin) and exchanges postMessage with the host
+             (postMessage works in every sandbox). */
+          sandbox="allow-scripts"
           className="w-full h-full border-0"
           title="Slide Preview"
         />
