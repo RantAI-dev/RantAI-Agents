@@ -224,12 +224,53 @@ fn run_event_loop(
                 match app.screen {
                     Screen::Welcome => {
                         if let KeyCode::Enter = key.code {
-                            app.screen = Screen::ProfileSelect;
+                            app.screen = if app.install_state.is_some() {
+                                Screen::UpdateOrFresh
+                            } else {
+                                Screen::ProfileSelect
+                            };
                         }
                         if let KeyCode::Char('q') = key.code {
                             app.should_quit = true;
                         }
                     }
+                    Screen::UpdateOrFresh => match key.code {
+                        KeyCode::Up => {
+                            if app.update_or_fresh_index > 0 { app.update_or_fresh_index -= 1; }
+                        }
+                        KeyCode::Down => {
+                            if app.update_or_fresh_index < 2 { app.update_or_fresh_index += 1; }
+                        }
+                        KeyCode::Enter => {
+                            use ui::screens::update_or_fresh::{selected_action, UpdateAction};
+                            match selected_action(app) {
+                                UpdateAction::Update => {
+                                    if let Some(s) = &app.install_state {
+                                        app.config.profile = s.profile;
+                                        app.config.mode = s.mode;
+                                        app.mode = s.mode;
+                                        app.config.install_dir = s.install_dir.clone();
+                                        app.config.data_dir = s.data_dir.clone();
+                                        app.config.update_mode = true;
+                                        app.update_mode = true;
+                                    }
+                                    app.screen = Screen::Preflight;
+                                }
+                                UpdateAction::Fresh => {
+                                    app.config.update_mode = false;
+                                    app.update_mode = false;
+                                    app.screen = Screen::ProfileSelect;
+                                }
+                                UpdateAction::Cancel => {
+                                    app.should_quit = true;
+                                }
+                            }
+                        }
+                        KeyCode::Esc => {
+                            app.screen = Screen::Welcome;
+                        }
+                        _ => {}
+                    },
                     Screen::ProfileSelect => match key.code {
                         KeyCode::Up => {
                             if app.profile_index > 0 {
