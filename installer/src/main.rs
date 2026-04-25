@@ -186,6 +186,14 @@ fn run_tui(initial_mode: InstallMode) -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::new(initial_mode);
+
+    if let Some(state) = &app.install_state {
+        eprintln!(
+            "Detected existing install at {} (sha {}, profile {:?}, installed {})",
+            state.install_dir, state.git_sha, state.profile, state.installed_at,
+        );
+    }
+
     let result = run_event_loop(&mut terminal, &mut app);
 
     disable_raw_mode()?;

@@ -395,6 +395,7 @@ pub struct App {
     pub screen: Screen,
     pub mode: InstallMode,
     pub config: InstallConfig,
+    pub install_state: Option<crate::state::InstallState>,
 
     // Mode selection
     pub mode_index: usize,
@@ -456,6 +457,9 @@ impl App {
             screen: Screen::Welcome,
             mode,
             config,
+            install_state: crate::state::InstallState::load_from(
+                &crate::state::InstallState::default_path(crate::installer::is_root()),
+            ).unwrap_or(None),
             mode_index: 0,
             profile_index: 0,
             optional_index: 0,
