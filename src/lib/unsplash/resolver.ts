@@ -182,18 +182,19 @@ export async function resolveQueries(queries: string[]): Promise<Map<string, str
         const url = `${photo.urls.regular}&w=1200`
         resolved.set(query, url)
 
-        // Cache the result
+        // Cache the result. Upsert (not create) so concurrent writers don't
+        // race on the @unique constraint on `query` — the previous code
+        // swallowed the duplicate-key error in an empty catch.
+        const expiresAt = new Date(Date.now() + CACHE_DAYS * 24 * 60 * 60 * 1000)
+        const attribution = `Photo by ${photo.user.name} on Unsplash`
         try {
-          await prisma.resolvedImage.create({
-            data: {
-              query,
-              url,
-              attribution: `Photo by ${photo.user.name} on Unsplash`,
-              expiresAt: new Date(Date.now() + CACHE_DAYS * 24 * 60 * 60 * 1000),
-            },
+          await prisma.resolvedImage.upsert({
+            where: { query },
+            create: { query, url, attribution, expiresAt },
+            update: { url, attribution, expiresAt },
           })
-        } catch {
-          // Ignore duplicate key errors (race condition)
+        } catch (err) {
+          console.warn("[unsplash] Cache upsert failed:", err)
         }
       } else {
         // Unsplash failed - use placeholder with keyword text
