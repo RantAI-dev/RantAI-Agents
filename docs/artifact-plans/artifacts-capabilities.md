@@ -1,419 +1,890 @@
-# Kapabilitas Artifact — Deep Scan Detail
+# Artifact Capabilities — per-type spec
 
-**Tanggal:** April 2026
-**Sumber:** Scan lengkap prompt rules, renderer implementations, dan validator di `/src/lib/prompts/artifacts/` dan `/src/features/conversations/components/chat/artifacts/renderers/`
+> **Audience:** anyone deciding "which artifact type should I (or my LLM) use for X?", or implementing a new capability for an existing type. Each section below is self-contained — you can read just the type you care about. Companion docs: [artifacts-deepscan.md](./artifacts-deepscan.md) (system flow) and [architecture-reference.md](./architecture-reference.md) (file:line audit).
 
----
-
-## TL;DR — Matrix Kapabilitas
-
-| Fitur | HTML | React | SVG | Mermaid | Code | Python | Sheet | Markdown | Document | LaTeX | Slides | R3F |
-|-------|:----:|:-----:|:---:|:-------:|:----:|:------:|:-----:|:--------:|:--------:|:-----:|:------:|:---:|
-| **Unsplash images** | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ |
-| **External images** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ |
-| **Inline SVG** | ✓ | ✓ | – | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **Recharts** | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
-| **Mermaid diagrams** | ✗ | ✗ | ✗ | – | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ | ✓ | ✗ |
-| **Mermaid charts** | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ |
-| **Aesthetic menu (7 dir)** | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **Dynamic Google Fonts** | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **Chart fence (D3)** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
-| **Framer Motion** | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **Lucide icons** | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
-| **Tailwind CSS** | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **Interactive forms** | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **Sort + filter** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **Formulas + multi-sheet** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **XLSX export** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **Matplotlib plots** | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| **KaTeX math** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ |
-| **YAML frontmatter** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
-| **DOCX export** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
-| **WYSIWYG preview** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
-| **3D models (glTF)** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+**Last regenerated:** 2026-04-25 — fresh scan from `src/`.
 
 ---
 
-## 1. HTML Artifact — `text/html`
+## How to read this doc
 
-**Label:** HTML Page
-**Ringkasan:** Self-contained interactive HTML pages dengan Tailwind CSS v3 dan JS interactivity, di-render dalam sandboxed iframe.
+Each artifact type gets a section with this structure:
 
-### Kapabilitas Inti
+- **Identity** — type string, label, file extension, has-code-tab flag
+- **When to use** — the boundary against neighboring types
+- **Content shape** — what the LLM emits (raw HTML / JSX / mermaid syntax / JSON / etc.)
+- **Capabilities** — the can-do list, with concrete examples
+- **Hard constraints** — things the validator rejects
+- **Soft warnings** — things the validator nags about
+- **Anti-patterns** — explicit ❌ items from the prompt
+- **Pre-injected dependencies** — what the LLM gets for free
+- **Render pipeline** — what happens between content and pixels
+- **Sandbox / security** — isolation guarantees
+- **Download** — file format and any post-processing
 
-**Runtime:**
-- Tailwind CSS v3 — auto-injected dari CDN (`https://cdn.tailwindcss.com`)
-- Inter font — HARUS include manual: `<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">`
-- Sandbox: `allow-scripts allow-modals` only — NO `location.*`, NO `history.*`, NO real form POST
-- `localStorage` works — untuk user preferences
-- No external network (except Google Fonts dan Tailwind CDN)
+---
 
-**Unsplash Image Integration** ⭐ (CORE FEATURE)
-- **Syntax:** `<img src="unsplash:keyword phrase" alt="meaningful alt text" />`
-- **Contoh:**
-  ```html
-  <img src="unsplash:mountain sunset" alt="Scenic mountain at golden hour" />
-  <img src="unsplash:coffee shop interior" alt="Warm cafe setting" />
-  ```
-- **Resolusi:** Server-side (file: [resolver.ts](src/lib/unsplash/resolver.ts))
-  - Regex: `src=["']unsplash:([^"']+)["']/gi`
-  - Extract keyword → normalize (lowercase, trim, 50 char max)
-  - Search Unsplash API via [client.ts](src/lib/unsplash/client.ts)
-  - **Output:** Direct URL dengan width param: `${photo.urls.regular}&w=1200`
-  - **Cache:** 30 hari di Prisma `resolvedImage` table
-  - **Fallback:** Jika Unsplash down → `placehold.co` dengan keyword text
-- **Tipe field:** HANYA di `src` attribute — bukan CSS `background-image` atau inline styles
-- **Tidak support:** Base64 data URIs, Picsum, placeholder.com (explicit anti-pattern)
+## Cross-type capability matrix
 
-**Media Support:**
-- `<img>` dengan URL atau `unsplash:` protocol
-- Internal SVG (`<svg>...</svg>` inline) ✓
-- Video (`<video>`) — teknisnya bisa tapi unlikely, sandbox blocks navigation
-- Audio (`<audio>`) — supported
+Quick visual reference; details in each section. Order matches the registry.
 
-**Styling & Layout:**
-- Tailwind classes — utility-first, container (max-w-7xl, mx-auto)
-- Custom inline `<style>` blocks — max 10 non-blank lines
-- Flexbox first (primary), Grid (secondary)
-- Responsive breakpoints: `sm:`, `md:`, `lg:`, `xl:` — mobile-first
+| Capability | HTML | React | SVG | Mermaid | Markdown | Document | Code | Sheet | LaTeX | Slides | Python | R3F |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Unsplash images (`unsplash:keyword`) | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| External image URLs in content | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| Inline SVG (in body) | ✓ | ✓ | – | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Recharts (React component charts) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Inline mermaid diagrams | ✗ | ✗ | ✗ | – | ✓ (fenced) | ✓ (block node) | ✗ | ✗ | ✗ | ✓ (layout) | ✗ | ✗ |
+| Data charts (D3 SVG; bar/line/pie/donut) | ✗ | ✓ (Recharts) | ✗ | ✓ (`pie`) | ✗ | ✓ (block node) | ✗ | ✗ | ✗ | ✓ (layout) | ✓ (matplotlib) | ✗ |
+| Aesthetic directive menu (7 directions) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Dynamic Google Fonts | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ (font name only in DOCX) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Framer Motion animations | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Lucide icons | ✓ (via SVG paths) | ✓ (`LucideReact.*`) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ (`{icon:name}`) | ✗ | ✗ |
+| Tailwind CSS (CDN) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Interactive forms / DOM events | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Sort + filter table | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ (CSV / array) | ✗ | ✗ | ✗ | ✗ |
+| Multi-sheet workbook + formulas | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ (spec) | ✗ | ✗ | ✗ | ✗ |
+| Real `.xlsx` export with cached values | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ (spec) | ✗ | ✗ | ✗ | ✗ |
+| Matplotlib plots | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
+| Pandas / NumPy / scikit-learn | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
+| KaTeX math (inline + display) | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ (rendered as text) | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| Cover page + header/footer | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ (title slide layout) | ✗ | ✗ |
+| TOC with bookmarks + anchors | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Page numbers | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ (slide-num footer) | ✗ | ✗ |
+| Footnotes (page-bottom) | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Tables with colspan / rowspan | ✓ | ✓ | ✗ | ✗ | ✗ (GFM only) | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Real `.docx` export (server-side) | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| `.pptx` export | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
+| Code execution at runtime | ✓ (browser JS) | ✓ (transpiled JSX) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ (formulas only) | ✗ | ✗ | ✓ (Pyodide) | ✓ (WebGL) |
+| 3D models (`.glb`) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| Iframe sandbox | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ (Worker) | ✓ |
+| Theme awareness (light/dark) | ✗ | ✗ (chooses palette per directive) | ✗ | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 
-**Interactivity:**
-- Form dengan `onSubmit` (controlled state via vanilla JS)
-- Event listeners (`addEventListener`)
-- `setTimeout` / `setInterval` — short delays only
-- Tab functionality dengan `role="tablist"` + `aria-selected`
+Legend: ✓ = supported · ✗ = not supported · `–` = the type itself · parenthetical = the conditional form.
 
-### Anti-Patterns ❌
-- ❌ Bare `unsplash:` di CSS `background-image` (won't resolve)
-- ❌ External URLs (non-Google Fonts, non-Tailwind)
-- ❌ Form dengan `action="/submit"` (sandbox blocks POST)
+---
+
+## 1. `text/html` — HTML Page
+
+**Identity**
+
+| | |
+|---|---|
+| Type | `text/html` |
+| Label / Short label | "HTML Page" / "HTML" |
+| Extension | `.html` |
+| Code tab | ✓ |
+| Color | orange-500 |
+
+### When to use
+
+- Interactive single-page apps: dashboards, calculators, forms, games, landing pages.
+- Anything that needs the user to **click, type, or compute**.
+
+vs `text/markdown`: markdown is for *reading*, HTML is for *interacting*.
+vs `application/react`: React if you need component state across multiple sub-views, animations, charts; HTML for self-contained interactive pages where vanilla JS is sufficient.
+vs `application/slides`: slides if it's a presentation; HTML for any other interactive surface.
+
+### Content shape
+
+A complete HTML document. Tailwind CSS v3 from CDN and Inter from Google Fonts will be auto-injected into `<head>` if not present (regex check). Partial HTML (just a body fragment) will be wrapped in a default document.
+
+### Capabilities
+
+- **Tailwind CSS v3** — full utility-first styling. No build step; Tailwind's CDN reads class names at runtime.
+- **Inter font** — auto-loaded if not present.
+- **`unsplash:keyword phrase` URLs** in `<img src>` — server-resolved to real Unsplash URLs at create time, cached 30 days. Falls back to `placehold.co` on resolution failure.
+- **Inline SVG** — full SVG markup as element trees.
+- **`<audio>` / `<video>`** — supported by the iframe; sandbox doesn't strip them.
+- **Vanilla JS** — `addEventListener`, `setTimeout`, `setInterval`, full DOM manipulation.
+- **`localStorage`** — works (sandbox doesn't disable storage). Useful for user preferences across reloads of the same artifact.
+- **Forms** — controlled state via JS only. The sandbox doesn't include `allow-forms`, so `<form action="...">` cannot POST.
+- **Tables with colspan / rowspan** — full HTML table semantics.
+- **Modal dialogs** — `allow-modals` is on, so `alert()` / `confirm()` / `prompt()` / `<dialog>` work.
+
+### Hard constraints (validator errors)
+
+- Must start with `<!DOCTYPE html>`.
+- Must contain `<html>`, `<head>`, `<body>`.
+- Must contain a non-empty `<title>` in `<head>`.
+- Must contain `<meta name="viewport">`.
+- Must NOT contain `<form action>` (the sandbox blocks submissions; misleading to users).
+- Hard cap 512 KB content size (universal).
+
+### Soft warnings (validator)
+
+- Inline `<style>` block > 10 non-blank lines (prefer Tailwind utilities).
+- `<script src>` to non-CDN URLs (likely will be blocked by sandbox).
+
+### Anti-patterns ❌ (from prompt)
+
+- ❌ Bare `unsplash:` reference in CSS `background-image` (won't resolve — only matches `<img src>`)
+- ❌ External URLs other than Tailwind CDN, Google Fonts, or `unsplash:`
+- ❌ Form with `action="/submit"` (sandbox blocks POST)
 - ❌ `window.location = "..."` (sandbox blocks navigation)
-- ❌ Truncation atau "...add more here"
+- ❌ Truncation or "...add more here" placeholders
+
+### Pre-injected dependencies
+
+- Tailwind CDN (`https://cdn.tailwindcss.com`)
+- Google Fonts (Inter family)
+- Navigation blocker script (custom, see render pipeline)
+
+### Render pipeline
+
+1. Parse content for existing Tailwind / Inter; conditionally inject if missing.
+2. If partial HTML, wrap in default document with charset + viewport + base styles.
+3. Inject navigation blocker script (BEFORE any user code).
+4. Build `srcDoc` and load into `<iframe sandbox="allow-scripts allow-modals">`.
+5. 5-second slow-load warning timer; spinner cleared by actual `onLoad` event.
+6. Three `useRef`s coordinate state across loads to prevent races during navigation restoration.
+
+### Sandbox / security
+
+- **Iframe sandbox flags**: `allow-scripts allow-modals` only. **No** `allow-same-origin`, **no** `allow-top-navigation`, **no** `allow-forms`, **no** `allow-popups`.
+- **Navigation blocker** (injected before user code) overrides:
+  - `Location.assign` / `Location.replace` / `Location.reload`
+  - `location.href` setter
+  - Anchor `click` events (non-fragment, non-`javascript:`)
+  - Form `submit` events
+  - `history.pushState` / `history.replaceState`
+  - `window.open` (returns a no-op stub)
+- **No DOMPurify** — relies entirely on the iframe sandbox boundary for isolation.
+
+### Download
+
+Raw `.html` save (the actual artifact content). Tailwind CDN + Inter font links are part of the saved file (since they're injected at render time, not before persist) — actually, since the injection happens in the renderer's iframe construction, the saved file does *not* include the auto-injected Tailwind/font; the LLM is expected to include them itself if they should be in the saved file.
 
 ---
 
-## 2. React Artifact — `application/react`
+## 2. `application/react` — React Component
 
-**Label:** React Component
-**Ringkasan:** Single React 18 component, transpiled by Babel, rendered di iframe dengan pre-injected globals. **Upgraded 2026-04-24:** aesthetic direction menu + dynamic Google Fonts — no more hard-locked Inter/slate+indigo default.
+**Identity**
 
-### Runtime Environment
+| | |
+|---|---|
+| Type | `application/react` |
+| Label / Short label | "React Component" / "React" |
+| Extension | `.tsx` |
+| Code tab | ✓ |
+| Color | blue-500 |
 
-**Pre-destructured React APIs** (available langsung, no import needed):
+### When to use
+
+- UI components with state: dashboards, toolboxes, configurators, chart explorers, multi-step flows.
+- Anything that benefits from React's reconciliation: lists, forms, animations.
+- When you need **Recharts** for data viz or **Framer Motion** for animations.
+
+vs `text/html`: HTML for one-shot pages; React for stateful UI with reusable parts.
+vs `application/slides`: slides have rigid layouts; React if you need a custom interactive surface.
+
+### Content shape
+
+A single React component file. **Line 1 must be a directive comment**:
+
 ```jsx
-const {
-  useState, useEffect, useRef, useMemo, useCallback, useReducer,
-  useContext, useId, useTransition, useDeferredValue, useLayoutEffect,
-  useSyncExternalStore, useInsertionEffect, createContext, forwardRef,
-  memo, Fragment, Suspense, lazy, startTransition, createElement,
-  isValidElement, Children, cloneElement
-} = React;
+// @aesthetic: editorial
 ```
 
-**Global Libraries — window.global syntax:**
+**Optional line 2:**
 
-| Library | Symbol | Version | Usage | Notes |
-|---------|--------|---------|-------|-------|
-| **Recharts** | `Recharts` | 2 | `<Recharts.LineChart>`, `<Recharts.BarChart>`, `<Recharts.PieChart>`, `<Recharts.AreaChart>`, `<Recharts.ResponsiveContainer>`, `<Recharts.Tooltip>` | Charts ONLY |
-| **Lucide React** | `LucideReact` | 0.454 | `<LucideReact.ArrowRight>`, `<LucideReact.Check>` | Icons as React components |
-| **Framer Motion** | `Motion` | 11 | `Motion.motion.div`, `Motion.AnimatePresence` | Animations & transitions |
-| **Tailwind CSS** | – | v3 CDN | Classes (`.bg-slate-50`, `.text-indigo-600`) | Styling |
+```jsx
+// @fonts: Fraunces:ital,wght@0,400..700 | Inter:wght@300..700
+```
 
-**Sandbox:** `allow-scripts` only — no real form POST, no `window.open`, no navigation. Mock all data.
+The component must export a default. JSX + ES modules. TypeScript syntax allowed (Babel strips types).
 
-### Directives (NEW — 2026-04-24)
+### Aesthetic directive menu
 
-Line 1 is REQUIRED: `// @aesthetic: <direction>`. Line 2 is OPTIONAL: `// @fonts: Family:spec | Family:spec` (pipe-separated, max 3 families).
+Required on line 1. Determines palette guidance, component conventions, motion character, and default Google Fonts.
 
-Valid directions (7):
-`editorial | brutalist | luxury | playful | industrial | organic | retro-futuristic`
-
-Renderer loads fonts dynamically from `fonts.googleapis.com` (only host whitelist); malformed `@fonts` falls back to direction defaults. Validator hard-errors on missing `@aesthetic`, unknown value, or malformed `@fonts`. Soft-warns on:
-- Non-industrial direction + ≥ 6 `slate-*` / `indigo-*` references (palette-direction mismatch)
-- Editorial/luxury direction without a known serif family in `@fonts` (font-direction mismatch)
-- Industrial direction using `Motion.motion` / `Motion.AnimatePresence` (motion-in-industrial)
-
-### Aesthetic Direction Menu
-
-| Direction | When to pick | Default fonts |
+| Direction | Use for | Default fonts |
 |---|---|---|
-| editorial | articles, brand pages, storytelling, long-form | Fraunces + Inter |
-| brutalist | indie tools, manifestos, dev products, "raw" | Space Grotesk + JetBrains Mono |
-| luxury | premium, hospitality, fashion | DM Serif Display + DM Sans |
-| playful | onboarding, kids, creative tools | Fredoka |
-| industrial | dashboards, admin, monitoring | Inter Tight + Space Mono |
-| organic | wellness, food, crafts | Fraunces + Public Sans |
-| retro-futuristic | gaming, sci-fi, events | VT323 + Space Mono |
+| `editorial` | articles, brand pages, storytelling, long-form | Fraunces + Inter |
+| `brutalist` | indie tools, manifestos, dev products, "raw" | Space Grotesk + JetBrains Mono |
+| `luxury` | premium, hospitality, fashion | DM Serif Display + DM Sans |
+| `playful` | onboarding, kids, creative tools | Fredoka |
+| `industrial` | dashboards, admin, monitoring | Inter Tight + Space Mono |
+| `organic` | wellness, food, crafts | Fraunces + Public Sans |
+| `retro-futuristic` | gaming, sci-fi, events | VT323 + Space Mono |
 
-Each direction ships a full design system (palette, spacing, component conventions, motion character). See [src/lib/prompts/artifacts/react.ts](../../src/lib/prompts/artifacts/react.ts) for the canonical spec. Prompt fixtures cover 4 directions; test fixtures at [tests/fixtures/react-artifacts/](../../tests/fixtures/react-artifacts/) cover all 7.
+The validator hard-errors on missing `@aesthetic:` (when env `ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"`) or unknown direction. Soft-warns on:
+- ≥ 6 `slate-*`/`indigo-*` references with a non-`industrial` direction (palette mismatch)
+- `editorial`/`luxury` direction without a recognized serif in `@fonts` (font mismatch)
+- `industrial` direction using `Motion.motion` or `Motion.AnimatePresence` (motion-in-industrial)
 
-### Chart Types via Recharts
-Same as before: `<LineChart>`, `<BarChart>` (also `layout="vertical"`), `<PieChart>`, `<AreaChart>`, with `<XAxis>`, `<YAxis>`, `<CartesianGrid>`, `<Legend>`, `<Tooltip>`, `<ResponsiveContainer>`.
+### `@fonts` spec
 
-### Anti-Patterns ❌
-- ❌ Missing `// @aesthetic:` directive on line 1 (hard-error)
-- ❌ Unknown aesthetic direction name (hard-error)
-- ❌ Malformed `@fonts` spec (hard-error)
-- ❌ More than 3 font families (hard-error)
-- ❌ Mixing directions within one artifact
-- ❌ Silently defaulting to slate+indigo without `@aesthetic: industrial` (palette-mismatch warn)
-- ❌ `import { Card } from 'shadcn/ui'` — NOT available (Phase 2 will ship `RantaiUI` bundle)
+Pipe-separated. Each spec validates against `/^[A-Z][A-Za-z0-9 ]{1,40}:(wght@[\d;.]+|...)$/`. Max 3 families. Loaded dynamically from `fonts.googleapis.com` (only host whitelist). Malformed specs hard-error in the validator.
+
+### Capabilities
+
+**Pre-injected globals (no `import` needed):**
+
+| Library | Symbol | Version |
+|---|---|---|
+| React 18 | `React` + 26 hooks pre-destructured | UMD 18 |
+| Recharts | `Recharts.LineChart`, `Recharts.BarChart`, `Recharts.PieChart`, `Recharts.AreaChart`, `Recharts.ResponsiveContainer`, `Recharts.Tooltip`, `Recharts.XAxis`, `Recharts.YAxis`, `Recharts.CartesianGrid`, `Recharts.Legend`, etc. | 2 |
+| Lucide React | `LucideReact.ArrowRight`, `LucideReact.Check`, `LucideReact.X`, etc. | 0.454.0 |
+| Framer Motion | `Motion.motion.div`, `Motion.AnimatePresence` | 11 |
+| Tailwind CSS | utility classes via CDN | v3 |
+
+**Pre-destructured React hooks** (available without `const { ... } = React;`): `useState`, `useEffect`, `useRef`, `useMemo`, `useCallback`, `useContext`, `useReducer`, `useId`, `useTransition`, `useDeferredValue`, `useSyncExternalStore`, `useInsertionEffect`, `useLayoutEffect`, `createContext`, `forwardRef`, `memo`, `Fragment`, `Suspense`, `lazy`, `startTransition`, `Children`, `cloneElement`, `createElement`, `isValidElement` — and a few more (Profiler / StrictMode are NOT in the destructured set; `import { Profiler } from 'react'` will be rewritten to `const { Profiler } = React;`).
+
+**TypeScript syntax** is allowed — Babel strips types during transpile.
+
+### Hard constraints (validator errors)
+
+- Missing `// @aesthetic:` line 1 (gated by env, default enforce)
+- Unknown aesthetic value (gated by env)
+- Malformed `@fonts` spec (gated by env)
+- More than 3 font families
+- Missing `export default`
+- Class components (`class X extends React.Component`)
+- Non-whitelisted imports — only allowed: `react`, `react-dom`, `recharts`, `lucide-react`, `framer-motion`, plus relative paths
+- `document.getElementById` / `document.querySelector` (use `useRef`)
+- CSS imports (`import './styles.css'`)
+- Hard cap 512 KB
+
+### Soft warnings (validator)
+
+- Direction-specific palette/font/motion mismatches (see directive section above)
+
+### Anti-patterns ❌
+
+- ❌ `import { Card } from 'shadcn/ui'` — NOT available
 - ❌ `import './styles.css'`
 - ❌ `class X extends React.Component`
-- ❌ `document.getElementById()` / `document.querySelector()`
-- ❌ Real `fetch()` calls
+- ❌ `document.getElementById` / `document.querySelector`
+- ❌ Real `fetch()` calls (no network)
+- ❌ Form `action="/api"` POST (sandbox)
+- ❌ `window.open` / `window.location` (sandbox)
 - ❌ Truncation
 
----
+### Render pipeline
 
-## 3. SVG Artifact — `image/svg+xml`
+1. Strip directive lines (1–2) before transpile.
+2. Hide template literals (`` `...` ``) so import-regex doesn't false-match inside strings.
+3. Collapse multi-line imports onto one line.
+4. Rewrite imports to globals: `import { useState } from 'react'` → `const { useState } = React;` (only for symbols not in the 26 pre-destructured set); `import * as Recharts from 'recharts'` → `const Recharts = Recharts;` etc.
+5. Strip side-effect imports (`import './foo.css'`).
+6. Transform `export default` into a named const/function.
+7. Restore template literals.
+8. Build iframe `srcDoc` containing: Tailwind CDN, font links from `buildFontLinks(aesthetic, fonts)`, React 18 + ReactDOM 18 + Babel-standalone + Recharts + Lucide + Framer Motion UMDs, navigation blocker, then a `<script type="text/babel">` block with the user code wrapped in an `__ArtifactErrorBoundary` class.
+9. Mount with `ReactDOM.createRoot()`.
+10. Errors postMessage'd to parent; parent shows fatal card (Retry / Fix-with-AI / View Source) or non-fatal warning banner.
 
-**Label:** SVG Graphic
-**Ringkasan:** Static inline SVG graphics (icons, illustrations, logos, diagrams), sanitized oleh DOMPurify (no script/style/foreignObject).
+### Sandbox / security
 
-### Rendering Context
-- **Inline** (not iframed) — di-sanitize dengan DOMPurify
-- **Container scale:** responsive (`max-width: 100%; height: auto`)
-- **viewBox:** REQUIRED — hardcoded `width`/`height` akan break responsive scaling
+- Iframe `sandbox="allow-scripts"` — **no** modals, no popups.
+- Same navigation blocker as HTML.
+- Babel runs in-iframe (transpiled at render time, not at create time).
 
-### Supported Elements
-- Shapes: `<rect>`, `<circle>`, `<ellipse>`, `<line>`, `<polyline>`, `<polygon>`, `<path>`
-- Text: `<text>` (native SVG, bukan outlined paths kecuali diminta)
-- Groups & defs: `<g>`, `<defs>`, `<linearGradient>`, `<radialGradient>`, `<pattern>`, `<use>`
-- Animation: **SMIL only** (`<animate>`, `<animateTransform>`) — prefer static unless explicitly requested
+### Download
 
-### NOT Supported ❌
-- `<script>` — stripped
-- `<style>` blocks — stripped (leak ke host page karena inline rendering)
-- `<foreignObject>` — stripped
-- External `href` / `xlink:href` (http, https, data: URIs) — only same-doc `#fragment` refs
-- Event handlers (`onclick`, `onload`) — stripped
-- Precision beyond 1 decimal place di path coordinates
-
-### Styling
-- **SVG presentation attributes:** `fill`, `stroke`, `stroke-width`, `opacity`, `transform`
-- **Tidak:** inline `style="..."` atau `<style>` blocks
-- **currentColor:** untuk icons (inherit dari parent text color)
-- **Max 5 colors** per SVG (decorative patterns max 3)
-
-### Style Categories
-
-**Icon** (default untuk "icon", "glyph", "symbol"):
-- `viewBox="0 0 24 24"`
-- `fill="none"`, `stroke="currentColor"`, `stroke-width="2"`, `stroke-linecap="round"`, `stroke-linejoin="round"`
-- ≤ 16 visible units; nothing smaller than 2px at source
-
-**Illustration** ("illustration", "empty state", "scene"):
-- `viewBox="0 0 400 300"` atau proportional rectangle
-- 3–5 colors
-- Mostly filled shapes
-- Group dengan `<g id="...">`, include `<desc>` describing scene
-
-**Logo / Badge:**
-- Square `viewBox="0 0 200 200"` untuk emblems, atau rectangular `viewBox="0 0 240 80"` untuk wordmarks
-- ≤ 3 colors
-- Bold filled shapes
-- `<text>` untuk letterforms (unless explicitly path-outlined)
-
-**Diagram** (non-flowchart — flowcharts use Mermaid):
-- Proportional viewBox
-- 2–4 colors
-- Consistent stroke widths, corner radii
-- `<text>` dengan `text-anchor="middle"`, `dominant-baseline="middle"`
+`.tsx`. Saved file includes the user's directive comments and original `import` statements (the rewriting happens only during render).
 
 ---
 
-## 4. Mermaid Artifact — `application/mermaid`
+## 3. `image/svg+xml` — SVG Graphic
 
-**Label:** Mermaid Diagram
-**Ringkasan:** Raw Mermaid syntax → SVG, rendered dalam themed scrollable container. Mendukung flowcharts, sequence, ER, state, class, Gantt, pie, quadrant, xychart, sankey, timeline, gitgraph, mindmap, journey, dan lainnya.
+**Identity**
 
-### Configuration
-- **Library:** Mermaid v11.x
-- **Theme:** `dark` atau `default` — set otomatis berdasarkan app theme, **JANGAN override** dengan `%%{init: {'theme':'...'}}%%` directives
-- **Security level:** `strict` — click directives blocked
-- **Output:** Raw Mermaid syntax ONLY (no markdown fences)
+| | |
+|---|---|
+| Type | `image/svg+xml` |
+| Label / Short label | "SVG Graphic" / "SVG" |
+| Extension | `.svg` |
+| Code tab | ✓ |
+| Color | emerald-500 |
 
-### Diagram Types — Lengkap
+### When to use
 
-| User wants... | Type | Declaration | Max nodes |
+- Icons, glyphs, symbols (`<viewBox="0 0 24 24">`, currentColor stroke).
+- Illustrations, hero shots, empty states.
+- Logos, badges, wordmarks.
+- Static diagrams (non-flowchart — use Mermaid for flowcharts).
+
+### Content shape
+
+Inline SVG markup. `viewBox` is required; hardcoded `width`/`height` will break responsive scaling.
+
+### Capabilities
+
+- All standard SVG shape elements: `<rect>`, `<circle>`, `<ellipse>`, `<line>`, `<polyline>`, `<polygon>`, `<path>`.
+- Native `<text>` with `text-anchor`, `dominant-baseline`, font attributes.
+- Groups, defs, gradients (`<linearGradient>`, `<radialGradient>`), patterns, `<use>` references.
+- SMIL animation: `<animate>`, `<animateTransform>` (CSS animations not supported — `<style>` is stripped).
+- `currentColor` for icon stroke (inherits from parent text color).
+- 4 style categories: **icon** (`viewBox="0 0 24 24"`, `fill="none"`, `stroke-width="2"`, `stroke-linecap="round"`, `stroke-linejoin="round"`), **illustration** (`viewBox="0 0 400 300"`, 3–5 colors, mostly filled), **logo / badge** (square `0 0 200 200` for emblems, rectangular `0 0 240 80` for wordmarks, ≤ 3 colors), **diagram** (proportional, 2–4 colors, consistent stroke widths).
+
+### Hard constraints
+
+- `<script>` blocks → stripped by DOMPurify (validator also rejects).
+- `<style>` blocks → stripped (would leak to host page since rendered inline).
+- `<foreignObject>` → stripped.
+- External `href` / `xlink:href` (http / https / data: URIs) → only same-doc `#fragment` references allowed.
+- Event handler attributes (`onclick`, `onload`, etc.) → stripped.
+- Inline `style="..."` blocks discouraged (validator warns); use SVG presentation attributes (`fill`, `stroke`, `stroke-width`, `opacity`, `transform`) instead.
+
+### Soft warnings
+
+- > 5 distinct colors (decorative patterns: max 3)
+- Path coordinates with > 2 decimal precision (overprecise; bloats file)
+- Missing `viewBox`
+- Hardcoded width/height
+
+### Anti-patterns ❌
+
+- ❌ `<script>` / `<style>` / `<foreignObject>`
+- ❌ External hrefs
+- ❌ Event handlers
+- ❌ > 5 colors (or > 3 for decorative patterns)
+
+### Pre-injected dependencies
+
+None. SVG renders inline.
+
+### Render pipeline
+
+1. `DOMParser.parseFromString(content, "image/svg+xml")` — check for `<parsererror>` and `<svg>` root.
+2. `DOMPurify.sanitize(content, { USE_PROFILES: { svg: true, svgFilters: true }, ADD_TAGS: ["use"] })`.
+3. Inline `dangerouslySetInnerHTML` (no iframe).
+
+### Sandbox / security
+
+- No iframe — content rendered directly into the React tree.
+- DOMPurify with the SVG profile is the sole sanitizer.
+- `<use>` is in `ADD_TAGS` (allowed for symbol references).
+- `<filter>` and friends (`<feGaussianBlur>`, etc.) are allowed via `svgFilters` profile.
+
+### Download
+
+Raw `.svg`.
+
+---
+
+## 4. `application/mermaid` — Mermaid Diagram
+
+**Identity**
+
+| | |
+|---|---|
+| Type | `application/mermaid` |
+| Label / Short label | "Mermaid Diagram" / "Mermaid" |
+| Extension | `.mmd` |
+| Code tab | ✓ |
+| Color | purple-500 |
+
+### When to use
+
+- Process flows, decision trees, algorithms, pipelines, org charts (`flowchart`)
+- API call sequences, OAuth, webhooks (`sequenceDiagram`)
+- DB schemas (`erDiagram`)
+- Lifecycles, state machines (`stateDiagram-v2`)
+- Class hierarchies (`classDiagram`)
+- Project schedules / roadmaps (`gantt`)
+- Concept maps (`mindmap`)
+- Distributions (`pie`)
+- 2×2 priority/impact matrices (`quadrantChart`)
+- Scatter / bubble / sankey / timeline (`xychart-beta`, `sankey-beta`, `timeline`)
+
+### Content shape
+
+Raw Mermaid syntax. **No markdown fences.** First non-empty token must be a recognized diagram declaration. The renderer auto-syncs the theme to light/dark — do **not** override with `%%{init: {'theme':'...'}}%%`.
+
+### Capabilities
+
+**14 supported diagram types** (validator-verified declarations):
+
+| User wants… | Type | Declaration | Max nodes |
 |---|---|---|---|
-| Process, workflow, decision tree, algorithm, pipeline, org chart | **flowchart** | `flowchart TD` atau `LR` | 15 |
-| API call, request/response, protocol, OAuth, webhook | **sequenceDiagram** | `sequenceDiagram` | 15 |
-| Database schema, data model, tables, entities, relationships | **erDiagram** | `erDiagram` | 15 |
-| Lifecycle, status transitions, state machine, order states | **stateDiagram-v2** | `stateDiagram-v2` | 15 |
-| Class hierarchy, OOP, inheritance, interface, code-level domain | **classDiagram** | `classDiagram` | 15 |
-| Timeline, project schedule, roadmap, phases, sprint plan | **gantt** | `gantt` | 15 |
-| Brainstorm, concept map, idea hierarchy | **mindmap** | `mindmap` | 15 |
-| Git branching / release flow | **gitGraph** | `gitGraph` | 15 |
-| Distribution, percentage breakdown | **pie** | `pie` | 8 |
-| User journey / experience map | **journey** | `journey` | 15 |
-| 2×2 priority / effort-impact matrix | **quadrantChart** | `quadrantChart` | – |
-| **BONUS:** Timeline events | **timeline** | `timeline` | – |
-| **BONUS:** Flow / Sankey diagram | **sankey-beta** | `sankey-beta` | – |
-| **BONUS:** XY scatter / bubble chart | **xychart-beta** | `xychart-beta` | – |
+| Process / workflow | `flowchart` | `flowchart TD` or `LR` | 15 |
+| API call / sequence | `sequenceDiagram` | `sequenceDiagram` | 15 |
+| DB schema | `erDiagram` | `erDiagram` | 15 |
+| Lifecycle / states | `stateDiagram-v2` | `stateDiagram-v2` | 15 |
+| Class / OOP | `classDiagram` | `classDiagram` | 15 |
+| Schedule / roadmap | `gantt` | `gantt` | 15 |
+| Brainstorm / concept | `mindmap` | `mindmap` | 15 |
+| Git branching | `gitGraph` | `gitGraph` | 15 |
+| Distribution | `pie` | `pie` | 8 |
+| User journey | `journey` | `journey` | 15 |
+| Priority / matrix | `quadrantChart` | `quadrantChart` | – |
+| Timeline events | `timeline` | `timeline` | – |
+| Sankey / flow | `sankey-beta` | `sankey-beta` | – |
+| XY scatter / bubble | `xychart-beta` | `xychart-beta` | – |
+| C4 architecture | `c4Context` | `c4Context` | – |
+| Requirements | `requirementDiagram` | `requirementDiagram` | – |
 
-**Chart Types di Mermaid:**
-- Mermaid v11 mendukung **pie**, **xychart-beta** (scatter/bubble), **sankey-beta** (flow), **timeline**
-- Bukan "charts" dalam konteks Recharts — ini adalah diagram types native Mermaid
-- **Penggunaan:** User minta "chart" → consider Recharts (React) atau chart via Slides layout, bukan Mermaid pie
+### Hard constraints
 
-### Readability Rules
-- ≤ 15 nodes/participants/entities
-- Labels: ≤ 5 words, Title Case
-- Direction: `TD` (top-down) untuk hierarchies; `LR` (left-right) untuk sequential flows
-- Subgraphs: max 2 levels deep
-- Edge labels: short verb phrases
+- Markdown fence wrappers (```` ```mermaid ````) → reject.
+- Missing diagram declaration on first meaningful line → reject.
+- No mermaid `click` directives — `securityLevel: "strict"` blocks them.
 
-### Styling Restrictions
-- **NO theme override** — `%%{init: {'theme':'...'}}%%` breaks dark mode
-- `classDef` sparingly — max 3 highlight colors
-- NO `linkStyle` (brittle)
-- Renderer handles dark/light sync automatically
+### Soft warnings
 
-### Anti-Patterns ❌
-- ❌ Markdown fences di output (raw Mermaid only)
-- ❌ Missing diagram type declaration on line 1
-- ❌ More than 15 nodes
-- ❌ Labels > 5 words
-- ❌ Nested subgraphs > 2 levels
-- ❌ `click NodeId call fn()` atau `click NodeId href "..."` (blocked by `securityLevel: strict`)
-- ❌ Mixed syntax (e.g. `->>\` di flowchart)
+- > 3000 chars (renderer slow on large diagrams).
+- > 15 node definitions in a flowchart (unreadable).
+- Labels > 5 words.
+- Subgraphs > 2 levels deep.
+- `%%{init: ... theme ...}%%` directive (breaks dark-mode sync).
+- Mixed syntax (e.g. `->>` in flowchart).
 
----
+### Anti-patterns ❌
 
-## 5. Code Artifact — `application/code`
+- ❌ Markdown fences in output
+- ❌ Missing declaration
+- ❌ > 15 nodes
+- ❌ `click NodeId call fn()` or `click NodeId href "..."` (blocked)
+- ❌ Theme override
 
-**Label:** Code (Display-only)
-**Ringkasan:** Source code files dengan syntax highlighting via Shiki, copy button, download button. NO execution.
+### Pre-injected dependencies
 
-### Language Support (Shiki)
-**REQUIRED parameter:** `language` (lowercase, canonical name)
+- mermaid v11 (dynamic-imported on first render, cached at module level).
 
-Common: `typescript`, `tsx`, `javascript`, `jsx`, `python`, `rust`, `go`, `java`, `csharp`, `cpp`, `c`, `ruby`, `php`, `swift`, `kotlin`, `sql`, `bash`, `shell`, `yaml`, `json`, `toml`, `dockerfile`, `html`, `css`, `scss`, `markdown`
+### Render pipeline
 
-### Code Quality — STRICT
-- **NEVER truncate.** No `// ...rest`, no `...`, no TODOs
-- **NEVER use placeholders.** No `pass`, `throw new Error("not implemented")`, `unimplemented!()`
-- All imports present and correct
-- All names defined (no ambient globals)
-- No dead code, no commented alternatives
-- Realistic sample values (not `foo`, `bar`, `example.com`)
+1. Module-level singleton: `mermaidPromise = import("mermaid")`.
+2. Track `lastInitTheme`; if light/dark changed, re-initialize with theme config from `mermaid-config.ts`.
+3. `mermaid.parse(content, { suppressErrors: true })` to validate syntax.
+4. `mermaid.render(id, content)` returns SVG string.
+5. Inline `dangerouslySetInnerHTML` (no iframe).
+6. On error: regex-strip verbose details after first `\n\n`, show Retry + View-Source + Fix-with-AI.
 
-### Per-Language Conventions
-- **TypeScript:** ES modules, no `any`, JSDoc pada public functions
-- **Python:** 3.10+, type hints, docstrings Google style, `if __name__ == "__main__":`
-- **Rust:** `Result<T, E>`, `?` propagation, derive `Debug`
-- **Go:** Check every `error`, exported names PascalCase
-- **SQL:** Uppercase keywords, explicit JOINs
-- **Shell:** `#!/usr/bin/env bash`, `set -euo pipefail`, quote `${var}`
+### Sandbox / security
+
+- `securityLevel: "strict"` (mermaid config)
+- `htmlLabels: false` (text rendered as SVG `<text>`, not HTML)
+- `deterministicIds: true` (reproducible output)
+- `startOnLoad: false` (manual render only)
+- Theme via `theme: "base"` + custom `themeVariables` (light + dark mappings to Tailwind tokens)
+
+### Download
+
+Raw `.mmd`.
 
 ---
 
-## 6. Python Artifact — `application/python`
+## 5. `text/markdown` — Markdown
 
-**Label:** Python Script (Executable)
-**Ringkasan:** Executable Python 3.12 via Pyodide (WebAssembly), runs in Web Worker.
+**Identity**
 
-### Pre-loaded Packages (Pyodide v0.27)
-**Always available (no `micropip` needed):**
-- `numpy`, `matplotlib`, `pandas`, `scipy`, `sympy`, `networkx`, `scikit-learn` (as `sklearn`)
-- `pillow` (as `PIL`), `pytz`, `python-dateutil` (as `dateutil`), `regex`, `beautifulsoup4` (as `bs4`), `lxml`
-- `pyyaml` (as `yaml`)
-- Full standard library: `math`, `statistics`, `random`, `itertools`, `functools`, `collections`, `json`, `re`, `datetime`, `decimal`, `dataclasses`, `enum`, dll.
+| | |
+|---|---|
+| Type | `text/markdown` |
+| Label / Short label | "Markdown" / "Markdown" |
+| Extension | `.md` |
+| Code tab | ✓ |
+| Color | gray-500 |
 
-**NOT available** (will crash):
-- `requests`, `urllib3`, `httpx`, `flask`, `django`, `fastapi`, `sqlalchemy`
-- `selenium`, `tensorflow`, `torch`, `keras`, `transformers`
-- `opencv-python` (cv2), `pyarrow`, `polars`
+### When to use
 
-### Matplotlib Best Practices
-```python
-import matplotlib.pyplot as plt
-plt.figure(figsize=(10, 6))  # Always set size
-plt.plot(...)
-plt.title("Title")
-plt.xlabel("X Label")
-plt.ylabel("Y Label")
-plt.legend()  # When multiple series
-plt.tight_layout()  # Before show()
-plt.show()  # This is captured + rendered
+- READMEs, CONTRIBUTING files, technical docs, design notes
+- Reports, comparison articles, tutorials
+- Blog posts, changelogs, release notes
+- Anything read on screen, no formal export needed
+
+vs `text/document`: documents are formal deliverables (printable / `.docx` / cover page); markdown is for screen reading.
+vs `text/html`: HTML when you need interaction; markdown for read-only content.
+vs `text/latex`: LaTeX for math-heavy proofs/derivations; markdown can do *some* inline math via KaTeX.
+
+### Content shape
+
+GitHub-Flavored Markdown.
+
+### Capabilities
+
+- **Code blocks**: Shiki syntax highlighting. **Required language tag** (untagged blocks render unstyled).
+- **GFM tables**: pipe tables.
+- **KaTeX math**: inline `$...$`, display `$$...$$`. `remark-math` + `rehype-katex` plugins.
+- **Inline mermaid**: ` ```mermaid ` fenced blocks render as live diagrams.
+- **Task lists**: `- [ ]` and `- [x]`.
+- **Strikethrough**: `~~text~~`.
+- **Links + images**: `![alt](url)` for absolute URLs only.
+- **Theme awareness**: Streamdown's Shiki theme switches with `next-themes` (`["github-dark", "github-light"]` for dark mode).
+- **Streaming**: `animated` + `isAnimating` props for streaming UI animations.
+
+### Hard constraints
+
+(None — `validateMarkdown` is the most permissive validator: only soft warnings.)
+- Hard cap 512 KB content size (universal).
+
+### Soft warnings
+
+- Missing top-level `# heading`.
+- Heading level jumps (e.g. `#` directly to `###`).
+- Raw HTML tags (`<details>`, `<summary>`, `<kbd>`, `<mark>`, `<iframe>`, `<video>`, `<audio>`, `<object>`, `<embed>`, `<table>` — unreliable through Streamdown).
+- `<script>` (markdown doesn't execute).
+- Untagged fenced code blocks (no Shiki highlight).
+
+### Anti-patterns ❌
+
+- ❌ Raw HTML for layout (`<details>`, `<kbd>`, `<sub>`, `<script>`)
+- ❌ Emoji as functional icons (use inline SVG or text)
+- ❌ Truncation / "exercise for the reader"
+- ❌ Lorem ipsum / `[TODO]` / `...`
+
+### Pre-injected dependencies
+
+- Streamdown v2.2.0
+- Shiki for code highlighting
+- KaTeX for math (`remark-math` v6 + `rehype-katex` v7)
+- Mermaid v11 (used inside Streamdown's mermaid control)
+- `next-themes` for theme awareness
+
+### Render pipeline
+
+The dispatcher routes `text/markdown` directly to `StreamdownContent` (no dedicated `MarkdownRenderer`). Streamdown wraps the actual rendering and exposes:
+- `controls: { code: true, table: true, mermaid: true }`
+- `mermaid: { errorComponent: MermaidError }` (custom error UI)
+- `plugins.math: { remarkPlugin: remark-math, rehypePlugin: rehype-katex }`
+- `shikiTheme` array ordered by current theme
+
+No iframe. Inline DOM render.
+
+### Sandbox / security
+
+- No iframe.
+- Streamdown / react-markdown filters dangerous HTML by default.
+- KaTeX with default settings (does not enable `trust`, so `\href` etc. with `javascript:` URLs are stripped).
+
+### Download
+
+Raw `.md`.
+
+---
+
+## 6. `text/document` — Document (the AST type)
+
+**Identity**
+
+| | |
+|---|---|
+| Type | `text/document` |
+| Label / Short label | "Document" / "Document" |
+| Extension | `.docx` |
+| Code tab | **✗** (preview is the source of truth) |
+| Color | amber-500 |
+
+### When to use
+
+- Client proposals, tender responses, statements of work
+- Executive reports, board briefs, quarterly reviews
+- Book chapters, white papers, research papers
+- Official letters, legal memos, formal advice notes
+- Anything someone will **print, sign, send, or archive**
+
+vs `text/markdown`: heuristic — if it'll be read once on a screen, markdown; if it'll be archived/signed/sent, document.
+vs `text/html`: HTML can't export to `.docx` cleanly.
+vs `text/latex`: LaTeX for math-heavy authoring; document for prose-heavy with cover/header/footer/TOC.
+
+### Content shape
+
+**JSON-only** output matching the `DocumentAst` schema. **No markdown fences. No commentary before `{` or after `}`.** The entire response must be `JSON.parse`-able as-is.
+
+```json
+{
+  "meta":      { /* title, author, date, pageSize, orientation, margins, font, ... */ },
+  "coverPage": { /* optional styled cover */ },
+  "header":    { "children": [ /* repeating page header */ ] },
+  "footer":    { "children": [ /* repeating page footer */ ] },
+  "body":      [ /* main content */ ]
+}
 ```
 
-**NOT supported:**
-- `plt.savefig()` — use `plt.show()` (renderer captures this only)
-- Multi-part plots without `plt.figure()` per plot
+### `meta` fields
 
-### Code Requirements
-- Every script MUST have visible output (`print()` or `plt.show()`)
-- No `input()` — hard-code values
-- No `open()` or file I/O
-- No real network requests (HTTP)
-- No `threading`, `asyncio.run` with real I/O
-- Type hints on all function signatures + returns
-- Docstrings (one line OK) on all functions
-- No bare `except:`
+| Field | Required | Notes |
+|---|:-:|---|
+| `title` | ✓ | 1–200 chars |
+| `author` | | ≤ 120 chars |
+| `date` | | ISO 8601 `YYYY-MM-DD` |
+| `subtitle` | | ≤ 200 chars |
+| `organization` | | ≤ 120 chars |
+| `documentNumber` | | ≤ 80 chars; e.g. `PROP/NQT/2026/001` |
+| `pageSize` | | `"letter"` (default) or `"a4"` |
+| `orientation` | | `"portrait"` (default) or `"landscape"` |
+| `margins` | | `{ top, bottom, left, right }` in DXA (1440 = 1 in; default 1440 each) |
+| `font` | | family name; default `"Arial"` |
+| `fontSize` | | 8–24 pt; default 12 |
+| `showPageNumbers` | | boolean |
 
-### Mock Data
-- Seed RNGs for reproducibility: `rng = np.random.default_rng(42)`
-- Realistic sizes: ≤ 10,000 elements (browser Python ~3–10× slower than native)
-- Realistic values: monthly revenue in dollars, not `[1, 2, 3, 4, 5]`
+### `coverPage` fields
+
+Optional. `title` required. Optional `subtitle`, `author`, `date` (ISO regex), `organization`, `logoUrl` (URL or `unsplash:keyword`).
+
+### Block nodes (12)
+
+| Type | Use for | Required fields |
+|---|---|---|
+| `paragraph` | Running prose | `children` ≥ 1 inline |
+| `heading` | Section titles | `level` 1–6, `children` ≥ 1 inline; optional `bookmarkId` (kebab-case, unique) |
+| `list` | Bullet / numbered items, nested via `subList` | `ordered` boolean, `items` ≥ 1; optional `startAt` |
+| `table` | Pricing, features, comparison | `columnWidths[]` (DXA), `width` (DXA, must equal sum), `rows[]`; optional `shading: "striped"` |
+| `image` | Illustrations, hero shots | `src` (URL or `unsplash:keyword`), `alt` (required, non-empty), `width`, `height` (px); optional `caption`, `align` |
+| `blockquote` | Pull quotes, citations | `children` ≥ 1 block; optional `attribution` |
+| `codeBlock` | Config files, snippets | `language`, `code` |
+| `horizontalRule` | Section separator | — |
+| `pageBreak` | Force new page | — |
+| `toc` | Table of contents | `maxLevel` 1–6; optional `title` |
+| `mermaid` | Flowcharts, sequence, etc. (16 mermaid types) | `code` (1–10000 chars, NO fences); optional `caption`, `width` 200–1600, `height` 150–1200, `alt` (defaults 1200×800) |
+| `chart` | Quantitative data viz | `chart: ChartData`; optional `caption`, `width`, `height`, `alt` (defaults 1200×600) |
+
+`paragraph` optional fields: `align` (`left` / `center` / `right` / `justify`), `spacing: { before, after }` in DXA, `indent: { left, hanging, firstLine }` in DXA.
+
+### Inline nodes (7)
+
+| Type | Required | Notes |
+|---|---|---|
+| `text` | `text` | Style flags: `bold`, `italic`, `underline`, `strike`, `code`, `superscript`, `subscript` (booleans); `color: "#rrggbb"` |
+| `link` | `href`, `children` ≥ 1 inline | External hyperlink |
+| `anchor` | `bookmarkId`, `children` ≥ 1 inline | Internal cross-reference (must match a heading bookmark) |
+| `footnote` | `children` ≥ 1 block | Page-bottom footnote in DOCX |
+| `lineBreak` | — | Soft break (not a new paragraph) |
+| `pageNumber` | — | **Only valid inside `header.children` / `footer.children`** |
+| `tab` | optional `leader: "none" | "dot"` | Horizontal tab; `"dot"` creates dotted line for letters / TOCs |
+
+### Capabilities
+
+- **Cover page** — separate styled first page (auto-generated from `coverPage` object).
+- **Header / footer** — repeated on each page in DOCX; visible at top/bottom of each simulated page in HTML preview.
+- **Page numbers** — `pageNumber` inline node in header/footer.
+- **TOC** — real Word TOC field, populated from heading bookmarkIds. Hyperlinked in DOCX. Live-generated in HTML preview.
+- **Anchors** — internal cross-references between text and heading bookmarks. `InternalHyperlink` in DOCX.
+- **Footnotes** — Word native footnotes (numbered at page bottom).
+- **Tables** — column widths in DXA, header rows, cell colspan/rowspan, shading, alignment, recursive cell content.
+- **Images** — Unsplash resolution (rewritten in validator before persist) or full URLs. Required `alt` text.
+- **Inline mermaid** — block node renders as SVG in preview, PNG (via jsdom + sharp) in DOCX.
+- **Inline charts** — block node uses `ChartData` from slides. SVG in preview, PNG in DOCX.
+- **Code blocks** — gray-background paragraphs in DOCX (Consolas font), Shiki highlight in preview.
+- **Page sizing** — letter or A4, portrait or landscape, custom margins.
+- **Numbering** — 3 levels of bullets (•/◦/▪) and 3 levels of ordered (`%1.` / `%2.` / `%3.`).
+- **Heading style cascade** — H1–H6 with HEADING_1..6 styles, outline levels (for TOC).
+
+### Hard constraints
+
+- Content not parseable as JSON → error.
+- Zod schema violations → error.
+- 128 KB serialized-size cap (pre-Zod budget check).
+- `anchor.bookmarkId` not declared on any heading → semantic error.
+- `pageNumber` inline outside header/footer → semantic error.
+- `sum(columnWidths) !== width` in any table → semantic error.
+- Per-row cell count (with colspan) ≠ column count → semantic error.
+- `unsplash:` with empty keyword → semantic error.
+- `mermaid.code` first token not in {flowchart, graph, sequenceDiagram, classDiagram, stateDiagram, stateDiagram-v2, erDiagram, gantt, pie, mindmap, timeline, journey, c4Context, gitGraph, quadrantChart, requirementDiagram} → semantic error.
+- Hard cap 512 KB.
+
+### Soft warnings
+
+(Document validator focuses on structural correctness — most issues are hard errors. Quality issues are caught by the prompt rules, not the validator.)
+
+### Anti-patterns ❌ (from prompt, ~12 items)
+
+- ❌ Output anything before `{` or after `}` — commentary, fences, explanation
+- ❌ Wrap JSON in ```` ```json ```` fences
+- ❌ Markdown syntax inside `text.text` (`**bold**`, `## heading`, backticks, `*italic*`) — use inline node style flags instead
+- ❌ Empty `children` arrays on `paragraph` / `heading` / `blockquote` (schema requires ≥ 1)
+- ❌ `anchor.bookmarkId` referencing an undeclared heading
+- ❌ `pageNumber` inline outside header/footer
+- ❌ `sum(columnWidths) !== width` in a table
+- ❌ `"src": "unsplash:"` (empty keyword)
+- ❌ Missing `alt` on images
+- ❌ **Math notation (`$...$` or `$$...$$`)** — `text/document` does NOT render LaTeX. Use prose, or `text/markdown`/`text/latex` for math-heavy content.
+- ❌ Using `text/document` for a README, internal note, or developer doc — use `text/markdown`
+- ❌ Wrapping a `mermaid` block's `code` in ```` ```mermaid ```` fences — `code` IS raw mermaid syntax
+- ❌ > 15 nodes in a mermaid flowchart
+- ❌ Stuffing prose into diagrams (use `mermaid` for qualitative, `chart` for quantitative)
+- ❌ Truncation, `Lorem ipsum`, `[TODO]`, `(content omitted)`
+
+### Pre-injected dependencies
+
+For preview:
+- mermaid v11 (dynamic import, `MERMAID_INIT_OPTIONS` from `src/lib/rendering/mermaid-theme.ts`)
+- D3 (via `chartToSvg` from `src/lib/rendering/chart-to-svg.ts`)
+
+For DOCX export (server-side):
+- [`docx`](https://www.npmjs.com/package/docx) MIT
+- [`jsdom`](https://www.npmjs.com/package/jsdom) — server-side DOM shim for mermaid render
+- [`sharp`](https://www.npmjs.com/package/sharp) — SVG → PNG rasterizer
+
+### Render pipeline (preview)
+
+1. `JSON.parse(content)` → if fails, show empty state.
+2. `DocumentAstSchema.safeParse(raw)` → if fails, show empty state.
+3. Walk AST recursively via `renderInline()` and `renderBlock()`.
+4. A4/Letter page sizing in pixels (96 DPI conversion from DXA).
+5. Mermaid blocks: dynamic-import mermaid, init with shared `MERMAID_INIT_OPTIONS`, render to SVG, set via `dangerouslySetInnerHTML`.
+6. Chart blocks: call `chartToSvg(chart, 800, 400)`, set via `dangerouslySetInnerHTML`.
+7. TOC built post-walk by traversing body for headings ≤ `maxLevel`.
+8. Footnotes accumulated in a sink object passed through render tree, rendered at document end.
+
+### DOCX export pipeline (server)
+
+1. `GET /api/dashboard/chat/sessions/{id}/artifacts/{artifactId}/download?format=docx` (Node runtime).
+2. Auth + ownership; reject if `artifactType !== "text/document"`.
+3. `JSON.parse(content)` → `DocumentAstSchema.parse()`.
+4. `astToDocx(ast)`:
+   - Page setup: letter (12240×15840 twips) or a4 (11906×16838); margins from `meta.margins`.
+   - Cover page: 48pt centered title, 28pt italic subtitle, 24/22pt centered author/org/date stack, trailing page break.
+   - Inline rendering: text style flags, `ExternalHyperlink`, `InternalHyperlink` (anchor), `FootnoteReferenceRun` (footnotes deferred), `PageNumber.CURRENT`, `tab`, `lineBreak`.
+   - Block rendering: `Paragraph` (alignment + spacing + indentation), `Heading` (level → HEADING_1..6, optional Bookmark wrapper), `List` (3-level bullets / numbers, recursive), `Table` (with colspan/rowspan + shading + borders + vertical-align), `Image` (HTTP fetch, 10s timeout, fallback 1×1 transparent PNG, SVG rejected by docx-js), `Mermaid` (mermaidToSvg → resizeSvg → svgToPng → ImageRun), `Chart` (chartToSvg → resizeSvg → svgToPng → ImageRun), `Blockquote` (left-border + indent + optional attribution), `CodeBlock` (gray-background paragraphs, Consolas), `PageBreak`, `TableOfContents` (with `hyperlink: true`, `headingStyleRange: "1-{maxLevel}"`), `HorizontalRule` (paragraph with bottom border).
+   - Style cascade: HEADING_1 (20pt) → HEADING_6 (12pt) with outline levels.
+   - Font: `meta.font` or `"Arial"`; `meta.fontSize` applied globally.
+   - Footnotes accumulated during body rendering, attached to `Document.footnotes`.
+   - Header/footer rendered via `renderBlocks()`, attached to section `headers` / `footers`.
+5. Return as `Uint8Array` blob with sanitized filename.
+
+### Sandbox / security
+
+- No iframe (preview).
+- Upstream Zod schema is the security boundary — AST nodes carry only structured data, no executable HTML.
+- DOCX export runs in Node runtime, not edge runtime.
+- jsdom shim restores globals in `finally` for thread safety.
+
+### Download
+
+Split-button:
+- **Markdown (.md)** — client-side AST → markdown walk. Lossy (mermaid/chart become placeholder fences).
+- **Word (.docx)** — server route, `astToDocx()`. Full fidelity.
+
+PDF export is **not shipped**.
 
 ---
 
-## 7. Sheet Artifact — `application/sheet`
+## 7. `application/code` — Code (display-only)
 
-**Label:** Spreadsheet (Interactive Table / Workbook)
-**Ringkasan:** Tabular data sebagai CSV, JSON array, atau JSON spec `spreadsheet/v1` → rendered sebagai interactive sortable/filterable table (flat data) atau multi-sheet workbook dengan formulas, named ranges, dan XLSX export (financial-model grade).
+**Identity**
 
-**Status (2026-04-23):** upgraded dari CSV-only menjadi financial-model grade dengan 3 content shapes, formula evaluator, dan real `.xlsx` export via ExcelJS (setara skill xlsx Claude AI, tanpa LibreOffice dependency).
+| | |
+|---|---|
+| Type | `application/code` |
+| Label / Short label | "Code" / "Code" |
+| Extension | `.txt` (overridden by language conventions in download) |
+| Code tab | **✗** (preview *is* the code) |
+| Color | cyan-500 |
 
-### Input Formats — 3 Content Shapes
+### When to use
 
-**Shape A: CSV** (default, flat tabular data)
-- Header row REQUIRED
-- Quote fields containing comma/quote/newline: `"Engineer, Senior"`
-- Escape literal quotes by doubling: `"She said ""hi"""`
-- Every row MUST have matching column count
-- No trailing comma, no BOM, UTF-8
-- Download: `.csv`
+- Source files: configs, scripts, modules.
+- Code that the user will copy into a project, not run inside the artifact.
 
-**Shape B: JSON array of objects** (flat tabular data, JSON-friendly)
-- Top level: non-empty array `[{...}, {...}]`
-- Every object MUST have same keys, same order
-- First object's keys = column headers, in order
-- NO nested objects/arrays (stringify as `[object Object]`)
-- Download: `.csv`
+vs `application/python`: Python is **executable** in-browser; code is display-only.
+vs `text/markdown`: markdown if there's surrounding prose; code if it's pure source.
 
-**Shape C: JSON spec `spreadsheet/v1`** ⭐ NEW (workbook with formulas)
-- Top level: object `{ "kind": "spreadsheet/v1", "sheets": [...], ... }`
-- Multi-sheet workbook dengan formulas, named ranges, merged cells, cell notes, frozen panes
-- 6 named cell styles, Excel number formats, theme colors
-- Download: `.xlsx` (via ExcelJS dengan cached formula values — tidak perlu F9 recalc)
-- Preview: `SpecWorkbookView` (lazy-loaded, sheet tabs, A/B/C columns, ƒx toggle, click-a-cell footer)
+### Content shape
 
-### Shape C: Spec Schema
+Source code, plus the `language` parameter on the tool call.
+
+### Capabilities
+
+- **Shiki syntax highlighting** for ~30 languages: `typescript`, `tsx`, `javascript`, `jsx`, `python`, `rust`, `go`, `java`, `csharp`, `cpp`, `c`, `ruby`, `php`, `swift`, `kotlin`, `sql`, `bash`, `shell`, `yaml`, `json`, `toml`, `dockerfile`, `html`, `css`, `scss`, `markdown`, etc.
+- **Copy and download** buttons in the panel.
+- **No truncation**: validator soft-errors on `// ...rest`, `# TODO: implement`, `unimplemented!()`, `pass # placeholder`, etc.
+
+### Per-language conventions (from prompt)
+
+- TypeScript: ES modules, no `any`, JSDoc on public functions
+- Python: 3.10+, type hints, Google-style docstrings, `if __name__ == "__main__":`
+- Rust: `Result<T, E>`, `?` propagation, derive `Debug`
+- Go: check every `error`, exported names PascalCase
+- SQL: uppercase keywords, explicit JOINs
+- Shell: `#!/usr/bin/env bash`, `set -euo pipefail`, quote `${var}`
+
+### Hard constraints
+
+- Content that looks like HTML (`<!doctype` / `<html`) → reject (wrong type).
+- Markdown fence wrapper around the content → reject (the renderer adds the fence, not the LLM).
+- 512 KB cap.
+
+### Soft warnings
+
+- Truncation/placeholder markers
+- Content > 512 KB
+
+### Anti-patterns ❌
+
+- ❌ Truncation (`// ... rest`, `...`, TODO comments)
+- ❌ Placeholders (`pass`, `throw new Error("not implemented")`, `unimplemented!()`)
+- ❌ Realistic-looking but non-functional values (`example.com` for real APIs, etc.)
+- ❌ Markdown fence wrappers in the content
+
+### Pre-injected dependencies
+
+- Shiki for highlighting (via Streamdown).
+
+### Render pipeline
+
+The dispatcher computes the longest backtick run in the content (so embedded code blocks don't break the wrapping fence) and wraps the content in a fence + language tag, then passes to `StreamdownContent` for rendering. No iframe.
+
+### Sandbox / security
+
+- No execution at all — purely display.
+- Streamdown filters dangerous HTML (though this content is treated as code, not markdown).
+
+### Download
+
+Extension determined by the `language` param (e.g. `.py` for Python, `.rs` for Rust). The registry's default extension is `.txt`; the panel overrides during download.
+
+---
+
+## 8. `application/sheet` — Spreadsheet (3 content shapes)
+
+**Identity**
+
+| | |
+|---|---|
+| Type | `application/sheet` |
+| Label / Short label | "Spreadsheet" / "Spreadsheet" |
+| Extension | `.csv` (or `.xlsx` for spec) |
+| Code tab | ✓ |
+| Color | green-500 |
+
+### When to use
+
+- Flat tabular data (employees, products, SKUs) → CSV or JSON-array shape.
+- Financial models, budgets, forecasts, cap tables, P&L → `spreadsheet/v1` spec.
+- Anything with formulas, multi-sheet, named ranges, or complex formatting → spec.
+
+vs `text/markdown` (with GFM table): markdown for small read-only comparison tables; sheet for sortable/filterable data or any computation.
+vs `text/document` (with table block): document for tables embedded in narrative deliverables; sheet for standalone data.
+
+### Content shape — three options
+
+#### Shape A: CSV (default for flat data)
+
+- Header row required.
+- Quote fields with comma / quote / newline: `"Engineer, Senior"`.
+- Escape literal quotes by doubling: `"She said ""hi"""`.
+- Every row matches header column count.
+- No trailing comma, no BOM, UTF-8.
+
+#### Shape B: JSON array of objects
+
+- Top level: non-empty array `[{...}, {...}]`.
+- Every object has same keys in same order.
+- First object's keys = column headers.
+- No nested objects/arrays (would stringify as `[object Object]`).
+
+#### Shape C: `spreadsheet/v1` JSON spec
 
 ```json
 {
   "kind": "spreadsheet/v1",
-  "title": "Revenue Projection 2026",
   "theme": { "primaryColor": "#0F172A", "accentColor": "#3B82F6" },
-  "namedRanges": [
-    { "name": "GrowthRate", "ref": "Assumptions!B2" }
-  ],
+  "namedRanges": { "GrowthRate": "Assumptions!B2" },
   "sheets": [
     {
       "name": "Assumptions",
-      "frozenRows": 1,
-      "columnWidths": { "A": 24, "B": 16 },
+      "frozen": { "rows": 1 },
+      "columns": [ { "width": 24 }, { "width": 16 } ],
       "cells": [
         { "ref": "A1", "value": "Metric", "style": "header" },
         { "ref": "B1", "value": "Value", "style": "header" },
         { "ref": "A2", "value": "Starting Revenue" },
         { "ref": "B2", "value": 4200000, "format": "$#,##0", "style": "input" },
         { "ref": "A3", "value": "Growth Rate" },
-        { "ref": "B3", "value": 0.18, "format": "0.0%", "style": "input", "note": "Based on Q4 trend" }
+        { "ref": "B3", "value": 0.18, "format": "0.0%", "style": "input", "note": "Q4 trend" }
       ],
       "merges": []
     },
@@ -428,252 +899,291 @@ plt.show()  # This is captured + rendered
 }
 ```
 
-### Hard Caps (validator-enforced)
+### Hard caps (spec)
 
-| Limit | Max |
-|---|---|
-| Sheets per workbook | 8 |
-| Cells per sheet | 500 |
-| Formulas per workbook | 200 |
-| Named ranges | 64 |
-| Sheet name length | 31 chars |
-| Columns per sheet | 26 (A–Z) |
+- 8 sheets per workbook
+- 500 cells per sheet
+- 200 formulas per workbook
+- 64 named ranges
+- 31 chars max sheet name (Excel-compatible)
+- 26 columns per sheet (A–Z)
 
-### Cell Rules
-- **`value` XOR `formula`** — never both on same cell
-- `ref` is A1 notation (`A1`, `B25`, `AA10`) uppercase
-- `formula` strings start with `=` OR without; validator normalizes
-- Sheet names: alphanumeric + space/underscore, no `!`, `:`, `[`, `]`, `?`, `*`, `/`, `\`
-- Cross-sheet refs: `Sheet2!A1` (must reference existing sheet)
-- Named ranges: resolve transparently inside formulas
+### Cell rules (spec)
 
-### Formula Evaluator
-- **Library:** `fast-formula-parser@1.0.19` (MIT) + `@formulajs/formulajs@4.6.0` (MIT)
-- **Rejected:** HyperFormula (GPL-3.0 incompatible)
-- **Dep graph:** `DepParser` extracts cell-level dependencies
-- **Execution:** Kahn topological sort; cycle detection emits `error: "CIRCULAR"`
-- **Cross-sheet refs** and **named ranges** resolve transparently
-- **Built-in functions:** SUM, IF, VLOOKUP, HLOOKUP, INDEX, MATCH, IFERROR, XIRR, NPV, IRR, PMT, FV, PV, ROUND, AVERAGE, COUNT, COUNTIF, SUMIF, MAX, MIN, CONCAT, TEXT, DATE, YEAR, MONTH, DAY, TODAY, AND, OR, NOT — ~500 Excel functions total
-- **Lazy-loaded:** zero bundle cost until user opens a spec artifact
-- **Errors surfaced:** `#REF!` (undefined refs), `#NAME?` (unknown names), `#DIV/0!`, `#VALUE!`, `CIRCULAR`
+- `value` XOR `formula` — never both on same cell.
+- `ref` is A1 notation uppercase (`A1`, `B25`, `AA10`).
+- `formula` strings start with `=` or omit it; validator normalizes.
+- Sheet names: alphanumeric + space/underscore, none of `!`, `:`, `[`, `]`, `?`, `*`, `/`, `\`.
+- Cross-sheet refs: `Sheet2!A1` (must reference existing sheet).
+- Named ranges resolve transparently inside formulas.
 
-### Cell Styles (6 named, theme-aware)
+### Cell styles (6 named)
+
 | Style | Use | Rendering |
 |---|---|---|
-| `header` | Column/row headers | Bold, primary color fill, white text |
+| `header` | Column / row headers | Bold, primary fill, white text |
 | `input` | User-editable values | Blue text (`#2563EB`), no fill |
-| `formula` | Computed cells | Black text, subtle background |
+| `formula` | Computed cells | Black text |
 | `cross-sheet` | References other sheets | Green text (`#059669`) |
 | `highlight` | Important figures | Yellow fill (`#FEF3C7`) |
-| `note` | Annotations | Italic, gray text |
+| `note` | Annotations | Italic, gray |
 
-### Number Formats (Excel-compatible)
+### Number formats (Excel-compatible)
+
 - Currency: `"$#,##0"`, `"$#,##0.00"`
-- Currency negatives in parens: `"$#,##0;($#,##0);-"`
+- Currency with parens-negative: `"$#,##0;($#,##0);-"`
 - Percent: `"0%"`, `"0.0%"`, `"0.00%"`
-- Multiples: `"0.0x"` (for ratios)
+- Multiples: `"0.0x"` (ratios)
 - Thousands: `"#,##0"`
 - Dates: `"mmm d, yyyy"`, `"yyyy-mm-dd"`
-- Segmented: `"positive;negative;zero"` (Excel syntax)
+- Segmented: `"positive;negative;zero"`
 
-### Rich Preview (SpecWorkbookView)
-- Sheet tabs at bottom (hidden when single sheet)
-- Column letters (A/B/C…) and row numbers (1/2/3…) Excel-style
-- `ƒx` toggle: computed values ↔ raw formulas
-- Click-a-cell footer: ref + formula + format + note
-- Style-aware cells (blue input / black formula / green cross-sheet / yellow highlight)
-- Error cells (`#REF!`, `#NAME?`, `#DIV/0!`, `CIRCULAR`) shown in red
-- Frozen panes respected visually
-- Lazy-loaded evaluator — zero main bundle cost
+### Capabilities
 
-### XLSX Export (Shape C only)
-- **Library:** `exceljs@4.4.0` (MIT) — writes formulas WITH cached computed values
-- Excel / LibreOffice / Google Sheets / Numbers open file with values **already visible**, no F9 recalc needed
-- Exports: merges, named ranges, frozen panes, styles (font color, fill, bold, italic), column widths, cell notes
-- Lazy-loaded at download click — zero main bundle impact
-- **Dual-button toolbar:** `.csv` (flattened active sheet) + `.xlsx` (full workbook)
-- Cell format: `{ formula: "A1*(1+A2)", result: cachedValue }`
-- Fallback: if spec invalid or export fails → CSV path (no silent corruption)
+**Shape A/B (flat data):**
+- Sort by any column (TanStack Table).
+- Global filter / search.
+- CSV export (respects current filter).
 
-### Validator Behavior
-- **Shape detection:** peeks first char: `{` + `kind` field → spec, `[` → array, else csv
-- **Spec errors surfaced at authoring time:** undefined refs, circular refs, unknown named ranges, bad sheet names, cap violations, style name typos, invalid A1 refs, `value`+`formula` both set
-- **Semantic errors** surfaced per cell with actionable messages
-- **145 validate-artifact tests + 44 new spec tests green** — zero regression on CSV/JSON-array path
+**Shape C (spec):**
+- Multi-sheet with tabs.
+- ~500 Excel functions via `@formulajs/formulajs`: SUM, IF, VLOOKUP, HLOOKUP, INDEX, MATCH, IFERROR, XIRR, NPV, IRR, PMT, FV, PV, ROUND, AVERAGE, COUNT, COUNTIF, SUMIF, MAX, MIN, CONCAT, TEXT, DATE, YEAR, MONTH, DAY, TODAY, AND, OR, NOT, etc.
+- Cross-sheet references and named ranges.
+- Cycle detection (Kahn's algorithm topological sort).
+- ƒx toggle: switch between computed values and raw formulas.
+- Click-a-cell footer: ref + formula + format + note.
+- Real `.xlsx` export via ExcelJS, with cached values pre-populated.
+- Style-aware cell rendering (blue input / black formula / green cross-sheet / yellow highlight / italic note).
+- Error display: `#REF!`, `#NAME?`, `#DIV/0!`, `#VALUE!`, `CIRCULAR` shown in red.
 
-### Shape Decision Table
+### Hard constraints
 
-| User wants... | Shape | Download | Renderer |
-|---|---|---|---|
-| Flat list (employees, products, SKU table) | A (CSV) | `.csv` | TanStack table (sort + filter) |
-| JSON-native structured data for API/code context | B (JSON array) | `.csv` | TanStack table (sort + filter) |
-| Financial model, budget, forecast, cap table, P&L | **C (spec)** | **`.xlsx`** | SpecWorkbookView (workbook) |
-| Any formulas needed (SUM, IF, VLOOKUP, growth chain) | **C (spec)** | **`.xlsx`** | SpecWorkbookView |
-| Multi-sheet (Assumptions + Projections + Summary) | **C (spec)** | **`.xlsx`** | SpecWorkbookView |
+**Shape A:**
+- Mismatched column counts → reject.
+- Unquoted CSV with comma/quote/newline in field → reject.
 
-### Critical Constraint: Flat Data (Shapes A/B) Still Lexicographic
-- Sorting in Shape A/B TanStack table is string-based (e.g. `"10"` before `"2"`)
-- For sortable numeric/date columns use ISO 8601 dates, zero-padded IDs, plain numerals
-- **Shape C bypasses this** — spec stores proper types; XLSX export writes native numbers/dates
-
-### Column Design (Shapes A/B)
-- Headers: Title Case, descriptive (`Full Name` not `name`)
-- Order: ID → descriptive → numeric → dates → status
-- **Max 10 columns** (wider becomes unreadable)
-- **10–30 rows** typical, up to ~100 for large datasets
-
-### Financial Model Conventions (Shape C)
-- **Dedicated `Assumptions` sheet** for all inputs, referenced via named ranges
-- Use named ranges for repeatable constants (`GrowthRate`, `TaxRate`, `DiscountRate`)
-- Currency columns: parens-negative format `"$#,##0;($#,##0);-"`
-- Dates: ISO 8601 (`yyyy-mm-dd`) or long form (`mmm d, yyyy`)
-- Freeze header row (`frozenRows: 1`) on every sheet
-- Cell notes (`note` field) document assumption sources
-- Style `input` for editable cells, `formula` for computed
-
-### Anti-Patterns ❌
-**Shapes A/B:**
-- ❌ Mismatched column counts
-- ❌ Unquoted CSV with comma/quote/newline in field
-- ❌ Currency symbols or thousand separators (`$1,234`) — use Shape C instead
-- ❌ Mixed date formats in one column
-- ❌ JSON top-level that is object (not array)
-- ❌ JSON objects with inconsistent keys
-- ❌ More than 100 rows (performance)
+**Shape B:**
+- Top-level not an array → reject.
+- Inconsistent keys → reject.
 
 **Shape C:**
-- ❌ `"kind": "spreadsheet/v2"` or other version strings (only `spreadsheet/v1`)
-- ❌ Cell with both `value` and `formula` set
-- ❌ Formulas referencing undefined cells (`=A1*Foo!B99` when `Foo` sheet or `B99` doesn't exist)
-- ❌ Circular refs (`A1 = B1 + 1`, `B1 = A1 + 1`)
-- ❌ Sheet names with `!`, `:`, `[`, `]`, `?`, `*`, `/`, `\` or > 31 chars
-- ❌ Bare English inside formula: `=Assumptions!B2 kali growth` (use `*`)
+- `kind` not `"spreadsheet/v1"` → reject.
+- Cell with both `value` and `formula` → reject.
+- Formula referencing undefined cell or sheet → error.
+- Circular formula refs → error.
+- Sheet name with forbidden chars or > 31 chars → reject.
+- Cell style name typo (`"heading"`, `"inputs"`, `"bold"` — only the 6 valid names accepted).
+- Invalid A1 refs (`"1A"`, `"A"`, `"0"`, lowercase `"a1"`).
+- Cap violations (sheets / cells / formulas / named ranges).
+
+### Soft warnings
+
+- > 100 rows in flat data (no pagination yet)
+- > 10 columns in flat data (hard to read)
+- Currency or thousand-separator formatting in CSV/JSON-array shape (recommend the spec)
+- Mixed date formats in one column
+
+### Anti-patterns ❌
+
+**Shapes A/B:**
+- ❌ Mismatched column counts
+- ❌ Unquoted CSV with special chars in field
+- ❌ Currency symbols `$1,234` in flat data — use Shape C instead
+- ❌ Mixed date formats
+- ❌ JSON top-level object (must be array)
+- ❌ JSON inconsistent keys
+- ❌ > 100 rows
+
+**Shape C:**
+- ❌ `"kind": "spreadsheet/v2"` (only v1)
+- ❌ Cell with both `value` and `formula`
+- ❌ Bare English in formula (`=B2 kali growth` — use `*`)
+- ❌ Hardcoding computed values (trust the evaluator)
+- ❌ Cell style name typos
+- ❌ Invalid A1 refs
 - ❌ Using Shape C for flat tabular data (prefer A/B)
-- ❌ Hardcoding computed values — trust the evaluator
-- ❌ Cell style name typos: `"heading"`, `"inputs"`, `"bold"` (only 6 valid names)
-- ❌ Invalid A1 refs: `"1A"`, `"A"`, `"0"`, lowercase `"a1"`
-- ❌ More than 8 sheets, 500 cells/sheet, 200 formulas, or 64 named ranges
 
 **Universal:**
 - ❌ Truncation markers (`...more rows...`, `/* remaining cells */`)
 
-### Dependencies
-- `exceljs@4.4.0` (MIT) — workbook builder
-- `@formulajs/formulajs@4.6.0` (MIT) — ~500 Excel functions
-- `fast-formula-parser@1.0.19` (MIT) — AST parser + DepParser
-- All lazy-loaded — zero main bundle cost
-- **Zero new runtime deps:** no LibreOffice, no Pyodide coupling, no server-side recalc endpoint
-- All execution client-side, deterministic
+### Pre-injected dependencies
+
+- `@tanstack/react-table` (flat data renderer)
+- `fast-formula-parser@1.0.19` MIT (AST + DepParser)
+- `@formulajs/formulajs@4.6.0` MIT (~500 Excel functions)
+- `exceljs@4.4.0` MIT (XLSX export)
+
+All formula/XLSX deps are **lazy-loaded** — zero main bundle cost until the user opens a spec artifact.
+
+### Render pipeline
+
+Detect content shape by peeking first non-whitespace char:
+- `{` + has `kind` field → spec → lazy-load `SpecWorkbookView` + lazy-load `evaluateWorkbook`
+- `[` → JSON array → TanStack Table
+- else → CSV → custom parser → TanStack Table
+
+### Sandbox / security
+
+- No iframe.
+- Formula evaluator runs main-thread (synchronous Kahn's sort + parser); evaluator is a pure function with no DOM/network access.
+
+### Download
+
+- **Shape A/B:** `.csv` (single button; flattens active sheet for spec).
+- **Shape C (spec):** dual-button toolbar — `.csv` (active sheet flattened) + `.xlsx` (full workbook with formulas + cached values + styles + named ranges + frozen panes + merges).
 
 ---
 
-## 8. Markdown Artifact — `text/markdown`
+## 9. `text/latex` — LaTeX / Math
 
-**Label:** Document
-**Ringkasan:** Long-form documents (READMEs, technical docs, reports, tutorials) — GitHub Flavored Markdown dengan code blocks, tables, KaTeX math, Mermaid diagrams inline.
+**Identity**
 
-### Supported Features
-- **Code blocks:** Shiki syntax highlighting (REQUIRED language tag)
-- **GFM tables:** Pipe tables for structured comparisons
-- **Math:** KaTeX inline (`$...$`) dan display (`$$...$$`)
-- **Mermaid diagrams:** ` ```mermaid ` fenced blocks (rendered live inline)
-- **Task lists:** `- [ ]` dan `- [x]` (GFM)
-- **Strikethrough:** `~~text~~`
-- **Links & images:** `![alt](url)` (absolute URLs only)
+| | |
+|---|---|
+| Type | `text/latex` |
+| Label / Short label | "LaTeX / Math" / "LaTeX" |
+| Extension | `.tex` |
+| Code tab | ✓ |
+| Color | rose-500 |
 
-### NOT Supported ❌
-- Raw HTML (`<details>`, `<kbd>`, `<script>` — unreliable)
-- Emoji as functional icons (use inline SVG or text)
+### When to use
 
-### Document Structure
-- Single `# H1` at top
-- Consistent hierarchy: `##` (major), `###` (sub), `####` (sub-sub)
-- Never skip levels (no `#` → `###` directly)
-- Table of Contents (for 3+ major sections): anchor links
-- End with Conclusion/Summary/Next Steps (for reports, tutorials)
+- Pure mathematical proofs / derivations.
+- Equation reference sheets.
+- Math-heavy technical documents.
 
-### Content Quality
-- **Substantive only** — no placeholders like `[TODO]`, `Lorem ipsum`, `...`
-- **Real code examples** in fenced blocks with language tags
-- **Specifics over vaguetalk** (numbers, names, versions)
-- **Complete document** — no truncation, no "exercise for reader"
-- Paragraphs: 2–4 sentences; break up walls of text
+vs `text/markdown`: markdown can do inline `$x$` math; LaTeX for documents where math is the primary content.
+vs `text/document`: documents render math as text only — use LaTeX for math-heavy authoring.
 
----
+### Content shape
 
-## 8b. Document Artifact — `text/document`
+LaTeX subset compatible with KaTeX. The custom parser handles document structure; KaTeX handles math.
 
-**Status (2026-04-23):** rebuilding for Phase 9.
+### Capabilities
 
-The Phase 1-8 markdown-walker pipeline has been reverted in preparation for a rebuild around [Anthropic Claude's `docx` skill](https://docs.anthropic.com/) approach (LLM-authored JS code executed in a sandbox, native OMML math, full creative control over styling).
+**Document commands:**
 
-Capability matrix flags above (Unsplash images, mermaid, charts, DOCX export, WYSIWYG preview, etc.) reflect the prior pipeline. They will be re-evaluated when Phase 9 ships. Creating a new text/document artifact via the assistant currently shows a "rebuild in progress" placeholder in the preview panel.
+| Command | Renders as |
+|---|---|
+| `\section{...}` / `\section*{...}` | `<h2>` (numbered/unnumbered) |
+| `\subsection{...}` | `<h3>` |
+| `\subsubsection{...}` | `<h4>` |
+| `\paragraph{...}` | bold inline lead-in |
+| `\begin{itemize} \item ... \end{itemize}` | `<ul>` |
+| `\begin{enumerate} \item ... \end{enumerate}` | `<ol>` |
+| `\begin{quote} ... \end{quote}` | `<blockquote>` |
+| `\begin{abstract} ... \end{abstract}` | `<blockquote>` |
+| `\textbf{...}` | bold |
+| `\textit{...}` / `\emph{...}` | italic |
+| `\underline{...}` | underline |
+| `\texttt{...}` | inline code (monospace + bg) |
+| `\href{url}{text}` | link |
 
-Context: [phase-9-revert.md](phase-9-revert.md). Rebuild brief: TBD.
-
----
-
-## 9. LaTeX Artifact — `text/latex`
-
-**Label:** LaTeX / Math
-**Ringkasan:** Mathematical documents dengan sections, equations, proofs — KaTeX-rendered (subset, NOT full LaTeX engine).
-
-### Supported Document Commands
-| Command | Renders as | Notes |
-|---------|-----------|-------|
-| `\section{...}` / `\section*{...}` | `<h2>` | Numbered / unnumbered |
-| `\subsection{...}` | `<h3>` | |
-| `\subsubsection{...}` | `<h4>` | |
-| `\paragraph{...}` | Bold inline lead-in | |
-| `\begin{itemize} \item ... \end{itemize}` | Unordered list | |
-| `\begin{enumerate} \item ... \end{enumerate}` | Ordered list | |
-| `\begin{quote} ... \end{quote}` | Blockquote | |
-| `\begin{abstract} ... \end{abstract}` | Blockquote | |
-| `\textbf{...}` | Bold | |
-| `\textit{...}` / `\emph{...}` | Italic | |
-| `\underline{...}` | Underline | |
-| `\texttt{...}` | Inline code | |
-| `\href{url}{text}` | Link | |
-
-### Supported Math Environments
+**Math environments** (KaTeX):
 - `equation` / `equation*` — single equation
-- `align` / `align*` — multi-line aligned (use for derivations)
+- `align` / `align*` — multi-line aligned
 - `gather` / `gather*` — centered multi-line
 - `multline` / `multline*` — long single equation across lines
 - `cases` — piecewise definitions
+- `eqnarray` — supported
 - Inside math: `matrix`, `pmatrix`, `bmatrix`, `vmatrix`, `array`
 
 **KaTeX symbols:**
-- Greek: `\alpha \beta \gamma ... \omega` (lowercase), `\Gamma \Delta ... \Omega` (uppercase)
-- Operators: `\sum \prod \int \partial \nabla \lim \sup \inf`
-- Relations: `\leq \geq \neq \approx \equiv \in \forall \exists`
-- Logic/arrows: `\land \lor \lnot \implies \iff \to \rightarrow \leftarrow \Rightarrow`
-- Decorations: `\hat{x} \bar{x} \vec{x} \dot{x} \ddot{x} \tilde{x} \overline{xyz} \overrightarrow{AB}`
-- Sets: `\mathbb{R} \mathbb{Z} \mathbb{N} \mathbb{C} \mathbb{Q} \emptyset`
-- Fractions/roots: `\sqrt{x} \sqrt[n]{x} \frac{a}{b} \dfrac{a}{b} \binom{n}{k}`
+- Greek: lowercase `\alpha`–`\omega`, uppercase `\Gamma`–`\Omega`
+- Operators: `\sum`, `\prod`, `\int`, `\partial`, `\nabla`, `\lim`, `\sup`, `\inf`
+- Relations: `\leq`, `\geq`, `\neq`, `\approx`, `\equiv`, `\in`, `\forall`, `\exists`
+- Logic / arrows: `\land`, `\lor`, `\lnot`, `\implies`, `\iff`, `\to`, `\rightarrow`, `\leftarrow`, `\Rightarrow`
+- Decorations: `\hat{x}`, `\bar{x}`, `\vec{x}`, `\dot{x}`, `\ddot{x}`, `\tilde{x}`, `\overline{...}`, `\overrightarrow{AB}`
+- Sets: `\mathbb{R}`, `\mathbb{Z}`, `\mathbb{N}`, `\mathbb{C}`, `\mathbb{Q}`, `\emptyset`
+- Fractions / roots: `\sqrt{x}`, `\sqrt[n]{x}`, `\frac{a}{b}`, `\dfrac{a}{b}`, `\binom{n}{k}`
 
-### NOT Supported ❌
-- `\documentclass{...}`, `\usepackage{...}`, `\begin{document}` — silently stripped
-- `\maketitle`, `\label`, `\ref`, `\eqref` — cross-refs not resolved
-- `\input{...}`, `\include{...}` — no file system
-- `\includegraphics{...}`, `\begin{figure}` — no image inclusion
-- `\begin{tikzpicture}` — use `pmatrix`/`array` for tabular math
-- `\verb`, `\begin{verbatim}` — use `\texttt{...}`
-- Multiple separate `$$...$$` for derivations (use `align` instead)
-- Bare English inside `$...$` (wrap in `\text{...}`)
+**Spacing primitives:** `~` (nbsp), `\,` (thin), `\;` (en), `\quad` (em), `\qquad`, `---` (mdash), `--` (ndash).
+
+### Hard constraints
+
+- `\documentclass{...}` → reject.
+- `\usepackage{...}` → reject.
+- `\begin{document}` / `\end{document}` → reject (use the wrapper-stripped subset).
+- `\includegraphics{...}` → reject.
+- `\bibliography{...}` → reject.
+- `\begin{tikzpicture}` → reject (not supported).
+- `\begin{verbatim}` / `\verb` → reject (use `\texttt{...}`).
+
+### Soft warnings
+
+- No math delimiter detected anywhere (recommend markdown for non-math content).
+
+### Anti-patterns ❌
+
+- ❌ `\maketitle`, `\label`, `\ref`, `\eqref` — cross-refs not resolved
+- ❌ `\input{...}`, `\include{...}` — no file system
+- ❌ `\begin{figure}` — no image inclusion
+- ❌ Multiple separate `$$...$$` for derivations (use `align` instead)
+- ❌ Bare English inside `$...$` (wrap in `\text{...}`)
+
+### Pre-injected dependencies
+
+- KaTeX v0.16+ (`katex` npm package + `katex/dist/katex.min.css`)
+
+### Render pipeline
+
+A custom parser, NOT a full LaTeX engine:
+
+1. Extract document body (`\begin{document}...\end{document}` if present).
+2. Extract preamble (`\title`, `\author`, `\date`).
+3. Strip `\maketitle`.
+4. Line-by-line walk with state tracking (`inList`, `listType`):
+   - Empty lines → skip
+   - Sectioning → balanced-brace `readBracedArg` → `<h2>`/`<h3>`/`<h4>`
+   - List environments → `<ul>` / `<ol>` open/close + `<li>` per `\item`
+   - Math environments (`equation`, `align`, `gather`, `multline`, `cases`, `eqnarray`) → multi-line collect → KaTeX displayMode render
+   - `\[...\]` and `$$...$$` → display math
+   - `\begin{quote}` / `\begin{abstract}` → `<blockquote>`
+   - Other paragraph text → collect consecutive lines → `processInlineLatex` (handles `$...$` inline math + text commands like `\textbf`/`\textit`/`\href`)
+5. `dangerouslySetInnerHTML` (no iframe).
+
+**Key parsing trick:** every command-arg parser uses brace-depth tracking, never naive `[^}]*` regex. Handles `\section{$f(x)$}` correctly.
+
+### Sandbox / security
+
+- No iframe.
+- KaTeX with `trust: true` (KaTeX itself filters dangerous commands).
+- HTML-escape applied to fallback code blocks and link URLs.
+
+### Download
+
+`.tex`, wrapped in a minimal compilable preamble (`\documentclass{article}`, `\begin{document}` / `\end{document}`).
 
 ---
 
-## 10. Slides Artifact — `application/slides`
+## 10. `application/slides` — Slides (Presentation Deck)
 
-**Label:** Slides (Presentation Deck)
-**Ringkasan:** JSON presentation deck → 17 layouts dengan diagrams, images, charts, stats, gallery, comparison tables, dark/light theme alternation, arrow-key navigation, PPTX export.
+**Identity**
 
-### Output Format: JSON ONLY
-**NO markdown, NO fences.** Raw JSON object:
+| | |
+|---|---|
+| Type | `application/slides` |
+| Label / Short label | "Slides" / "Slides" |
+| Extension | `.pptx` |
+| Code tab | ✓ |
+| Color | indigo-500 |
+
+### When to use
+
+- Pitch decks, board presentations, product launches.
+- Quarterly reviews, technical walkthroughs.
+- Anything told as a sequence of focal slides.
+
+vs `text/document`: documents are continuous prose; slides are discrete visuals.
+vs `application/react`: slides have rigid layout grammar (17 layouts) and a real PPTX export; React for custom interactive UI.
+
+### Content shape
+
+JSON only. No markdown fences. No commentary.
+
 ```json
 {
-  "theme": { "primaryColor": "#...", "secondaryColor": "#...", "fontFamily": "..." },
+  "theme": { "primaryColor": "#0F172A", "secondaryColor": "#3B82F6", "fontFamily": "Inter, sans-serif" },
   "slides": [
     { "layout": "title", "title": "...", "subtitle": "..." },
     { "layout": "content", "title": "...", "bullets": [...] },
@@ -683,151 +1193,296 @@ Context: [phase-9-revert.md](phase-9-revert.md). Rebuild brief: TBD.
 ```
 
 ### Theme
-**Required fields:**
-- `primaryColor` (hex) — dark & desaturated (e.g. `#0F172A` slate-900)
-  - Approved: `#0F172A`, `#1E293B`, `#0C1222`, `#042F2E`, `#1C1917`, `#1A1A2E`
-  - **NEVER:** white, bright indigo, system colors, RGB/HSL, shorthand hex
-- `secondaryColor` (hex) — vivid accent (e.g. `#3B82F6` blue, `#06B6D4` cyan, `#10B981` emerald)
-  - Approved: `#3B82F6`, `#06B6D4`, `#10B981`, `#F59E0B`, `#8B5CF6`, `#EC4899`
-- `fontFamily` — always `"Inter, sans-serif"` unless explicitly requested
 
-### Layouts — 17 Types
+| Field | Required | Notes |
+|---|:-:|---|
+| `primaryColor` | ✓ | **Dark and desaturated** — approved: `#0F172A`, `#1E293B`, `#0C1222`, `#042F2E`, `#1C1917`, `#1A1A2E`. Never bright/white. |
+| `secondaryColor` | ✓ | Vivid accent — approved: `#3B82F6`, `#06B6D4`, `#10B981`, `#F59E0B`, `#8B5CF6`, `#EC4899` |
+| `fontFamily` | ✓ | Default `"Inter, sans-serif"` |
 
-**Text Layouts (6):**
+### 17 layouts
 
-1. **title** — opening slide (dark gradient, white text, centered)
-   - `title` (required), `subtitle` (required), `note` (optional)
+**Text layouts (6):**
 
-2. **content** — main workhorse (white bg, dark text, accent-bar title)
-   - `title` (recommended), `bullets` OR `content` (one required, max 6 bullets ≤ 10 words each), `note` (optional)
+1. **title** — opening (dark gradient, white, centered). Required: `title`, `subtitle`.
+2. **content** — workhorse (white bg, accent title bar). One of `bullets` (≤ 6, ≤ 10 words each) or `content`.
+3. **two-column** — comparison. `leftColumn` (≤ 5 items) + balanced `rightColumn`.
+4. **section** — chapter divider (dark gradient).
+5. **quote** — testimonial. `quote` 5–25 words, optional `attribution`, `quoteImage` (URL or `unsplash:`), `quoteStyle: "minimal" | "large" | "card"`.
+6. **closing** — final slide (dark gradient, CTA).
 
-3. **two-column** — comparison / paired-list (two parallel bullet lists)
-   - `title` (recommended), `leftColumn` (required ≤ 5 items), `rightColumn` (required, balanced)
+**Visual layouts (11):**
 
-4. **section** — chapter divider (dark gradient, centered)
-   - `title` (required), `subtitle` (optional)
+7. **diagram** — full-slide mermaid (≤ 15 nodes).
+8. **image** — full-slide image with optional caption. `imageUrl` URL or `unsplash:`.
+9. **chart** — full-slide ChartData.
+10. **diagram-content** — diagram left, text/bullets right (≤ 10 nodes for split).
+11. **image-content** — image left, text/bullets right.
+12. **chart-content** — chart left, text/bullets right.
+13. **hero** — full-bleed background + text overlay. `backgroundImage` (URL or `unsplash:`), `overlay: "dark" | "light" | "none"`.
+14. **stats** — 2–4 KPI numbers. Each `{ value, label, trend?: "up"|"down"|"neutral", change? }`.
+15. **gallery** — 4–12 image grid, 2–6 columns. Each `{ imageUrl, caption? }`.
+16. **comparison** — feature table. `comparisonHeaders` + `comparisonRows[].values` (true→✓, false→✗, or string).
+17. **features** — icon grid 3–6 items, 2–4 columns. Each `{ icon: "lucide-name", title, description? }`.
 
-5. **quote** — testimonial / pull quote (blockquote with optional avatar)
-   - `quote` (required 5–25 words), `attribution` (recommended), `quoteImage` (optional URL or `unsplash:`), `quoteStyle` (`large`, `minimal`, `card`)
+### Inline icons
 
-6. **closing** — final slide (dark gradient, white text, centered CTA)
-   - `title` (required), `subtitle` or `content` (optional)
+In any text field: `{icon:icon-name}` (kebab-case Lucide names). Examples: `{icon:check}`, `{icon:rocket}`, `{icon:dollar-sign}`, `{icon:trending-up}`, `{icon:users}`, `{icon:building}`, `{icon:lock}`. Renders inline 1em SVG in HTML preview, **stripped from PPTX** (PowerPoint doesn't support inline SVG).
 
-**Visual Layouts (11):**
+### Mermaid in slides
 
-7. **diagram** — full-slide Mermaid diagram
-   - `title` (optional), `diagram` (required Mermaid code ≤ 15 nodes), `note` (optional)
+Same 14+ diagram types as `application/mermaid`. Max 15 nodes for full-slide, 10 for split layout. **No** `%%{init}%%` directives (renderer handles theming).
 
-8. **image** — full-slide centered image with optional caption
-   - `imageUrl` (required URL or `unsplash:`), `imageCaption` (optional), `note` (optional)
+### Chart types
 
-9. **chart** — full-slide data chart (bar, line, pie, donut)
-   - `title` (optional), `chart` (required ChartData object)
+| Type | Data shape |
+|---|---|
+| `bar` | `data: [{ label, value, color? }]` |
+| `bar-horizontal` | same as `bar` |
+| `line` | `{ labels: [...], series: [{ name, values: [...], color? }] }` |
+| `pie` | `data: [{ label, value, color? }]` |
+| `donut` | same as `pie` (renders with inner radius) |
 
-10. **diagram-content** — diagram left, text/bullets right
-    - `title` (recommended), `diagram` (required ≤ 10 nodes), `bullets` OR `content` (one required)
+### Unsplash slots
 
-11. **image-content** — image left, text/bullets right
-    - `title` (recommended), `imageUrl` (required), `bullets` OR `content` (one required)
-
-12. **chart-content** — chart left, text/bullets right
-    - `title` (recommended), `chart` (required), `bullets` OR `content` (one required)
-
-13. **hero** — full-bleed background image with text overlay
-    - `title` (required), `subtitle` (optional), `backgroundImage` (required URL or `unsplash:`), `overlay` (`dark`, `light`, `none`)
-
-14. **stats** — 2–4 big KPI numbers in grid
-    - `title` (optional), `stats` (required array of stat objects)
-    - **Stat object:** `{ "value": "42%", "label": "...", "trend": "up|down|neutral", "change": "..." }`
-
-15. **gallery** — image grid (4–12 items, 2–6 columns)
-    - `title` (optional), `gallery` (required array `[{ "imageUrl": "...", "caption": "..." }]`), `galleryColumns` (optional 2–6)
-
-16. **comparison** — feature comparison table
-    - `title` (optional), `comparisonHeaders` (required), `comparisonRows` (required array of `{ "feature": "...", "values": [...] }`)
-    - `values`: `true` (✓), `false` (✗), or string (custom)
-
-17. **features** — icon-based feature grid (visual alternative to bullets)
-    - `title` (optional), `features` (required 3–6 items), `featuresColumns` (optional 2–4)
-    - **Feature item:** `{ "icon": "rocket", "title": "...", "description": "..." }` (Lucide icon names)
-
-### Mermaid in Slides
-- Max 15 nodes for full-slide, max 10 for split layout
-- Valid declarations: `flowchart TD`, `sequenceDiagram`, `erDiagram`, `stateDiagram-v2`, `classDiagram`, `gantt`, `pie`, `mindmap`, `gitGraph`, `journey`
-- **NO** `%%{init}%%` directives (renderer handles theming)
-
-### Unsplash Integration in Slides ⭐
-**Fields supporting `unsplash:keyword`:**
-- `imageUrl` (image layout)
+Fields that accept `unsplash:keyword`:
+- `imageUrl` (image / image-content layouts)
 - `backgroundImage` (hero layout)
 - `quoteImage` (quote layout avatar)
-- `gallery[].imageUrl` (gallery items)
+- `gallery[].imageUrl`
 
-**Syntax:** `"unsplash:technology"`, `"unsplash:mountain sunset"`, `"unsplash:office meeting"`
+Resolved server-side at create/update time, cached 30 days.
 
-**Resolusi:** Server-side → real Unsplash URL before PPTX export
-**Cache:** 30 days
+### Capabilities
 
-### Chart Types
-- `bar` — vertical bars; data: `[{ "label": "Q1", "value": 120000 }]`
-- `bar-horizontal` — horizontal bars
-- `line` — trends; data: `{ "labels": ["Jan", "Feb"], "series": [{ "name": "Revenue", "values": [100, 120] }] }`
-- `pie` — pie chart
-- `donut` — pie with hole
+- 17 distinct layouts with per-layout required+optional fields.
+- Inline mermaid (rendered client-side by mermaid.js inside the iframe).
+- D3-based charts (rendered as inline SVG in preview, rasterized to PNG for PPTX).
+- Inline Lucide icons via `{icon:name}` (preview only).
+- Arrow-key navigation in the panel.
+- Slide dot indicators (when 1 < slide count ≤ 20).
+- Real `.pptx` export with all assets embedded.
 
-### Content Rules
-- **Plain text ONLY** — NO markdown syntax in text fields (`**bold**`, `## headings`, backticks)
-- **Bullets ≤ 10 words, ≤ 6 per slide**
-- **Realistic, substantive copy** — NO `Lorem ipsum`, `Company Name`, `TBD`, `Add your point here`
-- **Numbers anchor claims:** "Increased revenue 23% to $4.2M" not "grew"
-- Title slide title = deck name, subtitle = framing
-- Closing = CTA or takeaway, NOT just "Thank you"
-- `note` field is visible (footer in preview AND PPTX)
+### Hard constraints
 
-### Deck Structure
-- **Slide count: 7–12** (fewer = thin; more = lose audience)
-- **First slide MUST be `layout: "title"`**
-- **Last slide MUST be `layout: "closing"`**
-- **Use ≥ 3 different layouts** (audited by validator)
-- **Narrative arc:** opening → context/problem → core content → evidence → closing
-- **Section breaks** for decks ≥ 9 slides (1–2 `section` slides as act breaks)
+- Anything outside `{...}` or wrapped in markdown fences → reject.
+- `image-text` layout (deprecated) → reject.
+- Bright `primaryColor` → soft-warn (validator; prompt rejects).
+- Missing `subtitle` on title slide → soft-warn.
+- < 7 or > 12 slides → soft-warn.
+- First slide not `title` or last not `closing` → soft-warn.
+- Per-layout required field missing (e.g. `chart` without `chart` object) → reject.
+- Markdown syntax in text fields → soft-warn.
+- 512 KB cap.
 
-### Inline Icons Syntax
-**In any text field:** `{icon:icon-name}` (kebab-case Lucide names)
-- Examples: `{icon:check} GDPR compliant`, `{icon:rocket} Launch Metrics`
-- Renders inline, inherits text color
-- Common: `check`, `x`, `alert-circle`, `info`, `arrow-right`, `trending-up`, `dollar-sign`, `users`, `briefcase`, `building`, `code`, `database`, `cloud`, `server`, `lock`, `rocket`, `target`, `zap`, `star`
-- **Note:** Only in HTML preview; stripped from PPTX
+### Soft warnings
 
-### Anti-Patterns ❌
-- ❌ Outputting anything outside `{...}` or wrapping in markdown fences
-- ❌ Using `image-text` layout (deprecated, no image support)
+- All deck-level conventions above.
+- Same layout for every slide (≤ 5 slides with only 1–2 distinct layouts).
+- Per-layout content quality (bullets > 6, words > 10/bullet, deprecated layouts).
+
+### Anti-patterns ❌
+
+- ❌ Output anything outside `{...}` or wrap in markdown fences
+- ❌ Use deprecated `image-text` layout (no image support)
 - ❌ Bright `primaryColor` (unreadable on title slides)
 - ❌ Missing `subtitle` on title slide
 - ❌ First slide not `title` or last not `closing`
 - ❌ Fewer than 7 or more than 12 slides
 - ❌ Same layout for every slide
-- ❌ Markdown syntax in text fields
+- ❌ Markdown syntax in text fields (`**bold**`, `## heading`, backticks)
 - ❌ Truncation (`"... etc"`)
+
+### Pre-injected dependencies
+
+- `pptxgenjs@4.0.1` (PPTX builder)
+- mermaid v11
+- D3-based `chartToSvg`
+- ~100 Lucide icon SVGs bundled inline (for `{icon:name}` shorthand)
+
+### Render pipeline (preview)
+
+1. JSON parse; if not valid JSON or missing slides, fall back to `parseLegacyMarkdown` (splits on `\n---\n`).
+2. `slidesToHtml(presentation)` builds a full HTML document (~1325 lines of HTML+CSS+JS template) with one slide container per slide.
+3. Iframe with `srcDoc` + sandbox `allow-scripts allow-same-origin` (same-origin needed for postMessage).
+4. Iframe runs `mermaid.initialize()` + `mermaid.run()` to render embedded mermaid blocks.
+5. Charts embedded as inline SVG strings (from server-side `chartToSvg`).
+6. Parent ↔ iframe via postMessage: `{ type: "slideChange", current, total }` from iframe; `{ type: "navigate", direction | index }` from parent.
+7. Keyboard navigation (arrow keys) preventDefault'd on parent to avoid page scroll.
+
+### Render pipeline (PPTX export)
+
+`generatePptx(data): Promise<Blob>` using pptxgenjs with `LAYOUT_WIDE` (13.333"×7.5"):
+
+- **title / section / closing**: dark backgrounds, accent line, centered text.
+- **content**: white bg, theme title bar, bullets/body, slide number footer.
+- **two-column**: vertical divider at center, left/right bullets.
+- **quote**: decorative quote mark (Georgia 80–120pt), italic text, optional avatar fetch.
+- **diagram**: async — `mermaidToBase64Png()` (client-side render at 2× resolution) → embed as PNG.
+- **chart**: async — `chartToSvg()` → `svgToBase64Png()` → embed as PNG. **No native PPTX charts.**
+- **image / hero**: async — `fetchImageAsBase64()` (with `unsplash:` rewrite to `source.unsplash.com`) → embed as PNG.
+- **gallery**: async multi-image grid, auto-columns by item count.
+- **comparison**: PptxGenJS table with check/cross marks for booleans.
+- **features**: icon grid using bundled Lucide SVG paths.
+- **stats**: KPI numbers in grid, trend indicators (↑↓→).
+
+`cleanPptx()` strips markdown + inline icons (`{icon:name}`) before rendering — PowerPoint doesn't render those.
+
+### Sandbox / security
+
+- Preview iframe: `allow-scripts allow-same-origin` (no navigation blocking — slides are LLM-trusted content).
+- PPTX export runs client-side (no network trip).
+
+### Download
+
+`.pptx` — full deck with all assets embedded as PNG.
 
 ---
 
-## 11. R3F 3D Artifact — `application/3d`
+## 11. `application/python` — Python Script (executable)
 
-**Label:** R3F 3D Scene (React Three Fiber)
-**Ringkasan:** Interactive 3D scenes — primitives, glTF models, animations di Canvas dengan OrbitControls dan Environment (pre-provided).
+**Identity**
 
-### Runtime Dependencies
+| | |
+|---|---|
+| Type | `application/python` |
+| Label / Short label | "Python Script" / "Python" |
+| Extension | `.py` |
+| Code tab | ✓ |
+| Color | yellow-500 |
 
-| Library | Version | Pre-injected | Notes |
-|---------|---------|--------------|-------|
-| React | 18.3.1 | Yes | All hooks available as globals |
-| Three.js | 0.170.0 | Yes | As `THREE` namespace |
-| @react-three/fiber | 8.17.10 | Yes | `useFrame`, `useThree` |
-| @react-three/drei | 9.117.0 | Yes | 20 helpers (see below) |
-| Babel | 7.26.10 | – | JSX + TypeScript compiled |
+### When to use
 
-**Canvas + Lighting** (already provided — do NOT include):
+- Computation, data analysis, math experiments.
+- Visualizations via matplotlib (line, bar, scatter, etc.).
+- Anything that benefits from running Python *in the browser* with the result visible.
+
+vs `application/code` (with language=python): code is display-only; `application/python` is **executable** with output capture.
+
+### Content shape
+
+Python 3.12 source. Must produce visible output (`print` or `plt.show`).
+
+### Capabilities
+
+**Pre-loaded packages** (no `micropip` install needed):
+- `numpy`
+- `matplotlib` (in Agg mode — non-interactive, with `plt.show()` capture)
+- `pandas`
+- `scipy`
+- `sympy`
+- `networkx`
+- `scikit-learn` (as `sklearn`)
+- `pillow` (as `PIL`)
+- `pytz`
+- `python-dateutil` (as `dateutil`)
+- `regex`
+- `beautifulsoup4` (as `bs4`)
+- `lxml`
+- `pyyaml` (as `yaml`)
+
+Plus full standard library: `math`, `statistics`, `random`, `itertools`, `functools`, `collections`, `json`, `re`, `datetime`, `decimal`, `dataclasses`, `enum`, etc.
+
+**Output capture:**
+- `print()` → stdout, streamed to UI.
+- `sys.stderr.write()` / errors → stderr, prefixed `[stderr]` in UI.
+- `plt.show()` → captured to base64 PNG (matplotlib `Agg` backend; `plt.show` monkey-patched to `plt.savefig(BytesIO, format="png", bbox_inches="tight", dpi=150)`); rendered as `<img>` below the output panel.
+
+**Mock-data conventions:**
+- Seed RNGs: `rng = np.random.default_rng(42)`.
+- Realistic sizes: ≤ 10,000 elements (browser Python ~3–10× slower than native).
+- Realistic values: monthly revenue in dollars, not `[1, 2, 3, 4, 5]`.
+
+### Hard constraints
+
+- Markdown fence wrapper → reject.
+- Imports of unavailable packages (`requests`, `urllib3`, `httpx`, `flask`, `django`, `fastapi`, `sqlalchemy`, `selenium`, `tensorflow`, `torch`, `keras`, `transformers`, `opencv-python`, `pyarrow`, `polars`) → reject.
+- `input()` → reject (no stdin).
+- `open(write)` → reject (no persistent FS).
+
+### Soft warnings
+
+- No visible output (no `print`, no `plt.show`).
+- `time.sleep > 2s`.
+- `while True:` without `break`.
+- No type hints (prompt strongly recommends them).
+- Bare `except:` (catch specific).
+
+### Anti-patterns ❌
+
+- ❌ Importing unavailable packages (will crash)
+- ❌ `input()` / `sys.stdin` / file I/O / network requests
+- ❌ `threading.Thread`, `asyncio.run` with real I/O
+- ❌ Bare `except:`
+- ❌ `plt.savefig()` (use `plt.show()` instead — only that is captured)
+- ❌ Multi-part plots without `plt.figure()` per plot
+
+### Pre-injected dependencies
+
+- Pyodide v0.27.6 from CDN (`pyodide.js`)
+
+### Render pipeline
+
+1. **Web Worker** created from blob URL on first run.
+2. Worker initialization:
+   - `importScripts(PYODIDE_CDN + "pyodide.js")`
+   - `pyodide = await self.loadPyodide({ indexURL: PYODIDE_CDN })`
+   - `pyodide.loadPackage(["numpy", "micropip", "matplotlib", "scikit-learn"])`
+   - Install matplotlib interceptor: `matplotlib.use('Agg')`, monkey-patch `plt.show` to write PNG bytes into a global `__plot_images__` list.
+3. **Each run:**
+   - Reset: `__plot_images__ = []`.
+   - Capture stdout/stderr: `py.setStdout({ batched: text => postMessage({ type: "stdout", text }) })`, same for stderr.
+   - `py.runPythonAsync(userCode)`.
+   - After run: read `__plot_images__`, postMessage each base64 PNG.
+4. **Worker reused** across multiple Run clicks; **terminated** on component unmount.
+
+### Sandbox / security
+
+- Python runs in Web Worker (off main thread, no DOM access).
+- Pyodide isolates Python from JS globals (only stdout/stderr/plot capture cross the boundary).
+- No file system access; no real network requests.
+
+### Download
+
+`.py`.
+
+---
+
+## 12. `application/3d` — 3D Scene (R3F)
+
+**Identity**
+
+| | |
+|---|---|
+| Type | `application/3d` |
+| Label / Short label | "3D Scene" / "3D" |
+| Extension | `.tsx` |
+| Code tab | ✓ |
+| Color | pink-500 |
+
+### When to use
+
+- 3D scenes: product showcase, spatial data viz, game-like environments.
+- Loading and animating glTF models.
+- Demonstrations of materials, lighting, particle effects.
+
+### Content shape
+
+A single React Three Fiber component. The wrapper provides Canvas + lighting + Environment + OrbitControls — the LLM must NOT include them. The user component returns `<group>`, `<mesh>`, or a Fragment.
+
+### Capabilities
+
+**Pre-injected at runtime:**
+
+| Library | Symbol | Version |
+|---|---|---|
+| React 18 | `React` + all hooks | 18.3.1 |
+| Three.js | `THREE` namespace | 0.170.0 |
+| @react-three/fiber | `useFrame`, `useThree` | 8.17.10 |
+| @react-three/drei | 20 helpers (see below) | 9.117.0 |
+| Babel | JSX + TypeScript transpiled | 7.26.10 |
+
+**Wrapper-provided (do NOT include):**
 - `<Canvas camera={{ position: [0, 2, 5], fov: 60 }}>`
 - `<ambientLight intensity={0.5} />`
 - `<directionalLight position={[5, 5, 5]} intensity={1} />`
@@ -836,223 +1491,114 @@ Context: [phase-9-revert.md](phase-9-revert.md). Rebuild brief: TBD.
 - `<Suspense>` wrapper
 - Background: dark `#0a0a0f`
 
-### Drei Helpers — 20 Total Available
+**The 20 drei helpers available:**
+`useGLTF`, `useAnimations`, `Clone`, `Float`, `Sparkles`, `Stars`, `Text`, `Center`, `Billboard`, `Grid`, `Html`, `Line`, `Trail`, `Sphere`, `RoundedBox`, `MeshDistortMaterial`, `MeshWobbleMaterial`, `MeshTransmissionMaterial`, `GradientTexture`.
 
-| Helper | Usage | Notes |
-|--------|-------|-------|
-| `useGLTF` | `const { scene, animations } = useGLTF(url)` | Load .glb/.gltf models |
-| `useAnimations` | `const { actions } = useAnimations(animations, ref)` | Play model animations |
-| `Clone` | `<Clone object={scene} />` | Efficiently clone loaded model |
-| `Float` | `<Float speed={1.5} floatIntensity={2}>...</Float>` | Gentle floating animation |
-| `Sparkles` | `<Sparkles count={100} scale={4} />` | Particle sparkles |
-| `Stars` | `<Stars radius={100} count={5000} />` | Starfield background |
-| `Text` | `<Text fontSize={0.5} color="white">Hello</Text>` | 3D text (troika) |
-| `Center` | `<Center>...</Center>` | Auto-center children |
-| `Billboard` | `<Billboard>...</Billboard>` | Always face camera |
-| `Grid` | `<Grid args={[20, 20]} />` | Ground grid |
-| `Html` | `<Html position={[0, 2, 0]}>...</Html>` | HTML overlay in 3D space |
-| `Line` | `<Line points={[[0,0,0],[1,1,1]]} color="red" />` | 3D line |
-| `Trail` | `<Trail>...</Trail>` | Motion trail behind moving objects |
-| `Sphere` | `<Sphere args={[1, 32, 32]}><meshStandardMaterial /></Sphere>` | Shorthand sphere |
-| `RoundedBox` | `<RoundedBox args={[1, 1, 1]} radius={0.1}>...</RoundedBox>` | Box with rounded edges |
-| `MeshDistortMaterial` | `<MeshDistortMaterial distort={0.4} speed={2} />` | Wobbly distortion |
-| `MeshWobbleMaterial` | `<MeshWobbleMaterial factor={1} speed={2} />` | Wave wobble |
-| `MeshTransmissionMaterial` | `<MeshTransmissionMaterial transmission={1} thickness={0.5} />` | Glass/transmission |
-| `GradientTexture` | `<GradientTexture stops={[0, 1]} colors={["#e63946", "#1d3557"]} />` | Gradient fill |
+**Drei NOT available (will crash):**
+`OrbitControls`, `Environment`, `PerspectiveCamera`, `Sky`, `Cloud`, `Bounds`, `PivotControls`, `TransformControls`, `Reflector`, `ContactShadows`, `AccumulativeShadows`, `RandomizedLight`, `Decal`, `useTexture`, `useProgress`, `Preload`, `Leva`.
 
-### NOT Available (will crash) ❌
-- `OrbitControls`, `Environment`, `PerspectiveCamera`, `Sky`, `Cloud`, `Bounds`
-- `PivotControls`, `TransformControls`, `Reflector`, `ContactShadows`, `AccumulativeShadows`
-- `RandomizedLight`, `Decal`, `useTexture`, `useProgress`, `Preload`, `Leva`
+### Verified glTF model CDNs
 
-### Component Requirements
-- **MUST** `export default` a function component
-- Function component ONLY (no class components)
-- Return `<group>`, `<mesh>`, or `<Fragment>`
-- **NEVER** return `<Canvas>`
+**KhronosGroup** (preferred, reliable):
 
-### Animation Patterns
-- **Rotation:** `useFrame((_, delta) => { ref.current.rotation.y += delta * 0.5 })`
-  - Always use `delta` for frame-rate-independent motion
-- **Float effect:** Wrap in `<Float speed={1.5} floatIntensity={2}>...</Float>`
-- **Scale pulse:** `ref.current.scale.setScalar(1 + Math.sin(state.clock.elapsedTime) * 0.1)`
-- **Orbit:** `ref.current.position.set(Math.cos(t) * r, 0, Math.sin(t) * r)` where `t = state.clock.elapsedTime`
-- **NEVER** allocate objects inside `useFrame` (memory leak)
-
-### 3D Model Loading
-
-**Verified Working CDNs:**
-
-**KhronosGroup glTF samples** (reliable):
 ```
 https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/{Name}/glTF-Binary/{Name}.glb
 ```
-Models: Fox (animated, scale 0.02), Duck, DamagedHelmet, Avocado (scale ~20), BrainStem, CesiumMan, CesiumMilkTruck, Lantern, ToyCar, BoomBox, WaterBottle, AntiqueCamera, BarramundiFish, CarConcept, DragonAttenuation, MaterialsVariantsShoe, ABeautifulGame, ChronographWatch, CommercialRefrigerator, SheenChair
 
-**Three.js examples** (animated birds + characters):
+Models: Fox (animated, scale 0.02), Duck (scale 1), DamagedHelmet, Avocado (scale ~20), BrainStem, CesiumMan, CesiumMilkTruck, Lantern, ToyCar, BoomBox, WaterBottle, AntiqueCamera, BarramundiFish, CarConcept, DragonAttenuation, MaterialsVariantsShoe, ABeautifulGame, ChronographWatch, CommercialRefrigerator, SheenChair.
+
+**three.js examples** (animated birds + characters):
+
 ```
 https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/{Name}.glb
 ```
-Models: Parrot, Flamingo, Stork (animated birds), Soldier, Xbot, LittlestTokyo (large city scene)
 
-**Scale notes:**
-- Fox: scale 0.02
-- Avocado: scale ~20
-- Most others: scale 1–3
+Models: Parrot, Flamingo, Stork (animated birds), Soldier, Xbot, LittlestTokyo (large city scene).
 
-### Scale & Composition
-- 1 unit ≈ 1 meter
-- Keep objects in 0.5–5 range (camera at [0, 2, 5])
-- Place objects near origin (OrbitControls targets [0, 0, 0])
-- Wrapper provides ambient + directional + environment lighting
+### Animation patterns (from prompt)
 
-### Anti-Patterns ❌
-- ❌ `<Canvas>` inside (wrapper provides it)
-- ❌ `<OrbitControls>` inside (wrapper provides it)
-- ❌ `import` statements (stripped by sanitizer)
-- ❌ `requestAnimationFrame` (use `useFrame`)
-- ❌ `document.querySelector()` (use `useRef`)
-- ❌ `new THREE.WebGLRenderer()` (Canvas handles this)
+- **Rotation**: `useFrame((_, delta) => { ref.current.rotation.y += delta * 0.5 })` — always use `delta` for frame-rate independence.
+- **Float effect**: `<Float speed={1.5} floatIntensity={2}>...</Float>`
+- **Scale pulse**: `ref.current.scale.setScalar(1 + Math.sin(state.clock.elapsedTime) * 0.1)`
+- **Orbit**: `ref.current.position.set(Math.cos(t) * r, 0, Math.sin(t) * r)` where `t = state.clock.elapsedTime`
+- **NEVER** allocate objects inside `useFrame` (memory leak).
+
+### Hard constraints
+
+- `<Canvas>` inside the user code → reject (wrapper provides).
+- `<OrbitControls>` inside → reject.
+- `<Environment>` inside → reject.
+- `document.querySelector` / `getElementById` → reject (use `useRef`).
+- `requestAnimationFrame` → reject (use `useFrame`).
+- `new THREE.WebGLRenderer()` → reject (Canvas handles it).
+- Missing `export default` → reject.
+
+### Soft warnings
+
+- Imports outside the ~40-symbol R3F whitelist (will be stripped).
+- Building real-world objects from primitive boxes/spheres — recommend glTF models.
+- Model URLs not from verified CDNs.
+
+### Anti-patterns ❌
+
+- ❌ `<Canvas>` / `<OrbitControls>` / `<Environment>` (wrapper)
+- ❌ `import` statements (stripped by sanitizer; deps injected as globals)
+- ❌ `requestAnimationFrame`
+- ❌ `document.querySelector` / `getElementById`
+- ❌ `new THREE.WebGLRenderer`
 - ❌ Allocating objects inside `useFrame`
-- ❌ Building real-world objects from primitives (use glTF models)
-- ❌ Model URLs not from verified CDNs above
+- ❌ Building from primitives instead of using glTF models
+- ❌ Model URLs not from verified CDNs
+- ❌ Wrapping output in markdown fences
+- ❌ Truncation
+
+### Scale conventions
+
+- 1 unit ≈ 1 meter.
+- Keep objects in 0.5–5 range (camera at `[0, 2, 5]`).
+- Place objects near origin (OrbitControls targets `[0, 0, 0]`).
+- KhronosGroup model scales vary: Fox `0.02`, Avocado `~20`, most others `1–3`.
+
+### Pre-injected dependencies
+
+See "Capabilities" above.
+
+### Render pipeline
+
+Babel-transpiled component, mounted inside the wrapper Canvas. Sandboxed iframe similar to React.
+
+### Sandbox / security
+
+- Iframe `allow-scripts`.
+- Same navigation blocker as React.
+
+### Download
+
+`.tsx`.
 
 ---
 
-## Deep Dive: Unsplash Image Resolution
+## Decision boundaries summary
 
-**File:** [src/lib/unsplash/resolver.ts](src/lib/unsplash/resolver.ts)
-
-### How It Works (Server-Side)
-
-**Flow:**
-1. User's artifact content (HTML or Slides JSON) reaches server
-2. Validator/tool detects `unsplash:keyword` patterns
-3. `resolveHtmlImages(content)` atau `resolveSlideImages(content)` is called
-4. Regex extracts all keywords → normalize (lowercase, trim, max 50 chars)
-5. Dedupe + check Prisma cache (30-day TTL)
-6. Fetch uncached queries in parallel via `searchPhoto(query)` → [client.ts](src/lib/unsplash/client.ts)
-7. **API call:** GET `https://api.unsplash.com/search/photos?query=...&per_page=1&orientation=landscape`
-   - Returns first result (highest quality landscape orientation)
-   - Timeout: 5 seconds per query
-8. **Output URL:** `${photo.urls.regular}&w=1200` (regular size + width optimization)
-9. **Cache:** Save query + URL + attribution to `resolvedImage` table, expires 30 days
-10. **Fallback:** If Unsplash down/timeout → `placehold.co` placeholder dengan keyword text
-
-### Regex Patterns
-
-**HTML:** `src=["']unsplash:([^"']+)["']/gi`
-```html
-<!-- Matches: -->
-<img src="unsplash:mountain sunset" />
-<img src='unsplash:coffee shop interior' />
-<!-- Extracts keyword: "mountain sunset", "coffee shop interior" -->
-```
-
-**Slides JSON:** Direct field checks
-```json
-{
-  "imageUrl": "unsplash:technology",
-  "backgroundImage": "unsplash:office meeting",
-  "quoteImage": "unsplash:person",
-  "gallery": [{ "imageUrl": "unsplash:logo company" }]
-}
-```
-
-### Normalization
-```javascript
-function normalize(query: string): string {
-  return query
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ")  // Collapse whitespace
-    .slice(0, 50)           // Max 50 chars
-}
-```
-
-### Cache Strategy
-- **TTL:** 30 days
-- **Key:** normalized query string
-- **Value:** direct Unsplash URL with width param
-- **Attribution:** `Photo by {name} on Unsplash`
-- **Race condition handling:** Duplicate key errors ignored (rely on cache)
-
-### Fallback Behavior
-```javascript
-function fallbackUrl(query: string): string {
-  const encoded = encodeURIComponent(query)
-  return `https://placehold.co/1200x800/f1f5f9/64748b?text=${encoded}`
-}
-```
-**Gray background (#f1f5f9) dengan dark text (#64748b), text = keyword yang asli**
-
-### Which Types Support Unsplash Resolution?
-
-| Type | resolveImages called? | Field(s) | Notes |
-|------|:---:|---|---|
-| HTML | ✓ | `src="unsplash:..."` in `<img>` tags | Server-side in create-artifact/update-artifact |
-| Slides | ✓ | `imageUrl`, `backgroundImage`, `quoteImage`, `gallery[].imageUrl` | Server-side in create-artifact/update-artifact |
-| React | ✗ | – | Would need runtime resolution (no unsplash support documented) |
-| SVG | ✗ | – | SVG is sanitized, external refs blocked |
-| Mermaid | ✗ | – | No image support in Mermaid syntax |
-| Other | ✗ | – | – |
-
-### Error Handling
-- **Timeout:** 5 seconds per query → fallback
-- **API error (4xx/5xx):** Log warning → fallback
-- **Network error:** Log error → fallback
-- **Cache lookup fail:** Continue with uncached queries
-- **Never throws:** Resolution is wrapped with try/catch, always returns valid content
+| User wants… | Pick |
+|---|---|
+| Read it once on a screen | `text/markdown` |
+| Print, sign, send, archive | `text/document` |
+| Click, type, compute (browser-native) | `text/html` |
+| Stateful UI with charts/animations | `application/react` |
+| Pure mathematical proof / equation reference | `text/latex` |
+| A presentation deck | `application/slides` |
+| A flowchart / diagram | `application/mermaid` (standalone) or embed in `text/document` / `text/markdown` / `application/slides` |
+| An icon / illustration / logo | `image/svg+xml` |
+| A 3D scene | `application/3d` |
+| Display source code (no execution) | `application/code` |
+| Run Python (with output capture) | `application/python` |
+| Flat tabular data with sort/filter | `application/sheet` (CSV or JSON-array shape) |
+| Multi-sheet workbook with formulas / XLSX export | `application/sheet` (`spreadsheet/v1` shape) |
 
 ---
 
-## TL;DR: Fitur Matrix (Visual Checklist)
+## See also
 
-Tabel di atas (bagian "TL;DR — Matrix Kapabilitas") merangkum semua fitur per artifact type. Highlight utama:
-
-### Yang BISA:
-- **HTML:** Unsplash images, SVG inline, Lucide icons (via SVG text), forms, `localStorage`
-- **React:** Recharts, Framer Motion, Lucide icons, Tailwind, state management
-- **Slides:** Unsplash images (imageUrl, backgroundImage, quoteImage, gallery), Mermaid diagrams, Lucide icons (inline `{icon:name}`), charts (bar, line, pie, donut), stats, gallery, comparison tables
-- **Mermaid:** Flowcharts, sequence, ER, state, class, Gantt, pie, quadrant, xychart, sankey, timeline, gitgraph, mindmap, journey (max 15 nodes each)
-- **Python:** Matplotlib plots, numpy, pandas, scipy, scikit-learn, pre-loaded packages
-- **Sheet:** 3 shapes (CSV / JSON array / spec `spreadsheet/v1`), sort + filter (flat data), formulas + named ranges + multi-sheet (spec), real `.xlsx` export dengan cached values, 6 cell styles, Excel number formats, frozen panes, merges, cell notes
-- **Markdown:** Inline/display KaTeX math, GFM tables, Mermaid diagrams inline, code blocks with syntax highlighting
-- **LaTeX:** KaTeX full symbol support, align/gather/cases environments, document structure
-
-### Yang TIDAK BISA:
-- **React:** Shadcn/ui, real `fetch()`, form POST, `window.location`, `document.querySelector`
-- **HTML:** External images (except Unsplash), real network requests, form submission
-- **SVG:** Scripts, styles, external hrefs, event handlers, nested SVGs via foreignObject
-- **Mermaid:** Theme override (`%%{init}%%`), click directives (security blocked), >15 nodes
-- **Python:** `requests`, `tensorflow`, `torch`, file I/O, `input()`, `threading`
-- **Slides:** Markdown syntax in text fields, real network images (use unsplash: protocol)
-- **Markdown:** Raw HTML tags, embedded images via data: URIs
-- **Sheet:** More than 8 sheets / 500 cells per sheet / 200 formulas / 64 named ranges, circular refs, HyperFormula-only functions (GPL rejected), server-side recalc (all client-side)
-
----
-
-## Summary
-
-**11 artifact types, each dengan distinct capabilities:**
-
-1. **HTML** — Rich interactivity + **Unsplash images** (core feature)
-2. **React** — Components dengan **Recharts + Framer Motion**
-3. **SVG** — Static graphics (icons, illustrations, diagrams)
-4. **Mermaid** — **Full chart suite** (pie, xychart, sankey, timeline) + diagrams
-5. **Code** — Display-only dengan syntax highlighting
-6. **Python** — **Matplotlib plots** + numpy/pandas/scipy, executable
-7. **Sheet** — **3 content shapes** (CSV / JSON array / spec `spreadsheet/v1`) — flat tables get sort + filter + CSV, workbooks get **formulas + multi-sheet + named ranges + real XLSX export** (financial-model grade)
-8. **Markdown** — **KaTeX math + inline Mermaid** + GFM tables
-9. **LaTeX** — **Full KaTeX symbol set** + document structure
-10. **Slides** — **17 layouts dengan Unsplash images, Mermaid, icons, charts**
-11. **R3F** — **3D scenes dengan glTF models + animations**
-
-**Key discoveries (per user request):**
-- ✓ Unsplash: HTML + Slides only, server-side resolution, 30-day cache, fallback to placehold.co
-- ✓ HTML + images: `unsplash:keyword` protocol, or inline SVG, no external URLs
-- ✓ Mermaid charts: Pie, quadrant, xychart, sankey, timeline, gitgraph semua supported (v11)
-- ✓ Slides: Embed images, Mermaid, charts, icons, comparison tables semuanya bisa
-- ✓ React (2026-04-24): upgraded dengan 7 aesthetic directions (editorial, brutalist, luxury, playful, industrial, organic, retro-futuristic) + dynamic Google Fonts via `// @aesthetic:` + `// @fonts:` directives. Validator hard-errors on missing directive, soft-warns on palette/font/motion direction mismatch. Zero new runtime deps, zero server-side bundler. Recharts + Framer Motion + Lucide tetap pre-injected globals.
-- ✓ Python: Pre-loaded numpy, matplotlib, pandas, scipy, scikit-learn
-- ✓ Sheet (2026-04-23): upgraded ke financial-model grade — spec `spreadsheet/v1` dengan formulas + multi-sheet + named ranges + real XLSX export via ExcelJS (cached values, no F9 recalc), `fast-formula-parser` + `@formulajs/formulajs` untuk eval (MIT, HyperFormula GPL ditolak), zero new runtime deps (semua client-side lazy-loaded), setara skill xlsx Claude AI tanpa LibreOffice
+- [artifacts-deepscan.md](./artifacts-deepscan.md) — system architecture and end-to-end flows
+- [architecture-reference.md](./architecture-reference.md) — file:line audit and dependency matrix
