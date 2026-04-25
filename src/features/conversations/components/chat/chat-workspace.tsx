@@ -1926,6 +1926,12 @@ export function ChatWorkspace({
         })
       }
 
+      // Declared at the sendMessage scope (above the try) so the catch
+      // block below can clean them up on stream failure / abort. See
+      // the streaming-input handler for how these get populated.
+      const preStreamSnapshots = new Map<string, Artifact | null>()
+      const createdStreamingIds = new Set<string>()
+
       try {
         // Normalize messages to plain { id, role, content } before sending.
         // This strips any custom `parts` set during SSE streaming (e.g. tool-invocation)
@@ -1945,6 +1951,11 @@ export function ChatWorkspace({
 
         let assistantContent = ""
         const toolCalls: TransportToolCallMap = new Map()
+        // preStreamSnapshots / createdStreamingIds declared above the try
+        // so the catch block can clean them up. preStreamSnapshots holds
+        // the pre-stream state of any artifact mutated by an
+        // `update_artifact` stream; createdStreamingIds tracks every
+        // `streaming-${toolCallId}` placeholder we created.
 
         // isSSE tracks whether we're in SSE mode
         let isSSE = false
@@ -2148,9 +2159,22 @@ export function ChatWorkspace({
                     ) {
                       const args = tc.args
                       if (args.type && args.content && isValidArtifactType(args.type)) {
-                        const streamingId = tc.toolName === "update_artifact" && args.id
+                        const isUpdate = tc.toolName === "update_artifact" && args.id
+                        const toolCallId = part.toolCallId as string
+                        const streamingId = isUpdate
                           ? args.id as string
-                          : `streaming-${part.toolCallId as string}`
+                          : `streaming-${toolCallId}`
+                        if (isUpdate) {
+                          // First stream chunk for this update — capture
+                          // the existing artifact so we can restore it
+                          // if the final tool result reports an error.
+                          if (!preStreamSnapshots.has(toolCallId)) {
+                            const existing = artifacts.get(args.id as string)
+                            preStreamSnapshots.set(toolCallId, existing ?? null)
+                          }
+                        } else {
+                          createdStreamingIds.add(streamingId)
+                        }
                         addOrUpdateArtifact({
                           id: streamingId,
                           title: (args.title as string) || "Generating...",
@@ -2172,9 +2196,11 @@ export function ChatWorkspace({
                     // Handle create_artifact — replace streaming placeholder with final
                     if (tc.toolName === "create_artifact" && part.output && typeof part.output === "object") {
                       const out = part.output as Record<string, unknown>
+                      const placeholderId = `streaming-${toolCallId}`
                       if (out.id && out.title && isValidArtifactType(out.type) && out.content) {
                         // Remove streaming placeholder, add final artifact
-                        removeArtifact(`streaming-${toolCallId}`)
+                        removeArtifact(placeholderId)
+                        createdStreamingIds.delete(placeholderId)
                         addOrUpdateArtifact({
                           id: out.id as string,
                           title: out.title as string,
@@ -2189,7 +2215,8 @@ export function ChatWorkspace({
                         // would see "Generating..." forever. Log so we can
                         // diagnose; the LLM will see the error in tc.output
                         // and can self-correct on the next turn.
-                        removeArtifact(`streaming-${toolCallId}`)
+                        removeArtifact(placeholderId)
+                        createdStreamingIds.delete(placeholderId)
                         if (typeof out.error === "string") {
                           console.warn(
                             "[chat-workspace] create_artifact returned error:",
@@ -2208,23 +2235,50 @@ export function ChatWorkspace({
                     if (tc.toolName === "update_artifact" && part.output && typeof part.output === "object") {
                       const out = part.output as Record<string, unknown>
                       if (out.id && out.content && out.updated) {
-                        // Find existing artifact to get its type
+                        // Apply the result. Earlier code only updated when
+                        // `existing` was present in the local map, silently
+                        // dropping the update if the artifact wasn't loaded
+                        // (race: hard refresh + tool call still in flight).
+                        // We now always reflect a successful server update —
+                        // we have the full final shape on `out`, so even a
+                        // missing local copy can be hydrated.
                         const existing = artifacts.get(out.id as string)
-                        if (existing) {
+                        const type = existing?.type
+                          ?? (isValidArtifactType(out.type) ? out.type : undefined)
+                        if (type) {
                           addOrUpdateArtifact({
                             id: out.id as string,
-                            title: (out.title as string) || existing.title,
-                            type: existing.type,
+                            title: (out.title as string) || existing?.title || "Untitled",
+                            type,
                             content: out.content as string,
-                            language: existing.language,
+                            language: (out.language as string) || existing?.language,
+                          })
+                        } else {
+                          console.warn(
+                            "[chat-workspace] update_artifact succeeded but local map has no copy and tool output omitted type",
+                            out,
+                          )
+                        }
+                        // Successful update — drop any stale snapshot.
+                        preStreamSnapshots.delete(toolCallId)
+                      } else if (out.error) {
+                        // Update failed. The streaming-input handler already
+                        // mutated the in-memory artifact with partial content
+                        // using the real artifact id (not a placeholder), so
+                        // we restore the pre-stream snapshot — otherwise the
+                        // panel shows the invalid partial content locked in
+                        // place with only a console.warn for feedback.
+                        const snapshot = preStreamSnapshots.get(toolCallId)
+                        if (snapshot && out.id) {
+                          addOrUpdateArtifact({
+                            id: snapshot.id,
+                            title: snapshot.title,
+                            type: snapshot.type,
+                            content: snapshot.content,
+                            language: snapshot.language,
                           })
                         }
-                      } else if (out.error) {
-                        // Update failed (validation, missing artifact, etc.).
-                        // The streaming placeholder may have been associated
-                        // with this update — but for updates the streaming id
-                        // IS the artifact id, so we don't remove anything.
-                        // Just log; the LLM gets the error in its tool result.
+                        preStreamSnapshots.delete(toolCallId)
                         console.warn(
                           "[chat-workspace] update_artifact returned error:",
                           out.error,
@@ -2408,6 +2462,30 @@ export function ChatWorkspace({
           })
         }
       } catch (err) {
+        // Whatever broke the stream, also clean up any
+        // `streaming-${toolCallId}` placeholder artifacts we created
+        // before the failure. They're forever-spinning "Generating..."
+        // cards otherwise — the placeholder is keyed on the toolCallId,
+        // so the success path's `removeArtifact("streaming-...")` was
+        // never reached. Restore any pre-stream snapshots we captured
+        // for `update_artifact` streams that the abort interrupted.
+        for (const placeholderId of createdStreamingIds) {
+          removeArtifact(placeholderId)
+        }
+        for (const snapshot of preStreamSnapshots.values()) {
+          if (snapshot) {
+            addOrUpdateArtifact({
+              id: snapshot.id,
+              title: snapshot.title,
+              type: snapshot.type,
+              content: snapshot.content,
+              language: snapshot.language,
+            })
+          }
+        }
+        createdStreamingIds.clear()
+        preStreamSnapshots.clear()
+
         // Handle user-initiated abort — keep partial content
         if (err instanceof DOMException && err.name === "AbortError") {
           setIsStreaming(false)
