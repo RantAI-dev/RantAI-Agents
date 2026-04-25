@@ -28,6 +28,7 @@ pub fn draw(f: &mut Frame, app: &App, area: Rect) {
 fn screen_name(screen: Screen) -> &'static str {
     match screen {
         Screen::Welcome => "Welcome",
+        Screen::UpdateOrFresh => "Existing Install Detected",
         Screen::ProfileSelect => "Profile Selection",
         Screen::ModeSelect => "Mode Selection",
         Screen::OptionalServices => "Optional Services",
