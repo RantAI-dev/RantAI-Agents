@@ -462,7 +462,8 @@ impl App {
             config,
             install_state: crate::state::InstallState::load_from(
                 &crate::state::InstallState::default_path(crate::installer::is_root()),
-            ).unwrap_or(None),
+            )
+            .unwrap_or(None),
             update_mode: false,
             mode_index: 0,
             profile_index: 0,

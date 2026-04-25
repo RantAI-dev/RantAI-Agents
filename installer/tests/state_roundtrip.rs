@@ -1,4 +1,4 @@
-use rantai_agents_installer::app::{InstallProfile, InstallMode};
+use rantai_agents_installer::app::{InstallMode, InstallProfile};
 use rantai_agents_installer::state::InstallState;
 
 #[test]
@@ -37,6 +37,9 @@ fn install_state_default_path_for_non_root_is_xdg() {
 
 #[test]
 fn install_state_load_returns_none_when_missing() {
-    let nonexistent = std::path::PathBuf::from(format!("/tmp/rantai-state-missing-{}.toml", std::process::id()));
+    let nonexistent = std::path::PathBuf::from(format!(
+        "/tmp/rantai-state-missing-{}.toml",
+        std::process::id()
+    ));
     assert!(InstallState::load_from(&nonexistent).unwrap().is_none());
 }

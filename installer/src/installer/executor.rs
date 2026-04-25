@@ -54,13 +54,17 @@ pub async fn run_installation(config: InstallConfig, tx: Sender<InstallMessage>)
     }
 
     {
-        use crate::state::InstallState;
         use crate::installer::current_git_sha;
+        use crate::state::InstallState;
 
         let mut sidecars = Vec::new();
         if config.profile.includes_sidecars() {
-            if config.sidecar.mineru_enabled { sidecars.push("mineru".to_string()); }
-            if config.sidecar.rerank_enabled { sidecars.push("rerank".to_string()); }
+            if config.sidecar.mineru_enabled {
+                sidecars.push("mineru".to_string());
+            }
+            if config.sidecar.rerank_enabled {
+                sidecars.push("rerank".to_string());
+            }
         }
 
         let state = InstallState {
@@ -78,12 +82,16 @@ pub async fn run_installation(config: InstallConfig, tx: Sender<InstallMessage>)
             tx.send(InstallMessage::Log(
                 crate::app::LogLevel::Warning,
                 format!("Failed to write install state: {e}"),
-            )).await.ok();
+            ))
+            .await
+            .ok();
         } else {
             tx.send(InstallMessage::Log(
                 crate::app::LogLevel::Info,
                 format!("Install state saved to {}", path.display()),
-            )).await.ok();
+            ))
+            .await
+            .ok();
         }
     }
 

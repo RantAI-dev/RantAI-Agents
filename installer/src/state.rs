@@ -50,8 +50,7 @@ impl InstallState {
 
     pub fn save_to(&self, path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("mkdir {parent:?}: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(|e| format!("mkdir {parent:?}: {e}"))?;
         }
         let s = self.to_toml()?;
         std::fs::write(path, s).map_err(|e| format!("write {path:?}: {e}"))
