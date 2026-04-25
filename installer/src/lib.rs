@@ -9,6 +9,7 @@
 )]
 
 pub mod app;
+pub mod cli;
 pub mod installer;
 pub mod state;
 pub mod theme;

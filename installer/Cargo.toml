@@ -8,6 +8,10 @@ description = "TUI installer for RantAI Agents platform"
 name = "rantai-agents-installer"
 path = "src/main.rs"
 
+[[bin]]
+name = "rantai-agents"
+path = "src/bin/rantai-agents.rs"
+
 [lib]
 name = "rantai_agents_installer"
 path = "src/lib.rs"
