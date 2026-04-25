@@ -101,11 +101,28 @@ const VALIDATORS: Record<
  * legitimate artifacts (typical validation completes in < 50ms) and short
  * enough that a malicious payload can't stall the request indefinitely.
  */
-export let VALIDATE_TIMEOUT_MS = 5_000
+/** The default 5-second budget. Read it via `getValidateTimeoutMs()` so
+ *  the test override below can shadow it without exposing a mutable
+ *  module-level binding to production callers. */
+const DEFAULT_VALIDATE_TIMEOUT_MS = 5_000
 
-/** Test-only hook — production code should not call this. */
-export function __setValidateTimeoutMsForTesting(ms: number) {
-  VALIDATE_TIMEOUT_MS = ms
+/** Test-only override. Lives in module scope but is hidden from external
+ *  consumers; only the test hook below can mutate it. Reset to undefined
+ *  via `__setValidateTimeoutMsForTesting(undefined)` so production
+ *  behaviour resumes. */
+let __testTimeoutOverride: number | undefined
+
+/** Public read-only accessor. Production callers see the default unless
+ *  the test hook has overridden it for a single test. */
+export const VALIDATE_TIMEOUT_MS = DEFAULT_VALIDATE_TIMEOUT_MS
+function getValidateTimeoutMs(): number {
+  return __testTimeoutOverride ?? DEFAULT_VALIDATE_TIMEOUT_MS
+}
+
+/** Test-only hook — production code should not call this. Pass `undefined`
+ *  to clear the override and restore the default. */
+export function __setValidateTimeoutMsForTesting(ms: number | undefined) {
+  __testTimeoutOverride = ms
 }
 
 export async function validateArtifactContent(
@@ -115,6 +132,7 @@ export async function validateArtifactContent(
 ): Promise<ArtifactValidationResult> {
   const validator = VALIDATORS[type as ArtifactType]
   if (!validator) return { ok: true, errors: [], warnings: [] }
+  const timeoutMs = getValidateTimeoutMs()
   const result = await Promise.race([
     Promise.resolve().then(() => validator(content, ctx)),
     new Promise<ArtifactValidationResult>((resolve) => {
@@ -122,11 +140,11 @@ export async function validateArtifactContent(
         resolve({
           ok: false,
           errors: [
-            `Validation timeout: ${type} validator exceeded ${VALIDATE_TIMEOUT_MS}ms budget. Content may be too complex (e.g. deeply nested structures, oversized formula DAG).`,
+            `Validation timeout: ${type} validator exceeded ${timeoutMs}ms budget. Content may be too complex (e.g. deeply nested structures, oversized formula DAG).`,
           ],
           warnings: [],
         })
-      }, VALIDATE_TIMEOUT_MS).unref?.()
+      }, timeoutMs).unref?.()
     }),
   ])
   // Post-validation: resolve unsplash:keyword URLs for HTML and slides so

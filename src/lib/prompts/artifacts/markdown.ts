@@ -1,6 +1,10 @@
 export const markdownArtifact = {
   type: "text/markdown" as const,
-  label: "Document",
+  // Distinct from the `text/document` artifact's "Document" label —
+  // both labels surface in canvas-mode UI, and sharing a string left
+  // users guessing which option produced what. "Markdown" matches the
+  // registry's shortLabel for this type.
+  label: "Markdown",
   summary:
     "Documents, reports, READMEs, articles, tutorials — rendered Markdown with GFM tables, Shiki-highlighted code blocks, KaTeX math, and mermaid diagrams.",
   rules: `**text/markdown — Documents**

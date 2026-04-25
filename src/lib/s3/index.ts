@@ -128,13 +128,20 @@ function sanitizeFilename(filename: string): string {
 }
 
 /**
- * Upload a file buffer to S3
+ * Upload a file buffer to S3.
+ *
+ * The presigned download URL is generated only when `options.includeUrl`
+ * is true. Most callers (artifact create / update / version archival)
+ * never read `url`, and generating it costs an extra signing API call
+ * per upload. Set `includeUrl: true` only when the caller actually needs
+ * the URL (e.g. surfacing a link to the user immediately after upload).
  */
 export async function uploadFile(
   key: string,
   buffer: Buffer,
   contentType: string,
-  metadata?: Record<string, string>
+  metadata?: Record<string, string>,
+  options?: { includeUrl?: boolean }
 ): Promise<{ key: string; url: string; size: number }> {
   const client = getS3Client()
 
@@ -148,7 +155,7 @@ export async function uploadFile(
     })
   )
 
-  const url = await getPresignedDownloadUrl(key)
+  const url = options?.includeUrl ? await getPresignedDownloadUrl(key) : ""
 
   return {
     key,

@@ -29,6 +29,12 @@ export async function POST(
     }
 
     const parsedBody = DashboardChatSessionMessagesBodySchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", issues: parsedBody.error.issues },
+        { status: 400 },
+      )
+    }
     const result = await addDashboardChatSessionMessages({
       userId: session.user.id,
       sessionId: parsedParams.data.id,
@@ -62,6 +68,12 @@ export async function PATCH(
     }
 
     const parsedBody = DashboardChatSessionMessageUpdateBodySchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", issues: parsedBody.error.issues },
+        { status: 400 },
+      )
+    }
     const result = await updateDashboardChatSessionMessage({
       userId: session.user.id,
       sessionId: parsedParams.data.id,
@@ -95,6 +107,12 @@ export async function DELETE(
     }
 
     const parsedBody = DashboardChatSessionMessageDeleteBodySchema.safeParse(await req.json())
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", issues: parsedBody.error.issues },
+        { status: 400 },
+      )
+    }
     const result = await deleteDashboardChatSessionMessages({
       userId: session.user.id,
       sessionId: parsedParams.data.id,

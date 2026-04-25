@@ -6,22 +6,26 @@
 
 import { resolveHtmlImages, resolveSlideImages as resolveSlideImagesImpl } from "./resolver"
 
-/** Feature flag to enable/disable image resolution */
-const ENABLED = true
+/** Disable Unsplash resolution by setting `UNSPLASH_RESOLUTION_DISABLED=true`.
+ *  Default is enabled. Replaces a hardcoded `const ENABLED = true` kill
+ *  switch that could only be toggled by editing source. */
+function isUnsplashDisabled(): boolean {
+  return process.env.UNSPLASH_RESOLUTION_DISABLED === "true"
+}
 
 /**
  * Resolve unsplash:keyword URLs in HTML content to real Unsplash photos.
  *
  * This is a SAFE wrapper that:
  * - Never throws (always returns valid content)
- * - Can be disabled via feature flag
+ * - Can be disabled via env flag
  * - Falls back to original content on any error
  *
  * @param content - HTML content potentially containing unsplash: URLs
  * @returns HTML content with resolved image URLs
  */
 export async function resolveImages(content: string): Promise<string> {
-  if (!ENABLED) {
+  if (isUnsplashDisabled()) {
     return content
   }
 
@@ -38,14 +42,14 @@ export async function resolveImages(content: string): Promise<string> {
  *
  * This is a SAFE wrapper that:
  * - Never throws (always returns valid content)
- * - Can be disabled via feature flag
+ * - Can be disabled via env flag
  * - Falls back to original content on any error
  *
  * @param content - Slides JSON content potentially containing unsplash: URLs
  * @returns Slides JSON content with resolved image URLs
  */
 export async function resolveSlideImages(content: string): Promise<string> {
-  if (!ENABLED) {
+  if (isUnsplashDisabled()) {
     return content
   }
 

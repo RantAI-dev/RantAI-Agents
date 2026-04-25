@@ -182,8 +182,32 @@ export function evaluateWorkbook(spec: SpreadsheetSpec): WorkbookValues {
       const entry = values.get(key)
       if (!entry) return null
       if (entry.error) {
-        // Propagate errors from dependency cells
-        throw FormulaError.REF
+        // Propagate the dependency's actual error type instead of always
+        // collapsing to #REF!. A cell that depended on a #VALUE! source
+        // used to surface as #REF!, hiding the root cause and confusing
+        // users debugging a formula chain. Map our string error codes
+        // back to the FormulaParser sentinels (`#NAME?`, `#VALUE!`,
+        // `#DIV/0!`, `#NUM!`, `#N/A`, `#NULL!`, `#CIRCULAR!`); fall back
+        // to #REF! when the code is unknown or just "REF".
+        switch (entry.error) {
+          case "NAME":
+            throw FormulaError.NAME
+          case "VALUE":
+            throw FormulaError.VALUE
+          case "DIV0":
+          case "DIV/0":
+            throw FormulaError.DIV0
+          case "NUM":
+            throw FormulaError.NUM
+          case "NA":
+          case "N/A":
+            throw FormulaError.NA
+          case "NULL":
+            throw FormulaError.NULL
+          case "REF":
+          default:
+            throw FormulaError.REF
+        }
       }
       return entry.value ?? null
     },
