@@ -18,6 +18,7 @@ pub fn draw(f: &mut Frame, app: &App) {
 
     match app.screen {
         Screen::Welcome => screens::welcome::draw(f, app),
+        Screen::UpdateOrFresh => screens::update_or_fresh::draw(f, app),
         Screen::ProfileSelect => screens::profile_select::draw(f, app),
         Screen::ModeSelect => screens::mode_select::draw(f, app),
         Screen::OptionalServices => screens::optional_services::draw(f, app),

@@ -1,4 +1,5 @@
 pub mod complete;
+pub mod update_or_fresh;
 pub mod config;
 pub mod error;
 pub mod mode_select;
