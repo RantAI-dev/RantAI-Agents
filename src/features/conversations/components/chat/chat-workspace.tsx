@@ -2182,13 +2182,32 @@ export function ChatWorkspace({
                           content: out.content as string,
                           language: (out.language as string) || undefined,
                         })
+                      } else {
+                        // Tool output was malformed or carries an error (e.g.
+                        // validation failure / missing artifact / canvas-mode
+                        // mismatch). Without removing the placeholder the user
+                        // would see "Generating..." forever. Log so we can
+                        // diagnose; the LLM will see the error in tc.output
+                        // and can self-correct on the next turn.
+                        removeArtifact(`streaming-${toolCallId}`)
+                        if (typeof out.error === "string") {
+                          console.warn(
+                            "[chat-workspace] create_artifact returned error:",
+                            out.error,
+                          )
+                        } else {
+                          console.warn(
+                            "[chat-workspace] create_artifact tool output incomplete:",
+                            out,
+                          )
+                        }
                       }
                     }
 
                     // Handle update_artifact — update existing artifact (versioning handled by hook)
                     if (tc.toolName === "update_artifact" && part.output && typeof part.output === "object") {
                       const out = part.output as Record<string, unknown>
-                      if (out.id && out.content) {
+                      if (out.id && out.content && out.updated) {
                         // Find existing artifact to get its type
                         const existing = artifacts.get(out.id as string)
                         if (existing) {
@@ -2200,6 +2219,16 @@ export function ChatWorkspace({
                             language: existing.language,
                           })
                         }
+                      } else if (out.error) {
+                        // Update failed (validation, missing artifact, etc.).
+                        // The streaming placeholder may have been associated
+                        // with this update — but for updates the streaming id
+                        // IS the artifact id, so we don't remove anything.
+                        // Just log; the LLM gets the error in its tool result.
+                        console.warn(
+                          "[chat-workspace] update_artifact returned error:",
+                          out.error,
+                        )
                       }
                     }
                   }
