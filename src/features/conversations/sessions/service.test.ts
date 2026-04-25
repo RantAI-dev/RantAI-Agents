@@ -17,22 +17,29 @@ import { deleteFile, uploadFile } from "@/lib/s3"
 vi.mock("./repository", () => ({
   createDashboardMessages: vi.fn(),
   createDashboardSession: vi.fn(),
+  deleteArtifactsBySessionId: vi.fn(),
   deleteDashboardArtifactById: vi.fn(),
   deleteDashboardMessagesBySession: vi.fn(),
   deleteDashboardSessionById: vi.fn(),
+  findArtifactsBySessionId: vi.fn().mockResolvedValue([]),
   findDashboardArtifactByIdAndSession: vi.fn(),
   findDashboardMessageByIdAndSession: vi.fn(),
   findDashboardSessionBasicByIdAndUser: vi.fn(),
   findDashboardSessionByIdAndUser: vi.fn(),
   findDashboardSessionsByUser: vi.fn(),
-  updateDashboardArtifactById: vi.fn(),
+  updateDashboardArtifactByIdLocked: vi.fn(),
   updateDashboardMessageById: vi.fn(),
   updateDashboardSessionTitle: vi.fn(),
 }))
 
 vi.mock("@/lib/s3", () => ({
   deleteFile: vi.fn(),
+  deleteFiles: vi.fn(),
   uploadFile: vi.fn(),
+}))
+
+vi.mock("@/lib/rag/vector-store", () => ({
+  deleteChunksByDocumentId: vi.fn(),
 }))
 
 describe("dashboard chat sessions service", () => {
@@ -142,7 +149,7 @@ describe("dashboard chat sessions service", () => {
       artifactType: "note",
       metadata: { versions: [] },
     } as never)
-    vi.mocked(repository.updateDashboardArtifactById).mockResolvedValue({
+    vi.mocked(repository.updateDashboardArtifactByIdLocked).mockResolvedValue({
       id: "artifact_1",
       title: "Updated Spec",
       content: "new content",

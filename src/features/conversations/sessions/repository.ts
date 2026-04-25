@@ -149,30 +149,16 @@ export async function findDashboardArtifactByIdAndSession(
   })
 }
 
-export async function updateDashboardArtifactById(
-  artifactId: string,
-  data: {
-    content: string
-    title: string
-    fileSize: number
-    metadata: Record<string, unknown>
-  }
-) {
-  return prisma.document.update({
-    where: { id: artifactId },
-    data: {
-      ...data,
-      metadata: data.metadata as Prisma.InputJsonValue,
-    },
-  })
-}
-
 /**
- * Optimistic-lock variant of {@link updateDashboardArtifactById}.
+ * Optimistic-lock update for an artifact row.
  *
  * Returns `null` when the row's `updatedAt` no longer matches the supplied
  * token — meaning a concurrent writer changed the row between read and write.
  * Caller must surface the conflict (don't silently retry or overwrite).
+ *
+ * Rescan N-39: an earlier `updateDashboardArtifactById` (no lock) variant
+ * was kept as a fallback and never called from any code path. Removed
+ * because a silent last-write-wins update was always the wrong default.
  */
 export async function updateDashboardArtifactByIdLocked(
   artifactId: string,

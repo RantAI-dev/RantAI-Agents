@@ -17,7 +17,6 @@ import {
   findDashboardSessionBasicByIdAndUser,
   findDashboardSessionByIdAndUser,
   findDashboardSessionsByUser,
-  updateDashboardArtifactById,
   updateDashboardArtifactByIdLocked,
   updateDashboardMessageById,
   updateDashboardSessionTitle,
