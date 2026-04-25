@@ -10,6 +10,7 @@
 
 pub mod app;
 pub mod installer;
+pub mod state;
 pub mod theme;
 pub mod ui;
 pub mod validate;

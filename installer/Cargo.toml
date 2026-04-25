@@ -27,6 +27,8 @@ anyhow = "1"
 thiserror = "1"
 chrono = "0.4"
 rand = "0.8"
+toml = "0.8"
+dirs = "5"
 
 [profile.release]
 opt-level = 3

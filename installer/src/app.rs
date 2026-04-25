@@ -16,7 +16,7 @@ pub enum Screen {
 }
 
 /// Installation mode selected by the user.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum InstallMode {
     /// All services via Docker, app natively via systemd+Bun
     Full,
@@ -68,7 +68,7 @@ impl InstallMode {
 
 /// Orthogonal axis to `InstallMode`. Profile decides WHAT is installed.
 /// Mode decides HOW. They compose.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum InstallProfile {
     /// Next.js app + infra. Points at external sidecars via env URLs.
     /// Pick this when your GPU box is a separate machine.
