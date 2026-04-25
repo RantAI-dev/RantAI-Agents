@@ -25,6 +25,8 @@ import {
   Header,
   Footer,
   PageNumber,
+  TabStopType,
+  LeaderType,
 } from "docx"
 import type { DocumentAst } from "./schema"
 import type { BlockNode, InlineNode } from "./schema"
@@ -243,9 +245,26 @@ async function renderChart(
   const h = node.height ?? 600
   const alt = node.alt ?? node.caption ?? "Chart"
 
-  const rawSvg = chartToSvg(node.chart, w, h)
-  const sizedSvg = resizeSvg(rawSvg, w, h)
-  const pngBuffer = await svgToPng(sizedSvg, w, h)
+  // chartToSvg is synchronous and falls back to renderEmptyChart on bad
+  // input, but svgToPng (sharp) can still throw on malformed SVG / OOM.
+  // Mirror renderMermaid's marker-paragraph fallback so a bad chart can't
+  // bring down the whole DOCX export with an unhandled rejection.
+  let pngBuffer: Buffer
+  try {
+    const rawSvg = chartToSvg(node.chart, w, h)
+    const sizedSvg = resizeSvg(rawSvg, w, h)
+    pngBuffer = await svgToPng(sizedSvg, w, h)
+  } catch (err) {
+    console.error("[to-docx] renderChart failed:", err)
+    return [new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({
+        text: `[chart failed to render${node.caption ? `: ${node.caption}` : ""}]`,
+        italics: true,
+        color: "6B7280",
+      })],
+    })]
+  }
 
   const image = new Paragraph({
     alignment: AlignmentType.CENTER,
@@ -298,6 +317,29 @@ async function renderBlocks(blocks: BlockNode[], ctx: RenderCtx): Promise<(Parag
   return results.flat()
 }
 
+/**
+ * Inspect a paragraph's inline children for any `tab` node carrying a
+ * `leader: "dot"` and emit a single right-aligned dot-leader tab stop near
+ * the right margin. Word's tab leader rendering is a paragraph-level
+ * property, not a per-run one, so we have to attach this to the Paragraph
+ * itself rather than to the TextRun returned by `renderInline`.
+ *
+ * `tab.leader: "none"` (or unset) needs no tab stop — the default tab
+ * advance handles those positions. We emit at most one stop per paragraph
+ * regardless of how many leader-dot tabs the paragraph contains; the
+ * common pattern (one label + dot leader + reference number on a single
+ * line) only needs one.
+ */
+function tabStopsForParagraph(children: ReadonlyArray<{ type: string; leader?: string }>) {
+  const hasDotLeader = children.some(c => c.type === "tab" && c.leader === "dot")
+  if (!hasDotLeader) return undefined
+  return [{
+    type: TabStopType.RIGHT,
+    position: 9000,
+    leader: LeaderType.DOT,
+  }]
+}
+
 async function renderBlock(node: BlockNode, ctx: RenderCtx): Promise<(Paragraph | Table | TableOfContents)[]> {
   switch (node.type) {
     case "paragraph":
@@ -305,6 +347,7 @@ async function renderBlock(node: BlockNode, ctx: RenderCtx): Promise<(Paragraph 
         alignment: alignTo(node.align),
         spacing: node.spacing,
         indent: node.indent,
+        tabStops: tabStopsForParagraph(node.children),
         children: node.children.flatMap(c => renderInline(c, ctx)) as any,
       })]
 
@@ -370,18 +413,16 @@ async function renderBlock(node: BlockNode, ctx: RenderCtx): Promise<(Paragraph 
       return [new Paragraph({ children: [new PageBreak()] })]
 
     case "toc": {
-      const out: (Paragraph | TableOfContents)[] = []
-      if (node.title) {
-        out.push(new Paragraph({
-          heading: HeadingLevel.HEADING_1,
-          children: [new TextRun(node.title)],
-        }))
-      }
-      out.push(new TableOfContents(node.title ?? "Contents", {
-        hyperlink: true,
-        headingStyleRange: `1-${node.maxLevel}`,
-      }))
-      return out as (Paragraph | TableOfContents)[]
+      // The TableOfContents constructor's first argument IS the title Word
+      // renders above the entries — duplicating it as a separate Heading
+      // paragraph would make the title appear twice. Pass the title (or the
+      // default "Contents") straight to TableOfContents.
+      return [
+        new TableOfContents(node.title ?? "Contents", {
+          hyperlink: true,
+          headingStyleRange: `1-${node.maxLevel}`,
+        }),
+      ]
     }
 
     default:
@@ -393,15 +434,54 @@ async function renderBlock(node: BlockNode, ctx: RenderCtx): Promise<(Paragraph 
 // List rendering
 // ────────────────────────────────────────────────────────────────────────────
 
-// Note: startAt is accepted by the schema but DOCX v1 always begins ordered
-// lists at 1. Supporting arbitrary startAt would require a per-list numbering
-// config. The HTML preview renderer honours startAt via <ol start>.
+/**
+ * Walk every block in an AST collecting the set of distinct `startAt`
+ * values used on ordered lists. The doc-level numbering config has a
+ * fixed reference per starting value (so each list gets its own
+ * numbering instance and the count picks up where the schema asked).
+ *
+ * Without this, an ordered list with `startAt: 5` would silently start
+ * at 1 because the shared `"numbers"` reference always begins at 1.
+ */
+function collectListStartAts(blocks: BlockNode[], acc: Set<number> = new Set()): Set<number> {
+  for (const block of blocks) {
+    if (block.type === "list") {
+      if (block.ordered && typeof block.startAt === "number" && block.startAt > 1) {
+        acc.add(block.startAt)
+      }
+      for (const item of block.items) {
+        collectListStartAts(item.children, acc)
+        if (item.subList?.items) {
+          collectListStartAts(
+            item.subList.items.flatMap((i) => i.children),
+            acc,
+          )
+        }
+      }
+    } else if (block.type === "table") {
+      for (const row of block.rows) {
+        for (const cell of row.cells) collectListStartAts(cell.children, acc)
+      }
+    } else if (block.type === "blockquote") {
+      collectListStartAts(block.children, acc)
+    }
+  }
+  return acc
+}
+
+/** Numbering reference name for an ordered list starting at N. */
+function orderedRef(startAt: number): string {
+  return startAt > 1 ? `numbers-start-${startAt}` : "numbers"
+}
+
 async function renderList(
   node: Extract<BlockNode, { type: "list" }>,
   level: number,
   ctx: RenderCtx,
 ): Promise<Paragraph[]> {
-  const ref = node.ordered ? "numbers" : "bullets"
+  const ref = node.ordered
+    ? orderedRef(typeof node.startAt === "number" ? node.startAt : 1)
+    : "bullets"
   const out: Paragraph[] = []
   for (const item of node.items) {
     const firstBlock = item.children[0]
@@ -442,18 +522,36 @@ const ALL_CELL_BORDERS = {
   top: CELL_BORDER, bottom: CELL_BORDER, left: CELL_BORDER, right: CELL_BORDER,
 }
 
+/** Light-gray fill applied to alternating data rows when the schema sets
+ *  the table-level `shading: "striped"`. Picked to read as a subtle stripe
+ *  on white paper without competing with content for visual weight. */
+const STRIPED_ROW_FILL = "F3F4F6"
+
 async function renderTable(
   node: Extract<BlockNode, { type: "table" }>,
   ctx: RenderCtx,
 ): Promise<Table> {
+  // The schema's `node.shading: "striped" | "none"` was previously accepted
+  // and silently dropped — only per-cell `cell.shading` (a hex string) was
+  // ever applied. We now honor "striped" by alternating-fill on data rows
+  // (header rows stay unstyled). Per-cell shading still takes precedence
+  // when present so a cell can override the stripe.
+  const tableStriped = node.shading === "striped"
+  let dataRowIndex = 0
   const rows = await Promise.all(node.rows.map(async row => {
+    const stripeFill = tableStriped && !row.isHeader && dataRowIndex % 2 === 1
+      ? STRIPED_ROW_FILL
+      : undefined
+    if (!row.isHeader) dataRowIndex++
+
     const cells = await Promise.all(row.cells.map(async (cell, i) => {
       const cellChildren = (await Promise.all(cell.children.map(c => renderBlock(c, ctx)))).flat()
+      const fill = cell.shading ?? stripeFill
       return new TableCell({
         width: { size: node.columnWidths[i] ?? node.columnWidths[node.columnWidths.length - 1] ?? 0, type: WidthType.DXA },
         columnSpan: cell.colspan,
         rowSpan: cell.rowspan,
-        shading: cell.shading ? { fill: cell.shading, type: ShadingType.CLEAR, color: "auto" } : undefined,
+        shading: fill ? { fill, type: ShadingType.CLEAR, color: "auto" } : undefined,
         borders: ALL_CELL_BORDERS,
         margins: { top: 80, bottom: 80, left: 120, right: 120 },
         verticalAlign:
@@ -611,7 +709,16 @@ export async function astToDocx(ast: DocumentAst): Promise<Buffer> {
       paragraphStyles: buildHeadingStyles(meta.font ?? "Arial"),
     },
     numbering: {
-      config: buildNumberingConfig(),
+      // Walk the body / header / footer for ordered lists with `startAt`
+      // overrides; each unique value gets its own numbering reference so
+      // the list actually starts at the requested number.
+      config: buildNumberingConfig(
+        collectListStartAts([
+          ...ast.body,
+          ...(ast.header?.children ?? []),
+          ...(ast.footer?.children ?? []),
+        ]),
+      ),
     },
     footnotes: footnoteIds.length ? footnoteDefinitions : undefined,
     sections: [
@@ -665,35 +772,50 @@ function buildHeadingStyles(font: string) {
   })
 }
 
-function buildNumberingConfig() {
-  return [
-    {
-      reference: "bullets",
-      levels: BULLET_CHARS.map((char, idx) => ({
-        level: idx,
-        format: LevelFormat.BULLET,
-        text: char,
-        alignment: AlignmentType.LEFT,
-        style: {
-          paragraph: {
-            indent: { left: 720 * (idx + 1), hanging: 360 },
-          },
-        },
-      })),
+/** Build the numbering levels for a decimal ordered list at the given
+ *  start value. Used both for the default `"numbers"` reference (start=1)
+ *  and for any per-list start overrides. */
+function decimalNumberingLevels(start: number) {
+  return [0, 1, 2].map((idx) => ({
+    level: idx,
+    format: LevelFormat.DECIMAL,
+    text: `%${idx + 1}.`,
+    alignment: AlignmentType.LEFT,
+    // Only the top-level numbering carries the start override — sublists
+    // restart from 1, which matches HTML <ol> semantics for nested lists.
+    start: idx === 0 ? start : 1,
+    style: {
+      paragraph: {
+        indent: { left: 720 * (idx + 1), hanging: 360 },
+      },
     },
-    {
-      reference: "numbers",
-      levels: [0, 1, 2].map((idx) => ({
-        level: idx,
-        format: LevelFormat.DECIMAL,
-        text: `%${idx + 1}.`,
-        alignment: AlignmentType.LEFT,
-        style: {
-          paragraph: {
-            indent: { left: 720 * (idx + 1), hanging: 360 },
-          },
-        },
-      })),
+  }))
+}
+
+function buildNumberingConfig(startAts: ReadonlySet<number> = new Set()) {
+  const bulletLevels = BULLET_CHARS.map((char, idx) => ({
+    level: idx,
+    format: LevelFormat.BULLET,
+    text: char,
+    alignment: AlignmentType.LEFT,
+    style: {
+      paragraph: {
+        indent: { left: 720 * (idx + 1), hanging: 360 },
+      },
     },
+  }))
+  const config = [
+    { reference: "bullets", levels: bulletLevels },
+    { reference: "numbers", levels: decimalNumberingLevels(1) },
   ]
+  // One additional reference per distinct `list.startAt` value used in
+  // the AST. The renderer threads the matching reference into each list
+  // paragraph so the count picks up at the requested start.
+  for (const start of startAts) {
+    config.push({
+      reference: `numbers-start-${start}`,
+      levels: decimalNumberingLevels(start),
+    })
+  }
+  return config
 }
