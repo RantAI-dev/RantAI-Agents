@@ -399,7 +399,10 @@ interface DocumentRendererProps {
 
 export function DocumentRenderer({ content }: DocumentRendererProps) {
   const ast = useMemo(() => parseSafe(content), [content])
-  const footnotes = useMemo(newFootnoteSink, [content])
+  // Sink is mutated as a side effect of the AST walk during render. Memoizing
+  // would reuse the populated sink across re-renders, doubling footnote
+  // entries every time. Allocate fresh per render — newFootnoteSink() is cheap.
+  const footnotes = newFootnoteSink()
 
   const tocEntries = useMemo(() => {
     if (!ast) return [] as Array<{ level: number; text: string; bookmarkId?: string }>
