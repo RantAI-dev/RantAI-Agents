@@ -11,6 +11,7 @@ pub mod preflight;
 pub mod profile;
 pub mod services;
 pub mod sidecar;
+pub mod update;
 pub mod verify;
 
 pub fn run_command(cmd: &str, args: &[&str]) -> Result<String, String> {
