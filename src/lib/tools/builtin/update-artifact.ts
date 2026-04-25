@@ -43,7 +43,7 @@ export const updateArtifactTool: ToolDefinition = {
       .string()
       .describe("The complete updated content replacing the entire artifact. Include ALL content — unchanged parts must be repeated, not omitted. The artifact must remain fully functional after the update."),
   }),
-  execute: async (params) => {
+  execute: async (params, context) => {
     const id = params.id as string
     const content = params.content as string
     const newTitle = params.title as string | undefined
@@ -64,39 +64,86 @@ export const updateArtifactTool: ToolDefinition = {
     // Persist version update to Document + S3
     let persisted = true
     let validationWarnings: string[] = []
+    let finalContent = content
     try {
       const existing = await prisma.document.findUnique({ where: { id } })
-      if (existing) {
-        // Structural validation against the artifact's known type. Failures
-        // are surfaced back to the LLM so it can self-correct.
-        if (existing.artifactType) {
-          const validation = await validateArtifactContent(
-            existing.artifactType,
-            content
-          )
-          validationWarnings = validation.warnings
-          if (!validation.ok) {
-            return {
-              id,
-              title: newTitle,
-              content,
-              updated: false,
-              persisted: false,
-              error: formatValidationError(existing.artifactType, validation),
-              validationErrors: validation.errors,
-            }
+      // Fix #23: explicit not-found path. Without this the function silently
+      // falls through to the success return below and tells the LLM
+      // `updated: true, persisted: true` for an artifact that doesn't exist —
+      // the model never knows to call create_artifact instead.
+      if (!existing) {
+        return {
+          id,
+          title: newTitle,
+          content,
+          updated: false,
+          persisted: false,
+          error: `Artifact "${id}" not found. Call create_artifact instead to create a new artifact.`,
+        }
+      }
+
+      // Fix #6: canvas-mode type enforcement. When the user has selected a
+      // specific artifact type, the LLM is required to keep using it.
+      // create_artifact has the same check; without it here, an LLM in
+      // canvas-mode could replace e.g. an HTML artifact with React content
+      // and slip past the type-specific renderer.
+      const canvasMode = context.canvasMode
+      if (
+        canvasMode &&
+        canvasMode !== "auto" &&
+        existing.artifactType &&
+        canvasMode !== existing.artifactType
+      ) {
+        return {
+          id,
+          title: newTitle,
+          content,
+          updated: false,
+          persisted: false,
+          error: `Canvas mode is locked to "${canvasMode}" but the artifact type is "${existing.artifactType}". The user explicitly chose this type — do not switch. Keep updating with content valid for "${existing.artifactType}".`,
+          validationErrors: [
+            `Canvas-mode mismatch: expected "${canvasMode}", artifact is "${existing.artifactType}".`,
+          ],
+        }
+      }
+
+      // Structural validation against the artifact's known type. Failures
+      // are surfaced back to the LLM so it can self-correct.
+      if (existing.artifactType) {
+        const validation = await validateArtifactContent(
+          existing.artifactType,
+          content
+        )
+        validationWarnings = validation.warnings
+        if (!validation.ok) {
+          return {
+            id,
+            title: newTitle,
+            content,
+            updated: false,
+            persisted: false,
+            error: formatValidationError(existing.artifactType, validation),
+            validationErrors: validation.errors,
           }
         }
-
-        // Resolve unsplash: URLs to real images for HTML and slides artifacts
-        let finalContent = content
-        if (existing.artifactType === "text/html") {
-          finalContent = await resolveImages(content)
-        } else if (existing.artifactType === "application/slides") {
-          finalContent = await resolveSlideImages(content)
+        // Fix #2: pick up the validator's rewritten content. For
+        // `text/document` this is the AST with `unsplash:` URLs already
+        // resolved. Without this assignment the rewrite is silently
+        // discarded and raw `unsplash:keyword` strings get persisted.
+        if (validation.content) {
+          finalContent = validation.content
         }
+      }
 
-        // Archive old version to S3 and record lightweight metadata
+      // Resolve unsplash: URLs to real images for HTML and slides artifacts
+      if (existing.artifactType === "text/html") {
+        finalContent = await resolveImages(finalContent)
+      } else if (existing.artifactType === "application/slides") {
+        finalContent = await resolveSlideImages(finalContent)
+      }
+
+      // Archive old version to S3 and record lightweight metadata
+      {
         const meta = (existing.metadata as Record<string, unknown>) || {}
         const versions = (meta.versions as Array<unknown>) || []
         const evictedVersionCount =
@@ -188,7 +235,7 @@ export const updateArtifactTool: ToolDefinition = {
     return {
       id,
       title: newTitle,
-      content,
+      content: finalContent,
       updated: true,
       persisted,
       ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),
