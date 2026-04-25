@@ -111,6 +111,33 @@ pub async fn install_services(
         }
     }
 
+    // ── Step 6: Install the rantai-agents CLI to /usr/local/bin ──
+    {
+        let installer_binary = std::env::current_exe()
+            .map_err(|e| format!("cannot resolve current_exe: {e}"))?;
+        let cli = installer_binary
+            .parent()
+            .ok_or_else(|| "current_exe has no parent".to_string())?
+            .join("rantai-agents");
+
+        if cli.exists() {
+            tx.send(InstallMessage::Progress(
+                "Installing rantai-agents CLI to /usr/local/bin...".into(),
+            ))
+            .await
+            .ok();
+            run_sudo("cp", &[&cli.to_string_lossy(), "/usr/local/bin/rantai-agents"])?;
+            run_sudo("chmod", &["755", "/usr/local/bin/rantai-agents"])?;
+        } else {
+            tx.send(InstallMessage::Log(
+                crate::app::LogLevel::Warning,
+                format!("rantai-agents CLI binary not found next to installer at {cli:?}"),
+            ))
+            .await
+            .ok();
+        }
+    }
+
     Ok(())
 }
 
