@@ -8,6 +8,13 @@
   Enterprise-grade AI agent platform for building and deploying autonomous digital employees with RAG capabilities, multi-channel communication, and human-in-the-loop workflows.
 </p>
 
+## Install
+
+    curl -fsSL https://raw.githubusercontent.com/RantAI-dev/RantAI-Agents/main/scripts/install.sh | bash
+
+Update with `sudo rantai-agents update`. See [docs/INSTALL.md](docs/INSTALL.md)
+for profiles, doctor, and version pinning.
+
 ## Overview
 
 RantAI Agents enables organizations to create, manage, and orchestrate intelligent AI agents powered by large language models. It combines a traditional assistant/chatbot platform with a full **Digital Employee** layer — autonomous agents that run in isolated Docker containers, execute tools, use integrations, and collaborate with each other and with humans.
