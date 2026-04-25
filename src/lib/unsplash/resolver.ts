@@ -140,9 +140,14 @@ export async function resolveSlideImages(content: string): Promise<string> {
 
 /**
  * Resolve a list of queries to URLs (with caching).
- * Shared logic between HTML and Slides resolvers.
+ * Shared logic between HTML, Slides, and DocumentAst resolvers.
+ *
+ * Exported so the DocumentAst tree-walker can reuse the same Prisma cache
+ * + parallel-fetch + fallback semantics rather than calling `searchPhoto`
+ * directly (which would bypass the 30-day cache and hammer the rate-limited
+ * Unsplash API on every document validation / DOCX export).
  */
-async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
+export async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
   const resolved = new Map<string, string>()
 
   // 1. Check cache first
@@ -162,7 +167,15 @@ async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
 
   await Promise.all(
     uncached.map(async (query) => {
-      const photo = await searchPhoto(query)
+      let photo: Awaited<ReturnType<typeof searchPhoto>> = null
+      try {
+        photo = await searchPhoto(query)
+      } catch (err) {
+        // Network/auth/rate-limit failures are non-fatal — fall through to
+        // placeholder. Without this catch the whole Promise.all would reject
+        // and a single bad query would poison the entire batch.
+        console.warn("[unsplash] searchPhoto threw, using fallback:", err)
+      }
 
       if (photo) {
         // Use regular size with width parameter for optimal loading

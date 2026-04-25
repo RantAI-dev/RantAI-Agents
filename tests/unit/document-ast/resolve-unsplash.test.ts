@@ -6,6 +6,18 @@ vi.mock("@/lib/unsplash/client", () => ({
   searchPhoto: vi.fn(),
 }))
 
+// Stub Prisma so the cache layer is empty and we always fall through to
+// searchPhoto. Without this, a real (or test) DB could return cached entries
+// and bypass the calls these tests assert on.
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    resolvedImage: {
+      findMany: vi.fn().mockResolvedValue([]),
+      upsert: vi.fn().mockResolvedValue({}),
+    },
+  },
+}))
+
 const metaBase = {
   title: "T", pageSize: "letter" as const, orientation: "portrait" as const,
   font: "Arial", fontSize: 12, showPageNumbers: false,
