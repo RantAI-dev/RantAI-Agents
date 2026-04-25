@@ -8,6 +8,7 @@
 
 mod app;
 mod installer;
+mod state;
 mod theme;
 mod ui;
 mod validate;

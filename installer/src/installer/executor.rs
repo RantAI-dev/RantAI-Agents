@@ -53,6 +53,40 @@ pub async fn run_installation(config: InstallConfig, tx: Sender<InstallMessage>)
         }
     }
 
+    {
+        use crate::state::InstallState;
+        use crate::installer::current_git_sha;
+
+        let mut sidecars = Vec::new();
+        if config.profile.includes_sidecars() {
+            if config.sidecar.mineru_enabled { sidecars.push("mineru".to_string()); }
+            if config.sidecar.rerank_enabled { sidecars.push("rerank".to_string()); }
+        }
+
+        let state = InstallState {
+            profile: config.profile,
+            mode: config.mode,
+            install_dir: config.install_dir.clone(),
+            data_dir: config.data_dir.clone(),
+            git_sha: current_git_sha(&config.install_dir),
+            installer_version: env!("CARGO_PKG_VERSION").to_string(),
+            installed_at: chrono::Utc::now().to_rfc3339(),
+            sidecars,
+        };
+        let path = InstallState::default_path(crate::installer::is_root());
+        if let Err(e) = state.save_to(&path) {
+            tx.send(InstallMessage::Log(
+                crate::app::LogLevel::Warning,
+                format!("Failed to write install state: {e}"),
+            )).await.ok();
+        } else {
+            tx.send(InstallMessage::Log(
+                crate::app::LogLevel::Info,
+                format!("Install state saved to {}", path.display()),
+            )).await.ok();
+        }
+    }
+
     tx.send(InstallMessage::Done(Ok(()))).await.ok();
 }
 

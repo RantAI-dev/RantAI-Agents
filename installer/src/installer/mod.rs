@@ -60,3 +60,19 @@ pub fn generate_random_string(len: usize) -> String {
         })
         .collect()
 }
+
+pub fn current_git_sha(install_dir: &str) -> String {
+    use std::process::Command;
+    Command::new("git")
+        .args(["-C", install_dir, "rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                Some(String::from_utf8_lossy(&o.stdout).trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+}
