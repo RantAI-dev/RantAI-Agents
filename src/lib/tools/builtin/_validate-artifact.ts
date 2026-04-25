@@ -29,6 +29,7 @@ import {
 } from "@/features/conversations/components/chat/artifacts/renderers/_react-directives"
 import { validateDocumentAst } from "@/lib/document-ast/validate"
 import { resolveUnsplashInAst } from "@/lib/document-ast/resolve-unsplash"
+import { MERMAID_DIAGRAM_TYPES as MERMAID_DIAGRAM_TYPES_SHARED } from "@/lib/document-ast/_mermaid-types"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -148,7 +149,15 @@ export async function validateArtifactContent(
 // Document validation — DocumentAst + Unsplash resolver
 // ---------------------------------------------------------------------------
 
-async function validateDocument(content: string): Promise<ArtifactValidationResult> {
+async function validateDocument(
+  content: string,
+  // ctx accepted for parity with the other validators even though we don't
+  // currently key any rules off `isNew` for documents — adding the parameter
+  // now means future strict gates (e.g. a document size cap on creates) can
+  // plug in without changing the signature and breaking callers.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _ctx?: ValidationContext,
+): Promise<ArtifactValidationResult> {
   let raw: unknown
   try {
     raw = JSON.parse(content)
@@ -359,24 +368,14 @@ function validateSlides(content: string, ctx?: ValidationContext): ArtifactValid
           `Slide ${i + 1} (${s.layout} layout) requires a non-empty \`diagram\` field with Mermaid code.`,
         )
       } else {
-        // Warn if diagram doesn't start with a valid Mermaid declaration
+        // Warn if diagram doesn't start with a valid Mermaid declaration.
+        // Uses the shared MERMAID_DIAGRAM_TYPES list so this list stays in
+        // lockstep with the standalone validator and the document-AST one —
+        // historically this had a hand-maintained subset that lacked
+        // stateDiagram-v2, xychart-beta, etc., producing "may be invalid"
+        // warnings on diagrams the renderer handled fine.
         const diagramTrimmed = (s.diagram as string).trim()
-        const validStarts = [
-          "flowchart",
-          "graph",
-          "sequenceDiagram",
-          "erDiagram",
-          "stateDiagram",
-          "classDiagram",
-          "gantt",
-          "pie",
-          "mindmap",
-          "gitGraph",
-          "journey",
-          "quadrantChart",
-          "timeline",
-        ]
-        const hasValidStart = validStarts.some(
+        const hasValidStart = MERMAID_DIAGRAM_TYPES_SHARED.some(
           (k) => diagramTrimmed.startsWith(k + " ") || diagramTrimmed.startsWith(k + "\n") || diagramTrimmed === k,
         )
         if (!hasValidStart) {
@@ -1350,9 +1349,14 @@ function validateCode(content: string): ArtifactValidationResult {
     )
   }
 
-  if (content.length > 512 * 1024) {
+  // Use byte length (not char length) so multibyte UTF-8 content is sized
+  // consistently with the 512KB cap enforced by create-artifact.ts. The old
+  // char-based check could let a CJK / emoji-heavy snippet pass this warning
+  // and then fail the byte cap upstream.
+  const bytes = Buffer.byteLength(content, "utf-8")
+  if (bytes > 512 * 1024) {
     warnings.push(
-      `Code content is ${Math.round(content.length / 1024)}KB — consider splitting into multiple files or trimming.`
+      `Code content is ${Math.round(bytes / 1024)}KB — consider splitting into multiple files or trimming.`
     )
   }
 
@@ -1364,38 +1368,14 @@ function validateCode(content: string): ArtifactValidationResult {
 // ---------------------------------------------------------------------------
 
 /**
- * Recognized Mermaid diagram type declarations. Order matters only insofar as
- * longer prefixes must be checked before shorter ones that are proper prefixes
- * (e.g. `stateDiagram-v2` before `stateDiagram`). We handle that explicitly
- * below via `startsWith(keyword + " ")` or exact-match.
+ * Recognized Mermaid diagram type declarations. Single source of truth is
+ * `@/lib/document-ast/_mermaid-types` (imported at the top of this file as
+ * `MERMAID_DIAGRAM_TYPES_SHARED`); we alias under the local name
+ * `MERMAID_DIAGRAM_TYPES` so the longer-prefix-first ordering this validator
+ * relies on (e.g. `stateDiagram-v2` before `stateDiagram`) stays in lockstep
+ * with the document-AST and slides validators.
  */
-const MERMAID_DIAGRAM_TYPES = [
-  "flowchart",
-  "graph",
-  "sequenceDiagram",
-  "erDiagram",
-  "stateDiagram-v2",
-  "stateDiagram",
-  "classDiagram",
-  "gantt",
-  "pie",
-  "mindmap",
-  "gitGraph",
-  "journey",
-  "quadrantChart",
-  "timeline",
-  "sankey-beta",
-  "xychart-beta",
-  "block-beta",
-  "packet-beta",
-  "kanban",
-  "C4Context",
-  "C4Container",
-  "C4Component",
-  "C4Deployment",
-  "requirementDiagram",
-  "architecture-beta",
-]
+const MERMAID_DIAGRAM_TYPES: readonly string[] = MERMAID_DIAGRAM_TYPES_SHARED
 
 function validateMermaid(content: string): ArtifactValidationResult {
   const errors: string[] = []
