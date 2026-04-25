@@ -1,2022 +1,1089 @@
-# Full Pre-Planning Recon — `text/document` Artifact Upgrade
+# Artifact System — Architecture Reference
 
-**Date:** 2026-04-21
-**Scope:** Comprehensive audit of all artifact-system surfaces that will be touched by Phases 2–8 (document rendering, DOCX/PDF export, chart rendering, math rendering, image handling).
-**Constraint:** Read-only. Every factual claim carries a file:line citation. `[NOT FOUND]` explicit for absent items.
+> **Audience:** an engineer who needs to find where something lives in the code. This doc is structured as a **file:line audit** — every claim points at a specific source file and line range. For the system-level narrative read [artifacts-deepscan.md](./artifacts-deepscan.md); for per-type capabilities read [artifacts-capabilities.md](./artifacts-capabilities.md).
 
----
-
-## Table of Contents
-
-- [A. Type registry](#a-type-registry--all-sources-of-truth)
-- [B. Prompt system](#b-prompt-system)
-- [C. Existing markdown render path](#c-existing-markdown-render-path)
-- [D. Slides pipeline — full audit (closest analog)](#d-slides-pipeline--full-audit)
-- [E. Dependencies — what is actually installed](#e-dependencies)
-- [F. Unsplash resolver](#f-unsplash-resolver)
-- [G. Create/update artifact pipeline](#g-createupdate-artifact-pipeline)
-- [H. API routes](#h-api-routes)
-- [I. Download handler](#i-download-handler)
-- [J. Math / KaTeX](#j-math--katex)
-- [K. Deployment target and runtime constraints](#k-deployment-target-and-runtime-constraints)
-- [L. Testing infra](#l-testing-infra)
-- [M. Summary matrix](#m-summary-matrix)
-- [N. Open questions for roadmap planning](#n-open-questions-for-roadmap-planning)
+**Last regenerated:** 2026-04-25 — fresh scan from `src/`.
 
 ---
 
-## A. Type Registry — All Sources of Truth
+## Table of contents
 
-### A1. `src/features/conversations/components/chat/artifacts/types.ts`
+- [A. The single source of truth: registry](#a-the-single-source-of-truth-registry)
+- [B. Type definitions and state hook](#b-type-definitions-and-state-hook)
+- [C. Prompt layer (`src/lib/prompts/artifacts/`)](#c-prompt-layer)
+- [D. AI tool layer (`src/lib/tools/builtin/`)](#d-ai-tool-layer)
+- [E. Validator layer (`src/lib/tools/builtin/_validate-artifact.ts`)](#e-validator-layer)
+- [F. Renderer layer (`src/features/conversations/components/chat/artifacts/renderers/`)](#f-renderer-layer)
+- [G. Document AST module (`src/lib/document-ast/`)](#g-document-ast-module)
+- [H. Slides module (`src/lib/slides/`)](#h-slides-module)
+- [I. Spreadsheet module (`src/lib/spreadsheet/`)](#i-spreadsheet-module)
+- [J. Shared rendering module (`src/lib/rendering/`)](#j-shared-rendering-module)
+- [K. Unsplash module (`src/lib/unsplash/`)](#k-unsplash-module)
+- [L. RAG indexer (`src/lib/rag/`)](#l-rag-indexer)
+- [M. S3 helpers (`src/lib/s3/`)](#m-s3-helpers)
+- [N. API routes](#n-api-routes)
+- [O. Service / repository (`src/features/conversations/sessions/`)](#o-service--repository)
+- [P. Database schema (`prisma/schema.prisma`)](#p-database-schema)
+- [Q. UI shell (panel, indicator, dispatcher)](#q-ui-shell)
+- [R. Tool registration & seeding](#r-tool-registration--seeding)
+- [S. Constants reference](#s-constants-reference)
+- [T. Environment flags](#t-environment-flags)
 
-[types.ts:1-73](src/features/conversations/components/chat/artifacts/types.ts#L1-L73) — **73 lines total, full file below**:
+---
+
+## A. The single source of truth: registry
+
+**File:** `src/features/conversations/components/chat/artifacts/registry.ts` (219 lines)
+**Purpose:** one array drives type validation, iteration order, UI metadata, download extension, and every Record map elsewhere in the codebase.
+
+### A.1 `ArtifactRegistryEntry` interface (L35–L60)
 
 ```typescript
-export const VALID_ARTIFACT_TYPES = new Set([
-  "text/html",
-  "text/markdown",
-  "image/svg+xml",
-  "application/react",
-  "application/mermaid",
-  "application/code",
-  "application/sheet",
-  "text/latex",
-  "application/slides",
-  "application/python",
-  "application/3d",
-] as const)
-
-export type ArtifactType =
-  | "text/html"
-  | "text/markdown"
-  | "image/svg+xml"
-  | "application/react"
-  | "application/mermaid"
-  | "application/code"
-  | "application/sheet"
-  | "text/latex"
-  | "application/slides"
-  | "application/python"
-  | "application/3d"
-
-export function isValidArtifactType(value: unknown): value is ArtifactType {
-  return typeof value === "string" && VALID_ARTIFACT_TYPES.has(value as ArtifactType)
-}
-
-export interface ArtifactVersion {
-  content: string
-  title: string
-  timestamp: number
-}
-
-export interface Artifact {
-  id: string
-  title: string
+interface ArtifactRegistryEntry {
   type: ArtifactType
-  content: string
-  language?: string
-  version: number
-  previousVersions: ArtifactVersion[]
-  /**
-   * Number of historical versions that were evicted by the FIFO version
-   * cap (currently 20). Used by the UI to show "+N earlier versions
-   * evicted" so users aren't surprised when older history disappears.
-   */
-  evictedVersionCount?: number
-  /**
-   * Whether this artifact has been successfully indexed into RAG. `false`
-   * surfaces a "not searchable" badge in the panel header so users know
-   * the indexing pipeline missed (or is still pending) for this artifact.
-   */
-  ragIndexed?: boolean
-}
-
-/** Shape returned from the session API for persisted artifacts */
-export interface PersistedArtifact {
-  id: string
-  title: string
-  content: string
-  artifactType: string
-  metadata?: {
-    artifactLanguage?: string
-    versions?: Array<{ content: string; title: string; timestamp: number }>
-    evictedVersionCount?: number
-    ragIndexed?: boolean
-  } | null
+  label: string         // e.g., "HTML Page"
+  shortLabel: string    // e.g., "HTML"
+  icon: LucideIcon      // imported from @/lib/icons
+  colorClasses: string  // tailwind chip classes
+  extension: string     // download extension, e.g., ".html"
+  codeLanguage: string  // shiki language; "" = no separate language
+  hasCodeTab: boolean   // true unless preview *is* the source
 }
 ```
 
-**Current state observation:** The file registers **11 types**. `"text/document"` is **NOT** currently present in either `VALID_ARTIFACT_TYPES` or the `ArtifactType` union. The prompt rules file at [`src/lib/prompts/artifacts/document.ts`](src/lib/prompts/artifacts/document.ts) still exists (see §B5) but has no consumer in the current type registry.
+### A.2 `ARTIFACT_REGISTRY` array (L62–L183)
 
-### A2. `src/features/conversations/components/chat/artifacts/constants.ts`
+12 entries in this order:
 
-[constants.ts:1-56](src/features/conversations/components/chat/artifacts/constants.ts#L1-L56) — full file below:
+| # | Line range | type | label | extension | hasCodeTab |
+|--:|---|---|---|---|---|
+| 1 | L63–L72 | `text/html` | HTML Page | `.html` | true |
+| 2 | L73–L82 | `application/react` | React Component | `.tsx` | true |
+| 3 | L83–L92 | `image/svg+xml` | SVG Graphic | `.svg` | true |
+| 4 | L93–L102 | `application/mermaid` | Mermaid Diagram | `.mmd` | true |
+| 5 | L103–L112 | `text/markdown` | Markdown | `.md` | true |
+| 6 | L113–L122 | `text/document` | Document | `.docx` | **false** |
+| 7 | L123–L132 | `application/code` | Code | `.txt` | **false** |
+| 8 | L133–L142 | `application/sheet` | Spreadsheet | `.csv` | true |
+| 9 | L143–L152 | `text/latex` | LaTeX / Math | `.tex` | true |
+| 10 | L153–L162 | `application/slides` | Slides | `.pptx` | true |
+| 11 | L163–L172 | `application/python` | Python Script | `.py` | true |
+| 12 | L173–L182 | `application/3d` | 3D Scene | `.tsx` | true |
 
-```typescript
-import {
-  Globe,
-  FileCode,
-  Image,
-  GitBranch,
-  FileText,
-  Code,
-  Table2,
-  Sigma,
-  Presentation,
-  Terminal,
-  Box,
-} from "@/lib/icons"
-import type { ArtifactType } from "./types"
+### A.3 Derived exports (L185–L218)
 
-export const TYPE_ICONS: Record<ArtifactType, typeof Globe> = {
-  "text/html": Globe,
-  "application/react": FileCode,
-  "image/svg+xml": Image,
-  "application/mermaid": GitBranch,
-  "text/markdown": FileText,
-  "application/code": Code,
-  "application/sheet": Table2,
-  "text/latex": Sigma,
-  "application/slides": Presentation,
-  "application/python": Terminal,
-  "application/3d": Box,
-}
+- `ArtifactType = (typeof ARTIFACT_REGISTRY)[number]["type"]` — union type (L185)
+- `ARTIFACT_TYPES: readonly ArtifactType[]` — for iteration (L187)
+- `VALID_ARTIFACT_TYPES: ReadonlySet<ArtifactType>` — for membership (L189)
+- `BY_TYPE: Map<ArtifactType, ArtifactRegistryEntry>` — for direct lookup (L191–L193)
+- `getArtifactRegistryEntry(type): ArtifactRegistryEntry | undefined` (L196–L200)
+- `TYPE_ICONS: Record<ArtifactType, LucideIcon>` (L202–L205)
+- `TYPE_LABELS: Record<ArtifactType, string>` (L207–L210)
+- `TYPE_SHORT_LABELS: Record<ArtifactType, string>` (L212–L214)
+- `TYPE_COLORS: Record<ArtifactType, string>` (L216–L218)
 
-export const TYPE_LABELS: Record<ArtifactType, string> = {
-  "text/html": "HTML Page",
-  "application/react": "React Component",
-  "image/svg+xml": "SVG Graphic",
-  "application/mermaid": "Mermaid Diagram",
-  "text/markdown": "Document",
-  "application/code": "Code",
-  "application/sheet": "Spreadsheet",
-  "text/latex": "LaTeX / Math",
-  "application/slides": "Slides",
-  "application/python": "Python Script",
-  "application/3d": "3D Scene",
-}
-
-export const TYPE_COLORS: Record<ArtifactType, string> = {
-  "text/html": "text-orange-500 bg-orange-500/10 border-orange-500/20",
-  "application/react": "text-blue-500 bg-blue-500/10 border-blue-500/20",
-  "image/svg+xml": "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
-  "application/mermaid": "text-purple-500 bg-purple-500/10 border-purple-500/20",
-  "text/markdown": "text-gray-500 bg-gray-500/10 border-gray-500/20",
-  "application/code": "text-cyan-500 bg-cyan-500/10 border-cyan-500/20",
-  "application/sheet": "text-green-500 bg-green-500/10 border-green-500/20",
-  "text/latex": "text-rose-500 bg-rose-500/10 border-rose-500/20",
-  "application/slides": "text-indigo-500 bg-indigo-500/10 border-indigo-500/20",
-  "application/python": "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
-  "application/3d": "text-pink-500 bg-pink-500/10 border-pink-500/20",
-}
-```
-
-**Current state observation:** `BookOpen` is not imported. `text/markdown` carries the UI label `"Document"` ([constants.ts:35](src/features/conversations/components/chat/artifacts/constants.ts#L35)), which is a naming ambiguity to be resolved when the new `text/document` is re-introduced — "Document" is effectively taken.
-
-### A3. `VALID_ARTIFACT_TYPES` usage graph
-
-Grep command (equivalent to `rg -n "VALID_ARTIFACT_TYPES|ARTIFACT_TYPES\s*:" src/`):
-
-| path:line | content | role |
-|---|---|---|
-| [types.ts:1](src/features/conversations/components/chat/artifacts/types.ts#L1) | `export const VALID_ARTIFACT_TYPES = new Set([` | **DEFINITION** — only one, no duplicate |
-| [types.ts:29](src/features/conversations/components/chat/artifacts/types.ts#L29) | `return typeof value === "string" && VALID_ARTIFACT_TYPES.has(value as ArtifactType)` | USAGE — `isValidArtifactType()` type guard |
-| [chat-input-toolbar.tsx:141](src/features/conversations/components/chat/chat-input-toolbar.tsx#L141) | `const ARTIFACT_TYPES: ArtifactType[] = [` | **SECOND SOURCE** — module-local parallel array, iterated by the canvas mode selector ([chat-input-toolbar.tsx:696](src/features/conversations/components/chat/chat-input-toolbar.tsx#L696) shows `{ARTIFACT_TYPES.map(...)}`) |
-
-**Finding:** The registry has **two separate iteration sources**. `VALID_ARTIFACT_TYPES` is a `Set` used only for `.has()` membership checks. The toolbar maintains its own `ARTIFACT_TYPES` array for iteration. Consolidation plan lives in [`phase-7-brief.md`](phase-7-brief.md).
-
-### A4. Zod enum block in `create-artifact.ts`
-
-[create-artifact.ts:21-49](src/lib/tools/builtin/create-artifact.ts#L21-L49):
-
-```typescript
-  parameters: z.object({
-    title: z.string().describe("A concise, descriptive title (3-8 words) that clearly identifies the artifact content"),
-    type: z
-      .enum([
-        "text/html",
-        "text/markdown",
-        "image/svg+xml",
-        "application/react",
-        "application/mermaid",
-        "application/code",
-        "application/sheet",
-        "text/latex",
-        "application/slides",
-        "application/python",
-        "application/3d",
-      ])
-      .describe(
-        "The artifact format. Choose based on content: text/html (interactive pages, dashboards, games), application/react (UI components, data visualizations), image/svg+xml (graphics, icons), application/mermaid (flowcharts, diagrams), application/code (source code), text/markdown (documents, reports), application/sheet (CSV tables), text/latex (math equations), application/slides (presentations as JSON), application/python (executable scripts), application/3d (R3F 3D scenes)"
-      ),
-    content: z
-      .string()
-      .describe("The complete, self-contained content of the artifact. Must be fully functional — no placeholders, stubs, or TODO comments. For HTML: include full document structure. For React: include all component logic with export default. For code: include all necessary functions. For slides: provide complete JSON with theme and slides array."),
-    language: z
-      .string()
-      .optional()
-      .describe(
-        "Programming language for application/code type (e.g. python, javascript, typescript)"
-      ),
-  }),
-```
-
-**Finding:** 11 types in enum; no `text/document`.
-
-### A5. Zod enum in `update-artifact.ts`
-
-[update-artifact.ts:34-45](src/lib/tools/builtin/update-artifact.ts#L34-L45):
-
-```typescript
-  parameters: z.object({
-    id: z
-      .string()
-      .describe("The ID of the artifact to update (from the create_artifact result)"),
-    title: z
-      .string()
-      .optional()
-      .describe("Optional new title. If omitted, keeps the existing title"),
-    content: z
-      .string()
-      .describe("The complete updated content replacing the entire artifact. Include ALL content — unchanged parts must be repeated, not omitted. The artifact must remain fully functional after the update."),
-  }),
-```
-
-**`[NOT FOUND]`** — there is no `type` enum in `update-artifact.ts`. The tool takes `id`, optional `title`, and `content` only; type is derived from the existing DB row ([update-artifact.ts:72-89](src/lib/tools/builtin/update-artifact.ts#L72-L89)). Future additions to the type union do not require touching this file's schema.
-
-### A6. `text/markdown` references (list-like vs one-off)
-
-Grep command (equivalent to `rg -n "text/markdown" src/ | head -60`):
-
-| path:line | role | list-like? |
-|---|---|---|
-| [types.ts:3](src/features/conversations/components/chat/artifacts/types.ts#L3) | Set entry | **list** |
-| [types.ts:17](src/features/conversations/components/chat/artifacts/types.ts#L17) | union member | **list** |
-| [constants.ts:21](src/features/conversations/components/chat/artifacts/constants.ts#L21) | `TYPE_ICONS` key | **list** |
-| [constants.ts:35](src/features/conversations/components/chat/artifacts/constants.ts#L35) | `TYPE_LABELS` key | **list** |
-| [constants.ts:49](src/features/conversations/components/chat/artifacts/constants.ts#L49) | `TYPE_COLORS` key | **list** |
-| [chat-input-toolbar.tsx:146](src/features/conversations/components/chat/chat-input-toolbar.tsx#L146) | toolbar array entry | **list** |
-| [create-artifact.ts:26](src/lib/tools/builtin/create-artifact.ts#L26) | Zod enum entry | **list** |
-| [create-artifact.ts:38](src/lib/tools/builtin/create-artifact.ts#L38) | mention in `.describe()` prose | one-off |
-| [_validate-artifact.ts:48](src/lib/tools/builtin/_validate-artifact.ts#L48) | dispatch `if` entry | **dispatch** |
-| [artifact-renderer.tsx:121](src/features/conversations/components/chat/artifacts/artifact-renderer.tsx#L121) | renderer switch case | **dispatch** |
-| [artifact-panel.tsx:752](src/features/conversations/components/chat/artifacts/artifact-panel.tsx#L752) | `getExtension()` switch case | **dispatch** |
-| [artifact-panel.tsx:805](src/features/conversations/components/chat/artifacts/artifact-panel.tsx#L805) | `getCodeLanguage()` switch case | **dispatch** |
-| [prompts/artifacts/markdown.ts:2](src/lib/prompts/artifacts/markdown.ts#L2) | `type` field of artifact config | dispatch (auto-picked by `ALL_ARTIFACTS`) |
-| [prompts/artifacts/markdown.ts:6](src/lib/prompts/artifacts/markdown.ts#L6) | prose inside `rules` | one-off (prompt text) |
-
-**Finding:** The **list-like** (6 entries) and **dispatch** (4 switches) sites are the two classes that any new type must add to. One-off mentions (prompt text, describe strings) need hand-editing for completeness but are not blockers.
+**Adding a new type:** add an entry to `ARTIFACT_REGISTRY`. All maps update automatically. Compile errors will then appear at:
+- `src/lib/tools/builtin/_validate-artifact.ts` `VALIDATORS` map (need a new validator)
+- `src/features/conversations/components/chat/artifacts/artifact-renderer.tsx` switch (need a new case)
+- `src/lib/prompts/artifacts/index.ts` `ALL_ARTIFACTS` tuple (need a new prompt config — the compiler enforces the prompt's `type` matches the registry entry)
 
 ---
 
-## B. Prompt System
+## B. Type definitions and state hook
 
-### B1. `src/lib/prompts/artifacts/index.ts`
+### B.1 `types.ts`
 
-[index.ts:1-35](src/lib/prompts/artifacts/index.ts#L1-L35) — full file:
+**File:** `src/features/conversations/components/chat/artifacts/types.ts` (62 lines)
+
+- L9–L13: re-exports `ARTIFACT_TYPES`, `VALID_ARTIFACT_TYPES`, and `ArtifactType` from `./registry`.
+- L17–L19: `isValidArtifactType(value): value is ArtifactType` type guard.
+- L21–L25: `ArtifactVersion` interface — `{ content: string; title: string; timestamp: number }`.
+- L27–L47: `Artifact` interface — `{ id, title, type, content, language?, version, previousVersions[], evictedVersionCount?, ragIndexed? }`.
+- L50–L61: `PersistedArtifact` interface — server JSON shape: `{ id, title, content, artifactType, metadata? }` where `metadata` carries `artifactLanguage`, `versions`, `evictedVersionCount`, `ragIndexed`.
+
+### B.2 `use-artifacts.ts`
+
+**File:** `src/features/conversations/components/chat/artifacts/use-artifacts.ts` (144 lines)
+
+- L17: `ACTIVE_ARTIFACT_KEY_PREFIX = "rantai.artifact.active."` — sessionStorage key prefix.
+- L19–L21: `useArtifacts(sessionKey?: string | null)` — hook signature.
+- L25–L35: sessionStorage **restore** on mount (L28–L30 read, L33 catch privacy errors).
+- L37–L50: sessionStorage **persist** on `activeArtifactId` change (L42–L43 write, L44–L46 remove on null, L47 catch).
+- L52–L83: `addOrUpdateArtifact(input)` — pushes existing state into `previousVersions[]` before overwriting (L54–L62), increments `version` (L63), or initializes new artifact at version 1 (L74–L79). Auto-opens at L82.
+- L85–L92: `removeArtifact(id)` — closes if active (L89).
+- L94–L96: `closeArtifact()` — sets `activeArtifactId = null`.
+- L98–L100: `openArtifact(id)`.
+- L102–L127: `loadFromPersisted(persisted[])` — rebuilds Map; clears `activeArtifactId` if no longer present (L124–L126).
+
+---
+
+## C. Prompt layer
+
+**Directory:** `src/lib/prompts/artifacts/`
+
+### C.1 `index.ts`
 
 ```typescript
 import { htmlArtifact } from "./html"
 import { reactArtifact } from "./react"
 import { svgArtifact } from "./svg"
 import { mermaidArtifact } from "./mermaid"
-import { slidesArtifact } from "./slides"
-import { codeArtifact } from "./code"
-import { pythonArtifact } from "./python"
-import { sheetArtifact } from "./sheet"
 import { markdownArtifact } from "./markdown"
+import { documentArtifact } from "./document"
+import { codeArtifact } from "./code"
+import { sheetArtifact } from "./sheet"
 import { latexArtifact } from "./latex"
+import { slidesArtifact } from "./slides"
+import { pythonArtifact } from "./python"
 import { r3fArtifact } from "./r3f"
 
 export const ALL_ARTIFACTS = [
-  htmlArtifact,
-  reactArtifact,
-  svgArtifact,
-  mermaidArtifact,
-  slidesArtifact,
-  codeArtifact,
-  pythonArtifact,
-  sheetArtifact,
-  markdownArtifact,
-  latexArtifact,
-  r3fArtifact,
+  htmlArtifact, reactArtifact, svgArtifact, mermaidArtifact,
+  markdownArtifact, documentArtifact, codeArtifact, sheetArtifact,
+  latexArtifact, slidesArtifact, pythonArtifact, r3fArtifact,
 ] as const
 
-export const CANVAS_TYPE_LABELS: Record<string, string> = Object.fromEntries(
-  ALL_ARTIFACTS.map((a) => [a.type, a.label]),
-)
-
+export const CANVAS_TYPE_LABELS: Record<string, string> =
+  Object.fromEntries(ALL_ARTIFACTS.map((a) => [a.type, a.label]))
 export const ARTIFACT_TYPE_INSTRUCTIONS: Record<string, string> =
   Object.fromEntries(ALL_ARTIFACTS.map((a) => [a.type, a.rules]))
-
 export const ARTIFACT_TYPE_SUMMARIES: Record<string, string> =
   Object.fromEntries(ALL_ARTIFACTS.map((a) => [a.type, a.summary]))
 ```
 
-**Current state observation:** `documentArtifact` is **NOT imported**. The file at [`src/lib/prompts/artifacts/document.ts`](src/lib/prompts/artifacts/document.ts) exists (see B5) but is an **orphan** — no consumer. Any roadmap that wants the document prompt rules active must re-wire the import.
+### C.2 Prompt file inventory
 
-### B2. Files in `src/lib/prompts/artifacts/`
+| File | Lines | Type | Examples imported from |
+|---|--:|---|---|
+| `html.ts` | ~164 | `text/html` | inline strings |
+| `react.ts` | ~169 | `application/react` | inline strings (4 directions covered; full 7 in test fixtures) |
+| `svg.ts` | ~150 | `image/svg+xml` | inline strings |
+| `mermaid.ts` | ~249 | `application/mermaid` | inline strings |
+| `markdown.ts` | ~245 | `text/markdown` | inline strings (README + backprop tutorial) |
+| `document.ts` | ~308 | `text/document` | `@/lib/document-ast/examples/{proposal,report,letter}` |
+| `code.ts` | ~317 | `application/code` | inline strings |
+| `sheet.ts` | ~122 | `application/sheet` | inline strings (3 shapes) |
+| `latex.ts` | ~212 | `text/latex` | inline strings |
+| `slides.ts` | ~591 | `application/slides` | inline strings (fintech pitch + microservice migration) |
+| `python.ts` | ~191 | `application/python` | inline strings |
+| `r3f.ts` | ~280 | `application/3d` | inline strings (geometric + animated Fox) |
+| `context.ts` | ~53 | (utility) | — |
 
-```
-code.ts         317 lines
-context.ts       53 lines
-document.ts     104 lines   ← orphan (not in index.ts)
-html.ts         164 lines
-index.ts         35 lines
-latex.ts        212 lines
-markdown.ts     245 lines
-mermaid.ts      249 lines
-python.ts       191 lines
-r3f.ts          280 lines
-react.ts        169 lines
-sheet.ts        122 lines
-slides.ts       591 lines
-svg.ts          150 lines
-────────────────────────
-TOTAL          2882 lines
-```
+Total: ~3000 lines of prompt rules.
 
-### B3. `src/lib/prompts/artifacts/markdown.ts`
+### C.3 `context.ts`
 
-[markdown.ts:1-70](src/lib/prompts/artifacts/markdown.ts#L1-L70) — config object + rules string (245 lines total; `examples` array L71-L244 contains two long fixtures: a README and a backpropagation tutorial — not pasted here because they are illustrative text fixtures that do not affect the pipeline, but they remain full-length in the file):
+**File:** `src/lib/prompts/artifacts/context.ts` (53 lines)
+**Purpose:** canvas-mode context injection. When the user picks a specific type from the toolbar, `assembleArtifactContext()` returns the full `rules` for that type plus design tokens (palette / typography / spacing) — but only for **5 visual types** (`text/html`, `application/react`, `image/svg+xml`, `application/slides`, `application/3d`). For other modes only the rules are injected.
+
+### C.4 Per-prompt highlights (file:line)
+
+#### `html.ts`
+
+- Tailwind v3 + Inter font auto-injected: prompt rule explicitly says NOT to add `<link>` for Tailwind / Inter — the renderer injects them.
+- `unsplash:keyword` only valid in `<img src>`.
+- Sandbox: `allow-scripts allow-modals` (no top-nav, no forms, no popups).
+
+#### `react.ts`
+
+- Aesthetic directive grammar: line 1 mandatory `// @aesthetic: <direction>` (validator hard-errors on missing/unknown).
+- Fonts directive: line 2 optional `// @fonts: F:spec | F:spec | F:spec` (max 3).
+- 7 aesthetic directions with full design system: editorial, brutalist, luxury, playful, industrial, organic, retro-futuristic.
+- Pre-injected globals: `Recharts`, `LucideReact`, `Motion`, plus 26 React hooks pre-destructured (see [F. renderer §react](#f-renderer-layer)).
+
+#### `slides.ts`
+
+- 17 layouts (verified at L1–L6 then enumerated through ~L590).
+- Approved primary colors (dark slate-900 family); approved accents (vivid).
+- Inline `{icon:name}` syntax (kebab-case Lucide names).
+- Mermaid diagrams supported (`flowchart`, `sequenceDiagram`, `erDiagram`, `stateDiagram-v2`, `classDiagram`, `gantt`, `pie`, `mindmap`, `gitGraph`, `journey`).
+- Chart types: `bar`, `bar-horizontal`, `line`, `pie`, `donut`.
+- Deck conventions: 7–12 slides, first=`title`, last=`closing`, ≥ 3 different layouts.
+
+#### `document.ts`
+
+Imports examples from `@/lib/document-ast/examples/proposal.ts`, `@/lib/document-ast/examples/report.ts`, `@/lib/document-ast/examples/letter.ts` (L1–L3).
+
+`documentArtifact = { type: "text/document", label: "Document", summary: "...", rules: \`...\`, examples: [...] }` (L5+).
+
+The rules are JSON-only — no markdown fences. The block / inline node inventory matches the Zod schema in `src/lib/document-ast/schema.ts` (see §G.1). 14+ anti-patterns, the most important of which is "no math notation (`$...$` or `$$...$$`) — `text/document` does NOT render LaTeX equations" (~L287).
+
+#### `sheet.ts`
+
+3 content shapes — CSV / JSON array of objects / `spreadsheet/v1` spec. Hard caps for the spec: 8 sheets, 500 cells/sheet, 200 formulas, 64 named ranges, 31 chars max sheet name. 6 named cell styles. Excel number formats. 5 supported error codes.
+
+#### `mermaid.ts`
+
+14 diagram types listed with `flowchart` declaration syntax. Max 15 nodes per flowchart for readability.
+
+---
+
+## D. AI tool layer
+
+### D.1 `create-artifact.ts`
+
+**File:** `src/lib/tools/builtin/create-artifact.ts` (193 lines)
+
+- L1–L18: imports + constants.
+  - `MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024` (L17)
+- L19–L41: tool metadata + Zod parameters schema.
+  - L19–L24: name="create_artifact", displayName, description, category="builtin"
+  - L25–L41: parameters object — `title`, `type` (enum from `ARTIFACT_TYPES`), `content`, optional `language`
+- L42–L192: `execute()` async function.
+  - L43–L47: parse inputs + `crypto.randomUUID()`
+  - L49–L61: content size check (`Buffer.byteLength`)
+  - L68–L86: canvas-mode type lock check
+  - L88–L102: language requirement for `application/code`
+  - L104–L120: `validateArtifactContent(type, content)` dispatch
+  - L122–L130: `resolveImages(content)` (HTML), `resolveSlideImages(content)` (slides)
+  - L132–L181: persistence:
+    - L134–L149: S3 upload via `S3Paths.artifact()` + `uploadFile()`
+    - L151–L172: Prisma `document.create()`
+    - L173–L176: fire-and-forget `indexArtifactContent(id, title, finalContent)`
+    - L177–L181: try/catch around persistence
+  - L183–L191: return shape
+
+### D.2 `update-artifact.ts`
+
+**File:** `src/lib/tools/builtin/update-artifact.ts` (197 lines)
+
+- L13–L26: constants.
+  - `MAX_VERSION_HISTORY = 20` (L14)
+  - `MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024` (L17)
+  - `MAX_INLINE_FALLBACK_BYTES = 32 * 1024` (L26)
+- L27–L45: tool metadata + parameters (`id`, optional `title`, `content`).
+- L46–L196: `execute()` flow.
+  - L51–L62: size check
+  - L68: `prisma.document.findUnique({ id })`
+  - L72–L89: validator dispatch (only for known artifact types)
+  - L91–L97: `resolveImages` for HTML and slides
+  - L99–L147: archive old version
+    - L100–L106: extract metadata + version info
+    - L108–L120: upload old content to `${s3Key}.v${versionNum}`, catch sets `versionS3Key = undefined`
+    - L122–L132: inline fallback if S3 failed AND ≤ 32 KB; else mark `archiveFailed`
+    - L133–L139: push version metadata
+    - L141–L148: FIFO eviction beyond 20, increment `evictedVersionCount`
+  - L150–L157: upload new content to original key
+  - L159–L176: `prisma.document.update()`
+  - L178–L181: re-index RAG with `{ isUpdate: true }`
+  - L188–L195: return
+
+### D.3 `builtin/index.ts`
+
+**File:** `src/lib/tools/builtin/index.ts` (~41 lines)
 
 ```typescript
-export const markdownArtifact = {
-  type: "text/markdown" as const,
-  label: "Document",
-  summary:
-    "Documents, reports, READMEs, articles, tutorials — rendered Markdown with GFM tables, Shiki-highlighted code blocks, KaTeX math, and mermaid diagrams.",
-  rules: `**text/markdown — Documents**
+export const BUILTIN_TOOLS: Record<string, ToolDefinition> = {
+  knowledge_search: knowledgeSearchTool,
+  customer_lookup: customerLookupTool,
+  channel_dispatch: channelDispatchTool,
+  document_analysis: documentAnalysisTool,
+  file_operations: fileOperationsTool,
+  web_search: webSearchTool,
+  calculator: calculatorTool,
+  date_time: dateTimeTool,
+  json_transform: jsonTransformTool,
+  text_utilities: textUtilitiesTool,
+  create_artifact: createArtifactTool,
+  update_artifact: updateArtifactTool,
+  code_interpreter: codeInterpreterTool,
+  ocr_document: ocrDocumentTool,
+}
+```
 
-You are generating a long-form document that will be rendered as Markdown in a read-only panel. The reader's goal is to **read and understand**, not to interact. Pick this type for READMEs, technical documentation, reports, comparison articles, tutorials, design notes, and explanatory content.
+Plus `getBuiltinTool(name)` and `getAllBuiltinTools()`.
 
-## Runtime Environment
-- **Renderer:** Streamdown (a streaming-friendly react-markdown wrapper) with GitHub Flavored Markdown enabled.
-- **Code blocks** are syntax-highlighted by Shiki — you MUST tag every fenced block with a language (\`\`\`typescript, \`\`\`python, \`\`\`bash, \`\`\`json, \`\`\`sql, etc.). Untagged blocks render as unstyled plain text.
-- **Tables** (GFM pipe tables) render natively. Use them for structured comparisons.
-- **Math:** KaTeX is wired in via remark-math + rehype-katex. Inline math uses \`$...$\` and display math uses \`$$...$$\`. You can include equations directly in a markdown document — you do NOT need to switch to the LaTeX artifact type for an equation or two.
-- **Mermaid diagrams:** \`\`\`mermaid fenced blocks render as live diagrams. Use them inline when a diagram clarifies the prose.
-- **Task lists:** \`- [ ]\` and \`- [x]\` render as checkboxes (GFM).
-- **Strikethrough:** \`~~text~~\` works (GFM).
-- **Links** are clickable. **Images** via \`![alt](url)\` work for absolute URLs.
-- **Raw HTML is unreliable.** The renderer is not guaranteed to pass HTML through. Do not write \`<details>\`, \`<kbd>\`, \`<sub>\`, \`<script>\`, etc. — express everything in Markdown.
+### D.4 `seed.ts`
 
-## Type Boundary — Markdown vs. HTML vs. LaTeX
-| Use case | Correct type | Why |
+**File:** `src/lib/tools/seed.ts` (~94 lines)
+
+- L25–L32: `NON_USER_SELECTABLE_BUILTIN_TOOLS` set (includes `create_artifact`, `update_artifact`, `file_operations`, `knowledge_search`, `web_search`, `code_interpreter`).
+- L45–L93: `ensureBuiltinTools()` — DB sync. Calls `zodToJsonSchema()` to convert each tool's Zod parameters to OpenAPI-compatible JSON schema for storage.
+
+---
+
+## E. Validator layer
+
+**File:** `src/lib/tools/builtin/_validate-artifact.ts` (~2022 lines, the largest file in the artifact system)
+
+### E.1 Result shape (L33–L39)
+
+```typescript
+interface ArtifactValidationResult {
+  ok: boolean
+  errors: string[]
+  warnings: string[]
+  content?: string  // optional content rewrite (used by validateDocument)
+}
+```
+
+### E.2 Constants (top of file)
+
+- L42–L48: `REACT_IMPORT_WHITELIST` — `react`, `react-dom`, `recharts`, `lucide-react`, `framer-motion`
+- L51: `MAX_INLINE_STYLE_LINES = 10`
+- L127–L147: `SLIDE_LAYOUTS` — 18 valid layout types (includes deprecated `image-text` for soft-warn)
+- L150–L151: `MIN_DECK_SLIDES = 7`, `MAX_DECK_SLIDES = 12`
+- L578–L617: `R3F_ALLOWED_DEPS` — ~40 symbols across react / three / @react-three/fiber / @react-three/drei
+- L1112–L1131: LATEX unsupported-command patterns
+- L1284–L1310: MERMAID_DIAGRAM_TYPES — 27 valid declarations (including beta variants)
+- L1911–L1927: `PYTHON_UNAVAILABLE_PACKAGES` — 13 packages that crash on import (requests, urllib3, httpx, flask, django, fastapi, sqlalchemy, selenium, tensorflow, torch, keras, transformers, opencv-python)
+
+### E.3 `VALIDATORS` dispatch (L61–L77)
+
+```typescript
+const VALIDATORS: Record<ArtifactType, (content: string) => Result | Promise<Result>> = {
+  "text/html": validateHtml,
+  "application/react": validateReact,
+  "image/svg+xml": validateSvg,
+  "application/mermaid": validateMermaid,
+  "application/python": validatePython,
+  "application/code": validateCode,
+  "text/markdown": validateMarkdown,
+  "text/document": validateDocument,
+  "text/latex": validateLatex,
+  "application/sheet": validateSheet,
+  "application/slides": validateSlides,
+  "application/3d": validate3d,
+}
+```
+
+### E.4 `validateArtifactContent(type, content)` dispatcher (L79–L86)
+
+Returns `{ ok: true, errors: [], warnings: [] }` for unknown types.
+
+### E.5 Per-validator function locations
+
+| Validator | Line range | Notable behavior |
 |---|---|---|
-| README, technical docs, design notes, reports, articles, tutorials | \`text/markdown\` | Document to READ |
-| Interactive page, dashboard, calculator, form, landing page | \`text/html\` | Page to INTERACT with |
-| Pure mathematical proof or derivation, equation reference sheet | \`text/latex\` | Math-heavy, needs LaTeX environments |
-| A document with a few inline equations | \`text/markdown\` | Markdown supports KaTeX inline |
-| A diagram with an explanation | \`text/markdown\` (with a \`\`\`mermaid block) | Mixed content |
-| Just a diagram | \`application/mermaid\` | Pure visual |
+| `validateDocument` | L92–L117 | async; JSON.parse → `validateDocumentAst()` → `resolveUnsplashInAst()`; returns rewritten JSON in `content` |
+| `validateSlides` | L153–L568 | Per-layout required-field checks across 18 layouts |
+| `validate3d` | L619–L716 | Forbidden constructs: `<Canvas>`, `<OrbitControls>`, `<Environment>`, `document.*`, `requestAnimationFrame`, `new THREE.WebGLRenderer()` |
+| `validateSheet` | L774–L998 | Shape detection; per-shape rules |
+| `validateMarkdown` | L1004–L1099 | Soft-warnings only |
+| `validateLatex` | L1133–L1200 | Reject full-LaTeX preamble |
+| `validateCode` | L1223–L1272 | Reject HTML doctype, fence wrapper; warn on placeholders |
+| `validateMermaid` | L1312–L1408 | Diagram-type declaration check |
+| `validateSvg` | L1422–L1559 | parse5 walk; reject scripts/style/foreignObject |
+| `validateHtml` | L1565–L1671 | parse5 walk; require DOCTYPE/html/head/body/title/viewport |
+| `validateReact` | L1750–L1901 | Directive parse + Babel parse + import whitelist |
+| `validatePython` | L1929–L2009 | Reject unavailable-package imports |
 
-If the user wants to **read words and look at structure**, it's Markdown. If they want to **click, type, or compute**, it's HTML.
-```
+### E.6 React directives
 
-Rules continues through L69 covering: Document Structure, Formatting Rules, Content Quality, Anti-Patterns. `examples` array spans L71-L244 with two long fixture documents.
+**Helper file:** `src/features/conversations/components/chat/artifacts/renderers/_react-directives.ts`
 
-### B4. `src/lib/prompts/artifacts/slides.ts`
+- L11–L19: `AESTHETIC_DIRECTIONS` — 7 strings.
+- L23–L51: `DEFAULT_FONTS_BY_DIRECTION` — Record mapping each direction to default Google Fonts.
+- L54: `MAX_FONT_FAMILIES = 3`.
+- L76–L99: `parseDirectives(code)` — regex-extract `@aesthetic` line 1 and `@fonts` line 2 (pipe-separated).
+- L112–L114: `validateFontSpec(spec)` — regex `/^[A-Z][A-Za-z0-9 ]{1,40}:(wght@[\d;.]+|...)$/`.
+- L127–L141: `buildFontLinks(aesthetic, fonts)` — emits `<link>` tags from `fonts.googleapis.com`.
 
-**591 lines — key structural sections pasted verbatim. `examples` array dominates the bottom half with two long fixtures (fintech pitch + microservice migration) — omitted here because they are illustrative, not load-bearing.**
-
-[slides.ts:1-6](src/lib/prompts/artifacts/slides.ts#L1-L6) — header:
-
-```typescript
-export const slidesArtifact = {
-  type: "application/slides" as const,
-  label: "Slides",
-  summary:
-    "Presentation decks for stories told in sequence — pitch decks, quarterly reviews, product launches, technical walkthroughs. Renders as a navigable slide viewer with PPTX export; each slide is a discrete visual with a clear focal point.",
-  rules: `**application/slides — Presentation Decks**
-```
-
-Rules cover (all verified in the file):
-- Runtime + output format (JSON only, no markdown fences)
-- Theme: `primaryColor` (dark), `secondaryColor` (vivid accent), `fontFamily`
-- **17 layouts**: `title`, `content`, `two-column`, `section`, `quote`, `closing`, `diagram`, `image`, `chart`, `diagram-content`, `image-content`, `chart-content`, `hero`, `stats`, `gallery`, `comparison`, `features`
-- Mermaid in slides (max 15 nodes full-slide, 10 split-layout)
-- Unsplash image integration: `unsplash:keyword` in `imageUrl`, `backgroundImage`, `quoteImage`, `gallery[].imageUrl`
-- Chart types via `ChartData`: `bar`, `bar-horizontal`, `line`, `pie`, `donut`
-- Inline icons syntax: `{icon:name}` (Lucide names, kebab-case)
-- Deck structure rules: 7–12 slides, first=`title`, last=`closing`, ≥3 different layouts
-
-**Relevance to `text/document`:** Phase 2–6 should mirror this prompt-rules scaffolding (detailed layouts, export semantics, anti-patterns) because the same consumer (LLM) produces both.
-
-### B5. `src/lib/prompts/artifacts/document.ts`
-
-[document.ts:1-104](src/lib/prompts/artifacts/document.ts#L1-L104) — full file (orphan; no current consumer):
-
-```typescript
-export const documentArtifact = {
-  type: "text/document" as const,
-  label: "Document",
-  summary:
-    "Formal deliverables (proposals, reports, book chapters, letters, white papers) rendered as A4-style documents with YAML frontmatter, Unsplash images, Mermaid diagrams, and DOCX/PDF export.",
-  rules: `**text/document — Formal Deliverables**
-
-You are generating a formal document that someone will print, sign, send, archive, or submit. The reader is a client, executive, editor, regulator, or counterpart — not a developer scanning a README. Pick this type when the output is a **deliverable**: a proposal, an executive report, a book chapter, an official letter, a tender response, a legal memo, a research paper, or a white paper.
-
-## Runtime Environment
-- **Source format:** Markdown body with an optional YAML frontmatter block at the very top.
-- **Rendering:** A4-style paper surface in the artifact panel (cover header from frontmatter + body prose). Phase 1 uses a simple markdown render stub; the paper chrome, frontmatter cover, and rich typography land in Phase 2.
-- **Export:** \`.md\` today. In later phases, \`.docx\` and \`.pdf\` exports are generated server-side from the same markdown source. Write content that will still read well after that conversion — no constructs that rely on browser-only behavior.
-- **Code blocks** are syntax-highlighted by Shiki — tag every fenced block with a language (\`\`\`python, \`\`\`typescript, \`\`\`bash, \`\`\`sql, etc.).
-- **Tables** (GFM pipe tables) render natively. Use them for structured comparison.
-- **Math:** KaTeX inline \`$...$\` and display \`$$...$$\`.
-- **Mermaid diagrams:** \`\`\`mermaid fenced blocks render as live diagrams in the web preview and are rasterized in DOCX/PDF export.
-- **Raw HTML is not supported.** Anything that depends on \`<details>\`, \`<kbd>\`, \`<script>\` will be dropped on export. Express everything in Markdown.
-```
-
-Rules continue through L101 with: When-to-use table, YAML frontmatter spec, Body conventions, Images, Content Quality, Anti-Patterns (11 items). `examples` array is empty: `examples: [] as { label: string; code: string }[]` ([document.ts:103](src/lib/prompts/artifacts/document.ts#L103)).
-
-**Orphan status:** File exists on disk but is **not imported** by [`index.ts`](src/lib/prompts/artifacts/index.ts). When the registry re-adopts `text/document`, restoring the import will make this prompt active again without further edits.
+**Validator integration:** `_validate-artifact.ts` L1754–L1806.
+- L1758–L1759: read `ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"` env flag.
+- L1761–L1788: enforce `@aesthetic` (hard-error or soft-warn).
+- L1789–L1806: enforce `@fonts` validity + 3-family cap.
+- L1893–L1898: `appendAestheticWarnings()` — soft-warns on direction mismatches.
 
 ---
 
-## C. Existing Markdown Render Path
+## F. Renderer layer
 
-### C1. `artifact-renderer.tsx`
+**Directory:** `src/features/conversations/components/chat/artifacts/renderers/`
 
-[artifact-renderer.tsx:1-128](src/features/conversations/components/chat/artifacts/artifact-renderer.tsx#L1-L128) — full file:
+### F.1 Dispatcher (`artifact-renderer.tsx`)
 
-```tsx
-"use client"
+**File:** `src/features/conversations/components/chat/artifacts/artifact-renderer.tsx` (140 lines)
 
-import dynamic from "next/dynamic"
-import { Loader2 } from "@/lib/icons"
-import type { Artifact } from "./types"
-import { StreamdownContent } from "../streamdown-content"
+- L1: `"use client"`.
+- L9–L77: 10 lazy-loaded renderers via `next/dynamic()` with custom loading messages.
+- L88–L94: `ArtifactRendererProps` interface — `{ artifact, onFixWithAI?, onDownloadXlsx? }`.
+- L96–L138: switch by `artifact.type`:
+  - `"text/html"` → `<HtmlRenderer>`
+  - `"application/react"` → `<ReactRenderer>` with `onFixWithAI`
+  - `"image/svg+xml"` → `<SvgRenderer>`
+  - `"application/mermaid"` → `<MermaidRenderer>` with `onFixWithAI`
+  - `"application/sheet"` → `<SheetRenderer>` with `title` + `onDownloadXlsx`
+  - `"text/latex"` → `<LatexRenderer>`
+  - `"application/slides"` → `<SlidesRenderer>`
+  - `"application/python"` → `<PythonRenderer>` with `onFixWithAI`
+  - `"application/3d"` → `<R3FRenderer>` with `onFixWithAI`
+  - `"application/code"` → `<StreamdownContent>` (wrapped in fence + language)
+  - `"text/markdown"` → `<StreamdownContent>`
+  - `"text/document"` → `<DocumentRenderer>`
+  - `default` → `<pre>` fallback
 
-// Lazy-load heavy renderers
-const HtmlRenderer = dynamic(
-  () => import("./renderers/html-renderer").then((m) => ({ default: m.HtmlRenderer })),
-  {
-    loading: () => <RendererLoading />,
-  }
-)
+### F.2 Streamdown wrapper (`streamdown-content.tsx`)
 
-const ReactRenderer = dynamic(
-  () => import("./renderers/react-renderer").then((m) => ({ default: m.ReactRenderer })),
-  {
-    loading: () => <RendererLoading message="Transpiling React component..." />,
-  }
-)
+**File:** `src/features/conversations/components/chat/streamdown-content.tsx` (96 lines)
 
-const SvgRenderer = dynamic(
-  () => import("./renderers/svg-renderer").then((m) => ({ default: m.SvgRenderer })),
-  {
-    loading: () => <RendererLoading />,
-  }
-)
+- L1: `"use client"`.
+- L4: `import { Streamdown } from "streamdown"`.
+- L6–L7: CSS imports (`streamdown/styles.css`, `katex/dist/katex.min.css`).
+- L13–L54: `MermaidError` component for streaming-mermaid failures.
+- L56–L65: `StreamdownContentProps` — `{ content, isStreaming?, className? }`.
+- L67: `useTheme()` for shiki theme awareness.
+- L71–L92: `<Streamdown>` config:
+  - `animated`, `isAnimating={isStreaming}`, `caret={isStreaming ? "block" : undefined}`
+  - `shikiTheme` (theme-aware)
+  - `controls: { code: true, table: true, mermaid: true }`
+  - `mermaid: { errorComponent: MermaidError }`
+  - `plugins.math: { remarkPlugin: remark-math, rehypePlugin: rehype-katex }`
 
-const MermaidRenderer = dynamic(
-  () => import("./renderers/mermaid-renderer").then((m) => ({ default: m.MermaidRenderer })),
-  {
-    loading: () => <RendererLoading />,
-  }
-)
+### F.3 Per-renderer file:line summary
 
-const SheetRenderer = dynamic(
-  () => import("./renderers/sheet-renderer").then((m) => ({ default: m.SheetRenderer })),
-  {
-    loading: () => <RendererLoading />,
-  }
-)
+| Renderer | File | Lines | Mode | Sandbox / Security |
+|---|---|--:|---|---|
+| HtmlRenderer | `html-renderer.tsx` | 136 | iframe + srcDoc | `allow-scripts allow-modals` + nav blocker |
+| ReactRenderer | `react-renderer.tsx` | 574 | iframe + Babel transpile | `allow-scripts` + nav blocker |
+| SvgRenderer | `svg-renderer.tsx` | 92 | inline DOM | DOMPurify (svg + svgFilters profile) |
+| MermaidRenderer | `mermaid-renderer.tsx` | 172 | inline DOM | mermaid `securityLevel: "strict"` |
+| MermaidConfig | `mermaid-config.ts` | 502 | (config) | — |
+| DocumentRenderer | `document-renderer.tsx` | 617 | inline DOM | upstream Zod |
+| SheetRenderer | `sheet-renderer.tsx` | 277 | inline DOM | — |
+| SpecWorkbookView | `sheet-spec-view.tsx` | 250 | inline DOM | formula evaluator main-thread |
+| LatexRenderer | `latex-renderer.tsx` | 523 | inline DOM | KaTeX `trust: true` |
+| SlidesRenderer | `slides-renderer.tsx` | 148 | iframe + srcDoc | `allow-scripts allow-same-origin` |
+| PythonRenderer | `python-renderer.tsx` | 308 | Web Worker | Pyodide isolated |
+| R3FRenderer | `r3f-renderer.tsx` | 622 | iframe + Babel | `allow-scripts` + nav blocker |
+| `_iframe-nav-blocker.ts` | (helper) | — | (script) | injected before user code in HTML/React/R3F |
+| `_react-directives.ts` | (helper) | — | (parser) | aesthetic + fonts |
 
-const LatexRenderer = dynamic(
-  () => import("./renderers/latex-renderer").then((m) => ({ default: m.LatexRenderer })),
-  {
-    loading: () => <RendererLoading />,
-  }
-)
+### F.4 React renderer (deep-dive citations)
 
-const SlidesRenderer = dynamic(
-  () => import("./renderers/slides-renderer").then((m) => ({ default: m.SlidesRenderer })),
-  {
-    loading: () => <RendererLoading message="Building slide deck..." />,
-  }
-)
+**File:** `react-renderer.tsx` (574 lines)
 
-const PythonRenderer = dynamic(
-  () => import("./renderers/python-renderer").then((m) => ({ default: m.PythonRenderer })),
-  {
-    loading: () => <RendererLoading message="Initializing Python runtime..." />,
-  }
-)
+- L20–L25: `IMPORT_GLOBALS` mapping — `react`→`React`, `recharts`→`Recharts`, `lucide-react`→`LucideReact`, `framer-motion`→`Motion`.
+- L33–L58: `REACT_PRE_DESTRUCTURED` set — 26 React symbols.
+- L76–L91: parse + strip directive lines.
+- L93–L237: import preprocessing pipeline (template-literal hide → multi-line collapse → import rewrites).
+- L177–L222: `export default` rewrite into named const/function.
+- L242–L377: `buildSrcdoc(code, componentName, directives)` — full HTML template.
+- L286: pre-destructure 26 React symbols.
+- L293–L332: `__ArtifactErrorBoundary` injected.
+- L334–L344: mount via `ReactDOM.createRoot()`.
+- L359–L373: global `onerror` + `unhandledrejection` listeners.
+- L381: `export function ReactRenderer(...)`.
+- L454–L455: fatal-vs-warning error split.
+- L566: iframe `sandbox="allow-scripts"`.
 
-const R3FRenderer = dynamic(
-  () => import("./renderers/r3f-renderer").then((m) => ({ default: m.R3FRenderer })),
-  {
-    loading: () => <RendererLoading message="Compiling 3D scene..." />,
-  }
-)
+### F.5 Document renderer (deep-dive citations)
 
-function RendererLoading({ message = "Loading preview..." }: { message?: string }) {
-  return (
-    <div className="flex items-center justify-center p-8 text-muted-foreground">
-      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-      {message}
-    </div>
-  )
-}
+**File:** `document-renderer.tsx` (617 lines)
 
-interface ArtifactRendererProps {
-  artifact: Artifact
-  /** Callback to send an artifact error to the LLM for automated repair. */
-  onFixWithAI?: (error: string) => void
-}
+- L1: `"use client"`.
+- L11–L12: imports — `MERMAID_INIT_OPTIONS`, `chartToSvg`.
+- L20–L29: footnote sink type.
+- L31–L111: `renderInline()` — handles 7 inline node types.
+- L113–L353: `renderBlock()` — handles 12 block node types.
+- L121–L122: DXA → px conversion `(dxa / 1440) * 96`.
+- L150–L171: `list` recursive rendering.
+- L232–L277: `table` rendering with colspan/rowspan + shading.
+- L310–L311: `mermaid` block → `<MermaidPreviewBlock>`.
+- L313–L314: `chart` block → `<ChartPreviewBlock>`.
+- L316–L348: TOC live generation by traversing body.
+- L400: `export function DocumentRenderer(...)`.
+- L427–L501: page layout (A4 794×1123 px, Letter 816×1056 px).
+- L505–L579: `MermaidPreviewBlock` — dynamic-import mermaid + `MERMAID_INIT_OPTIONS`.
+- L518–L545: SVG layout shims for jsdom test environment.
+- L581–L593: `ChartPreviewBlock` — `chartToSvg(chart, 800, 400)`.
+- L595–L605: `parseSafe()` — JSON.parse + Zod safeParse.
 
-export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProps) {
-  switch (artifact.type) {
-    case "text/html":
-      return <HtmlRenderer content={artifact.content} />
-    case "application/react":
-      return <ReactRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
-    case "image/svg+xml":
-      return <SvgRenderer content={artifact.content} />
-    case "application/mermaid":
-      return <MermaidRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
-    case "application/sheet":
-      return <SheetRenderer content={artifact.content} title={artifact.title} />
-    case "text/latex":
-      return <LatexRenderer content={artifact.content} />
-    case "application/slides":
-      return <SlidesRenderer content={artifact.content} />
-    case "application/python":
-      return <PythonRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
-    case "application/3d":
-      return <R3FRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
-    case "application/code": {
-      // Pick a fence length one longer than the longest backtick run
-      // already inside the content, so code that itself contains ``` blocks
-      // doesn't break syntax highlighting.
-      const longestRun = (artifact.content.match(/`+/g) ?? [])
-        .reduce((max, run) => Math.max(max, run.length), 0)
-      const fence = "`".repeat(Math.max(3, longestRun + 1))
-      return (
-        <StreamdownContent
-          content={`${fence}${artifact.language || ""}\n${artifact.content}\n${fence}`}
-          className="p-4"
-        />
-      )
-    }
-    case "text/markdown":
-      return <StreamdownContent content={artifact.content} className="p-4" />
-    default:
-      return (
-        <pre className="p-4 text-sm whitespace-pre-wrap">{artifact.content}</pre>
-      )
-  }
+### F.6 Python renderer (deep-dive citations)
+
+**File:** `python-renderer.tsx` (308 lines)
+
+- L28: `PYODIDE_CDN` URL constant.
+- L40–L78: worker init function.
+  - L52: `pyodide.loadPackage(["numpy", "micropip", "matplotlib", "scikit-learn"])`.
+  - L57–L74: matplotlib `Agg` backend + `plt.show` interceptor.
+- L80–L114: worker message handler.
+  - L88–L93: stdout/stderr capture.
+  - L97: reset `__plot_images__`.
+  - L99: `py.runPythonAsync(code)`.
+  - L102–L108: emit captured plots.
+- L117–L123: `createWorker()` — blob URL + revoke.
+- L141–L184: `runCode()` callback.
+- L254–L304: output / error / plot panels.
+
+### F.7 R3F renderer (deep-dive citations)
+
+**File:** `r3f-renderer.tsx` (622 lines)
+
+The renderer wraps user code in a Canvas + lighting + Environment + OrbitControls + Suspense container. The wrapper iframe loads Three.js + drei + @react-three/fiber UMDs and Babel.
+
+(Specific line citations omitted for brevity — pattern parallel to React renderer.)
+
+---
+
+## G. Document AST module
+
+**Directory:** `src/lib/document-ast/`
+
+### G.1 `schema.ts` (376 lines)
+
+- **TypeScript types** (L65–L116):
+  - Block nodes: paragraph, heading, list, table, image, blockquote, codeBlock, horizontalRule, pageBreak, toc, mermaid, chart.
+  - Inline nodes: text, link, anchor, footnote, lineBreak, pageNumber, tab.
+- **Zod schemas** (L223–L330):
+  - L313–L320: `MermaidBlockSchema` — `code` 1–10000 chars, `width` 200–1600 (default 1200), `height` 150–1200 (default 800), `caption` ≤ 200, `alt` ≤ 500.
+  - L322–L329: `ChartBlockSchema` — `chart: ChartDataSchema` (imported from slides), `width` (default 1200), `height` (default 600), `caption`, `alt`.
+- **Document shape** (L337):
+  ```typescript
+  DocumentAstSchema = z.object({
+    meta: DocumentMetaSchema,
+    coverPage: CoverPageSchema.optional(),
+    header: z.object({ children: z.array(BlockNode) }).optional(),
+    footer: z.object({ children: z.array(BlockNode) }).optional(),
+    body: z.array(BlockNode).min(1),
+  })
+  ```
+- **Constraints:**
+  - `meta.title` 1–200 chars
+  - `meta.author` ≤ 120
+  - `meta.date` regex `/^\d{4}-\d{2}-\d{2}$/`
+  - `meta.fontSize` 8–24 (default 12)
+  - color regex `/^#[0-9a-fA-F]{6}$/`
+  - `image.src` intentionally NOT validated as `.url()` (allows `unsplash:keyword`)
+
+### G.2 `validate.ts` (214 lines)
+
+- L186–L192: 128 KB serialized-size budget (pre-Zod check).
+- L195–L204: `DocumentAstSchema.safeParse(raw)` with formatted error from `.issues[]`.
+- L113–L180: `semanticCheck(ast)` — bookmark cross-ref resolution, pageNumber scope, table column-width invariants, unsplash keyword non-empty, mermaid first-token validation.
+- L47–L105: tree-walker pattern — `walkInlines()`, `walkBlocks()`, `walkListItems()` with scope tracking ("body" | "header" | "footer").
+
+### G.3 `to-docx.ts` (657 lines)
+
+- **Public API** (L525–L597):
+  ```typescript
+  export async function astToDocx(ast: DocumentAst): Promise<Buffer>
+  ```
+- **Page setup** (L527–L533): letter (12240×15840 twips) or a4 (11906×16838); margins from meta.
+- **Cover page** (L481–L519): `renderCoverPage()` — 48pt centered title, 28pt italic subtitle, 24/22pt centered author/org/date stack, trailing page break.
+- **Inline rendering** (L75–L127): `renderInline()` handles text style flags, ExternalHyperlink, InternalHyperlink (anchor → bookmark), FootnoteReferenceRun (deferred), PageNumber.CURRENT, lineBreak, tab.
+- **Block rendering** (L301–L390): `renderBlock()` handles all 12 block node types.
+- **Table rendering** (L445–L473): `renderTable()` — async; handles colspan/rowspan + cell shading + borders + vertical alignment.
+- **List rendering** (L399–L434): `renderList()` — recursive; level-based indentation; ordered (numbered) vs unordered (bulleted). **Limitation:** `startAt` ignored (always starts at 1).
+- **Image fetch** (L190+): 10-second timeout; fallback 1×1 transparent PNG; SVG inputs rejected by docx-js.
+- **Mermaid rendering** (L190–L232): `renderMermaid()` — `mermaidToSvg()` (jsdom) → `resizeSvg()` → `svgToPng()` (sharp) → `ImageRun`.
+- **Chart rendering** (L238–L271): `renderChart()` — `chartToSvg()` → `resizeSvg()` → `svgToPng()` → `ImageRun`.
+- **Numbering config** (L603–L656): 3 levels each for bullets (•/◦/▪) and ordered (`%1.`/`%2.`/`%3.`).
+- **Heading styles**: HEADING_1..6 with cascading sizes (20pt..12pt).
+- **Footnotes** (L547–L556): accumulated in `RenderCtx` during body rendering, attached to `Document.footnotes`.
+
+### G.4 `resolve-unsplash.ts` (133 lines)
+
+- L94–L102: collect phase — walk body / header / footer / coverPage.logoUrl, identify unique `unsplash:` keywords.
+- L105–L117: resolve phase — `searchPhoto()` parallel; fallback to `placehold.co`.
+- L119–L131: replace phase — `structuredClone(ast)` + recursive replace.
+- Helper: `extractKeyword(raw)` — slice off prefix, lowercase, trim, collapse whitespace, slice 50 chars.
+
+### G.5 Examples directory
+
+- `examples/proposal.ts` (~19 KB) — sales proposal with cover, sections, tables, charts.
+- `examples/report.ts` (~14 KB) — business report with TOC, headings, charts, mermaid diagrams.
+- `examples/letter.ts` (~6.4 KB) — formal letter with header/footer, signature block.
+
+---
+
+## H. Slides module
+
+**Directory:** `src/lib/slides/`
+
+### H.1 `types.ts` (123 lines)
+
+- `SlideTheme` interface (L1+).
+- `DEFAULT_THEME` (L7+) — `{ primaryColor: "#0F172A", secondaryColor: "#3B82F6", fontFamily: "Inter, system-ui, ..." }`.
+- `SlideLayout` union — 19 strings (17 layouts + `image-text` deprecated + ?).
+- `ChartType` union — `bar | bar-horizontal | line | pie | donut`.
+- `ChartData`, `ChartDataPoint`, `ChartSeries` interfaces.
+- Advanced layout shapes: `StatItem`, `GalleryItem`, `ComparisonRow`, `FeatureItem`.
+- `SlideData` (most fields optional, populated by layout).
+- `PresentationData = { theme, slides[] }`.
+
+### H.2 `types.zod.ts` (32 lines)
+
+Zod mirror of `ChartData` for cross-artifact reuse (`text/document` `chart` block also uses this).
+
+### H.3 `render-html.ts` (1325 lines)
+
+- `slidesToHtml(data: PresentationData): string` — entry at L378+.
+- L43–L371: `renderSlideContent()` — per-layout renderer.
+- L38–L41: `renderText()` — escape + icon resolve via `resolveIconsInText()`.
+- L374–L376: `isDarkSlide()` — predicate for dark backgrounds.
+- L404–L1325: full inline CSS in `<style>` block — slide containers, animations, dark/light variants, theme injection.
+
+### H.4 `parse-legacy.ts` (69 lines)
+
+- `parseLegacyMarkdown(markdown)` — splits on `\n---\n`, builds slides.
+- `isJsonPresentation(content)` — checks for `{` start + presence of `"slides"`.
+
+### H.5 `generate-pptx.ts` (1532 lines)
+
+- Library: `pptxgenjs@4.0.1`. Layout: `LAYOUT_WIDE` (13.333"×7.5").
+- `generatePptx(data): Promise<Blob>` at L1458–L1531.
+- Per-layout renderers:
+  - `renderTitleSlide()` L72–L129
+  - `renderContentSlide()` L131–L213
+  - `renderTwoColumnSlide()` L215–L295
+  - `renderQuoteSlide()` L340–L450
+  - `renderDiagramSlide()` (async) L452–L506 — `mermaidToBase64Png()` → `addImage`
+  - `renderChartSlide()` (async) L508–L581 — `chartToSvg()` → `svgToBase64Png()` → `addImage`
+  - `renderImageSlide()` (async) L583–L634 — `fetchImageAsBase64()` (with `unsplash:` rewrite) → `addImage`
+  - `renderGallerySlide()` (async) L1148–L1245
+  - `renderComparisonSlide()` L1247–L1355
+  - `renderFeaturesSlide()` L1357–L1435
+- Helpers: `cleanPptx()` strips markdown + inline icons; `addAccentLine()`, `addSlideNumber()`, `stripHash()`.
+
+---
+
+## I. Spreadsheet module
+
+**Directory:** `src/lib/spreadsheet/`
+
+### I.1 `types.ts` (89 lines)
+
+- `SPREADSHEET_SPEC_VERSION = "spreadsheet/v1"`.
+- `SPREADSHEET_CAPS` — `{ maxSheets: 8, maxCellsPerSheet: 500, maxFormulasPerWorkbook: 200, maxNamedRanges: 64, maxSheetNameLength: 31 }`.
+- `CellStyleName = "header" | "input" | "formula" | "cross-sheet" | "highlight" | "note"`.
+- `CellSpec`, `ColumnSpec`, `FrozenSpec`, `SheetSpec`, `SpreadsheetTheme`, `SpreadsheetSpec` interfaces.
+- `DEFAULT_THEME` constant.
+
+### I.2 `formulas.ts` (274 lines)
+
+`evaluateWorkbook(spec): WorkbookValues` (L228–L271) — six phases:
+
+1. L61–L76: Build cell index (qualified `SheetName!A1` keys, strip `$`).
+2. L89–L93: Seed literal cells.
+3. L96–L143: Build dependency graph with `DepParser`. Resolve named ranges; expand range refs (A1:B2) into individual cell refs.
+4. L146–L168: Topological sort (Kahn's). Remaining cells after iteration → `{ value: null, error: "CIRCULAR" }`.
+5. L171–L225: Build `FormulaParser` with `onCell` / `onRange` / `onVariable` callbacks. Errors wrapped in `FormulaError.REF` / `.VALUE` / `.DIV0`.
+6. L228–L271: Evaluate in topo order. Catch FormulaError; map error code (strip `#` and `!`).
+
+Helpers: `refToRowCol(ref)`, `rowColToRef(row, col)`, `qualify(sheet, ref)`.
+
+### I.3 `generate-xlsx.ts` (145 lines)
+
+`generateXlsx(spec, values): Promise<Blob>`.
+
+- L21–L23: `new ExcelJS.Workbook()` + creator metadata.
+- L25–L43: per-sheet creation with frozen panes + column widths + default formats.
+- L45–L70: cell writing.
+  - **Formulas written as `{ formula, result: cachedValue }`** so Excel/LibreOffice/Sheets/Numbers open with values **already visible** (no F9 recalc).
+- L72–L76: merges via `ws.mergeCells(range)`.
+- L79–L84: named ranges via `wb.definedNames.add()`.
+- L86–L87: `wb.xlsx.writeBuffer()` → `Blob`.
+- L90–L137: `applyStyle()` — maps named styles to ExcelJS font + fill objects.
+- L139–L144: `hexToArgb()` — `#RRGGBB` → `FFRRGGBB`.
+
+### I.4 `parse.ts`
+
+`detectShape(content)` — peeks first non-whitespace char to dispatch CSV / array / spec.
+
+`parseSpec(content)` — Zod parse + cap checks.
+
+---
+
+## J. Shared rendering module
+
+**Directory:** `src/lib/rendering/`
+
+### J.1 `mermaid-theme.ts` (26 lines)
+
+```typescript
+export const MERMAID_THEME_VARIABLES = {
+  background: "#ffffff",
+  primaryColor: "#ffffff",
+  primaryTextColor: "#1c1c1c",
+  primaryBorderColor: "#e2e1de",
+  lineColor: "#6b6b6b",
+  textColor: "#1c1c1c",
+  fontFamily: "system-ui, -apple-system, sans-serif",
+  fontSize: "14px",
+} as const
+
+export const MERMAID_INIT_OPTIONS = {
+  startOnLoad: false,
+  theme: "base" as const,
+  themeVariables: MERMAID_THEME_VARIABLES,
 }
 ```
 
-**Current state:** 10 explicit cases (`text/html`, `application/react`, `image/svg+xml`, `application/mermaid`, `application/sheet`, `text/latex`, `application/slides`, `application/python`, `application/3d`, `application/code`) + `text/markdown` falling into a `StreamdownContent` branch + `default` falling into a `<pre>` block. **No `text/document` case.** Silent fallback to `<pre>` for unknown types.
+Used by both `document-renderer.tsx` (preview) and `to-docx.ts` (server-side render).
 
-### C2. `StreamdownContent` full file
+### J.2 `chart-to-svg.ts` (414 lines)
 
-Located at [`src/features/conversations/components/chat/streamdown-content.tsx`](src/features/conversations/components/chat/streamdown-content.tsx). Per the agent-compiled recon pass (external subagent `toolu_013px1vmF5qUVFFo9i5ZNYEr`), the file is **95 lines**. Key excerpt verified by the subagent:
+`chartToSvg(chart, width=600, height=400): string` — isomorphic D3-based renderer.
 
-```tsx
-"use client"
+- L69–L129: `renderBarChart()` — `scaleBand` X, `scaleLinear` Y, rounded rects.
+- L131–L190: `renderBarHorizontalChart()` — axes swapped.
+- L192–L279: `renderLineChart()` — `scalePoint` X + `scaleLinear` Y, `curveMonotoneX`, multi-series via `series[]`, legend at bottom.
+- L281–L350: `renderPieChart()` — `d3Shape.arc()`, `innerRadius=0` for pie or `radius*0.5` for donut, percentage labels.
+- L355–L406: `chartToSvg()` dispatcher.
+- L408–L413: `renderEmptyChart()` fallback.
+- 8-color default palette: blue, green, amber, red, violet, cyan, pink, teal.
 
-import { useState, useCallback } from "react"
-import { Streamdown } from "streamdown"
-import type { MermaidErrorComponentProps } from "streamdown"
-import "streamdown/styles.css"
-import "katex/dist/katex.min.css"
-import remarkMath from "remark-math"
-import rehypeKatex from "rehype-katex"
-import { useTheme } from "next-themes"
-import { AlertTriangle, RotateCcw, Code } from "@/lib/icons"
+### J.3 `resize-svg.ts` (19 lines)
 
-// ...MermaidError component (lines 13-54 — renders an error banner with Retry
-// and Source toggle buttons)...
+`resizeSvg(svg, width, height)` — pure regex on root `<svg>`. Removes existing width/height/preserveAspectRatio, adds new values + `preserveAspectRatio="xMidYMid meet"`.
 
-interface StreamdownContentProps {
-  content: string
-  isStreaming?: boolean
-  className?: string
-}
+### J.4 `server/mermaid-to-svg.ts` (127 lines)
 
-export function StreamdownContent({
-  content,
-  isStreaming,
-  className,
-}: StreamdownContentProps) {
-  const { resolvedTheme } = useTheme()
+`mermaidToSvg(code): Promise<string>`:
 
-  return (
-    <div className={className ?? "chat-message max-w-none"}>
-      <Streamdown
-        animated
-        isAnimating={isStreaming}
-        caret={isStreaming ? "block" : undefined}
-        shikiTheme={
-          resolvedTheme === "dark"
-            ? ["github-dark", "github-light"]
-            : ["github-light", "github-dark"]
-        }
-        controls={{ code: true, table: true, mermaid: true }}
-        mermaid={{ errorComponent: MermaidError }}
-        plugins={{
-          math: {
-            name: "katex",
-            type: "math",
-            remarkPlugin: remarkMath,
-            rehypePlugin: rehypeKatex,
-          },
-        }}
-      >
-        {content}
-      </Streamdown>
-    </div>
-  )
+- L50: `new JSDOM(...)` with `pretendToBeVisual: true`.
+- L67–L69: capture global PropertyDescriptors for window/document/DOMParser/navigator.
+- L71–L102: stub `getBBox()` returning `{ width: text.length * 8, height: 16 }` and `getComputedTextLength()` returning `text.length * 8` (jsdom doesn't implement these; mermaid needs them for dagre layout).
+- L105–L117: dynamic-import mermaid + `mermaid.initialize({ ...MERMAID_INIT_OPTIONS, securityLevel: "loose" })` (loose because DOMPurify binds at module load and reusing across calls would break it).
+- L120–L124: `finally` block restores all globals + `dom.window.close()`.
+
+### J.5 `server/svg-to-png.ts` (26 lines)
+
+```typescript
+sharp(Buffer.from(svg))
+  .resize(width, height, {
+    fit: "contain",
+    background: "#FFFFFF",
+    kernel: sharp.kernel.lanczos3,
+  })
+  .flatten({ background: "#FFFFFF" })
+  .png({ compressionLevel: 6 })
+  .toBuffer()
+```
+
+### J.6 `client/mermaid-to-png.ts` (35 lines)
+
+`mermaidToBase64Png(code, w=1200, h=800)` — dynamic-import mermaid + browser Canvas at 2× resolution.
+
+### J.7 `client/svg-to-png.ts` (92 lines)
+
+- `svgToBase64Png(svg, w, h)` — Canvas API at 2× internal resolution.
+- `fetchImageAsBase64(url)` — handles `unsplash:keyword` → `source.unsplash.com/1600x900/?{keyword}`.
+
+---
+
+## K. Unsplash module
+
+**Directory:** `src/lib/unsplash/`
+
+### K.1 `client.ts` (46 lines)
+
+- `searchPhoto(query): Promise<UnsplashPhoto | null>`.
+- Endpoint: `https://api.unsplash.com/search/photos?query=&per_page=1&orientation=landscape`.
+- Header: `Client-ID UNSPLASH_API_KEY`.
+- Timeout: 5000 ms via `AbortSignal.timeout(5000)`.
+
+### K.2 `resolver.ts` (194 lines)
+
+- L18–L24: `normalize(query)` — lowercase + trim + collapse whitespace + slice 50 chars.
+- `resolveHtmlImages(content)` — regex find-replace `src="unsplash:..."` in `<img>` tags.
+- `resolveSlideImages(content)` — JSON parse + walk `imageUrl`, `backgroundImage`, `quoteImage`, `gallery[].imageUrl`.
+- L145–L193: `resolveQueries()` — shared logic.
+  - L149–L158: cache lookup batched via `WHERE { query: { in: queries } }`.
+  - L161–L190: parallel Promise.all over uncached queries; on hit cache to Prisma `ResolvedImage` with `expiresAt = now + 30 days` and attribution.
+  - Race condition on UNIQUE constraint swallowed.
+- `fallbackUrl(query)` — `https://placehold.co/1200x800/f1f5f9/64748b?text={encodedKeyword}`.
+
+### K.3 Prisma `ResolvedImage` model
+
+```prisma
+model ResolvedImage {
+  id          String   @id @default(cuid())
+  query       String   @unique
+  url         String
+  attribution String
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+  @@index([expiresAt])
 }
 ```
 
-**Parser in use:** `streamdown` (v2.2.0 — see §E). Not `react-markdown`, not `unified` directly. Features wired in: Shiki syntax highlighting (dark/light theme via `next-themes`), GFM (implicit through Streamdown), Mermaid rendering with custom error component, KaTeX via `remark-math` + `rehype-katex`.
+---
 
-### C3. Markdown parser: Streamdown
+## L. RAG indexer
 
-Grep output (`rg -n "streamdown|react-markdown|remark|rehype|markdown-it" src/ package.json`):
+**File:** `src/lib/rag/artifact-indexer.ts` (~78 lines)
 
-| Location | Ref | Role |
+- `indexArtifactContent(documentId, title, content, options?)`.
+- L28–L30: `deleteChunksByDocumentId()` if `options.isUpdate`.
+- L32–L35: `chunkDocument(content, title, "ARTIFACT", undefined, { chunkSize: 1000, chunkOverlap: 200 })`.
+- L41–L42: prepend title to each chunk before `generateEmbeddings()`.
+- L43: `storeChunks()` → SurrealDB vector store.
+- L45: `markRagStatus(documentId, true)` — patches `metadata.ragIndexed`.
+- On failure: `markRagStatus(documentId, false)`.
+- L60–L77: `markRagStatus()` — fetches existing metadata, patches only `ragIndexed`, preserves siblings.
+
+---
+
+## M. S3 helpers
+
+**Directory:** `src/lib/s3/`
+
+### M.1 Path builders (`S3Paths`)
+
+```typescript
+S3Paths.artifact(orgId, sessionId, artifactId, ext) =>
+  `artifacts/${orgId || "global"}/${sessionId}/${artifactId}${ext}`
+```
+
+`getArtifactExtension(type)` returns `getArtifactRegistryEntry(type)?.extension ?? ".txt"`.
+
+### M.2 Upload / download API
+
+```typescript
+uploadFile(key: string, buffer: Buffer, contentType: string, metadata?: Record<string, string>):
+  Promise<{ key: string; url: string; size: number }>
+
+uploadStream(key: string, body: ReadableStream | Blob | Uint8Array, contentType: string,
+             contentLength?: number, metadata?: Record<string, string>):
+  Promise<{ key: string; url: string }>
+
+getPresignedDownloadUrl(key: string, expiresIn?: number,
+                        options?: { downloadFilename?: string }):
+  Promise<string>
+
+getPresignedUploadUrl(key: string, contentType: string, expiresIn?: number = 3600):
+  Promise<string>
+
+downloadFile(key: string): Promise<Buffer>
+deleteFile(key: string): Promise<void>
+deleteFiles(keys: string[]): Promise<void>  // chunks at 1000 (S3 API limit)
+```
+
+### M.3 Configuration
+
+`S3_CONFIG`:
+- `endpoint`: `S3_ENDPOINT` env (default `http://localhost:9000` for MinIO local dev)
+- `accessKeyId`: `S3_ACCESS_KEY_ID` env
+- `secretAccessKey`: `S3_SECRET_ACCESS_KEY` env
+- `bucket`: `S3_BUCKET` env (default `rantai-files`)
+- `region`: `S3_REGION` env (default `us-east-1`)
+- `forcePathStyle`: `S3_ENABLE_PATH_STYLE === "1"` (for MinIO)
+- `presignedExpire`: `S3_PRESIGNED_URL_EXPIRE` env (default `7200` seconds)
+
+---
+
+## N. API routes
+
+### N.1 Update / delete
+
+**File:** `src/app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/route.ts` (82 lines)
+
+#### `PUT` (L13–L49)
+- L18–L21: auth check → 401 if no session.
+- L23–L26: validate route params → 404.
+- L28–L31: validate body → 400.
+- L33–L38: `updateDashboardChatSessionArtifact()`.
+- L40–L44: HTTP error mapping.
+
+#### `DELETE` (L51–L81)
+- Same auth/param flow.
+- L66–L70: `deleteDashboardChatSessionArtifact()`.
+- L76: `{ success: true }`.
+
+### N.2 Download (DOCX)
+
+**File:** `src/app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/download/route.ts` (82 lines)
+
+- L9: `export const runtime = "nodejs"` (required for `astToDocx`).
+- L11–L81: `GET`.
+  - L18–L21: auth.
+  - L21–L24: validate params.
+  - L26: `format` query param (default `"docx"`).
+  - L28–L32: `getDashboardChatSessionArtifact()`.
+  - L38–L43: enforce `artifactType === "text/document"` → 400 if not.
+  - L46–L52: `JSON.parse` → `DocumentAstSchema.parse()` → 409 on parse failure.
+  - L55–L67: if format `docx`, call `astToDocx(ast)`, sanitize filename from `meta.title` (lowercase, alphanumeric+dashes, ≤ 80 chars), return blob with:
+    - `Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+    - `Content-Disposition: attachment; filename="{title}.docx"`
+    - `Cache-Control: no-store`
+  - L70–L73: unsupported format → 400.
+
+### N.3 Read (session including artifacts)
+
+**File:** `src/app/api/dashboard/chat/sessions/[id]/route.ts`
+
+`GET` returns the session including its artifacts (where `artifactType IS NOT NULL`). Used by `chat-workspace.tsx` `loadFreshSessionArtifacts()`.
+
+---
+
+## O. Service / repository
+
+### O.1 `service.ts`
+
+**File:** `src/features/conversations/sessions/service.ts` (~601 lines)
+
+- L422–L428: constants — `MAX_INLINE_FALLBACK_BYTES = 32 * 1024`, `MAX_VERSION_HISTORY = 20`.
+- L430–L547: `updateDashboardChatSessionArtifact({ userId, sessionId, artifactId, input: { content, title? } })`.
+  - L436–L438: validate required `content`.
+  - L444–L447: session-ownership check.
+  - L449–L452: artifact existence check.
+  - L459–L470: validator dispatch; 422 on failure.
+  - L472–L520: version archival (mirrors `update-artifact.ts` flow).
+  - L521–L527: upload new content.
+  - L529–L547: `prisma.document.update()`.
+- L549–L571: `getDashboardChatSessionArtifact()` — auth + return formatted artifact.
+- L576–L599: `deleteDashboardChatSessionArtifact()` — auth + S3 delete (non-fatal) + Prisma delete.
+
+### O.2 `repository.ts`
+
+**File:** `src/features/conversations/sessions/repository.ts` (~188 lines)
+
+- L143–L150: `findDashboardArtifactByIdAndSession()` — `prisma.document.findFirst({ where: { id, sessionId, artifactType: { not: null } } })`.
+- L152–L168: `updateDashboardArtifactById()` — `prisma.document.update()`.
+- L170–L174: `deleteDashboardArtifactById()`.
+- L176–L181: `findArtifactsBySessionId()` — id + s3Key only (for cleanup).
+- L183–L187: `deleteArtifactsBySessionId()` — bulk delete on session removal.
+
+---
+
+## P. Database schema
+
+**File:** `prisma/schema.prisma` (artifact-relevant section ~L287–L318)
+
+```prisma
+model Document {
+  id             String    @id @default(cuid())
+  title          String
+  content        String              // current artifact content (also in S3)
+  categories     String[]            // ["ARTIFACT"]
+  subcategory    String?
+  metadata       Json?               // versions, ragIndexed, language, warnings
+  s3Key          String?             // primary S3 key
+  fileType       String?             // "artifact"
+  fileSize       Int?
+  mimeType       String?
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy      String?
+  sessionId      String?
+  session        DashboardSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  artifactType   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  @@index([organizationId])
+  @@index([s3Key])
+  @@index([sessionId])
+}
+```
+
+`metadata` JSON shape (artifacts):
+
+```typescript
+{
+  artifactLanguage?: string,
+  versions?: Array<{
+    title: string
+    timestamp: number
+    contentLength: number
+    s3Key?: string
+    content?: string
+    archiveFailed?: boolean
+  }>,
+  evictedVersionCount?: number,
+  ragIndexed?: boolean,
+  validationWarnings?: string[]
+}
+```
+
+---
+
+## Q. UI shell
+
+### Q.1 `artifact-panel.tsx` (~939 lines)
+
+Major behaviors and approximate line ranges:
+
+- L46–L48: RAG indexing badge (`Not searchable` if `ragIndexed === false`).
+- L65–L74: tab management (Preview / Code; Code hidden if `!hasCodeTab`).
+- L238–L292: download split-button for `text/document` (Markdown / Word).
+  - L244–L250: client-side `.md` download via Blob.
+  - L268–L269: server-side `.docx` fetch.
+  - `exportError` state surfaces inline failure messages.
+- L294–L320: version navigation (prev/next, restore, evicted-count tooltip).
+- L322–L385: edit mode (textarea + Discard/Save/Cancel; 422 → inline validation errors).
+- L343–L347: fullscreen toggle.
+
+### Q.2 `artifact-indicator.tsx` (~48 lines)
+
+Animated chip rendered inside chat messages. Uses `TYPE_ICONS`, `TYPE_LABELS`, `TYPE_COLORS` from registry. Click handler opens panel.
+
+### Q.3 `artifact-renderer.tsx`
+
+See [§F.1](#f1-dispatcher-artifact-renderertsx) above.
+
+### Q.4 Wiring in `chat-workspace.tsx`
+
+Approximate locations:
+
+- ~L1100–L1109: `useArtifacts(apiSessionId || session?.id || null)` initialization.
+- ~L1131–L1141: custom event `artifact-panel-changed` dispatched on open/close (so layout can collapse sidebar).
+- ~L1181–L1208: `loadFreshSessionArtifacts()` on session load.
+- ~L584–L603: detect `create_artifact` / `update_artifact` tool outputs in streaming response, call `addOrUpdateArtifact()`, render `<ArtifactIndicator>` inline.
+- ~L3295–L3302: `<ArtifactPanel>` inside the right `<ResizablePanel>`.
+
+---
+
+## R. Tool registration & seeding
+
+- **`src/lib/tools/builtin/index.ts`** — `BUILTIN_TOOLS` Record mapping name → `ToolDefinition`. 14 tools total; `create_artifact` and `update_artifact` are positions 11 + 12.
+- **`src/lib/tools/seed.ts`** — `ensureBuiltinTools()` syncs `BUILTIN_TOOLS` to the DB. `NON_USER_SELECTABLE_BUILTIN_TOOLS` set excludes artifact tools from the user's tool picker.
+- **`src/lib/tools/registry.ts`** — `resolveToolsForAssistant(assistantId)` checks model `functionCalling` capability + AssistantTool bindings + wraps in AI-SDK `aiTool()`.
+
+---
+
+## S. Constants reference
+
+| Constant | Value | Defined in (file:line) | Purpose |
+|---|--:|---|---|
+| `MAX_ARTIFACT_CONTENT_BYTES` | 524288 (512 KB) | `create-artifact.ts:17`, `update-artifact.ts:17` | Hard cap on artifact content size |
+| `MAX_VERSION_HISTORY` | 20 | `update-artifact.ts:14`, `service.ts:428` | FIFO cap on stored versions |
+| `MAX_INLINE_FALLBACK_BYTES` | 32768 (32 KB) | `update-artifact.ts:26`, `service.ts:426` | Inline-version size cap when S3 fails |
+| `MAX_INLINE_STYLE_LINES` | 10 | `_validate-artifact.ts:51` | Max non-blank lines in HTML `<style>` |
+| `MAX_FONT_FAMILIES` | 3 | `_react-directives.ts:54` | React `// @fonts:` cap |
+| `REACT_IMPORT_WHITELIST` | 5 libs | `_validate-artifact.ts:42–48` | react, react-dom, recharts, lucide-react, framer-motion |
+| `R3F_ALLOWED_DEPS` | ~40 symbols | `_validate-artifact.ts:578–617` | React + three + @react-three/{fiber,drei} |
+| `MIN_DECK_SLIDES` / `MAX_DECK_SLIDES` | 7 / 12 | `_validate-artifact.ts:150–151` | Slides per deck |
+| `SLIDE_LAYOUTS` | 18 strings | `_validate-artifact.ts:127–147` | Valid slide layouts |
+| `MERMAID_DIAGRAM_TYPES` | 27 strings | `_validate-artifact.ts:1284–1310` | Valid mermaid declarations |
+| `PYTHON_UNAVAILABLE_PACKAGES` | 13 entries | `_validate-artifact.ts:1911–1927` | Packages that crash on Pyodide import |
+| `SPREADSHEET_SPEC_VERSION` | `"spreadsheet/v1"` | `src/lib/spreadsheet/types.ts` | Only valid spec `kind` |
+| `SPREADSHEET_CAPS.maxSheets` | 8 | `src/lib/spreadsheet/types.ts` | Per-workbook sheet cap |
+| `SPREADSHEET_CAPS.maxCellsPerSheet` | 500 | `src/lib/spreadsheet/types.ts` | Per-sheet cell cap |
+| `SPREADSHEET_CAPS.maxFormulasPerWorkbook` | 200 | `src/lib/spreadsheet/types.ts` | Workbook formula cap |
+| `SPREADSHEET_CAPS.maxNamedRanges` | 64 | `src/lib/spreadsheet/types.ts` | Named-range cap |
+| `SPREADSHEET_CAPS.maxSheetNameLength` | 31 | `src/lib/spreadsheet/types.ts` | Excel-compat sheet name |
+| Document validator pre-Zod size cap | 128 KB | `src/lib/document-ast/validate.ts:186–192` | Pre-parse budget |
+| Mermaid block dimensions | 200–1600 × 150–1200 | `src/lib/document-ast/schema.ts:313–320` | Per-block image dimensions |
+| `mermaid.code` length | 1–10000 chars | `src/lib/document-ast/schema.ts:313` | Document `mermaid` block |
+| `meta.title` | 1–200 chars | `src/lib/document-ast/schema.ts` (DocumentMetaSchema) | |
+| `meta.fontSize` | 8–24 | `src/lib/document-ast/schema.ts` (DocumentMetaSchema) | |
+| `meta.font` default | `"Arial"` | `src/lib/document-ast/schema.ts` (DocumentMetaSchema) | |
+| Unsplash cache TTL | 30 days | `src/lib/unsplash/resolver.ts` | |
+| Unsplash API timeout | 5 s | `src/lib/unsplash/client.ts` | `AbortSignal.timeout(5000)` |
+| Pyodide CDN | `pyodide.js` v0.27.6 | `python-renderer.tsx:28` | |
+| RAG chunk size / overlap | 1000 / 200 | `src/lib/rag/artifact-indexer.ts` | `chunkDocument()` |
+| DOCX image fetch timeout | 10 s | `src/lib/document-ast/to-docx.ts` `fetchImage()` | Falls back to 1×1 transparent PNG |
+
+---
+
+## T. Environment flags
+
+| Flag | Default | Effect |
 |---|---|---|
-| `package.json` | `"streamdown": "^2.2.0"` | **Active parser** |
-| `package.json` | `"react-markdown": "^10.1.0"` | **Installed but unused in artifact panel**; may be used elsewhere (e.g. non-artifact chat messages) |
-| `package.json` | `"remark-gfm": "^4.0.1"` | Peer of Streamdown for GFM |
-| `package.json` | `"remark-math": "^6.0.0"` | Wired into Streamdown plugin |
-| `package.json` | `"rehype-katex": "^7.0.1"` | Wired into Streamdown plugin |
-| [streamdown-content.tsx:4](src/features/conversations/components/chat/streamdown-content.tsx#L4) | `import { Streamdown } from "streamdown"` | Active |
-| [streamdown-content.tsx:8-9](src/features/conversations/components/chat/streamdown-content.tsx#L8-L9) | `import remarkMath from "remark-math"`, `import rehypeKatex from "rehype-katex"` | Active via plugins prop |
-
-**Conclusion:** `Streamdown` is the sole markdown renderer in the artifact panel. `markdown-it` is `[NOT FOUND]`.
-
-### C4. YAML frontmatter parser
-
-Grep for `gray-matter|js-yaml` in package.json + `src/`:
-
-- `package.json`: `"gray-matter": "^4.0.3"` and `"js-yaml": "^4.1.1"` both present.
-- `src/`: `[NOT FOUND]` for any import of `gray-matter` or `js-yaml` in the artifact pipeline. They are installed but not wired.
-
-**Consequence for Phase 2:** Both parsers are already in the dependency graph. Wiring them is purely an application-layer task; no new installs needed.
+| `ARTIFACT_REACT_AESTHETIC_REQUIRED` | enforce | Set to `"false"` to downgrade missing/unknown `// @aesthetic:` from hard-error to warning. Read in `_validate-artifact.ts:1759`. |
+| `UNSPLASH_API_KEY` | (none — required for live API) | Sent as `Client-ID` header. If unset, all queries fall back to `placehold.co`. |
+| `S3_ENDPOINT` | `http://localhost:9000` | S3-compatible endpoint (MinIO for dev). |
+| `S3_BUCKET` | `rantai-files` | Bucket name. |
+| `S3_REGION` | `us-east-1` | Region. |
+| `S3_ENABLE_PATH_STYLE` | unset | Set to `"1"` to use path-style URLs (MinIO). |
+| `S3_PRESIGNED_URL_EXPIRE` | `7200` (2 h) | Presigned URL TTL in seconds. |
+| `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | (none — required) | Credentials. |
 
 ---
 
-## D. Slides Pipeline — Full Audit
+## See also
 
-### D1. `slides-renderer.tsx`
-
-[slides-renderer.tsx:1-147](src/features/conversations/components/chat/artifacts/renderers/slides-renderer.tsx#L1-L147):
-
-```tsx
-"use client"
-
-import { useState, useMemo, useCallback, useEffect, useRef } from "react"
-import { ChevronLeft, ChevronRight } from "@/lib/icons"
-import type { PresentationData } from "@/lib/slides/types"
-import { DEFAULT_THEME } from "@/lib/slides/types"
-import { slidesToHtml } from "@/lib/slides/render-html"
-import { parseLegacyMarkdown, isJsonPresentation } from "@/lib/slides/parse-legacy"
-
-interface SlidesRendererProps {
-  content: string
-}
-
-function parsePresentation(content: string): PresentationData {
-  if (isJsonPresentation(content)) {
-    try {
-      const data = JSON.parse(content) as PresentationData
-      if (data.slides && Array.isArray(data.slides) && data.slides.length > 0) {
-        return {
-          theme: data.theme || DEFAULT_THEME,
-          slides: data.slides,
-        }
-      }
-    } catch {
-      // Fall through to legacy parser
-    }
-  }
-  return parseLegacyMarkdown(content)
-}
-
-export function SlidesRenderer({ content }: SlidesRendererProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  const [currentSlide, setCurrentSlide] = useState(0)
-  const [totalSlides, setTotalSlides] = useState(0)
-
-  const presentation = useMemo(() => parsePresentation(content), [content])
-  const srcdoc = useMemo(() => slidesToHtml(presentation), [presentation])
-
-  // ... useEffect for postMessage slideChange event (L39-L49)
-  // ... navigate callback (L51-L59)
-  // ... Keyboard arrow-key navigation (L61-L73)
-
-  if (presentation.slides.length === 0) {
-    return (
-      <div className="flex items-center justify-center p-8 text-muted-foreground">
-        No slides found
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Slide preview — iframe with srcDoc */}
-      <div className="flex-1 min-h-0 bg-black/5">
-        <iframe
-          ref={iframeRef}
-          srcDoc={srcdoc}
-          sandbox="allow-scripts allow-same-origin"
-          className="w-full h-full border-0"
-          title="Slide Preview"
-        />
-      </div>
-
-      {/* Navigation bar — prev/next buttons + dot indicators */}
-      ...
-    </div>
-  )
-}
-```
-
-**Architecture:** Slides render in an `<iframe srcDoc={slidesToHtml(presentation)} sandbox="allow-scripts allow-same-origin">`. `slidesToHtml()` is the server-safe HTML generator at [`src/lib/slides/render-html.ts`](src/lib/slides/render-html.ts) (see D3/D4).
-
-### D2. Companion files in `renderers/`
-
-Directory [`src/features/conversations/components/chat/artifacts/renderers/`](src/features/conversations/components/chat/artifacts/renderers/):
-
-```
-_iframe-nav-blocker.ts
-html-renderer.tsx
-latex-renderer.tsx
-mermaid-config.ts
-mermaid-renderer.tsx
-python-renderer.tsx
-r3f-renderer.tsx
-react-renderer.tsx
-sheet-renderer.tsx
-slides-renderer.tsx
-svg-renderer.tsx
-```
-
-Supporting modules (not under `renderers/`):
-- [`src/lib/slides/types.ts`](src/lib/slides/types.ts) — `PresentationData`, `SlideData`, `ChartData`, `DEFAULT_THEME`
-- [`src/lib/slides/render-html.ts`](src/lib/slides/render-html.ts) — `slidesToHtml()` produces full iframe srcDoc with embedded charts, mermaid, images
-- [`src/lib/slides/chart-to-svg.ts`](src/lib/slides/chart-to-svg.ts) — D3-based SVG generator
-- [`src/lib/slides/svg-to-png.ts`](src/lib/slides/svg-to-png.ts) — client Canvas-based raster converter
-- [`src/lib/slides/parse-legacy.ts`](src/lib/slides/parse-legacy.ts) — detects JSON vs legacy markdown deck
-- [`src/lib/slides/generate-pptx.ts`](src/lib/slides/generate-pptx.ts) — 1530 lines, PptxGenJS-based exporter
-
-### D3. Chart rendering at preview time
-
-**Library:** `d3-scale`, `d3-shape`, `d3-axis` (D3 modular modules — *not* Recharts, *not* Chart.js).
-
-[chart-to-svg.ts:1-27](src/lib/slides/chart-to-svg.ts#L1-L27) excerpt (from subagent read):
-
-```typescript
-/**
- * Chart to SVG renderer using D3.js
- *
- * Generates SVG strings for bar, bar-horizontal, line, pie, and donut charts.
- * Works both server-side (for HTML generation) and client-side (for PPTX export).
- */
-
-import * as d3Scale from "d3-scale"
-import * as d3Shape from "d3-shape"
-import type { ChartData, ChartDataPoint, ChartSeries } from "./types"
-
-// Default color palette (matches mermaid-config.ts pie colors)
-const DEFAULT_COLORS = [
-  "#3b82f6", // blue-500
-  "#22c55e", // green-500
-  "#f59e0b", // amber-500
-  "#ef4444", // red-500
-  "#8b5cf6", // violet-500
-  "#06b6d4", // cyan-500
-  "#ec4899", // pink-500
-  "#14b8a6", // teal-500
-]
-```
-
-At preview time, `chartToSvg()` returns an SVG string which `slidesToHtml()` embeds directly into the iframe srcDoc. No Canvas rasterization at preview time — SVG renders natively in the browser.
-
-Chart types: `bar`, `bar-horizontal`, `line`, `pie`, `donut` (enforced by `ChartData` type at [`src/lib/slides/types.ts`](src/lib/slides/types.ts)).
-
-### D4. Mermaid rendering at preview time
-
-Two flavors:
-
-1. **Standalone Mermaid artifact** (`application/mermaid`): [`mermaid-renderer.tsx`](src/features/conversations/components/chat/artifacts/renderers/mermaid-renderer.tsx) (170 lines per prior recon) — uses the client-side `mermaid.render()` API.
-
-2. **Mermaid-in-slides**: `slidesToHtml()` in [`render-html.ts`](src/lib/slides/render-html.ts) embeds Mermaid source in `<pre class="mermaid">` blocks inside the iframe; the iframe then runs `mermaid.initialize()` + `mermaid.run()` to transform them to SVG.
-
-3. **Mermaid-in-markdown** (text/markdown via Streamdown): Streamdown's built-in Mermaid plugin renders ` ```mermaid ` fenced blocks inline with a custom error component (see C2).
-
-### D5. `generatePptx` — PPTX exporter
-
-File: [`src/lib/slides/generate-pptx.ts`](src/lib/slides/generate-pptx.ts), **1530 lines**. Uses `pptxgenjs` v4.0.1. Invoked client-side from the download button (see §I2).
-
-#### D5a. Chart slides — rasterized PNG
-
-Per subagent read of [generate-pptx.ts:620-621](src/lib/slides/generate-pptx.ts#L620-L621):
-
-```typescript
-const svgString = chartToSvg(slide.chart, CHART_DIMENSIONS.pptx.fullSlide.width, CHART_DIMENSIONS.pptx.fullSlide.height)
-const pngData = await svgToBase64Png(svgString, 900, 500)
-```
-
-**Answer:** Charts are **rasterized to PNG** via `svgToBase64Png()` (Canvas API client-side). They are NOT native PPTX chart shapes. This keeps the exporter client-side-only.
-
-#### D5b. Mermaid slides — PNG via client-side mermaid render
-
-Per subagent read of [generate-pptx.ts:504](src/lib/slides/generate-pptx.ts#L504):
-
-```typescript
-const pngData = await mermaidToBase64Png(slide.diagram, MERMAID_DIMENSIONS.fullSlide.width, MERMAID_DIMENSIONS.fullSlide.height)
-```
-
-`mermaidToBase64Png()` lives in [`src/lib/slides/svg-to-png.ts`](src/lib/slides/svg-to-png.ts) — calls `mermaid.render()` (client), obtains SVG, then rasterizes via Canvas to PNG data URL.
-
-#### D5c. Image slides — fetch to base64, embed in PPTX binary
-
-Slides image URLs (including already-resolved Unsplash URLs from [resolver.ts](src/lib/unsplash/resolver.ts)) are fetched client-side and converted to base64 for PPTX embedding. Unsplash resolution happens **server-side at create/update time** (see §F / §G1), so by the time the client exports PPTX the URLs are real, not `unsplash:` protocol strings.
-
-#### D5d. Text slides — plain text with PptxGenJS formatting
-
-Per subagent read of [generate-pptx.ts:71-128](src/lib/slides/generate-pptx.ts#L71-L128): title/subtitle/content slides use PptxGenJS text options (`bold`, `italic`, `align`, `color`, `fontSize`). **No markdown parsing at export time** — the slides content is plain string with some icon-syntax stripping at [generate-pptx.ts:21-24](src/lib/slides/generate-pptx.ts#L21-L24). Inline `{icon:name}` syntax is stripped for PPTX (works only in HTML preview).
-
-### D6. Mermaid usage (`rg -n "mermaid" src/ -t ts -t tsx | head -40`)
-
-Key references:
-- `package.json`: `"mermaid": "^11.12.2"`
-- [mermaid-renderer.tsx](src/features/conversations/components/chat/artifacts/renderers/mermaid-renderer.tsx) — standalone artifact
-- [mermaid-config.ts](src/features/conversations/components/chat/artifacts/renderers/mermaid-config.ts) — shared theme/config
-- [streamdown-content.tsx:40-41](src/features/conversations/components/chat/streamdown-content.tsx#L40-L41) — `controls: { mermaid: true }`, `mermaid: { errorComponent: MermaidError }`
-- [svg-to-png.ts](src/lib/slides/svg-to-png.ts) — `mermaidToBase64Png()` for PPTX export
-- [render-html.ts](src/lib/slides/render-html.ts) — iframe-embedded mermaid for slides preview
-- [_validate-artifact.ts:45](src/lib/tools/builtin/_validate-artifact.ts#L45) — `if (type === "application/mermaid") return validateMermaid(content)`
-
-### D7. Headless browser check
-
-`rg -n "puppeteer|playwright|chromium|jsdom|html2canvas|toDataURL" src/ package.json` →
-
-| Term | Result |
-|---|---|
-| puppeteer | `[NOT FOUND]` |
-| playwright | `[NOT FOUND]` |
-| chromium | `[NOT FOUND]` |
-| jsdom | `[NOT FOUND]` |
-| html2canvas | `[NOT FOUND]` |
-| toDataURL | Present — Canvas API call in [svg-to-png.ts](src/lib/slides/svg-to-png.ts) for SVG→PNG raster (client-side, native browser Canvas) |
-
-**Finding:** No headless-browser dependency anywhere in the repo. All existing export rasterization (Mermaid, charts) runs client-side via the browser's native Canvas API. This is a notable constraint for Phase 4–5 (DOCX/PDF export will either need client-side rendering OR a new server dependency).
-
-### D8. D3 imports
-
-`rg -n "from ['\"]d3['\"]|from ['\"]d3-" src/` →
-
-- [chart-to-svg.ts:8](src/lib/slides/chart-to-svg.ts#L8): `import * as d3Scale from "d3-scale"`
-- [chart-to-svg.ts:9](src/lib/slides/chart-to-svg.ts#L9): `import * as d3Shape from "d3-shape"`
-- `d3-axis` imported implicitly via `d3-scale` types (per subagent observation)
-
-**No full `d3` bundle.** Only modular packages `d3-scale`, `d3-shape`, `d3-axis`.
-
----
-
-## E. Dependencies
-
-### E1. Relevant `dependencies` + `devDependencies`
-
-Grep-filtered entries from `package.json` (exact strings):
-
-```json
-"d3-axis": "^3.0.0",
-"d3-scale": "^4.0.2",
-"d3-shape": "^3.2.0",
-"gray-matter": "^4.0.3",
-"js-yaml": "^4.1.1",
-"mermaid": "^11.12.2",
-"pptxgenjs": "^4.0.1",
-"react-markdown": "^10.1.0",
-"recharts": "2.15.4",
-"rehype-katex": "^7.0.1",
-"remark-gfm": "^4.0.1",
-"remark-math": "^6.0.0",
-"streamdown": "^2.2.0"
-```
-
-`devDependencies` relevant:
-```json
-"@types/d3-axis": "^3.0.6",
-"@types/d3-scale": "^4.0.9",
-"@types/d3-shape": "^3.1.8",
-"@types/js-yaml": "^4.0.9"
-```
-
-Versions for `d3-*` and `@types/d3-*` sourced from subagent read of the full `package.json`; `rehype-katex` / `remark-*` versions also cross-verified against [streamdown-content.tsx](src/features/conversations/components/chat/streamdown-content.tsx) imports.
-
-### E2. Dependency presence matrix
-
-| Package | Installed? | Version | Notes |
-|---|---|---|---|
-| `mermaid` | ✅ | `^11.12.2` | Used in standalone artifact, slides iframe, Streamdown markdown, PPTX export raster |
-| `d3` (full) | ❌ | — | Only modular sub-packages present |
-| `d3-scale` | ✅ | `^4.0.2` | Used by `chart-to-svg.ts` |
-| `d3-shape` | ✅ | `^3.2.0` | Used by `chart-to-svg.ts` |
-| `d3-axis` | ✅ | `^3.0.0` | Used indirectly via `d3-scale` types |
-| `recharts` | ✅ | `2.15.4` | **Installed but not used in slides charts** — usage elsewhere (e.g. dashboards outside artifact system) not confirmed |
-| `chart.js` / `chartjs` | ❌ | — | `[NOT FOUND]` |
-| `pptxgenjs` | ✅ | `^4.0.1` | Sole PPTX generator |
-| `puppeteer` / `puppeteer-core` | ❌ | — | `[NOT FOUND]` |
-| `@sparticuz/chromium` | ❌ | — | `[NOT FOUND]` |
-| `playwright` | ❌ | — | `[NOT FOUND]` |
-| `docx` | ❌ | — | `[NOT FOUND]` — no DOCX library |
-| `officegen` | ❌ | — | `[NOT FOUND]` |
-| `jspdf` / `pdfkit` / `pdfmake` | ❌ | — | `[NOT FOUND]` — no PDF library |
-| `@react-pdf/renderer` | ❌ | — | `[NOT FOUND]` |
-| `html-to-docx` | ❌ | — | `[NOT FOUND]` |
-| `html-pdf-node` | ❌ | — | `[NOT FOUND]` |
-| `gray-matter` | ✅ | `^4.0.3` | Installed, **not yet wired** (frontmatter parse for Phase 2) |
-| `js-yaml` | ✅ | `^4.1.1` | Installed, **not yet wired** |
-| `unified` | ❌ (direct) | — | Present transitively through `streamdown` + `remark-*` |
-| `remark-parse` | ❌ (direct) | — | Transitively via Streamdown |
-| `remark-gfm` | ✅ | `^4.0.1` | Implicit via Streamdown + explicit import elsewhere |
-| `remark-math` | ✅ | `^6.0.0` | Wired into Streamdown plugin |
-| `rehype-katex` | ✅ | `^7.0.1` | Wired into Streamdown plugin |
-| `katex` | ✅ (transitive) | — | Pulled in by `rehype-katex`; CSS imported at [streamdown-content.tsx:7](src/features/conversations/components/chat/streamdown-content.tsx#L7) |
-| `streamdown` | ✅ | `^2.2.0` | Active markdown parser |
-| `react-markdown` | ✅ | `^10.1.0` | Installed, not used in artifact panel (may be used in non-artifact chat surfaces) |
-
-**Key gaps for Phases 4–5:** no DOCX library, no PDF library, no headless browser. Every DOCX/PDF export plan has to pick from: install a new library, OR rely on client-side Canvas rendering.
-
----
-
-## F. Unsplash Resolver
-
-### F1. `resolver.ts`
-
-[resolver.ts:1-193](src/lib/unsplash/resolver.ts#L1-L193) — full file:
-
-```typescript
-/**
- * Image resolution logic for HTML artifacts.
- * Resolves unsplash:keyword URLs to real Unsplash photos.
- */
-
-import { prisma } from "@/lib/prisma"
-import { searchPhoto } from "./client"
-
-/** Regex to match src="unsplash:keyword" or src='unsplash:keyword' */
-const UNSPLASH_REGEX = /src=["']unsplash:([^"']+)["']/gi
-
-/** Cache duration in days */
-const CACHE_DAYS = 30
-
-/**
- * Normalize a search query for consistent caching.
- */
-function normalize(query: string): string {
-  return query
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ") // Collapse whitespace
-    .slice(0, 50) // Max 50 chars
-}
-
-/**
- * Generate a fallback placeholder URL with the keyword as text.
- */
-function fallbackUrl(query: string): string {
-  const encoded = encodeURIComponent(query)
-  // Gray background (#f1f5f9) with dark text (#64748b)
-  return `https://placehold.co/1200x800/f1f5f9/64748b?text=${encoded}`
-}
-
-/**
- * Resolve all unsplash:keyword URLs in HTML content to real Unsplash photos.
- * Falls back to placehold.co if Unsplash is unavailable.
- */
-export async function resolveHtmlImages(content: string): Promise<string> {
-  // 1. Extract all unsplash: URLs
-  const matches = [...content.matchAll(UNSPLASH_REGEX)]
-  if (matches.length === 0) {
-    return content
-  }
-
-  // 2. Dedupe and normalize queries
-  const queries = [...new Set(matches.map((m) => normalize(m[1])))]
-  const resolved = await resolveQueries(queries)
-
-  // 3. Replace all unsplash: URLs with resolved URLs
-  return content.replace(UNSPLASH_REGEX, (_, rawQuery) => {
-    const normalizedQuery = normalize(rawQuery)
-    const url = resolved.get(normalizedQuery) ?? fallbackUrl(rawQuery)
-    return `src="${url}"`
-  })
-}
-
-/** Slide type for resolver (minimal fields we need) */
-interface SlideForResolver {
-  imageUrl?: string
-  backgroundImage?: string
-  quoteImage?: string
-  gallery?: Array<{ imageUrl?: string; caption?: string }>
-}
-
-/**
- * Resolve unsplash:keyword URLs in slides JSON content.
- * Handles: imageUrl, backgroundImage, quoteImage, gallery[].imageUrl
- */
-export async function resolveSlideImages(content: string): Promise<string> {
-  // Try to parse as JSON
-  let data: { slides?: SlideForResolver[] }
-  try {
-    data = JSON.parse(content)
-  } catch {
-    return content // Not valid JSON, return as-is
-  }
-
-  if (!data.slides || !Array.isArray(data.slides)) {
-    return content
-  }
-
-  // 1. Collect all unsplash: URLs from slides
-  const unsplashUrls: string[] = []
-  for (const slide of data.slides) {
-    if (slide.imageUrl?.startsWith("unsplash:")) {
-      unsplashUrls.push(normalize(slide.imageUrl.slice(9)))
-    }
-    if (slide.backgroundImage?.startsWith("unsplash:")) {
-      unsplashUrls.push(normalize(slide.backgroundImage.slice(9)))
-    }
-    if (slide.quoteImage?.startsWith("unsplash:")) {
-      unsplashUrls.push(normalize(slide.quoteImage.slice(9)))
-    }
-    // Gallery items
-    if (slide.gallery && Array.isArray(slide.gallery)) {
-      for (const item of slide.gallery) {
-        if (item.imageUrl?.startsWith("unsplash:")) {
-          unsplashUrls.push(normalize(item.imageUrl.slice(9)))
-        }
-      }
-    }
-  }
-
-  if (unsplashUrls.length === 0) {
-    return content
-  }
-
-  // 2. Resolve all unique queries
-  const queries = [...new Set(unsplashUrls)]
-  const resolved = await resolveQueries(queries)
-
-  // 3. Replace unsplash: URLs in slides
-  for (const slide of data.slides) {
-    if (slide.imageUrl?.startsWith("unsplash:")) {
-      const query = normalize(slide.imageUrl.slice(9))
-      slide.imageUrl = resolved.get(query) ?? fallbackUrl(query)
-    }
-    if (slide.backgroundImage?.startsWith("unsplash:")) {
-      const query = normalize(slide.backgroundImage.slice(9))
-      slide.backgroundImage = resolved.get(query) ?? fallbackUrl(query)
-    }
-    if (slide.quoteImage?.startsWith("unsplash:")) {
-      const query = normalize(slide.quoteImage.slice(9))
-      slide.quoteImage = resolved.get(query) ?? fallbackUrl(query)
-    }
-    // Gallery items
-    if (slide.gallery && Array.isArray(slide.gallery)) {
-      for (const item of slide.gallery) {
-        if (item.imageUrl?.startsWith("unsplash:")) {
-          const query = normalize(item.imageUrl.slice(9))
-          item.imageUrl = resolved.get(query) ?? fallbackUrl(query)
-        }
-      }
-    }
-  }
-
-  return JSON.stringify(data)
-}
-
-/**
- * Resolve a list of queries to URLs (with caching).
- * Shared logic between HTML and Slides resolvers.
- */
-async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
-  const resolved = new Map<string, string>()
-
-  // 1. Check cache first
-  try {
-    const cached = await prisma.resolvedImage.findMany({
-      where: { query: { in: queries } },
-    })
-    for (const entry of cached) {
-      resolved.set(entry.query, entry.url)
-    }
-  } catch (error) {
-    console.warn("[unsplash] Cache lookup failed:", error)
-  }
-
-  // 2. Fetch uncached queries in parallel
-  const uncached = queries.filter((q) => !resolved.has(q))
-
-  await Promise.all(
-    uncached.map(async (query) => {
-      const photo = await searchPhoto(query)
-
-      if (photo) {
-        // Use regular size with width parameter for optimal loading
-        const url = `${photo.urls.regular}&w=1200`
-        resolved.set(query, url)
-
-        // Cache the result
-        try {
-          await prisma.resolvedImage.create({
-            data: {
-              query,
-              url,
-              attribution: `Photo by ${photo.user.name} on Unsplash`,
-              expiresAt: new Date(Date.now() + CACHE_DAYS * 24 * 60 * 60 * 1000),
-            },
-          })
-        } catch {
-          // Ignore duplicate key errors (race condition)
-        }
-      } else {
-        // Unsplash failed - use placeholder with keyword text
-        resolved.set(query, fallbackUrl(query))
-      }
-    })
-  )
-
-  return resolved
-}
-```
-
-### F2. `client.ts`
-
-[client.ts:1-45](src/lib/unsplash/client.ts#L1-L45) — full file:
-
-```typescript
-/**
- * Unsplash API client
- */
-
-import type { UnsplashPhoto, UnsplashSearchResponse } from "./types"
-
-const API_URL = "https://api.unsplash.com/search/photos"
-const TIMEOUT_MS = 5000
-
-/**
- * Search for a photo on Unsplash.
- * Returns the first result or null if not found / API unavailable.
- */
-export async function searchPhoto(query: string): Promise<UnsplashPhoto | null> {
-  const apiKey = process.env.UNSPLASH_API_KEY
-  if (!apiKey) {
-    return null
-  }
-
-  try {
-    const url = `${API_URL}?query=${encodeURIComponent(query)}&per_page=1&orientation=landscape`
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Client-ID ${apiKey}`,
-        "Accept-Version": "v1",
-      },
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    })
-
-    if (!response.ok) {
-      console.warn(`[unsplash] API returned ${response.status} for query: ${query}`)
-      return null
-    }
-
-    const data: UnsplashSearchResponse = await response.json()
-    return data.results?.[0] ?? null
-  } catch (error) {
-    if (error instanceof Error && error.name === "TimeoutError") {
-      console.warn(`[unsplash] Timeout for query: ${query}`)
-    } else {
-      console.warn(`[unsplash] Error fetching photo:`, error)
-    }
-    return null
-  }
-}
-```
-
-### F3. Callers
-
-- [create-artifact.ts:6](src/lib/tools/builtin/create-artifact.ts#L6): `import { resolveImages, resolveSlideImages } from "@/lib/unsplash"`
-- [create-artifact.ts:131-136](src/lib/tools/builtin/create-artifact.ts#L131-L136) — dispatch:
-
-```typescript
-    // Resolve unsplash: URLs to real images for HTML and slides artifacts
-    let finalContent = content
-    if (type === "text/html") {
-      finalContent = await resolveImages(content)
-    } else if (type === "application/slides") {
-      finalContent = await resolveSlideImages(content)
-    }
-```
-
-- [update-artifact.ts:7](src/lib/tools/builtin/update-artifact.ts#L7): same import
-- [update-artifact.ts:91-97](src/lib/tools/builtin/update-artifact.ts#L91-L97):
-
-```typescript
-        // Resolve unsplash: URLs to real images for HTML and slides artifacts
-        let finalContent = content
-        if (existing.artifactType === "text/html") {
-          finalContent = await resolveImages(content)
-        } else if (existing.artifactType === "application/slides") {
-          finalContent = await resolveSlideImages(content)
-        }
-```
-
-Note: the imported name at the call site is `resolveImages` (re-exported from `@/lib/unsplash/index.ts` — underlying function is `resolveHtmlImages`).
-
-### F4. Regex and triggers
-
-| Resolver | Pattern / field | Triggered on artifact type |
-|---|---|---|
-| `resolveHtmlImages` | regex `/src=["']unsplash:([^"']+)["']/gi` ([resolver.ts:10](src/lib/unsplash/resolver.ts#L10)) | `text/html` only |
-| `resolveSlideImages` | JSON field checks on `slide.imageUrl`, `slide.backgroundImage`, `slide.quoteImage`, `slide.gallery[].imageUrl` ([resolver.ts:85-102](src/lib/unsplash/resolver.ts#L85-L102)) | `application/slides` only |
-
-**Confirmation for Phase 3 scoping:** `text/document` currently **does NOT trigger Unsplash resolution**. When it's re-introduced, Phase 3 needs to either (a) add a new `resolveDocumentImages()` that handles the `![alt](unsplash:keyword)` markdown image syntax, OR (b) extend `resolveHtmlImages` to also match the markdown form `\!\[[^\]]*\]\(unsplash:[^)]+\)`.
-
----
-
-## G. Create/Update Artifact Pipeline
-
-### G1. `create-artifact.ts`
-
-[create-artifact.ts:1-199](src/lib/tools/builtin/create-artifact.ts#L1-L199) — full file (current state, 11 types):
-
-```typescript
-import { z } from "zod"
-import type { ToolDefinition } from "../types"
-import { prisma } from "@/lib/prisma"
-import { uploadFile, S3Paths, getArtifactExtension } from "@/lib/s3"
-import { indexArtifactContent } from "@/lib/rag"
-import { resolveImages, resolveSlideImages } from "@/lib/unsplash"
-import {
-  validateArtifactContent,
-  formatValidationError,
-} from "./_validate-artifact"
-
-/** Maximum artifact content size: 512 KB */
-const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
-
-export const createArtifactTool: ToolDefinition = {
-  name: "create_artifact",
-  displayName: "Create Artifact",
-  description:
-    "Create a rich, polished artifact rendered in a live preview panel. Use for substantial content: HTML pages, React components, SVG graphics, diagrams, code files, documents, spreadsheets, slides, Python scripts, or 3D scenes. Output must be complete, self-contained, and production-quality — no placeholders, no TODOs, no incomplete sections. Always choose the most appropriate type for the content.",
-  category: "builtin",
-  parameters: z.object({
-    title: z.string().describe("A concise, descriptive title (3-8 words) that clearly identifies the artifact content"),
-    type: z
-      .enum([
-        "text/html",
-        "text/markdown",
-        "image/svg+xml",
-        "application/react",
-        "application/mermaid",
-        "application/code",
-        "application/sheet",
-        "text/latex",
-        "application/slides",
-        "application/python",
-        "application/3d",
-      ])
-      .describe(
-        "The artifact format. Choose based on content: text/html (interactive pages, dashboards, games), application/react (UI components, data visualizations), image/svg+xml (graphics, icons), application/mermaid (flowcharts, diagrams), application/code (source code), text/markdown (documents, reports), application/sheet (CSV tables), text/latex (math equations), application/slides (presentations as JSON), application/python (executable scripts), application/3d (R3F 3D scenes)"
-      ),
-    content: z
-      .string()
-      .describe("The complete, self-contained content of the artifact. Must be fully functional — no placeholders, stubs, or TODO comments. For HTML: include full document structure. For React: include all component logic with export default. For code: include all necessary functions. For slides: provide complete JSON with theme and slides array."),
-    language: z
-      .string()
-      .optional()
-      .describe(
-        "Programming language for application/code type (e.g. python, javascript, typescript)"
-      ),
-  }),
-  execute: async (params, context) => {
-    const id = crypto.randomUUID()
-    const content = params.content as string
-    const type = params.type as string
-    const title = params.title as string
-    const language = (params.language as string) || undefined
-
-    // Validate content size
-    const contentBytes = Buffer.byteLength(content, "utf-8")
-    if (contentBytes > MAX_ARTIFACT_CONTENT_BYTES) {
-      return {
-        id, title, type, content, language,
-        persisted: false,
-        error: `Artifact content exceeds maximum size (${Math.round(contentBytes / 1024)}KB > ${MAX_ARTIFACT_CONTENT_BYTES / 1024}KB)`,
-      }
-    }
-
-    // Canvas-mode type enforcement. When the user has selected a
-    // specific artifact type, the LLM is required to use it.
-    const canvasMode = context.canvasMode
-    if (canvasMode && canvasMode !== "auto" && canvasMode !== type) {
-      return {
-        id, title, type, content, language,
-        persisted: false,
-        error: `Canvas mode is locked to "${canvasMode}" but you called create_artifact with type "${type}". ...`,
-        validationErrors: [`Wrong artifact type: expected "${canvasMode}", got "${type}".`],
-      }
-    }
-
-    // application/code requires `language`
-    if (type === "application/code" && !language) {
-      return {
-        id, title, type, content, language,
-        persisted: false,
-        error: 'application/code artifacts require a `language` parameter ...',
-        validationErrors: ["Missing required `language` parameter for application/code."],
-      }
-    }
-
-    // Structural validation
-    const validation = validateArtifactContent(type, content)
-    let validationWarnings: string[] = validation.warnings
-    if (!validation.ok) {
-      return {
-        id, title, type, content, language,
-        persisted: false,
-        error: formatValidationError(type, validation),
-        validationErrors: validation.errors,
-      }
-    }
-
-    // Resolve unsplash: URLs for HTML and slides artifacts
-    let finalContent = content
-    if (type === "text/html") {
-      finalContent = await resolveImages(content)
-    } else if (type === "application/slides") {
-      finalContent = await resolveSlideImages(content)
-    }
-
-    // Persist to S3 + Document (knowledge system)
-    let persisted = true
-    try {
-      const ext = getArtifactExtension(type)
-      const s3Key = S3Paths.artifact(
-        context.organizationId || null,
-        context.sessionId || "orphan",
-        id,
-        ext
-      )
-      const mimeType =
-        type === "image/svg+xml" ? "image/svg+xml" : "text/plain"
-
-      await uploadFile(s3Key, Buffer.from(finalContent, "utf-8"), mimeType)
-
-      await prisma.document.create({
-        data: {
-          id, title, content: finalContent,
-          categories: ["ARTIFACT"],
-          artifactType: type,
-          sessionId: context.sessionId || null,
-          organizationId: context.organizationId || null,
-          createdBy: context.userId || null,
-          s3Key,
-          fileType: "artifact",
-          fileSize: contentBytes,
-          mimeType,
-          metadata: {
-            artifactLanguage: language,
-            ...(validationWarnings.length > 0 ? { validationWarnings } : {}),
-          },
-        },
-      })
-
-      // Background: RAG indexing
-      indexArtifactContent(id, title, finalContent).catch((err) =>
-        console.error("[create_artifact] Background indexing error:", err)
-      )
-    } catch (err) {
-      console.error("[create_artifact] Persistence error:", err)
-      persisted = false
-    }
-
-    return {
-      id, title, type,
-      content: finalContent,
-      language, persisted,
-      ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),
-    }
-  },
-}
-```
-
-(Block excerpts condensed from [create-artifact.ts:50-198](src/lib/tools/builtin/create-artifact.ts#L50-L198) for readability; full bodies were verified verbatim.)
-
-### G2. `update-artifact.ts`
-
-[update-artifact.ts:1-197](src/lib/tools/builtin/update-artifact.ts#L1-L197) — structural summary with verbatim key sections:
-
-- **Header + imports** ([update-artifact.ts:1-17](src/lib/tools/builtin/update-artifact.ts#L1-L17)) identical pattern to create-artifact
-- **Constants:** `MAX_VERSION_HISTORY = 20`, `MAX_INLINE_FALLBACK_BYTES = 32 * 1024`, `MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024`
-- **Zod schema** [update-artifact.ts:34-45](src/lib/tools/builtin/update-artifact.ts#L34-L45) — just `id`, `title?`, `content` (no type enum)
-- **Execute flow:**
-  1. Size check ([update-artifact.ts:51-62](src/lib/tools/builtin/update-artifact.ts#L51-L62))
-  2. Load existing Document ([update-artifact.ts:68](src/lib/tools/builtin/update-artifact.ts#L68))
-  3. Run `validateArtifactContent(existing.artifactType, content)` ([update-artifact.ts:72-89](src/lib/tools/builtin/update-artifact.ts#L72-L89))
-  4. Resolve Unsplash if text/html or application/slides ([update-artifact.ts:91-97](src/lib/tools/builtin/update-artifact.ts#L91-L97))
-  5. Archive old version to S3 at `${existing.s3Key}.v${versionNum}` with inline fallback for small content ([update-artifact.ts:99-139](src/lib/tools/builtin/update-artifact.ts#L99-L139))
-  6. FIFO eviction at 20 versions ([update-artifact.ts:141-148](src/lib/tools/builtin/update-artifact.ts#L141-L148))
-  7. Upload new content + update Prisma ([update-artifact.ts:150-176](src/lib/tools/builtin/update-artifact.ts#L150-L176))
-  8. Background re-index ([update-artifact.ts:179-181](src/lib/tools/builtin/update-artifact.ts#L179-L181))
-
-### G3. `_validate-artifact.ts`
-
-File is **1790 lines** ([wc -l result](src/lib/tools/builtin/_validate-artifact.ts)). The dispatch function is the only block directly relevant to adding new types:
-
-[_validate-artifact.ts:38-54](src/lib/tools/builtin/_validate-artifact.ts#L38-L54):
-
-```typescript
-export function validateArtifactContent(
-  type: string,
-  content: string
-): ArtifactValidationResult {
-  if (type === "text/html") return validateHtml(content)
-  if (type === "application/react") return validateReact(content)
-  if (type === "image/svg+xml") return validateSvg(content)
-  if (type === "application/mermaid") return validateMermaid(content)
-  if (type === "application/python") return validatePython(content)
-  if (type === "application/code") return validateCode(content)
-  if (type === "text/markdown") return validateMarkdown(content)
-  if (type === "text/latex") return validateLatex(content)
-  if (type === "application/sheet") return validateSheet(content)
-  if (type === "application/slides") return validateSlides(content)
-  if (type === "application/3d") return validate3d(content)
-  return { ok: true, errors: [], warnings: [] }
-}
-```
-
-**Current state:** 11 `if` branches; no `text/document` dispatch. Falls through to permissive `{ ok: true, errors: [], warnings: [] }` for anything unknown.
-
-Remainder of the file (L55-L1790) is per-type validator implementations: `validateSlides` (largest, with layout/bullet/slide-count checks), `validateHtml`, `validateReact`, `validateSvg`, `validateMermaid`, `validatePython`, `validateCode`, `validateMarkdown`, `validateLatex`, `validateSheet`, `validate3d`. They are independent functions and do not interact with the dispatch beyond being called from it.
-
-### G4. `updateDashboardChatSessionArtifact`
-
-Per subagent read: [service.ts:430-546](src/features/conversations/sessions/service.ts#L430-L546) — `updateDashboardChatSessionArtifact(params)` function that:
-
-1. Checks session ownership via `findDashboardSessionByIdAndUser`.
-2. Runs `validateArtifactContent(existing.artifactType, content)` (same validator as the LLM tool).
-3. Archives old content to S3 with inline fallback (same logic as `update-artifact.ts`).
-4. Updates Document via `updateDashboardArtifactById`.
-5. Background RAG re-index.
-
-Returns either the updated artifact or an `HttpServiceError` (400/404/422). **Structural equivalence with the LLM update path** — any new type that validates in the tool will also validate in manual-edit PUT.
-
----
-
-## H. API Routes
-
-### H1. Artifact route
-
-[route.ts:1-81](src/app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/route.ts#L1-L81) — full file:
-
-```typescript
-import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
-import {
-  DashboardChatSessionArtifactBodySchema,
-  DashboardChatSessionArtifactParamsSchema,
-} from "@/features/conversations/sessions/schema"
-import {
-  deleteDashboardChatSessionArtifact,
-  updateDashboardChatSessionArtifact,
-} from "@/features/conversations/sessions/service"
-import { isHttpServiceError } from "@/features/shared/http-service-error"
-
-export async function PUT(
-  req: Request,
-  { params }: { params: Promise<{ id: string; artifactId: string }> }
-) {
-  try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const parsedParams = DashboardChatSessionArtifactParamsSchema.safeParse(await params)
-    if (!parsedParams.success) {
-      return NextResponse.json({ error: "Artifact not found" }, { status: 404 })
-    }
-
-    const parsedBody = DashboardChatSessionArtifactBodySchema.safeParse(await req.json())
-    if (!parsedBody.success) {
-      return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
-    }
-
-    const result = await updateDashboardChatSessionArtifact({
-      userId: session.user.id,
-      sessionId: parsedParams.data.id,
-      artifactId: parsedParams.data.artifactId,
-      input: parsedBody.data,
-    })
-
-    if (isHttpServiceError(result)) {
-      return NextResponse.json({ error: result.error }, { status: result.status })
-    }
-
-    return NextResponse.json(result)
-  } catch (error) {
-    console.error("[Artifact API] PUT error:", error)
-    return NextResponse.json({ error: "Failed to update artifact" }, { status: 500 })
-  }
-}
-
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string; artifactId: string }> }
-) {
-  try {
-    const session = await auth()
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const parsedParams = DashboardChatSessionArtifactParamsSchema.safeParse(await params)
-    if (!parsedParams.success) {
-      return NextResponse.json({ error: "Artifact not found" }, { status: 404 })
-    }
-
-    const result = await deleteDashboardChatSessionArtifact({
-      userId: session.user.id,
-      sessionId: parsedParams.data.id,
-      artifactId: parsedParams.data.artifactId,
-    })
-
-    if (isHttpServiceError(result)) {
-      return NextResponse.json({ error: result.error }, { status: result.status })
-    }
-
-    return NextResponse.json(result)
-  } catch (error) {
-    console.error("[Artifact API] DELETE error:", error)
-    return NextResponse.json({ error: "Failed to delete artifact" }, { status: 500 })
-  }
-}
-```
-
-### H2. Routes under `sessions/` namespace
-
-From subagent glob of `src/app/api/dashboard/chat/sessions/`:
-
-- `src/app/api/dashboard/chat/sessions/route.ts` (sessions collection)
-- `src/app/api/dashboard/chat/sessions/[id]/route.ts` (single session GET/PUT/DELETE)
-- `src/app/api/dashboard/chat/sessions/[id]/messages/route.ts` (messages)
-- `src/app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/route.ts` (the artifact CRUD above)
-
-### H3. Export endpoints
-
-**`[NOT FOUND]`** — there is no GET artifact endpoint and no export endpoint. Downloads are client-side only (see §I). Phase 4–5 will need to create new routes for DOCX / PDF export.
-
----
-
-## I. Download Handler
-
-### I1. `getExtension` + helpers
-
-[artifact-panel.tsx:741-775](src/features/conversations/components/chat/artifacts/artifact-panel.tsx#L741-L775) — current state (11 types, no `text/document`):
-
-```typescript
-function codeExtension(language: string | undefined): string {
-  if (!language) return ".txt"
-  const key = language.toLowerCase().trim()
-  const mapped = CODE_LANGUAGE_EXTENSIONS[key]
-  return mapped ? `.${mapped}` : `.${key}`
-}
-
-function getExtension(artifact: Artifact): string {
-  switch (artifact.type) {
-    case "text/html":
-      return ".html"
-    case "text/markdown":
-      return ".md"
-    case "image/svg+xml":
-      return ".svg"
-    case "application/react":
-      return ".tsx"
-    case "application/mermaid":
-      return ".mmd"
-    case "application/code":
-      return codeExtension(artifact.language)
-    case "application/sheet":
-      return ".csv"
-    case "text/latex":
-      return ".tex"
-    case "application/slides":
-      return ".pptx"
-    case "application/python":
-      return ".py"
-    case "application/3d":
-      return ".tsx"
-    default:
-      return ".txt"
-  }
-}
-```
-
-[artifact-panel.tsx:784-799](src/features/conversations/components/chat/artifacts/artifact-panel.tsx#L784-L799) — LaTeX preamble wrapper:
-
-```typescript
-function wrapLatexForDownload(body: string): string {
-  if (/\\documentclass\b/.test(body)) return body
-  return `\\documentclass{article}
-\\usepackage[utf8]{inputenc}
-\\usepackage{amsmath}
-\\usepackage{amssymb}
-\\usepackage{amsthm}
-\\usepackage{hyperref}
-
-\\begin{document}
-
-${body.trim()}
-
-\\end{document}
-`
-}
-```
-
-[artifact-panel.tsx:801-825](src/features/conversations/components/chat/artifacts/artifact-panel.tsx#L801-L825) — `getCodeLanguage()` maps type → Shiki language tag for the Code tab (11 cases):
-
-```typescript
-function getCodeLanguage(artifact: Artifact): string {
-  switch (artifact.type) {
-    case "text/html":     return "html"
-    case "text/markdown": return "markdown"
-    case "image/svg+xml": return "svg"
-    case "application/react":    return "tsx"
-    case "application/mermaid":  return "mermaid"
-    case "application/code":     return artifact.language || ""
-    case "application/sheet":    return "csv"
-    case "text/latex":           return "latex"
-    case "application/slides":   return "json"
-    case "application/python":   return "python"
-    case "application/3d":       return "tsx"
-    default: return ""
-  }
-}
-```
-
-### I2. Download `onClick` handler
-
-[artifact-panel.tsx:149-196](src/features/conversations/components/chat/artifacts/artifact-panel.tsx#L149-L196) — verbatim (from subagent read, cross-verified):
-
-```typescript
-  const handleDownload = useCallback(async () => {
-    const ext = getExtension(displayArtifact)
-    const filename = `${displayArtifact.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}${ext}`
-
-    // For slides, generate a real PPTX file
-    if (displayArtifact.type === "application/slides") {
-      try {
-        const { isJsonPresentation, parseLegacyMarkdown } = await import("@/lib/slides/parse-legacy")
-        const { DEFAULT_THEME } = await import("@/lib/slides/types")
-        const { generatePptx } = await import("@/lib/slides/generate-pptx")
-
-        let presentation
-        if (isJsonPresentation(displayArtifact.content)) {
-          const parsed = JSON.parse(displayArtifact.content)
-          presentation = { theme: parsed.theme || DEFAULT_THEME, slides: parsed.slides }
-        } else {
-          presentation = parseLegacyMarkdown(displayArtifact.content)
-        }
-
-        const blob = await generatePptx(presentation)
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url
-        a.download = filename
-        a.click()
-        URL.revokeObjectURL(url)
-      } catch (err) {
-        console.error("[ArtifactPanel] PPTX generation failed:", err)
-      }
-      return
-    }
-
-    // LaTeX artifacts are KaTeX fragments — they have no preamble and won't
-    // compile in pdflatex as-is. Wrap them in a minimal article document on
-    // download so users get a `.tex` file they can actually compile.
-    const downloadContent =
-      displayArtifact.type === "text/latex"
-        ? wrapLatexForDownload(displayArtifact.content)
-        : displayArtifact.content
-
-    const blob = new Blob([downloadContent], { type: "text/plain" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = filename
-    a.click()
-    URL.revokeObjectURL(url)
-  }, [displayArtifact])
-```
-
-### I3. Special cases
-
-- **Slides** (`application/slides`): Uses dynamic imports of `parse-legacy`, `types`, and `generate-pptx`, produces a real `.pptx` blob. No fallback to text/plain — errors are logged and download is aborted.
-- **LaTeX** (`text/latex`): If the body doesn't already start with `\documentclass`, `wrapLatexForDownload` prepends an article preamble loading `amsmath`, `amssymb`, `amsthm`, `hyperref` and wraps in `\begin{document} ... \end{document}`. Output is plain `.tex`.
-- **Everything else**: `new Blob([content], { type: "text/plain" })` → `URL.createObjectURL` → synthetic `<a>` click → revoke. No server round-trip.
-
----
-
-## J. Math / KaTeX
-
-### J1. Hits
-
-`rg -n "katex|remark-math|rehype-katex" src/ package.json`:
-
-- `package.json`: `"remark-math": "^6.0.0"`, `"rehype-katex": "^7.0.1"`
-- [streamdown-content.tsx:7](src/features/conversations/components/chat/streamdown-content.tsx#L7): `import "katex/dist/katex.min.css"`
-- [streamdown-content.tsx:8](src/features/conversations/components/chat/streamdown-content.tsx#L8): `import remarkMath from "remark-math"`
-- [streamdown-content.tsx:9](src/features/conversations/components/chat/streamdown-content.tsx#L9): `import rehypeKatex from "rehype-katex"`
-- [streamdown-content.tsx:82-89](src/features/conversations/components/chat/streamdown-content.tsx#L82-L89): plugin configuration
-
-### J2. Streamdown plugin wiring
-
-[streamdown-content.tsx:82-89](src/features/conversations/components/chat/streamdown-content.tsx#L82-L89):
-
-```tsx
-        plugins={{
-          math: {
-            name: "katex",
-            type: "math",
-            remarkPlugin: remarkMath,
-            rehypePlugin: rehypeKatex,
-          },
-        }}
-```
-
-Inline `$...$` and display `$$...$$` are parsed by `remark-math` into MDX math nodes, then transformed to rendered HTML by `rehype-katex`.
-
-### J3. KaTeX delivery method
-
-**Bundled (via NPM).** The CSS is imported from the package at [streamdown-content.tsx:7](src/features/conversations/components/chat/streamdown-content.tsx#L7) (`"katex/dist/katex.min.css"`). No `<link>` tag, no CDN. The JS side is pulled in transitively by `rehype-katex`.
-
----
-
-## K. Deployment Target and Runtime Constraints
-
-### K1. Deployment platform signals
-
-Files examined:
-- [`next.config.mjs`](next.config.mjs): no `output: "export"`, no Vercel-specific config blocks; does set `serverExternalPackages` for native bindings (see K2)
-- [`vercel.json`](vercel.json): `[NOT FOUND]` at repo root (subagent glob did not surface it)
-- [`Dockerfile`](Dockerfile): present at repo root (gitStatus mentions it, not read here — flagged for direct inspection if deployment target matters)
-- [`docker-compose.yml`](docker-compose.yml): present at repo root
-- [`.github/workflows/`](.github/workflows/): presence not confirmed in this pass
-
-**Interpretation:** the presence of `Dockerfile` + `docker-compose.yml` + `serverExternalPackages` list with non-portable native bindings (canvas, pdf-img-convert, sharp, @libsql/client, dockerode, ssh2) strongly suggests **self-hosted Node/Docker deployment**, not Vercel Serverless. This matters for Phase 4/5: a server-side headless browser would be viable on Docker but would require a `@sparticuz/chromium` workaround on Vercel.
-
-### K2. `next.config.mjs`
-
-[next.config.mjs:1-56](next.config.mjs#L1-L56) — full file:
-
-```javascript
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    unoptimized: true,
-  },
-  // External packages with native bindings (canvas for OCR, LibSQL for database)
-  serverExternalPackages: [
-    "canvas",
-    "pdf-img-convert",
-    "sharp",
-    "@libsql/client",
-    "@libsql/win32-x64-msvc",
-    "@mastra/libsql",
-    "dockerode",
-    "docker-modem",
-    "ssh2"
-  ],
-  async headers() {
-    return [
-      {
-        // Global security headers
-        source: "/(.*)",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-        ],
-      },
-      {
-        // Widget API CORS headers
-        source: "/api/widget/:path*",
-        headers: [
-          { key: "Access-Control-Allow-Origin", value: "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS" },
-          { key: "Access-Control-Allow-Headers", value: "Content-Type, X-Widget-Api-Key" },
-        ],
-      },
-      {
-        // MCP Server CORS headers (external MCP clients)
-        source: "/api/mcp/:path*",
-        headers: [
-          { key: "Access-Control-Allow-Origin", value: "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET, POST, OPTIONS, DELETE" },
-          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization, Mcp-Session-Id, MCP-Protocol-Version" },
-        ],
-      },
-    ]
-  },
-}
-
-export default nextConfig
-```
-
-(One minor transcription variation across reads in the MCP CORS `Allow-Methods` entry — verbatim above is from the direct file read; treat this line as read-from-source rather than inferred.)
-
-**Observations:**
-- `canvas` in `serverExternalPackages` — native dependency present. `canvas` is usable for server-side raster ops; could support server-side SVG→PNG for DOCX/PDF export without headless browser.
-- `sharp` present — available for server-side image manipulation.
-- `pdf-img-convert` present — potentially useful for PDF-to-image conversion if PDF export ever needs preview thumbnails.
-- No `canvas-ng`, no `playwright`, no `puppeteer-core`.
-
-### K3. Serverless timeout/memory limits
-
-**`[NOT FOUND]`** — no `export const runtime = ...`, no `export const maxDuration = ...`, no `export const dynamic = ...` in the artifact API route file. No `vercel.json` functions block. Default Next.js / deployment platform limits apply (typically 30s on Vercel serverless; unlimited on self-hosted Docker).
-
-### K4. S3 upload helper
-
-Grep `rg -n "uploadToS3|s3\.upload|putObject|uploadFile" src/`:
-
-- `uploadFile` imported by [create-artifact.ts:4](src/lib/tools/builtin/create-artifact.ts#L4) and [update-artifact.ts:5](src/lib/tools/builtin/update-artifact.ts#L5) from `@/lib/s3`.
-- [create-artifact.ts:151-155](src/lib/tools/builtin/create-artifact.ts#L151-L155):
-
-```typescript
-      await uploadFile(
-        s3Key,
-        Buffer.from(finalContent, "utf-8"),
-        mimeType
-      )
-```
-
-- Helper utilities: `S3Paths.artifact(organizationId, sessionId, id, ext)` produces the canonical key; `getArtifactExtension(type)` returns an extension string for the S3 key ([create-artifact.ts:141](src/lib/tools/builtin/create-artifact.ts#L141)).
-
-**Reusability for binary exports (Phase 4–5):** `uploadFile` takes a `Buffer` + `mimeType` — can upload DOCX/PDF bytes directly. S3 key scheme `orgs/{orgId}/sessions/{sessionId}/artifacts/{id}.{ext}` can extend to `.docx` / `.pdf` without schema changes.
-
----
-
-## L. Testing Infra
-
-### L1. Test directory structure
-
-From subagent glob:
-
-```
-tests/
-  unit/
-    validate-artifact.test.ts        ← primary artifact tests
-    mcp/tool-adapter.test.ts
-  integration/
-    media/
-      api/jobs.test.ts
-  bench-kb/
-    src/bench-extraction-impact.ts
-```
-
-No `__tests__` directories inside `src/`. Tests are centralized under `tests/`.
-
-### L2. Artifact tests
-
-From `tests/unit/validate-artifact.test.ts` — subagent enumerated `describe` blocks:
-
-- `validateArtifactContent — text/html`
-- `validateArtifactContent — application/react`
-- `validateArtifactContent — image/svg+xml`
-- `validateArtifactContent — application/mermaid`
-- `validateArtifactContent — application/python`
-- `validateArtifactContent — other types pass through`
-- `validateArtifactContent — application/code`
-- `validateArtifactContent — text/markdown`
-- `validateArtifactContent — text/latex`
-- `validateArtifactContent — application/sheet (CSV)`
-- `validateArtifactContent — application/sheet (JSON)`
-- `validateArtifactContent — application/slides`
-- `validateArtifactContent — application/3d`
-- `create_artifact tool — guard rails`
-
-**`[NOT FOUND]`** for `text/document` tests. Phase 8 (or earlier) needs to add them.
-
-### L3. Example test
-
-[validate-artifact.test.ts:27-45](tests/unit/validate-artifact.test.ts#L27-L45) — verified pattern from subagent:
-
-```typescript
-describe("validateArtifactContent — text/html", () => {
-  it("accepts a well-formed document", () => {
-    const r = validateArtifactContent("text/html", VALID_HTML)
-    expect(r.ok).toBe(true)
-    expect(r.errors).toEqual([])
-  })
-
-  it("rejects missing doctype", () => {
-    const r = validateArtifactContent(
-      "text/html",
-      VALID_HTML.replace("<!DOCTYPE html>", "")
-    )
-    expect(r.ok).toBe(false)
-    expect(r.errors.join(" ")).toMatch(/DOCTYPE/)
-  })
-
-  it("rejects missing viewport meta", () => {
-    const r = validateArtifactContent(
-      "text/html",
-      VALID_HTML.replace(/<meta name="viewport"[^>]*\/>/, "")
-    )
-    expect(r.ok).toBe(false)
-    expect(r.errors.join(" ")).toMatch(/viewport/)
-  })
-```
-
-Pattern is simple: parametrize the validator, assert on `{ ok, errors, warnings }`. No mocks. Fast.
-
----
-
-## M. Summary Matrix
-
-| Concern | Already exists? | File path | Library used | Reusability for `text/document` | Notes |
-|---|---|---|---|---|---|
-| Markdown body rendering | ✅ | [streamdown-content.tsx](src/features/conversations/components/chat/streamdown-content.tsx) | Streamdown v2.2.0 | **HIGH** — direct reuse, same renderer | Works today for `text/markdown` |
-| GFM tables | ✅ | Streamdown implicit + `remark-gfm` v4 | — | **HIGH** | Free with Streamdown |
-| Mermaid diagram (preview) | ✅ | [streamdown-content.tsx:40-41](src/features/conversations/components/chat/streamdown-content.tsx#L40-L41), [mermaid-renderer.tsx](src/features/conversations/components/chat/artifacts/renderers/mermaid-renderer.tsx) | Mermaid v11.12.2 | **HIGH** | Inline in markdown, free reuse |
-| Mermaid → PNG (export) | ✅ | [svg-to-png.ts](src/lib/slides/svg-to-png.ts) (`mermaidToBase64Png`) | Mermaid + Canvas API | **HIGH** — call from DOCX/PDF pipeline | Client-side; if export moves server-side, needs replacement |
-| Chart rendering (preview) | ✅ (slides-only) | [chart-to-svg.ts](src/lib/slides/chart-to-svg.ts) | `d3-scale`, `d3-shape` | **MEDIUM** — chart JSON schema exists but needs prompt rules extension for document | Recharts is installed but not used in slides |
-| Chart → image (export) | ✅ (slides-only) | [generate-pptx.ts:620-621](src/lib/slides/generate-pptx.ts#L620-L621) (`svgToBase64Png`) | D3 + Canvas | **HIGH** | Same flow reusable for DOCX/PDF |
-| KaTeX math (preview) | ✅ | [streamdown-content.tsx:82-89](src/features/conversations/components/chat/streamdown-content.tsx#L82-L89) | `remark-math` v6 + `rehype-katex` v7 | **HIGH** | Free with Streamdown |
-| KaTeX math → image / OMML (export) | ❌ | — | — | **MUST BUILD** | Current LaTeX artifact just wraps KaTeX in a preamble; DOCX/PDF cannot embed that |
-| Image embed from URL | ✅ | Streamdown markdown images + slides `fetchImageAsBase64` | Fetch + Canvas | **HIGH** | Works in Streamdown preview |
-| Unsplash resolution | ✅ (HTML + Slides only) | [resolver.ts](src/lib/unsplash/resolver.ts) | Unsplash API + Prisma cache | **MEDIUM** — must add a markdown-image pattern matcher | Phase 3 scope |
-| YAML frontmatter parsing | ❌ | [NOT FOUND] usage; `gray-matter` + `js-yaml` installed | — | **HIGH** (just wire) | Phase 2 |
-| DOCX generation | ❌ | [NOT FOUND] | — | **MUST BUILD / INSTALL** | Phase 4; candidates `docx`, `html-to-docx`, `officegen` |
-| PDF generation | ❌ | [NOT FOUND] | — | **MUST BUILD / INSTALL** | Phase 5; candidates `puppeteer`, `@react-pdf/renderer`, `pdfkit`, `html-pdf-node` |
-| Headless browser | ❌ | — | — | — | `[NOT FOUND]`; decide Phase 4/5 |
-| S3 upload for binaries | ✅ | [create-artifact.ts:151-155](src/lib/tools/builtin/create-artifact.ts#L151-L155) (`uploadFile` + `S3Paths`) | `@aws-sdk/client-s3` | **HIGH** | Takes Buffer + mimeType, extensible to `.docx`/`.pdf` |
-
----
-
-## N. Open Questions for Roadmap Planning
-
-1. **Prompt re-adoption timing.** The orphan [`document.ts`](src/lib/prompts/artifacts/document.ts) exists but is not imported. Does the roadmap re-wire it in Phase 2 (as part of the DocumentRenderer feature) or earlier as a throwaway prep step? Implication: if re-wired early, the LLM can start producing `text/document` output against a stub renderer (status quo); if re-wired in Phase 2, the renderer and prompt go live together.
-
-2. **Frontmatter UI in Phase 2.** What does the cover page look like? A4 paper surface with title-centered-top + author/date footer? A sidebar metadata panel? Determines whether Phase 2 needs a new `DocumentRenderer` component or can parameterize `StreamdownContent`. Reference: slides use an iframe + `srcdoc`; following that pattern gives print-media CSS control for free.
-
-3. **Chart schema for text/document.** Slides use a bespoke `ChartData` JSON shape ([types.ts](src/lib/slides/types.ts)). Should `text/document` support ` ```chart ` fenced blocks with the same JSON, or only Mermaid-based charts (`pie`, `xychart`, `sankey`, `quadrant`, `timeline`) via ` ```mermaid `? Affects prompt rules, validator, renderer. Recommendation: start Mermaid-only to avoid chart-JSON parity work; revisit if needed.
-
-4. **Unsplash pattern extension.** [resolver.ts:10](src/lib/unsplash/resolver.ts#L10) matches `src="unsplash:..."` (HTML only). For `text/document` markdown, images are `![alt](unsplash:keyword)`. Option A: add a new regex and a `resolveMarkdownImages()` function. Option B: pre-process markdown to HTML-like `<img src>` before resolution. Recommendation: A (cleaner separation).
-
-5. **DOCX library choice (Phase 4).** Three realistic paths:
-   - **`docx`** (pure JS, programmatic): full control, handles inline math OMML natively, but need to translate markdown → docx objects manually.
-   - **`html-to-docx`**: render markdown → HTML → DOCX; less control over math/charts.
-   - **Pandoc via CLI**: most faithful output but adds a system dependency (binary in Docker image).
-   Deployment looks self-hosted (see K1), so pandoc is viable but heavy. Recommendation: `docx` for programmatic control.
-
-6. **PDF library choice (Phase 5).** Four paths:
-   - **Puppeteer / Playwright + headless Chromium**: render the same HTML the browser shows, pixel-identical. Works on Docker; needs `@sparticuz/chromium` on Vercel.
-   - **`@react-pdf/renderer`**: react-component-tree → PDF. No Chromium.
-   - **`pdfkit` / `pdfmake`**: programmatic drawing. Least fidelity to preview.
-   - **Server-side reuse of Canvas rasterizer + wrap in PDF shell**: minimal-dep, but needs a light PDF emitter (e.g. `pdf-lib`).
-   Recommendation: decide based on whether we want preview-identical output (→ headless browser) or no-new-binary (→ `@react-pdf/renderer`).
-
-7. **KaTeX at export.** Currently `wrapLatexForDownload()` handles the standalone `text/latex` artifact by emitting `.tex`. For `text/document` DOCX/PDF, inline `$x$` must render as an image (raster) or as OMML (Office Math). DOCX has first-class OMML support via the `docx` library. PDF via headless browser gets KaTeX styling for free. Recommendation: align library choice with §5/§6 — `docx` library emits OMML; headless PDF gets rendered KaTeX.
-
-8. **Split-button download in Phase 6.** The current `handleDownload` has one button that dispatches by `artifact.type`. For `text/document`, should the button become a dropdown with `.md`, `.docx`, `.pdf` options? Or remain single-button defaulting to the richest format available? Affects UI copy and analytics.
-
-9. **Server-side vs. client-side export.** Slides currently do PPTX client-side (no server trip). DOCX/PDF could follow the same pattern if we pick no-new-binary libraries — but that bloats the client bundle. Large artifacts (500 KB markdown + images) may be slow client-side. Recommendation: server endpoint for DOCX/PDF (new API route), return signed S3 URL, client downloads. Reuses existing `uploadFile` helper (K4).
-
-10. **Phase 7 consolidation vs. per-phase drift.** Each phase (2, 3, 4, 5, 6) will touch the type registry. Should Phase 7 (registry consolidation per [phase-7-brief.md](phase-7-brief.md)) move *earlier* to prevent accumulating manual list-sync debt across Phases 2–6, or stay at its scheduled slot? Moving earlier means one consolidation done before feature work; leaving it puts pressure on every intermediate phase to maintain 7–8 parallel lists manually.
-
-11. **Testing in Phase 8.** Currently there are unit tests for `validateArtifactContent` per type but no integration tests for the artifact pipeline end-to-end (create → S3 → Prisma → download). Phase 8 should add: `validateDocument` unit test, frontmatter parse test, DOCX/PDF export smoke test (byte-length sanity + valid container header check).
-
----
-
-## Appendix: Current-State Observations to Flag for Planning
-
-1. **Orphan prompt file.** [`src/lib/prompts/artifacts/document.ts`](src/lib/prompts/artifacts/document.ts) exists on disk (104 lines, full `documentArtifact` config) but is not imported by [`index.ts`](src/lib/prompts/artifacts/index.ts). Restoring the import is a one-line change.
-
-2. **Type registry at 11-type baseline.** `types.ts`, `constants.ts`, `artifact-renderer.tsx`, `chat-input-toolbar.tsx`, `create-artifact.ts`, `_validate-artifact.ts`, and `artifact-panel.tsx` all reflect the 11-type baseline with no `text/document` surface.
-
-3. **No `text/document` tests exist** in [`tests/unit/validate-artifact.test.ts`](tests/unit/validate-artifact.test.ts). Added coverage should land alongside whichever phase re-introduces the validator.
-
-4. **Artifact panel's second `TYPE_LABELS`.** [artifact-panel.tsx:54-66](src/features/conversations/components/chat/artifacts/artifact-panel.tsx#L54-L66) defines a **local** `TYPE_LABELS: Record<string, string>` for the panel header (`"text/html": "HTML"`, `"text/markdown": "Markdown"`, etc.). This is a third source of truth for labels (alongside `constants.ts` `TYPE_LABELS` and the prompt files' `label` field). Flag for Phase 7 consolidation scope.
-
-5. **Deployment ambiguity.** Repo has `Dockerfile` + `docker-compose.yml` at root, no `vercel.json`. Native binaries in `serverExternalPackages` (canvas, sharp, pdf-img-convert, dockerode, ssh2) strongly suggest self-hosted Node/Docker. Phases 4/5 library choice should be made assuming self-host unless user confirms Vercel target.
+- [artifacts-deepscan.md](./artifacts-deepscan.md) — system architecture and end-to-end lifecycle flows
+- [artifacts-capabilities.md](./artifacts-capabilities.md) — per-type capability spec (matrix + constraints + anti-patterns + dependencies)

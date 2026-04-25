@@ -18,6 +18,7 @@ import {
   MoreHorizontal,
   RotateCcw,
   AlertTriangle,
+  AlertCircle,
 } from "@/lib/icons"
 import { Maximize, Minimize } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -144,6 +145,8 @@ export function ArtifactPanel({
   }, [displayArtifact.content])
 
   const handleDownload = useCallback(async () => {
+    // Clear any prior error from a previous attempt before retrying.
+    setExportError(null)
     const ext = getExtension(displayArtifact)
     const filename = `${displayArtifact.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}${ext}`
 
@@ -170,7 +173,9 @@ export function ArtifactPanel({
         a.click()
         URL.revokeObjectURL(url)
       } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error"
         console.error("[ArtifactPanel] PPTX generation failed:", err)
+        setExportError(`PPTX export failed: ${message}`)
       }
       return
     }
@@ -188,6 +193,7 @@ export function ArtifactPanel({
             const result = parseSpec(displayArtifact.content)
             if (!result.ok || !result.spec) {
               console.error("[ArtifactPanel] Spreadsheet spec invalid:", result.errors)
+              setExportError(`XLSX export failed: ${result.errors.join("; ") || "invalid spec"}`)
               return
             }
             const values = evaluateWorkbook(result.spec)
@@ -201,10 +207,22 @@ export function ArtifactPanel({
             return
           }
         } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error"
           console.error("[ArtifactPanel] Spreadsheet download failed:", err)
+          setExportError(`XLSX export failed: ${message}`)
           // fall through to CSV text path
         }
       }
+    }
+
+    // Historical versions archived to S3 (>32 KB) come back here without
+    // their content loaded into the panel. Bail out with a user-visible
+    // error rather than emitting a file that contains "undefined".
+    if (typeof displayArtifact.content !== "string" || displayArtifact.content.length === 0) {
+      setExportError(
+        "Download isn't available for this version — its content was archived to storage and isn't loaded into the panel. Restore the version first, then download.",
+      )
+      return
     }
 
     // LaTeX artifacts are KaTeX fragments — they have no preamble and won't
@@ -252,6 +270,16 @@ export function ArtifactPanel({
 
       try {
         if (format === "md") {
+          // Historical versions stored only in S3 have `content === undefined`
+          // here (only inline-fallback versions ≤ 32 KB carry their bytes in
+          // metadata). Without this guard the user gets a `.md` containing
+          // the literal string "undefined".
+          if (typeof displayArtifact.content !== "string" || displayArtifact.content.length === 0) {
+            setExportError(
+              "Markdown download isn't available for this version — its content was archived to storage and isn't loaded into the panel. Restore the version first, then download.",
+            )
+            return
+          }
           const blob = new Blob([displayArtifact.content], { type: "text/markdown" })
           triggerDownload(blob, `${slug}.md`)
           return
@@ -682,6 +710,24 @@ export function ArtifactPanel({
           </Tooltip>
         </div>
       </div>
+
+      {/* Export-error banner for non-document downloads (PPTX, XLSX, etc.).
+          Document downloads have their own dropdown-scoped error display.
+          Banner is dismissed automatically on the next download attempt. */}
+      {exportError && !isTextDocument && (
+        <div className="flex items-start gap-2 px-4 py-2 text-xs text-destructive bg-destructive/10 border-b border-destructive/30">
+          <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+          <div className="flex-1">{exportError}</div>
+          <button
+            type="button"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => setExportError(null)}
+            aria-label="Dismiss error"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Tab bar — hidden for application/code (preview == code, redundant)
           and for text/document (preview is the source of truth for exports;

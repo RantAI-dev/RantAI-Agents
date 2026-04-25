@@ -47,12 +47,12 @@ export async function indexArtifactContent(
     const action = options?.isUpdate ? "Re-indexed" : "Indexed"
     console.log(`[ArtifactIndexer] ${action} ${chunks.length} chunks for "${title}"`)
   } catch (err) {
-    // Failures are non-fatal for the parent tool, but we record the
-    // status so the UI can show a "not searchable" badge instead of
-    // silently misleading the user.
+    // Failures are non-fatal for the parent tool. We record the status so the
+    // UI can show a "not searchable" badge instead of silently misleading the
+    // user. Do NOT rethrow — callers fire-and-forget this function and would
+    // generate an unhandled rejection if the rejection escaped this catch.
     console.error("[ArtifactIndexer] Failed to index artifact:", err)
     await markRagStatus(documentId, false).catch(() => {})
-    throw err
   }
 }
 

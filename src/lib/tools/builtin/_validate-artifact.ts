@@ -76,13 +76,43 @@ const VALIDATORS: Record<
   "application/3d": validate3d,
 }
 
+/**
+ * Wall-clock budget enforced on every `validateArtifactContent` call.
+ *
+ * Without a cap, a malicious or pathological artifact can wedge a validator
+ * for an unbounded time — `validateLatex` is hand-rolled regex parsing,
+ * `validateSlides` walks a deeply branching tree, and `evaluateWorkbook`'s
+ * topological sort is O(n²) worst case. The 5-second budget is generous for
+ * legitimate artifacts (typical validation completes in < 50ms) and short
+ * enough that a malicious payload can't stall the request indefinitely.
+ */
+export let VALIDATE_TIMEOUT_MS = 5_000
+
+/** Test-only hook — production code should not call this. */
+export function __setValidateTimeoutMsForTesting(ms: number) {
+  VALIDATE_TIMEOUT_MS = ms
+}
+
 export async function validateArtifactContent(
   type: string,
   content: string
 ): Promise<ArtifactValidationResult> {
   const validator = VALIDATORS[type as ArtifactType]
   if (!validator) return { ok: true, errors: [], warnings: [] }
-  return validator(content)
+  return Promise.race([
+    Promise.resolve().then(() => validator(content)),
+    new Promise<ArtifactValidationResult>((resolve) => {
+      setTimeout(() => {
+        resolve({
+          ok: false,
+          errors: [
+            `Validation timeout: ${type} validator exceeded ${VALIDATE_TIMEOUT_MS}ms budget. Content may be too complex (e.g. deeply nested structures, oversized formula DAG).`,
+          ],
+          warnings: [],
+        })
+      }, VALIDATE_TIMEOUT_MS).unref?.()
+    }),
+  ])
 }
 
 // ---------------------------------------------------------------------------

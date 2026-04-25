@@ -7,7 +7,10 @@
  *
  * Concurrency note: mermaid is a global singleton; the window swap + restore
  * in the finally block keeps the Node process from leaking a stale window
- * between calls. Serialized per call via JS single-threaded event loop.
+ * between calls. Concurrent callers MUST be serialized — between the global
+ * swap and the `await import("mermaid")` resolution there is an event-loop
+ * yield where a second call would clobber the first call's window. We chain
+ * calls through `renderQueue` so only one render runs at a time.
  */
 
 import "server-only"
@@ -47,10 +50,21 @@ function restore(key: ShimKey, snap: Snapshot) {
   }
 }
 
+// Per-process Promise mutex. Each call appends to the chain so the next render
+// only starts after the previous one's `finally` block has restored globals.
+// `.catch(() => undefined)` keeps a rejected render from poisoning the chain.
+let renderQueue: Promise<unknown> = Promise.resolve()
+
 export async function mermaidToSvg(code: string): Promise<string> {
   const trimmed = code.trim()
   if (!trimmed) throw new Error("[mermaid-to-svg] empty code")
 
+  const next = renderQueue.then(() => doRender(trimmed))
+  renderQueue = next.catch(() => undefined)
+  return next
+}
+
+async function doRender(trimmed: string): Promise<string> {
   const dom = new JSDOM(
     `<!DOCTYPE html><html><body><div id="mm-host"></div></body></html>`,
     { pretendToBeVisual: true },

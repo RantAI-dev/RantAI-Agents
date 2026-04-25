@@ -140,9 +140,14 @@ export async function resolveSlideImages(content: string): Promise<string> {
 
 /**
  * Resolve a list of queries to URLs (with caching).
- * Shared logic between HTML and Slides resolvers.
+ * Shared logic between HTML, Slides, and DocumentAst resolvers.
+ *
+ * Exported so the DocumentAst tree-walker can reuse the same Prisma cache
+ * + parallel-fetch + fallback semantics rather than calling `searchPhoto`
+ * directly (which would bypass the 30-day cache and hammer the rate-limited
+ * Unsplash API on every document validation / DOCX export).
  */
-async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
+export async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
   const resolved = new Map<string, string>()
 
   // 1. Check cache first
@@ -162,25 +167,34 @@ async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
 
   await Promise.all(
     uncached.map(async (query) => {
-      const photo = await searchPhoto(query)
+      let photo: Awaited<ReturnType<typeof searchPhoto>> = null
+      try {
+        photo = await searchPhoto(query)
+      } catch (err) {
+        // Network/auth/rate-limit failures are non-fatal — fall through to
+        // placeholder. Without this catch the whole Promise.all would reject
+        // and a single bad query would poison the entire batch.
+        console.warn("[unsplash] searchPhoto threw, using fallback:", err)
+      }
 
       if (photo) {
         // Use regular size with width parameter for optimal loading
         const url = `${photo.urls.regular}&w=1200`
         resolved.set(query, url)
 
-        // Cache the result
+        // Cache the result. Upsert (not create) so concurrent writers don't
+        // race on the @unique constraint on `query` — the previous code
+        // swallowed the duplicate-key error in an empty catch.
+        const expiresAt = new Date(Date.now() + CACHE_DAYS * 24 * 60 * 60 * 1000)
+        const attribution = `Photo by ${photo.user.name} on Unsplash`
         try {
-          await prisma.resolvedImage.create({
-            data: {
-              query,
-              url,
-              attribution: `Photo by ${photo.user.name} on Unsplash`,
-              expiresAt: new Date(Date.now() + CACHE_DAYS * 24 * 60 * 60 * 1000),
-            },
+          await prisma.resolvedImage.upsert({
+            where: { query },
+            create: { query, url, attribution, expiresAt },
+            update: { url, attribution, expiresAt },
           })
-        } catch {
-          // Ignore duplicate key errors (race condition)
+        } catch (err) {
+          console.warn("[unsplash] Cache upsert failed:", err)
         }
       } else {
         // Unsplash failed - use placeholder with keyword text

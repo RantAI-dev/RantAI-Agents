@@ -476,12 +476,29 @@ async function renderTable(
 // Cover page rendering
 // ────────────────────────────────────────────────────────────────────────────
 
-// v1: logoUrl is intentionally skipped to keep cover page synchronous and
-// deterministic. The async image render path already supports logos if needed.
-function renderCoverPage(cover: NonNullable<DocumentAst["coverPage"]>): Paragraph[] {
+async function renderCoverPage(cover: NonNullable<DocumentAst["coverPage"]>): Promise<Paragraph[]> {
   const out: Paragraph[] = []
   // Top padding (~2 inches at 1440 twips/inch)
   out.push(new Paragraph({ spacing: { before: 2880 }, children: [] }))
+  // Optional centred logo image at the very top. Failures fall through silently
+  // — a missing logo shouldn't block the rest of the cover page.
+  if (cover.logoUrl) {
+    try {
+      const fetched = await fetchImage(cover.logoUrl)
+      out.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new ImageRun({
+          data: fetched.buf,
+          transformation: { width: 160, height: 160 },
+          type: fetched.type,
+        })],
+      }))
+      // Spacer between logo and title
+      out.push(new Paragraph({ spacing: { before: 480 }, children: [] }))
+    } catch (err) {
+      console.warn("[to-docx] cover logo fetch failed, skipping:", err)
+    }
+  }
   // Title
   out.push(new Paragraph({
     alignment: AlignmentType.CENTER,
@@ -541,18 +558,44 @@ export async function astToDocx(ast: DocumentAst): Promise<Buffer> {
     ? new Footer({ children: (await renderBlocks(ast.footer.children, ctx)) as any })
     : undefined
 
-  const coverChildren = ast.coverPage ? renderCoverPage(ast.coverPage) : []
+  const coverChildren = ast.coverPage ? await renderCoverPage(ast.coverPage) : []
   const bodyChildren = await renderBlocks(ast.body, ctx)
 
   // Collect footnote definitions accumulated during body (and header/footer) rendering.
+  // The docx library only accepts Paragraph[] inside footnotes (no Tables, no
+  // ImageRun-only blocks). We render the full block tree, keep all paragraphs,
+  // and replace any dropped Table with a placeholder paragraph so the user
+  // sees that *something* is missing rather than silently losing content.
   const footnoteDefinitions: Record<number, { children: Paragraph[] }> = {}
   const footnoteIds = Object.keys(ctx.footnotes).map(Number)
   for (const id of footnoteIds) {
     const blocks = ctx.footnotes[id]
     const rendered = await renderBlocks(blocks, ctx)
-    footnoteDefinitions[id] = {
-      children: rendered.filter((r): r is Paragraph => r instanceof Paragraph),
+    const children: Paragraph[] = []
+    for (const item of rendered) {
+      if (item instanceof Paragraph) {
+        children.push(item)
+      } else {
+        // docx footnotes don't support tables — leave a marker so the user
+        // knows content was elided rather than misread the footnote.
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "[table omitted from footnote — see body for full content]",
+                italics: true,
+                color: "6B7280",
+              }),
+            ],
+          }),
+        )
+      }
     }
+    if (children.length === 0) {
+      // Defensive: docx will fail to render a footnote with zero children.
+      children.push(new Paragraph({ children: [new TextRun({ text: "" })] }))
+    }
+    footnoteDefinitions[id] = { children }
   }
 
   const doc = new Document({

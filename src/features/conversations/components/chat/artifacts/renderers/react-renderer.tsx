@@ -387,26 +387,44 @@ export function ReactRenderer({ content, onFixWithAI }: ReactRendererProps) {
   const restoring = useRef(false)
   const [loading, setLoading] = useState(true)
 
-  const { srcdoc, unsupported } = useMemo(() => {
-    setError(null)
+  // Pure derivation — no state writes here. React forbids state updates
+  // during render (which is when useMemo factories run); StrictMode warns,
+  // and the value can be discarded and recomputed without the corresponding
+  // setError taking effect. Side effects move to the useEffect below.
+  const { srcdoc, unsupported, processError } = useMemo(() => {
     try {
       const { processedCode, componentName, unsupportedImports, directives } = preprocessCode(content)
-      if (unsupportedImports.length > 0) {
-        setError(
-          `Unsupported ${unsupportedImports.length === 1 ? "library" : "libraries"}: ${unsupportedImports.join(", ")}. ` +
-          `Available: react, recharts, lucide-react, framer-motion.`
-        )
-      }
       return {
         srcdoc: buildSrcdoc(processedCode, componentName, directives),
         unsupported: unsupportedImports,
+        processError: null as string | null,
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to process code")
-      return { srcdoc: "", unsupported: [] }
+      return {
+        srcdoc: "",
+        unsupported: [] as string[],
+        processError: err instanceof Error ? err.message : "Failed to process code",
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, retryCount])
+
+  // Mirror processError + unsupported imports into the error state. Runs
+  // after render, satisfying React's "no setState during render" rule.
+  useEffect(() => {
+    if (processError) {
+      setError(processError)
+      return
+    }
+    if (unsupported.length > 0) {
+      setError(
+        `Unsupported ${unsupported.length === 1 ? "library" : "libraries"}: ${unsupported.join(", ")}. ` +
+          `Available: react, recharts, lucide-react, framer-motion.`,
+      )
+      return
+    }
+    setError(null)
+  }, [processError, unsupported])
 
   // Reset load tracking when content changes
   useEffect(() => {
@@ -435,6 +453,10 @@ export function ReactRenderer({ content, onFixWithAI }: ReactRendererProps) {
   // Listen for error messages from the iframe
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {
+      // Only accept messages from our own iframe. Without this guard, other
+      // iframes on the page (or even cross-origin embedders) can fire fake
+      // error events and force this renderer into the error state.
+      if (e.source !== iframeRef.current?.contentWindow) return
       if (e.data?.type === "error" && typeof e.data.message === "string") {
         setError(e.data.message)
       }

@@ -6,7 +6,7 @@
  * Identical keywords are deduped so each triggers at most one API call.
  */
 
-import { searchPhoto } from "@/lib/unsplash/client"
+import { resolveQueries } from "@/lib/unsplash/resolver"
 import type { BlockNode, DocumentAst, ListItem } from "./schema"
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -101,22 +101,29 @@ export async function resolveUnsplashInAst(ast: DocumentAst): Promise<DocumentAs
     rawSrcs.add(ast.coverPage.logoUrl)
   }
 
-  // 2. Resolve each unique raw src (parallelised, deduped)
-  const entries = await Promise.all(
-    [...rawSrcs].map(async (raw): Promise<[string, string]> => {
-      const kw = extractKeyword(raw)
-      if (!kw) return [raw, fallback("")]
-      try {
-        const photo = await searchPhoto(kw)
-        const url = photo ? `${photo.urls.regular}&w=1200` : fallback(kw)
-        return [raw, url]
-      } catch {
-        return [raw, fallback(kw)]
-      }
-    }),
-  )
-
-  const map = new Map<string, string>(entries)
+  // 2. Resolve each unique raw src via the shared cache-backed resolver.
+  // Mapping: rawSrc → keyword → resolved URL. Going through resolveQueries
+  // gives us the same 30-day Prisma cache + concurrent-safe upsert that the
+  // HTML and slides paths use.
+  const rawByKeyword = new Map<string, string[]>()
+  for (const raw of rawSrcs) {
+    const kw = extractKeyword(raw)
+    if (!kw) continue
+    const list = rawByKeyword.get(kw) ?? []
+    list.push(raw)
+    rawByKeyword.set(kw, list)
+  }
+  const keywords = [...rawByKeyword.keys()]
+  const resolved = keywords.length > 0 ? await resolveQueries(keywords) : new Map<string, string>()
+  const map = new Map<string, string>()
+  for (const raw of rawSrcs) {
+    const kw = extractKeyword(raw)
+    if (!kw) {
+      map.set(raw, fallback(""))
+      continue
+    }
+    map.set(raw, resolved.get(kw) ?? fallback(kw))
+  }
 
   // 3. Deep-clone then replace
   const out: DocumentAst = structuredClone(ast)

@@ -8,7 +8,8 @@ import {
   type BlockNode,
   type InlineNode,
 } from "@/lib/document-ast/schema"
-import { MERMAID_INIT_OPTIONS } from "@/lib/rendering/mermaid-theme"
+import { getMermaidInitOptions } from "@/lib/rendering/mermaid-theme"
+import { useTheme } from "next-themes"
 import { chartToSvg } from "@/lib/rendering/chart-to-svg"
 import type { ChartData } from "@/lib/slides/types"
 
@@ -399,7 +400,10 @@ interface DocumentRendererProps {
 
 export function DocumentRenderer({ content }: DocumentRendererProps) {
   const ast = useMemo(() => parseSafe(content), [content])
-  const footnotes = useMemo(newFootnoteSink, [content])
+  // Sink is mutated as a side effect of the AST walk during render. Memoizing
+  // would reuse the populated sink across re-renders, doubling footnote
+  // entries every time. Allocate fresh per render — newFootnoteSink() is cheap.
+  const footnotes = newFootnoteSink()
 
   const tocEntries = useMemo(() => {
     if (!ast) return [] as Array<{ level: number; text: string; bookmarkId?: string }>
@@ -505,6 +509,8 @@ export function DocumentRenderer({ content }: DocumentRendererProps) {
 function MermaidPreviewBlock({ code, caption }: { code: string; caption?: string }) {
   const [svg, setSvg] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
+  const { resolvedTheme } = useTheme()
+  const themeKey: "light" | "dark" = resolvedTheme === "dark" ? "dark" : "light"
 
   React.useEffect(() => {
     let cancelled = false
@@ -545,7 +551,7 @@ function MermaidPreviewBlock({ code, caption }: { code: string; caption?: string
         }
 
         const mermaid = (await import("mermaid")).default
-        mermaid.initialize(MERMAID_INIT_OPTIONS)
+        mermaid.initialize(getMermaidInitOptions(themeKey))
         const id = `mmd-${Math.random().toString(36).slice(2)}`
         const { svg } = await mermaid.render(id, code.trim())
         if (!cancelled) setSvg(svg)
@@ -556,7 +562,7 @@ function MermaidPreviewBlock({ code, caption }: { code: string; caption?: string
     return () => {
       cancelled = true
     }
-  }, [code])
+  }, [code, themeKey])
 
   return (
     <figure className="my-4 flex flex-col items-center">
