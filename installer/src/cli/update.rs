@@ -6,7 +6,10 @@ pub fn run(branch: Option<&str>) -> ExitCode {
     let state = match crate::state::InstallState::load_from(&path) {
         Ok(Some(s)) => s,
         Ok(None) => {
-            eprintln!("No install detected at {}. Run the installer first.", path.display());
+            eprintln!(
+                "No install detected at {}. Run the installer first.",
+                path.display()
+            );
             return ExitCode::FAILURE;
         }
         Err(e) => {
@@ -21,12 +24,14 @@ pub fn run(branch: Option<&str>) -> ExitCode {
     }
 
     // Build an InstallConfig from state for update_mode = true.
-    let mut config = crate::app::InstallConfig::default();
-    config.profile = state.profile;
-    config.mode = state.mode;
-    config.install_dir = state.install_dir.clone();
-    config.data_dir = state.data_dir.clone();
-    config.update_mode = true;
+    let config = crate::app::InstallConfig {
+        profile: state.profile,
+        mode: state.mode,
+        install_dir: state.install_dir.clone(),
+        data_dir: state.data_dir.clone(),
+        update_mode: true,
+        ..Default::default()
+    };
 
     let rt = match tokio::runtime::Runtime::new() {
         Ok(r) => r,
@@ -64,6 +69,10 @@ pub fn run(branch: Option<&str>) -> ExitCode {
         }
 
         let _ = install.await;
-        if had_error { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+        if had_error {
+            ExitCode::FAILURE
+        } else {
+            ExitCode::SUCCESS
+        }
     })
 }

@@ -4,25 +4,37 @@ use rantai_agents_installer::cli::Cli;
 #[test]
 fn parses_update() {
     let cli = Cli::try_parse_from(["rantai-agents", "update"]).unwrap();
-    assert!(matches!(cli.command, rantai_agents_installer::cli::Command::Update { .. }));
+    assert!(matches!(
+        cli.command,
+        rantai_agents_installer::cli::Command::Update { .. }
+    ));
 }
 
 #[test]
 fn parses_doctor() {
     let cli = Cli::try_parse_from(["rantai-agents", "doctor"]).unwrap();
-    assert!(matches!(cli.command, rantai_agents_installer::cli::Command::Doctor));
+    assert!(matches!(
+        cli.command,
+        rantai_agents_installer::cli::Command::Doctor
+    ));
 }
 
 #[test]
 fn parses_status() {
     let cli = Cli::try_parse_from(["rantai-agents", "status"]).unwrap();
-    assert!(matches!(cli.command, rantai_agents_installer::cli::Command::Status));
+    assert!(matches!(
+        cli.command,
+        rantai_agents_installer::cli::Command::Status
+    ));
 }
 
 #[test]
 fn parses_version() {
     let cli = Cli::try_parse_from(["rantai-agents", "version"]).unwrap();
-    assert!(matches!(cli.command, rantai_agents_installer::cli::Command::Version));
+    assert!(matches!(
+        cli.command,
+        rantai_agents_installer::cli::Command::Version
+    ));
 }
 
 #[test]

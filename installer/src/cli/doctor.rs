@@ -5,7 +5,10 @@ pub fn run() -> ExitCode {
     let state = match crate::state::InstallState::load_from(&path) {
         Ok(Some(s)) => s,
         Ok(None) => {
-            eprintln!("No install detected at {}. Run the installer first.", path.display());
+            eprintln!(
+                "No install detected at {}. Run the installer first.",
+                path.display()
+            );
             return ExitCode::FAILURE;
         }
         Err(e) => {
@@ -17,7 +20,13 @@ pub fn run() -> ExitCode {
     let mut ok_count = 0u32;
     let mut bad_count = 0u32;
     let mut check = |name: &str, ok: bool, msg: String| {
-        let mark = if ok { ok_count += 1; "+" } else { bad_count += 1; "x" };
+        let mark = if ok {
+            ok_count += 1;
+            "+"
+        } else {
+            bad_count += 1;
+            "x"
+        };
         println!("  {mark} {name:<40} {msg}");
     };
 
