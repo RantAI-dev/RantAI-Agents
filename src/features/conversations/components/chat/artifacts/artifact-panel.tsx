@@ -108,15 +108,26 @@ export function ArtifactPanel({
     return { ...artifact, content: ver.content, title: ver.title }
   }, [artifact, viewingVersionIdx])
 
-  // Initialize edit content when entering edit mode or artifact changes
-  // Skip if a save is in progress to prevent overwriting the editor
+  // Initialize edit content when entering edit mode or artifact changes.
+  // Skip if a save is in progress to prevent overwriting the editor.
+  // Also skip when the editor is mid-edit (`isDirty`) so an LLM update
+  // arriving while the user types doesn't silently discard their
+  // unsaved changes — a banner surfaces instead so the user can either
+  // discard their edit (re-enter edit mode to pull the new content) or
+  // save what they have on top of the new content.
   useEffect(() => {
-    if (isEditing && !isSaving) {
-      setEditContent(displayArtifact.content)
-      setIsDirty(false)
-      setSaveError(null)
+    if (!isEditing) return
+    if (isSaving) return
+    if (isDirty) {
+      setSaveError(
+        "The artifact was updated elsewhere while you were editing. Your unsaved changes are still in this editor; click Save to overwrite the new version, or click Discard to load the latest content.",
+      )
+      return
     }
-  }, [isEditing, displayArtifact.content, isSaving])
+    setEditContent(displayArtifact.content)
+    setIsDirty(false)
+    setSaveError(null)
+  }, [isEditing, displayArtifact.content, isSaving, isDirty])
 
   // Reset version view to latest when artifact is updated externally
   useEffect(() => {
@@ -409,16 +420,16 @@ export function ArtifactPanel({
     if (!ver) return
     if (isSaving) return
     setIsSaving(true)
+    setSaveError(null)
     try {
-      onUpdateArtifact?.({
-        id: artifact.id,
-        title: ver.title || artifact.title,
-        type: artifact.type,
-        content: ver.content,
-        language: artifact.language,
-      })
+      // Pessimistic ordering: persist to the server first, then update
+      // in-memory state. The earlier flow updated memory before the
+      // fetch and silently console.error'd on failure — so the panel
+      // would show content the server had rejected with no banner. Now
+      // a 4xx/5xx surfaces through `saveError` and the panel keeps
+      // showing the historical version until the user retries.
       if (sessionId) {
-        await fetch(
+        const response = await fetch(
           `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifact.id}`,
           {
             method: "PUT",
@@ -429,10 +440,29 @@ export function ArtifactPanel({
             }),
           }
         )
+        if (!response.ok) {
+          let message = `Restore failed (HTTP ${response.status})`
+          try {
+            const body = await response.json()
+            if (body?.error) message = String(body.error)
+          } catch {
+            // body wasn't JSON — keep the HTTP-status message
+          }
+          setSaveError(message)
+          return
+        }
       }
+      onUpdateArtifact?.({
+        id: artifact.id,
+        title: ver.title || artifact.title,
+        type: artifact.type,
+        content: ver.content,
+        language: artifact.language,
+      })
       setViewingVersionIdx(null)
     } catch (err) {
       console.error("[ArtifactPanel] Restore error:", err)
+      setSaveError(err instanceof Error ? err.message : "Restore failed")
     } finally {
       setIsSaving(false)
     }
@@ -447,18 +477,35 @@ export function ArtifactPanel({
   const handleDelete = useCallback(async () => {
     if (isDeleting) return
     setIsDeleting(true)
+    setExportError(null)
 
     try {
       if (sessionId) {
-        await fetch(
+        const response = await fetch(
           `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifact.id}`,
           { method: "DELETE" }
         )
+        if (!response.ok) {
+          let message = `Delete failed (HTTP ${response.status})`
+          try {
+            const body = await response.json()
+            if (body?.error) message = String(body.error)
+          } catch {
+            // body wasn't JSON
+          }
+          // Surface server failure inline rather than silently removing
+          // the artifact from the UI as the previous code did. The
+          // panel stays open so the user can retry; on success below
+          // we proceed with the in-memory remove + close.
+          setExportError(message)
+          return
+        }
       }
       onDeleteArtifact?.(artifact.id)
       onClose()
     } catch (err) {
       console.error("[ArtifactPanel] Delete error:", err)
+      setExportError(err instanceof Error ? err.message : "Delete failed")
     } finally {
       setIsDeleting(false)
     }
