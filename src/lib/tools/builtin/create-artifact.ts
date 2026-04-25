@@ -124,9 +124,9 @@ export const createArtifactTool: ToolDefinition = {
     // the transformed AST JSON via validation.content.
     let finalContent = validation.content ?? content
     if (type === "text/html") {
-      finalContent = await resolveImages(content)
+      finalContent = await resolveImages(finalContent)
     } else if (type === "application/slides") {
-      finalContent = await resolveSlideImages(content)
+      finalContent = await resolveSlideImages(finalContent)
     }
 
     // Persist to S3 + Document (knowledge system)
