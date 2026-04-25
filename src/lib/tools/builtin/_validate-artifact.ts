@@ -58,9 +58,23 @@ const MAX_INLINE_STYLE_LINES = 10
  * Validators may be sync or async — `validateArtifactContent` awaits the
  * result so callers always get a resolved `ArtifactValidationResult`.
  */
+/**
+ * Optional context passed through the dispatcher into individual validators.
+ *
+ * - `isNew`: this content is being CREATED, not updated. Lets validators apply
+ *   stricter rules (e.g. size caps, layout deprecations) only to fresh content
+ *   and grandfather existing artifacts that pre-date the rule.
+ */
+export interface ValidationContext {
+  isNew?: boolean
+}
+
 const VALIDATORS: Record<
   ArtifactType,
-  (content: string) => ArtifactValidationResult | Promise<ArtifactValidationResult>
+  (
+    content: string,
+    ctx?: ValidationContext,
+  ) => ArtifactValidationResult | Promise<ArtifactValidationResult>
 > = {
   "text/html": validateHtml,
   "application/react": validateReact,
@@ -95,12 +109,13 @@ export function __setValidateTimeoutMsForTesting(ms: number) {
 
 export async function validateArtifactContent(
   type: string,
-  content: string
+  content: string,
+  ctx?: ValidationContext,
 ): Promise<ArtifactValidationResult> {
   const validator = VALIDATORS[type as ArtifactType]
   if (!validator) return { ok: true, errors: [], warnings: [] }
-  return Promise.race([
-    Promise.resolve().then(() => validator(content)),
+  const result = await Promise.race([
+    Promise.resolve().then(() => validator(content, ctx)),
     new Promise<ArtifactValidationResult>((resolve) => {
       setTimeout(() => {
         resolve({
@@ -113,6 +128,20 @@ export async function validateArtifactContent(
       }, VALIDATE_TIMEOUT_MS).unref?.()
     }),
   ])
+  // Post-validation: resolve unsplash:keyword URLs for HTML and slides so
+  // every entry-point (LLM tool, API route, manual edit via service.ts) gets
+  // resolved content without each having to call the resolvers itself.
+  // text/document already resolves inside validateDocument; other types skip.
+  if (!result.ok) return result
+  if (type === "text/html") {
+    const { resolveImages } = await import("@/lib/unsplash")
+    return { ...result, content: await resolveImages(result.content ?? content) }
+  }
+  if (type === "application/slides") {
+    const { resolveSlideImages } = await import("@/lib/unsplash")
+    return { ...result, content: await resolveSlideImages(result.content ?? content) }
+  }
+  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +209,7 @@ const MAX_BULLET_WORDS = 10
 const MIN_DECK_SLIDES = 7
 const MAX_DECK_SLIDES = 12
 
-function validateSlides(content: string): ArtifactValidationResult {
+function validateSlides(content: string, ctx?: ValidationContext): ArtifactValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
@@ -300,13 +329,17 @@ function validateSlides(content: string): ArtifactValidationResult {
       }
     }
 
-    // image-text is a deprecated alias for content (renderer + PPTX both
-    // treat it as content with no image support). Steer the LLM toward
-    // content explicitly.
+    // image-text is deprecated. New artifacts must use `content` (renderer +
+    // PPTX both treat the two identically anyway, so there's no migration cost
+    // beyond renaming). Existing artifacts still validate to keep them
+    // editable until their next save replaces the layout.
     if (s.layout === "image-text") {
-      warnings.push(
-        `Slide ${i + 1} uses \`image-text\` layout — this renders identically to \`content\` and adds no image support. Use \`content\` instead.`,
-      )
+      const message = `Slide ${i + 1} uses \`image-text\` layout — this renders identically to \`content\` and adds no image support. Use \`content\` instead.`
+      if (ctx?.isNew) {
+        errors.push(message)
+      } else {
+        warnings.push(message)
+      }
     }
 
     // Closing slides should have a title (the CTA / takeaway line).
@@ -1031,13 +1064,29 @@ function validateSheet(content: string): ArtifactValidationResult {
 // Markdown validation
 // ---------------------------------------------------------------------------
 
-function validateMarkdown(content: string): ArtifactValidationResult {
+/** Hard size cap on newly created markdown artifacts (existing ones grandfathered). */
+const MARKDOWN_NEW_CAP_BYTES = 128 * 1024
+
+function validateMarkdown(content: string, ctx?: ValidationContext): ArtifactValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
   if (!content.trim()) {
     errors.push("Markdown content is empty.")
     return { ok: false, errors, warnings }
+  }
+
+  // Per-type size cap on creates only — updates of pre-existing oversized
+  // artifacts must keep working so users can still edit them down to size
+  // rather than getting locked out.
+  if (ctx?.isNew) {
+    const bytes = Buffer.byteLength(content, "utf-8")
+    if (bytes > MARKDOWN_NEW_CAP_BYTES) {
+      errors.push(
+        `Markdown content exceeds new-artifact size cap (${Math.round(bytes / 1024)}KB > ${MARKDOWN_NEW_CAP_BYTES / 1024}KB). Split into multiple artifacts or move long-form prose into text/document.`,
+      )
+      return { ok: false, errors, warnings }
+    }
   }
 
   const lines = content.split("\n")
@@ -1072,9 +1121,18 @@ function validateMarkdown(content: string): ArtifactValidationResult {
   }
 
   if (/<script[\s>]/i.test(content)) {
-    warnings.push(
+    // Strict mode (env-gated, default off) treats <script> as a hard error so
+    // the LLM/user can't ship markdown that includes embedded scripts. Default
+    // is a soft warning to avoid breaking legitimate stored artifacts that may
+    // have <script> in code blocks for tutorial purposes.
+    const strict = process.env.ARTIFACT_STRICT_MARKDOWN_VALIDATION === "true"
+    const message =
       "Found a <script> tag. Markdown does not execute scripts — if you need an interactive page, use the `text/html` artifact type instead."
-    )
+    if (strict) {
+      errors.push(message)
+    } else {
+      warnings.push(message)
+    }
   }
 
   // Raw HTML tags the prompt forbids — most renderers either drop them or

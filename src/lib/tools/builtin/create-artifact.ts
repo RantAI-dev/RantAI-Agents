@@ -3,7 +3,6 @@ import type { ToolDefinition } from "../types"
 import { prisma } from "@/lib/prisma"
 import { uploadFile, S3Paths, getArtifactExtension } from "@/lib/s3"
 import { indexArtifactContent } from "@/lib/rag"
-import { resolveImages, resolveSlideImages } from "@/lib/unsplash"
 import {
   ARTIFACT_TYPES,
   type ArtifactType,
@@ -104,7 +103,7 @@ export const createArtifactTool: ToolDefinition = {
     // Structural validation for HTML/React. Failures are surfaced back to the
     // LLM so it can self-correct on the next tool call. Other artifact types
     // pass through unchanged.
-    const validation = await validateArtifactContent(type, content)
+    const validation = await validateArtifactContent(type, content, { isNew: true })
     let validationWarnings: string[] = validation.warnings
     if (!validation.ok) {
       return {
@@ -119,15 +118,10 @@ export const createArtifactTool: ToolDefinition = {
       }
     }
 
-    // Resolve unsplash: URLs to real images for HTML and slides artifacts.
-    // For text/document the validator already resolved Unsplash and returned
-    // the transformed AST JSON via validation.content.
-    let finalContent = validation.content ?? content
-    if (type === "text/html") {
-      finalContent = await resolveImages(finalContent)
-    } else if (type === "application/slides") {
-      finalContent = await resolveSlideImages(finalContent)
-    }
+    // The validator now resolves unsplash:keyword URLs for HTML/slides/document
+    // and returns the rewritten content via validation.content, so we just
+    // pick that up here.
+    const finalContent = validation.content ?? content
 
     // Persist to S3 + Document (knowledge system)
     let persisted = true
