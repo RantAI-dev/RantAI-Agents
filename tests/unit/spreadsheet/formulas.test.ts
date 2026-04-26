@@ -87,6 +87,39 @@ describe("evaluateWorkbook — formulas", () => {
     expect(v.get("Sheet1!A1")?.error).toMatch(/circular|cycle/i)
     expect(v.get("Sheet1!B1")?.error).toMatch(/circular|cycle/i)
   })
+
+  it("evaluates formulas in topological order using Kahn's algorithm", () => {
+    // Long chain B1 ← C1 ← D1 ← E1 ← A1=1. Each cell depends on the
+    // previous one; the evaluator must compute A1 first, then B1, ...,
+    // E1. The earlier O(n²) naive scan handled this fine; this test
+    // pins the behavior so the Kahn's-algorithm rewrite can't regress
+    // the chain semantics silently.
+    const v = evaluateWorkbook(
+      spec([
+        { ref: "E1", formula: "=D1+1" },
+        { ref: "D1", formula: "=C1+1" },
+        { ref: "C1", formula: "=B1+1" },
+        { ref: "B1", formula: "=A1+1" },
+        { ref: "A1", value: 10 },
+      ])
+    )
+    expect(v.get("Sheet1!E1")?.value).toBe(14)
+  })
+
+  it("preserves dependency error types instead of collapsing every error to #REF!", () => {
+    // A1 produces #DIV/0!; B1 depends on A1. The dependent should surface
+    // the same #DIV/0! type, not a generic #REF!. Earlier code threw
+    // FormulaError.REF unconditionally on any upstream error, which hid
+    // the root cause from anyone debugging a chain.
+    const v = evaluateWorkbook(
+      spec([
+        { ref: "A1", formula: "=1/0" },
+        { ref: "B1", formula: "=A1+1" },
+      ])
+    )
+    expect(v.get("Sheet1!A1")?.error).toMatch(/DIV/i)
+    expect(v.get("Sheet1!B1")?.error).toMatch(/DIV/i)
+  })
 })
 
 describe("evaluateWorkbook — named ranges", () => {

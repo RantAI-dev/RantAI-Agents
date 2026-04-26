@@ -1040,6 +1040,259 @@ describe("validateArtifactContent — application/slides", () => {
   })
 })
 
+describe("validateArtifactContent — application/slides visual layouts", () => {
+  const v = async (c: string) => await validateArtifactContent("application/slides", c)
+
+  /** Wrap a single visual slide between a title and a closing slide so the
+   *  "first slide is not title" / "no closing slide" structural warnings
+   *  don't crowd the assertion we actually care about. */
+  function deckWith(slide: Record<string, unknown>) {
+    return JSON.stringify({
+      theme: {},
+      slides: [
+        { layout: "title", title: "T", subtitle: "S" },
+        slide,
+        { layout: "closing", title: "Bye" },
+      ],
+    })
+  }
+
+  describe("hero", () => {
+    it("rejects missing backgroundImage", async () => {
+      const r = await v(deckWith({ layout: "hero", title: "Welcome" }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/backgroundImage/)
+    })
+
+    it("rejects missing title", async () => {
+      const r = await v(deckWith({ layout: "hero", backgroundImage: "unsplash:mountain" }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/title/i)
+    })
+
+    it("accepts hero with both fields", async () => {
+      const r = await v(deckWith({ layout: "hero", title: "Hero", backgroundImage: "unsplash:mountain" }))
+      expect(r.ok).toBe(true)
+    })
+  })
+
+  describe("stats", () => {
+    it("rejects when stats array is empty", async () => {
+      const r = await v(deckWith({ layout: "stats", stats: [] }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/stats.*array/i)
+    })
+
+    it("rejects when a stat is missing value or label", async () => {
+      const r = await v(deckWith({ layout: "stats", stats: [{ value: "" }] }))
+      expect(r.ok).toBe(false)
+      const errors = r.errors.join(" ")
+      expect(errors).toMatch(/value/i)
+      expect(errors).toMatch(/label/i)
+    })
+
+    it("warns when there is only one stat (visual balance)", async () => {
+      const r = await v(deckWith({
+        layout: "stats",
+        stats: [{ value: "42%", label: "Growth" }],
+      }))
+      expect(r.warnings.join(" ")).toMatch(/use at least 2/i)
+    })
+
+    it("warns when there are more than four stats (crowded)", async () => {
+      const r = await v(deckWith({
+        layout: "stats",
+        stats: Array.from({ length: 5 }, (_, i) => ({ value: `${i}`, label: `L${i}` })),
+      }))
+      expect(r.warnings.join(" ")).toMatch(/becomes crowded/i)
+    })
+  })
+
+  describe("gallery", () => {
+    it("rejects empty gallery", async () => {
+      const r = await v(deckWith({ layout: "gallery", gallery: [] }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/gallery.*array/i)
+    })
+
+    it("rejects when an item is missing imageUrl", async () => {
+      const r = await v(deckWith({
+        layout: "gallery",
+        gallery: [
+          { imageUrl: "unsplash:a" },
+          { imageUrl: "unsplash:b" },
+          { imageUrl: "unsplash:c" },
+          { imageUrl: "" },
+        ],
+      }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/imageUrl/i)
+    })
+
+    it("warns when fewer than four items (no grid effect)", async () => {
+      const r = await v(deckWith({
+        layout: "gallery",
+        gallery: [{ imageUrl: "unsplash:a" }, { imageUrl: "unsplash:b" }],
+      }))
+      expect(r.warnings.join(" ")).toMatch(/at least 4/i)
+    })
+  })
+
+  describe("comparison", () => {
+    it("rejects when fewer than two headers", async () => {
+      const r = await v(deckWith({
+        layout: "comparison",
+        comparisonHeaders: ["Feature"],
+        comparisonRows: [{ feature: "Speed", values: ["fast"] }],
+      }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/at least 2 columns/i)
+    })
+
+    it("rejects when comparisonRows is empty", async () => {
+      const r = await v(deckWith({
+        layout: "comparison",
+        comparisonHeaders: ["Feature", "A", "B"],
+        comparisonRows: [],
+      }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/at least 1 row/i)
+    })
+
+    it("warns when row values count doesn't match the header count", async () => {
+      const r = await v(deckWith({
+        layout: "comparison",
+        comparisonHeaders: ["Feature", "A", "B"],
+        comparisonRows: [{ feature: "Speed", values: ["fast"] }],
+      }))
+      expect(r.warnings.join(" ")).toMatch(/expected 2/)
+    })
+  })
+
+  describe("features", () => {
+    it("rejects empty features", async () => {
+      const r = await v(deckWith({ layout: "features", features: [] }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/features.*array/i)
+    })
+
+    it("rejects items missing icon or title", async () => {
+      const r = await v(deckWith({
+        layout: "features",
+        features: [
+          { icon: "rocket", title: "Fast" },
+          { icon: "", title: "" },
+          { icon: "shield", title: "Secure" },
+        ],
+      }))
+      expect(r.ok).toBe(false)
+      const errors = r.errors.join(" ")
+      expect(errors).toMatch(/icon/i)
+      expect(errors).toMatch(/title/i)
+    })
+
+    it("warns when fewer than three items (no grid effect)", async () => {
+      const r = await v(deckWith({
+        layout: "features",
+        features: [
+          { icon: "rocket", title: "Fast" },
+          { icon: "shield", title: "Secure" },
+        ],
+      }))
+      expect(r.warnings.join(" ")).toMatch(/at least 3/i)
+    })
+  })
+
+  describe("image / image-content", () => {
+    it("rejects image layout without imageUrl", async () => {
+      const r = await v(deckWith({ layout: "image" }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/imageUrl/)
+    })
+
+    it("rejects image-content without bullets or content alongside the visual", async () => {
+      const r = await v(deckWith({ layout: "image-content", imageUrl: "unsplash:mountain" }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/bullets.*content/i)
+    })
+  })
+
+  describe("chart / chart-content", () => {
+    it("rejects when the chart object is missing", async () => {
+      const r = await v(deckWith({ layout: "chart" }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/chart.*type and data/i)
+    })
+
+    it("rejects an unknown chart type", async () => {
+      const r = await v(deckWith({
+        layout: "chart",
+        chart: { type: "scatter", data: [{ name: "A", value: 1 }] },
+      }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/invalid type/i)
+    })
+
+    it("rejects bar chart missing both data and series", async () => {
+      const r = await v(deckWith({ layout: "chart", chart: { type: "bar" } }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/data.*series/i)
+    })
+
+    it("accepts a well-formed bar chart", async () => {
+      const r = await v(deckWith({
+        layout: "chart",
+        chart: { type: "bar", data: [{ name: "A", value: 1 }] },
+      }))
+      expect(r.ok).toBe(true)
+    })
+  })
+
+  describe("diagram / diagram-content", () => {
+    it("rejects when the diagram field is missing", async () => {
+      const r = await v(deckWith({ layout: "diagram" }))
+      expect(r.ok).toBe(false)
+      expect(r.errors.join(" ")).toMatch(/diagram.*Mermaid/)
+    })
+
+    it("warns when the mermaid diagram doesn't open with a recognized keyword", async () => {
+      const r = await v(deckWith({
+        layout: "diagram",
+        diagram: "// not actually mermaid syntax",
+      }))
+      expect(r.warnings.join(" ")).toMatch(/may be invalid/)
+    })
+
+    it("accepts stateDiagram-v2 (covered by the shared mermaid types list)", async () => {
+      // stateDiagram-v2 used to fail this check because the inline list
+      // diverged from the canonical MERMAID_DIAGRAM_TYPES set. Now they
+      // share the same source of truth.
+      const r = await v(deckWith({
+        layout: "diagram",
+        diagram: "stateDiagram-v2\n[*] --> Active",
+      }))
+      expect(r.ok).toBe(true)
+      expect(r.warnings.join(" ")).not.toMatch(/may be invalid/)
+    })
+  })
+})
+
+describe("validateArtifactContent — application/mermaid theme override", () => {
+  const v = async (c: string) => await validateArtifactContent("application/mermaid", c)
+
+  it("warns when content contains a `%%{init: ... theme ...}%%` directive", async () => {
+    const r = await v(`%%{init: {'theme':'forest'}}%%\nflowchart TD\n  A --> B`)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).toMatch(/theme/i)
+  })
+
+  it("does not warn when the init directive sets non-theme options", async () => {
+    const r = await v(`%%{init: {'flowchart':{'curve':'basis'}}}%%\nflowchart TD\n  A --> B`)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join(" ")).not.toMatch(/Do not override Mermaid theme/i)
+  })
+})
+
 describe("validateArtifactContent — application/3d", () => {
   const v = async (c: string) => await validateArtifactContent("application/3d", c)
 

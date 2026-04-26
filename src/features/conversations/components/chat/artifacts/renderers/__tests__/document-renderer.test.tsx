@@ -1,10 +1,27 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, vi } from "vitest"
 import { render, waitFor } from "@testing-library/react"
 import { DocumentRenderer } from "../document-renderer"
 import { proposalExample } from "@/lib/document-ast/examples/proposal"
 import { reportExample } from "@/lib/document-ast/examples/report"
 import { letterExample } from "@/lib/document-ast/examples/letter"
+
+// The MermaidPreviewBlock dynamically imports `mermaid` and calls
+// `mermaid.render(...)`. Real mermaid in jsdom is flaky because its
+// dagre layout depends on getBBox / getComputedTextLength implementations
+// jsdom does not ship; the renderer has prototype shims for those, but
+// browser-API differences (DOMPurify global binding, defs handling) still
+// cause sporadic failures. We mock the whole module so this suite only
+// asserts the renderer's wiring (the dynamic import resolves, the render
+// call returns an SVG string, the SVG ends up in the DOM).
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    render: vi.fn(async (id: string) => ({
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" data-mock="1" id="${id}"><g><text>mocked</text></g></svg>`,
+    })),
+  },
+}))
 
 describe("DocumentRenderer", () => {
   it.each([

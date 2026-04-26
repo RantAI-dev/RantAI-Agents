@@ -413,16 +413,22 @@ async function renderBlock(node: BlockNode, ctx: RenderCtx): Promise<(Paragraph 
       return [new Paragraph({ children: [new PageBreak()] })]
 
     case "toc": {
-      // The TableOfContents constructor's first argument IS the title Word
-      // renders above the entries — duplicating it as a separate Heading
-      // paragraph would make the title appear twice. Pass the title (or the
-      // default "Contents") straight to TableOfContents.
-      return [
-        new TableOfContents(node.title ?? "Contents", {
-          hyperlink: true,
-          headingStyleRange: `1-${node.maxLevel}`,
-        }),
-      ]
+      // The TableOfContents constructor's first argument is an SDT
+      // `alias` (an internal label, not rendered text). Word renders the
+      // entries only — so to give the user-facing TOC its visible title
+      // we emit a Heading paragraph immediately before the SDT block.
+      const out: (Paragraph | TableOfContents)[] = []
+      if (node.title) {
+        out.push(new Paragraph({
+          heading: HeadingLevel.HEADING_1,
+          children: [new TextRun(node.title)],
+        }))
+      }
+      out.push(new TableOfContents(node.title ?? "Contents", {
+        hyperlink: true,
+        headingStyleRange: `1-${node.maxLevel}`,
+      }))
+      return out as (Paragraph | TableOfContents)[]
     }
 
     default:
