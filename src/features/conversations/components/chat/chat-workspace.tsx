@@ -59,6 +59,7 @@ import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } 
 import { ToolCallIndicator } from "./tool-call-indicator"
 import { useArtifacts } from "./artifacts/use-artifacts"
 import { ArtifactIndicator } from "./artifacts/artifact-indicator"
+import { isPersistedArtifactToolCall, getEffectiveToolState } from "./artifact-tool-result"
 import { ArtifactPanel } from "./artifacts/artifact-panel"
 import { isValidArtifactType, type Artifact, type ArtifactType } from "./artifacts/types"
 import { TYPE_ICONS, TYPE_LABELS, getArtifactRegistryEntry } from "./artifacts/registry"
@@ -581,8 +582,7 @@ function MessagesArea({
                               return (
                                 <div className="space-y-0.5 mb-1">
                                   {toolParts.map((tp) => {
-                                    const isArtifactTool = (tp.toolName === "create_artifact" || tp.toolName === "update_artifact") && tp.state === "done" && tp.output
-                                    if (isArtifactTool) {
+                                    if (isPersistedArtifactToolCall(tp)) {
                                       const out = tp.output as Record<string, unknown>
                                       const artifactId = out.id as string
                                       const existing = artifactId ? artifacts.get(artifactId) : undefined
@@ -602,14 +602,19 @@ function MessagesArea({
                                         />
                                       )
                                     }
+                                    // Failed artifact tool calls (validation rejected, concurrent
+                                    // update conflict, missing artifact) fall through to the regular
+                                    // tool-call indicator. getEffectiveToolState rewrites the state
+                                    // to "error" so the pill renders red instead of green.
+                                    const effective = getEffectiveToolState(tp)
                                     return (
                                       <ToolCallIndicator
                                         key={tp.toolCallId}
                                         toolName={tp.toolName}
-                                        state={tp.state}
+                                        state={effective.state}
                                         args={tp.input}
                                         result={tp.output}
-                                        errorText={tp.errorText}
+                                        errorText={effective.errorText}
                                         employeeId={digitalEmployeeId}
                                       />
                                     )
@@ -640,8 +645,7 @@ function MessagesArea({
                               return (
                                 <div className="space-y-0.5 mb-1">
                                   {persistedTCs?.map((tc) => {
-                                    const isArtifactTool = (tc.toolName === "create_artifact" || tc.toolName === "update_artifact") && tc.state === "done" && tc.output
-                                    if (isArtifactTool) {
+                                    if (isPersistedArtifactToolCall(tc)) {
                                       const out = tc.output as Record<string, unknown>
                                       const artifactId = out.id as string
                                       const existing = artifactId ? artifacts.get(artifactId) : undefined
@@ -661,14 +665,18 @@ function MessagesArea({
                                         />
                                       )
                                     }
+                                    // Failed artifact tool calls fall through to the tool-call
+                                    // indicator with state rewritten to "error" so the user can
+                                    // tell the LLM's attempt didn't take.
+                                    const effective = getEffectiveToolState(tc)
                                     return (
                                       <ToolCallIndicator
                                         key={tc.toolCallId}
                                         toolName={tc.toolName}
-                                        state={tc.state}
+                                        state={effective.state}
                                         args={tc.input}
                                         result={tc.output}
-                                        errorText={tc.errorText}
+                                        errorText={effective.errorText}
                                         employeeId={digitalEmployeeId}
                                       />
                                     )
@@ -2197,7 +2205,21 @@ export function ChatWorkspace({
                     if (tc.toolName === "create_artifact" && part.output && typeof part.output === "object") {
                       const out = part.output as Record<string, unknown>
                       const placeholderId = `streaming-${toolCallId}`
-                      if (out.id && out.title && isValidArtifactType(out.type) && out.content) {
+                      // Gate on `out.persisted === true` — without this, a tool
+                      // result that returned the LLM's input alongside
+                      // `persisted: false` (validation failure path) would
+                      // create a "ghost" artifact in the in-memory map. The
+                      // user would see an indicator that opens content the
+                      // server rejected, with the LLM's retry sitting next to
+                      // it — exactly matching the reported "first artifact
+                      // is broken, second one works" pattern.
+                      if (
+                        out.persisted === true &&
+                        out.id &&
+                        out.title &&
+                        isValidArtifactType(out.type) &&
+                        out.content
+                      ) {
                         // Remove streaming placeholder, add final artifact
                         removeArtifact(placeholderId)
                         createdStreamingIds.delete(placeholderId)

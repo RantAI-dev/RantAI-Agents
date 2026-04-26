@@ -19,7 +19,7 @@ export const createArtifactTool: ToolDefinition = {
   name: "create_artifact",
   displayName: "Create Artifact",
   description:
-    "Create a rich, polished artifact rendered in a live preview panel. Use for substantial content: HTML pages, React components, SVG graphics, diagrams, code files, documents, spreadsheets, slides, Python scripts, or 3D scenes. Output must be complete, self-contained, and production-quality — no placeholders, no TODOs, no incomplete sections. Always choose the most appropriate type for the content.",
+    "Create a rich, polished artifact rendered in a live preview panel. Use for substantial content: HTML pages, React components, SVG graphics, diagrams, code files, documents, spreadsheets, slides, Python scripts, or 3D scenes. Output must be complete, self-contained, and production-quality — no placeholders, no TODOs, no incomplete sections. Always choose the most appropriate type for the content. To REVISE an artifact you created earlier in this same session, call `update_artifact` with that artifact's id — do NOT call `create_artifact` again to refine an artifact you just made. Each create_artifact call produces a separate artifact; calling it twice for what should be one artifact leaves the user with a stale draft alongside the real version.",
   category: "builtin",
   parameters: z.object({
     title: z.string().describe("A concise, descriptive title (3-8 words) that clearly identifies the artifact content"),
