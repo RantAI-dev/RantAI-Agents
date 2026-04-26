@@ -5,6 +5,7 @@ import {
   type InlineNode,
   type ListItem,
 } from "@/lib/document-ast/schema"
+import { MERMAID_DIAGRAM_TYPES, type MermaidDiagramType } from "@/lib/document-ast/_mermaid-types"
 
 // ────────────────────────────────────────────────────────────────────────────
 // Public types
@@ -16,19 +17,12 @@ export type ValidateResult = ValidateOk | ValidateErr
 
 const SIZE_BUDGET = 128 * 1024 // 128 KB
 
-const MERMAID_DIAGRAM_TYPES = [
-  "flowchart", "graph", "sequenceDiagram", "classDiagram",
-  "stateDiagram", "stateDiagram-v2", "erDiagram", "gantt",
-  "pie", "mindmap", "timeline", "journey", "c4Context",
-  "gitGraph", "quadrantChart", "requirementDiagram",
-] as const
-
 function validateMermaidNode(code: string): string | null {
   const trimmed = code.trim()
   if (!trimmed) return "mermaid block has empty code"
   const firstLine = trimmed.split("\n", 1)[0].trim()
   const firstToken = firstLine.split(/\s+/, 1)[0]
-  if (!MERMAID_DIAGRAM_TYPES.includes(firstToken as (typeof MERMAID_DIAGRAM_TYPES)[number])) {
+  if (!MERMAID_DIAGRAM_TYPES.includes(firstToken as MermaidDiagramType)) {
     return `mermaid block: unknown diagram type "${firstToken}" (expected one of ${MERMAID_DIAGRAM_TYPES.join(", ")})`
   }
   return null
@@ -110,14 +104,97 @@ function walk(ast: DocumentAst, visit: (v: Visit) => void): void {
 
 class _SemanticAbort extends Error { constructor(public reason: string) { super(reason) } }
 
+/** Maximum nesting depth for inline `footnote` blocks. The schema allows
+ *  unbounded recursion (footnote → paragraph → footnote → …) which would
+ *  produce malformed DOCX output and risk runaway preview rendering. Word
+ *  itself does not support nested footnotes; one level deep is the practical
+ *  ceiling. */
+const MAX_FOOTNOTE_DEPTH = 1
+
+function checkFootnoteDepthInline(node: InlineNode, depth: number): string | null {
+  if (node.type === "footnote") {
+    if (depth >= MAX_FOOTNOTE_DEPTH) {
+      return `footnote nested deeper than allowed (max depth ${MAX_FOOTNOTE_DEPTH}) — Word does not render nested footnotes`
+    }
+    for (const child of node.children) {
+      const err = checkFootnoteDepthBlock(child, depth + 1)
+      if (err) return err
+    }
+  } else if (node.type === "link" || node.type === "anchor") {
+    for (const child of node.children) {
+      const err = checkFootnoteDepthInline(child, depth)
+      if (err) return err
+    }
+  }
+  return null
+}
+
+function checkFootnoteDepthBlock(node: BlockNode, depth: number): string | null {
+  if (node.type === "paragraph" || node.type === "heading") {
+    for (const child of node.children) {
+      const err = checkFootnoteDepthInline(child, depth)
+      if (err) return err
+    }
+  } else if (node.type === "list") {
+    for (const item of node.items) {
+      for (const child of item.children) {
+        const err = checkFootnoteDepthBlock(child, depth)
+        if (err) return err
+      }
+    }
+  } else if (node.type === "table") {
+    for (const row of node.rows) {
+      for (const cell of row.cells) {
+        for (const child of cell.children) {
+          const err = checkFootnoteDepthBlock(child, depth)
+          if (err) return err
+        }
+      }
+    }
+  } else if (node.type === "blockquote") {
+    for (const child of node.children) {
+      const err = checkFootnoteDepthBlock(child, depth)
+      if (err) return err
+    }
+  }
+  return null
+}
+
 function semanticCheck(ast: DocumentAst): string | null {
-  // 1. Collect all bookmark IDs from headings
+  // 1. Collect all bookmark IDs from headings + flag duplicates.
+  //    Duplicate bookmarkIds are silently survivable in DOCX (Word picks
+  //    whichever target it sees first), but anchors then resolve to the
+  //    "wrong" heading from the author's perspective. Reject early.
   const bookmarkIds = new Set<string>()
+  let duplicateBookmarkErr: string | null = null
   walk(ast, (v) => {
     if (v.kind === "block" && v.node.type === "heading" && v.node.bookmarkId) {
-      bookmarkIds.add(v.node.bookmarkId)
+      if (bookmarkIds.has(v.node.bookmarkId)) {
+        duplicateBookmarkErr ??= `duplicate heading bookmarkId "${v.node.bookmarkId}" — every bookmarkId must be unique because anchors resolve by id`
+      } else {
+        bookmarkIds.add(v.node.bookmarkId)
+      }
     }
   })
+  if (duplicateBookmarkErr) return duplicateBookmarkErr
+
+  // 1b. Footnote nesting depth check (schema allows unbounded recursion).
+  for (const block of ast.body) {
+    const err = checkFootnoteDepthBlock(block, 0)
+    if (err) return err
+  }
+  if (ast.header) {
+    for (const block of ast.header.children) {
+      const err = checkFootnoteDepthBlock(block, 0)
+      if (err) return err
+    }
+  }
+  if (ast.footer) {
+    for (const block of ast.footer.children) {
+      const err = checkFootnoteDepthBlock(block, 0)
+      if (err) return err
+    }
+  }
 
   // 2. Run checks in a single pass — throw _SemanticAbort to short-circuit
   try {

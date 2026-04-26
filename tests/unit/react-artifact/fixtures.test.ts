@@ -25,8 +25,13 @@ describe("react-artifact fixtures — roundtrip", () => {
         expect(parsed.aesthetic).toBe(dir)
       })
 
-      it("validates without errors", () => {
-        const result = validateArtifactContent("application/react", content)
+      it("validates without errors", async () => {
+        // validateArtifactContent is async (it post-resolves Unsplash for
+        // HTML/slides and is wrapped in a Promise.race timeout); the
+        // missing await meant `result` was a Promise, `result.errors`
+        // was undefined, and any `.toEqual([])` / `.toBe(true)` assertion
+        // on the proxy passed vacuously. Always await.
+        const result = await validateArtifactContent("application/react", content)
         expect(
           result.errors,
           `errors for ${dir}: ${result.errors.join(" | ")}`

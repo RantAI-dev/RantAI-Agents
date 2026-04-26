@@ -21,7 +21,7 @@ vi.mock("@/features/conversations/sessions/repository", () => ({
   findDashboardMessageByIdAndSession: vi.fn(),
   findDashboardSessionByIdAndUser: vi.fn(),
   findDashboardSessionsByUser: vi.fn(),
-  updateDashboardArtifactById: vi.fn(),
+  updateDashboardArtifactByIdLocked: vi.fn(),
   updateDashboardMessageById: vi.fn(),
   updateDashboardSessionTitle: vi.fn(),
 }))

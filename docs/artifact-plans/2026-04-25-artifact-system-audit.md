@@ -1,7 +1,7 @@
 # Artifact System — Quality & Risk Audit
 
 **Date:** 2026-04-25
-**Scope:** All artifact-system surfaces on `main` (HEAD `14dabfd`).
+**Scope:** All artifact-system surfaces on `main` (HEAD `14dabfd` at audit time).
 **Method:** Three independent passes against actual source code:
 1. **Initial audit** — feature-dev:code-reviewer, hypothesis-driven (20 hypotheses + open invitation for new findings).
 2. **Coverage audit** — Explore agent, sweeps for areas missed in pass 1 (tests, deletion cascade, concurrency, resource leaks, memory growth, auth, MIME types, streaming, rate limiting, migrations).
@@ -9,7 +9,110 @@
 
 Every finding carries a `file:line` citation and a classification: **UPGRADE** / **REPLACE** / **DELETE** / **FIX**.
 
-This file is the **source of truth** for the audit. The summary at the end of [artifacts-deepscan.md](./artifacts-deepscan.md) and the per-type spec in [artifacts-capabilities.md](./artifacts-capabilities.md) describe the artifact system as it currently exists; this file describes what should change.
+This file is a **historical record** of what the original 2026-04-25 audit identified. Live system state is documented in [artifacts-deepscan.md](./artifacts-deepscan.md) (system flow), [architecture-reference.md](./architecture-reference.md) (file:line), and [artifacts-capabilities.md](./artifacts-capabilities.md) (per-type spec).
+
+---
+
+## Status (updated 2026-04-25, post-Priority-C)
+
+**All Priority A, B, and C items shipped to `main`.** Priority D remains
+deferred. A second rescan after the Priority-C merge surfaced 58
+additional findings — see
+[`2026-04-25-deepscan-rescan-findings.md`](./2026-04-25-deepscan-rescan-findings.md)
+for the unshipped backlog.
+
+| Priority | Status | Merge | Items |
+|----------|--------|-------|-------|
+| A — quick wins (5 fixes, ~70 LoC) | ✅ Shipped | `f319a4a` | Fix #1 footnote sink, #2 update-artifact `validation.content`, #6 update-artifact canvas-mode, #21 RAG cleanup on delete, #23 missing-artifact early return |
+| A.5 — hotfix | ✅ Shipped | `75e28a5` | Drop duplicate `updateDashboardArtifactByIdLocked` definition introduced during the rewind/re-apply dance |
+| B — 13 fixes | ✅ Shipped | `f319a4a` | Fixes #5, #7, #8, #9, #10, #11, #12, #13, #14, #15, #18, #22 + NEW-1..NEW-7 |
+| C — 4 items (deferred from B for migration safety) | ✅ Shipped | `f0264f8` | Fix #4 service-side Unsplash, #16 markdown strict mode + 128 KiB cap, #19 `image-text` deprecation, migration script |
+| D — 1 item | 🟡 Deferred | — | Fix #20 formula evaluator → Web Worker |
+
+**Why D is deferred:** the `SpreadsheetSpec` carries callback fields
+(`onCell`, `onRange`, `onVariable` for FormulaParser) that are not
+structured-clone compatible across the postMessage boundary. A proper
+Worker port requires redesigning the spec interface and rebuilding
+callbacks inside the Worker (~300–500 LoC + Next.js webpack worker
+bundle config). No jank has been reported in production; doing this now
+is speculative refactor.
+
+**Recommended path if jank is reported:** first try
+`requestIdleCallback` chunking inside `evaluateWorkbook` (~50 LoC, no
+spec redesign, no bundle config) before committing to the full Worker
+migration. The audit's Pass 3 classifies this as the lower-risk first
+step.
+
+**Where the fixes landed:** see the audit cross-reference table in
+[`architecture-reference.md` §17](./architecture-reference.md#17-audit-cross-reference)
+for an audit-id → file:line map.
+
+**Test coverage added** (mapped by audit ID):
+
+| Audit ID | Test |
+|----------|------|
+| #1 unsplash post-resolve | `tests/unit/tools/validate-artifact-resolves-unsplash.test.ts` |
+| #2 update-artifact validation.content | `tests/unit/tools/update-artifact.test.ts` |
+| #6, #18, #23 update-artifact suite | `tests/unit/tools/update-artifact.test.ts` |
+| #8 indexer no-rethrow | `tests/unit/rag/artifact-indexer-rethrow.test.ts` |
+| #22 delete cleanup (S3 + RAG) | `tests/unit/features/conversations/sessions/delete-artifact.test.ts` |
+| NEW-6 validator timeout | `tests/unit/tools/validate-artifact-timeout.test.ts` |
+
+**Migration script.** `scripts/migrate-artifact-deprecations.ts` is the
+companion to Fixes #16 + #19. Two idempotent passes:
+- **Pass A (mutating)** — rewrites `image-text` slide layout to
+  `content` in stored decks.
+- **Pass B (report-only)** — counts markdown artifacts containing
+  `<script>` and/or exceeding the 128 KiB cap.
+
+Run with `bun run scripts/migrate-artifact-deprecations.ts --dry-run`
+to preview. Idempotent; safe to re-run.
+
+---
+
+## What the rescan added (2026-04-25, post-Priority-C)
+
+After the Priority-C merge, a 5-agent ground-up rescan surfaced
+**58 net-new findings (N-1 to N-58)** that the original audit's
+hypothesis-driven approach didn't probe. These are unshipped backlog,
+documented in
+[`2026-04-25-deepscan-rescan-findings.md`](./2026-04-25-deepscan-rescan-findings.md).
+
+Categories covered by the rescan:
+
+1. **Cross-tool / API consistency** — `update_artifact` vs
+   `create_artifact`, service vs LLM-tool, manual edit vs LLM RAG indexing.
+2. **Prompt-vs-validator drift** — places where the LLM is told one rule
+   and the validator enforces a different one.
+3. **Schema-vs-renderer drift** — DocumentAst fields the schema accepts
+   that `to-docx.ts` silently ignores.
+4. **Sandbox / postMessage hardening** — uneven iframe sandbox flags
+   and one missing origin guard (R3F).
+5. **Streaming UX edge cases** — what happens to a partially-streamed
+   artifact when the validator rejects the final tool output.
+
+**Tier 1 candidates** (high-confidence, low-scope, real user impact):
+
+- **N-1** Manual artifact edit (HTTP PUT) doesn't re-index RAG → stale searches.
+- **N-2** Streaming `update_artifact` leaves dirty content on validation failure.
+- **N-3** `out.updated` gate silently drops updates when artifact missing from local map.
+- **N-4** Streaming abort orphans the `streaming-${toolCallId}` placeholder.
+- **N-5** `createDashboardMessages` upsert can steal a message between sessions.
+- **N-7** `update-artifact` canvas-mode lock silently bypassed when stored `artifactType` is null.
+- **N-21** TOC title rendered twice in DOCX when `node.title` set.
+- **N-24** `renderChart` has no try/catch around `svgToPng` — propagates as 500.
+- **N-27** R3F renderer is the only iframe missing postMessage origin guard.
+- **N-30** LaTeX renderer `trust: true` + `dangerouslySetInnerHTML` → `\href{javascript:...}` XSS.
+- **N-32** Unsaved edits silently discarded when LLM updates artifact mid-edit.
+- **N-33** `handleRestoreVersion` is optimistic, `handleSave` is not — failed restore leaves UI inconsistent.
+- **N-34** `handleDelete` ignores API response status — UI removes artifact even on 500.
+- **N-42** Download route returns 409 for "Invalid document AST" (should be 422).
+- **N-47** Versioned S3 keys leak on **session** delete (single-artifact delete cleans them).
+
+**Original audit content below is preserved as the historical record of
+what was identified during the first audit.** It does not reflect post-fix
+code state — for that read the deepscan, architecture-reference, and
+capabilities docs, plus the rescan-findings backlog.
 
 ---
 

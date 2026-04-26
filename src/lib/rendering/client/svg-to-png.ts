@@ -65,14 +65,23 @@ export async function svgToBase64Png(
 
 /**
  * Fetch an image URL and convert to a base64 data URL.
- * Handles both regular URLs and `unsplash:keyword` syntax (via source.unsplash.com).
+ *
+ * Slide content arriving here normally has already had its `unsplash:`
+ * URLs resolved server-side by the validator dispatcher (the slides
+ * JSON walker runs `resolveSlideImages` before persist). If a raw
+ * `unsplash:` prefix slips through anyway — for instance when the
+ * server-side resolver failed and stored the original URL — we fall
+ * back to a placehold.co URL with the keyword embedded as visible
+ * text. Earlier code hit `https://source.unsplash.com/...`, which
+ * Unsplash retired; that path silently returned null and produced
+ * empty placeholders in the exported PPTX.
  */
 export async function fetchImageAsBase64(url: string): Promise<string | null> {
   try {
     let imageUrl = url
     if (url.startsWith("unsplash:")) {
       const keyword = url.slice(9).trim()
-      imageUrl = `https://source.unsplash.com/1600x900/?${encodeURIComponent(keyword)}`
+      imageUrl = `https://placehold.co/1200x800/f1f5f9/64748b?text=${encodeURIComponent(keyword)}`
     }
 
     const response = await fetch(imageUrl)

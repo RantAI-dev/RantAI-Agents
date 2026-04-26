@@ -1,79 +1,83 @@
 // @vitest-environment node
-import { describe, it, expect, vi } from "vitest"
-import { validateArtifactContent } from "@/lib/tools/builtin/_validate-artifact"
+import { describe, it, expect, afterEach } from "vitest"
+import {
+  validateArtifactContent,
+  VALIDATE_TIMEOUT_MS,
+  __setValidateTimeoutMsForTesting,
+} from "@/lib/tools/builtin/_validate-artifact"
 
 describe("validateArtifactContent — timeout", () => {
-  it("returns a timeout error when a validator hangs longer than the budget", async () => {
-    // We rely on the document validator being async + accepting JSON.
-    // To create a slow path we feed it valid JSON that resolves Unsplash —
-    // but the resolver will short-circuit on no images. So instead, we trigger
-    // the timeout by running with VALIDATE_TIMEOUT_MS overridden via the
-    // testing hook the implementation exposes.
-    vi.useFakeTimers()
-    const slowDoc = JSON.stringify({
-      meta: { title: "x" },
-      body: [{ type: "paragraph", children: [{ type: "text", text: "y" }] }],
-    })
-    // Fast path validates instantly, so we instead test the public guarantee:
-    // a validator that exceeds 5s of wall time gets rejected with a timeout
-    // error instead of hanging the request indefinitely.
-    vi.useRealTimers()
+  afterEach(() => {
+    // Clear any test-only override so other suites see the real budget.
+    __setValidateTimeoutMsForTesting(undefined)
+  })
 
-    // Smoke test: short content validates fast (well under the budget).
-    const fast = await validateArtifactContent("text/document", slowDoc)
+  it("exposes a constant 5-second default budget", () => {
+    // Public expectation pinned by callers (LLM error message, ops dashboards).
+    // If the default ever changes, update this test consciously.
+    expect(VALIDATE_TIMEOUT_MS).toBe(5_000)
+  })
+
+  it("validates fast content well under the default budget", async () => {
+    const start = Date.now()
+    const result = await validateArtifactContent(
+      "text/document",
+      JSON.stringify({
+        meta: { title: "x" },
+        body: [{ type: "paragraph", children: [{ type: "text", text: "y" }] }],
+      }),
+    )
+    const elapsed = Date.now() - start
+    expect(result.ok).toBe(true)
+    expect(elapsed).toBeLessThan(VALIDATE_TIMEOUT_MS)
+  })
+
+  it("returns a timeout error with the budget in the message when a slow validator hangs", async () => {
+    // Validators are dispatched through `Promise.resolve().then(...)` (a
+    // microtask) which can settle before any setTimeout-based timer
+    // fires for sync validators, so a tiny-but-positive budget is not
+    // a reliable trigger. We use validateDocument with a large body
+    // that pulls in the Unsplash resolver and then trip the timeout
+    // by setting the budget to 0 — at that boundary even an awaited
+    // microtask path is reliably interrupted because the resolver's
+    // own awaits surrender control.
+    __setValidateTimeoutMsForTesting(0)
+    // text/document validator is genuinely async (Zod parse + Unsplash
+    // resolution); the awaits inside it yield control, letting the
+    // 0ms timer beat the validator.
+    const result = await validateArtifactContent(
+      "text/document",
+      JSON.stringify({
+        meta: { title: "x" },
+        body: [
+          { type: "image", src: "unsplash:mountain", alt: "a", width: 100, height: 100 },
+          { type: "paragraph", children: [{ type: "text", text: "y" }] },
+        ],
+      }),
+    )
+    expect(result.ok).toBe(false)
+    const message = result.errors.join(" ")
+    expect(message).toMatch(/timeout/i)
+    expect(message).toMatch(/text\/document/)
+    expect(message).toMatch(/0ms/)
+  })
+
+  it("clearing the test override restores the default budget", async () => {
+    __setValidateTimeoutMsForTesting(0)
+    const slow = await validateArtifactContent(
+      "text/document",
+      JSON.stringify({
+        meta: { title: "x" },
+        body: [
+          { type: "image", src: "unsplash:cat", alt: "a", width: 100, height: 100 },
+        ],
+      }),
+    )
+    expect(slow.ok).toBe(false)
+    expect(slow.errors.join(" ")).toMatch(/timeout/i)
+
+    __setValidateTimeoutMsForTesting(undefined)
+    const fast = await validateArtifactContent("text/markdown", "# title")
     expect(fast.ok).toBe(true)
-  })
-
-  it("exposes a global timeout budget (constant)", async () => {
-    // The implementation must export a budget that's enforced. We assert via
-    // its observable behavior in the next test (long-running validators get
-    // rejected). This placeholder ensures the budget exists.
-    const mod = await import("@/lib/tools/builtin/_validate-artifact")
-    expect("VALIDATE_TIMEOUT_MS" in mod).toBe(true)
-    const budget = (mod as unknown as { VALIDATE_TIMEOUT_MS?: number }).VALIDATE_TIMEOUT_MS
-    expect(typeof budget).toBe("number")
-    expect(budget).toBeGreaterThan(0)
-  })
-
-  it("rejects with a timeout error when a validator never resolves", async () => {
-    // Force a hang in validateDocument by giving it a JSON it must fully
-    // process. Since real validators are fast, we patch a slow path via the
-    // VALIDATE_TIMEOUT_MS internal: replace it with a tiny budget and run a
-    // validator that takes longer than that.
-    const mod = (await import(
-      "@/lib/tools/builtin/_validate-artifact"
-    )) as unknown as {
-      __setValidateTimeoutMsForTesting?: (ms: number) => void
-      validateArtifactContent: (
-        type: string,
-        content: string,
-      ) => Promise<{ ok: boolean; errors: string[] }>
-    }
-
-    if (!mod.__setValidateTimeoutMsForTesting) {
-      throw new Error("missing __setValidateTimeoutMsForTesting export")
-    }
-
-    mod.__setValidateTimeoutMsForTesting(1)
-    try {
-      // A 200-cell sheet with formulas takes longer than 1ms to evaluate,
-      // forcing the timeout path.
-      const cells = Array.from({ length: 200 }, (_, i) => ({
-        ref: `A${i + 1}`,
-        value: i,
-      }))
-      const spec = JSON.stringify({
-        kind: "spreadsheet/v1",
-        sheets: [{ name: "Sheet1", cells }],
-      })
-      const result = await mod.validateArtifactContent("application/sheet", spec)
-      // With a 1ms budget the validator either completes in time or times out.
-      // If it times out, the timeout error message must be informative.
-      if (!result.ok) {
-        expect(result.errors.some((e) => /timeout/i.test(e))).toBe(true)
-      }
-    } finally {
-      mod.__setValidateTimeoutMsForTesting(5_000)
-    }
   })
 })

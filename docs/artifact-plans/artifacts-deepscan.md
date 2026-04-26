@@ -1,844 +1,925 @@
-# Artifact System — Deep Scan
+# Artifact System — Deepscan
 
-> **Audience:** an engineer or PM who has never opened the artifact code before. After reading this doc you should understand: what an artifact is, how content flows from the LLM to the screen and to S3, and where to look in the codebase for each part. Companion docs: [architecture-reference.md](./architecture-reference.md) (file:line audit) and [artifacts-capabilities.md](./artifacts-capabilities.md) (per-type capability spec).
-
-**Last regenerated:** 2026-04-25 — fresh scan from `src/`, no carry-over from prior versions of this file.
-**Stack:** Next.js 15 (App Router) · React 18 · AI SDK v6 · Prisma 5 · TypeScript · S3 (or MinIO) · Vector store (SurrealDB)
+> **Last regenerated:** 2026-04-25, post-Priority-C, pinned to merge `f0264f8`.
+> Replaces all prior versions. Sourced from a 5-agent ground-up rescan that
+> read every byte of the relevant code.
+>
+> **Companion docs:**
+> - [`architecture-reference.md`](./architecture-reference.md) — file:line audit per module.
+> - [`artifacts-capabilities.md`](./artifacts-capabilities.md) — per-type capability spec.
+> - [`2026-04-25-artifact-system-audit.md`](./2026-04-25-artifact-system-audit.md) — original audit + Priority A/B/C completion status.
+> - [`2026-04-25-deepscan-rescan-findings.md`](./2026-04-25-deepscan-rescan-findings.md) — 58 net-new findings surfaced by the rescan that this document is grounded in. Treat as backlog (none shipped).
 
 ---
 
 ## TL;DR
 
-An **artifact** is a substantial piece of LLM-generated content — a React component, an HTML page, a Word document, a Python script, a 3D scene, etc. — rendered in a resizable side panel of the chat UI. There are **12 artifact types**, one row per type in the central registry. The pipeline is:
+The artifact system has **one source of truth** (the registry) and a
+**dispatcher pattern** repeated four times — validator, prompt, renderer,
+panel chrome. Adding a new type means filling the same slot in each switch;
+TypeScript exhaustiveness checking surfaces every missing branch at compile
+time.
+
+It also has **two parallel persistence paths** that share validation but
+diverge on side effects:
 
 ```
-LLM tool-call (create_artifact / update_artifact)
-        ↓
-validator (per-type, in _validate-artifact.ts)
-        ↓
-Unsplash resolver rewrites unsplash:keyword → real URLs (for HTML, Slides, Document)
-        ↓
-S3 upload + Prisma `Document` row
-        ↓
-fire-and-forget RAG indexing (chunk + embed + store)
-        ↓
-chat workspace receives tool output → state hook adds it to in-memory Map
-        ↓
-ArtifactIndicator chip renders inside the chat message
-        ↓
-user clicks chip → ResizablePanelGroup splits → ArtifactPanel mounts
-        ↓
-panel routes by type → lazy-loaded renderer renders preview
+LLM tool path                           HTTP service path (manual edit)
+─────────────                           ──────────────────────────────
+create_artifact / update_artifact       PUT /api/.../artifacts/[id]
+        │                                       │
+        ▼                                       ▼
+validateArtifactContent  ───────────────  validateArtifactContent
+   (5s timeout, post-Unsplash for HTML/slides, ctx.isNew on create)
+        │                                       │
+        ▼                                       ▼
+ prisma.document direct                updateDashboardChatSessionArtifact
+ + S3 + RAG indexing                   + S3 + (NO RAG re-index — see N-1)
 ```
 
-Versioning is FIFO with a hard cap of 20 historical versions per artifact, archived to S3 under `<key>.v<n>` keys with a 32 KB inline fallback when S3 fails. Content is hard-capped at **512 KB**. Deletion cascades S3 + Prisma + RAG.
+The split matters because **the manual-edit path does not re-index RAG**
+(rescan finding **N-1**), so an artifact edited from the panel will return
+stale content from `knowledge_search` until the next LLM-driven update.
+
+A single `validateArtifactContent(type, content, ctx?)` is the entry point
+every persistence path runs through. It does three jobs:
+
+1. Dispatches to the per-type validator with a **5-second wall-clock
+   timeout** (`VALIDATE_TIMEOUT_MS`).
+2. Carries an optional `ValidationContext.isNew` flag — only `validateMarkdown`
+   and `validateSlides` read it (`validateDocument` doesn't even accept the
+   parameter — see rescan finding **N-26**).
+3. **Post-resolves Unsplash** for `text/html` and `application/slides`
+   before returning. `text/document` resolves earlier inside its own
+   validator. No other persistence path needs to touch the resolver
+   directly any more.
+
+Persistence is **optimistically locked** on the Prisma `Document.updatedAt`
+column for both update paths. Concurrent writers hit `count: 0` from
+`updateMany` and surface a 409 (HTTP) or
+`{ updated: false, error: "Concurrent update detected…" }` (LLM tool).
+
+Deletion is **mostly complete**:
+`deleteDashboardChatSessionArtifact` removes the canonical S3 object,
+versioned S3 keys from `metadata.versions[].s3Key`, the SurrealDB RAG
+chunks, and the Postgres row. **Session delete still leaks versioned S3
+keys** (rescan finding **N-47**) because `findArtifactsBySessionId` only
+selects `{ id, s3Key }` — not `metadata`.
+
+Twelve types remain. The **`image-text` slide layout is deprecated** —
+existing artifacts validate with a warning, new artifacts hard-error
+(`ctx.isNew`). The migration script
+`scripts/migrate-artifact-deprecations.ts` rewrites `image-text → content`
+in stored decks and audits markdown for `<script>` and oversized payloads.
+
+Mermaid rendering exists in **three paths** (server SVG → DOCX, client
+PNG → PPTX, browser SVG → live preview) sharing a common theme module —
+but the client PPTX path always uses the light theme and the standalone
+mermaid renderer + the document preview's mermaid block both call
+`mermaid.initialize` on the same global singleton, so concurrent renders
+can race on theme state (rescan **N-53, N-54**).
 
 ---
 
-## Table of contents
+## 1. The twelve artifact types
 
-1. [What an artifact is](#1-what-an-artifact-is)
-2. [The 12 types at a glance](#2-the-12-types-at-a-glance)
-3. [End-to-end lifecycle flows](#3-end-to-end-lifecycle-flows)
-4. [The registry — single source of truth](#4-the-registry--single-source-of-truth)
-5. [The two LLM tools](#5-the-two-llm-tools)
-6. [The validator dispatch](#6-the-validator-dispatch)
-7. [The 12 artifact types — full per-type breakdown](#7-the-12-artifact-types--full-per-type-breakdown)
-8. [Persistence: S3 + Prisma + versioning](#8-persistence-s3--prisma--versioning)
-9. [Unsplash image resolution](#9-unsplash-image-resolution)
-10. [Rendering layer](#10-rendering-layer)
-11. [RAG indexing](#11-rag-indexing)
-12. [Integration with the chat workspace](#12-integration-with-the-chat-workspace)
-13. [API surface](#13-api-surface)
-14. [Constants reference](#14-constants-reference)
+**Source of truth:** `src/features/conversations/components/chat/artifacts/registry.ts`.
+Everything else (`ARTIFACT_TYPES`, `VALID_ARTIFACT_TYPES`, `TYPE_ICONS`,
+`TYPE_LABELS`, `TYPE_SHORT_LABELS`, `TYPE_COLORS`, the Zod enum on
+`create_artifact`, the `Record<ArtifactType, …>` validator dispatch, the
+renderer switch, the panel chrome) is derived from `ARTIFACT_REGISTRY`.
 
----
+| Type | Label | Ext | Code Tab | Renderer | Validator | Prompt |
+|------|-------|-----|----------|----------|-----------|--------|
+| `text/html` | HTML Page | `.html` | ✓ | `html-renderer.tsx` | `validateHtml` | `prompts/artifacts/html.ts` |
+| `application/react` | React Component | `.tsx` | ✓ | `react-renderer.tsx` | `validateReact` | `prompts/artifacts/react.ts` |
+| `image/svg+xml` | SVG Graphic | `.svg` | ✓ | `svg-renderer.tsx` | `validateSvg` | `prompts/artifacts/svg.ts` |
+| `application/mermaid` | Mermaid Diagram | `.mmd` | ✓ | `mermaid-renderer.tsx` | `validateMermaid` | `prompts/artifacts/mermaid.ts` |
+| `text/markdown` | Markdown* | `.md` | ✓ | `StreamdownContent` | `validateMarkdown` | `prompts/artifacts/markdown.ts` |
+| `text/document` | Document* | `.docx` | ✗ | `document-renderer.tsx` | `validateDocument` | `prompts/artifacts/document.ts` |
+| `application/code` | Code | `.txt` | ✗ | `StreamdownContent` (fenced) | `validateCode` | `prompts/artifacts/code.ts` |
+| `application/sheet` | Spreadsheet | `.csv` | ✓ | `sheet-renderer.tsx` | `validateSheet` | `prompts/artifacts/sheet.ts` |
+| `text/latex` | LaTeX / Math | `.tex` | ✓ | `latex-renderer.tsx` | `validateLatex` | `prompts/artifacts/latex.ts` |
+| `application/slides` | Slides | `.pptx`† | ✓ | `slides-renderer.tsx` | `validateSlides` | `prompts/artifacts/slides.ts` |
+| `application/python` | Python Script | `.py` | ✓ | `python-renderer.tsx` | `validatePython` | `prompts/artifacts/python.ts` |
+| `application/3d` | 3D Scene | `.tsx` | ✓ | `r3f-renderer.tsx` | `validate3d` | `prompts/artifacts/r3f.ts` |
 
-## 1. What an artifact is
+\* The prompt-module `label` for both `text/markdown` and `text/document`
+is the string `"Document"` (rescan **N-17**) — the registry uses
+`"Markdown"` and `"Document"` for the two `shortLabel`s. The duplicated
+prompt label is a UX gap, not a runtime bug.
 
-An artifact is a **first-class side-panel object** in the chat UI. It is created by the LLM through a tool call (not produced as inline text), persisted to S3 + Postgres so it survives reload, and shown in a resizable preview panel that can be edited or downloaded.
+† The S3 canonical key for `application/slides` ends in `.pptx` even
+though stored content is JSON (rescan **N-43**) — exporters convert on the
+fly.
 
-**Mental model:** very similar to Claude.ai Artifacts or ChatGPT Canvas — but tighter integration with the rest of the chat platform. Each artifact:
-
-- Has a **canonical type** (one of 12 — full list below) that determines validator, renderer, file extension, and download behavior
-- Is **persisted** in the Prisma `Document` table with `artifactType` set non-null (knowledge documents leave it null)
-- Is **indexed for RAG** in the background so the assistant can later search across the user's artifacts
-- Is **versioned** in place — every update archives the previous content to a versioned S3 key with FIFO eviction at 20 versions
-- Is **rendered** by a lazy-loaded React component specific to its type
-
-Content size is hard-capped at **512 KB**. Anything larger is rejected at create/update time with a validation error.
-
----
-
-## 2. The 12 types at a glance
-
-Order below matches `ARTIFACT_REGISTRY` in `src/features/conversations/components/chat/artifacts/registry.ts`:
-
-| # | Type | Label | Content shape | Renderer | Download |
-|--:|---|---|---|---|---|
-| 1 | `text/html` | HTML Page | Full HTML doc | Sandboxed iframe (Tailwind CDN, Inter font, navigation blocker) | `.html` |
-| 2 | `application/react` | React Component | Single component with `// @aesthetic:` line-1 directive (+ optional `// @fonts:` line 2) | Babel-transpiled iframe; React/Recharts/Lucide/Motion pre-injected as window globals | `.tsx` |
-| 3 | `image/svg+xml` | SVG Graphic | Inline SVG markup | Inline DOM, sanitized by DOMPurify | `.svg` |
-| 4 | `application/mermaid` | Mermaid Diagram | Raw mermaid syntax | Inline mermaid.js, theme-synced light/dark | `.mmd` |
-| 5 | `text/markdown` | Markdown | GFM markdown (+ KaTeX `$…$`, fenced mermaid, fenced code) | Streamdown (react-markdown wrapper) with Shiki + remark-math + rehype-katex | `.md` |
-| 6 | `text/document` | Document | **JSON `DocumentAst` tree** (typed block + inline nodes) | A4/Letter paper preview, walks AST, renders mermaid + chart blocks inline | Split-button: `.md` (client-side AST→md walk) + `.docx` (server-side via `astToDocx` + `docx` lib) |
-| 7 | `application/code` | Code | Source text + `language` field | Streamdown wrapped in fence with the language tag (display-only, no execution) | `.txt` (extension overridden by language conventions) |
-| 8 | `application/sheet` | Spreadsheet | **3 shapes**: CSV, JSON-array-of-objects, or `spreadsheet/v1` spec (multi-sheet workbook with formulas) | TanStack Table for CSV/array; lazy-loaded `SpecWorkbookView` for spec | `.csv` for flat data; `.xlsx` (ExcelJS, with cached values) for spec |
-| 9 | `text/latex` | LaTeX / Math | LaTeX subset | Custom parser → KaTeX-rendered HTML, inline DOM | `.tex` (wrapped) |
-| 10 | `application/slides` | Slides | JSON deck with theme + slides[]; 17 layout types | Iframe with `slidesToHtml` srcDoc, postMessage navigation | `.pptx` via `pptxgenjs` |
-| 11 | `application/python` | Python Script | Python 3 source | Pyodide 0.27.6 in a Web Worker, with matplotlib `plt.show()` capture and stdout/stderr streaming | `.py` |
-| 12 | `application/3d` | 3D Scene | R3F component source | Three.js + `@react-three/fiber` + 20 drei helpers; wrapper supplies Canvas, OrbitControls, Environment, lighting | `.tsx` |
-
-Every type's metadata (label, icon, color, extension, whether it has a separate code tab) lives in **one place**: the registry array. Adding a new type means adding one row plus a renderer case + a validator function.
+`hasCodeTab: false` for `application/code` (the preview *is* the code) and
+`text/document` (the preview is the source of truth). The
+`text/document` panel uses a split-button download for `.md` (raw AST) vs
+`.docx` (rendered).
 
 ---
 
-## 3. End-to-end lifecycle flows
+## 2. End-to-end flow — LLM creates an artifact
 
-### 3.1 Creation flow
-
-Step-by-step, from the user typing to the artifact appearing in the panel:
-
-1. **User asks for something:** "Build me a React dashboard" / "Write a proposal for Acme Corp" / etc.
-2. **LLM decides to call `create_artifact`** with `{ title, type, content, language? }`. The Zod enum for `type` is derived from `ARTIFACT_TYPES` so the model can only pick from the 12 registered types.
-3. **`createArtifactTool.execute()` runs server-side:**
-   1. Generate UUID via `crypto.randomUUID()`
-   2. Reject if `Buffer.byteLength(content, "utf-8")` > 512 KB
-   3. If chat workspace had a Canvas-mode lock (e.g. user picked "HTML" from the toolbar), reject if the LLM tried to emit a different type
-   4. If `type === "application/code"` and no `language`, return a validation error so the LLM retries with the language parameter
-   5. Run `validateArtifactContent(type, content)` — dispatches to the per-type validator. Returns `{ ok, errors, warnings, content? }`. `content?` is set when the validator rewrote the input — currently used by `validateDocument` to bake resolved Unsplash URLs into the AST before persistence.
-   6. For HTML and Slides, run `resolveHtmlImages(content)` / `resolveSlideImages(content)` — these regex-scan or JSON-walk for `unsplash:keyword`, then resolve via the cached Unsplash resolver and rewrite URLs.
-   7. Build the S3 key: `artifacts/{orgId | "global"}/{sessionId}/{artifactId}{ext}` and upload with `uploadFile(key, buffer, mime)`.
-   8. Create the Prisma `Document` row with `artifactType: type`, `categories: ["ARTIFACT"]`, `s3Key`, `fileSize`, `mimeType`, plus a `metadata` JSON containing `artifactLanguage` (for code) and `validationWarnings`.
-   9. Fire `indexArtifactContent(id, title, content)` and `.catch()` log; do not block the response on it.
-   10. Return `{ id, title, type, content: finalContent, language, persisted: true, warnings? }`.
-4. **AI SDK streams** the tool output back to the chat workspace.
-5. **`chat-workspace.tsx` detects** the tool output, calls `addOrUpdateArtifact(...)` from the `useArtifacts()` hook. This:
-   1. If the ID doesn't exist: insert into `artifacts: Map<string, Artifact>` with `version: 1`, `previousVersions: []`.
-   2. Set `activeArtifactId = id` (auto-open).
-   3. Persist `activeArtifactId` to `sessionStorage` under key `rantai.artifact.active.{sessionId}`.
-6. **`ArtifactIndicator`** renders a clickable chip inline in the chat message — icon + label + chevron, color-coded by type via `TYPE_COLORS`.
-7. **`ArtifactPanel`** mounts in the right side of the `ResizablePanelGroup`. It dispatches the chosen type into `ArtifactRenderer`, which lazy-loads the type-specific renderer (`HtmlRenderer`, `ReactRenderer`, …) and shows it in the Preview tab.
-
-### 3.2 View flow
-
-When a new chat session loads, persisted artifacts come back from `GET /api/dashboard/chat/sessions/{id}` as a `PersistedArtifact[]`. The hook's `loadFromPersisted()` rebuilds the in-memory `Map<string, Artifact>`, restoring version histories from the `metadata.versions[]` blob. If `sessionStorage` had an `activeArtifactId` for that session, the panel reopens automatically.
-
-### 3.3 Update flow (manual edit OR LLM update)
-
-The same code path runs for both cases — the LLM tool and the user-facing edit endpoint share `validateArtifactContent` + the version-archival logic.
-
-1. **Edit source:** the panel toggles into edit mode; the user changes content in a `<textarea>` (or for code-type artifacts, in the code tab of the panel).
-2. **Save click:** the panel `PUT`s `/api/dashboard/chat/sessions/{sessionId}/artifacts/{artifactId}` with `{ content, title? }`.
-3. **`updateDashboardChatSessionArtifact()`** in `service.ts`:
-   1. Verify session ownership.
-   2. Run the validator. If it fails, return `422` with formatted error string. The panel surfaces this inline.
-   3. Archive the old content: upload the **previous** content to `{originalKey}.v{versionNum}`. If S3 fails AND the previous content was ≤ 32 KB, store it inline in `metadata.versions[].content`. Otherwise mark `archiveFailed: true` so we don't lose the audit trail entirely.
-   4. Push a version entry: `{ title, timestamp, contentLength, s3Key? | content? | archiveFailed? }`.
-   5. If `versions.length > 20`, FIFO-evict the oldest and increment `evictedVersionCount` so the UI can display "+N earlier versions evicted".
-   6. Upload the new content to the original `s3Key` (overwriting).
-   7. `prisma.document.update({ data: { content, title, fileSize, metadata } })`.
-   8. Re-run RAG indexing with `{ isUpdate: true }` (deletes old chunks first).
-4. **Response:** the panel updates its in-memory state via `addOrUpdateArtifact`, which pushes the previous in-memory content into `previousVersions[]` and increments `version`.
-
-The same flow applies when the LLM calls `update_artifact` — only the entry point changes.
-
-### 3.4 Delete flow
-
-`DELETE` on the same route → `deleteDashboardChatSessionArtifact()` → S3 cleanup (non-fatal) → `prisma.document.delete()`. The panel calls `removeArtifact(id)` which closes the panel if the deleted artifact was active.
-
-### 3.5 Document download flow (DOCX)
-
-Specific to `text/document`:
-
-1. Panel split-button → "Word (.docx)" → `GET /api/dashboard/chat/sessions/{id}/artifacts/{artifactId}/download?format=docx`.
-2. Route runs in **Node runtime** (`export const runtime = "nodejs"` — required for `astToDocx`).
-3. Auth + ownership check; reject with 400 if `artifactType !== "text/document"`.
-4. `JSON.parse(content)` → `DocumentAstSchema.safeParse()` → if invalid, return 409.
-5. Call `astToDocx(ast)` from `src/lib/document-ast/to-docx.ts`. This uses the `docx` npm package (pure JS) plus the shared rendering module to rasterize embedded mermaid + chart blocks (`mermaidToSvg` via jsdom → `svgToPng` via sharp; `chartToSvg` via D3).
-6. Return blob with `Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document`, sanitized filename, `Cache-Control: no-store`.
-
-The `.md` button is fully client-side: the panel walks the AST in the browser to synthesize markdown, no network trip.
-
----
-
-## 4. The registry — single source of truth
-
-**File:** `src/features/conversations/components/chat/artifacts/registry.ts`
-
-Adding a new artifact type means editing **one** file. Everything else (validator dispatch, renderer dispatch, Zod enum, UI chrome, download extension) is derived.
-
-The registry exports:
-
-```typescript
-interface ArtifactRegistryEntry {
-  type: ArtifactType
-  label: string         // long UI label, e.g. "React Component"
-  shortLabel: string    // panel pill label, e.g. "React"
-  icon: LucideIcon      // imported from @/lib/icons
-  colorClasses: string  // Tailwind classes for type chip
-  extension: string     // download extension, e.g. ".tsx"
-  codeLanguage: string  // shiki language for code tab; "" if none
-  hasCodeTab: boolean   // whether panel exposes a separate code tab
-}
-
-const ARTIFACT_REGISTRY: readonly ArtifactRegistryEntry[] = [/* 12 entries */]
-
-type ArtifactType = (typeof ARTIFACT_REGISTRY)[number]["type"]
-const ARTIFACT_TYPES: ArtifactType[]                    // for iteration
-const VALID_ARTIFACT_TYPES: ReadonlySet<ArtifactType>   // for membership
-
-const TYPE_ICONS: Record<ArtifactType, LucideIcon>
-const TYPE_LABELS: Record<ArtifactType, string>
-const TYPE_SHORT_LABELS: Record<ArtifactType, string>
-const TYPE_COLORS: Record<ArtifactType, string>
-
-function getArtifactRegistryEntry(type: string): ArtifactRegistryEntry | undefined
+```
+Chat tool call (AI SDK v6)
+     │
+     ▼
+src/lib/tools/builtin/create-artifact.ts
+     │  • Zod params: { title, type (enum from ARTIFACT_TYPES), content, language? }
+     │  • 512 KiB content cap (Buffer.byteLength)
+     │  • Canvas-mode lock: canvasMode && canvasMode !== "auto" && canvasMode !== type
+     │  • application/code requires `language` arg
+     ▼
+validateArtifactContent(type, content, { isNew: true })
+     │  • Promise.race against 5-second timer (VALIDATE_TIMEOUT_MS)
+     │  • Per-type validator (sync or async)
+     │  • Post-resolve Unsplash for text/html and application/slides
+     │  • text/document validator resolves Unsplash internally
+     │
+     ├── ok=false → return { persisted: false, error, validationErrors }
+     │             AI SDK retry loop signals the LLM to self-correct.
+     │
+     ▼ ok=true
+finalContent = validation.content ?? content
+     │
+     ▼
+S3 upload (canonical key: artifacts/<orgId|null>/<sessionId|"orphan">/<id><ext>)
+     │
+     ▼
+prisma.document.create({
+  id, title, content: finalContent, artifactType,
+  sessionId, organizationId, createdBy, s3Key,
+  fileType: "artifact", fileSize, mimeType,
+  metadata: { artifactLanguage, validationWarnings? }
+})
+     │
+     ▼ background, fire-and-forget
+indexArtifactContent(id, title, finalContent)
+     │  • chunkDocument() (1000-char / 200-overlap)
+     │  • generateEmbeddings() → storeChunks() (N sequential SurrealDB inserts — see N-49)
+     │  • markRagStatus(id, true|false) on metadata
+     │  • NEVER rethrows; failure path writes ragIndexed:false and returns
+     │
+     ▼
+return { id, title, type, content: finalContent, language, persisted, warnings? }
+     │
+     ▼
+chat-workspace.tsx onToolUpdate
+     │  • addOrUpdateArtifact() → useArtifacts state
+     │  • on tool error / malformed output: removeArtifact("streaming-${toolCallId}")
+     │  • does NOT auto-open the artifact panel — user must click the indicator
 ```
 
-The Zod enum in `create-artifact.ts` is `z.enum(ARTIFACT_TYPES as unknown as [ArtifactType, ...ArtifactType[]])` — so the LLM's allowed-types list updates automatically whenever the registry changes.
+**Streaming.** When `tool-input-available` arrives mid-stream, the
+chat-workspace adds a placeholder artifact with id `streaming-${toolCallId}`
+so the panel can show progressive content. On `tool-output-available` the
+placeholder is removed and the real artifact (with the persisted id) takes
+its place. **If the user aborts mid-stream**, the placeholder is orphaned
+forever (rescan **N-4**) — no cleanup runs in `handleStop`.
 
-`text/document` and `application/code` set `hasCodeTab: false`. For `text/document` the AST JSON *is* the source of truth and showing it in a code tab would be confusing; for `application/code` the preview is the code (display-only).
-
----
-
-## 5. The two LLM tools
-
-**Files:** `src/lib/tools/builtin/create-artifact.ts`, `src/lib/tools/builtin/update-artifact.ts`. Both registered (alongside ~12 other built-in tools) in `src/lib/tools/builtin/index.ts` and seeded into the database by `src/lib/tools/seed.ts`. Both are flagged **non-user-selectable** — they're triggered by the LLM, not surfaced in the user's tool picker.
-
-### `create_artifact`
-
-| Field | Required | Notes |
-|---|---|---|
-| `title` | ✓ | 3–8 word descriptive title |
-| `type` | ✓ | One of the 12 enum values |
-| `content` | ✓ | Complete, self-contained content. Hard cap 512 KB. |
-| `language` | optional | Required for `application/code` (e.g. `"python"`, `"rust"`, `"typescript"`). |
-
-Returns: `{ id, title, type, content, language?, persisted, warnings?, error?, validationErrors? }`.
-
-### `update_artifact`
-
-| Field | Required | Notes |
-|---|---|---|
-| `id` | ✓ | UUID returned by `create_artifact` |
-| `title` | optional | Keep existing title if omitted |
-| `content` | ✓ | Complete replacement (no diffs / no partial). |
-
-Returns: `{ id, title, content, updated: true, persisted, warnings? }`.
-
-`type` is **not** a parameter of `update_artifact` — the type is derived from the persisted artifact and cannot be changed in-place. To switch types, call `create_artifact` with a new content.
+**`ctx.isNew = true`** is hardcoded for create. Two validators consume it:
+`validateMarkdown` enforces a 128 KiB cap, `validateSlides` rejects the
+deprecated `image-text` layout. Every other validator ignores it.
 
 ---
 
-## 6. The validator dispatch
+## 3. End-to-end flow — LLM updates an artifact
 
-**File:** `src/lib/tools/builtin/_validate-artifact.ts` (~2000 lines).
+```
+update_artifact tool call
+     │
+     ▼
+src/lib/tools/builtin/update-artifact.ts
+     │  • Zod params: { id, title?, content }   ← no `type`, no `language`
+     │  • 512 KiB cap
+     │  • prisma.document.findUnique({ where: { id } })
+     │     ↳ existing == null  → return { updated: false, error: "...not found..." }
+     │  • Canvas-mode lock against existing.artifactType
+     │     ↳ silently bypassed when existing.artifactType is null (rescan N-7)
+     ▼
+validateArtifactContent(existing.artifactType, content)   ← no ctx, so isNew is false
+     │  • failures → { updated: false, error: formatValidationError, validationErrors }
+     ▼
+finalContent = validation.content ?? content
+     │
+     ▼
+Versioning
+     │  • metadata.versions: append { title, timestamp, contentLength, s3Key? }
+     │  • archive previous content to <s3Key>.v<N>; on failure → inline if ≤32 KiB else marker
+     │  • FIFO eviction at 20 entries (MAX_VERSION_HISTORY); track total in evictedVersionCount
+     │  • upload new content to existing.s3Key
+     ▼
+prisma.document.updateMany({ where: { id, updatedAt: existing.updatedAt }, data: {...} })
+     │  • count === 0 → return { updated: false, error: "Concurrent update detected…" }
+     │  • count === 1 → continue
+     ▼
+indexArtifactContent(id, updatedTitle, finalContent, { isUpdate: true })  ← background
+     │
+     ▼
+return { id, title: newTitle, content: finalContent, updated: true, persisted, warnings? }
+```
 
-A central `VALIDATORS: Record<ArtifactType, (content) => Result | Promise<Result>>` map dispatches to a per-type function. The result shape is:
+**Three known behavioral quirks of `update_artifact`** (rescan items):
 
-```typescript
-interface ArtifactValidationResult {
+- **N-8.** When `title` is omitted, the success return contains
+  `title: undefined` — the LLM cannot read the actual current title from
+  the tool result.
+- **N-9.** Persistence errors set `persisted = false` but the function
+  still returns `updated: true` — misleading. The chat workspace's
+  `out.updated` gate fires anyway and applies in-memory state diverging
+  from storage.
+- **N-12.** No `language` or `type` parameters — code language can't be
+  changed in place; type can't be migrated.
+
+**Streaming-update edge** (rescan **N-2**): the chat-workspace's
+`tool-input-available` handler updates the artifact with partial streamed
+content using the **real** id (not a placeholder). If the final
+`tool-output-available` carries an error, the chat-workspace only
+`console.warn`s. The artifact is left with the partial invalid content
+locked in place.
+
+---
+
+## 4. End-to-end flow — manual edit (panel UI)
+
+```
+ArtifactPanel edit-mode save
+     │
+     ▼
+PUT /api/dashboard/chat/sessions/[id]/artifacts/[artifactId]
+     │  • auth() session check
+     │  • Zod-validate params + body (DashboardChatSessionArtifactBodySchema)
+     ▼
+updateDashboardChatSessionArtifact({ userId, sessionId, artifactId, input })
+     │  • Session ownership check (cross-tenant guard)
+     │  • Artifact-belongs-to-session check
+     ▼
+validateArtifactContent(existing.artifactType, content)   ← no ctx
+     │  • failure → 422 with formatValidationError text
+     │  • finalContent = validation.content ?? content
+     ▼
+Versioning (same archival + FIFO logic as update-artifact)
+     │
+     ▼
+updateDashboardArtifactByIdLocked(id, expectedUpdatedAt, data)
+     │  • prisma.document.updateMany({ where: { id, updatedAt: expectedUpdatedAt } })
+     │  • returns null on count === 0 → 409
+     │
+     ▼
+HTTP 200 with the persisted row
+```
+
+**The big difference from the LLM tool path: NO RAG re-index** (rescan
+**N-1**). After a manual edit, `knowledge_search` keeps returning the old
+content until the next LLM-driven update reseeds chunks via
+`indexArtifactContent`.
+
+**Two-step optimistic-lock window** (rescan, low-impact): the locked
+update is `updateMany` + `findUnique` as separate statements. A third
+writer landing between them returns *their* version of the row to the
+caller, who just "successfully" updated. Doesn't corrupt data, but the
+returned shape may not match what was just written.
+
+---
+
+## 5. End-to-end flow — delete
+
+```
+DELETE /api/dashboard/chat/sessions/[id]/artifacts/[artifactId]
+     │
+     ▼
+deleteDashboardChatSessionArtifact
+     │  • session ownership + artifact-belongs-to-session
+     ▼
+S3 cleanup (all non-fatal)
+     │  • deleteFile(existing.s3Key)
+     │  • collect metadata.versions[].s3Key → deleteFiles(versionedKeys)
+     │  • per-object error array on DeleteObjects is silently dropped (rescan N-46)
+     ▼
+RAG cleanup
+     │  • deleteChunksByDocumentId(artifactId) on SurrealDB (non-fatal)
+     ▼
+prisma.document.delete({ where: { id } })
+     ▼
+HTTP 200 { success: true }
+```
+
+**Session-delete is incomplete** (rescan **N-47**):
+`deleteDashboardChatSession` calls `findArtifactsBySessionId` which only
+fetches `{ id, s3Key }`. Versioned keys in `metadata.versions[].s3Key` are
+never collected and remain in S3 indefinitely after the session is deleted.
+
+**Session-delete is also non-atomic** (rescan **N-48**): the steps
+(S3 → RAG → `deleteArtifactsBySessionId` → `deleteDashboardSessionById`)
+are not wrapped in a transaction. A failure between the artifact-row
+delete and the session-row delete leaves Documents gone but the session
+alive.
+
+---
+
+## 6. The validator dispatcher
+
+`src/lib/tools/builtin/_validate-artifact.ts` (~2110 LoC, the most-changed
+file post-fix). Single contract every persistence path runs through.
+
+```ts
+export interface ValidationContext { isNew?: boolean }
+
+export interface ArtifactValidationResult {
   ok: boolean
-  errors: string[]    // hard failures — block create/update
-  warnings: string[]  // soft nags — surface in metadata, do not block
-  content?: string    // optional rewrite — used by validateDocument to bake in resolved Unsplash URLs
+  errors: string[]
+  warnings: string[]
+  content?: string  // resolved/transformed content to persist instead of input
 }
-```
 
-Key validator behaviors at a glance:
+const VALIDATORS: Record<ArtifactType, (content, ctx?) =>
+  ArtifactValidationResult | Promise<ArtifactValidationResult>> = { ... }
 
-- **`validateHtml`** — parse5 tree walk; require `<!DOCTYPE html>`, `<html>`/`<head>`/`<body>`, non-empty `<title>`, `<meta name="viewport">`. Reject `<form action>` (sandbox blocks submissions). Warn if inline `<style>` block > 10 lines (prefer Tailwind).
-- **`validateReact`** — strip directive lines, parse with `@babel/parser` (`sourceType: "module"`, `plugins: ["jsx"]`). Require `export default`. Reject class components. Whitelist imports to `react`, `react-dom`, `recharts`, `lucide-react`, `framer-motion` (relative paths also OK). Reject `document.querySelector` / `getElementById`. Reject CSS imports. The directive layer (next bullet) runs first.
-- **React directives** — line 1 must be `// @aesthetic: <direction>` where direction ∈ {editorial, brutalist, luxury, playful, industrial, organic, retro-futuristic}. Optional line 2: `// @fonts: Family:spec | Family:spec | …` (max 3 families, pipe-separated). The env flag `ARTIFACT_REACT_AESTHETIC_REQUIRED` controls enforcement: anything other than `"false"` (the default) hard-errors on a missing/unknown directive; `"false"` downgrades it to a warning. Soft-warn on aesthetic/palette/font/motion mismatches (e.g. `industrial` direction using `Motion.AnimatePresence`).
-- **`validateSvg`** — parse5 walk. Reject `<script>`, `<style>`, `<foreignObject>`. Reject external `href`/`xlink:href` (only same-doc `#fragment` refs). Strip event-handler attributes. Warn if > 5 distinct colors, missing viewBox, or path coordinates with > 2 decimal precision.
-- **`validateMermaid`** — find first non-comment/non-frontmatter line, require recognized diagram declaration (27 supported types). Reject markdown fence wrappers. Warn if > 3000 chars; for flowcharts, warn if > 15 node definitions. Reject `%%{init: theme: …}%%` (breaks dark mode sync).
-- **`validateMarkdown`** — soft warnings only (no hard errors). Warn on missing top-level `#`, heading-level jumps, raw HTML tags (details/iframe/etc), `<script>`, missing language tags on fenced code blocks.
-- **`validateDocument`** — `JSON.parse` → `validateDocumentAst()` (Zod schema) → `resolveUnsplashInAst()` → return rewritten JSON in `content`. Semantic checks include: anchor `bookmarkId` must reference an existing heading; `pageNumber` only valid inside header/footer; table `sum(columnWidths) === width` and per-row cell count (with colspan) matches column count; `unsplash:` must have non-empty keyword; `mermaid.code` first token must be one of 16 supported diagram declarations.
-- **`validateCode`** — reject HTML doctype (wrong type), reject markdown fence wrapper. Warn on truncation/placeholder markers (`// ... rest`, `TODO: implement`, `unimplemented!()`).
-- **`validateSheet`** — peek first non-whitespace char. `{` + has `kind` field → spec validator (full Zod + formula DAG); `[` → JSON-array-of-objects (matching keys, no nested objects, warn on >100 rows / >10 columns); else → CSV (uniform column count, mixed-date warning, currency-leaking warning).
-- **`validateLatex`** — reject full-LaTeX preamble (`\documentclass`, `\usepackage`, `\begin{document}`). Reject unsupported KaTeX commands (`\includegraphics`, `\bibliography`, `\begin{tikzpicture}`). Warn if no math delimiter at all (recommend markdown instead).
-- **`validateSlides`** — JSON parse, ≥1 slide, layout must be one of 18 valid types. Per-layout required-field checks. Warn on <7 or >12 slides, on first slide not being `title` and last not being `closing`, on bullet count > 6 or words/bullet > 10. Warn on markdown leakage in text fields.
-- **`validatePython`** — reject markdown fence wrappers. Reject imports of unavailable packages (requests, urllib3, httpx, flask, django, fastapi, sqlalchemy, selenium, tensorflow, torch, keras, transformers, opencv-python). Reject `input()` and `open(write)`. Warn on missing output (no `print` or `plt.show`), on `time.sleep > 2s`, on `while True` without `break`.
-- **`validate3d`** — reject `<Canvas>`, `<OrbitControls>`, `<Environment>` (the wrapper provides them). Reject `document.*`, `requestAnimationFrame`, `new THREE.WebGLRenderer()`. Require `export default`. Warn on imports outside the R3F whitelist (~40 symbols across react / three / @react-three/fiber / @react-three/drei).
+export let VALIDATE_TIMEOUT_MS = 5_000   // ⚠ mutable module-level — see N-55
 
----
-
-## 7. The 12 artifact types — full per-type breakdown
-
-This section is the heart of the doc. Each subsection covers: prompt rules at a glance, content shape, validator highlights, renderer behavior, sandbox/security, download. For deeper per-type capability matrices see [artifacts-capabilities.md](./artifacts-capabilities.md); for file:line cites see [architecture-reference.md](./architecture-reference.md).
-
-### 7.1 `text/html` — HTML Page
-
-**Prompt** ([html.ts](../../src/lib/prompts/artifacts/html.ts)) tells the LLM to emit a self-contained HTML document. Tailwind is auto-injected from CDN and Inter is auto-injected from Google Fonts. The LLM may use `unsplash:keyword phrase` in `<img src>` for Unsplash images; the server resolves these to real photo URLs at create-time.
-
-**Renderer** (`renderers/html-renderer.tsx`, ~136 lines):
-- Iframe with `srcDoc` and sandbox `allow-scripts allow-modals` — *no* `allow-same-origin`, *no* `allow-top-navigation`, *no* `allow-forms` (so `<form action>` cannot POST).
-- A **navigation blocker** script is injected first — before any user code or CDN scripts. It overrides `Location.assign/replace/reload`, intercepts `location.href` assignment, blocks anchor clicks (non-fragment, non-`javascript:`), blocks form submissions, blocks `history.pushState/replaceState`, and stubs `window.open`. This ensures the iframe stays on the artifact's content; users cannot accidentally be navigated away.
-- Tailwind CDN (`https://cdn.tailwindcss.com`) and Inter font are conditionally injected if not already present in the user-supplied HTML (regex check).
-- Partial HTML (just a body fragment) is auto-wrapped in a full document with charset + viewport + base styles.
-- A 5-second slow-load warning is shown but the spinner is only cleared by the actual `onLoad` event.
-
-**Validator** parses with parse5, requires DOCTYPE/html/head/body/title/viewport, rejects `<form action>`, soft-warns on long inline `<style>`.
-
-**Download** is a raw `.html` save.
-
-### 7.2 `application/react` — React Component
-
-**Prompt** ([react.ts](../../src/lib/prompts/artifacts/react.ts), ~169 lines): the LLM writes a single React component. **Line 1 must be** `// @aesthetic: <direction>` where the direction is one of:
-
-| Direction | When to pick | Default fonts |
-|---|---|---|
-| editorial | articles, brand pages, storytelling, long-form | Fraunces + Inter |
-| brutalist | indie tools, manifestos, dev products, "raw" | Space Grotesk + JetBrains Mono |
-| luxury | premium, hospitality, fashion | DM Serif Display + DM Sans |
-| playful | onboarding, kids, creative tools | Fredoka |
-| industrial | dashboards, admin, monitoring | Inter Tight + Space Mono |
-| organic | wellness, food, crafts | Fraunces + Public Sans |
-| retro-futuristic | gaming, sci-fi, events | VT323 + Space Mono |
-
-Optional line 2: `// @fonts: Family:spec | Family:spec | …` for explicit overrides (max 3 families, pipe-separated). Each spec validates against `/^[A-Z][A-Za-z0-9 ]{1,40}:(wght@[\d;.]+|…)$/`.
-
-**Pre-injected globals** (the LLM uses these directly without imports):
-
-| Library | Symbol | Version |
-|---|---|---|
-| React 18 | `React` (and 26 hooks pre-destructured: `useState`, `useEffect`, `useRef`, `useMemo`, `useCallback`, `useContext`, `useReducer`, `useId`, `useTransition`, `useDeferredValue`, `useSyncExternalStore`, `useInsertionEffect`, `useLayoutEffect`, `createContext`, `forwardRef`, `memo`, `Fragment`, `Suspense`, `lazy`, `startTransition`, `Children`, `cloneElement`, `createElement`, `isValidElement`) | 18 (UMD) |
-| Recharts | `Recharts.LineChart`, `Recharts.BarChart`, `Recharts.PieChart`, `Recharts.AreaChart`, `Recharts.ResponsiveContainer`, `Recharts.Tooltip`, etc. | 2 (UMD) |
-| Lucide React | `LucideReact.ArrowRight`, `LucideReact.Check`, etc. | 0.454.0 (UMD) |
-| Framer Motion | `Motion.motion.div`, `Motion.AnimatePresence` | 11 (UMD) |
-| Tailwind CSS | utility classes via CDN | v3 |
-
-**Renderer** (`renderers/react-renderer.tsx`, ~574 lines) — the most complex renderer:
-1. Strip directive lines (lines 1–2) before transpiling.
-2. Hide template literals (`` `…` ``) so import-regex doesn't match inside strings, then collapse multi-line imports onto a single line.
-3. Rewrite imports: `import { useState } from 'react'` → `const { useState } = React;` (only for symbols not in the pre-destructured 26). Other-package imports (`recharts`, `framer-motion`, `lucide-react`) become `const X = GLOBAL_NAME;`.
-4. Strip side-effect imports (`import './styles.css'`).
-5. Transform `export default` into a named const/function so the iframe can mount it.
-6. Restore template literals.
-7. Build the iframe `srcDoc`: Tailwind CDN + font links from `buildFontLinks(aesthetic, fonts)` + React UMDs + Babel-standalone + Recharts + Lucide + Framer Motion + navigation blocker + a `<script type="text/babel">` block containing the user code wrapped in an `__ArtifactErrorBoundary` class.
-8. Sandbox `allow-scripts` only — **no** `allow-modals`. Errors postMessage'd back to parent; parent shows fatal error card with Retry / Fix-with-AI / View Source, or warning banner for non-fatal issues.
-
-**Validator** rejects: missing `export default`, class components, non-whitelisted imports, `document.*` access, CSS imports. The directive layer hard-errors on missing/unknown `@aesthetic:` (gated by `ARTIFACT_REACT_AESTHETIC_REQUIRED` env). Soft-warns on `>= 6 slate-*/indigo-* references` outside of `industrial` direction (palette mismatch), `editorial`/`luxury` without a serif `@fonts`, or `industrial` using `Motion.AnimatePresence`.
-
-**Download** is `.tsx`.
-
-### 7.3 `image/svg+xml` — SVG Graphic
-
-**Prompt** ([svg.ts](../../src/lib/prompts/artifacts/svg.ts), ~150 lines): inline SVG markup. `viewBox` is required (no hardcoded width/height). Four style categories with slightly different conventions: **icon** (`viewBox="0 0 24 24"`, `fill="none"`, `stroke="currentColor"`, `stroke-width="2"`), **illustration** (`viewBox="0 0 400 300"`, 3–5 colors), **logo / badge** (square or rectangular wordmark, ≤3 colors, bold filled shapes), **diagram** (proportional, 2–4 colors, consistent stroke widths). Animation supported via SMIL only. Maximum 5 distinct colors per SVG.
-
-**Renderer** (`renderers/svg-renderer.tsx`, ~92 lines):
-- Inline DOM render (no iframe).
-- Validates with `DOMParser` first, checking for `<parsererror>` and `<svg>` root.
-- Sanitizes with `DOMPurify` (`USE_PROFILES: { svg: true, svgFilters: true }`, `ADD_TAGS: ["use"]`).
-- DOMPurify strips: `<script>`, `<style>` blocks, `<foreignObject>`, event handlers (`onclick`, `onload`), foreign namespaces.
-- Renders with `dangerouslySetInnerHTML` after sanitization.
-
-**Validator** also runs the same parse5 tree walk plus shape checks (`scriptCount === 0`, `foreignObjectCount === 0`, `styleBlockCount === 0`, `externalHrefs === 0`, `colorValues ≤ 5`).
-
-**Download** is `.svg`.
-
-### 7.4 `application/mermaid` — Mermaid Diagram
-
-**Prompt** ([mermaid.ts](../../src/lib/prompts/artifacts/mermaid.ts), ~249 lines): raw mermaid syntax. Up to 14 diagram types: `flowchart`, `graph`, `sequenceDiagram`, `classDiagram`, `stateDiagram`/`stateDiagram-v2`, `erDiagram`, `gantt`, `pie`, `mindmap`, `timeline`, `journey`, `c4Context`, `gitGraph`, `quadrantChart`, `requirementDiagram`, plus `xychart-beta` and `sankey-beta`. Maximum 15 nodes per diagram for readability. Labels ≤ 5 words.
-
-**Renderer** (`renderers/mermaid-renderer.tsx`, ~172 lines):
-- Inline DOM render (no iframe).
-- Module-level singleton: `import("mermaid")` happens once and is cached. Theme tracked separately — re-initialize only when light/dark changes.
-- Theme config from `mermaid-config.ts` (~502 lines!) maps Tailwind design tokens to mermaid theme variables for both modes; `securityLevel: "strict"` and `htmlLabels: false` so user code can't escape.
-- `mermaid.parse(content, { suppressErrors: true })` first to validate syntax, then `mermaid.render(id, content)` for the SVG.
-- `dangerouslySetInnerHTML` for the resulting SVG.
-- Errors get a Retry + View-Source + Fix-with-AI control row.
-- Cancellation flag prevents state updates if the user navigates away mid-render.
-
-**Validator** finds the first meaningful line, requires a recognized diagram type declaration, rejects markdown fence wrappers, warns if > 15 node definitions in a flowchart or if `%%{init}%%` is used.
-
-**Download** is `.mmd`.
-
-### 7.5 `text/markdown` — Markdown
-
-**Prompt** ([markdown.ts](../../src/lib/prompts/artifacts/markdown.ts), ~245 lines): GFM markdown. Supports inline math `$…$`, display math `$$…$$`, fenced mermaid blocks, fenced code with language tags (Shiki highlight), GFM tables, task lists, strikethrough. **No raw HTML** — `<details>`, `<kbd>`, `<script>` will be stripped or rendered unreliably.
-
-**Renderer**: there is no dedicated `MarkdownRenderer`; the dispatcher routes `text/markdown` to `StreamdownContent` directly (which is also used for chat-message body rendering elsewhere in the app). It wraps the `streamdown` npm package with:
-
-- Shiki for code syntax highlighting (theme-aware: dark theme uses `["github-dark", "github-light"]`)
-- `controls: { code: true, table: true, mermaid: true }` — enables interactive controls
-- `mermaid: { errorComponent: MermaidError }` — custom error UI for failed inline mermaid
-- `plugins.math: { remarkPlugin: remark-math, rehypePlugin: rehype-katex }` — KaTeX math rendering
-- `animated` + `isAnimating` for streaming UI
-
-**Validator** is the most permissive — only soft warnings, no hard errors.
-
-**Download** is `.md`.
-
-### 7.6 `text/document` — Document (the AST type)
-
-This is the most complex type. The LLM emits a **JSON `DocumentAst` tree** (not markdown text), which the validator parses with Zod and which the renderer walks node-by-node.
-
-**Prompt** ([document.ts](../../src/lib/prompts/artifacts/document.ts), ~308 lines):
-- **Output format: JSON ONLY** — no markdown fences, no commentary, no text before `{` or after `}`.
-- Decision boundaries vs `text/markdown` and `text/html` (heuristic: "if someone will print, sign, send, or archive it → text/document; if someone will read it once on a screen → text/markdown").
-- Top-level: `{ meta, coverPage?, header?, footer?, body }`.
-- `meta` carries title, author, date (ISO 8601), subtitle, organization, documentNumber, pageSize (`"letter"` | `"a4"`), orientation (`"portrait"` | `"landscape"`), margins (DXA — 1440 = 1 inch), font (default `"Arial"`), fontSize (8–24, default 12), showPageNumbers.
-- 11 **block node types**: `paragraph`, `heading` (level 1–6, with optional `bookmarkId` for TOC + anchor targets), `list` (ordered/unordered, with sublists), `table` (column widths in DXA, must sum to width), `image` (URL or `unsplash:keyword`, required `alt`), `blockquote` (with optional attribution), `codeBlock` (with language), `horizontalRule`, `pageBreak`, `toc` (with `maxLevel` 1–6), `mermaid` (raw mermaid code, max 10k chars, dimensions clamped 200–1600 × 150–1200), `chart` (reuses `ChartData` from slides — bar/bar-horizontal/line/pie/donut).
-- 7 **inline node types**: `text` (with style flags: bold/italic/underline/strike/code/superscript/subscript, plus `color: "#rrggbb"`), `link`, `anchor` (internal cross-ref), `footnote`, `lineBreak`, `pageNumber` (only valid in header/footer), `tab` (with optional `leader: "dot"` for letter/TOC layouts).
-
-**Schema** (`src/lib/document-ast/schema.ts`, ~376 lines): full Zod schema with discriminated unions and lazy circular references. Hard caps include: `title` 1–200 chars, `author`/`organization` ≤ 120, `date` regex `/^\d{4}-\d{2}-\d{2}$/`, `mermaid.code` 1–10000 chars, color regex `/^#[0-9a-fA-F]{6}$/`. `image.src` is intentionally NOT validated as `.url()` so `"unsplash:keyword"` passes.
-
-**Validator** (`validateDocument`, async): JSON parse → `validateDocumentAst()` (Zod + 128 KB serialized-size cap) → semantic checks (anchor bookmark resolution, pageNumber scope, table column-width invariants, mermaid first-token check, unsplash keyword non-empty) → `resolveUnsplashInAst()` walks the tree, dedups `unsplash:` keywords, parallel-fetches via the cached resolver, deep-clones and rewrites in place. Returns `JSON.stringify(resolvedAst)` as the rewritten content so persistence stores resolved URLs.
-
-**Renderer** (`renderers/document-renderer.tsx`, ~617 lines):
-- Inline DOM render (no iframe).
-- Walks the AST via `renderInline()` and `renderBlock()` recursive functions.
-- Page sized to A4 (794×1123 px) or Letter (816×1056 px) at 96 DPI; margins from `meta.margins` converted DXA → px (`(dxa / 1440) * 96`).
-- Headings → `<h1>`–`<h6>` with cascading sizes, `bookmarkId` preserved as the element id.
-- Lists are recursive (sublists supported).
-- Tables: column widths from spec, header rows styled, cells can have colspan/rowspan + shading + alignment.
-- **Mermaid blocks** rendered by `MermaidPreviewBlock` — dynamic-import mermaid, initialize with the **shared** `MERMAID_INIT_OPTIONS` from `src/lib/rendering/mermaid-theme.ts` (note: this is *different* from the standalone `MermaidRenderer` which uses theme-aware `getMermaidConfig`), call `mermaid.render()`, set the SVG via `dangerouslySetInnerHTML`. Caption rendered as `<figcaption>`.
-- **Chart blocks** rendered by `ChartPreviewBlock` — call `chartToSvg(chart, 800, 400)` from `src/lib/rendering/chart-to-svg.ts` and inject the SVG.
-- TOC built post-walk by traversing body for headings ≤ `maxLevel`.
-- Footnotes use a single sink object passed through the entire render tree; rendered in a footnotes section at document end.
-
-**DOCX export** (`src/lib/document-ast/to-docx.ts`, ~657 lines): `astToDocx(ast): Promise<Buffer>` using the [`docx`](https://www.npmjs.com/package/docx) npm package (MIT). Page setup from `meta`. Cover page rendered with 48pt centered title, 28pt italic subtitle, 24/22pt centered author/org/date stack. Inline rendering produces `TextRun` / `ExternalHyperlink` / `InternalHyperlink` (for anchors) / `FootnoteReferenceRun` / `PageNumber.CURRENT`. Block rendering produces `Paragraph` (with mapped alignment, spacing, indentation), `Table` (with col widths in DXA, colspan/rowspan, vertical align, shading, borders), `ImageRun` (fetches over HTTP with 10-second timeout, falls back to a 1×1 transparent PNG on failure; SVG inputs are rejected by the `docx` package). **Mermaid blocks** route through `mermaidToSvg()` (jsdom shim) → `resizeSvg()` → `svgToPng()` (sharp). **Chart blocks** route through `chartToSvg()` → `svgToPng()`. Heading bookmarkIds map to Word bookmarks; the `toc` node renders as a real Word `TableOfContents` field with `hyperlink: true`. Footnotes accumulated during body rendering, attached via `Document.footnotes`. Numbering config defines 3 levels each for bullets (•/◦/▪) and ordered (`%1.`/`%2.`/`%3.`).
-
-**Download** is split-button:
-- **Markdown (.md)**: client-side, walks the AST in the browser to synthesize markdown. Lossy — mermaid/chart blocks become placeholder fences.
-- **Word (.docx)**: `GET /api/dashboard/chat/sessions/{id}/artifacts/{artifactId}/download?format=docx` — Node runtime, calls `astToDocx`, returns blob. Filename sanitized from `meta.title`.
-
-PDF export is **not shipped**.
-
-### 7.7 `application/code` — Code (display-only)
-
-**Prompt** ([code.ts](../../src/lib/prompts/artifacts/code.ts), ~317 lines): source code with strict no-truncation, no-placeholder rules. The LLM must specify `language` (parameter on the tool call). Per-language conventions (TypeScript: ES modules, no `any`, JSDoc on public functions; Python: 3.10+, type hints, `if __name__ == "__main__":`; Rust: `Result<T, E>`, `?` propagation; Go: check every `error`; SQL: uppercase keywords; Shell: `#!/usr/bin/env bash`, `set -euo pipefail`).
-
-**Renderer**: dispatched to `StreamdownContent` with the content wrapped in a fence + language tag. The dispatcher computes the longest backtick run inside the content and uses `fence-length + 1` so embedded code blocks don't break syntax highlighting.
-
-**Validator** rejects content that looks like HTML (`<!doctype` / `<html`), rejects markdown fence wrappers (the wrapper is added by the renderer, not the LLM), warns on truncation markers (`// ... rest`, `TODO: implement`, `unimplemented!()`).
-
-**Download**: extension determined by `language` param when generating the filename (e.g. `.py`, `.ts`, `.rs`).
-
-### 7.8 `application/sheet` — Spreadsheet (3 content shapes)
-
-**Prompt** ([sheet.ts](../../src/lib/prompts/artifacts/sheet.ts), ~122 lines) — three shapes:
-
-1. **CSV** (default for flat tabular data): header row required, RFC-4180 quoting (escape literal quotes by doubling: `"She said ""hi"""`), every row matching column count.
-2. **JSON array of objects**: `[{...}, {...}]` with the same keys in the same order on every object, no nested objects.
-3. **`spreadsheet/v1` spec**: structured workbook with formulas, multi-sheet, named ranges, merged cells, frozen panes, cell styles, Excel number formats. Hard caps: 8 sheets per workbook, 500 cells per sheet, 200 formulas per workbook, 64 named ranges, sheet name length ≤ 31 chars.
-
-**Spec schema** (`src/lib/spreadsheet/types.ts`):
-
-```typescript
-{
-  kind: "spreadsheet/v1",
-  theme?: { font?, inputColor?, formulaColor?, crossSheetColor?, highlightFill? },
-  namedRanges?: { GrowthRate: "Assumptions!B2", … },
-  sheets: [
-    {
-      name: "Assumptions",
-      columns?: [{ width?, format? }, …],
-      frozen?: { rows?, columns? },
-      cells: [
-        { ref: "A1", value: "Metric", style: "header" },
-        { ref: "B2", value: 0.18, format: "0.0%", style: "input", note: "Q4 trend" },
-        { ref: "B3", formula: "=B2 * (1 + GrowthRate)", style: "formula" },
-        …
-      ],
-      merges?: ["A1:B2", …]
-    },
-    …
-  ]
-}
-```
-
-Six named cell styles: `header`, `input` (blue, manually editable), `formula` (computed), `cross-sheet` (green), `highlight` (yellow fill), `note` (italic gray).
-
-**Validator** detects shape by peeking the first non-whitespace character. For spec, runs `parseSpec()` then evaluates formulas to surface circular refs / undefined refs as errors at authoring time. For JSON, enforces matching keys and warns on >100 rows / >10 cols / nested objects. For CSV, enforces uniform column count and warns on currency/thousands formatting in flat data (recommend the spec instead).
-
-**Renderer** (`renderers/sheet-renderer.tsx` + `sheet-spec-view.tsx`):
-- The base `SheetRenderer` calls `detectShape(content)`. CSV / JSON-array → TanStack React Table with sort + filter + CSV export. Spec → `<SpecWorkbookView>` (lazy-loaded).
-- `SpecWorkbookView` (~250 lines): sheet tabs at the bottom; column letters (A, B, …) + row numbers Excel-style; `ƒx` toggle switches between computed values and raw formulas; click-a-cell footer shows the cell's ref + formula + format + note. Formulas evaluated via dynamic import of `evaluateWorkbook()` from `@/lib/spreadsheet/formulas`.
-
-**Formula evaluator** (`src/lib/spreadsheet/formulas.ts`, ~274 lines):
-- Library: `fast-formula-parser@1.0.19` (MIT) + `@formulajs/formulajs@4.6.0` (MIT, ~500 Excel functions). `HyperFormula` was rejected because it's GPL-3.0.
-- Phases: build cell index → seed literal cells → build dep graph via `DepParser` (resolves named ranges + expands ranges) → topological sort (Kahn's algorithm; remaining cells after pass = circular ref → error `"CIRCULAR"`) → build `FormulaParser` with onCell/onRange/onVariable callbacks → evaluate in topo order, catch `FormulaError` and store result + optional error code.
-- Errors surfaced: `#REF!`, `#NAME?`, `#DIV/0!`, `#VALUE!`, `CIRCULAR`.
-
-**XLSX export** (`src/lib/spreadsheet/generate-xlsx.ts`, ~145 lines):
-- Library: `exceljs@4.4.0` (MIT). Lazy-loaded — zero main bundle cost until user clicks download.
-- Writes formulas with cached values (`{ formula, result }`) so Excel/LibreOffice/Google Sheets/Numbers open the file with values **already visible**, no F9 recalc needed.
-- Exports: merges, named ranges (via `wb.definedNames`), frozen panes, styles (font color, fill, bold, italic), column widths, cell notes (Excel comments).
-- Style `applyStyle()` maps named styles to ExcelJS font + fill objects.
-- Color conversion: `#RRGGBB` → `FFRRGGBB` (ExcelJS argb format with alpha=FF).
-
-**Download**: split-button when content is a spec (`.csv` flattens active sheet, `.xlsx` exports the full workbook). For CSV/JSON-array shapes, single button: `.csv`.
-
-### 7.9 `text/latex` — LaTeX / Math
-
-**Prompt** ([latex.ts](../../src/lib/prompts/artifacts/latex.ts), ~212 lines): a LaTeX subset compatible with KaTeX. Supports `\section`/`\subsection`/`\subsubsection`, `\paragraph`, `itemize`/`enumerate`, `\textbf`/`\textit`/`\emph`/`\underline`/`\texttt`/`\href`, `\quote`/`\abstract`. Math environments: `equation`, `align`/`align*`, `gather`/`gather*`, `multline`/`multline*`, `cases`. Inside math: `matrix`, `pmatrix`, `bmatrix`, `vmatrix`, `array`. Full KaTeX symbol set (Greek, operators, relations, sets, fractions, decorations).
-
-**Not** supported: `\documentclass`, `\usepackage`, `\begin{document}` (silently stripped), `\maketitle`, `\label`/`\ref`/`\eqref`, `\input`/`\include`, `\includegraphics`, `\begin{figure}`, `\begin{tikzpicture}`, `\verb`/`\verbatim`.
-
-**Renderer** (`renderers/latex-renderer.tsx`, ~523 lines):
-- Custom LaTeX → HTML parser (no full LaTeX engine).
-- KaTeX `katex.renderToString()` with `displayMode` flag for inline vs block math (`throwOnError: false`, `trust: true`).
-- **Balanced-brace argument reader** (key trick): handles `\section{$f(x)$}` correctly without breaking at the `}` inside math. All command-arg parsing uses brace-depth tracking, never naive `[^}]*` regex.
-- Two-pass: extract preamble (`\title`/`\author`/`\date`), then line-by-line walk handling sectioning, lists, math environments, display math (`\[…\]` and `$$…$$`), `\begin{quote}`/`\begin{abstract}`, regular paragraphs.
-- Inline LaTeX processor recursively handles text commands inside math and vice versa (e.g. `\textbf{$x$}` works).
-- Styled inline render via `dangerouslySetInnerHTML`. No iframe.
-
-**Validator** errors on `\documentclass`/`\usepackage`/`\begin{document}` and on `\includegraphics`/`\bibliography`/`\begin{tikzpicture}`. Warns if no math delimiter present (recommend markdown instead).
-
-**Download** is `.tex`, wrapped in a minimal compilable preamble (the wrapper, not the artifact, contains `\documentclass{article}`).
-
-### 7.10 `application/slides` — Slides (Presentation Deck)
-
-**Prompt** ([slides.ts](../../src/lib/prompts/artifacts/slides.ts), ~591 lines — by far the largest prompt): JSON-only output, no markdown fences. `{ theme: { primaryColor, secondaryColor, fontFamily }, slides: [...] }`. Approved primaryColors are **dark and desaturated** (`#0F172A` slate-900, `#1E293B` slate-800, `#0C1222`, `#042F2E`, `#1C1917` stone-900, `#1A1A2E`); approved secondaries are vivid accents (`#3B82F6` blue, `#06B6D4` cyan, `#10B981` emerald, `#F59E0B` amber, `#8B5CF6` violet, `#EC4899` pink). Default `fontFamily: "Inter, sans-serif"`.
-
-**17 layouts** (6 text + 11 visual):
-
-- **title** — opening slide, dark gradient, centered. Required: title, subtitle.
-- **content** — workhorse, white bg, accent-bar title, bullets (≤ 6, ≤ 10 words each) or content body.
-- **two-column** — comparison; `leftColumn` ≤ 5 items + balanced `rightColumn`.
-- **section** — chapter divider, dark gradient, centered.
-- **quote** — testimonial; `quote` 5–25 words, optional `attribution`, optional `quoteImage` (URL or `unsplash:`), `quoteStyle: "minimal" | "large" | "card"`.
-- **closing** — final slide, dark gradient, CTA.
-- **diagram** — full-slide mermaid (≤ 15 nodes).
-- **image** — full-slide centered image with optional caption.
-- **chart** — full-slide ChartData (bar/bar-horizontal/line/pie/donut).
-- **diagram-content** / **image-content** / **chart-content** — split layout with text/bullets on the right, visual on the left (≤ 10 nodes for split mermaid).
-- **hero** — full-bleed background image with text overlay; `overlay: "dark" | "light" | "none"`.
-- **stats** — 2–4 big KPI numbers in a grid; each `{ value, label, trend?, change? }`.
-- **gallery** — image grid (4–12 items, 2–6 columns); each `{ imageUrl, caption? }`.
-- **comparison** — feature comparison table; `comparisonHeaders` + `comparisonRows[].values` (true→✓, false→✗, or string).
-- **features** — icon-based feature grid (3–6 items, 2–4 columns); icons by Lucide name.
-
-Inline `{icon:icon-name}` works in any text field — kebab-case Lucide names get rendered as inline SVG in the HTML preview but stripped in the PPTX export (PowerPoint doesn't support inline SVG).
-
-Deck conventions: 7–12 slides, first slide must be `title`, last must be `closing`, ≥ 3 different layouts.
-
-**Renderer** (`renderers/slides-renderer.tsx`, ~148 lines):
-- Iframe with `srcDoc = slidesToHtml(presentation)` and sandbox `allow-scripts allow-same-origin` (same-origin needed for postMessage).
-- `slidesToHtml()` (`src/lib/slides/render-html.ts`, ~1325 lines!) generates a full HTML document with inline CSS, all layout types, embedded mermaid divs (rendered client-side by mermaid.js inside the iframe), embedded chart SVGs (from `chartToSvg()`), inline icon SVGs, and a slide-navigation script.
-- Parent ↔ iframe via `postMessage`: iframe sends `{ type: "slideChange", current, total }`, parent sends `{ type: "navigate", direction | index }`.
-- Keyboard navigation in parent: arrow keys → postMessage to iframe (preventDefault to avoid page scroll).
-- Slide-dot indicators visible only when 1 < total ≤ 20 (avoid layout bloat for big decks).
-
-**Legacy markdown parser** (`src/lib/slides/parse-legacy.ts`): if content doesn't parse as JSON or lacks a `slides` array, fall back to splitting on `\n---\n` and parsing title/bullets/content per slide.
-
-**PPTX export** (`src/lib/slides/generate-pptx.ts`, ~1532 lines): `generatePptx(data): Promise<Blob>` using `pptxgenjs@4.0.1`, layout LAYOUT_WIDE (13.333"×7.5"). Per-layout renderers:
-- **diagram / chart / image / gallery / hero / quote-with-image** are async — they fetch/render images, mermaid (`mermaidToBase64Png()`), or charts (`chartToSvg() → svgToBase64Png()`) client-side using the browser Canvas API at 2× internal resolution.
-- **No native PPTX charts** — charts are rasterized to PNG.
-- **No `<svg>` in PPTX** — PowerPoint doesn't support inline SVG; everything visual is embedded as PNG.
-- Inline `{icon:name}` syntax stripped via `cleanPptx()`.
-
-**Validator** runs deep per-layout checks (see §6 above).
-
-**Download** is `.pptx`.
-
-### 7.11 `application/python` — Python Script (executable)
-
-**Prompt** ([python.ts](../../src/lib/prompts/artifacts/python.ts), ~191 lines): Python 3.12 source. Pre-loaded packages (no `micropip` install needed): `numpy`, `matplotlib`, `pandas`, `scipy`, `sympy`, `networkx`, `scikit-learn` (as `sklearn`), `pillow` (as `PIL`), `pytz`, `python-dateutil` (as `dateutil`), `regex`, `beautifulsoup4` (as `bs4`), `lxml`, `pyyaml` (as `yaml`), plus the full standard library.
-
-**Not** available — will crash on import: `requests`, `urllib3`, `httpx`, `flask`, `django`, `fastapi`, `sqlalchemy`, `selenium`, `tensorflow`, `torch`, `keras`, `transformers`, `opencv-python`, `pyarrow`, `polars`.
-
-Required: every script must produce visible output (`print()` or `plt.show()`). No `input()`, no `open()`, no real network requests, no `threading`.
-
-**Renderer** (`renderers/python-renderer.tsx`, ~308 lines):
-- Off-main-thread execution in a Web Worker.
-- Pyodide v0.27.6 from CDN (`pyodide.js`).
-- Pre-load on init: `numpy`, `micropip`, `matplotlib`, `scikit-learn`.
-- Matplotlib interceptor installed at init: `matplotlib.use('Agg')` then monkey-patch `plt.show` to write the figure to a `BytesIO`, base64-encode the PNG, and append to a `__plot_images__` list. This list is reset per-run.
-- stdout / stderr captured via `py.setStdout({ batched: ... })` / `py.setStderr({ batched: ... })`, streamed to the parent via postMessage.
-- Worker reused across runs; terminated on component unmount.
-
-**Validator** rejects fence wrappers and imports of unavailable packages. Rejects `input()` and `open(write)`. Warns on missing output, on `time.sleep > 2s`, on `while True:` without `break`.
-
-**Download** is `.py`.
-
-### 7.12 `application/3d` — 3D Scene (R3F)
-
-**Prompt** ([r3f.ts](../../src/lib/prompts/artifacts/r3f.ts), ~280 lines): a single React Three Fiber component. The wrapper provides `<Canvas>`, `<ambientLight>`, `<directionalLight>`, `<Environment preset="city">`, `<OrbitControls makeDefault dampingFactor={0.05}>`, and `<Suspense>` — the LLM must NOT include them. The user component returns `<group>`, `<mesh>`, or a Fragment.
-
-**Pre-injected**: React 18.3.1 + all hooks; Three.js 0.170.0 as `THREE`; `@react-three/fiber` 8.17.10 (`useFrame`, `useThree`); `@react-three/drei` 9.117.0 — exactly 20 helpers exposed: `useGLTF`, `useAnimations`, `Clone`, `Float`, `Sparkles`, `Stars`, `Text`, `Center`, `Billboard`, `Grid`, `Html`, `Line`, `Trail`, `Sphere`, `RoundedBox`, `MeshDistortMaterial`, `MeshWobbleMaterial`, `MeshTransmissionMaterial`, `GradientTexture`. Babel 7.26.10 transpiles JSX + TypeScript.
-
-**Verified glTF CDNs** for `useGLTF`:
-- KhronosGroup: `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/{Name}/glTF-Binary/{Name}.glb` — 20+ models including Fox (animated, scale 0.02), Duck, DamagedHelmet, Avocado (scale ~20), CesiumMan, BrainStem, ToyCar, BoomBox, WaterBottle, AntiqueCamera, BarramundiFish, ChronographWatch, DragonAttenuation, etc.
-- three.js examples: `https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/{Name}.glb` — Parrot, Flamingo, Stork, Soldier, Xbot, LittlestTokyo.
-
-**Renderer** (`renderers/r3f-renderer.tsx`, ~622 lines): Babel-transpiled component, mounted inside the wrapper Canvas. Sandboxed iframe similar to the React renderer.
-
-**Validator** rejects `<Canvas>`/`<OrbitControls>`/`<Environment>` (provided by wrapper), `document.*`, `requestAnimationFrame`, `new THREE.WebGLRenderer()`. Requires `export default`. Warns on imports outside the ~40-symbol R3F whitelist.
-
-**Download** is `.tsx`.
-
----
-
-## 8. Persistence: S3 + Prisma + versioning
-
-### 8.1 Storage layout
-
-Every artifact's primary content lives at the S3 key:
-
-```
-artifacts/{orgId | "global"}/{sessionId}/{artifactId}{extension}
-```
-
-The extension comes from `getArtifactRegistryEntry(type).extension`. So an HTML artifact in session `abc-123` for org `acme` is at `artifacts/acme/abc-123/<uuid>.html`.
-
-When an artifact is updated, the **previous** content gets archived to a versioned key:
-
-```
-artifacts/acme/abc-123/<uuid>.html.v1
-artifacts/acme/abc-123/<uuid>.html.v2
-…
-```
-
-### 8.2 Prisma `Document` row
-
-Artifacts share the `Document` table with knowledge documents. The `artifactType` column (nullable string) is the marker — non-null = artifact, null = knowledge doc. Every artifact query filters on `artifactType: { not: null }`.
-
-```prisma
-model Document {
-  id             String    @id @default(cuid())
-  title          String
-  content        String              // current artifact content (also in S3)
-  categories     String[]            // ["ARTIFACT"]
-  subcategory    String?
-  metadata       Json?               // versions, ragIndexed, language, warnings
-  s3Key          String?             // primary S3 key
-  fileType       String?             // "artifact"
-  fileSize       Int?
-  mimeType       String?
-  organizationId String?
-  organization   Organization? @relation(...)
-  createdBy      String?
-  sessionId      String?
-  session        DashboardSession? @relation(...)
-  artifactType   String?             // <-- the artifact-vs-knowledge marker
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  @@index([organizationId])
-  @@index([s3Key])
-  @@index([sessionId])
-}
-```
-
-The `metadata` JSON has roughly this shape for artifacts:
-
-```typescript
-{
-  artifactLanguage?: string,             // for application/code
-  versions?: Array<{
-    title: string
-    timestamp: number                    // unix ms
-    contentLength: number
-    s3Key?: string                       // archived version key
-    content?: string                     // inline fallback (≤ 32 KB)
-    archiveFailed?: boolean              // S3 failed AND too large for inline
-  }>,
-  evictedVersionCount?: number,
-  ragIndexed?: boolean,                  // true / false / undefined
-  validationWarnings?: string[]
-}
-```
-
-### 8.3 Versioning rules
-
-- `MAX_VERSION_HISTORY = 20`. FIFO eviction once exceeded; `evictedVersionCount` increments by however many were evicted in that update.
-- `MAX_INLINE_FALLBACK_BYTES = 32 KB`. Only if S3 archive fails *and* the previous content ≤ 32 KB do we inline. Otherwise the version metadata records `archiveFailed: true`.
-- `MAX_ARTIFACT_CONTENT_BYTES = 512 KB`. Hard cap; rejected at create/update time.
-
-### 8.4 Service / repository layer
-
-Three top-level functions in `src/features/conversations/sessions/service.ts`:
-
-- `getDashboardChatSessionArtifact({ userId, sessionId, artifactId })` — session-ownership check + return formatted artifact.
-- `updateDashboardChatSessionArtifact({ userId, sessionId, artifactId, input: { content, title? } })` — same validation as the LLM tool, same version archival, same FIFO. Returns `422` on validation failure with formatted errors so the panel can show them inline in edit mode.
-- `deleteDashboardChatSessionArtifact({ userId, sessionId, artifactId })` — S3 cleanup (non-fatal if it fails) + Prisma delete.
-
-The repository (`repository.ts`) exposes the actual Prisma queries: `findDashboardArtifactByIdAndSession`, `updateDashboardArtifactById`, `deleteDashboardArtifactById`, `findArtifactsBySessionId` (id + s3Key only — for cleanup), `deleteArtifactsBySessionId`.
-
----
-
-## 9. Unsplash image resolution
-
-**Why this exists:** the LLM doesn't know the URLs of nice photos. Instead of generating placeholder URLs that don't work, it writes `unsplash:keyword phrase` and the server resolves it to a real Unsplash photo URL with attribution, cached for 30 days in Postgres.
-
-**Where it runs:**
-
-| Type | Triggered by | Mechanism |
-|---|---|---|
-| `text/html` | `create_artifact` / `update_artifact` after validator | Regex-scan `src="unsplash:..."` in `<img>` tags |
-| `application/slides` | `create_artifact` / `update_artifact` after validator | JSON-walk fields: `imageUrl`, `backgroundImage`, `quoteImage`, `gallery[].imageUrl` |
-| `text/document` | inside `validateDocument` (returned in `content`) | AST-walk all image nodes (block, header, footer, coverPage.logoUrl) |
-| Other types | — | Not supported. SVG sanitizer strips externals; Markdown does not auto-resolve `unsplash:` (use a real URL or the `text/document` type). |
-
-**Pipeline** (`src/lib/unsplash/resolver.ts`):
-
-1. **Collect** the unique normalized keywords (lowercase, trim, collapse whitespace, slice to 50 chars).
-2. **Cache lookup** against Prisma's `ResolvedImage` table (UNIQUE on `query`, with `expiresAt` 30 days out).
-3. **Fetch uncached** in parallel via `searchPhoto(query)` (`src/lib/unsplash/client.ts`): `GET https://api.unsplash.com/search/photos?query=&per_page=1&orientation=landscape`, with `Client-ID` header from `UNSPLASH_API_KEY` env var, 5-second timeout via `AbortSignal.timeout`.
-4. **On hit**: use `photo.urls.regular + "&w=1200"` for optimal loading; persist with `attribution: "Photo by {name} on Unsplash"` and `expiresAt` 30 days out. Race conditions on the UNIQUE constraint are swallowed.
-5. **On miss / API error / timeout**: fall back to `https://placehold.co/1200x800/f1f5f9/64748b?text={encodedKeyword}`. Resolution **never throws** — always returns valid content.
-
-For `text/document`, the resolver runs *inside* `validateDocument` so the persisted JSON contains real URLs (no client-side resolution needed at render time).
-
----
-
-## 10. Rendering layer
-
-### 10.1 Lazy-loading dispatcher
-
-`src/features/conversations/components/chat/artifacts/artifact-renderer.tsx` (~140 lines) is a thin client component that imports each renderer via `next/dynamic()`. Each `dynamic()` call gets its own `loading: () => <RendererLoading message="..." />` fallback so the user sees a contextual spinner ("Transpiling React component…", "Initializing Python runtime…", "Building slide deck…", "Compiling 3D scene…").
-
-The dispatcher's switch covers all 12 types. `application/code` is special-cased: it wraps the content in a fence with the language tag (computing the fence length based on the longest backtick run inside the content) before passing to `StreamdownContent`. `text/markdown` passes through directly.
-
-### 10.2 Sandboxing strategy
-
-| Renderer | Mode | Sandbox |
-|---|---|---|
-| HTML | iframe | `allow-scripts allow-modals` + injected navigation blocker |
-| React | iframe | `allow-scripts` only + injected navigation blocker |
-| SVG | inline DOM | DOMPurify (svg + svgFilters profile, ADD_TAGS use) |
-| Mermaid | inline DOM | mermaid.js `securityLevel: "strict"`, `htmlLabels: false` |
-| Markdown | inline DOM | Streamdown handles XSS via react-markdown |
-| Document | inline DOM | upstream Zod schema validates; AST nodes can't carry executable HTML |
-| Code | inline DOM | display-only, no execution |
-| Sheet | inline DOM | TanStack Table renders as plain HTML; spec evaluator runs main-thread |
-| LaTeX | inline DOM | KaTeX with `trust: true` (filters dangerous commands itself) |
-| Slides | iframe | `allow-scripts allow-same-origin` (postMessage requires same-origin) |
-| Python | Web Worker | Pyodide isolates Python from DOM; only stdout/stderr/plot postMessage |
-| R3F | iframe | similar to React + Three.js |
-
-### 10.3 Shared rendering module
-
-`src/lib/rendering/` is the unification layer used by both slides and documents:
-
-- `mermaid-theme.ts` — `MERMAID_INIT_OPTIONS` (theme variables + base config). One config in the repo.
-- `chart-to-svg.ts` — D3-based chart-to-SVG, isomorphic (no browser/server-only deps). Bar / bar-horizontal / line / pie / donut. 8-color default palette.
-- `resize-svg.ts` — pure regex resize of root `<svg>` width/height attributes; isomorphic.
-- `server/mermaid-to-svg.ts` — `mermaidToSvg(code)` using `jsdom` to shim `window`/`document`/`DOMParser`/`navigator`. Stubs `getBBox()` and `getComputedTextLength()` (jsdom doesn't implement them). Restores globals in `finally` for Node singleton safety.
-- `server/svg-to-png.ts` — `svgToPng(svg, w, h)` via `sharp` with `fit: "contain"`, white background, lanczos3 kernel, flatten alpha, PNG compression level 6.
-- `client/mermaid-to-png.ts` — `mermaidToBase64Png(code, w, h)` via dynamic-import mermaid + browser Canvas at 2× resolution.
-- `client/svg-to-png.ts` — `svgToBase64Png(svg, w, h)` and `fetchImageAsBase64(url)` (with `unsplash:` → `source.unsplash.com` rewrite).
-
-This module replaced an older `src/lib/slides/chart-to-svg.ts` + `src/lib/slides/svg-to-png.ts` pair; slides imports were flipped to it as part of the unification work, so today there is exactly one mermaid theme and one SVG resize helper in the repo.
-
----
-
-## 11. RAG indexing
-
-`src/lib/rag/artifact-indexer.ts`:
-
-```typescript
-export async function indexArtifactContent(
-  documentId: string,
-  title: string,
+export async function validateArtifactContent(
+  type: string,
   content: string,
-  options?: { isUpdate?: boolean }
-): Promise<void>
+  ctx?: ValidationContext,
+): Promise<ArtifactValidationResult>
 ```
 
-Pipeline:
+Internals:
 
-1. If `isUpdate`, call `deleteChunksByDocumentId(documentId)` to clear stale chunks first.
-2. `chunkDocument(content, title, "ARTIFACT", undefined, { chunkSize: 1000, chunkOverlap: 200 })` — sliding-window chunks with overlap.
-3. Prepend the title to each chunk before embedding (gives every vector access to the artifact's name).
-4. `generateEmbeddings(chunkTexts)` — batch embedding API call.
-5. `storeChunks(documentId, chunks, embeddings)` → SurrealDB vector store.
-6. `markRagStatus(documentId, true)` — patches `metadata.ragIndexed`.
+1. Look up `VALIDATORS[type]`. **Unknown types pass through with `ok: true`** —
+   silent permissive default (pragmatic; any future type added to the
+   registry without a validator slot would still persist).
+2. `Promise.race` the validator against a 5-second timer. The timer uses
+   `setTimeout(...).unref?.()` so it doesn't keep the event loop alive.
+   Timeout produces `{ ok: false, errors: ["Validation timeout: ${type} validator exceeded 5000ms budget…"] }`.
+3. If `ok === false`, return immediately — Unsplash resolution is skipped.
+4. For `text/html`: dynamic-import `@/lib/unsplash`, run
+   `resolveImages(result.content ?? content)`, return with `content` set.
+5. For `application/slides`: same pattern with `resolveSlideImages`.
+6. Other types: pass through unchanged.
 
-On any failure: `markRagStatus(documentId, false)` instead. Both `create_artifact.ts` and `update_artifact.ts` invoke this with `.catch()` so a failure never breaks the user-visible flow. The panel header surfaces a "Not searchable" badge if `ragIndexed === false`.
+**Hidden contract** (rescan): the dispatcher's post-Unsplash overwrite of
+`result.content` is a quiet rule — every consumer must check
+`validation.content` and persist it instead of the original. Both
+`create-artifact.ts` and `update-artifact.ts` do (`finalContent = validation.content ?? content`),
+and the manual-edit service does too. Adding a new persistence path that
+forgets this would silently lose Unsplash resolution.
+
+The exhaustive `Record<ArtifactType, …>` constraint guarantees every
+registered type has a validator slot — adding a new type to the registry
+without a validator branch is a TypeScript error.
 
 ---
 
-## 12. Integration with the chat workspace
+## 7. Per-validator strict-gate map
 
-### 12.1 The `useArtifacts` hook
+A "strict gate" is a rule that fires only on creates (`ctx.isNew === true`)
+or only when an env flag is set.
 
-`src/features/conversations/components/chat/artifacts/use-artifacts.ts` (~144 lines) is the in-memory state hook:
+| Validator | Strict gate | Trigger | Rescan ref |
+|-----------|-------------|---------|------------|
+| `validateMarkdown` | 128 KiB cap | `ctx.isNew` | — |
+| `validateMarkdown` | `<script>` hard error (default soft warning) | `process.env.ARTIFACT_STRICT_MARKDOWN_VALIDATION === "true"` | — |
+| `validateSlides` | `image-text` layout hard error | `ctx.isNew` | — |
+| `validateReact` | aesthetic-directive required | `process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"` (defaults to enforced) | — |
+| `validateDocument` | (none — doesn't accept `ctx`) | — | **N-26** |
 
-```typescript
-useArtifacts(sessionKey?: string | null) → {
-  artifacts: Map<string, Artifact>
-  activeArtifact: Artifact | null
-  activeArtifactId: string | null
-  addOrUpdateArtifact(input): void
-  removeArtifact(id): void
-  loadFromPersisted(persisted: PersistedArtifact[]): void
-  openArtifact(id): void
-  closeArtifact(): void
-}
+Both env flags also gate the migration script's audit pass.
+
+---
+
+## 8. Persistence model
+
+**Postgres `Document` model** (artifact-relevant fields):
+
+```
+id              String   @id   @default(cuid())
+title           String
+content         String                    -- canonical, kept in sync with S3
+artifactType    String?                   -- non-null = artifact (vs file upload)
+categories      String[]                  -- contains "ARTIFACT" for artifacts
+sessionId       String?  → DashboardSession (onDelete: SetNull)
+organizationId  String?  → Organization   (onDelete: Cascade)
+createdBy       String?                   -- loose user reference, no FK (rescan N-44)
+s3Key           String?                   -- canonical key
+fileType        String?                   -- "artifact"
+fileSize        Int?
+mimeType        String?
+metadata        Json?                     -- versions[], evictedVersionCount, ragIndexed,
+                                          --   artifactLanguage, validationWarnings,
+                                          --   archiveFailed
+updatedAt       DateTime @updatedAt        -- ⚡ optimistic-lock token
+@@index([organizationId])
+@@index([s3Key])
+@@index([sessionId])
 ```
 
-- `Map<string, Artifact>` for O(1) lookup.
-- Per-session `sessionStorage` persistence of `activeArtifactId` under key `rantai.artifact.active.{sessionKey}`. Privacy-mode failures are swallowed.
-- `addOrUpdateArtifact` pushes the existing in-memory state into `previousVersions[]` before overwriting and increments `version`. Auto-opens the artifact.
-- `loadFromPersisted` rebuilds the Map from server data; if the previously active artifact no longer exists, clears the active id.
+Notable: `Document.content` has no `@db.Text` annotation while
+`DashboardMessage.content` does. Postgres treats both as `text` regardless
+but the inconsistency is a hygiene smell.
 
-### 12.2 The panel
+**`ResolvedImage` model** (Unsplash cache):
 
-`artifact-panel.tsx` (~939 lines) is the chrome around the renderer. Key behaviors:
+```
+id            String   @id   @default(cuid())
+query         String   @unique             -- normalized search term
+url           String
+attribution   String                       -- "Photo by … on Unsplash"
+expiresAt     DateTime                     -- 30 days from creation
+@@index([expiresAt])
+```
 
-- **Tabs**: Preview (default) and Code. The Code tab is hidden for types where `hasCodeTab: false` (`text/document`, `application/code`).
-- **Version navigation**: arrow buttons cycle through `previousVersions`. "Restore" button when viewing a historical version. "+N earlier versions evicted" tooltip when `evictedVersionCount > 0`.
-- **Edit mode**: turns the Code tab into an editable textarea. Save → PUT to the API; on `422`, show the formatted validation error inline.
-- **Fullscreen**: portal-rendered fullscreen modal.
-- **Download split-button**: type-specific. PPTX for slides, split `.md`/`.docx` for documents, raw download for the rest. Failures are caught into an `exportError` state without crashing the panel.
-- **RAG badge**: "Not searchable" if `ragIndexed === false`; absent if `undefined` or `true`.
-- **Fix-with-AI**: callback fires for renderers that detected a runtime error (React, Mermaid, Python, R3F) — sends the error back to the assistant for an automated fix attempt.
+No background expiry job — stale entries accumulate.
 
-### 12.3 The indicator chip
+**S3 layout** (`S3Paths.artifact`):
 
-`artifact-indicator.tsx` (~48 lines) — the clickable chip that appears in chat messages. Animated entry, color from `TYPE_COLORS`, icon from `TYPE_ICONS`, label from `TYPE_LABELS`. Click opens the panel.
+```
+artifacts/<orgId|"global">/<sessionId>/<artifactId><ext>      ← canonical
+artifacts/<orgId|"global">/<sessionId>/<artifactId><ext>.v1   ← prior version 1
+artifacts/<orgId|"global">/<sessionId>/<artifactId><ext>.v2   ← prior version 2
+…                                                             up to .v20
+```
 
-### 12.4 Wiring in `chat-workspace.tsx`
+`getArtifactExtension(type)` derives the extension from the registry. For
+`application/code` it's `.txt` regardless of language (rescan **N-38**);
+for `application/slides` it's `.pptx` even though content is JSON
+(rescan **N-43**).
 
-The chat workspace:
+**Version metadata** entries:
 
-1. Calls `useArtifacts(apiSessionId || session?.id || null)` once.
-2. Calls `loadFreshSessionArtifacts()` on session-load to populate from `GET /api/dashboard/chat/sessions/{id}`.
-3. Detects `create_artifact` / `update_artifact` tool outputs in the streaming response and calls `addOrUpdateArtifact(...)`.
-4. Renders `<ArtifactIndicator>` inline in the message list and `<ArtifactPanel>` inside the right `<ResizablePanel>` when `activeArtifact` is set.
-5. Dispatches a custom DOM event `artifact-panel-changed` with `{ open: boolean }` so the surrounding layout can collapse the chat sidebar.
+```json
+// Normal: archive succeeded
+{ "title": "...", "timestamp": 1714000000000, "contentLength": 4321, "s3Key": "artifacts/.../<id>.html.v3" }
 
----
+// Archive failed but content small: inline up to 32 KiB
+{ "title": "...", "timestamp": ..., "contentLength": 4321, "content": "<old>" }
 
-## 13. API surface
+// Archive failed and content too large: marker only
+{ "title": "...", "timestamp": ..., "contentLength": 532000, "archiveFailed": true }
+```
 
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/api/dashboard/chat/sessions/{id}` | Returns session + `artifacts: PersistedArtifact[]` |
-| `PUT` | `/api/dashboard/chat/sessions/{id}/artifacts/{artifactId}` | Update content / title (manual edit). 422 on validation failure. |
-| `DELETE` | `/api/dashboard/chat/sessions/{id}/artifacts/{artifactId}` | Delete artifact + S3 cleanup |
-| `GET` | `/api/dashboard/chat/sessions/{id}/artifacts/{artifactId}/download?format=docx` | DOCX export for `text/document` (Node runtime) |
+The 32 KiB inline cap (`MAX_INLINE_FALLBACK_BYTES`) prevents repeated
+edits of a 512 KiB artifact from ballooning the row indefinitely.
 
-There is **no** REST endpoint for create — artifacts are always created via the AI SDK tool call (`create_artifact`).
-
----
-
-## 14. Constants reference
-
-| Constant | Value | Defined in | Purpose |
-|---|---|---|---|
-| `MAX_ARTIFACT_CONTENT_BYTES` | 524288 (512 KB) | `create-artifact.ts`, `update-artifact.ts` | Hard cap on artifact content size |
-| `MAX_VERSION_HISTORY` | 20 | `update-artifact.ts`, `service.ts` | FIFO cap on stored versions per artifact |
-| `MAX_INLINE_FALLBACK_BYTES` | 32768 (32 KB) | `update-artifact.ts`, `service.ts` | Inline-version size cap when S3 fails |
-| `ARTIFACT_REACT_AESTHETIC_REQUIRED` | env, default enforce | `_validate-artifact.ts` | Set to `"false"` to downgrade missing/unknown `@aesthetic:` to a warning |
-| `MAX_FONT_FAMILIES` | 3 | `_react-directives.ts` | Cap on `// @fonts:` families per React artifact |
-| `SPREADSHEET_CAPS.maxSheets` | 8 | `src/lib/spreadsheet/types.ts` | Per-workbook sheet cap |
-| `SPREADSHEET_CAPS.maxCellsPerSheet` | 500 | `src/lib/spreadsheet/types.ts` | Per-sheet cell cap |
-| `SPREADSHEET_CAPS.maxFormulasPerWorkbook` | 200 | `src/lib/spreadsheet/types.ts` | Cross-workbook formula cap |
-| `SPREADSHEET_CAPS.maxNamedRanges` | 64 | `src/lib/spreadsheet/types.ts` | Named-range cap |
-| `SPREADSHEET_CAPS.maxSheetNameLength` | 31 | `src/lib/spreadsheet/types.ts` | Excel-compatible sheet name length |
-| Mermaid node cap | 15 | prompt + validator (mermaid.ts, _validate-artifact.ts) | Soft cap warned by validator |
-| Slide deck size | 7–12 | prompt + validator (slides.ts, _validate-artifact.ts) | Min/max slides per deck (warn outside) |
-| Document max content (validator) | 128 KB serialized | `src/lib/document-ast/validate.ts` | Pre-Zod size budget |
-| Mermaid block dimensions | 200–1600 × 150–1200 | `src/lib/document-ast/schema.ts` | Per-block image dimensions |
+FIFO eviction at 20 entries (`MAX_VERSION_HISTORY`); the count of evicted
+entries lives in `metadata.evictedVersionCount` so the panel can show
+"+N earlier versions evicted" instead of silently losing history.
 
 ---
 
-## See also
+## 9. Rendering layer
 
-- [architecture-reference.md](./architecture-reference.md) — file:line audit of every artifact surface in the codebase
-- [artifacts-capabilities.md](./artifacts-capabilities.md) — per-type capability spec (matrix + constraints + anti-patterns + dependencies)
+### Per-type renderers
+
+Lazy-loaded via `next/dynamic` in `artifact-renderer.tsx`. Each owns its
+own runtime. The dispatch switch is exhaustive over `ArtifactType` —
+adding a new type without a `case` is a TypeScript error.
+
+| Renderer | Mounting | Sandbox | Notes |
+|----------|----------|---------|-------|
+| `html-renderer.tsx` | iframe `srcDoc` | `allow-scripts allow-modals` | Auto-injects Tailwind CDN + Inter; nav-blocker shim before user scripts |
+| `react-renderer.tsx` | iframe `srcDoc` | `allow-scripts` | Babel-standalone in iframe; React/Recharts/Lucide/framer-motion as window globals |
+| `svg-renderer.tsx` | inline `dangerouslySetInnerHTML` | — | DOMPurify with `USE_PROFILES.svg + svgFilters`, `ADD_TAGS: ["use"]` |
+| `mermaid-renderer.tsx` | inline `dangerouslySetInnerHTML` | — | Module-level singleton `mermaidPromise`; `securityLevel: "strict"` |
+| `sheet-renderer.tsx` | inline TanStack Table | — | Dispatches to `sheet-spec-view.tsx` for v1 specs |
+| `latex-renderer.tsx` | inline `dangerouslySetInnerHTML` | — | KaTeX with `trust: true` (rescan **N-30**) |
+| `slides-renderer.tsx` | iframe `srcDoc` | **`allow-scripts allow-same-origin`** | Most permissive; rescan **N-28** flags this |
+| `python-renderer.tsx` | Web Worker (Pyodide) | — | Worker created on first run, terminated on stop |
+| `r3f-renderer.tsx` | iframe `srcDoc` | **(no sandbox)** | WebGL-required; documented as intentional |
+| `document-renderer.tsx` | inline React | — | Pure rendering of validated AST |
+| `application/code` | `StreamdownContent` | — | Fenced block; fence length grows past content's longest backtick run |
+| `text/markdown` | `StreamdownContent` | — | Same Streamdown wrapper as chat messages |
+
+### postMessage discipline
+
+Every iframe renderer EXCEPT `r3f-renderer.tsx` checks
+`e.source === iframeRef.current?.contentWindow` before trusting an
+incoming postMessage. **R3F is the only iframe missing the origin guard**
+(rescan **N-27**) — any frame on the page can spoof `r3f-error` /
+`r3f-ready` events.
+
+All iframe → parent postMessages target `'*'` origin (rescan **N-31**) —
+parent guards prevent inbound spoofing but messages could leak to
+attackers if a malicious sibling iframe proxies events.
+
+### Mermaid — three rasterization paths sharing one global
+
+| Path | File | Theme handling | Concurrency |
+|------|------|----------------|-------------|
+| Server SVG → DOCX | `lib/rendering/server/mermaid-to-svg.ts` | Light only | `renderQueue` Promise mutex serializes calls |
+| Client PNG → PPTX | `lib/rendering/client/mermaid-to-png.ts` | **Always light** (rescan **N-53**) | No serialization |
+| Browser SVG live | `mermaid-renderer.tsx` + `document-renderer.tsx`'s `MermaidPreviewBlock` | Theme-aware via `getMermaidInitOptions(theme)` | None — global singleton |
+
+`mermaid` is a global singleton; whichever path calls `mermaid.initialize`
+last wins for the next render. **Two separate init code paths exist**
+(rescan **N-54**): `renderers/mermaid-config.ts` (`getMermaidConfig()`)
+used by `mermaid-renderer.tsx`, and `lib/rendering/mermaid-theme.ts`
+(`getMermaidInitOptions()`) used by `document-renderer.tsx`'s preview
+block. They produce *different* config objects; concurrent renders cause
+silent theme drift.
+
+### Document AST (`text/document`)
+
+Schema in `src/lib/document-ast/schema.ts` — Zod tree of `BlockNode` /
+`InlineNode` types covering paragraphs, headings, lists, tables,
+blockquotes, mermaid, chart, pageBreak, footnotes, TOC, anchors, plus an
+optional `coverPage`. Runtime preview in `document-renderer.tsx`; DOCX
+export in `to-docx.ts`.
+
+**Key correctness fixes shipped in Priority B:**
+
+- Footnote sink allocated **per render** (`document-renderer.tsx:406`),
+  not memoized — memoizing would reuse the populated sink and double
+  entries on every keystroke.
+- `coverPage.logoUrl` renders as an `ImageRun` (160×160 px) in the DOCX
+  output (`renderCoverPage` in `to-docx.ts:479-540`).
+- Tables inside footnotes are dropped from DOCX (the `docx` library
+  doesn't support nested tables in `FootnoteReferenceRun`s) and replaced
+  with an italic-grey marker paragraph: *"[table omitted from footnote — see body for full content]"*.
+
+**Schema-vs-renderer drift items still present** (rescan **N-18, N-19,
+N-20, N-21**):
+
+- `tab.leader: "dot"` accepted by schema, used by the `letter.ts` example,
+  silently dropped — exporter renders all tabs as `\t`.
+- `list.startAt` accepted, ordered lists always start at 1.
+- `table.shading: "striped"` accepted, never applied.
+- TOC `node.title` rendered **twice** when set: once as a heading
+  paragraph, once as the `TableOfContents(node.title, ...)` first arg.
+
+**Other DocumentAst weaknesses** (rescan):
+
+- **N-22.** Heading bookmark uniqueness not enforced — duplicate
+  `bookmarkId`s survive validation.
+- **N-23.** Footnote nesting unbounded — schema permits
+  `footnote → paragraph → footnote` to arbitrary depth.
+- **N-24.** `renderChart` has **no try/catch** around `svgToPng` — a
+  malformed chart SVG propagates as 500 from the download endpoint.
+  Contrast `renderMermaid` which guards with a marker paragraph.
+- **N-25.** `validateDocument` discards warnings from `validateDocumentAst`
+  on the success path.
+
+---
+
+## 10. Per-type validator quick reference
+
+For full per-type capability detail see
+[`artifacts-capabilities.md`](./artifacts-capabilities.md). High-level:
+
+- **`text/html`** — parse5 parse + structural checks (DOCTYPE, viewport,
+  title, no `<form action=>`, no `<base>`); inline `<style>` ≤ 10 lines
+  warning. Post-resolves Unsplash via `resolveImages`.
+- **`application/react`** — Babel parse + import whitelist
+  (react, react-dom, recharts, lucide-react, framer-motion). Aesthetic
+  directives (`@aesthetic`, `@fonts`) parsed by `_react-directives.ts`.
+- **`image/svg+xml`** — parse5 + DOMPurify hard-rules: `viewBox` required,
+  no width/height on root, no `<script>` / `<foreignObject>` / `<style>`,
+  no external href, no event handlers.
+- **`application/mermaid`** — diagram-type prefix check against a
+  whitelist (rescan **N-16**: missing `xychart-beta`, `block-beta`,
+  `kanban`).
+- **`text/markdown`** — heading-level skip detection, raw-HTML disallow
+  list, unlabeled fenced-code warning, `<script>` warning (or hard error
+  in strict mode), 128 KiB cap on creates.
+- **`text/document`** — JSON.parse → `validateDocumentAst` (Zod) →
+  `resolveUnsplashInAst` → return resolved AST as `validation.content`.
+- **`application/code`** — minimal validation; size warning uses
+  `content.length` (chars) not `Buffer.byteLength` (rescan **N-57**).
+- **`application/sheet`** — CSV / JSON-array / v1-spec branches; spec
+  branch runs `evaluateWorkbook` to validate formulas. CSV currency
+  warning fires at ≥ 1 hit (asymmetric vs ISO date warning at ≥ 2;
+  rescan, low priority).
+- **`text/latex`** — disallowed-command list (`\documentclass`,
+  `\usepackage`, etc.); preamble errors short-circuit before unsupported-command
+  scan (rescan, low priority — extra LLM retry round).
+- **`application/slides`** — 17 layouts; per-layout field requirements;
+  bullet/word/deck-size warnings; `image-text` deprecated (warn → error
+  on `ctx.isNew`).
+- **`application/python`** — non-empty + Pyodide-package-availability
+  scan; `input()`, file-write, network checks.
+- **`application/3d`** — `R3F_ALLOWED_DEPS` whitelist (35 entries);
+  `export default` required; bans `<Canvas>`, `<OrbitControls>`,
+  `<Environment>`, `requestAnimationFrame`, `document.*` access.
+
+**Slides chart validation guard is type-loose** (rescan):
+`s.chart` is cast `as Record<string, unknown> | undefined` without
+`Array.isArray` check, so `chart: []` slips through as
+`typeof === "object"` and produces "invalid type undefined" downstream.
+
+---
+
+## 11. Migration script
+
+`scripts/migrate-artifact-deprecations.ts` (177 LoC, idempotent):
+
+```bash
+bun run scripts/migrate-artifact-deprecations.ts             # apply slides + audit markdown
+bun run scripts/migrate-artifact-deprecations.ts --dry-run   # preview only
+bun run scripts/migrate-artifact-deprecations.ts --slides    # slides pass only
+bun run scripts/migrate-artifact-deprecations.ts --markdown  # markdown audit only
+```
+
+**Pass A (mutating)** — rewrites every `application/slides` deck whose
+slides contain `layout === "image-text"` to `layout === "content"`. Renderer
+and PPTX exporter treat the two layouts identically, so this is non-visual.
+Idempotent — re-running on rewritten decks finds nothing to change.
+
+**Pass B (report-only)** — counts `text/markdown` artifacts containing
+`<script>` tags and/or exceeding the 128 KiB cap. Produces a list per
+session/user. No mutation.
+
+Both passes scan only `Document` rows where
+`artifactType IN ('application/slides', 'text/markdown')` so the script
+is safe at any database size.
+
+---
+
+## 12. Chat-workspace integration
+
+`src/features/conversations/components/chat/chat-workspace.tsx` hosts the
+artifact lifecycle:
+
+- **Streaming placeholders.** `tool-input-available` for `create_artifact`
+  builds an artifact with id `streaming-${toolCallId}` so the panel can
+  show progressive content. `tool-input-available` for `update_artifact`
+  uses the **real** artifact id (rescan **N-2** edge — see §3).
+- **`tool-output-available` cleanup.** Success: replace placeholder with
+  the persisted shape. Failure / malformed output: `removeArtifact("streaming-${toolCallId}")` +
+  `console.warn`. No user-visible toast.
+- **`out.updated` gate.** Update results only apply when
+  `out.id && out.content && out.updated`. **If `existing` is missing from
+  the local map, the update is silently dropped** (rescan **N-3**).
+- **Abort during streaming.** `handleStop()` cancels the request but does
+  NOT clean up streaming placeholders (rescan **N-4**).
+
+**Active-artifact persistence.** The active artifact id lives in
+`sessionStorage` under `rantai.artifact.active.<sessionKey>`. Survives a
+same-tab refresh; resets across browser sessions.
+
+**Canvas mode wiring:**
+
+- Type: `false | "auto" | ArtifactType` (defined in `chat-input-toolbar.tsx`).
+- Storage: part of the `SessionToolbarStateSnapshot` in `sessionStorage`
+  under `chat-toolbar-state:${sessionId}`.
+- Path UI → tool: ChatInputToolbar setter → `setCanvasMode` →
+  POST body field `canvasMode` (omitted when `false`) → server tool
+  context → `create_artifact` / `update_artifact` consume
+  `context.canvasMode` for the type-lock check.
+
+---
+
+## 13. ArtifactPanel UI (`artifact-panel.tsx` ~985 LoC)
+
+Major state variables:
+
+| State | Purpose |
+|-------|---------|
+| `tab` | "preview" or "code" |
+| `isEditing` | Edit-mode toggle (only reachable on the code tab) |
+| `viewingVersionIdx` | `null` = current, otherwise an index into `previousVersions` |
+| `editContent`, `isDirty`, `isSaving`, `saveError` | Edit-form state |
+| `isFullscreen` | Portal fullscreen mode |
+| `isExporting`, `exportError` | Export-button state |
+
+**Hidden state machine** (rescan **N-32**): if the user is mid-edit on
+the code tab and the LLM produces a new version of the artifact (via
+`update_artifact`), `artifact.version` increments, `viewingVersionIdx`
+resets, and the edit-content effect reinitializes `editContent` from the
+new content. **The orange "dirty" dot disappears without saving.** No
+warning, no confirmation.
+
+**Save vs Restore asymmetry** (rescan **N-33**): `handleSave` is
+pessimistic (await API → set state); `handleRestoreVersion` is optimistic
+(set state → await API → ignore failure with `console.error`). A failed
+restore leaves the panel showing content the server rejected, with no
+banner.
+
+**Delete is also fire-and-forget** (rescan **N-34**): `handleDelete`
+awaits the DELETE but never checks `response.ok` — UI removes the
+artifact even on a 5xx.
+
+**Download paths:**
+
+- `text/document`: split-button DropdownMenu — `.md` (raw AST JSON,
+  pretty-printed) or `.docx` (rendered server-side).
+- `application/sheet` v1 specs: `.xlsx` via `lib/spreadsheet/generate-xlsx.ts`.
+- Everything else: `.{registry.extension}` direct blob.
+
+**Historical-version content guards.** When the user picks an older
+version that lacks both `metadata.versions[N].content` (inline fallback)
+and `s3Key` (archived), the panel surfaces a "Download isn't available
+for this version — its content was archived to storage…" notice rather
+than producing a corrupted blob. The same guard applies to
+`text/document` `.docx` export.
+
+**RAG-status badge.** `metadata.ragIndexed === false` → header pill shows
+"not searchable". Drawn from the indexer's failure-case write of
+`metadata.ragIndexed`.
+
+**Accessibility gaps** (rescan **B-section**): version nav buttons and
+most action-bar buttons have no `aria-label`; tab bar uses plain
+`<button>` not `role="tab"` / `aria-selected`; SpecWorkbookView table
+has no caption / aria-label / scope.
+
+---
+
+## 14. RAG indexing
+
+`src/lib/rag/artifact-indexer.ts` is the single fire-and-forget indexer
+used by `create_artifact` and `update_artifact` (rescan **N-1**: NOT used
+by the manual-edit service path).
+
+```ts
+indexArtifactContent(documentId, title, content, options?: { isUpdate?: boolean }): Promise<void>
+```
+
+- `isUpdate: true` → `deleteChunksByDocumentId(documentId)` first.
+- `chunkDocument()` produces 1000-char chunks with 200-char overlap.
+- `generateEmbeddings()` (batched 128, 4-way parallel internally).
+- `storeChunks()` does **N sequential SurrealDB inserts** (rescan
+  **N-49**) — for a 128 KiB artifact, ~140 round-trips with no batching.
+- On success: `markRagStatus(id, true)`.
+- On failure or zero chunks: `markRagStatus(id, false).catch(() => {})`.
+- **Function does not rethrow.** Callers `.catch(...)` for habit; nothing
+  escapes.
+
+Deletion calls `deleteChunksByDocumentId(artifactId)` directly — failures
+logged but non-fatal.
+
+---
+
+## 15. API surface
+
+```
+GET    /api/dashboard/chat/sessions
+POST   /api/dashboard/chat/sessions
+GET    /api/dashboard/chat/sessions/[id]
+PATCH  /api/dashboard/chat/sessions/[id]
+DELETE /api/dashboard/chat/sessions/[id]
+
+POST   /api/dashboard/chat/sessions/[id]/messages
+PATCH  /api/dashboard/chat/sessions/[id]/messages
+DELETE /api/dashboard/chat/sessions/[id]/messages
+
+PUT    /api/dashboard/chat/sessions/[id]/artifacts/[artifactId]
+DELETE /api/dashboard/chat/sessions/[id]/artifacts/[artifactId]
+GET    /api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/download
+```
+
+**Auth model.** All routes require an authenticated NextAuth session.
+The entire authorization model is `userId` ownership of the
+`DashboardSession`. **No org-membership check, no role check.** (Rescan
+**N-6**: `createDashboardChatSession` doesn't validate `assistantId`
+belongs to the caller's org.)
+
+**Artifact PUT status codes:**
+
+| Status | Trigger |
+|--------|---------|
+| 200 | Updated successfully |
+| 400 | Body schema validation failed (Zod) |
+| 401 | No auth session |
+| 404 | Session or artifact not found, or cross-tenant lookup hit |
+| 409 | Concurrent-update conflict (optimistic lock returned 0 rows) |
+| 422 | Validator failure |
+| 500 | Unhandled |
+
+**Artifact DELETE status codes:** 200, 401, 404, 500.
+
+**Artifact download:** GET serves the rendered DOCX for `text/document`
+and the canonical S3 object for everything else. `format=docx` is the
+only accepted value; **returns 409 for "Invalid document AST"** which
+should semantically be 422 (rescan **N-42**).
+
+**Quirk** (rescan **N-41**): `POST /sessions` and
+`PATCH /sessions/[id]` silently pass `undefined` to the service when
+Zod parse fails (no early 400 with error details).
+
+**Quirk** (rescan **N-5**): `createDashboardMessages` upsert can move a
+message between sessions if a client supplies an existing id; no
+cross-session ownership check before the update branch.
+
+---
+
+## 16. Constants reference
+
+| Constant | Value | Where | Why |
+|----------|-------|-------|-----|
+| `MAX_ARTIFACT_CONTENT_BYTES` | 512 KiB | `create-artifact.ts`, `update-artifact.ts` | Hard cap on persisted content |
+| `MAX_INLINE_FALLBACK_BYTES` | 32 KiB | `update-artifact.ts`, `service.ts` | Inline-fallback cap when S3 archival fails |
+| `MAX_VERSION_HISTORY` | 20 | `update-artifact.ts`, `service.ts` | FIFO eviction cap |
+| `VALIDATE_TIMEOUT_MS` | 5000 ms (mutable; rescan **N-55**) | `_validate-artifact.ts` | Wall-clock budget on validators |
+| `MARKDOWN_NEW_CAP_BYTES` | 128 KiB | `_validate-artifact.ts` | Per-type cap on creates only |
+| `MAX_INLINE_STYLE_LINES` | 10 | `_validate-artifact.ts` | HTML inline `<style>` length warning (rescan **N-13**: real threshold ~15) |
+| `REACT_IMPORT_WHITELIST` | 5 | `_validate-artifact.ts` | react, react-dom, recharts, lucide-react, framer-motion |
+| `MAX_FONT_FAMILIES` | 3 | `_react-directives.ts` | React `@fonts` cap |
+| `MAX_SLIDE_BULLETS` / `MAX_BULLET_WORDS` | 6 / 10 | `_validate-artifact.ts` | Slides warnings |
+| `MIN_DECK_SLIDES` / `MAX_DECK_SLIDES` | 7 / 12 | `_validate-artifact.ts` | Deck-size convention |
+| `CACHE_DAYS` | 30 | `unsplash/resolver.ts` | `ResolvedImage.expiresAt` lifetime |
+| `MERMAID` chunker chunk size | 1000 chars | `lib/rag/chunker.ts` | RAG chunking |
+| `chunkOverlap` | 200 chars | `lib/rag/chunker.ts` | RAG chunking |
+| `BATCH_SIZE` (embeddings) | 128 | `lib/rag/embeddings.ts` | Parallel-fetch batching |
+| `EMBED_CONCURRENCY` | 4 | `lib/rag/embeddings.ts` | Parallel workers |
+
+---
+
+## 17. Environment flags
+
+| Flag | Default | Effect |
+|------|---------|--------|
+| `ARTIFACT_REACT_AESTHETIC_REQUIRED` | enforced (must explicitly equal `"false"` to disable) | When enforced, missing aesthetic directive on a React artifact is a hard error |
+| `ARTIFACT_STRICT_MARKDOWN_VALIDATION` | unset (soft warning) | When `"true"`, `<script>` tags in markdown are a hard error |
+| `UNSPLASH_ACCESS_KEY` | unset | When unset, `searchPhoto` returns null → resolver falls back to `placehold.co` |
+| `S3_*` | required | Artifact persistence; envelope errors degrade history (inline fallback up to 32 KiB) |
+
+Note: `ARTIFACT_REACT_AESTHETIC_REQUIRED` is **enforced by default** —
+the env var must be the literal string `"false"` to disable. The variable
+name suggests opt-in but the implementation is opt-out.
+
+---
+
+## 18. Test coverage
+
+```
+tests/unit/validate-artifact.test.ts                                  — base validator suite (~1660 lines)
+tests/unit/tools/validate-artifact-timeout.test.ts                    — 5s timeout + __setValidateTimeoutMsForTesting hook
+tests/unit/tools/validate-artifact-resolves-unsplash.test.ts          — dispatcher post-Unsplash for HTML and slides
+tests/unit/tools/create-artifact-resolve.test.ts                      — finalContent flow
+tests/unit/tools/update-artifact.test.ts                              — locked update + canvas-mode + missing artifact
+tests/unit/rag/artifact-indexer-rethrow.test.ts                       — fire-and-forget never throws
+tests/unit/features/conversations/sessions/delete-artifact.test.ts    — versioned S3 + RAG cleanup on delete
+tests/unit/react-artifact/directive-parser.test.ts                    — _react-directives.ts
+tests/unit/react-artifact/fixtures.test.ts                            — ⚠ rescan N-56: missing `await`, may test Promise objects vacuously
+```
+
+The 7 pre-existing failures in `react-artifact/fixtures.test.ts` are
+likely caused by the missing `await` (rescan **N-56**) — once fixed, the
+fixtures may need actual repair.
+
+Coverage gaps (rescan §G in
+[`2026-04-25-deepscan-rescan-findings.md`](./2026-04-25-deepscan-rescan-findings.md)):
+streaming dirty-state, `out.updated` map-miss, abort-during-stream
+cleanup, canvasMode sessionStorage roundtrip, mermaid theme-override
+warning, slides visual layouts (comparison/features/stats/gallery),
+`unsplash:` in CSS/JS, canvas-mode-bypass with null artifactType,
+`text/document` mermaid/chart blocks.
+
+---
+
+## 19. What was deferred
+
+**Priority D (audit Fix #20)** — moving `evaluateWorkbook` from main thread
+to a Web Worker. Deferred because the `SpreadsheetSpec` carries callback
+fields (`onCell`, `onRange`, `onVariable` for FormulaParser) that are not
+structured-clone compatible across the postMessage boundary. ~300–500 LoC
+plus Next.js webpack worker bundle config.
+
+If jank is reported in production, the lower-risk first step is
+`requestIdleCallback` chunking inside `evaluateWorkbook` (~50 LoC, no
+spec redesign, no bundle config) before committing to a full Worker
+migration.
+
+Topological sort is currently O(n²) in formula count (rescan **N-50**) —
+capped at 200 formulas it's negligible, but Kahn's algorithm with an
+in-degree map would be linear.
+
+---
+
+## 20. Recap — key inconsistencies that matter for callers
+
+A short list of "things to remember" for anyone touching this code:
+
+1. **The two persistence paths diverge on RAG** (rescan **N-1**). LLM tool
+   path indexes; manual-edit HTTP path doesn't. Don't expect search
+   results to reflect manual edits until the next LLM update.
+2. **The validator dispatcher rewrites content** for HTML and slides
+   (Unsplash). Every consumer must persist `validation.content ?? content`.
+3. **Optimistic locking is on `updatedAt`**. Failures surface as 409
+   (HTTP) or `{ updated: false }` (LLM tool). The two-step
+   `updateMany + findUnique` has a tiny race window where the returned
+   row may be from a third writer.
+4. **`update_artifact` has minor wire-shape gotchas** — `title: undefined`
+   when omitted (rescan **N-8**), `updated: true, persisted: false` on
+   catch (rescan **N-9**), canvas-mode bypass with null artifactType
+   (rescan **N-7**).
+5. **Streaming `update_artifact` mutates the live artifact** before the
+   final result lands (rescan **N-2**). Validation failure leaves the
+   artifact in the partial state.
+6. **Mermaid is a global singleton** with two competing init paths and
+   three render paths; expect occasional theme drift (rescan **N-53,
+   N-54**).
+7. **Sandbox flags are not uniform** across iframe renderers
+   (rescan **N-27, N-28, N-29**). R3F has none; slides has
+   `allow-same-origin`; HTML and React are properly sandboxed.
+8. **Session delete is incomplete**: versioned S3 keys leak, and the
+   sequence isn't transactional (rescan **N-47, N-48**).
+9. **`createDashboardMessages` upsert is cross-session unsafe** (rescan
+   **N-5**) — known issue.
+10. **DocumentAst has 4+ schema-vs-renderer drift items** —
+    `tab.leader`, `list.startAt`, `table.shading`, TOC title duplication,
+    chart error guard (rescan **N-18, N-19, N-20, N-21, N-24**).
+
+For the full backlog of 58 rescan findings, see
+[`2026-04-25-deepscan-rescan-findings.md`](./2026-04-25-deepscan-rescan-findings.md).

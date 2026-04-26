@@ -1,5 +1,6 @@
 import { deleteFile, deleteFiles, uploadFile } from "@/lib/s3"
-import { deleteChunksByDocumentId } from "@/lib/rag"
+import { deleteChunksByDocumentId, indexArtifactContent } from "@/lib/rag"
+import { prisma } from "@/lib/prisma"
 import {
   validateArtifactContent,
   formatValidationError,
@@ -7,17 +8,14 @@ import {
 import {
   createDashboardMessages,
   createDashboardSession,
-  deleteArtifactsBySessionId,
   deleteDashboardArtifactById,
   deleteDashboardMessagesBySession,
-  deleteDashboardSessionById,
   findArtifactsBySessionId,
   findDashboardArtifactByIdAndSession,
   findDashboardMessageByIdAndSession,
   findDashboardSessionBasicByIdAndUser,
   findDashboardSessionByIdAndUser,
   findDashboardSessionsByUser,
-  updateDashboardArtifactById,
   updateDashboardArtifactByIdLocked,
   updateDashboardMessageById,
   updateDashboardSessionTitle,
@@ -192,6 +190,31 @@ export async function createDashboardChatSession(params: {
     return { status: 400, error: "assistantId is required" }
   }
 
+  // Verify the caller has access to this assistant before binding a
+  // session to it. Without this check any authenticated user could
+  // create a session referencing any assistantId, including assistants
+  // belonging to other orgs (the session list scopes by userId so the
+  // session was invisible to legitimate owners — but the cross-org
+  // reference itself was unbounded).
+  // Access rule: assistant is system-global (organizationId == null) OR
+  // the caller is a member of the assistant's org.
+  const assistant = await prisma.assistant.findUnique({
+    where: { id: assistantId as string },
+    select: { id: true, organizationId: true },
+  })
+  if (!assistant) {
+    return { status: 404, error: "Assistant not found" }
+  }
+  if (assistant.organizationId !== null) {
+    const membership = await prisma.organizationMember.findFirst({
+      where: { userId: params.userId, organizationId: assistant.organizationId },
+      select: { id: true },
+    })
+    if (!membership) {
+      return { status: 403, error: "You don't have access to this assistant" }
+    }
+  }
+
   const chatSession = await createDashboardSession({
     userId: params.userId,
     assistantId: assistantId as string,
@@ -269,11 +292,25 @@ export async function deleteDashboardChatSession(params: {
     return { status: 404, error: "Session not found" }
   }
 
-  // Cleanup artifact S3 files and RAG chunks before deleting session
+  // Cleanup artifact S3 files and RAG chunks before deleting session.
+  // We flatten every `metadata.versions[].s3Key` into the bulk delete
+  // batch — single-artifact delete already cleans these up, but
+  // session delete used to leave them orphaned forever (up to
+  // MAX_VERSION_HISTORY=20 keys per artifact).
   const artifacts = await findArtifactsBySessionId(params.sessionId)
   if (artifacts.length > 0) {
-    // Delete S3 files (non-fatal)
-    const s3Keys = artifacts.map((a) => a.s3Key).filter(Boolean) as string[]
+    // Delete S3 files (canonical + every archived version, non-fatal).
+    const s3Keys: string[] = []
+    for (const artifact of artifacts) {
+      if (artifact.s3Key) s3Keys.push(artifact.s3Key)
+      const meta = (artifact.metadata as Record<string, unknown> | null) ?? null
+      const versions = Array.isArray(meta?.versions)
+        ? (meta.versions as Array<{ s3Key?: unknown }>)
+        : []
+      for (const v of versions) {
+        if (typeof v?.s3Key === "string") s3Keys.push(v.s3Key)
+      }
+    }
     if (s3Keys.length > 0) {
       await deleteFiles(s3Keys).catch((err) =>
         console.error("[deleteDashboardChatSession] S3 cleanup error:", err)
@@ -283,11 +320,18 @@ export async function deleteDashboardChatSession(params: {
     await Promise.allSettled(
       artifacts.map((a) => deleteChunksByDocumentId(a.id))
     )
-    // Delete document records
-    await deleteArtifactsBySessionId(params.sessionId)
   }
 
-  await deleteDashboardSessionById(params.sessionId)
+  // Wrap the row deletes in a transaction so a partial failure between
+  // artifact-row delete and session-row delete can't leave the DB
+  // inconsistent. S3 + RAG cleanup runs before this on purpose — they're
+  // best-effort and shouldn't gate the row deletion.
+  await prisma.$transaction([
+    prisma.document.deleteMany({
+      where: { sessionId: params.sessionId, artifactType: { not: null } },
+    }),
+    prisma.dashboardSession.delete({ where: { id: params.sessionId } }),
+  ])
   return { success: true }
 }
 
@@ -556,6 +600,16 @@ export async function updateDashboardChatSessionArtifact(params: {
         "Concurrent update detected: another writer changed this artifact while you were editing. Reload to see the latest version, then retry your save.",
     }
   }
+
+  // Re-index manual edits in RAG. The LLM-tool `update_artifact` path
+  // re-indexes on every write; without the equivalent here, the
+  // panel-edit path would let `knowledge_search` keep surfacing pre-edit
+  // content until the next LLM-driven update touches the artifact.
+  // Fire-and-forget — `indexArtifactContent` swallows its own failures
+  // and writes `metadata.ragIndexed: false` for the panel badge.
+  indexArtifactContent(updated.id, updated.title, updated.content, { isUpdate: true }).catch(
+    (err) => console.error("[updateDashboardChatSessionArtifact] Background re-indexing error:", err),
+  )
 
   return {
     id: updated.id,

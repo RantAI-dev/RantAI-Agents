@@ -128,13 +128,20 @@ function sanitizeFilename(filename: string): string {
 }
 
 /**
- * Upload a file buffer to S3
+ * Upload a file buffer to S3.
+ *
+ * The presigned download URL is generated only when `options.includeUrl`
+ * is true. Most callers (artifact create / update / version archival)
+ * never read `url`, and generating it costs an extra signing API call
+ * per upload. Set `includeUrl: true` only when the caller actually needs
+ * the URL (e.g. surfacing a link to the user immediately after upload).
  */
 export async function uploadFile(
   key: string,
   buffer: Buffer,
   contentType: string,
-  metadata?: Record<string, string>
+  metadata?: Record<string, string>,
+  options?: { includeUrl?: boolean }
 ): Promise<{ key: string; url: string; size: number }> {
   const client = getS3Client()
 
@@ -148,7 +155,7 @@ export async function uploadFile(
     })
   )
 
-  const url = await getPresignedDownloadUrl(key)
+  const url = options?.includeUrl ? await getPresignedDownloadUrl(key) : ""
 
   return {
     key,
@@ -284,7 +291,7 @@ export async function deleteFiles(keys: string[]): Promise<void> {
   }
 
   for (const chunk of chunks) {
-    await client.send(
+    const response = await client.send(
       new DeleteObjectsCommand({
         Bucket: S3_CONFIG.bucket,
         Delete: {
@@ -292,6 +299,19 @@ export async function deleteFiles(keys: string[]): Promise<void> {
         },
       })
     )
+    // S3 reports per-object failures in `response.Errors[]` even when
+    // the overall command "succeeds". Without inspecting them, a key
+    // that failed to delete (auth, missing, server error) would never
+    // be retried and would leak indefinitely. Log so the orphans show
+    // up in monitoring; don't throw because partial delete is the
+    // typical contract for callers.
+    if (response.Errors && response.Errors.length > 0) {
+      for (const err of response.Errors) {
+        console.error(
+          `[s3.deleteFiles] partial failure key=${err.Key} code=${err.Code} message=${err.Message}`,
+        )
+      }
+    }
   }
 }
 

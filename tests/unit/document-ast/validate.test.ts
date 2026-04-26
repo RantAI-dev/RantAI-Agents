@@ -172,4 +172,115 @@ describe("validateDocumentAst — mermaid semantic checks", () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.error).toMatch(/mermaid|diagram type/i)
   })
+
+  // The document-AST validator and the standalone mermaid validator now share
+  // a single MERMAID_DIAGRAM_TYPES list. These cover diagram types that used
+  // to fail in document context but pass standalone (drift between two
+  // hand-maintained lists).
+  it("accepts xychart-beta inside a document", () => {
+    const result = validateDocumentAst({
+      meta: baseMeta,
+      body: [{ type: "mermaid", code: "xychart-beta\n  title \"T\"" }],
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it("accepts kanban inside a document", () => {
+    const result = validateDocumentAst({
+      meta: baseMeta,
+      body: [{ type: "mermaid", code: "kanban\n  Todo\n    a[Pick up groceries]" }],
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it("accepts stateDiagram-v2 inside a document", () => {
+    const result = validateDocumentAst({
+      meta: baseMeta,
+      body: [{ type: "mermaid", code: "stateDiagram-v2\n  [*] --> Active" }],
+    })
+    expect(result.ok).toBe(true)
+  })
+})
+
+describe("validateDocumentAst — heading bookmarkId uniqueness", () => {
+  it("rejects two headings sharing the same bookmarkId", () => {
+    // Word resolves anchors to whichever target it sees first; duplicate
+    // bookmarkIds silently send users to the wrong heading. Reject early.
+    const r = validateDocumentAst({
+      meta: { title: "T" },
+      body: [
+        { type: "heading", level: 1, bookmarkId: "intro", children: [{ type: "text", text: "First" }] },
+        { type: "heading", level: 1, bookmarkId: "intro", children: [{ type: "text", text: "Second" }] },
+      ],
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/duplicate.*bookmarkId/i)
+  })
+
+  it("accepts distinct bookmarkIds even when text is identical", () => {
+    const r = validateDocumentAst({
+      meta: { title: "T" },
+      body: [
+        { type: "heading", level: 1, bookmarkId: "a", children: [{ type: "text", text: "Same" }] },
+        { type: "heading", level: 1, bookmarkId: "b", children: [{ type: "text", text: "Same" }] },
+      ],
+    })
+    expect(r.ok).toBe(true)
+  })
+})
+
+describe("validateDocumentAst — footnote nesting depth", () => {
+  it("rejects a footnote nested inside another footnote", () => {
+    // Word does not render nested footnotes; the schema previously
+    // permitted unbounded recursion via footnote → paragraph → footnote.
+    const r = validateDocumentAst({
+      meta: { title: "T" },
+      body: [
+        {
+          type: "paragraph",
+          children: [
+            {
+              type: "footnote",
+              children: [
+                {
+                  type: "paragraph",
+                  children: [
+                    {
+                      type: "footnote",
+                      children: [
+                        { type: "paragraph", children: [{ type: "text", text: "nested" }] },
+                      ],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/footnote nested/i)
+  })
+
+  it("accepts a single-level footnote (the supported depth)", () => {
+    const r = validateDocumentAst({
+      meta: { title: "T" },
+      body: [
+        {
+          type: "paragraph",
+          children: [
+            { type: "text", text: "Body" },
+            {
+              type: "footnote",
+              children: [
+                { type: "paragraph", children: [{ type: "text", text: "Footnote text" }] },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    expect(r.ok).toBe(true)
+  })
 })

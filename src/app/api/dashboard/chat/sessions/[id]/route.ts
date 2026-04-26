@@ -58,6 +58,14 @@ export async function PATCH(
     }
 
     const parsedBody = DashboardChatSessionUpdateBodySchema.safeParse(await req.json())
+    // Surface Zod issues directly instead of letting an undefined body
+    // silently no-op against the service's per-field guards.
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", issues: parsedBody.error.issues },
+        { status: 400 },
+      )
+    }
     const result = await updateDashboardChatSession({
       userId: session.user.id,
       sessionId: parsedParams.data.id,

@@ -9,13 +9,26 @@ interface LatexRendererProps {
   content: string
 }
 
+/** KaTeX trust callback — only allow `\href` URLs that resolve to http(s).
+ *  Earlier code used `trust: true` which combined with `dangerouslySetInnerHTML`
+ *  would let `\href{javascript:alert(1)}{text}` from LLM output produce a
+ *  live javascript: link in the panel. Other trust-gated KaTeX commands
+ *  (\includegraphics, \htmlClass, \htmlData, \htmlId, \htmlStyle) stay
+ *  rejected by returning false. */
+function isKatexCommandAllowed(context: { command: string; url?: string }): boolean {
+  if (context.command === "\\href" || context.command === "\\url") {
+    return typeof context.url === "string" && /^https?:\/\//i.test(context.url)
+  }
+  return false
+}
+
 /** Render a math string via KaTeX, returning HTML */
 function renderMath(tex: string, displayMode: boolean): string {
   try {
     return katex.renderToString(tex, {
       displayMode,
       throwOnError: false,
-      trust: true,
+      trust: isKatexCommandAllowed,
     })
   } catch {
     return `<code class="latex-error">${escapeHtml(tex)}</code>`

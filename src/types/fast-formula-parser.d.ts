@@ -46,6 +46,7 @@ declare module "fast-formula-parser" {
     static DIV0: FormulaError
     static NA: FormulaError
     static NUM: FormulaError
+    static NULL: FormulaError
     static ERROR(msg: string, details?: unknown): FormulaError
   }
 

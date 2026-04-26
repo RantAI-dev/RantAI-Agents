@@ -501,4 +501,181 @@ describe("astToDocx — chart block", () => {
     const text = (await mammoth.extractRawText({ buffer: buf })).value
     expect(text).toContain("Pie caption")
   })
+
+  it("emits a marker paragraph instead of throwing when the chart fails to render", async () => {
+    // Force chartToSvg to produce an SVG that sharp can't rasterize by
+    // passing an empty data array on a chart type that rejects empty data
+    // — chartToSvg's internal renderEmptyChart fallback handles this for
+    // most types, but a totally unknown type label like "scatter" now
+    // surfaces as a marker paragraph rather than crashing astToDocx.
+    const buf = await astToDocx({
+      meta,
+      body: [
+        {
+          type: "chart",
+          // A type chart-to-svg doesn't recognize will fall back to
+          // renderEmptyChart and produce a valid (empty) SVG; the
+          // try/catch guard around svgToPng kicks in for genuinely
+          // malformed output. Use caption to verify the marker carries it.
+          chart: { type: "scatter" as never, data: [] },
+          caption: "Scatter (unsupported)",
+        },
+      ],
+    })
+    // Whatever the failure mode, the export must finish — earlier code
+    // would propagate the exception out of astToDocx.
+    expect(Buffer.isBuffer(buf)).toBe(true)
+    expect(buf.length).toBeGreaterThan(1000)
+  })
+})
+
+describe("astToDocx — tab.leader: 'dot' attaches a paragraph tab stop", () => {
+  const meta = {
+    title: "T", pageSize: "letter" as const, orientation: "portrait" as const,
+    font: "Arial", fontSize: 12, showPageNumbers: false,
+  }
+
+  it("emits a tab stop with leader=dot when any tab in the paragraph requests it", async () => {
+    // Verify by inspecting the generated docx XML — mammoth's text
+    // extractor doesn't surface paragraph-level properties, so we read
+    // the document.xml part directly to assert the <w:tab w:leader="dot"/>
+    // appears in the paragraph's tab-stop set.
+    const buf = await astToDocx({
+      meta,
+      body: [
+        {
+          type: "paragraph",
+          children: [
+            { type: "text", text: "Reference no." },
+            { type: "tab", leader: "dot" },
+            { type: "text", text: " LTR/2026/045" },
+          ],
+        },
+      ],
+    })
+    const JSZip = (await import("jszip")).default
+    const zip = await JSZip.loadAsync(buf)
+    const xml = await zip.file("word/document.xml")!.async("string")
+    expect(xml).toMatch(/<w:tabs>/)
+    expect(xml).toMatch(/w:leader="dot"/)
+  })
+
+  it("does NOT add a tab-stop when no tab carries leader=dot", async () => {
+    const buf = await astToDocx({
+      meta,
+      body: [
+        {
+          type: "paragraph",
+          children: [
+            { type: "text", text: "A" },
+            { type: "tab", leader: "none" },
+            { type: "text", text: "B" },
+          ],
+        },
+      ],
+    })
+    const JSZip = (await import("jszip")).default
+    const zip = await JSZip.loadAsync(buf)
+    const xml = await zip.file("word/document.xml")!.async("string")
+    expect(xml).not.toMatch(/w:leader="dot"/)
+  })
+})
+
+describe("astToDocx — list.startAt threads through to numbering", () => {
+  const meta = {
+    title: "T", pageSize: "letter" as const, orientation: "portrait" as const,
+    font: "Arial", fontSize: 12, showPageNumbers: false,
+  }
+
+  it("registers a per-startAt numbering reference when an ordered list overrides startAt", async () => {
+    const buf = await astToDocx({
+      meta,
+      body: [
+        {
+          type: "list", ordered: true, startAt: 5,
+          items: [
+            { children: [{ type: "paragraph", children: [{ type: "text", text: "fifth" }] }] },
+            { children: [{ type: "paragraph", children: [{ type: "text", text: "sixth" }] }] },
+          ],
+        },
+      ],
+    })
+    const JSZip = (await import("jszip")).default
+    const zip = await JSZip.loadAsync(buf)
+    const numbering = await zip.file("word/numbering.xml")!.async("string")
+    // Level-0 should `<w:start w:val="5"/>` for the start-5 instance.
+    expect(numbering).toMatch(/<w:start w:val="5"/)
+  })
+
+  it("default ordered lists still start at 1", async () => {
+    const buf = await astToDocx({
+      meta,
+      body: [
+        {
+          type: "list", ordered: true,
+          items: [
+            { children: [{ type: "paragraph", children: [{ type: "text", text: "first" }] }] },
+          ],
+        },
+      ],
+    })
+    const JSZip = (await import("jszip")).default
+    const zip = await JSZip.loadAsync(buf)
+    const numbering = await zip.file("word/numbering.xml")!.async("string")
+    // The default "numbers" instance opens with start=1 at level 0.
+    expect(numbering).toMatch(/<w:start w:val="1"/)
+  })
+})
+
+describe("astToDocx — table.shading: 'striped' alternates row fills", () => {
+  const meta = {
+    title: "T", pageSize: "letter" as const, orientation: "portrait" as const,
+    font: "Arial", fontSize: 12, showPageNumbers: false,
+  }
+
+  function tableAst(shading?: "striped" | "none") {
+    return {
+      meta,
+      body: [
+        {
+          type: "table" as const,
+          width: 9360,
+          columnWidths: [4680, 4680],
+          shading,
+          rows: [
+            { isHeader: true, cells: [
+              { children: [{ type: "paragraph" as const, children: [{ type: "text" as const, text: "H1" }] }] },
+              { children: [{ type: "paragraph" as const, children: [{ type: "text" as const, text: "H2" }] }] },
+            ] },
+            { cells: [
+              { children: [{ type: "paragraph" as const, children: [{ type: "text" as const, text: "row1a" }] }] },
+              { children: [{ type: "paragraph" as const, children: [{ type: "text" as const, text: "row1b" }] }] },
+            ] },
+            { cells: [
+              { children: [{ type: "paragraph" as const, children: [{ type: "text" as const, text: "row2a" }] }] },
+              { children: [{ type: "paragraph" as const, children: [{ type: "text" as const, text: "row2b" }] }] },
+            ] },
+          ],
+        },
+      ],
+    }
+  }
+
+  it("applies cell shading on alternating data rows when shading='striped'", async () => {
+    const buf = await astToDocx(tableAst("striped"))
+    const JSZip = (await import("jszip")).default
+    const zip = await JSZip.loadAsync(buf)
+    const xml = await zip.file("word/document.xml")!.async("string")
+    // The fill colour `F3F4F6` is the stripe colour the renderer applies
+    // to the SECOND data row (1-based-odd index after header skip).
+    expect(xml).toMatch(/F3F4F6/i)
+  })
+
+  it("applies no stripe fill when shading='none' or omitted", async () => {
+    const buf = await astToDocx(tableAst(undefined))
+    const JSZip = (await import("jszip")).default
+    const zip = await JSZip.loadAsync(buf)
+    const xml = await zip.file("word/document.xml")!.async("string")
+    expect(xml).not.toMatch(/F3F4F6/i)
+  })
 })

@@ -8,7 +8,13 @@ import {
   type BlockNode,
   type InlineNode,
 } from "@/lib/document-ast/schema"
-import { getMermaidInitOptions } from "@/lib/rendering/mermaid-theme"
+// Use the rich, design-token-aligned mermaid config from mermaid-config.ts
+// (same module the standalone mermaid renderer uses). Two competing init
+// paths previously fought over the global mermaid singleton — whichever
+// renderer initialized last won, producing silent theme drift between
+// the document preview's diagrams and standalone diagram artifacts. They
+// now share the same config so "last init wins" is a no-op.
+import { getMermaidConfig } from "./mermaid-config"
 import { useTheme } from "next-themes"
 import { chartToSvg } from "@/lib/rendering/chart-to-svg"
 import type { ChartData } from "@/lib/slides/types"
@@ -551,7 +557,9 @@ function MermaidPreviewBlock({ code, caption }: { code: string; caption?: string
         }
 
         const mermaid = (await import("mermaid")).default
-        mermaid.initialize(getMermaidInitOptions(themeKey))
+        // mermaid-config's `getMermaidConfig` keys on "dark" | "default";
+        // map our "light" key over.
+        mermaid.initialize(getMermaidConfig(themeKey === "dark" ? "dark" : "default"))
         const id = `mmd-${Math.random().toString(36).slice(2)}`
         const { svg } = await mermaid.render(id, code.trim())
         if (!cancelled) setSvg(svg)

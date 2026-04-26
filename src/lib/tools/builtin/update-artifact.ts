@@ -50,6 +50,10 @@ export const updateArtifactTool: ToolDefinition = {
     // Validate content size
     const contentBytes = Buffer.byteLength(content, "utf-8")
     if (contentBytes > MAX_ARTIFACT_CONTENT_BYTES) {
+      // We don't have `existing` yet at this early guard, so emit the
+      // requested newTitle verbatim. Later guards below resolve to
+      // `newTitle ?? existing.title` so the LLM can read the current
+      // title even when it didn't request a change.
       return {
         id,
         title: newTitle,
@@ -64,6 +68,7 @@ export const updateArtifactTool: ToolDefinition = {
     let persisted = true
     let validationWarnings: string[] = []
     let finalContent = content
+    let existingForReturn: { title: string } | null = null
     try {
       const existing = await prisma.document.findUnique({ where: { id } })
       // Fix #23: explicit not-found path. Without this the function silently
@@ -80,28 +85,29 @@ export const updateArtifactTool: ToolDefinition = {
           error: `Artifact "${id}" not found. Call create_artifact instead to create a new artifact.`,
         }
       }
+      existingForReturn = { title: existing.title }
 
-      // Fix #6: canvas-mode type enforcement. When the user has selected a
+      // Canvas-mode type enforcement. When the user has selected a
       // specific artifact type, the LLM is required to keep using it.
-      // create_artifact has the same check; without it here, an LLM in
-      // canvas-mode could replace e.g. an HTML artifact with React content
-      // and slip past the type-specific renderer.
+      // A null stored `artifactType` (legacy / accidental untyped row)
+      // is treated as "any canvas-mode mismatches" — tools should not
+      // be the path that retypes an untyped Document.
       const canvasMode = context.canvasMode
-      if (
+      const canvasModeMismatch =
         canvasMode &&
         canvasMode !== "auto" &&
-        existing.artifactType &&
         canvasMode !== existing.artifactType
-      ) {
+      if (canvasModeMismatch) {
+        const stored = existing.artifactType ?? "(untyped)"
         return {
           id,
-          title: newTitle,
+          title: newTitle ?? existing.title,
           content,
           updated: false,
           persisted: false,
-          error: `Canvas mode is locked to "${canvasMode}" but the artifact type is "${existing.artifactType}". The user explicitly chose this type — do not switch. Keep updating with content valid for "${existing.artifactType}".`,
+          error: `Canvas mode is locked to "${canvasMode}" but the artifact type is "${stored}". The user explicitly chose this type — do not switch. Keep updating with content valid for "${stored}".`,
           validationErrors: [
-            `Canvas-mode mismatch: expected "${canvasMode}", artifact is "${existing.artifactType}".`,
+            `Wrong artifact type: expected "${canvasMode}", got "${stored}".`,
           ],
         }
       }
@@ -117,7 +123,10 @@ export const updateArtifactTool: ToolDefinition = {
         if (!validation.ok) {
           return {
             id,
-            title: newTitle,
+            // Prefer the requested title; fall back to the stored one so
+            // the LLM never sees a literal `undefined` for an artifact
+            // whose title it didn't try to change.
+            title: newTitle ?? existing.title,
             content,
             updated: false,
             persisted: false,
@@ -225,7 +234,7 @@ export const updateArtifactTool: ToolDefinition = {
           // re-fetch and retry rather than silently dropping the update.
           return {
             id,
-            title: newTitle,
+            title: newTitle ?? existing.title,
             content,
             updated: false,
             persisted: false,
@@ -244,9 +253,25 @@ export const updateArtifactTool: ToolDefinition = {
       persisted = false
     }
 
+    // When persistence threw, `updated: true` would be misleading — the
+    // LLM (and the chat-workspace's `out.updated` gate) would believe the
+    // in-memory state is now backed by storage. Reflect reality instead.
+    if (!persisted) {
+      return {
+        id,
+        title: newTitle ?? existingForReturn?.title,
+        content: finalContent,
+        updated: false,
+        persisted: false,
+        error: "Persistence failed after validation passed. The artifact's in-memory state may have diverged from storage; re-fetch and retry.",
+      }
+    }
+
     return {
       id,
-      title: newTitle,
+      // When no title change was requested, surface the stored title so
+      // downstream code (LLM memory, chat-workspace) can recall it.
+      title: newTitle ?? existingForReturn?.title,
       content: finalContent,
       updated: true,
       persisted,

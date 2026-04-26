@@ -1,1604 +1,822 @@
 # Artifact Capabilities — per-type spec
 
-> **Audience:** anyone deciding "which artifact type should I (or my LLM) use for X?", or implementing a new capability for an existing type. Each section below is self-contained — you can read just the type you care about. Companion docs: [artifacts-deepscan.md](./artifacts-deepscan.md) (system flow) and [architecture-reference.md](./architecture-reference.md) (file:line audit).
-
-**Last regenerated:** 2026-04-25 — fresh scan from `src/`.
-
----
-
-## How to read this doc
-
-Each artifact type gets a section with this structure:
-
-- **Identity** — type string, label, file extension, has-code-tab flag
-- **When to use** — the boundary against neighboring types
-- **Content shape** — what the LLM emits (raw HTML / JSX / mermaid syntax / JSON / etc.)
-- **Capabilities** — the can-do list, with concrete examples
-- **Hard constraints** — things the validator rejects
-- **Soft warnings** — things the validator nags about
-- **Anti-patterns** — explicit ❌ items from the prompt
-- **Pre-injected dependencies** — what the LLM gets for free
-- **Render pipeline** — what happens between content and pixels
-- **Sandbox / security** — isolation guarantees
-- **Download** — file format and any post-processing
+> **Audience:** anyone deciding "which artifact type should I (or my LLM)
+> use for X?", or implementing a new capability for an existing type. Each
+> section is self-contained.
+>
+> **Last regenerated:** 2026-04-25, post-Priority-C, pinned to merge `f0264f8`.
+> Replaces all prior versions. Sourced from a 5-agent ground-up rescan.
+>
+> Companion docs:
+> - [`artifacts-deepscan.md`](./artifacts-deepscan.md) — system flow.
+> - [`architecture-reference.md`](./architecture-reference.md) — file:line audit.
+> - [`2026-04-25-deepscan-rescan-findings.md`](./2026-04-25-deepscan-rescan-findings.md) — 58 unshipped findings (referenced as **N-N** below).
 
 ---
 
-## Cross-type capability matrix
+## Decision matrix — which type for what?
 
-Quick visual reference; details in each section. Order matches the registry.
+| User intent | Type | Why |
+|-------------|------|-----|
+| Interactive page, calculator, dashboard, game | `text/html` | Tailwind v3 + JS in sandboxed iframe |
+| Custom UI component with React/Recharts/Lucide | `application/react` | Babel transpile + iframe runtime |
+| Logo, icon, simple graphic | `image/svg+xml` | Inline SVG, sanitized |
+| Flowchart, sequence, ER, mindmap, Gantt | `application/mermaid` | Mermaid → SVG |
+| README, technical docs, articles, reports | `text/markdown` | GFM + KaTeX + mermaid + Shiki |
+| Formal deliverable (proposal, white paper, contract) | `text/document` | DocumentAst → DOCX export with cover, TOC, footnotes |
+| Source code (any language) for copy-paste | `application/code` | Shiki-highlighted, no execution |
+| CSV table or spreadsheet with formulas | `application/sheet` | CSV preview or v1-spec → XLSX export |
+| Math-heavy explainer with proofs | `text/latex` | KaTeX subset |
+| Slide deck (presentation) | `application/slides` | JSON deck → live preview + PPTX export |
+| Runnable Python (data munging, plotting) | `application/python` | Pyodide in browser |
+| 3D scene | `application/3d` | React-Three-Fiber sandbox |
 
-| Capability | HTML | React | SVG | Mermaid | Markdown | Document | Code | Sheet | LaTeX | Slides | Python | R3F |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| Unsplash images (`unsplash:keyword`) | ✓ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| External image URLs in content | ✓ | ✗ | ✗ | ✗ | ✓ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| Inline SVG (in body) | ✓ | ✓ | – | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Recharts (React component charts) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Inline mermaid diagrams | ✗ | ✗ | ✗ | – | ✓ (fenced) | ✓ (block node) | ✗ | ✗ | ✗ | ✓ (layout) | ✗ | ✗ |
-| Data charts (D3 SVG; bar/line/pie/donut) | ✗ | ✓ (Recharts) | ✗ | ✓ (`pie`) | ✗ | ✓ (block node) | ✗ | ✗ | ✗ | ✓ (layout) | ✓ (matplotlib) | ✗ |
-| Aesthetic directive menu (7 directions) | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Dynamic Google Fonts | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ (font name only in DOCX) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Framer Motion animations | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Lucide icons | ✓ (via SVG paths) | ✓ (`LucideReact.*`) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ (`{icon:name}`) | ✗ | ✗ |
-| Tailwind CSS (CDN) | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Interactive forms / DOM events | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Sort + filter table | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ (CSV / array) | ✗ | ✗ | ✗ | ✗ |
-| Multi-sheet workbook + formulas | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ (spec) | ✗ | ✗ | ✗ | ✗ |
-| Real `.xlsx` export with cached values | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ (spec) | ✗ | ✗ | ✗ | ✗ |
-| Matplotlib plots | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
-| Pandas / NumPy / scikit-learn | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ |
-| KaTeX math (inline + display) | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ (rendered as text) | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
-| Cover page + header/footer | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ (title slide layout) | ✗ | ✗ |
-| TOC with bookmarks + anchors | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Page numbers | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ (slide-num footer) | ✗ | ✗ |
-| Footnotes (page-bottom) | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Tables with colspan / rowspan | ✓ | ✓ | ✗ | ✗ | ✗ (GFM only) | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| Real `.docx` export (server-side) | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
-| `.pptx` export | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ |
-| Code execution at runtime | ✓ (browser JS) | ✓ (transpiled JSX) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ (formulas only) | ✗ | ✗ | ✓ (Pyodide) | ✓ (WebGL) |
-| 3D models (`.glb`) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
-| Iframe sandbox | ✓ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ (Worker) | ✓ |
-| Theme awareness (light/dark) | ✗ | ✗ (chooses palette per directive) | ✗ | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
+When two types could work, the rule of thumb:
 
-Legend: ✓ = supported · ✗ = not supported · `–` = the type itself · parenthetical = the conditional form.
+- **Read** vs. **interact**: readers → `text/markdown` or `text/document`;
+  clickers → `text/html` or `application/react`.
+- **Display code** vs. **run code**: `application/code` is read-only;
+  `application/python` actually runs.
+- **Casual write-up** vs. **deliverable**: `text/markdown` is the README path;
+  `text/document` is the printed-and-archived path.
 
 ---
 
-## 1. `text/html` — HTML Page
+## Common contracts (apply to every type)
 
-**Identity**
+All twelve types share these guarantees:
 
-| | |
-|---|---|
-| Type | `text/html` |
-| Label / Short label | "HTML Page" / "HTML" |
-| Extension | `.html` |
-| Code tab | ✓ |
-| Color | orange-500 |
-
-### When to use
-
-- Interactive single-page apps: dashboards, calculators, forms, games, landing pages.
-- Anything that needs the user to **click, type, or compute**.
-
-vs `text/markdown`: markdown is for *reading*, HTML is for *interacting*.
-vs `application/react`: React if you need component state across multiple sub-views, animations, charts; HTML for self-contained interactive pages where vanilla JS is sufficient.
-vs `application/slides`: slides if it's a presentation; HTML for any other interactive surface.
-
-### Content shape
-
-A complete HTML document. Tailwind CSS v3 from CDN and Inter from Google Fonts will be auto-injected into `<head>` if not present (regex check). Partial HTML (just a body fragment) will be wrapped in a default document.
-
-### Capabilities
-
-- **Tailwind CSS v3** — full utility-first styling. No build step; Tailwind's CDN reads class names at runtime.
-- **Inter font** — auto-loaded if not present.
-- **`unsplash:keyword phrase` URLs** in `<img src>` — server-resolved to real Unsplash URLs at create time, cached 30 days. Falls back to `placehold.co` on resolution failure.
-- **Inline SVG** — full SVG markup as element trees.
-- **`<audio>` / `<video>`** — supported by the iframe; sandbox doesn't strip them.
-- **Vanilla JS** — `addEventListener`, `setTimeout`, `setInterval`, full DOM manipulation.
-- **`localStorage`** — works (sandbox doesn't disable storage). Useful for user preferences across reloads of the same artifact.
-- **Forms** — controlled state via JS only. The sandbox doesn't include `allow-forms`, so `<form action="...">` cannot POST.
-- **Tables with colspan / rowspan** — full HTML table semantics.
-- **Modal dialogs** — `allow-modals` is on, so `alert()` / `confirm()` / `prompt()` / `<dialog>` work.
-
-### Hard constraints (validator errors)
-
-- Must start with `<!DOCTYPE html>`.
-- Must contain `<html>`, `<head>`, `<body>`.
-- Must contain a non-empty `<title>` in `<head>`.
-- Must contain `<meta name="viewport">`.
-- Must NOT contain `<form action>` (the sandbox blocks submissions; misleading to users).
-- Hard cap 512 KB content size (universal).
-
-### Soft warnings (validator)
-
-- Inline `<style>` block > 10 non-blank lines (prefer Tailwind utilities).
-- `<script src>` to non-CDN URLs (likely will be blocked by sandbox).
-
-### Anti-patterns ❌ (from prompt)
-
-- ❌ Bare `unsplash:` reference in CSS `background-image` (won't resolve — only matches `<img src>`)
-- ❌ External URLs other than Tailwind CDN, Google Fonts, or `unsplash:`
-- ❌ Form with `action="/submit"` (sandbox blocks POST)
-- ❌ `window.location = "..."` (sandbox blocks navigation)
-- ❌ Truncation or "...add more here" placeholders
-
-### Pre-injected dependencies
-
-- Tailwind CDN (`https://cdn.tailwindcss.com`)
-- Google Fonts (Inter family)
-- Navigation blocker script (custom, see render pipeline)
-
-### Render pipeline
-
-1. Parse content for existing Tailwind / Inter; conditionally inject if missing.
-2. If partial HTML, wrap in default document with charset + viewport + base styles.
-3. Inject navigation blocker script (BEFORE any user code).
-4. Build `srcDoc` and load into `<iframe sandbox="allow-scripts allow-modals">`.
-5. 5-second slow-load warning timer; spinner cleared by actual `onLoad` event.
-6. Three `useRef`s coordinate state across loads to prevent races during navigation restoration.
-
-### Sandbox / security
-
-- **Iframe sandbox flags**: `allow-scripts allow-modals` only. **No** `allow-same-origin`, **no** `allow-top-navigation`, **no** `allow-forms`, **no** `allow-popups`.
-- **Navigation blocker** (injected before user code) overrides:
-  - `Location.assign` / `Location.replace` / `Location.reload`
-  - `location.href` setter
-  - Anchor `click` events (non-fragment, non-`javascript:`)
-  - Form `submit` events
-  - `history.pushState` / `history.replaceState`
-  - `window.open` (returns a no-op stub)
-- **No DOMPurify** — relies entirely on the iframe sandbox boundary for isolation.
-
-### Download
-
-Raw `.html` save (the actual artifact content). Tailwind CDN + Inter font links are part of the saved file (since they're injected at render time, not before persist) — actually, since the injection happens in the renderer's iframe construction, the saved file does *not* include the auto-injected Tailwind/font; the LLM is expected to include them itself if they should be in the saved file.
+- **Hard size cap**: 512 KiB persisted content (`MAX_ARTIFACT_CONTENT_BYTES`).
+  Enforced by `Buffer.byteLength` in `create-artifact.ts:51-60` and
+  `update-artifact.ts:51-61`.
+- **Server-side validation** before persist via
+  `validateArtifactContent(type, content, ctx?)` — fails the tool call
+  with `validationErrors` so the LLM can self-correct.
+- **5-second wall-clock timeout** on validation (`VALIDATE_TIMEOUT_MS`).
+- **`ValidationContext.isNew`** is set to `true` on `create_artifact`,
+  omitted on `update_artifact`. Two validators (`validateMarkdown`,
+  `validateSlides`) apply stricter rules under `isNew=true`. (`validateDocument`
+  doesn't accept `ctx` at all — see rescan **N-26**.)
+- **Optimistic locking** on update via `prisma.document.updateMany` keyed
+  on `updatedAt` — concurrent writers get a 409 (HTTP) or
+  `{ updated: false, error: "Concurrent update detected…" }` (LLM tool).
+- **Versioned archival** to `<s3Key>.v<N>` up to 20 (`MAX_VERSION_HISTORY`),
+  FIFO eviction tracked in `metadata.evictedVersionCount`.
+- **RAG indexing** via `indexArtifactContent` is fire-and-forget and
+  never rethrows. Failure writes `metadata.ragIndexed: false` so the panel
+  can show a "not searchable" badge. **NOTE** (rescan **N-1**): only the
+  LLM tool path indexes; the manual-edit HTTP path does not — manual edits
+  produce stale RAG until the next LLM update.
+- **Deletion** removes the canonical S3 object, every versioned S3 key,
+  the RAG chunks, and the Postgres row. **NOTE** (rescan **N-47**):
+  session-level delete still leaks versioned S3 keys — it only fetches
+  `{ id, s3Key }`, not `metadata`.
+- **Canvas-mode lock** — when `context.canvasMode` is set to a specific
+  type, both `create_artifact` and `update_artifact` reject any other type.
+  `auto` allows any. **NOTE** (rescan **N-7**): `update_artifact`'s lock is
+  silently bypassed when `existing.artifactType` is null.
 
 ---
 
-## 2. `application/react` — React Component
+## 1. `text/html` — Self-contained interactive pages
 
-**Identity**
+**Renderer.** `html-renderer.tsx`. Mounts content in `<iframe srcdoc>`
+with `sandbox="allow-scripts allow-modals"`. The nav-blocker shim is
+injected before user scripts; Tailwind CDN and Inter font are auto-injected
+if absent.
 
-| | |
-|---|---|
-| Type | `application/react` |
-| Label / Short label | "React Component" / "React" |
-| Extension | `.tsx` |
-| Code tab | ✓ |
-| Color | blue-500 |
+**Runtime guarantees.**
+- Tailwind CSS v3 is auto-injected (do **not** add another `<script>` for it).
+- The Inter font must be linked via `<link>` from Google Fonts.
+- `localStorage` works inside the iframe.
+- No external network beyond Google Fonts and the Tailwind CDN.
+- Form submission, navigation, `window.open()` blocked by sandbox + nav-blocker.
 
-### When to use
+**Image protocol.** Use `src="unsplash:keyword"` for contextual photos.
+Validator's post-Unsplash step (`_validate-artifact.ts:131-144`) resolves
+via `resolveImages` before persisting. Rules:
+- 2–4 keyword phrases.
+- Only works in `src=` attributes (not CSS `background-image` or JS).
+- 30-day cache via `prisma.resolvedImage`.
+- `placehold.co` fallback when Unsplash key is missing or fails.
 
-- UI components with state: dashboards, toolboxes, configurators, chart explorers, multi-step flows.
-- Anything that benefits from React's reconciliation: lists, forms, animations.
-- When you need **Recharts** for data viz or **Framer Motion** for animations.
+**Validator** (`validateHtml`):
+- DOCTYPE `<!DOCTYPE html>` required at the top.
+- parse5 parse — `<html>`, `<head>`, `<body>`, `<title>` (with non-empty text), viewport meta required.
+- `<form action=…>` rejected (sandbox blocks form submission).
+- Inline `<style>` block warning at `MAX_INLINE_STYLE_LINES = 10`.
 
-vs `text/html`: HTML for one-shot pages; React for stateful UI with reusable parts.
-vs `application/slides`: slides have rigid layouts; React if you need a custom interactive surface.
+**Drift** (rescan **N-13**): the prompt says inline `<style>` ≤ 10 lines,
+but the validator threshold appears to be 15 in the test suite. 11–14
+lines satisfy validation but violate the prompt rule.
 
-### Content shape
+**Anti-patterns:**
+- Static prose. Use `text/markdown`.
+- `<base>` tag.
+- `fetch()` against real APIs (sandbox blocks).
 
-A single React component file. **Line 1 must be a directive comment**:
+---
 
-```jsx
-// @aesthetic: editorial
+## 2. `application/react` — React components with live preview
+
+**Renderer.** `react-renderer.tsx`. Babel transpiles the component;
+mounts in `<iframe srcdoc>` with `sandbox="allow-scripts"`. React 18,
+ReactDOM, Recharts 2, lucide-react, framer-motion are exposed as window
+globals (CDN-pinned in the iframe template).
+
+**Import whitelist** (`REACT_IMPORT_WHITELIST`): `react`, `react-dom`,
+`recharts`, `lucide-react`, `framer-motion`. Any other import is a hard
+validation error.
+
+**Mandatory shape.**
+- Exactly one `export default` (component or const).
+- One file. No multi-file imports.
+- No CSS file imports.
+- Inline `<style>` blocks ≤ 10 non-blank lines (`MAX_INLINE_STYLE_LINES`).
+- No `class extends React.Component` — function components only.
+- No `document.querySelector` / `document.getElementById` — use `useRef`.
+
+**Aesthetic directives** (`_react-directives.ts`):
+- Line 1: `// @aesthetic: <direction>` from
+  `editorial, brutalist, luxury, playful, industrial, organic, retro-futuristic`.
+- Line 2 (optional): `// @fonts: Family:wght@spec | Family:wght@spec`.
+  Capped at `MAX_FONT_FAMILIES = 3`.
+- `validateFontSpec` accepts only 4 axis forms: `wght@`, `ital,wght@`,
+  `opsz,wght@`, `ital,opsz,wght@`.
+- When `process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"`,
+  missing directive is a hard error. **Default behavior is enforced** —
+  the env var must be the literal string `"false"` to disable.
+
+**Soft warnings:**
+- Editorial/luxury aesthetic without serif in `@fonts`.
+- Industrial aesthetic with `Motion.motion` / `Motion.AnimatePresence`.
+- ≥ 6 slate/indigo Tailwind class hits with a non-industrial aesthetic.
+
+**postMessage discipline.** The iframe's error boundary forwards runtime
+errors to the host via `parent.postMessage({ type: "error", ... }, '*')`.
+The host enforces `e.source === iframeRef.current?.contentWindow`
+(`react-renderer.tsx:459`) before trusting it. The host's `setError`
+lives in `useEffect`, not `useMemo` (a render-time `setState` would warn
+or loop).
+
+**Anti-patterns:**
+- Importing from `@/lib` or any project-internal alias.
+- Server components / `"use client"` directive (every artifact is client-only).
+- `next/image` — use a plain `<img>` and a real URL.
+- shadcn/ui imports.
+
+---
+
+## 3. `image/svg+xml` — SVG graphics
+
+**Renderer.** `svg-renderer.tsx` — DOMPurify with
+`USE_PROFILES: { svg: true, svgFilters: true }` and `ADD_TAGS: ["use"]`.
+Renders inline (no iframe — important for the rules below).
+
+**Validator** (hard errors):
+- Empty content rejected.
+- Missing root `<svg>` rejected.
+- Missing `xmlns="http://www.w3.org/2000/svg"` rejected.
+- Missing `viewBox` rejected (no responsive scaling without it).
+- `width` / `height` on root rejected (use `viewBox` only).
+- `<script>` rejected (stripped by sanitizer; surface to LLM).
+- `<foreignObject>` rejected.
+- External `href` / `xlink:href` rejected; only same-document `#id` allowed.
+- Event handler attributes (`on*`) rejected.
+- Inline `<style>` blocks rejected — **error** for SVG (because the
+  renderer is not iframed and CSS leaks into host page) but only
+  **warning** for HTML (which is iframed).
+
+**Soft warnings:**
+- Missing `<title>` child of root `<svg>` (unless `aria-hidden="true"`).
+- > 5 distinct colors.
+- Path coordinates with > 2 decimal places.
+
+**Use cases.** Icons, logos, illustrations that compose into other
+artifacts. Icons should use `currentColor`.
+
+**Anti-patterns:**
+- Inline `<script>` — stripped.
+- Foreign-object HTML embeds — survive sanitization but rarely render usefully.
+
+---
+
+## 4. `application/mermaid` — Diagrams
+
+**Renderer.** `mermaid-renderer.tsx` (live preview, module-level singleton
+`mermaidPromise`). Server SVG path (`rendering/server/mermaid-to-svg.ts`)
+for DOCX, with jsdom shim + `renderQueue` Promise mutex. Client PNG path
+(`rendering/client/mermaid-to-png.ts`) for PPTX export.
+
+**Theme.** Light: `MERMAID_THEME_VARIABLES`. Dark:
+`MERMAID_THEME_VARIABLES_DARK`. Factory `getMermaidInitOptions(theme)` in
+`mermaid-theme.ts`. The document-renderer's `MermaidPreviewBlock` reads
+`useTheme().resolvedTheme` and switches; the server (DOCX) always uses
+light because the docx body is white.
+
+**Concurrency hazard** (rescan **N-54**): two separate init paths share
+the global mermaid singleton — `mermaid-renderer.tsx` (via
+`renderers/mermaid-config.ts`) and `document-renderer.tsx`'s
+`MermaidPreviewBlock` (via `lib/rendering/mermaid-theme.ts`). Whichever
+calls `mermaid.initialize` last wins. Concurrent renders cause silent
+theme drift.
+
+**Validator** (`validateMermaid`):
+- Non-empty content.
+- First non-empty line must start with one of the whitelisted diagram
+  types: `flowchart`, `graph`, `sequenceDiagram`, `erDiagram`,
+  `stateDiagram-v2`, `classDiagram`, `gantt`, `pie`, `mindmap`,
+  `gitGraph`, `journey`, `quadrantChart`, `timeline`, `sankey-beta`,
+  `xychart-beta`, `block-beta`, `kanban`, `C4Context`,
+  `requirementDiagram`, `architecture-beta` (24 entries).
+- ` ```mermaid ``` ` markdown fences rejected.
+
+**Drift** (rescan **N-14**): the prompt forbids
+`%%{init: {'theme':'...'}}%%` directives entirely; the validator only
+warns when a regex match hits, and the regex is easily evaded.
+
+**Drift** (rescan **N-15**): `validateSlides`'s inline mermaid-start
+list at `_validate-artifact.ts:364` is a strict subset of the global
+list and **omits `stateDiagram-v2`** — slides containing `stateDiagram-v2`
+trigger a "diagram may be invalid" warning even though the renderer
+handles it.
+
+**Drift** (rescan **N-16**): the document-AST validator's whitelist at
+`document-ast/validate.ts:19-24` lists 16 diagram types and is missing
+`xychart-beta`, `block-beta`, `packet-beta`, `kanban` (added in Mermaid
+v10/v11).
+
+**Anti-patterns:**
+- `%%{init:` directives — system applies its own theme.
+- Manually colored nodes that fight the theme — keep diagrams structural.
+- More than 15 nodes in a single flowchart (warning).
+
+---
+
+## 5. `text/markdown` — Documents
+
+**Renderer.** `StreamdownContent` (a streaming-friendly react-markdown
+wrapper). GFM enabled. Shiki for code, KaTeX for math (via
+`remark-math` + `rehype-katex`), mermaid via fenced ` ```mermaid ` blocks.
+
+**Mandatory contracts:**
+- Code fences must declare a language (warning when missing).
+- Heading levels must not skip (h1 → h3 emits a warning).
+
+**Strict gates:**
+- **128 KiB cap on creates** (`MARKDOWN_NEW_CAP_BYTES`). New markdown
+  over the cap is rejected. Existing oversized markdown still validates
+  on update so the panel can edit it down to size.
+- **`<script>` strict mode** (env-gated, off by default). When
+  `ARTIFACT_STRICT_MARKDOWN_VALIDATION === "true"`, a `<script>` tag is
+  a hard error. Default is a soft warning.
+
+**Raw HTML disallow list:** `details`, `summary`, `kbd`, `mark`,
+`iframe`, `video`, `audio`, `object`, `embed`, `table`. Renderer either
+strips or mis-renders these — emit warnings.
+
+**Anti-patterns:**
+- Embedding `<script>` for "interactivity" (use `text/html`).
+- Formal deliverables (use `text/document`).
+- Slides (use `application/slides`).
+- Raw HTML for layout.
+
+---
+
+## 6. `text/document` — Formal deliverables
+
+**Renderer.** `document-renderer.tsx` — A4/letter preview. Source of
+truth is `DocumentAst` JSON; preview renders it directly and the user
+downloads the same JSON as `.md` (raw, pretty-printed) or `.docx`
+(rendered server-side via `astToDocx`).
+
+**Schema** (`src/lib/document-ast/schema.ts`):
+
 ```
-
-**Optional line 2:**
-
-```jsx
-// @fonts: Fraunces:ital,wght@0,400..700 | Inter:wght@300..700
-```
-
-The component must export a default. JSX + ES modules. TypeScript syntax allowed (Babel strips types).
-
-### Aesthetic directive menu
-
-Required on line 1. Determines palette guidance, component conventions, motion character, and default Google Fonts.
-
-| Direction | Use for | Default fonts |
-|---|---|---|
-| `editorial` | articles, brand pages, storytelling, long-form | Fraunces + Inter |
-| `brutalist` | indie tools, manifestos, dev products, "raw" | Space Grotesk + JetBrains Mono |
-| `luxury` | premium, hospitality, fashion | DM Serif Display + DM Sans |
-| `playful` | onboarding, kids, creative tools | Fredoka |
-| `industrial` | dashboards, admin, monitoring | Inter Tight + Space Mono |
-| `organic` | wellness, food, crafts | Fraunces + Public Sans |
-| `retro-futuristic` | gaming, sci-fi, events | VT323 + Space Mono |
-
-The validator hard-errors on missing `@aesthetic:` (when env `ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"`) or unknown direction. Soft-warns on:
-- ≥ 6 `slate-*`/`indigo-*` references with a non-`industrial` direction (palette mismatch)
-- `editorial`/`luxury` direction without a recognized serif in `@fonts` (font mismatch)
-- `industrial` direction using `Motion.motion` or `Motion.AnimatePresence` (motion-in-industrial)
-
-### `@fonts` spec
-
-Pipe-separated. Each spec validates against `/^[A-Z][A-Za-z0-9 ]{1,40}:(wght@[\d;.]+|...)$/`. Max 3 families. Loaded dynamically from `fonts.googleapis.com` (only host whitelist). Malformed specs hard-error in the validator.
-
-### Capabilities
-
-**Pre-injected globals (no `import` needed):**
-
-| Library | Symbol | Version |
-|---|---|---|
-| React 18 | `React` + 26 hooks pre-destructured | UMD 18 |
-| Recharts | `Recharts.LineChart`, `Recharts.BarChart`, `Recharts.PieChart`, `Recharts.AreaChart`, `Recharts.ResponsiveContainer`, `Recharts.Tooltip`, `Recharts.XAxis`, `Recharts.YAxis`, `Recharts.CartesianGrid`, `Recharts.Legend`, etc. | 2 |
-| Lucide React | `LucideReact.ArrowRight`, `LucideReact.Check`, `LucideReact.X`, etc. | 0.454.0 |
-| Framer Motion | `Motion.motion.div`, `Motion.AnimatePresence` | 11 |
-| Tailwind CSS | utility classes via CDN | v3 |
-
-**Pre-destructured React hooks** (available without `const { ... } = React;`): `useState`, `useEffect`, `useRef`, `useMemo`, `useCallback`, `useContext`, `useReducer`, `useId`, `useTransition`, `useDeferredValue`, `useSyncExternalStore`, `useInsertionEffect`, `useLayoutEffect`, `createContext`, `forwardRef`, `memo`, `Fragment`, `Suspense`, `lazy`, `startTransition`, `Children`, `cloneElement`, `createElement`, `isValidElement` — and a few more (Profiler / StrictMode are NOT in the destructured set; `import { Profiler } from 'react'` will be rewritten to `const { Profiler } = React;`).
-
-**TypeScript syntax** is allowed — Babel strips types during transpile.
-
-### Hard constraints (validator errors)
-
-- Missing `// @aesthetic:` line 1 (gated by env, default enforce)
-- Unknown aesthetic value (gated by env)
-- Malformed `@fonts` spec (gated by env)
-- More than 3 font families
-- Missing `export default`
-- Class components (`class X extends React.Component`)
-- Non-whitelisted imports — only allowed: `react`, `react-dom`, `recharts`, `lucide-react`, `framer-motion`, plus relative paths
-- `document.getElementById` / `document.querySelector` (use `useRef`)
-- CSS imports (`import './styles.css'`)
-- Hard cap 512 KB
-
-### Soft warnings (validator)
-
-- Direction-specific palette/font/motion mismatches (see directive section above)
-
-### Anti-patterns ❌
-
-- ❌ `import { Card } from 'shadcn/ui'` — NOT available
-- ❌ `import './styles.css'`
-- ❌ `class X extends React.Component`
-- ❌ `document.getElementById` / `document.querySelector`
-- ❌ Real `fetch()` calls (no network)
-- ❌ Form `action="/api"` POST (sandbox)
-- ❌ `window.open` / `window.location` (sandbox)
-- ❌ Truncation
-
-### Render pipeline
-
-1. Strip directive lines (1–2) before transpile.
-2. Hide template literals (`` `...` ``) so import-regex doesn't false-match inside strings.
-3. Collapse multi-line imports onto one line.
-4. Rewrite imports to globals: `import { useState } from 'react'` → `const { useState } = React;` (only for symbols not in the 26 pre-destructured set); `import * as Recharts from 'recharts'` → `const Recharts = Recharts;` etc.
-5. Strip side-effect imports (`import './foo.css'`).
-6. Transform `export default` into a named const/function.
-7. Restore template literals.
-8. Build iframe `srcDoc` containing: Tailwind CDN, font links from `buildFontLinks(aesthetic, fonts)`, React 18 + ReactDOM 18 + Babel-standalone + Recharts + Lucide + Framer Motion UMDs, navigation blocker, then a `<script type="text/babel">` block with the user code wrapped in an `__ArtifactErrorBoundary` class.
-9. Mount with `ReactDOM.createRoot()`.
-10. Errors postMessage'd to parent; parent shows fatal card (Retry / Fix-with-AI / View Source) or non-fatal warning banner.
-
-### Sandbox / security
-
-- Iframe `sandbox="allow-scripts"` — **no** modals, no popups.
-- Same navigation blocker as HTML.
-- Babel runs in-iframe (transpiled at render time, not at create time).
-
-### Download
-
-`.tsx`. Saved file includes the user's directive comments and original `import` statements (the rewriting happens only during render).
-
----
-
-## 3. `image/svg+xml` — SVG Graphic
-
-**Identity**
-
-| | |
-|---|---|
-| Type | `image/svg+xml` |
-| Label / Short label | "SVG Graphic" / "SVG" |
-| Extension | `.svg` |
-| Code tab | ✓ |
-| Color | emerald-500 |
-
-### When to use
-
-- Icons, glyphs, symbols (`<viewBox="0 0 24 24">`, currentColor stroke).
-- Illustrations, hero shots, empty states.
-- Logos, badges, wordmarks.
-- Static diagrams (non-flowchart — use Mermaid for flowcharts).
-
-### Content shape
-
-Inline SVG markup. `viewBox` is required; hardcoded `width`/`height` will break responsive scaling.
-
-### Capabilities
-
-- All standard SVG shape elements: `<rect>`, `<circle>`, `<ellipse>`, `<line>`, `<polyline>`, `<polygon>`, `<path>`.
-- Native `<text>` with `text-anchor`, `dominant-baseline`, font attributes.
-- Groups, defs, gradients (`<linearGradient>`, `<radialGradient>`), patterns, `<use>` references.
-- SMIL animation: `<animate>`, `<animateTransform>` (CSS animations not supported — `<style>` is stripped).
-- `currentColor` for icon stroke (inherits from parent text color).
-- 4 style categories: **icon** (`viewBox="0 0 24 24"`, `fill="none"`, `stroke-width="2"`, `stroke-linecap="round"`, `stroke-linejoin="round"`), **illustration** (`viewBox="0 0 400 300"`, 3–5 colors, mostly filled), **logo / badge** (square `0 0 200 200` for emblems, rectangular `0 0 240 80` for wordmarks, ≤ 3 colors), **diagram** (proportional, 2–4 colors, consistent stroke widths).
-
-### Hard constraints
-
-- `<script>` blocks → stripped by DOMPurify (validator also rejects).
-- `<style>` blocks → stripped (would leak to host page since rendered inline).
-- `<foreignObject>` → stripped.
-- External `href` / `xlink:href` (http / https / data: URIs) → only same-doc `#fragment` references allowed.
-- Event handler attributes (`onclick`, `onload`, etc.) → stripped.
-- Inline `style="..."` blocks discouraged (validator warns); use SVG presentation attributes (`fill`, `stroke`, `stroke-width`, `opacity`, `transform`) instead.
-
-### Soft warnings
-
-- > 5 distinct colors (decorative patterns: max 3)
-- Path coordinates with > 2 decimal precision (overprecise; bloats file)
-- Missing `viewBox`
-- Hardcoded width/height
-
-### Anti-patterns ❌
-
-- ❌ `<script>` / `<style>` / `<foreignObject>`
-- ❌ External hrefs
-- ❌ Event handlers
-- ❌ > 5 colors (or > 3 for decorative patterns)
-
-### Pre-injected dependencies
-
-None. SVG renders inline.
-
-### Render pipeline
-
-1. `DOMParser.parseFromString(content, "image/svg+xml")` — check for `<parsererror>` and `<svg>` root.
-2. `DOMPurify.sanitize(content, { USE_PROFILES: { svg: true, svgFilters: true }, ADD_TAGS: ["use"] })`.
-3. Inline `dangerouslySetInnerHTML` (no iframe).
-
-### Sandbox / security
-
-- No iframe — content rendered directly into the React tree.
-- DOMPurify with the SVG profile is the sole sanitizer.
-- `<use>` is in `ADD_TAGS` (allowed for symbol references).
-- `<filter>` and friends (`<feGaussianBlur>`, etc.) are allowed via `svgFilters` profile.
-
-### Download
-
-Raw `.svg`.
-
----
-
-## 4. `application/mermaid` — Mermaid Diagram
-
-**Identity**
-
-| | |
-|---|---|
-| Type | `application/mermaid` |
-| Label / Short label | "Mermaid Diagram" / "Mermaid" |
-| Extension | `.mmd` |
-| Code tab | ✓ |
-| Color | purple-500 |
-
-### When to use
-
-- Process flows, decision trees, algorithms, pipelines, org charts (`flowchart`)
-- API call sequences, OAuth, webhooks (`sequenceDiagram`)
-- DB schemas (`erDiagram`)
-- Lifecycles, state machines (`stateDiagram-v2`)
-- Class hierarchies (`classDiagram`)
-- Project schedules / roadmaps (`gantt`)
-- Concept maps (`mindmap`)
-- Distributions (`pie`)
-- 2×2 priority/impact matrices (`quadrantChart`)
-- Scatter / bubble / sankey / timeline (`xychart-beta`, `sankey-beta`, `timeline`)
-
-### Content shape
-
-Raw Mermaid syntax. **No markdown fences.** First non-empty token must be a recognized diagram declaration. The renderer auto-syncs the theme to light/dark — do **not** override with `%%{init: {'theme':'...'}}%%`.
-
-### Capabilities
-
-**14 supported diagram types** (validator-verified declarations):
-
-| User wants… | Type | Declaration | Max nodes |
-|---|---|---|---|
-| Process / workflow | `flowchart` | `flowchart TD` or `LR` | 15 |
-| API call / sequence | `sequenceDiagram` | `sequenceDiagram` | 15 |
-| DB schema | `erDiagram` | `erDiagram` | 15 |
-| Lifecycle / states | `stateDiagram-v2` | `stateDiagram-v2` | 15 |
-| Class / OOP | `classDiagram` | `classDiagram` | 15 |
-| Schedule / roadmap | `gantt` | `gantt` | 15 |
-| Brainstorm / concept | `mindmap` | `mindmap` | 15 |
-| Git branching | `gitGraph` | `gitGraph` | 15 |
-| Distribution | `pie` | `pie` | 8 |
-| User journey | `journey` | `journey` | 15 |
-| Priority / matrix | `quadrantChart` | `quadrantChart` | – |
-| Timeline events | `timeline` | `timeline` | – |
-| Sankey / flow | `sankey-beta` | `sankey-beta` | – |
-| XY scatter / bubble | `xychart-beta` | `xychart-beta` | – |
-| C4 architecture | `c4Context` | `c4Context` | – |
-| Requirements | `requirementDiagram` | `requirementDiagram` | – |
-
-### Hard constraints
-
-- Markdown fence wrappers (```` ```mermaid ````) → reject.
-- Missing diagram declaration on first meaningful line → reject.
-- No mermaid `click` directives — `securityLevel: "strict"` blocks them.
-
-### Soft warnings
-
-- > 3000 chars (renderer slow on large diagrams).
-- > 15 node definitions in a flowchart (unreadable).
-- Labels > 5 words.
-- Subgraphs > 2 levels deep.
-- `%%{init: ... theme ...}%%` directive (breaks dark-mode sync).
-- Mixed syntax (e.g. `->>` in flowchart).
-
-### Anti-patterns ❌
-
-- ❌ Markdown fences in output
-- ❌ Missing declaration
-- ❌ > 15 nodes
-- ❌ `click NodeId call fn()` or `click NodeId href "..."` (blocked)
-- ❌ Theme override
-
-### Pre-injected dependencies
-
-- mermaid v11 (dynamic-imported on first render, cached at module level).
-
-### Render pipeline
-
-1. Module-level singleton: `mermaidPromise = import("mermaid")`.
-2. Track `lastInitTheme`; if light/dark changed, re-initialize with theme config from `mermaid-config.ts`.
-3. `mermaid.parse(content, { suppressErrors: true })` to validate syntax.
-4. `mermaid.render(id, content)` returns SVG string.
-5. Inline `dangerouslySetInnerHTML` (no iframe).
-6. On error: regex-strip verbose details after first `\n\n`, show Retry + View-Source + Fix-with-AI.
-
-### Sandbox / security
-
-- `securityLevel: "strict"` (mermaid config)
-- `htmlLabels: false` (text rendered as SVG `<text>`, not HTML)
-- `deterministicIds: true` (reproducible output)
-- `startOnLoad: false` (manual render only)
-- Theme via `theme: "base"` + custom `themeVariables` (light + dark mappings to Tailwind tokens)
-
-### Download
-
-Raw `.mmd`.
-
----
-
-## 5. `text/markdown` — Markdown
-
-**Identity**
-
-| | |
-|---|---|
-| Type | `text/markdown` |
-| Label / Short label | "Markdown" / "Markdown" |
-| Extension | `.md` |
-| Code tab | ✓ |
-| Color | gray-500 |
-
-### When to use
-
-- READMEs, CONTRIBUTING files, technical docs, design notes
-- Reports, comparison articles, tutorials
-- Blog posts, changelogs, release notes
-- Anything read on screen, no formal export needed
-
-vs `text/document`: documents are formal deliverables (printable / `.docx` / cover page); markdown is for screen reading.
-vs `text/html`: HTML when you need interaction; markdown for read-only content.
-vs `text/latex`: LaTeX for math-heavy proofs/derivations; markdown can do *some* inline math via KaTeX.
-
-### Content shape
-
-GitHub-Flavored Markdown.
-
-### Capabilities
-
-- **Code blocks**: Shiki syntax highlighting. **Required language tag** (untagged blocks render unstyled).
-- **GFM tables**: pipe tables.
-- **KaTeX math**: inline `$...$`, display `$$...$$`. `remark-math` + `rehype-katex` plugins.
-- **Inline mermaid**: ` ```mermaid ` fenced blocks render as live diagrams.
-- **Task lists**: `- [ ]` and `- [x]`.
-- **Strikethrough**: `~~text~~`.
-- **Links + images**: `![alt](url)` for absolute URLs only.
-- **Theme awareness**: Streamdown's Shiki theme switches with `next-themes` (`["github-dark", "github-light"]` for dark mode).
-- **Streaming**: `animated` + `isAnimating` props for streaming UI animations.
-
-### Hard constraints
-
-(None — `validateMarkdown` is the most permissive validator: only soft warnings.)
-- Hard cap 512 KB content size (universal).
-
-### Soft warnings
-
-- Missing top-level `# heading`.
-- Heading level jumps (e.g. `#` directly to `###`).
-- Raw HTML tags (`<details>`, `<summary>`, `<kbd>`, `<mark>`, `<iframe>`, `<video>`, `<audio>`, `<object>`, `<embed>`, `<table>` — unreliable through Streamdown).
-- `<script>` (markdown doesn't execute).
-- Untagged fenced code blocks (no Shiki highlight).
-
-### Anti-patterns ❌
-
-- ❌ Raw HTML for layout (`<details>`, `<kbd>`, `<sub>`, `<script>`)
-- ❌ Emoji as functional icons (use inline SVG or text)
-- ❌ Truncation / "exercise for the reader"
-- ❌ Lorem ipsum / `[TODO]` / `...`
-
-### Pre-injected dependencies
-
-- Streamdown v2.2.0
-- Shiki for code highlighting
-- KaTeX for math (`remark-math` v6 + `rehype-katex` v7)
-- Mermaid v11 (used inside Streamdown's mermaid control)
-- `next-themes` for theme awareness
-
-### Render pipeline
-
-The dispatcher routes `text/markdown` directly to `StreamdownContent` (no dedicated `MarkdownRenderer`). Streamdown wraps the actual rendering and exposes:
-- `controls: { code: true, table: true, mermaid: true }`
-- `mermaid: { errorComponent: MermaidError }` (custom error UI)
-- `plugins.math: { remarkPlugin: remark-math, rehypePlugin: rehype-katex }`
-- `shikiTheme` array ordered by current theme
-
-No iframe. Inline DOM render.
-
-### Sandbox / security
-
-- No iframe.
-- Streamdown / react-markdown filters dangerous HTML by default.
-- KaTeX with default settings (does not enable `trust`, so `\href` etc. with `javascript:` URLs are stripped).
-
-### Download
-
-Raw `.md`.
-
----
-
-## 6. `text/document` — Document (the AST type)
-
-**Identity**
-
-| | |
-|---|---|
-| Type | `text/document` |
-| Label / Short label | "Document" / "Document" |
-| Extension | `.docx` |
-| Code tab | **✗** (preview is the source of truth) |
-| Color | amber-500 |
-
-### When to use
-
-- Client proposals, tender responses, statements of work
-- Executive reports, board briefs, quarterly reviews
-- Book chapters, white papers, research papers
-- Official letters, legal memos, formal advice notes
-- Anything someone will **print, sign, send, or archive**
-
-vs `text/markdown`: heuristic — if it'll be read once on a screen, markdown; if it'll be archived/signed/sent, document.
-vs `text/html`: HTML can't export to `.docx` cleanly.
-vs `text/latex`: LaTeX for math-heavy authoring; document for prose-heavy with cover/header/footer/TOC.
-
-### Content shape
-
-**JSON-only** output matching the `DocumentAst` schema. **No markdown fences. No commentary before `{` or after `}`.** The entire response must be `JSON.parse`-able as-is.
-
-```json
 {
-  "meta":      { /* title, author, date, pageSize, orientation, margins, font, ... */ },
-  "coverPage": { /* optional styled cover */ },
-  "header":    { "children": [ /* repeating page header */ ] },
-  "footer":    { "children": [ /* repeating page footer */ ] },
-  "body":      [ /* main content */ ]
+  meta: {
+    title, subtitle?, author?, organization?, documentNumber?, date?,
+    pageSize: "letter" | "a4",
+    orientation: "portrait" | "landscape",
+    margins?: { top?, bottom?, left?, right? },
+    font, fontSize, showPageNumbers
+  },
+  coverPage?: { title, subtitle?, author?, date?, organization?, logoUrl? },
+  header?:    { children: BlockNode[] },
+  body:       BlockNode[],
+  footer?:    { children: BlockNode[] }
 }
 ```
 
-### `meta` fields
+**Block nodes:** `paragraph`, `heading`, `list` (ordered/unordered,
+nested), `table`, `image`, `blockquote`, `codeBlock`, `horizontalRule`,
+`pageBreak`, `toc`, `mermaid`, `chart`.
 
-| Field | Required | Notes |
-|---|:-:|---|
-| `title` | ✓ | 1–200 chars |
-| `author` | | ≤ 120 chars |
-| `date` | | ISO 8601 `YYYY-MM-DD` |
-| `subtitle` | | ≤ 200 chars |
-| `organization` | | ≤ 120 chars |
-| `documentNumber` | | ≤ 80 chars; e.g. `PROP/NQT/2026/001` |
-| `pageSize` | | `"letter"` (default) or `"a4"` |
-| `orientation` | | `"portrait"` (default) or `"landscape"` |
-| `margins` | | `{ top, bottom, left, right }` in DXA (1440 = 1 in; default 1440 each) |
-| `font` | | family name; default `"Arial"` |
-| `fontSize` | | 8–24 pt; default 12 |
-| `showPageNumbers` | | boolean |
+**Inline nodes:** `text` (with bold/italic/underline/strike/code/superscript/subscript/color),
+`link`, `anchor`, `footnote`, `lineBreak`, `pageNumber`, `tab`.
 
-### `coverPage` fields
+**`coverPage.logoUrl`.** Schema-typed as `z.string().optional()` —
+deliberately *not* `.url()` so `unsplash:keyword` is valid. The DOCX
+exporter's `renderCoverPage` (`to-docx.ts:479-540`) fetches the resolved
+URL and embeds the bytes as an `ImageRun` (160 × 160 px).
 
-Optional. `title` required. Optional `subtitle`, `author`, `date` (ISO regex), `organization`, `logoUrl` (URL or `unsplash:keyword`).
+**Footnote rendering.** Preview footnote sink is allocated **per render**
+(`document-renderer.tsx:406`), not memoized — memoizing would double
+entries on every keystroke. The DOCX exporter **drops `Table` blocks
+inside footnotes** (the `docx` library doesn't support nested tables in
+`FootnoteReferenceRun`s) and replaces them with an italic-grey paragraph:
+*"[table omitted from footnote — see body for full content]"*
+(`to-docx.ts:576-592`).
 
-### Block nodes (12)
+**Mermaid + chart blocks.** The exporter calls `mermaidToSvg` (server)
+and `chartToSvg` for these block types, then `svgToPng` for raster
+embedding. The server-side mermaid renderer serializes through
+`renderQueue` to keep concurrent calls from racing on the global jsdom
+shim swap.
 
-| Type | Use for | Required fields |
-|---|---|---|
-| `paragraph` | Running prose | `children` ≥ 1 inline |
-| `heading` | Section titles | `level` 1–6, `children` ≥ 1 inline; optional `bookmarkId` (kebab-case, unique) |
-| `list` | Bullet / numbered items, nested via `subList` | `ordered` boolean, `items` ≥ 1; optional `startAt` |
-| `table` | Pricing, features, comparison | `columnWidths[]` (DXA), `width` (DXA, must equal sum), `rows[]`; optional `shading: "striped"` |
-| `image` | Illustrations, hero shots | `src` (URL or `unsplash:keyword`), `alt` (required, non-empty), `width`, `height` (px); optional `caption`, `align` |
-| `blockquote` | Pull quotes, citations | `children` ≥ 1 block; optional `attribution` |
-| `codeBlock` | Config files, snippets | `language`, `code` |
-| `horizontalRule` | Section separator | — |
-| `pageBreak` | Force new page | — |
-| `toc` | Table of contents | `maxLevel` 1–6; optional `title` |
-| `mermaid` | Flowcharts, sequence, etc. (16 mermaid types) | `code` (1–10000 chars, NO fences); optional `caption`, `width` 200–1600, `height` 150–1200, `alt` (defaults 1200×800) |
-| `chart` | Quantitative data viz | `chart: ChartData`; optional `caption`, `width`, `height`, `alt` (defaults 1200×600) |
+**Schema-vs-renderer drift items still present:**
 
-`paragraph` optional fields: `align` (`left` / `center` / `right` / `justify`), `spacing: { before, after }` in DXA, `indent: { left, hanging, firstLine }` in DXA.
+- **Rescan N-18.** `tab.leader: "dot"` accepted by schema and used by
+  the `letter.ts` example (line 143) — exporter renders all tabs as `\t`,
+  silently dropping the dot leader.
+- **Rescan N-19.** `list.startAt` accepted by schema; exporter always
+  starts ordered lists at 1 (documented in comment at `to-docx.ts:396-398`).
+- **Rescan N-20.** `table.shading: "striped"` accepted; renderer reads
+  cell-level `cell.shading` (hex) but never reads table-level
+  `node.shading`.
+- **Rescan N-21.** TOC `node.title` rendered **twice** when set: once
+  as a heading paragraph, once as the `TableOfContents(node.title, …)`
+  argument.
+- **Rescan N-22.** Heading bookmark IDs not unique-checked. Duplicates
+  survive validation; anchors resolve to whichever Word picks.
+- **Rescan N-23.** Footnote nesting unbounded — schema permits
+  `footnote → paragraph → footnote` recursion to arbitrary depth.
+- **Rescan N-24.** `renderChart` has **no try/catch** around
+  `svgToPng` — sharp failures propagate as 500 from the download
+  endpoint. (Contrast `renderMermaid` which guards with a marker
+  paragraph.)
+- **Rescan N-25.** `validateDocument` discards warnings from
+  `validateDocumentAst` on success.
 
-### Inline nodes (7)
+**Numbering config.** Only 3 bullet levels (`BULLET_CHARS`: `•, ◦, ▪`)
+and 3 numbered levels are configured. Deeper nesting overflows silently.
 
-| Type | Required | Notes |
-|---|---|---|
-| `text` | `text` | Style flags: `bold`, `italic`, `underline`, `strike`, `code`, `superscript`, `subscript` (booleans); `color: "#rrggbb"` |
-| `link` | `href`, `children` ≥ 1 inline | External hyperlink |
-| `anchor` | `bookmarkId`, `children` ≥ 1 inline | Internal cross-reference (must match a heading bookmark) |
-| `footnote` | `children` ≥ 1 block | Page-bottom footnote in DOCX |
-| `lineBreak` | — | Soft break (not a new paragraph) |
-| `pageNumber` | — | **Only valid inside `header.children` / `footer.children`** |
-| `tab` | optional `leader: "none" | "dot"` | Horizontal tab; `"dot"` creates dotted line for letters / TOCs |
+**Cover page and body share one section** (`to-docx.ts:634`): no separate
+margins or page numbering for the cover.
 
-### Capabilities
+**Unsplash resolution.** `resolveUnsplashInAst` (in `resolve-unsplash.ts`)
+walks the AST collecting all `unsplash:keyword` strings, calls the shared
+`resolveQueries(keywords)`, and rewrites the AST in place. The validator
+returns the rewritten AST as `validation.content`.
 
-- **Cover page** — separate styled first page (auto-generated from `coverPage` object).
-- **Header / footer** — repeated on each page in DOCX; visible at top/bottom of each simulated page in HTML preview.
-- **Page numbers** — `pageNumber` inline node in header/footer.
-- **TOC** — real Word TOC field, populated from heading bookmarkIds. Hyperlinked in DOCX. Live-generated in HTML preview.
-- **Anchors** — internal cross-references between text and heading bookmarks. `InternalHyperlink` in DOCX.
-- **Footnotes** — Word native footnotes (numbered at page bottom).
-- **Tables** — column widths in DXA, header rows, cell colspan/rowspan, shading, alignment, recursive cell content.
-- **Images** — Unsplash resolution (rewritten in validator before persist) or full URLs. Required `alt` text.
-- **Inline mermaid** — block node renders as SVG in preview, PNG (via jsdom + sharp) in DOCX.
-- **Inline charts** — block node uses `ChartData` from slides. SVG in preview, PNG in DOCX.
-- **Code blocks** — gray-background paragraphs in DOCX (Consolas font), Shiki highlight in preview.
-- **Page sizing** — letter or A4, portrait or landscape, custom margins.
-- **Numbering** — 3 levels of bullets (•/◦/▪) and 3 levels of ordered (`%1.` / `%2.` / `%3.`).
-- **Heading style cascade** — H1–H6 with HEADING_1..6 styles, outline levels (for TOC).
+**Download.** Split-button:
+- `.md` — the AST pretty-printed as JSON (the source).
+- `.docx` — `astToDocx(ast)` rendered through the `docx` library.
 
-### Hard constraints
-
-- Content not parseable as JSON → error.
-- Zod schema violations → error.
-- 128 KB serialized-size cap (pre-Zod budget check).
-- `anchor.bookmarkId` not declared on any heading → semantic error.
-- `pageNumber` inline outside header/footer → semantic error.
-- `sum(columnWidths) !== width` in any table → semantic error.
-- Per-row cell count (with colspan) ≠ column count → semantic error.
-- `unsplash:` with empty keyword → semantic error.
-- `mermaid.code` first token not in {flowchart, graph, sequenceDiagram, classDiagram, stateDiagram, stateDiagram-v2, erDiagram, gantt, pie, mindmap, timeline, journey, c4Context, gitGraph, quadrantChart, requirementDiagram} → semantic error.
-- Hard cap 512 KB.
-
-### Soft warnings
-
-(Document validator focuses on structural correctness — most issues are hard errors. Quality issues are caught by the prompt rules, not the validator.)
-
-### Anti-patterns ❌ (from prompt, ~12 items)
-
-- ❌ Output anything before `{` or after `}` — commentary, fences, explanation
-- ❌ Wrap JSON in ```` ```json ```` fences
-- ❌ Markdown syntax inside `text.text` (`**bold**`, `## heading`, backticks, `*italic*`) — use inline node style flags instead
-- ❌ Empty `children` arrays on `paragraph` / `heading` / `blockquote` (schema requires ≥ 1)
-- ❌ `anchor.bookmarkId` referencing an undeclared heading
-- ❌ `pageNumber` inline outside header/footer
-- ❌ `sum(columnWidths) !== width` in a table
-- ❌ `"src": "unsplash:"` (empty keyword)
-- ❌ Missing `alt` on images
-- ❌ **Math notation (`$...$` or `$$...$$`)** — `text/document` does NOT render LaTeX. Use prose, or `text/markdown`/`text/latex` for math-heavy content.
-- ❌ Using `text/document` for a README, internal note, or developer doc — use `text/markdown`
-- ❌ Wrapping a `mermaid` block's `code` in ```` ```mermaid ```` fences — `code` IS raw mermaid syntax
-- ❌ > 15 nodes in a mermaid flowchart
-- ❌ Stuffing prose into diagrams (use `mermaid` for qualitative, `chart` for quantitative)
-- ❌ Truncation, `Lorem ipsum`, `[TODO]`, `(content omitted)`
-
-### Pre-injected dependencies
-
-For preview:
-- mermaid v11 (dynamic import, `MERMAID_INIT_OPTIONS` from `src/lib/rendering/mermaid-theme.ts`)
-- D3 (via `chartToSvg` from `src/lib/rendering/chart-to-svg.ts`)
-
-For DOCX export (server-side):
-- [`docx`](https://www.npmjs.com/package/docx) MIT
-- [`jsdom`](https://www.npmjs.com/package/jsdom) — server-side DOM shim for mermaid render
-- [`sharp`](https://www.npmjs.com/package/sharp) — SVG → PNG rasterizer
-
-### Render pipeline (preview)
-
-1. `JSON.parse(content)` → if fails, show empty state.
-2. `DocumentAstSchema.safeParse(raw)` → if fails, show empty state.
-3. Walk AST recursively via `renderInline()` and `renderBlock()`.
-4. A4/Letter page sizing in pixels (96 DPI conversion from DXA).
-5. Mermaid blocks: dynamic-import mermaid, init with shared `MERMAID_INIT_OPTIONS`, render to SVG, set via `dangerouslySetInnerHTML`.
-6. Chart blocks: call `chartToSvg(chart, 800, 400)`, set via `dangerouslySetInnerHTML`.
-7. TOC built post-walk by traversing body for headings ≤ `maxLevel`.
-8. Footnotes accumulated in a sink object passed through render tree, rendered at document end.
-
-### DOCX export pipeline (server)
-
-1. `GET /api/dashboard/chat/sessions/{id}/artifacts/{artifactId}/download?format=docx` (Node runtime).
-2. Auth + ownership; reject if `artifactType !== "text/document"`.
-3. `JSON.parse(content)` → `DocumentAstSchema.parse()`.
-4. `astToDocx(ast)`:
-   - Page setup: letter (12240×15840 twips) or a4 (11906×16838); margins from `meta.margins`.
-   - Cover page: 48pt centered title, 28pt italic subtitle, 24/22pt centered author/org/date stack, trailing page break.
-   - Inline rendering: text style flags, `ExternalHyperlink`, `InternalHyperlink` (anchor), `FootnoteReferenceRun` (footnotes deferred), `PageNumber.CURRENT`, `tab`, `lineBreak`.
-   - Block rendering: `Paragraph` (alignment + spacing + indentation), `Heading` (level → HEADING_1..6, optional Bookmark wrapper), `List` (3-level bullets / numbers, recursive), `Table` (with colspan/rowspan + shading + borders + vertical-align), `Image` (HTTP fetch, 10s timeout, fallback 1×1 transparent PNG, SVG rejected by docx-js), `Mermaid` (mermaidToSvg → resizeSvg → svgToPng → ImageRun), `Chart` (chartToSvg → resizeSvg → svgToPng → ImageRun), `Blockquote` (left-border + indent + optional attribution), `CodeBlock` (gray-background paragraphs, Consolas), `PageBreak`, `TableOfContents` (with `hyperlink: true`, `headingStyleRange: "1-{maxLevel}"`), `HorizontalRule` (paragraph with bottom border).
-   - Style cascade: HEADING_1 (20pt) → HEADING_6 (12pt) with outline levels.
-   - Font: `meta.font` or `"Arial"`; `meta.fontSize` applied globally.
-   - Footnotes accumulated during body rendering, attached to `Document.footnotes`.
-   - Header/footer rendered via `renderBlocks()`, attached to section `headers` / `footers`.
-5. Return as `Uint8Array` blob with sanitized filename.
-
-### Sandbox / security
-
-- No iframe (preview).
-- Upstream Zod schema is the security boundary — AST nodes carry only structured data, no executable HTML.
-- DOCX export runs in Node runtime, not edge runtime.
-- jsdom shim restores globals in `finally` for thread safety.
-
-### Download
-
-Split-button:
-- **Markdown (.md)** — client-side AST → markdown walk. Lossy (mermaid/chart become placeholder fences).
-- **Word (.docx)** — server route, `astToDocx()`. Full fidelity.
-
-PDF export is **not shipped**.
+**Anti-patterns:**
+- Wrapping the JSON in markdown fences. Validator JSON-parses raw input.
+- Trailing prose ("Here is your document"). Whole response must be
+  `JSON.parse`-able.
+- Tables inside footnotes (silently replaced with marker paragraph).
+- LaTeX notation (`$...$`). Use `text/markdown` if you need math.
 
 ---
 
-## 7. `application/code` — Code (display-only)
+## 7. `application/code` — Source code
 
-**Identity**
+**Renderer.** `StreamdownContent` with a fenced block at language
+`language`. Fence length is computed dynamically:
+`Math.max(3, longestRun + 1)` where `longestRun` is the longest run of
+backticks inside the content. Keeps content with embedded ` ``` ` blocks
+(tutorials) rendering correctly.
 
-| | |
-|---|---|
-| Type | `application/code` |
-| Label / Short label | "Code" / "Code" |
-| Extension | `.txt` (overridden by language conventions in download) |
-| Code tab | **✗** (preview *is* the code) |
-| Color | cyan-500 |
+**Mandatory.** The `language` parameter is **required** on the tool call —
+`create-artifact.ts:89-101` rejects missing language for this type.
+**The `application/code` type does NOT receive a `language` parameter on
+update_artifact** (rescan **N-12**) — the language can't be changed
+in-place after creation. The download extension is `.txt` regardless of
+language (rescan **N-38**).
 
-### When to use
+**No execution.** Display-only. For running code use:
+- `application/python` (Pyodide).
+- `application/react` / `text/html` (iframe).
 
-- Source files: configs, scripts, modules.
-- Code that the user will copy into a project, not run inside the artifact.
-
-vs `application/python`: Python is **executable** in-browser; code is display-only.
-vs `text/markdown`: markdown if there's surrounding prose; code if it's pure source.
-
-### Content shape
-
-Source code, plus the `language` parameter on the tool call.
-
-### Capabilities
-
-- **Shiki syntax highlighting** for ~30 languages: `typescript`, `tsx`, `javascript`, `jsx`, `python`, `rust`, `go`, `java`, `csharp`, `cpp`, `c`, `ruby`, `php`, `swift`, `kotlin`, `sql`, `bash`, `shell`, `yaml`, `json`, `toml`, `dockerfile`, `html`, `css`, `scss`, `markdown`, etc.
-- **Copy and download** buttons in the panel.
-- **No truncation**: validator soft-errors on `// ...rest`, `# TODO: implement`, `unimplemented!()`, `pass # placeholder`, etc.
-
-### Per-language conventions (from prompt)
-
-- TypeScript: ES modules, no `any`, JSDoc on public functions
-- Python: 3.10+, type hints, Google-style docstrings, `if __name__ == "__main__":`
-- Rust: `Result<T, E>`, `?` propagation, derive `Debug`
-- Go: check every `error`, exported names PascalCase
-- SQL: uppercase keywords, explicit JOINs
-- Shell: `#!/usr/bin/env bash`, `set -euo pipefail`, quote `${var}`
-
-### Hard constraints
-
-- Content that looks like HTML (`<!doctype` / `<html`) → reject (wrong type).
-- Markdown fence wrapper around the content → reject (the renderer adds the fence, not the LLM).
-- 512 KB cap.
-
-### Soft warnings
-
-- Truncation/placeholder markers
-- Content > 512 KB
-
-### Anti-patterns ❌
-
-- ❌ Truncation (`// ... rest`, `...`, TODO comments)
-- ❌ Placeholders (`pass`, `throw new Error("not implemented")`, `unimplemented!()`)
-- ❌ Realistic-looking but non-functional values (`example.com` for real APIs, etc.)
-- ❌ Markdown fence wrappers in the content
-
-### Pre-injected dependencies
-
-- Shiki for highlighting (via Streamdown).
-
-### Render pipeline
-
-The dispatcher computes the longest backtick run in the content (so embedded code blocks don't break the wrapping fence) and wraps the content in a fence + language tag, then passes to `StreamdownContent` for rendering. No iframe.
-
-### Sandbox / security
-
-- No execution at all — purely display.
-- Streamdown filters dangerous HTML (though this content is treated as code, not markdown).
-
-### Download
-
-Extension determined by the `language` param (e.g. `.py` for Python, `.rs` for Rust). The registry's default extension is `.txt`; the panel overrides during download.
+**Anti-patterns:**
+- `application/code` for runnable Python (use `application/python`).
+- `application/code` for React UI (use `application/react`).
+- Wrapping in markdown fences.
 
 ---
 
-## 8. `application/sheet` — Spreadsheet (3 content shapes)
+## 8. `application/sheet` — Spreadsheets
 
-**Identity**
+**Renderer.** `sheet-renderer.tsx` dispatches on `detectShape(content)`:
+- **CSV** (`headers + rows of strings`) → custom CSV table via TanStack.
+- **JSON array** (`[{...}, ...]`) → table built from object keys.
+- **v1 spec** (`{"kind": "spreadsheet/v1", "sheets": [...]}`) →
+  `sheet-spec-view.tsx` with cell evaluator.
 
-| | |
-|---|---|
-| Type | `application/sheet` |
-| Label / Short label | "Spreadsheet" / "Spreadsheet" |
-| Extension | `.csv` (or `.xlsx` for spec) |
-| Code tab | ✓ |
-| Color | green-500 |
+**Hard caps (validator):**
+- Max 8 sheets per workbook.
+- Max 500 cells per sheet.
+- Max 200 formulas per workbook.
+- Max 64 named ranges.
+- Sheet names ≤ 31 chars; letters/numbers/spaces/underscores only.
 
-### When to use
+**Validator branches:**
+- **CSV**: header row required; all rows same column count; per-column
+  warnings (currency-as-text at ≥ 1 hit, mixed ISO/non-ISO dates at
+  ≥ 2 each, identical-values column).
+- **JSON array**: object-shape consistency; nested values warning.
+- **v1 spec**: `parseSpec(json)` + `evaluateWorkbook(spec)` runs formulas
+  to surface circular/REF errors before persisting.
 
-- Flat tabular data (employees, products, SKUs) → CSV or JSON-array shape.
-- Financial models, budgets, forecasts, cap tables, P&L → `spreadsheet/v1` spec.
-- Anything with formulas, multi-sheet, named ranges, or complex formatting → spec.
+**Quirks** (rescan):
+- CSV currency warning fires at ≥ 1 hit while ISO date warning needs
+  ≥ 2 of each — noisy asymmetry.
+- `tokenizeCsv` doesn't handle bare `\r` (old Mac line endings) — old
+  Mac content parses as one giant row.
+- v1-spec sheets save with extension `.csv` in the registry but the
+  panel downloads them as `.xlsx`.
 
-vs `text/markdown` (with GFM table): markdown for small read-only comparison tables; sheet for sortable/filterable data or any computation.
-vs `text/document` (with table block): document for tables embedded in narrative deliverables; sheet for standalone data.
+**Export.** The panel offers `.csv` (raw) or `.xlsx` (via
+`generate-xlsx.ts` for v1 specs). `generate-xlsx` returns a `Blob`
+(browser API).
 
-### Content shape — three options
+**Performance.** `evaluateWorkbook` runs on the main thread. Topological
+sort is O(n²) in formula count (rescan **N-50**) — capped at 200, so
+~40k iterations, negligible. **Audit Priority D** flagged a Web Worker
+migration; deferred because `SpreadsheetSpec` carries non-clonable
+callbacks (`onCell`, `onRange`, `onVariable`). Lower-risk first step:
+`requestIdleCallback` chunking.
 
-#### Shape A: CSV (default for flat data)
-
-- Header row required.
-- Quote fields with comma / quote / newline: `"Engineer, Senior"`.
-- Escape literal quotes by doubling: `"She said ""hi"""`.
-- Every row matches header column count.
-- No trailing comma, no BOM, UTF-8.
-
-#### Shape B: JSON array of objects
-
-- Top level: non-empty array `[{...}, {...}]`.
-- Every object has same keys in same order.
-- First object's keys = column headers.
-- No nested objects/arrays (would stringify as `[object Object]`).
-
-#### Shape C: `spreadsheet/v1` JSON spec
-
-```json
-{
-  "kind": "spreadsheet/v1",
-  "theme": { "primaryColor": "#0F172A", "accentColor": "#3B82F6" },
-  "namedRanges": { "GrowthRate": "Assumptions!B2" },
-  "sheets": [
-    {
-      "name": "Assumptions",
-      "frozen": { "rows": 1 },
-      "columns": [ { "width": 24 }, { "width": 16 } ],
-      "cells": [
-        { "ref": "A1", "value": "Metric", "style": "header" },
-        { "ref": "B1", "value": "Value", "style": "header" },
-        { "ref": "A2", "value": "Starting Revenue" },
-        { "ref": "B2", "value": 4200000, "format": "$#,##0", "style": "input" },
-        { "ref": "A3", "value": "Growth Rate" },
-        { "ref": "B3", "value": 0.18, "format": "0.0%", "style": "input", "note": "Q4 trend" }
-      ],
-      "merges": []
-    },
-    {
-      "name": "Projections",
-      "cells": [
-        { "ref": "A1", "value": "Year 1", "style": "header" },
-        { "ref": "B1", "formula": "Assumptions!B2 * (1 + GrowthRate)", "format": "$#,##0", "style": "formula" }
-      ]
-    }
-  ]
-}
-```
-
-### Hard caps (spec)
-
-- 8 sheets per workbook
-- 500 cells per sheet
-- 200 formulas per workbook
-- 64 named ranges
-- 31 chars max sheet name (Excel-compatible)
-- 26 columns per sheet (A–Z)
-
-### Cell rules (spec)
-
-- `value` XOR `formula` — never both on same cell.
-- `ref` is A1 notation uppercase (`A1`, `B25`, `AA10`).
-- `formula` strings start with `=` or omit it; validator normalizes.
-- Sheet names: alphanumeric + space/underscore, none of `!`, `:`, `[`, `]`, `?`, `*`, `/`, `\`.
-- Cross-sheet refs: `Sheet2!A1` (must reference existing sheet).
-- Named ranges resolve transparently inside formulas.
-
-### Cell styles (6 named)
-
-| Style | Use | Rendering |
-|---|---|---|
-| `header` | Column / row headers | Bold, primary fill, white text |
-| `input` | User-editable values | Blue text (`#2563EB`), no fill |
-| `formula` | Computed cells | Black text |
-| `cross-sheet` | References other sheets | Green text (`#059669`) |
-| `highlight` | Important figures | Yellow fill (`#FEF3C7`) |
-| `note` | Annotations | Italic, gray |
-
-### Number formats (Excel-compatible)
-
-- Currency: `"$#,##0"`, `"$#,##0.00"`
-- Currency with parens-negative: `"$#,##0;($#,##0);-"`
-- Percent: `"0%"`, `"0.0%"`, `"0.00%"`
-- Multiples: `"0.0x"` (ratios)
-- Thousands: `"#,##0"`
-- Dates: `"mmm d, yyyy"`, `"yyyy-mm-dd"`
-- Segmented: `"positive;negative;zero"`
-
-### Capabilities
-
-**Shape A/B (flat data):**
-- Sort by any column (TanStack Table).
-- Global filter / search.
-- CSV export (respects current filter).
-
-**Shape C (spec):**
-- Multi-sheet with tabs.
-- ~500 Excel functions via `@formulajs/formulajs`: SUM, IF, VLOOKUP, HLOOKUP, INDEX, MATCH, IFERROR, XIRR, NPV, IRR, PMT, FV, PV, ROUND, AVERAGE, COUNT, COUNTIF, SUMIF, MAX, MIN, CONCAT, TEXT, DATE, YEAR, MONTH, DAY, TODAY, AND, OR, NOT, etc.
-- Cross-sheet references and named ranges.
-- Cycle detection (Kahn's algorithm topological sort).
-- ƒx toggle: switch between computed values and raw formulas.
-- Click-a-cell footer: ref + formula + format + note.
-- Real `.xlsx` export via ExcelJS, with cached values pre-populated.
-- Style-aware cell rendering (blue input / black formula / green cross-sheet / yellow highlight / italic note).
-- Error display: `#REF!`, `#NAME?`, `#DIV/0!`, `#VALUE!`, `CIRCULAR` shown in red.
-
-### Hard constraints
-
-**Shape A:**
-- Mismatched column counts → reject.
-- Unquoted CSV with comma/quote/newline in field → reject.
-
-**Shape B:**
-- Top-level not an array → reject.
-- Inconsistent keys → reject.
-
-**Shape C:**
-- `kind` not `"spreadsheet/v1"` → reject.
-- Cell with both `value` and `formula` → reject.
-- Formula referencing undefined cell or sheet → error.
-- Circular formula refs → error.
-- Sheet name with forbidden chars or > 31 chars → reject.
-- Cell style name typo (`"heading"`, `"inputs"`, `"bold"` — only the 6 valid names accepted).
-- Invalid A1 refs (`"1A"`, `"A"`, `"0"`, lowercase `"a1"`).
-- Cap violations (sheets / cells / formulas / named ranges).
-
-### Soft warnings
-
-- > 100 rows in flat data (no pagination yet)
-- > 10 columns in flat data (hard to read)
-- Currency or thousand-separator formatting in CSV/JSON-array shape (recommend the spec)
-- Mixed date formats in one column
-
-### Anti-patterns ❌
-
-**Shapes A/B:**
-- ❌ Mismatched column counts
-- ❌ Unquoted CSV with special chars in field
-- ❌ Currency symbols `$1,234` in flat data — use Shape C instead
-- ❌ Mixed date formats
-- ❌ JSON top-level object (must be array)
-- ❌ JSON inconsistent keys
-- ❌ > 100 rows
-
-**Shape C:**
-- ❌ `"kind": "spreadsheet/v2"` (only v1)
-- ❌ Cell with both `value` and `formula`
-- ❌ Bare English in formula (`=B2 kali growth` — use `*`)
-- ❌ Hardcoding computed values (trust the evaluator)
-- ❌ Cell style name typos
-- ❌ Invalid A1 refs
-- ❌ Using Shape C for flat tabular data (prefer A/B)
-
-**Universal:**
-- ❌ Truncation markers (`...more rows...`, `/* remaining cells */`)
-
-### Pre-injected dependencies
-
-- `@tanstack/react-table` (flat data renderer)
-- `fast-formula-parser@1.0.19` MIT (AST + DepParser)
-- `@formulajs/formulajs@4.6.0` MIT (~500 Excel functions)
-- `exceljs@4.4.0` MIT (XLSX export)
-
-All formula/XLSX deps are **lazy-loaded** — zero main bundle cost until the user opens a spec artifact.
-
-### Render pipeline
-
-Detect content shape by peeking first non-whitespace char:
-- `{` + has `kind` field → spec → lazy-load `SpecWorkbookView` + lazy-load `evaluateWorkbook`
-- `[` → JSON array → TanStack Table
-- else → CSV → custom parser → TanStack Table
-
-### Sandbox / security
-
-- No iframe.
-- Formula evaluator runs main-thread (synchronous Kahn's sort + parser); evaluator is a pure function with no DOM/network access.
-
-### Download
-
-- **Shape A/B:** `.csv` (single button; flattens active sheet for spec).
-- **Shape C (spec):** dual-button toolbar — `.csv` (active sheet flattened) + `.xlsx` (full workbook with formulas + cached values + styles + named ranges + frozen panes + merges).
+**Anti-patterns:**
+- Currency / thousand separators inside numeric columns — sorting is
+  lexicographic.
+- Mixed ISO + regional date formats in one column.
+- `kind: "spreadsheet/v2"` (only v1 supported).
 
 ---
 
-## 9. `text/latex` — LaTeX / Math
+## 9. `text/latex` — Math documents
 
-**Identity**
+**Renderer.** `latex-renderer.tsx` — KaTeX with `throwOnError: false`
+inside a custom transpiler that handles a curated subset of
+document-structure commands (`\section`, `\subsection`, `\paragraph`,
+`\itemize`, `\enumerate`, basic inline formatting) plus all KaTeX math
+environments.
 
-| | |
-|---|---|
-| Type | `text/latex` |
-| Label / Short label | "LaTeX / Math" / "LaTeX" |
-| Extension | `.tex` |
-| Code tab | ✓ |
-| Color | rose-500 |
+**KaTeX configuration:** `trust: true` — **rescan N-30: combined with
+`dangerouslySetInnerHTML`, this allows `\href{javascript:...}` payloads**
+from LLM output.
 
-### When to use
+**NOT a full LaTeX engine.** No `\documentclass`, no `\usepackage`, no
+preamble.
 
-- Pure mathematical proofs / derivations.
-- Equation reference sheets.
-- Math-heavy technical documents.
+**Validator** (`validateLatex`, hand-rolled regex parsing, protected by
+the 5-second timeout):
+- `\documentclass`, `\usepackage`, `\begin{document}` → hard errors,
+  short-circuit return (rescan: causes a two-round LLM retry rather than
+  one — the unsupported-command scan never runs after).
+- Disallowed commands: `\includegraphics`, `\bibliography`, `\cite`,
+  `\input`, `\include`, `\begin{tikzpicture}`, `\begin{figure}`,
+  `\begin{table}`, `\begin{tabular}`.
+- Soft warnings: `\begin{verbatim}`, `\verb`, `\label{}`, `\ref{}`,
+  `\eqref{}`.
 
-vs `text/markdown`: markdown can do inline `$x$` math; LaTeX for documents where math is the primary content.
-vs `text/document`: documents render math as text only — use LaTeX for math-heavy authoring.
+**Math delimiters:** `$...$` (inline), `$$...$$` (display), `\[...\]`,
+`align`, `matrix`, `cases`, `gather`, `multline`.
 
-### Content shape
-
-LaTeX subset compatible with KaTeX. The custom parser handles document structure; KaTeX handles math.
-
-### Capabilities
-
-**Document commands:**
-
-| Command | Renders as |
-|---|---|
-| `\section{...}` / `\section*{...}` | `<h2>` (numbered/unnumbered) |
-| `\subsection{...}` | `<h3>` |
-| `\subsubsection{...}` | `<h4>` |
-| `\paragraph{...}` | bold inline lead-in |
-| `\begin{itemize} \item ... \end{itemize}` | `<ul>` |
-| `\begin{enumerate} \item ... \end{enumerate}` | `<ol>` |
-| `\begin{quote} ... \end{quote}` | `<blockquote>` |
-| `\begin{abstract} ... \end{abstract}` | `<blockquote>` |
-| `\textbf{...}` | bold |
-| `\textit{...}` / `\emph{...}` | italic |
-| `\underline{...}` | underline |
-| `\texttt{...}` | inline code (monospace + bg) |
-| `\href{url}{text}` | link |
-
-**Math environments** (KaTeX):
-- `equation` / `equation*` — single equation
-- `align` / `align*` — multi-line aligned
-- `gather` / `gather*` — centered multi-line
-- `multline` / `multline*` — long single equation across lines
-- `cases` — piecewise definitions
-- `eqnarray` — supported
-- Inside math: `matrix`, `pmatrix`, `bmatrix`, `vmatrix`, `array`
-
-**KaTeX symbols:**
-- Greek: lowercase `\alpha`–`\omega`, uppercase `\Gamma`–`\Omega`
-- Operators: `\sum`, `\prod`, `\int`, `\partial`, `\nabla`, `\lim`, `\sup`, `\inf`
-- Relations: `\leq`, `\geq`, `\neq`, `\approx`, `\equiv`, `\in`, `\forall`, `\exists`
-- Logic / arrows: `\land`, `\lor`, `\lnot`, `\implies`, `\iff`, `\to`, `\rightarrow`, `\leftarrow`, `\Rightarrow`
-- Decorations: `\hat{x}`, `\bar{x}`, `\vec{x}`, `\dot{x}`, `\ddot{x}`, `\tilde{x}`, `\overline{...}`, `\overrightarrow{AB}`
-- Sets: `\mathbb{R}`, `\mathbb{Z}`, `\mathbb{N}`, `\mathbb{C}`, `\mathbb{Q}`, `\emptyset`
-- Fractions / roots: `\sqrt{x}`, `\sqrt[n]{x}`, `\frac{a}{b}`, `\dfrac{a}{b}`, `\binom{n}{k}`
-
-**Spacing primitives:** `~` (nbsp), `\,` (thin), `\;` (en), `\quad` (em), `\qquad`, `---` (mdash), `--` (ndash).
-
-### Hard constraints
-
-- `\documentclass{...}` → reject.
-- `\usepackage{...}` → reject.
-- `\begin{document}` / `\end{document}` → reject (use the wrapper-stripped subset).
-- `\includegraphics{...}` → reject.
-- `\bibliography{...}` → reject.
-- `\begin{tikzpicture}` → reject (not supported).
-- `\begin{verbatim}` / `\verb` → reject (use `\texttt{...}`).
-
-### Soft warnings
-
-- No math delimiter detected anywhere (recommend markdown for non-math content).
-
-### Anti-patterns ❌
-
-- ❌ `\maketitle`, `\label`, `\ref`, `\eqref` — cross-refs not resolved
-- ❌ `\input{...}`, `\include{...}` — no file system
-- ❌ `\begin{figure}` — no image inclusion
-- ❌ Multiple separate `$$...$$` for derivations (use `align` instead)
-- ❌ Bare English inside `$...$` (wrap in `\text{...}`)
-
-### Pre-injected dependencies
-
-- KaTeX v0.16+ (`katex` npm package + `katex/dist/katex.min.css`)
-
-### Render pipeline
-
-A custom parser, NOT a full LaTeX engine:
-
-1. Extract document body (`\begin{document}...\end{document}` if present).
-2. Extract preamble (`\title`, `\author`, `\date`).
-3. Strip `\maketitle`.
-4. Line-by-line walk with state tracking (`inList`, `listType`):
-   - Empty lines → skip
-   - Sectioning → balanced-brace `readBracedArg` → `<h2>`/`<h3>`/`<h4>`
-   - List environments → `<ul>` / `<ol>` open/close + `<li>` per `\item`
-   - Math environments (`equation`, `align`, `gather`, `multline`, `cases`, `eqnarray`) → multi-line collect → KaTeX displayMode render
-   - `\[...\]` and `$$...$$` → display math
-   - `\begin{quote}` / `\begin{abstract}` → `<blockquote>`
-   - Other paragraph text → collect consecutive lines → `processInlineLatex` (handles `$...$` inline math + text commands like `\textbf`/`\textit`/`\href`)
-5. `dangerouslySetInnerHTML` (no iframe).
-
-**Key parsing trick:** every command-arg parser uses brace-depth tracking, never naive `[^}]*` regex. Handles `\section{$f(x)$}` correctly.
-
-### Sandbox / security
-
-- No iframe.
-- KaTeX with `trust: true` (KaTeX itself filters dangerous commands).
-- HTML-escape applied to fallback code blocks and link URLs.
-
-### Download
-
-`.tex`, wrapped in a minimal compilable preamble (`\documentclass{article}`, `\begin{document}` / `\end{document}`).
+**Anti-patterns:**
+- `\documentclass` / `\usepackage` — hard error.
+- Custom commands (`\newcommand`) — not supported in this mode.
+- Using `text/latex` when only one equation is needed (embed it in
+  `text/markdown`).
 
 ---
 
-## 10. `application/slides` — Slides (Presentation Deck)
+## 10. `application/slides` — Presentation decks
 
-**Identity**
+**Renderer.** `slides-renderer.tsx` mounts the deck in an iframe with
+slide navigation. **Sandbox: `allow-scripts allow-same-origin`**
+(rescan **N-28**) — most permissive sandbox in the codebase.
 
-| | |
-|---|---|
-| Type | `application/slides` |
-| Label / Short label | "Slides" / "Slides" |
-| Extension | `.pptx` |
-| Code tab | ✓ |
-| Color | indigo-500 |
+**postMessage discipline.** Like React, the iframe sends messages back
+to the host. Host enforces
+`e.source === iframeRef.current?.contentWindow` (`slides-renderer.tsx:45`)
+before trusting events.
 
-### When to use
+**Keyboard nav** (rescan **N-9**): `window.addEventListener("keydown", ...)`
+captures arrow keys at the window level, calls `e.preventDefault()`.
+Arrow keys in unrelated text inputs (chat composer) trigger slide nav.
 
-- Pitch decks, board presentations, product launches.
-- Quarterly reviews, technical walkthroughs.
-- Anything told as a sequence of focal slides.
+**Layouts (17 in total).** The validator's `SLIDE_LAYOUTS` set:
+`title`, `content`, `two-column`, `section`, `quote`,
+`image-text` *(deprecated)*, `closing`, `diagram`, `image`, `chart`,
+`diagram-content`, `image-content`, `chart-content`, `hero`, `stats`,
+`gallery`, `comparison`, `features`.
 
-vs `text/document`: documents are continuous prose; slides are discrete visuals.
-vs `application/react`: slides have rigid layout grammar (17 layouts) and a real PPTX export; React for custom interactive UI.
+**`image-text` deprecation.** New artifacts trip a hard error
+(`ctx.isNew === true`); existing artifacts validate as warnings so
+authors of legacy decks can edit them. The migration script
+`scripts/migrate-artifact-deprecations.ts` rewrites stored decks
+`image-text → content`.
 
-### Content shape
+**Per-layout requirements:**
+- `title` — non-empty `title`. `subtitle` recommended.
+- `content` — must have either non-empty `bullets[]` or non-empty `content`.
+- `two-column` — both `leftColumn[]` and `rightColumn[]` arrays.
+- `quote` — non-empty `quote`.
+- `closing` — `title` recommended.
+- `diagram` / `diagram-content` — non-empty `diagram` (Mermaid).
+  Validator warns when prefix doesn't match a known mermaid keyword
+  (rescan **N-15**: `stateDiagram-v2` flagged here even though globally valid).
+- `image` / `image-content` — non-empty `imageUrl` (URL or `unsplash:keyword`).
+- `chart` / `chart-content` — `chart.type` ∈ `{bar, bar-horizontal, line, pie, donut}` +
+  `chart.data` (bar/pie/donut) or `chart.series` (line). **Rescan: no
+  `Array.isArray` check; `chart: []` slips through `typeof === "object"`.**
+- `hero` — `backgroundImage` + `title`.
+- `stats` — `stats[]` with 2–4 items, each `{ value, label }`.
+- `gallery` — `gallery[]` with 4–12 items, each with `imageUrl`.
+- `comparison` — `comparisonHeaders[]` (≥ 2) + `comparisonRows[]` (each
+  row's `values.length === headers.length - 1`).
+- `features` — `features[]` with 3–6 items, each `{ icon, title }`.
+- Split layouts (`*-content`) — must have `bullets` or `content` alongside
+  the visual.
 
-JSON only. No markdown fences. No commentary.
+**Soft conventions.** `MAX_SLIDE_BULLETS = 6`, `MAX_BULLET_WORDS = 10`,
+deck size 7–12 slides. Markdown syntax in text fields (`**`, `##`,
+backticks) is a warning.
 
-```json
-{
-  "theme": { "primaryColor": "#0F172A", "secondaryColor": "#3B82F6", "fontFamily": "Inter, sans-serif" },
-  "slides": [
-    { "layout": "title", "title": "...", "subtitle": "..." },
-    { "layout": "content", "title": "...", "bullets": [...] },
-    ...
-  ]
-}
-```
+**Image protocol.** Same `unsplash:keyword` syntax as HTML, applied to
+`imageUrl`, `backgroundImage`, `quoteImage`, and `gallery[].imageUrl`.
+Validator's post-Unsplash step (`_validate-artifact.ts:140-143`) calls
+`resolveSlideImages` so persisted decks carry resolved URLs.
 
-### Theme
+**Export.** Live preview → `.pptx` via `pptxgenjs`. Mermaid diagrams in
+slides rasterize through the **client → PNG path** which always uses
+the **light theme** (rescan **N-53**) — dark-mode users get
+light-theme mermaid in their PPTX.
 
-| Field | Required | Notes |
-|---|:-:|---|
-| `primaryColor` | ✓ | **Dark and desaturated** — approved: `#0F172A`, `#1E293B`, `#0C1222`, `#042F2E`, `#1C1917`, `#1A1A2E`. Never bright/white. |
-| `secondaryColor` | ✓ | Vivid accent — approved: `#3B82F6`, `#06B6D4`, `#10B981`, `#F59E0B`, `#8B5CF6`, `#EC4899` |
-| `fontFamily` | ✓ | Default `"Inter, sans-serif"` |
-
-### 17 layouts
-
-**Text layouts (6):**
-
-1. **title** — opening (dark gradient, white, centered). Required: `title`, `subtitle`.
-2. **content** — workhorse (white bg, accent title bar). One of `bullets` (≤ 6, ≤ 10 words each) or `content`.
-3. **two-column** — comparison. `leftColumn` (≤ 5 items) + balanced `rightColumn`.
-4. **section** — chapter divider (dark gradient).
-5. **quote** — testimonial. `quote` 5–25 words, optional `attribution`, `quoteImage` (URL or `unsplash:`), `quoteStyle: "minimal" | "large" | "card"`.
-6. **closing** — final slide (dark gradient, CTA).
-
-**Visual layouts (11):**
-
-7. **diagram** — full-slide mermaid (≤ 15 nodes).
-8. **image** — full-slide image with optional caption. `imageUrl` URL or `unsplash:`.
-9. **chart** — full-slide ChartData.
-10. **diagram-content** — diagram left, text/bullets right (≤ 10 nodes for split).
-11. **image-content** — image left, text/bullets right.
-12. **chart-content** — chart left, text/bullets right.
-13. **hero** — full-bleed background + text overlay. `backgroundImage` (URL or `unsplash:`), `overlay: "dark" | "light" | "none"`.
-14. **stats** — 2–4 KPI numbers. Each `{ value, label, trend?: "up"|"down"|"neutral", change? }`.
-15. **gallery** — 4–12 image grid, 2–6 columns. Each `{ imageUrl, caption? }`.
-16. **comparison** — feature table. `comparisonHeaders` + `comparisonRows[].values` (true→✓, false→✗, or string).
-17. **features** — icon grid 3–6 items, 2–4 columns. Each `{ icon: "lucide-name", title, description? }`.
-
-### Inline icons
-
-In any text field: `{icon:icon-name}` (kebab-case Lucide names). Examples: `{icon:check}`, `{icon:rocket}`, `{icon:dollar-sign}`, `{icon:trending-up}`, `{icon:users}`, `{icon:building}`, `{icon:lock}`. Renders inline 1em SVG in HTML preview, **stripped from PPTX** (PowerPoint doesn't support inline SVG).
-
-### Mermaid in slides
-
-Same 14+ diagram types as `application/mermaid`. Max 15 nodes for full-slide, 10 for split layout. **No** `%%{init}%%` directives (renderer handles theming).
-
-### Chart types
-
-| Type | Data shape |
-|---|---|
-| `bar` | `data: [{ label, value, color? }]` |
-| `bar-horizontal` | same as `bar` |
-| `line` | `{ labels: [...], series: [{ name, values: [...], color? }] }` |
-| `pie` | `data: [{ label, value, color? }]` |
-| `donut` | same as `pie` (renders with inner radius) |
-
-### Unsplash slots
-
-Fields that accept `unsplash:keyword`:
-- `imageUrl` (image / image-content layouts)
-- `backgroundImage` (hero layout)
-- `quoteImage` (quote layout avatar)
-- `gallery[].imageUrl`
-
-Resolved server-side at create/update time, cached 30 days.
-
-### Capabilities
-
-- 17 distinct layouts with per-layout required+optional fields.
-- Inline mermaid (rendered client-side by mermaid.js inside the iframe).
-- D3-based charts (rendered as inline SVG in preview, rasterized to PNG for PPTX).
-- Inline Lucide icons via `{icon:name}` (preview only).
-- Arrow-key navigation in the panel.
-- Slide dot indicators (when 1 < slide count ≤ 20).
-- Real `.pptx` export with all assets embedded.
-
-### Hard constraints
-
-- Anything outside `{...}` or wrapped in markdown fences → reject.
-- `image-text` layout (deprecated) → reject.
-- Bright `primaryColor` → soft-warn (validator; prompt rejects).
-- Missing `subtitle` on title slide → soft-warn.
-- < 7 or > 12 slides → soft-warn.
-- First slide not `title` or last not `closing` → soft-warn.
-- Per-layout required field missing (e.g. `chart` without `chart` object) → reject.
-- Markdown syntax in text fields → soft-warn.
-- 512 KB cap.
-
-### Soft warnings
-
-- All deck-level conventions above.
-- Same layout for every slide (≤ 5 slides with only 1–2 distinct layouts).
-- Per-layout content quality (bullets > 6, words > 10/bullet, deprecated layouts).
-
-### Anti-patterns ❌
-
-- ❌ Output anything outside `{...}` or wrap in markdown fences
-- ❌ Use deprecated `image-text` layout (no image support)
-- ❌ Bright `primaryColor` (unreadable on title slides)
-- ❌ Missing `subtitle` on title slide
-- ❌ First slide not `title` or last not `closing`
-- ❌ Fewer than 7 or more than 12 slides
-- ❌ Same layout for every slide
-- ❌ Markdown syntax in text fields (`**bold**`, `## heading`, backticks)
-- ❌ Truncation (`"... etc"`)
-
-### Pre-injected dependencies
-
-- `pptxgenjs@4.0.1` (PPTX builder)
-- mermaid v11
-- D3-based `chartToSvg`
-- ~100 Lucide icon SVGs bundled inline (for `{icon:name}` shorthand)
-
-### Render pipeline (preview)
-
-1. JSON parse; if not valid JSON or missing slides, fall back to `parseLegacyMarkdown` (splits on `\n---\n`).
-2. `slidesToHtml(presentation)` builds a full HTML document (~1325 lines of HTML+CSS+JS template) with one slide container per slide.
-3. Iframe with `srcDoc` + sandbox `allow-scripts allow-same-origin` (same-origin needed for postMessage).
-4. Iframe runs `mermaid.initialize()` + `mermaid.run()` to render embedded mermaid blocks.
-5. Charts embedded as inline SVG strings (from server-side `chartToSvg`).
-6. Parent ↔ iframe via postMessage: `{ type: "slideChange", current, total }` from iframe; `{ type: "navigate", direction | index }` from parent.
-7. Keyboard navigation (arrow keys) preventDefault'd on parent to avoid page scroll.
-
-### Render pipeline (PPTX export)
-
-`generatePptx(data): Promise<Blob>` using pptxgenjs with `LAYOUT_WIDE` (13.333"×7.5"):
-
-- **title / section / closing**: dark backgrounds, accent line, centered text.
-- **content**: white bg, theme title bar, bullets/body, slide number footer.
-- **two-column**: vertical divider at center, left/right bullets.
-- **quote**: decorative quote mark (Georgia 80–120pt), italic text, optional avatar fetch.
-- **diagram**: async — `mermaidToBase64Png()` (client-side render at 2× resolution) → embed as PNG.
-- **chart**: async — `chartToSvg()` → `svgToBase64Png()` → embed as PNG. **No native PPTX charts.**
-- **image / hero**: async — `fetchImageAsBase64()` (with `unsplash:` rewrite to `source.unsplash.com`) → embed as PNG.
-- **gallery**: async multi-image grid, auto-columns by item count.
-- **comparison**: PptxGenJS table with check/cross marks for booleans.
-- **features**: icon grid using bundled Lucide SVG paths.
-- **stats**: KPI numbers in grid, trend indicators (↑↓→).
-
-`cleanPptx()` strips markdown + inline icons (`{icon:name}`) before rendering — PowerPoint doesn't render those.
-
-### Sandbox / security
-
-- Preview iframe: `allow-scripts allow-same-origin` (no navigation blocking — slides are LLM-trusted content).
-- PPTX export runs client-side (no network trip).
-
-### Download
-
-`.pptx` — full deck with all assets embedded as PNG.
+**Anti-patterns:**
+- Markdown syntax in slide text fields.
+- Using `image-text` for new decks.
+- Decks with > 12 slides (warning; "this is a doc, not a deck" territory).
+- Bright `primaryColor` in the theme.
+- `application/slides` for static infographics (use `image/svg+xml` or
+  `application/react`).
 
 ---
 
-## 11. `application/python` — Python Script (executable)
+## 11. `application/python` — Runnable Python
 
-**Identity**
+**Renderer.** `python-renderer.tsx` runs the script in Pyodide v0.27.6
+inside a Web Worker. Output (stdout + final value + matplotlib plots
+captured as base64 PNG) renders inline.
 
-| | |
-|---|---|
-| Type | `application/python` |
-| Label / Short label | "Python Script" / "Python" |
-| Extension | `.py` |
-| Code tab | ✓ |
-| Color | yellow-500 |
+**Pyodide-supported imports.** The validator scans for imports against a
+list of unavailable packages (`PYTHON_UNAVAILABLE_PACKAGES`, 15 entries):
+`requests`, `httpx`, `urllib3`, `flask`, `django`, `fastapi`,
+`sqlalchemy`, `selenium`, `tensorflow`, `torch`, `keras`, `transformers`,
+`cv2`, `pyarrow`, `polars`. These produce a hard error.
 
-### When to use
+Pre-loaded packages: numpy, micropip, matplotlib, scikit-learn. First
+run is slow (CDN download); subsequent runs on the same worker are fast.
 
-- Computation, data analysis, math experiments.
-- Visualizations via matplotlib (line, bar, scatter, etc.).
-- Anything that benefits from running Python *in the browser* with the result visible.
+**Hard checks:**
+- `input()` rejected (no stdin in Pyodide Worker).
+- `open(..., "w")` / `open(..., "x")` / `open(..., "a")` rejected (no
+  persistent FS).
+- `time.sleep(n)` with `n > 2` warns.
+- `while True:` without `break` warns. **Rescan**: the regex looks for
+  `\bbreak\b` in `codeNoComments` over the whole file — a `break` in an
+  unrelated function would silently skip the warning.
 
-vs `application/code` (with language=python): code is display-only; `application/python` is **executable** with output capture.
+**Soft warnings:**
+- No `print()` or `plt.show()`.
+- Missing matplotlib title/xlabel/ylabel/legend/tight_layout.
 
-### Content shape
-
-Python 3.12 source. Must produce visible output (`print` or `plt.show`).
-
-### Capabilities
-
-**Pre-loaded packages** (no `micropip` install needed):
-- `numpy`
-- `matplotlib` (in Agg mode — non-interactive, with `plt.show()` capture)
-- `pandas`
-- `scipy`
-- `sympy`
-- `networkx`
-- `scikit-learn` (as `sklearn`)
-- `pillow` (as `PIL`)
-- `pytz`
-- `python-dateutil` (as `dateutil`)
-- `regex`
-- `beautifulsoup4` (as `bs4`)
-- `lxml`
-- `pyyaml` (as `yaml`)
-
-Plus full standard library: `math`, `statistics`, `random`, `itertools`, `functools`, `collections`, `json`, `re`, `datetime`, `decimal`, `dataclasses`, `enum`, etc.
-
-**Output capture:**
-- `print()` → stdout, streamed to UI.
-- `sys.stderr.write()` / errors → stderr, prefixed `[stderr]` in UI.
-- `plt.show()` → captured to base64 PNG (matplotlib `Agg` backend; `plt.show` monkey-patched to `plt.savefig(BytesIO, format="png", bbox_inches="tight", dpi=150)`); rendered as `<img>` below the output panel.
-
-**Mock-data conventions:**
-- Seed RNGs: `rng = np.random.default_rng(42)`.
-- Realistic sizes: ≤ 10,000 elements (browser Python ~3–10× slower than native).
-- Realistic values: monthly revenue in dollars, not `[1, 2, 3, 4, 5]`.
-
-### Hard constraints
-
-- Markdown fence wrapper → reject.
-- Imports of unavailable packages (`requests`, `urllib3`, `httpx`, `flask`, `django`, `fastapi`, `sqlalchemy`, `selenium`, `tensorflow`, `torch`, `keras`, `transformers`, `opencv-python`, `pyarrow`, `polars`) → reject.
-- `input()` → reject (no stdin).
-- `open(write)` → reject (no persistent FS).
-
-### Soft warnings
-
-- No visible output (no `print`, no `plt.show`).
-- `time.sleep > 2s`.
-- `while True:` without `break`.
-- No type hints (prompt strongly recommends them).
-- Bare `except:` (catch specific).
-
-### Anti-patterns ❌
-
-- ❌ Importing unavailable packages (will crash)
-- ❌ `input()` / `sys.stdin` / file I/O / network requests
-- ❌ `threading.Thread`, `asyncio.run` with real I/O
-- ❌ Bare `except:`
-- ❌ `plt.savefig()` (use `plt.show()` instead — only that is captured)
-- ❌ Multi-part plots without `plt.figure()` per plot
-
-### Pre-injected dependencies
-
-- Pyodide v0.27.6 from CDN (`pyodide.js`)
-
-### Render pipeline
-
-1. **Web Worker** created from blob URL on first run.
-2. Worker initialization:
-   - `importScripts(PYODIDE_CDN + "pyodide.js")`
-   - `pyodide = await self.loadPyodide({ indexURL: PYODIDE_CDN })`
-   - `pyodide.loadPackage(["numpy", "micropip", "matplotlib", "scikit-learn"])`
-   - Install matplotlib interceptor: `matplotlib.use('Agg')`, monkey-patch `plt.show` to write PNG bytes into a global `__plot_images__` list.
-3. **Each run:**
-   - Reset: `__plot_images__ = []`.
-   - Capture stdout/stderr: `py.setStdout({ batched: text => postMessage({ type: "stdout", text }) })`, same for stderr.
-   - `py.runPythonAsync(userCode)`.
-   - After run: read `__plot_images__`, postMessage each base64 PNG.
-4. **Worker reused** across multiple Run clicks; **terminated** on component unmount.
-
-### Sandbox / security
-
-- Python runs in Web Worker (off main thread, no DOM access).
-- Pyodide isolates Python from JS globals (only stdout/stderr/plot capture cross the boundary).
-- No file system access; no real network requests.
-
-### Download
-
-`.py`.
+**Anti-patterns:**
+- Importing Pyodide-unsupported packages.
+- File I/O against the host filesystem.
+- Long-running loops without yielding.
+- `plt.savefig` (only `plt.show` is captured).
 
 ---
 
-## 12. `application/3d` — 3D Scene (R3F)
+## 12. `application/3d` — React-Three-Fiber scenes
 
-**Identity**
+**Renderer.** `r3f-renderer.tsx` — iframe with **NO sandbox attribute**
+(rescan **N-29**, documented as required for WebGL GPU access). Import
+map pins React 18.3.1, Three 0.170.0, @react-three/fiber 8.17.10,
+@react-three/drei 9.117.0 to specific versions via `esm.sh`.
 
-| | |
-|---|---|
-| Type | `application/3d` |
-| Label / Short label | "3D Scene" / "3D" |
-| Extension | `.tsx` |
-| Code tab | ✓ |
-| Color | pink-500 |
+**Code execution.** Sanitized scene code passed as JSON via a
+`<script id="scene-data" type="application/json">` element. Babel
+transpiles inside the iframe's module script;
+`new Function(...depNames, compiled + ...)` executes it.
 
-### When to use
+**Allowed deps.** `R3F_ALLOWED_DEPS` set (35 entries; `_validate-artifact.ts:641`):
+`three`, `@react-three/fiber`, `@react-three/drei` symbols listed in the
+prompt. Other imports are a soft warning (not hard error).
 
-- 3D scenes: product showcase, spatial data viz, game-like environments.
-- Loading and animating glTF models.
-- Demonstrations of materials, lighting, particle effects.
+**Mandatory shape.**
+- `export default` — required (renderer keys off the default export).
+- No `<Canvas>` (wrapper provides it).
+- No `<OrbitControls>` / `<Environment>` (wrapper provides them).
+- No `import` statements — stripped by sanitizer; use globals.
+- No `document.querySelector` / `document.getElementById`.
+- No `requestAnimationFrame` — use `useFrame`.
+- No `new THREE.WebGLRenderer`.
 
-### Content shape
+**postMessage** (rescan **N-27**): the iframe sends `r3f-error` and
+`r3f-ready` events to the host; **the host has NO origin guard at lines
+531-551**. Any frame on the page can spoof these events. R3F is the only
+iframe renderer missing the guard.
 
-A single React Three Fiber component. The wrapper provides Canvas + lighting + Environment + OrbitControls — the LLM must NOT include them. The user component returns `<group>`, `<mesh>`, or a Fragment.
+**20-second `r3f-ready` timeout.** If the iframe never reports ready,
+the WebGL help overlay fires. Rescan **N-37**: the timeout effect's
+`didReady` is a `let` inside the closure — old `r3f-ready` events landing
+in a new closure produce false-positive timeout errors.
 
-### Capabilities
-
-**Pre-injected at runtime:**
-
-| Library | Symbol | Version |
-|---|---|---|
-| React 18 | `React` + all hooks | 18.3.1 |
-| Three.js | `THREE` namespace | 0.170.0 |
-| @react-three/fiber | `useFrame`, `useThree` | 8.17.10 |
-| @react-three/drei | 20 helpers (see below) | 9.117.0 |
-| Babel | JSX + TypeScript transpiled | 7.26.10 |
-
-**Wrapper-provided (do NOT include):**
-- `<Canvas camera={{ position: [0, 2, 5], fov: 60 }}>`
-- `<ambientLight intensity={0.5} />`
-- `<directionalLight position={[5, 5, 5]} intensity={1} />`
-- `<Environment preset="city" />`
-- `<OrbitControls makeDefault dampingFactor={0.05} />`
-- `<Suspense>` wrapper
-- Background: dark `#0a0a0f`
-
-**The 20 drei helpers available:**
-`useGLTF`, `useAnimations`, `Clone`, `Float`, `Sparkles`, `Stars`, `Text`, `Center`, `Billboard`, `Grid`, `Html`, `Line`, `Trail`, `Sphere`, `RoundedBox`, `MeshDistortMaterial`, `MeshWobbleMaterial`, `MeshTransmissionMaterial`, `GradientTexture`.
-
-**Drei NOT available (will crash):**
-`OrbitControls`, `Environment`, `PerspectiveCamera`, `Sky`, `Cloud`, `Bounds`, `PivotControls`, `TransformControls`, `Reflector`, `ContactShadows`, `AccumulativeShadows`, `RandomizedLight`, `Decal`, `useTexture`, `useProgress`, `Preload`, `Leva`.
-
-### Verified glTF model CDNs
-
-**KhronosGroup** (preferred, reliable):
-
-```
-https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/{Name}/glTF-Binary/{Name}.glb
-```
-
-Models: Fox (animated, scale 0.02), Duck (scale 1), DamagedHelmet, Avocado (scale ~20), BrainStem, CesiumMan, CesiumMilkTruck, Lantern, ToyCar, BoomBox, WaterBottle, AntiqueCamera, BarramundiFish, CarConcept, DragonAttenuation, MaterialsVariantsShoe, ABeautifulGame, ChronographWatch, CommercialRefrigerator, SheenChair.
-
-**three.js examples** (animated birds + characters):
-
-```
-https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/{Name}.glb
-```
-
-Models: Parrot, Flamingo, Stork (animated birds), Soldier, Xbot, LittlestTokyo (large city scene).
-
-### Animation patterns (from prompt)
-
-- **Rotation**: `useFrame((_, delta) => { ref.current.rotation.y += delta * 0.5 })` — always use `delta` for frame-rate independence.
-- **Float effect**: `<Float speed={1.5} floatIntensity={2}>...</Float>`
-- **Scale pulse**: `ref.current.scale.setScalar(1 + Math.sin(state.clock.elapsedTime) * 0.1)`
-- **Orbit**: `ref.current.position.set(Math.cos(t) * r, 0, Math.sin(t) * r)` where `t = state.clock.elapsedTime`
-- **NEVER** allocate objects inside `useFrame` (memory leak).
-
-### Hard constraints
-
-- `<Canvas>` inside the user code → reject (wrapper provides).
-- `<OrbitControls>` inside → reject.
-- `<Environment>` inside → reject.
-- `document.querySelector` / `getElementById` → reject (use `useRef`).
-- `requestAnimationFrame` → reject (use `useFrame`).
-- `new THREE.WebGLRenderer()` → reject (Canvas handles it).
-- Missing `export default` → reject.
-
-### Soft warnings
-
-- Imports outside the ~40-symbol R3F whitelist (will be stripped).
-- Building real-world objects from primitive boxes/spheres — recommend glTF models.
-- Model URLs not from verified CDNs.
-
-### Anti-patterns ❌
-
-- ❌ `<Canvas>` / `<OrbitControls>` / `<Environment>` (wrapper)
-- ❌ `import` statements (stripped by sanitizer; deps injected as globals)
-- ❌ `requestAnimationFrame`
-- ❌ `document.querySelector` / `getElementById`
-- ❌ `new THREE.WebGLRenderer`
-- ❌ Allocating objects inside `useFrame`
-- ❌ Building from primitives instead of using glTF models
-- ❌ Model URLs not from verified CDNs
-- ❌ Wrapping output in markdown fences
-- ❌ Truncation
-
-### Scale conventions
-
-- 1 unit ≈ 1 meter.
-- Keep objects in 0.5–5 range (camera at `[0, 2, 5]`).
-- Place objects near origin (OrbitControls targets `[0, 0, 0]`).
-- KhronosGroup model scales vary: Fox `0.02`, Avocado `~20`, most others `1–3`.
-
-### Pre-injected dependencies
-
-See "Capabilities" above.
-
-### Render pipeline
-
-Babel-transpiled component, mounted inside the wrapper Canvas. Sandboxed iframe similar to React.
-
-### Sandbox / security
-
-- Iframe `allow-scripts`.
-- Same navigation blocker as React.
-
-### Download
-
-`.tsx`.
+**Anti-patterns:**
+- Allocating objects inside `useFrame` (memory leak).
+- Real-world objects from primitives — use glTF models.
+- Model URLs outside the verified CDN lists.
 
 ---
 
-## Decision boundaries summary
+## 13. Capabilities cross-cutting matrix
 
-| User wants… | Pick |
-|---|---|
-| Read it once on a screen | `text/markdown` |
-| Print, sign, send, archive | `text/document` |
-| Click, type, compute (browser-native) | `text/html` |
-| Stateful UI with charts/animations | `application/react` |
-| Pure mathematical proof / equation reference | `text/latex` |
-| A presentation deck | `application/slides` |
-| A flowchart / diagram | `application/mermaid` (standalone) or embed in `text/document` / `text/markdown` / `application/slides` |
-| An icon / illustration / logo | `image/svg+xml` |
-| A 3D scene | `application/3d` |
-| Display source code (no execution) | `application/code` |
-| Run Python (with output capture) | `application/python` |
-| Flat tabular data with sort/filter | `application/sheet` (CSV or JSON-array shape) |
-| Multi-sheet workbook with formulas / XLSX export | `application/sheet` (`spreadsheet/v1` shape) |
+| Capability | HTML | React | SVG | Mermaid | Markdown | Document | Code | Sheet | LaTeX | Slides | Python | 3D |
+|------------|:----:|:-----:|:---:|:-------:|:--------:|:--------:|:----:|:-----:|:-----:|:------:|:------:|:--:|
+| Sandboxed iframe | ✓ | ✓ | – | – | – | – | – | – | – | ✓† | ✓ (worker) | ✗‡ |
+| Tailwind CSS | ✓ | ✓ | – | – | – | – | – | – | – | – | – | – |
+| Unsplash protocol | ✓ | – | – | – | – | ✓ | – | – | – | ✓ | – | – |
+| Code-tab edit mode | ✓ | ✓ | ✓ | ✓ | ✓ | – | – | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Native export beyond source | – | – | – | – | – | DOCX | – | XLSX | – | PPTX | – | – |
+| Server-side render | – | – | – | ✓ (DOCX) | – | ✓ (DOCX) | – | – | – | – | – | – |
+| Theme-aware mermaid | – | – | – | ✓ | ✓ | ✓ (preview only — N-53) | – | – | – | ✗ (always light) | – | – |
+| RAG indexed (LLM tool path) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| RAG indexed (manual edit path) | ✗ (N-1) | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ |
+| Optimistic-locked update | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `isNew` strict gate | – | – | – | – | ✓ | – | – | – | – | ✓ | – | – |
+| postMessage origin guard | n/a | ✓ | n/a | n/a | n/a | n/a | n/a | n/a | n/a | ✓ | n/a | ✗ (N-27) |
+
+† Slides sandbox is `allow-scripts allow-same-origin` — least restrictive.
+‡ R3F has no sandbox attribute by design (WebGL GPU access).
 
 ---
 
-## See also
+## 14. Strict gates summary
 
-- [artifacts-deepscan.md](./artifacts-deepscan.md) — system architecture and end-to-end flows
-- [architecture-reference.md](./architecture-reference.md) — file:line audit and dependency matrix
+A gate is "strict" when it applies to creates only or only when an env
+flag is set.
+
+| Gate | Where | Trigger |
+|------|-------|---------|
+| Markdown 128 KiB cap | `validateMarkdown` | `ctx?.isNew === true` |
+| Markdown `<script>` hard error | `validateMarkdown` | `process.env.ARTIFACT_STRICT_MARKDOWN_VALIDATION === "true"` (any path) |
+| Slides `image-text` rejection | `validateSlides` | `ctx?.isNew === true` |
+| React aesthetic-directive required | `validateReact` | `process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"` (defaults to enforced) |
+| Canvas-mode type lock | `create-artifact`, `update-artifact` | `context.canvasMode !== false && canvasMode !== "auto" && canvasMode !== type`. **Rescan N-7**: bypassed when `existing.artifactType` is null. |
+
+When a strict gate fires the tool returns `validationErrors` with the
+specific message, and the AI SDK's retry loop fires the LLM with the
+error attached so it can self-correct.
+
+---
+
+## 15. Image protocol cheat sheet
+
+The `unsplash:keyword` protocol works in three places:
+
+1. **HTML** — `<img src="unsplash:keyword" alt="…" />`. Only in `src=`
+   (not CSS `background-image`, not JS).
+2. **Slides JSON** — `imageUrl`, `backgroundImage`, `quoteImage`,
+   `gallery[].imageUrl`.
+3. **DocumentAst** — any `image` block's `src`, plus `coverPage.logoUrl`.
+
+The validator dispatcher (`_validate-artifact.ts:131-144`) post-resolves
+HTML and slides via `resolveImages` / `resolveSlideImages`. The document
+validator resolves AST-internally via `resolveUnsplashInAst`. All three
+paths share `resolveQueries` from `unsplash/resolver.ts`, which provides:
+
+- 30-day cache (`prisma.resolvedImage`) keyed on the normalized query.
+- Per-query `try/catch` so one failing query doesn't poison a batch.
+- `prisma.resolvedImage.upsert` for cache writes (handles concurrent
+  writers on the unique `query` index).
+- `placehold.co` fallback when Unsplash is unavailable / un-keyed.
+
+When `UNSPLASH_ACCESS_KEY` is unset the resolver always returns the
+placeholder. The fallback URL embeds the keyword as visible text so the
+artifact still reads correctly.
+
+**Stale path** (rescan **N-52**): `lib/rendering/client/svg-to-png.ts:75`
+still constructs the deprecated `https://source.unsplash.com/1600x900/?${keyword}`
+URL. PPTX exports that hit this path silently return null for most
+queries.
+
+---
+
+## 16. Versioning + deletion guarantees
+
+- Every update archives the prior content to `<canonicalKey>.v<N>` in S3
+  (up to 20). The `metadata.versions[]` array records each archive's
+  `s3Key`, `title`, `timestamp`, and `contentLength`.
+- When S3 archival fails, content ≤ 32 KiB inlines into
+  `metadata.versions[].content`; otherwise an `archiveFailed: true`
+  marker.
+- The panel UI shows "+N earlier versions evicted" when
+  `metadata.evictedVersionCount > 0`.
+- Historical-version preview validates that the content blob is
+  recoverable; missing → "version content unavailable" notice.
+- **Single-artifact delete** removes canonical S3 + every versioned key
+  in `metadata.versions[].s3Key` + RAG chunks + Postgres row.
+- **Session delete** removes canonical S3 + RAG chunks + artifact rows +
+  session row, but **leaks versioned S3 keys** (rescan **N-47**) and is
+  **not transactional** (rescan **N-48**).
+
+---
+
+## 17. RAG indexing per type
+
+Every artifact is chunked + embedded + stored in SurrealDB. The chunker
+uses 1000-char chunks with 200-char overlap, and the chunks are tagged
+with `category: "ARTIFACT"`. The chunk text is `${title}\n\n${chunk.content}` —
+title is prepended to every chunk.
+
+`metadata.ragIndexed` records the latest indexing outcome:
+- `true` — chunks present, searchable.
+- `false` — empty content, embedding failure, or storage failure. Panel
+  shows a "not searchable" badge on the header pill.
+
+The indexer never rethrows — failure path writes
+`metadata.ragIndexed: false` and returns. Callers fire-and-forget.
+
+**Indexing latency** (rescan **N-49**): `storeChunks` does N sequential
+SurrealDB inserts, no batching. A 128 KiB artifact produces ~140 chunks
+→ ~140 sequential round-trips. Noticeable.
+
+**Manual-edit RAG drift** (rescan **N-1**): the HTTP service path
+(`updateDashboardChatSessionArtifact`) does **not** call
+`indexArtifactContent`. Manual edits via the panel produce stale
+`knowledge_search` results until the next LLM-driven update.
+
+---
+
+## 18. Soft warnings (don't fail validation but surface)
+
+The validator returns `warnings[]` alongside errors. Warnings are
+persisted into `metadata.validationWarnings` so the panel can show them.
+Common warnings per type:
+
+- HTML: missing `<title>`, low color contrast (heuristic).
+- React: too many font families, palette mismatch (`PALETTE_MISMATCH_THRESHOLD = 6`).
+- Markdown: heading-level skip, unlabeled fenced code, raw HTML tags
+  from disallow list, `<script>` (unless strict mode is on).
+- Sheet: > 100 rows, > 10 columns, currency-as-text, mixed date formats.
+- Slides: > 6 bullets, > 10-word bullets, deck size out of 7–12,
+  markdown syntax in text fields, `image-text` (unless `isNew`).
+- 3D: missing R3F dep imports.
+
+Warnings never block persist — they exist to flag readability/SEO/style
+issues that don't break runtime.
+
+**Quirk** (rescan **N-10**): `validationWarnings` is stored at different
+metadata levels by `create-artifact.ts` (sibling of `artifactLanguage`)
+vs `update-artifact.ts` (sibling of `versions`). Same key name, different
+parent paths.
+
+---
+
+## 19. Build a new type — checklist
+
+When adding a 13th artifact type:
+
+1. **Add registry entry** at `registry.ts` — type, label, shortLabel,
+   icon, colorClasses, extension, codeLanguage, hasCodeTab.
+2. **Fill the validator slot** at `_validate-artifact.ts` — the
+   `Record<ArtifactType, …>` won't compile until you do.
+3. **Write the prompt** at `prompts/artifacts/<type>.ts` and register it
+   in `prompts/artifacts/index.ts`. The `satisfies` clause forces the
+   `type` field to match `ArtifactType`.
+4. **Add a renderer** at `renderers/<type>-renderer.tsx` and a `case` in
+   `artifact-renderer.tsx`.
+5. **Add a panel-chrome label** if the panel needs a custom action button.
+6. **Decide if `isNew` matters** — if the type can grow stricter rules
+   over time, plumb `ctx?.isNew` into the validator now.
+7. **Decide on Unsplash** — if the type carries images, follow §15.
+8. **Tests** — add a fixture in `tests/unit/validate-artifact.test.ts`
+   and a renderer fixture if non-trivial.
+9. **Sandbox decision** for iframe renderers — match the `text/html`
+   pattern (`allow-scripts allow-modals`) unless there's a specific need.
+   Always include the postMessage `e.source` origin guard if the iframe
+   talks to the parent (don't repeat the R3F mistake).
+10. **`prompt.label`** — make it distinct from existing labels (don't
+    use "Document" again — see N-17).
+
+The exhaustive switches in `artifact-renderer.tsx` and the
+`Record<ArtifactType, …>` validator map will surface missing branches at
+compile time. The exhaustive `satisfies` constraint on `ALL_ARTIFACTS`
+in `prompts/artifacts/index.ts` does the same for prompts.

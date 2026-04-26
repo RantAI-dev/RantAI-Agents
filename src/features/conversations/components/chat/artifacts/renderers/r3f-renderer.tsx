@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, useEffect, useCallback } from "react"
+import { useMemo, useRef, useState, useEffect, useCallback } from "react"
 import { AlertTriangle, Wand2, Copy, Check, MonitorCog } from "@/lib/icons"
 
 /* ── Sanitize AI-generated scene code ──────────────────────── */
@@ -517,6 +517,13 @@ export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
     const [error, setError] = useState<string | null>(null)
     const [webglError, setWebglError] = useState(false)
     const [ready, setReady] = useState(false)
+    const iframeRef = useRef<HTMLIFrameElement>(null)
+    // Persist didReady across content changes via a ref. Earlier code held
+    // it as a `let` inside the message-handler effect closure — when content
+    // changed rapidly, an `r3f-ready` event from the previous iframe could
+    // land in the new closure where the local `didReady` was still false,
+    // tripping a false-positive 20s timeout error.
+    const didReadyRef = useRef(false)
     const srcdoc = useMemo(() => buildSrcdoc(content), [content])
 
     // Reset state when content changes
@@ -524,12 +531,19 @@ export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
         setError(null)
         setWebglError(false)
         setReady(false)
+        didReadyRef.current = false
     }, [content])
 
     // Listen for messages from the iframe + loading timeout
     useEffect(() => {
-        let didReady = false
         const handler = (event: MessageEvent) => {
+            // Only trust messages from THIS iframe's contentWindow. Without
+            // this guard any other frame on the page (a different artifact,
+            // a stray embed) could spoof `r3f-error` / `r3f-ready` events
+            // and corrupt the renderer's state. Every other iframe-based
+            // renderer in the codebase (react, slides) already does this
+            // — R3F was the only outlier.
+            if (event.source !== iframeRef.current?.contentWindow) return
             try {
                 if (event.data?.type === "r3f-error") {
                     const msg = event.data.message
@@ -539,7 +553,7 @@ export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
                         setError(msg)
                     }
                 } else if (event.data?.type === "r3f-ready") {
-                    didReady = true
+                    didReadyRef.current = true
                     setReady(true)
                 }
             } catch {
@@ -550,7 +564,7 @@ export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
 
         // If no ready signal after 20s, show a timeout hint
         const timeout = setTimeout(() => {
-            if (!didReady) {
+            if (!didReadyRef.current) {
                 setError("Scene timed out loading. Check browser console (F12) for details. ESM imports may be blocked.")
             }
         }, 20000)
@@ -564,6 +578,7 @@ export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
     return (
         <div className="w-full h-full relative" style={{ minHeight: "500px" }}>
             <iframe
+                ref={iframeRef}
                 srcDoc={srcdoc}
                 /* No sandbox — WebGL requires full GPU access which sandboxed iframes block in some browsers.
                    Content is safe since we generate the srcdoc ourselves from AI scene code. */

@@ -32,6 +32,16 @@ export async function POST(req: Request) {
     }
 
     const parsedBody = DashboardChatSessionCreateBodySchema.safeParse(await req.json())
+    // Surface Zod issues directly. Without this guard, `parsedBody.data`
+    // (undefined on Zod failure) flows into the service, which silently
+    // falls back to its own per-field guards and emits a less precise
+    // 400 — losing the structured error from Zod entirely.
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: "Invalid request body", issues: parsedBody.error.issues },
+        { status: 400 },
+      )
+    }
     const result = await createDashboardChatSession({
       userId: session.user.id,
       input: parsedBody.data,

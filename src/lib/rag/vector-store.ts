@@ -501,6 +501,17 @@ export async function searchSimilarBatch(
 /**
  * Store chunks for an existing document (used by knowledge API)
  */
+/**
+ * Maximum simultaneous SurrealDB inserts when persisting chunks.
+ *
+ * The previous implementation issued one CREATE per chunk sequentially —
+ * a 128KB artifact produces ~140 chunks at the default 1000-char split,
+ * so indexing serialized into ~140 round-trips back-to-back. Parallelism
+ * is bounded so the surreal connection isn't flooded; 8 concurrent
+ * inserts keeps the throughput up without saturating a single connection.
+ */
+const STORE_CHUNKS_CONCURRENCY = 8
+
 export async function storeChunks(
   documentId: string,
   chunks: Chunk[],
@@ -508,31 +519,40 @@ export async function storeChunks(
 ): Promise<void> {
   const surrealClient = await getSurrealClient();
 
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const embedding = embeddings[i];
-    const chunkId = `${documentId}_${i}`;
-
-    await surrealClient.query(
-      `CREATE document_chunk SET
-        id = $id,
-        document_id = $document_id,
-        content = $content,
-        chunk_index = $chunk_index,
-        embedding = $embedding,
-        metadata = $metadata,
-        contextual_prefix = $contextual_prefix,
-        created_at = time::now()`,
-      {
-        id: chunkId,
-        document_id: documentId,
-        content: chunk.content,
-        chunk_index: chunk.metadata.chunkIndex,
-        embedding: embedding,
-        metadata: chunk.metadata,
-        contextual_prefix: chunk.metadata.contextualPrefix ?? null,
-      }
-    );
+  // Process chunks in bounded-concurrency batches. Order doesn't matter
+  // for storage (each chunk has its own deterministic id); we wait for
+  // each batch before starting the next so a cascade of failures can't
+  // exceed the cap.
+  for (let start = 0; start < chunks.length; start += STORE_CHUNKS_CONCURRENCY) {
+    const end = Math.min(start + STORE_CHUNKS_CONCURRENCY, chunks.length)
+    await Promise.all(
+      Array.from({ length: end - start }, (_, offset) => {
+        const i = start + offset
+        const chunk = chunks[i]
+        const embedding = embeddings[i]
+        const chunkId = `${documentId}_${i}`
+        return surrealClient.query(
+          `CREATE document_chunk SET
+            id = $id,
+            document_id = $document_id,
+            content = $content,
+            chunk_index = $chunk_index,
+            embedding = $embedding,
+            metadata = $metadata,
+            contextual_prefix = $contextual_prefix,
+            created_at = time::now()`,
+          {
+            id: chunkId,
+            document_id: documentId,
+            content: chunk.content,
+            chunk_index: chunk.metadata.chunkIndex,
+            embedding: embedding,
+            metadata: chunk.metadata,
+            contextual_prefix: chunk.metadata.contextualPrefix ?? null,
+          }
+        )
+      }),
+    )
   }
 
   console.log(
