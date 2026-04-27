@@ -7,6 +7,8 @@ import { chunkDocument } from "./chunker"
 import { generateEmbeddings } from "./embeddings"
 import { storeChunks, deleteChunksByDocumentId } from "./vector-store"
 import { prisma } from "@/lib/prisma"
+import { runScriptInSandbox } from "@/lib/document-script/sandbox-runner"
+import { extractDocxText } from "@/lib/document-script/extract-text"
 import type { Prisma } from "@prisma/client"
 
 /**
@@ -29,7 +31,15 @@ export async function indexArtifactContent(
       await deleteChunksByDocumentId(documentId)
     }
 
-    const chunks = chunkDocument(content, title, "ARTIFACT", undefined, {
+    // For script-format text/document artifacts, the raw `content` is JS
+    // source — embedding that lets `knowledge_search` match on `import`
+    // statements and noise. Run the script and pandoc-extract plain text
+    // from the resulting docx so semantic search hits the actual prose.
+    // Falls back to the script source if either step fails — code-style
+    // search is still better than nothing.
+    const textToEmbed = await resolveTextToEmbed(documentId, content)
+
+    const chunks = chunkDocument(textToEmbed, title, "ARTIFACT", undefined, {
       chunkSize: 1000,
       chunkOverlap: 200,
     })
@@ -53,6 +63,32 @@ export async function indexArtifactContent(
     // generate an unhandled rejection if the rejection escaped this catch.
     console.error("[ArtifactIndexer] Failed to index artifact:", err)
     await markRagStatus(documentId, false).catch(() => {})
+  }
+}
+
+/**
+ * For script-format text/document artifacts, run the JS in sandbox and
+ * pandoc-extract plain text. AST artifacts and all other types pass
+ * through unchanged. Failures fall back to the original content.
+ */
+async function resolveTextToEmbed(documentId: string, content: string): Promise<string> {
+  try {
+    const doc = await prisma.document.findUnique({
+      where: { id: documentId },
+      select: { artifactType: true, documentFormat: true },
+    })
+    if (doc?.artifactType !== "text/document" || doc?.documentFormat !== "script") {
+      return content
+    }
+    const r = await runScriptInSandbox(content, {})
+    if (!r.ok || !r.buf) {
+      console.warn(`[ArtifactIndexer] sandbox failed for ${documentId}, embedding script source: ${r.ok ? "no buffer" : r.error}`)
+      return content
+    }
+    return await extractDocxText(r.buf)
+  } catch (err) {
+    console.warn(`[ArtifactIndexer] script extract failed for ${documentId}, embedding script source:`, err)
+    return content
   }
 }
 
