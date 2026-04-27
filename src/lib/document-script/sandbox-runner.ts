@@ -1,3 +1,14 @@
+/**
+ * Sandboxed Node child-process executor for docx-js scripts.
+ *
+ * See design doc: docs/superpowers/specs/2026-04-27-text-document-script-based-design.md
+ *
+ * Used by:
+ *  - validator.ts (dry-run check at create/update)
+ *  - docx-preview-pipeline.ts (preview render)
+ *  - download/route.ts (script branch for .docx download)
+ *  - rag/artifact-indexer.ts (extract text for embedding)
+ */
 import "server-only"
 import { spawn } from "node:child_process"
 import { mkdir, writeFile, unlink } from "node:fs/promises"
