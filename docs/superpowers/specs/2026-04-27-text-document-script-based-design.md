@@ -225,7 +225,12 @@ for (const m of FORBIDDEN_MODULES) {
   })
 }
 globalThis.fetch = () => { throw new Error("forbidden API: fetch") }
-globalThis.Function = function () { throw new Error("forbidden API: Function constructor") }
+// NOTE: do NOT override globalThis.Function. docx's transitive dep `function-bind`
+// calls `Function.prototype.bind.call(...)` at module load and crashes if Function
+// is shadowed. The threat model (§ next paragraph) treats the LLM as trusted-
+// but-fallible — `new Function("...")` would only matter for malicious string-
+// based code injection, which is not in scope. Module-level no-fs/no-net is the
+// real protection.
 ```
 
 The user script's `import { Document } from "docx"` resolves through Node's normal loader — the temp file's location lets it find `node_modules/docx`. Forbidden modules are blocked because they're not in node_modules of the docx-only allowlist (the user script can technically write `import "fs"` and Node will resolve it from core; we catch this at runtime via the property-shadow above when fs internals are accessed).

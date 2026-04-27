@@ -243,9 +243,10 @@ for (const m of FORBIDDEN_MODULES) {
   })
 }
 globalThis.fetch = () => { throw new Error("forbidden API: fetch") }
-globalThis.Function = function () {
-  throw new Error("forbidden API: Function constructor")
-}
+// NOTE: do NOT override globalThis.Function — docx's transitive dep
+// `function-bind` calls Function.prototype.bind at module load and crashes if
+// Function is shadowed. Per spec threat model, eval-of-user-strings is not
+// the attack we're defending against; module-level no-fs/no-net is.
 
 const userScriptPath = process.argv[2]
 if (!userScriptPath) {
