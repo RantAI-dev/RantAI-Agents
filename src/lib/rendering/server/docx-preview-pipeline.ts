@@ -1,6 +1,7 @@
 import "server-only"
 import { runScriptInSandbox } from "@/lib/document-script/sandbox-runner"
 import { computeContentHash, getCachedPngs, putCachedPngs } from "@/lib/document-script/cache"
+import { recordRender } from "@/lib/document-script/metrics"
 import { docxToPdf } from "./docx-to-pdf"
 import { pdfToPngs } from "./pdf-to-pngs"
 import { withRenderSlot } from "./render-queue"
@@ -19,19 +20,26 @@ export async function renderArtifactPreview(artifactId: string, script: string):
   }
   // Cache miss → CPU-heavy work, gate via semaphore so we don't OOM under load
   return withRenderSlot(async () => {
-    const sandbox = await runScriptInSandbox(script, {})
-    if (!sandbox.ok || !sandbox.buf) {
-      throw new Error(`sandbox failed: ${sandbox.error ?? "unknown"}`)
+    const startedAt = Date.now()
+    try {
+      const sandbox = await runScriptInSandbox(script, {})
+      if (!sandbox.ok || !sandbox.buf) {
+        throw new Error(`sandbox failed: ${sandbox.error ?? "unknown"}`)
+      }
+      const pdf = await docxToPdf(sandbox.buf)
+      const pngs = await pdfToPngs(pdf)
+      if (pngs.length === 0) {
+        throw new Error("pipeline produced 0 pages")
+      }
+      // Best-effort cache; don't fail the request if S3 is down
+      await putCachedPngs(artifactId, hash, pngs).catch((err) => {
+        console.warn("[preview-pipeline] cache write failed:", err)
+      })
+      recordRender({ ok: true, durationMs: Date.now() - startedAt })
+      return { hash, pages: pngs, cached: false }
+    } catch (err) {
+      recordRender({ ok: false, durationMs: Date.now() - startedAt })
+      throw err
     }
-    const pdf = await docxToPdf(sandbox.buf)
-    const pngs = await pdfToPngs(pdf)
-    if (pngs.length === 0) {
-      throw new Error("pipeline produced 0 pages")
-    }
-    // Best-effort cache; don't fail the request if S3 is down
-    await putCachedPngs(artifactId, hash, pngs).catch((err) => {
-      console.warn("[preview-pipeline] cache write failed:", err)
-    })
-    return { hash, pages: pngs, cached: false }
   })
 }

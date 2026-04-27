@@ -1,6 +1,7 @@
 import "server-only"
 import { generateScriptRewrite } from "@/lib/llm/generate"
 import { validateScriptArtifact } from "./validator"
+import { recordLlmRewrite } from "./metrics"
 
 const MAX_RETRIES = 2
 
@@ -33,10 +34,12 @@ export async function llmRewriteWithRetry(args: {
     })
     const v = await validateScriptArtifact(newScript)
     if (v.ok) {
+      recordLlmRewrite({ ok: true, attempts: attempt + 1 })
       return { ok: true, script: newScript, attempts: attempt + 1 }
     }
     lastError = v.errors.join("; ")
   }
+  recordLlmRewrite({ ok: false, attempts: MAX_RETRIES + 1 })
   return {
     ok: false,
     error: `validation failed after ${MAX_RETRIES + 1} attempts: ${lastError}`,

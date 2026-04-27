@@ -4,6 +4,7 @@ import { mkdir, writeFile, unlink } from "node:fs/promises"
 import { randomUUID } from "node:crypto"
 import { join, resolve } from "node:path"
 import type { SandboxOptions, SandboxResult } from "./types"
+import { recordSandbox } from "./metrics"
 
 const DEFAULT_TIMEOUT_MS = 10_000
 const DEFAULT_MAX_OUTPUT = 100 * 1024 * 1024
@@ -49,6 +50,7 @@ export async function runScriptInSandbox(script: string, opts: SandboxOptions): 
       clearTimeout(timer)
       try { child.kill("SIGKILL") } catch {}
       unlink(scriptPath).catch(() => {})
+      recordSandbox({ ok: result.ok, durationMs: result.durationMs })
       resolve(result)
     }
 
