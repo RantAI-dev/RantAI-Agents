@@ -26,6 +26,15 @@ globalThis.fetch = () => { throw new Error("forbidden API: fetch") }
 // adversary), so blocking eval-of-strings adds no real defense — the actual
 // isolation comes from no-fs / no-net at the module level above.
 
+// Static `import fs from "fs"` resolves via Node's module loader and bypasses
+// the globalThis property-shadow. Register an ESM loader hook (runs in a
+// dedicated worker, so it can use fs internally without recursion) that
+// rejects any import of the forbidden module specifiers above. The hook is
+// installed BEFORE the user script is dynamic-imported, so static and dynamic
+// `import "fs"` from the user script both fail with `forbidden: fs`.
+import { register } from "node:module"
+register("./sandbox-loader.mjs", import.meta.url)
+
 const userScriptPath = process.argv[2]
 if (!userScriptPath) {
   process.stderr.write("sandbox-wrapper: missing script path argument")
