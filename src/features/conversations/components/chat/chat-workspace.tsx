@@ -3425,6 +3425,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                   onDeleteArtifact={removeArtifact}
                   onFixWithAI={handleFixWithAI}
                   sessionId={apiSessionId}
+                  isStreaming={isStreaming}
                 />
               </motion.div>
             </ResizablePanel>
