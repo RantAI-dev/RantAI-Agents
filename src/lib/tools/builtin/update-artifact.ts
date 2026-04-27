@@ -68,7 +68,7 @@ export const updateArtifactTool: ToolDefinition = {
     let persisted = true
     let validationWarnings: string[] = []
     let finalContent = content
-    let existingForReturn: { title: string } | null = null
+    let existingForReturn: { title: string; documentFormat: string | null } | null = null
     try {
       const existing = await prisma.document.findUnique({ where: { id } })
       // Fix #23: explicit not-found path. Without this the function silently
@@ -85,7 +85,7 @@ export const updateArtifactTool: ToolDefinition = {
           error: `Artifact "${id}" not found. Call create_artifact instead to create a new artifact.`,
         }
       }
-      existingForReturn = { title: existing.title }
+      existingForReturn = { title: existing.title, documentFormat: existing.documentFormat }
 
       // Canvas-mode type enforcement. When the user has selected a
       // specific artifact type, the LLM is required to keep using it.
@@ -113,11 +113,16 @@ export const updateArtifactTool: ToolDefinition = {
       }
 
       // Structural validation against the artifact's known type. Failures
-      // are surfaced back to the LLM so it can self-correct.
+      // are surfaced back to the LLM so it can self-correct. For text/document
+      // we honour the existing row's documentFormat so updates validate against
+      // the same shape (AST vs script) the artifact was created with.
       if (existing.artifactType) {
+        const existingFormat =
+          existing.documentFormat === "script" ? "script" : "ast"
         const validation = await validateArtifactContent(
           existing.artifactType,
-          content
+          content,
+          { documentFormat: existingFormat },
         )
         validationWarnings = validation.warnings
         if (!validation.ok) {
@@ -275,6 +280,9 @@ export const updateArtifactTool: ToolDefinition = {
       content: finalContent,
       updated: true,
       persisted,
+      ...(existingForReturn?.documentFormat
+        ? { documentFormat: existingForReturn.documentFormat === "script" ? "script" : "ast" }
+        : {}),
       ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),
     }
   },

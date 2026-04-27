@@ -117,6 +117,14 @@ export function useArtifacts(sessionKey?: string | null) {
           })),
           evictedVersionCount: a.metadata?.evictedVersionCount,
           ragIndexed: a.metadata?.ragIndexed,
+          // Hydrate documentFormat so reloaded script artifacts route to the
+          // DocumentScriptRenderer instead of the legacy AST path. Repo +
+          // service expose this column (T1, T12); without copying it here
+          // the field would silently drop on every page refresh.
+          documentFormat:
+            a.documentFormat === "script" || a.documentFormat === "ast"
+              ? a.documentFormat
+              : undefined,
         },
       ])
     )

@@ -37,6 +37,8 @@ import { cn } from "@/lib/utils"
 import type { Artifact } from "./types"
 import { TYPE_SHORT_LABELS, getArtifactRegistryEntry } from "./registry"
 import { ArtifactRenderer } from "./artifact-renderer"
+import { DocumentScriptRenderer } from "./renderers/document-script-renderer"
+import { EditDocumentModal } from "./edit-document-modal"
 import { StreamdownContent } from "../streamdown-content"
 
 type ArtifactInput = Omit<Artifact, "version" | "previousVersions"> & {
@@ -51,6 +53,14 @@ interface ArtifactPanelProps {
   onDeleteArtifact?: (artifactId: string) => void
   onFixWithAI?: (artifactId: string, error: string) => void
   sessionId?: string
+  /**
+   * Whether the parent chat session is currently streaming. The
+   * document-script renderer skips its render-status fetch while
+   * streaming so it doesn't probe a hash that hasn't been persisted yet.
+   * Defaults to `false` — wiring from chat-workspace is added in a
+   * follow-up task.
+   */
+  isStreaming?: boolean
 }
 
 export function ArtifactPanel({
@@ -60,6 +70,7 @@ export function ArtifactPanel({
   onDeleteArtifact,
   onFixWithAI,
   sessionId,
+  isStreaming = false,
 }: ArtifactPanelProps) {
   const isCodeOnly = artifact.type === "application/code"
   const isRunnable = artifact.type === "application/python"
@@ -89,6 +100,13 @@ export function ArtifactPanel({
   // (.docx). Users wanting PDF should open the .docx in Word and Save as PDF.
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
+
+  // Script-document edit modal. Gated on documentFormat=script — legacy AST
+  // text/document artifacts stay read-only. The `onSaved` callback fires
+  // after the API call resolves; we bump a key to force the renderer to
+  // refetch its render-status / preview, since the persisted content has
+  // been replaced server-side.
+  const [editModalOpen, setEditModalOpen] = useState(false)
 
   const hasVersions = artifact.previousVersions.length > 0
   const totalVersions = artifact.version
@@ -516,6 +534,7 @@ export function ArtifactPanel({
   }, [])
 
   const panelContent = (
+    <>
     <div
       className={cn(
         "flex flex-col bg-background",
@@ -817,11 +836,61 @@ export function ArtifactPanel({
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {tab === "preview" || isTextDocument ? (
-          <ArtifactRenderer
-            artifact={displayArtifact}
-            onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
-            onDownloadXlsx={handleDownload}
-          />
+          // text/document branches on documentFormat:
+          //   "script" → DocumentScriptRenderer (server-rendered PNG carousel)
+          //   "ast" or undefined → legacy DocumentRenderer (via ArtifactRenderer),
+          //                       prefixed with a banner steering users toward the
+          //                       new format on their next document.
+          displayArtifact.type === "text/document" &&
+          displayArtifact.documentFormat === "script" ? (
+            sessionId ? (
+              <div className="relative h-full">
+                <DocumentScriptRenderer
+                  sessionId={sessionId}
+                  artifactId={displayArtifact.id}
+                  content={displayArtifact.content}
+                  isStreaming={isStreaming}
+                />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="absolute top-3 right-3 h-8 w-8 shadow-sm"
+                      onClick={() => setEditModalOpen(true)}
+                      disabled={isStreaming}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Edit document</TooltipContent>
+                </Tooltip>
+              </div>
+            ) : (
+              <div className="p-4 text-sm text-muted-foreground">
+                Preview unavailable: missing session context.
+              </div>
+            )
+          ) : displayArtifact.type === "text/document" ? (
+            <div className="flex flex-col h-full">
+              <div className="bg-amber-50 border-b border-amber-200 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-900/60 dark:text-amber-200">
+                This is a legacy document format. Create a new document to use the latest features.
+              </div>
+              <div className="flex-1 overflow-auto">
+                <ArtifactRenderer
+                  artifact={displayArtifact}
+                  onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+                  onDownloadXlsx={handleDownload}
+                />
+              </div>
+            </div>
+          ) : (
+            <ArtifactRenderer
+              artifact={displayArtifact}
+              onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+              onDownloadXlsx={handleDownload}
+            />
+          )
         ) : isEditing ? (
           /* Code tab — edit mode */
           <div className="flex flex-col h-full">
@@ -903,6 +972,25 @@ export function ArtifactPanel({
         )}
       </div>
     </div>
+    {sessionId &&
+      displayArtifact.type === "text/document" &&
+      displayArtifact.documentFormat === "script" && (
+        <EditDocumentModal
+          open={editModalOpen}
+          onOpenChange={setEditModalOpen}
+          sessionId={sessionId}
+          artifactId={displayArtifact.id}
+          onSaved={() => {
+            // Re-emit the current artifact through onUpdateArtifact so the
+            // parent re-fetches/refreshes any cached state. The actual
+            // content has already been replaced server-side; this nudge
+            // forces dependent renderers (status fetch, preview hash) to
+            // re-run on the next mount cycle.
+            onUpdateArtifact?.(displayArtifact)
+          }}
+        />
+      )}
+    </>
   )
 
   // When fullscreen, render via portal with backdrop. The early return

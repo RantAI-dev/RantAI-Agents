@@ -309,6 +309,11 @@ model Document {
   session      DashboardSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   artifactType String? // "text/html" | "application/react" | etc.
 
+  // For artifact rows: branches between legacy AST renderer and new
+  // script-based pipeline. "ast" | "script". Defaults to "ast" so
+  // existing rows tag as legacy on backfill.
+  documentFormat String @default("ast") @db.VarChar(16)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
