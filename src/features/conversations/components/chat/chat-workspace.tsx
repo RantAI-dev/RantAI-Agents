@@ -2189,6 +2189,10 @@ export function ChatWorkspace({
                           type: args.type,
                           content: args.content as string,
                           language: (args.language as string) || undefined,
+                          // text/document artifacts default to "script" format under
+                          // the new pipeline; without this the streaming placeholder
+                          // would render via the legacy AST path.
+                          documentFormat: args.type === "text/document" ? "script" : undefined,
                         })
                       }
                     }
@@ -2229,6 +2233,10 @@ export function ChatWorkspace({
                           type: out.type,
                           content: out.content as string,
                           language: (out.language as string) || undefined,
+                          documentFormat:
+                            out.documentFormat === "script" || out.documentFormat === "ast"
+                              ? out.documentFormat
+                              : undefined,
                         })
                       } else {
                         // Tool output was malformed or carries an error (e.g.
@@ -2274,6 +2282,10 @@ export function ChatWorkspace({
                             type,
                             content: out.content as string,
                             language: (out.language as string) || existing?.language,
+                            documentFormat:
+                              out.documentFormat === "script" || out.documentFormat === "ast"
+                                ? out.documentFormat
+                                : existing?.documentFormat,
                           })
                         } else {
                           console.warn(
@@ -2298,6 +2310,7 @@ export function ChatWorkspace({
                             type: snapshot.type,
                             content: snapshot.content,
                             language: snapshot.language,
+                            documentFormat: snapshot.documentFormat,
                           })
                         }
                         preStreamSnapshots.delete(toolCallId)
@@ -2502,6 +2515,7 @@ export function ChatWorkspace({
               type: snapshot.type,
               content: snapshot.content,
               language: snapshot.language,
+              documentFormat: snapshot.documentFormat,
             })
           }
         }

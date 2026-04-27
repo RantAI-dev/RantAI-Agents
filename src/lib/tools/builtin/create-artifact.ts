@@ -196,6 +196,7 @@ export const createArtifactTool: ToolDefinition = {
       content: finalContent,
       language,
       persisted,
+      ...(documentFormat ? { documentFormat } : {}),
       ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),
     }
   },
