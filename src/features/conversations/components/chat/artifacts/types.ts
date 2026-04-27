@@ -60,6 +60,12 @@ export interface PersistedArtifact {
   title: string
   content: string
   artifactType: string
+  /**
+   * Document format flag — mirrors the column the service surfaces. Without
+   * this on the persisted shape, rehydrated rows would fall through the
+   * legacy AST path even when the row was authored as a script.
+   */
+  documentFormat?: "ast" | "script" | null
   metadata?: {
     artifactLanguage?: string
     versions?: Array<{ content: string; title: string; timestamp: number }>
