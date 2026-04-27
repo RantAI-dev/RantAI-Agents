@@ -47,6 +47,7 @@ export async function findDashboardSessionByIdAndUser(id: string, userId: string
           title: true,
           content: true,
           artifactType: true,
+          documentFormat: true,
           metadata: true,
         },
       },
@@ -198,6 +199,7 @@ export async function updateDashboardArtifactByIdLocked(
     title: string
     fileSize: number
     metadata: Record<string, unknown>
+    documentFormat?: string
   }
 ) {
   const result = await prisma.document.updateMany({
@@ -225,7 +227,7 @@ export async function findArtifactsBySessionId(sessionId: string) {
   // findDashboardArtifactByIdAndSession).
   return prisma.document.findMany({
     where: { sessionId, artifactType: { not: null } },
-    select: { id: true, s3Key: true, metadata: true },
+    select: { id: true, s3Key: true, metadata: true, documentFormat: true },
   })
 }
 
