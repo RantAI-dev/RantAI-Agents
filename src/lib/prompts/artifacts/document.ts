@@ -594,11 +594,65 @@ sections: [{
 
 ## Table of Contents
 
-Headings that should appear in the TOC must use \`HeadingLevel\` (no custom paragraph styles), and the override style must include \`outlineLevel\` (see Styles above).
+**Do NOT use \`new TableOfContents(...)\`.** That constructor emits a Word field that only Microsoft Word fills in dynamically. Our preview pipeline converts the .docx through LibreOffice to PDF, and LibreOffice does NOT auto-update fields during export, so the TOC shows up empty (or as the literal placeholder text "Right-click to update field"). The same is true for the user's downloaded .docx the first time they open it before clicking F9.
+
+**Build the TOC manually instead** — iterate the document's headings as you compose them and emit one \`Paragraph\` per entry with a tab-leader to the page placeholder. Page numbers can't be known at script-write time (they depend on layout), so use a hyperlink to the bookmark and let the dot leader carry the eye:
 
 \`\`\`js
-new TableOfContents("Table of Contents", { hyperlink: true, headingStyleRange: "1-3" })
+import {
+  Document, Paragraph, TextRun, HeadingLevel, Bookmark, InternalHyperlink, Packer,
+  TabStopType, TabStopPosition, PositionalTab, PositionalTabAlignment,
+  PositionalTabRelativeTo, PositionalTabLeader,
+} from "docx"
+
+// Helper that renders one TOC row: clickable title on the left, dot
+// leader, page-number bookmark target on the right.
+function tocRow(text, anchor, level) {
+  return new Paragraph({
+    indent: { left: (level - 1) * 360 },
+    tabStops: [{ type: TabStopType.RIGHT, position: TabStopPosition.MAX }],
+    children: [
+      new InternalHyperlink({
+        anchor,
+        children: [new TextRun({ text, style: "Hyperlink" })],
+      }),
+      new TextRun({
+        children: [
+          new PositionalTab({
+            alignment: PositionalTabAlignment.RIGHT,
+            relativeTo: PositionalTabRelativeTo.MARGIN,
+            leader: PositionalTabLeader.DOT,
+          }),
+        ],
+      }),
+    ],
+  })
+}
+
+// In the body, prepend the TOC, then emit headings with matching bookmarks.
+const body = [
+  new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("Table of Contents")] }),
+  tocRow("1. Executive Summary",     "h-exec",      1),
+  tocRow("2. Background",            "h-bg",        1),
+  tocRow("   2.1 Current State",     "h-bg-current", 2),
+  tocRow("3. Proposed Solution",     "h-prop",      1),
+  new Paragraph({ children: [new PageBreak()] }),
+
+  new Paragraph({
+    heading: HeadingLevel.HEADING_1,
+    children: [new Bookmark({ id: "h-exec", children: [new TextRun("1. Executive Summary")] })],
+  }),
+  // …prose paragraphs…
+
+  new Paragraph({
+    heading: HeadingLevel.HEADING_1,
+    children: [new Bookmark({ id: "h-bg", children: [new TextRun("2. Background")] })],
+  }),
+  // …
+]
 \`\`\`
+
+This renders correctly in the LibreOffice → PDF preview AND in Word (no F9-refresh required), AND the entries are clickable in both. The trade-off is that we can't show the actual page number — but the dot leader visually carries that role and the document still scans like a real TOC.
 
 ## Content Quality
 
