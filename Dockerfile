@@ -37,6 +37,17 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
+# Runtime deps for the artifact rendering pipeline:
+#   libreoffice-core/writer → docx → pdf conversion (text/document script pipeline)
+#   poppler-utils           → pdftoppm for per-page PNG previews
+#   pandoc                  → markdown/docx interop fallback
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libreoffice-core \
+    libreoffice-writer \
+    poppler-utils \
+    pandoc \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/bun.lock ./bun.lock
 COPY --from=builder /app/server.ts ./server.ts

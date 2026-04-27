@@ -8,15 +8,16 @@ const nextConfig = {
   },
   // External packages with native bindings (canvas for OCR, LibSQL for database)
   serverExternalPackages: [
-    "canvas", 
-    "pdf-img-convert", 
-    "sharp", 
-    "@libsql/client", 
-    "@libsql/win32-x64-msvc", 
+    "canvas",
+    "pdf-img-convert",
+    "sharp",
+    "@libsql/client",
+    "@libsql/win32-x64-msvc",
     "@mastra/libsql",
     "dockerode",
     "docker-modem",
-    "ssh2"
+    "ssh2",
+    "jsdom"
   ],
   async headers() {
     return [
