@@ -44,6 +44,14 @@ export interface Artifact {
    * the indexing pipeline missed (or is still pending) for this artifact.
    */
   ragIndexed?: boolean
+  /**
+   * For `text/document` artifacts, distinguishes the legacy AST format
+   * (rendered client-side via DocumentRenderer) from the new script
+   * format (rendered server-side via the docx → pdf → png pipeline and
+   * surfaced through DocumentScriptRenderer). `undefined` for non-document
+   * artifacts and for legacy rows that predate the column.
+   */
+  documentFormat?: "ast" | "script"
 }
 
 /** Shape returned from the session API for persisted artifacts */

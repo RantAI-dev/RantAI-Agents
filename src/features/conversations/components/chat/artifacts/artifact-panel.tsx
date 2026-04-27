@@ -37,6 +37,7 @@ import { cn } from "@/lib/utils"
 import type { Artifact } from "./types"
 import { TYPE_SHORT_LABELS, getArtifactRegistryEntry } from "./registry"
 import { ArtifactRenderer } from "./artifact-renderer"
+import { DocumentScriptRenderer } from "./renderers/document-script-renderer"
 import { StreamdownContent } from "../streamdown-content"
 
 type ArtifactInput = Omit<Artifact, "version" | "previousVersions"> & {
@@ -51,6 +52,14 @@ interface ArtifactPanelProps {
   onDeleteArtifact?: (artifactId: string) => void
   onFixWithAI?: (artifactId: string, error: string) => void
   sessionId?: string
+  /**
+   * Whether the parent chat session is currently streaming. The
+   * document-script renderer skips its render-status fetch while
+   * streaming so it doesn't probe a hash that hasn't been persisted yet.
+   * Defaults to `false` — wiring from chat-workspace is added in a
+   * follow-up task.
+   */
+  isStreaming?: boolean
 }
 
 export function ArtifactPanel({
@@ -60,6 +69,7 @@ export function ArtifactPanel({
   onDeleteArtifact,
   onFixWithAI,
   sessionId,
+  isStreaming = false,
 }: ArtifactPanelProps) {
   const isCodeOnly = artifact.type === "application/code"
   const isRunnable = artifact.type === "application/python"
@@ -817,11 +827,45 @@ export function ArtifactPanel({
       {/* Content */}
       <div className="flex-1 overflow-auto">
         {tab === "preview" || isTextDocument ? (
-          <ArtifactRenderer
-            artifact={displayArtifact}
-            onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
-            onDownloadXlsx={handleDownload}
-          />
+          // text/document branches on documentFormat:
+          //   "script" → DocumentScriptRenderer (server-rendered PNG carousel)
+          //   "ast" or undefined → legacy DocumentRenderer (via ArtifactRenderer),
+          //                       prefixed with a banner steering users toward the
+          //                       new format on their next document.
+          displayArtifact.type === "text/document" &&
+          displayArtifact.documentFormat === "script" ? (
+            sessionId ? (
+              <DocumentScriptRenderer
+                sessionId={sessionId}
+                artifactId={displayArtifact.id}
+                content={displayArtifact.content}
+                isStreaming={isStreaming}
+              />
+            ) : (
+              <div className="p-4 text-sm text-muted-foreground">
+                Preview unavailable: missing session context.
+              </div>
+            )
+          ) : displayArtifact.type === "text/document" ? (
+            <div className="flex flex-col h-full">
+              <div className="bg-amber-50 border-b border-amber-200 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-900/60 dark:text-amber-200">
+                This is a legacy document format. Create a new document to use the latest features.
+              </div>
+              <div className="flex-1 overflow-auto">
+                <ArtifactRenderer
+                  artifact={displayArtifact}
+                  onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+                  onDownloadXlsx={handleDownload}
+                />
+              </div>
+            </div>
+          ) : (
+            <ArtifactRenderer
+              artifact={displayArtifact}
+              onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+              onDownloadXlsx={handleDownload}
+            />
+          )
         ) : isEditing ? (
           /* Code tab — edit mode */
           <div className="flex flex-col h-full">
