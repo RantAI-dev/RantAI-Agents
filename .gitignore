@@ -11,6 +11,9 @@
 # testing
 /coverage
 
+# sandbox temp files (document-script runner)
+.tmp/
+
 # next.js
 /.next/
 /out/
