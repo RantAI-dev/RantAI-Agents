@@ -5,6 +5,7 @@ import { getDashboardChatSessionArtifact } from "@/features/conversations/sessio
 import { isHttpServiceError } from "@/features/shared/http-service-error"
 import { DocumentAstSchema } from "@/lib/document-ast/schema"
 import { astToDocx } from "@/lib/document-ast/to-docx"
+import { runScriptInSandbox } from "@/lib/document-script/sandbox-runner"
 
 export const runtime = "nodejs"
 
@@ -42,6 +43,42 @@ export async function GET(
       )
     }
 
+    // Compute a safe filename slug once — both AST and script branches reuse it.
+    // For script artifacts we don't have an AST title, so fall back to the
+    // artifact's own `title` field; for AST we'll override with the parsed
+    // ast.meta.title below since it is the authoritative document title.
+    let safeTitle =
+      (result.title ?? "").replace(/[^a-z0-9._-]+/gi, "_").slice(0, 80) ||
+      "document"
+
+    if (result.documentFormat === "script") {
+      const r = await runScriptInSandbox(result.content, {})
+      if (!r.ok || !r.buf) {
+        return NextResponse.json(
+          { error: `script failed: ${r.error ?? "unknown"}` },
+          { status: 500 }
+        )
+      }
+      if (format === "docx") {
+        return new Response(new Uint8Array(r.buf), {
+          status: 200,
+          headers: {
+            "Content-Type":
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "Content-Disposition": `attachment; filename="${safeTitle}.docx"`,
+            "Cache-Control": "no-store",
+          },
+        })
+      }
+      // pdf format for script artifacts is wired up in a later task.
+      return NextResponse.json(
+        {
+          error: `format ${format} not supported for script artifacts in this build`,
+        },
+        { status: 400 }
+      )
+    }
+
     let ast
     try {
       ast = DocumentAstSchema.parse(JSON.parse(result.content))
@@ -57,7 +94,7 @@ export async function GET(
 
     if (format === "docx") {
       const buf = await astToDocx(ast)
-      const safeTitle =
+      safeTitle =
         ast.meta.title.replace(/[^a-z0-9._-]+/gi, "_").slice(0, 80) || "document"
       return new Response(new Uint8Array(buf), {
         status: 200,
