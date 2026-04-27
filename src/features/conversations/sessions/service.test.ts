@@ -6,6 +6,7 @@ import {
   deleteDashboardChatSessionMessages,
   deleteDashboardChatSession,
   getDashboardChatSession,
+  getDashboardChatSessionArtifact,
   listDashboardChatSessions,
   updateDashboardChatSession,
   updateDashboardChatSessionArtifact,
@@ -224,5 +225,29 @@ describe("dashboard chat sessions service", () => {
     })
 
     expect(result).toEqual({ status: 400, error: "messageIds array is required" })
+  })
+
+  describe("getDashboardChatSessionArtifact — exposes documentFormat", () => {
+    it("returns documentFormat=script for new script artifacts", async () => {
+      vi.mocked(repository.findDashboardSessionBasicByIdAndUser).mockResolvedValue({
+        id: "session_1",
+      } as never)
+      vi.mocked(repository.findDashboardArtifactByIdAndSession).mockResolvedValue({
+        id: "artifact_1",
+        title: "Script doc",
+        content: "/**/",
+        artifactType: "text/document",
+        documentFormat: "script",
+        metadata: null,
+      } as never)
+
+      const result = await getDashboardChatSessionArtifact({
+        userId: "user_1",
+        sessionId: "session_1",
+        artifactId: "artifact_1",
+      })
+
+      expect(result).toMatchObject({ documentFormat: "script" })
+    })
   })
 })
