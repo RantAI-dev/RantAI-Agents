@@ -17,12 +17,12 @@ const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
 
 /**
  * Default `documentFormat` for new `text/document` artifacts. Reads
- * `ARTIFACT_DOC_FORMAT_DEFAULT` at module load — defaults to `"ast"` so the
- * legacy path stays the production behaviour until staging flips this to
- * `"script"`. Any value other than `"script"` is treated as `"ast"`.
+ * `ARTIFACT_DOC_FORMAT_DEFAULT` at module load — defaults to `"script"` so
+ * new artifacts use the docx-js pipeline. Set the env to `"ast"` to fall
+ * back to the legacy AST schema (kept for rollback only).
  */
 const DEFAULT_DOC_FORMAT: "ast" | "script" =
-  process.env.ARTIFACT_DOC_FORMAT_DEFAULT === "script" ? "script" : "ast"
+  process.env.ARTIFACT_DOC_FORMAT_DEFAULT === "ast" ? "ast" : "script"
 
 export const createArtifactTool: ToolDefinition = {
   name: "create_artifact",

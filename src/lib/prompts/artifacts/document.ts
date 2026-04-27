@@ -2,7 +2,8 @@ import { proposalExample } from "@/lib/document-ast/examples/proposal"
 import { reportExample } from "@/lib/document-ast/examples/report"
 import { letterExample } from "@/lib/document-ast/examples/letter"
 
-const DOC_FORMAT = process.env.ARTIFACT_DOC_FORMAT_DEFAULT === "script" ? "script" : "ast"
+// Default: script. Set ARTIFACT_DOC_FORMAT_DEFAULT=ast to fall back to legacy.
+const DOC_FORMAT = process.env.ARTIFACT_DOC_FORMAT_DEFAULT === "ast" ? "ast" : "script"
 
 const astSummary =
   "Formal deliverables (proposals, reports, book chapters, letters, white papers) authored as a structured JSON document tree — renders as an A4 preview and exports to .docx with native Word styling, tables, images, TOC, footnotes, and headers/footers."
