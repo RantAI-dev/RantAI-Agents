@@ -30,6 +30,7 @@ import {
 import { validateDocumentAst } from "@/lib/document-ast/validate"
 import { resolveUnsplashInAst } from "@/lib/document-ast/resolve-unsplash"
 import { MERMAID_DIAGRAM_TYPES as MERMAID_DIAGRAM_TYPES_SHARED } from "@/lib/document-ast/_mermaid-types"
+import { validateScriptArtifact } from "@/lib/document-script/validator"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -68,6 +69,7 @@ const MAX_INLINE_STYLE_LINES = 10
  */
 export interface ValidationContext {
   isNew?: boolean
+  documentFormat?: "ast" | "script"
 }
 
 const VALIDATORS: Record<
@@ -130,6 +132,13 @@ export async function validateArtifactContent(
   content: string,
   ctx?: ValidationContext,
 ): Promise<ArtifactValidationResult> {
+  // Script-based text/document branch: delegate to the dedicated validator
+  // (TS syntax check + sandbox dry-run + .docx magic-byte check). The legacy
+  // AST path below is unchanged when documentFormat is "ast" or unset.
+  if (type === "text/document" && ctx?.documentFormat === "script") {
+    const r = await validateScriptArtifact(content)
+    return { ok: r.ok, errors: r.errors, warnings: [] }
+  }
   const validator = VALIDATORS[type as ArtifactType]
   if (!validator) return { ok: true, errors: [], warnings: [] }
   const timeoutMs = getValidateTimeoutMs()

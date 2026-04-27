@@ -15,6 +15,15 @@ import {
 /** Maximum artifact content size: 512 KB */
 const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
 
+/**
+ * Default `documentFormat` for new `text/document` artifacts. Reads
+ * `ARTIFACT_DOC_FORMAT_DEFAULT` at module load — defaults to `"ast"` so the
+ * legacy path stays the production behaviour until staging flips this to
+ * `"script"`. Any value other than `"script"` is treated as `"ast"`.
+ */
+const DEFAULT_DOC_FORMAT: "ast" | "script" =
+  process.env.ARTIFACT_DOC_FORMAT_DEFAULT === "script" ? "script" : "ast"
+
 export const createArtifactTool: ToolDefinition = {
   name: "create_artifact",
   displayName: "Create Artifact",
@@ -103,7 +112,12 @@ export const createArtifactTool: ToolDefinition = {
     // Structural validation for HTML/React. Failures are surfaced back to the
     // LLM so it can self-correct on the next tool call. Other artifact types
     // pass through unchanged.
-    const validation = await validateArtifactContent(type, content, { isNew: true })
+    const documentFormat: "ast" | "script" | undefined =
+      type === "text/document" ? DEFAULT_DOC_FORMAT : undefined
+    const validation = await validateArtifactContent(type, content, {
+      isNew: true,
+      documentFormat,
+    })
     let validationWarnings: string[] = validation.warnings
     if (!validation.ok) {
       return {
@@ -156,6 +170,7 @@ export const createArtifactTool: ToolDefinition = {
           fileType: "artifact",
           fileSize: contentBytes,
           mimeType,
+          ...(documentFormat ? { documentFormat } : {}),
           metadata: {
             artifactLanguage: language,
             ...(validationWarnings.length > 0

@@ -113,11 +113,16 @@ export const updateArtifactTool: ToolDefinition = {
       }
 
       // Structural validation against the artifact's known type. Failures
-      // are surfaced back to the LLM so it can self-correct.
+      // are surfaced back to the LLM so it can self-correct. For text/document
+      // we honour the existing row's documentFormat so updates validate against
+      // the same shape (AST vs script) the artifact was created with.
       if (existing.artifactType) {
+        const existingFormat =
+          existing.documentFormat === "script" ? "script" : "ast"
         const validation = await validateArtifactContent(
           existing.artifactType,
-          content
+          content,
+          { documentFormat: existingFormat },
         )
         validationWarnings = validation.warnings
         if (!validation.ok) {
