@@ -3746,7 +3746,9 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {TYPE_LABELS[artifact.type] || artifact.type}
-                            {artifact.language ? ` · ${artifact.language}` : ""}
+                            {artifact.type === "application/code" && artifact.language
+                              ? ` · ${artifact.language}`
+                              : ""}
                           </p>
                         </div>
                       </button>

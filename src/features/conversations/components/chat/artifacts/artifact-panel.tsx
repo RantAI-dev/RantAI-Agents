@@ -545,7 +545,11 @@ export function ArtifactPanel({
           </div>
           <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 shrink-0">
             {TYPE_SHORT_LABELS[artifact.type] || artifact.type}
-            {artifact.language ? ` · ${artifact.language}` : ""}
+            {/* Language suffix only carries information for application/code,
+                where TypeScript vs Python vs Rust is the actual differentiator.
+                For Spreadsheet / Slides / Mermaid / SVG / etc. the type label
+                already conveys the format, so appending "· json" is just noise. */}
+            {isCodeOnly && artifact.language ? ` · ${artifact.language}` : ""}
           </span>
 
           {/* Version pill (inline in header) */}
