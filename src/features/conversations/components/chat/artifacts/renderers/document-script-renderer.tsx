@@ -20,7 +20,7 @@ interface Props {
  * Renders a `text/document` artifact whose content is a docx-js script.
  *
  * Layout mirrors `slides-renderer.tsx`:
- *  - main page area (bg-black/5 backdrop, page image centered)
+ *  - main page area (page image centered, no backdrop — flat panel)
  *  - bottom-anchored navigation bar (chevrons + counter + dots)
  *  - keyboard arrow nav (guarded against text-entry focus)
  *  - dot strip when pageCount ≤ 20
@@ -136,8 +136,8 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
 
   return (
     <div className="flex flex-col h-full">
-      {/* Page area — backdrop + centered image */}
-      <div className="flex-1 min-h-0 bg-black/5 overflow-auto">
+      {/* Page area — flat surface, image centered */}
+      <div className="flex-1 min-h-0 overflow-auto">
         <div className="min-h-full flex items-start justify-center p-4">
           <img
             key={`${status.hash}-${pageIdx}`}
