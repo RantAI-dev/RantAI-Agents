@@ -53,6 +53,7 @@ import {
   findDocumentsByIds,
   readChatAttachment,
   saveChatAttachment,
+  validateOwnedSessionId,
 } from "./repository"
 
 // Debug logging — only active in development
@@ -158,7 +159,25 @@ export async function runChat(params: {
       }
     }
 
-    const body = params.body
+    // Validate the inbound sessionId at the request boundary. If it doesn't
+    // point at a DashboardSession owned by this user (deleted row, stale
+    // localStorage cuid, race-condition tempId UUID, foreign user), drop it
+    // to undefined so downstream tools that FK against `Document.sessionId`
+    // don't blow up with P2003. The chat still completes; artifacts persist
+    // orphan rather than failing.
+    const validatedSessionId = await validateOwnedSessionId(
+      params.body.sessionId,
+      params.userId,
+    )
+    if (params.body.sessionId && !validatedSessionId) {
+      debug(
+        "[runChat] dropping unknown sessionId",
+        params.body.sessionId,
+        "for user",
+        params.userId,
+      )
+    }
+    const body = { ...params.body, sessionId: validatedSessionId ?? undefined }
     const { messages: rawMessages, fileContext, fileDocumentIds } = body
 
     // Extract threadId for memory tracking (generate one if not provided)

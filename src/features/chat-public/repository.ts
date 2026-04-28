@@ -116,6 +116,25 @@ export async function createConversation(sessionId: string) {
   })
 }
 
+// Confirms a `body.sessionId` from the chat request boundary actually points at
+// a DashboardSession row owned by the caller. Returns the id when valid, null
+// otherwise — including the empty / undefined cases. Stale or never-persisted
+// ids (e.g. a tempId UUID from `useChatSessions.createSession` before its
+// background POST resolves, or a cuid whose row was later deleted) flow
+// through here as null so downstream tools that FK against
+// `Document.sessionId` don't blow up with P2003.
+export async function validateOwnedSessionId(
+  sessionId: string | undefined | null,
+  userId: string,
+): Promise<string | null> {
+  if (!sessionId) return null
+  const row = await prisma.dashboardSession.findFirst({
+    where: { id: sessionId, userId },
+    select: { id: true },
+  })
+  return row ? sessionId : null
+}
+
 export async function findConversationMessages(conversationId: string) {
   return prisma.message.findMany({
     where: { conversationId },
