@@ -18,11 +18,11 @@ services:
       retries: 5
 
   surrealdb:
-    image: surrealdb/surrealdb:latest
+    image: surrealdb/surrealdb:v2
     container_name: rantai-agents-surrealdb
     restart: unless-stopped
     user: root
-    command: start --user root --pass root file:/data/database.db
+    command: start --user root --pass root surrealkv:/data/database.db
     ports:
       - "8000:8000"
     volumes:
@@ -44,10 +44,13 @@ services:
     volumes:
       - rustfs_data:/data
 
-  # Ollama for local OCR models
+  # Ollama for local OCR models (optional)
   # Supports: GLM-OCR, Moondream, MiniCPM-V, Qwen3-VL
+  # Opt-in: `docker compose --profile ocr up -d`
+  # Skipped by default — OCR falls back to OpenRouter when OPENROUTER_API_KEY is set.
   # Pull models with: docker exec -it rantai-agents-ollama ollama pull glm-ocr
   ollama:
+    profiles: ["ocr"]
     image: ollama/ollama:latest
     container_name: rantai-agents-ollama
     restart: unless-stopped
