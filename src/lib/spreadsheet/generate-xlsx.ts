@@ -83,6 +83,12 @@ export async function generateXlsx(
     }
   }
 
+  // NOTE: ExcelJS in this repo does not expose a stable chart API
+  // (worksheet.addChart is undefined; index.d.ts has no addChart symbol).
+  // Charts in the panel preview are rendered via Recharts client-side. The
+  // downloaded .xlsx contains the underlying data ranges but no native chart
+  // objects; users can right-click the data and Insert Chart in Excel directly.
+
   const buffer = await wb.xlsx.writeBuffer()
   return new Blob([buffer], { type: XLSX_MIME_TYPE })
 }

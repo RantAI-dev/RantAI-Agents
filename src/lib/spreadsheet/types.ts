@@ -9,6 +9,7 @@ export const SPREADSHEET_CAPS = {
   maxFormulasPerWorkbook: 200,
   maxNamedRanges: 64,
   maxSheetNameLength: 31,
+  maxCharts: 8,
 } as const
 
 export type CellStyleName =
@@ -64,11 +65,36 @@ export const DEFAULT_THEME: Required<SpreadsheetTheme> = {
   highlightFill: "#FFFF00",
 }
 
+export interface ChartAxis {
+  title?: string
+  format?: string
+}
+
+export interface ChartSeriesSpec {
+  name: string
+  range: string
+  color?: string
+}
+
+export type ChartType = "bar" | "line" | "pie" | "area"
+
+export interface ChartSpec {
+  id: string
+  title?: string
+  type: ChartType
+  categoryRange: string
+  series: ChartSeriesSpec[]
+  xAxis?: ChartAxis
+  yAxis?: ChartAxis
+  stacked?: boolean
+}
+
 export interface SpreadsheetSpec {
   kind: typeof SPREADSHEET_SPEC_VERSION
   theme?: SpreadsheetTheme
   namedRanges?: Record<string, string>
   sheets: SheetSpec[]
+  charts?: ChartSpec[]
 }
 
 export type ContentShape = "csv" | "array" | "spec"

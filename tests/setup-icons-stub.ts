@@ -27,6 +27,8 @@ const ICON_NAMES = [
   "Folder", "Database", "MessageSquare", "Blocks", "Headphones",
   "Store", "Building2", "User", "Star", "Eye", "ArrowRight",
   "FilePenLine", "AngleDoubleRight",
+  // sheet-spec-view.tsx
+  "FunctionSquare", "Download",
 ] as const
 
 const stubModule: Record<string, unknown> = {}

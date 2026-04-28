@@ -1,3 +1,4 @@
+import { z } from "zod"
 import {
   SPREADSHEET_SPEC_VERSION,
   SPREADSHEET_CAPS,
@@ -7,6 +8,32 @@ import {
   type SheetSpec,
   type CellSpec,
 } from "./types"
+
+const ChartAxisZ = z.object({
+  title: z.string().optional(),
+  format: z.string().optional(),
+})
+
+const ChartSeriesZ = z.object({
+  name: z.string(),
+  range: z.string(),
+  color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
+})
+
+const ChartSpecZ = z.object({
+  id: z.string().min(1),
+  title: z.string().optional(),
+  type: z.enum(["bar", "line", "pie", "area"]),
+  categoryRange: z.string().min(1),
+  series: z.array(ChartSeriesZ).min(1),
+  xAxis: ChartAxisZ.optional(),
+  yAxis: ChartAxisZ.optional(),
+  stacked: z.boolean().optional(),
+})
+
+const ChartsArrayZ = z
+  .array(ChartSpecZ)
+  .max(SPREADSHEET_CAPS.maxCharts, `Too many charts (max ${SPREADSHEET_CAPS.maxCharts})`)
 
 export function detectShape(content: string): ContentShape {
   const trimmed = content.trimStart()
@@ -187,6 +214,16 @@ export function parseSpec(content: string): ParseResult {
         errors.push(
           `Workbook has ${keys.length} named ranges but the max is ${SPREADSHEET_CAPS.maxNamedRanges}.`
         )
+      }
+    }
+  }
+
+  if (obj.charts !== undefined) {
+    const result = ChartsArrayZ.safeParse(obj.charts)
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const path = issue.path.length > 0 ? `charts[${issue.path.join(".")}]` : "charts"
+        errors.push(`${path}: ${issue.message}`)
       }
     }
   }

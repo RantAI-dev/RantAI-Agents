@@ -98,6 +98,59 @@ A full workbook specification. The renderer evaluates formulas live and exports 
 - Use negative-in-parens format for currency: \`"$#,##0;($#,##0);-"\`.
 - Round where precision adds noise: \`=ROUND(B2, 0)\` rather than ten decimal places.
 
+## Charts (optional)
+
+When the user benefits from a visual — trend over time, comparison across categories, distribution, or stacked composition — emit a \`charts\` array at the top level of the spec. The panel auto-adds a Data/Charts tab toggle when present.
+
+\`\`\`json
+{
+  "kind": "spreadsheet/v1",
+  "sheets": [
+    {
+      "name": "Trajectory",
+      "cells": [
+        { "ref": "A1", "value": "Year",    "style": "header" },
+        { "ref": "B1", "value": "Revenue", "style": "header" },
+        { "ref": "C1", "value": "EBITDA",  "style": "header" },
+        { "ref": "A2", "value": 2024 }, { "ref": "B2", "value": 100, "format": "$#,##0" }, { "ref": "C2", "value": 30, "format": "$#,##0" },
+        { "ref": "A3", "value": 2025 }, { "ref": "B3", "value": 130, "format": "$#,##0" }, { "ref": "C3", "value": 40, "format": "$#,##0" },
+        { "ref": "A4", "value": 2026 }, { "ref": "B4", "value": 170, "format": "$#,##0" }, { "ref": "C4", "value": 55, "format": "$#,##0" }
+      ]
+    }
+  ],
+  "charts": [
+    {
+      "id": "rev-trend",
+      "title": "Financial Trajectory",
+      "type": "bar",
+      "categoryRange": "Trajectory!A2:A4",
+      "series": [
+        { "name": "Revenue", "range": "Trajectory!B2:B4", "color": "#1a73e8" },
+        { "name": "EBITDA",  "range": "Trajectory!C2:C4", "color": "#34a853" }
+      ]
+    }
+  ]
+}
+\`\`\`
+
+**Chart rules:**
+
+- \`type\`: \`"bar"\` (compare categories), \`"line"\` (trend over time), \`"area"\` (cumulative trend), \`"pie"\` (composition; uses first series only — each row is a slice).
+- \`categoryRange\`: x-axis labels. Always a single column or single row range like \`Sheet1!A2:A6\`.
+- \`series[].range\`: y-values, same shape as \`categoryRange\` (parallel ranges).
+- \`series[].color\` is optional; the panel cycles through a default palette if absent.
+- \`stacked: true\` for bar/area to stack series on top of each other.
+- Maximum 8 charts per workbook.
+
+**When to emit a chart:**
+
+- Financial models, projections, forecasts → bar or line of revenue/EBITDA over years
+- Budget breakdowns → pie chart of spending categories
+- Cumulative metrics → area chart with \`stacked: true\`
+- Comparison across categories → bar chart
+
+Skip charts for simple lookup tables, dictionaries, or one-off snapshots.
+
 ## Anti-patterns (validator rejects)
 
 - ❌ \`"kind": "spreadsheet/v2"\` or any value other than \`"spreadsheet/v1"\`
