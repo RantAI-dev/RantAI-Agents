@@ -188,3 +188,56 @@ describe("parseSpec — errors", () => {
   })
 })
 
+describe("parseSpec — charts", () => {
+  it("accepts a spec with a single bar chart", () => {
+    const spec = JSON.stringify({
+      kind: "spreadsheet/v1",
+      sheets: [{
+        name: "Data",
+        cells: [
+          { ref: "A1", value: "Year" }, { ref: "B1", value: "Revenue" },
+          { ref: "A2", value: 2024 }, { ref: "B2", value: 100 },
+          { ref: "A3", value: 2025 }, { ref: "B3", value: 150 },
+        ],
+      }],
+      charts: [{
+        id: "rev-trend",
+        title: "Revenue Trajectory",
+        type: "bar",
+        categoryRange: "Data!A2:A3",
+        series: [{ name: "Revenue", range: "Data!B2:B3" }],
+      }],
+    })
+    const r = parseSpec(spec)
+    expect(r.ok).toBe(true)
+    expect(r.spec?.charts).toHaveLength(1)
+    expect(r.spec?.charts?.[0].type).toBe("bar")
+  })
+
+  it("rejects unknown chart type", () => {
+    const spec = JSON.stringify({
+      kind: "spreadsheet/v1",
+      sheets: [{ name: "S", cells: [{ ref: "A1", value: 1 }] }],
+      charts: [{ id: "x", type: "tornado", categoryRange: "S!A1:A1", series: [{ name: "x", range: "S!A1:A1" }] }],
+    })
+    const r = parseSpec(spec)
+    expect(r.ok).toBe(false)
+    expect(r.errors.some((e) => /chart|type/i.test(e))).toBe(true)
+  })
+
+  it("enforces maxCharts cap", () => {
+    const charts = Array.from({ length: 9 }, (_, i) => ({
+      id: `c${i}`, type: "bar" as const,
+      categoryRange: "S!A1:A1", series: [{ name: "x", range: "S!A1:A1" }],
+    }))
+    const spec = JSON.stringify({
+      kind: "spreadsheet/v1",
+      sheets: [{ name: "S", cells: [{ ref: "A1", value: 1 }] }],
+      charts,
+    })
+    const r = parseSpec(spec)
+    expect(r.ok).toBe(false)
+    expect(r.errors.some((e) => /charts|9/i.test(e))).toBe(true)
+  })
+})
+
