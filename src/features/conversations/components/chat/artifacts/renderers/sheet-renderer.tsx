@@ -20,26 +20,17 @@ const SpecWorkbookView = lazy(() =>
 interface SheetRendererProps {
   content: string
   title?: string
-  onDownloadXlsx?: () => void
 }
 
 type RowData = Record<string, string>
 
-export function SheetRenderer({
-  content,
-  title,
-  onDownloadXlsx,
-}: SheetRendererProps) {
+export function SheetRenderer({ content, title }: SheetRendererProps) {
   const shape = useMemo(() => detectShape(content), [content])
 
   if (shape === "spec") {
     return (
       <Suspense fallback={<SheetLoading />}>
-        <SpecWorkbookView
-          content={content}
-          title={title}
-          onDownloadXlsx={onDownloadXlsx ?? (() => {})}
-        />
+        <SpecWorkbookView content={content} title={title} />
       </Suspense>
     )
   }

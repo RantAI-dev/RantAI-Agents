@@ -22,7 +22,7 @@ const minimalSpec = JSON.stringify({
 
 describe("SpecWorkbookView", () => {
   it("renders the formula bar at the top, sheet tabs at the bottom", async () => {
-    render(<SpecWorkbookView content={minimalSpec} onDownloadXlsx={() => {}} />)
+    render(<SpecWorkbookView content={minimalSpec} />)
     // Sheet tab is visible (single sheet still renders)
     expect(screen.getByText("Sheet1")).toBeTruthy()
     // Column letter A is rendered
@@ -33,12 +33,12 @@ describe("SpecWorkbookView", () => {
   })
 
   it("formats currency values per cell.format", async () => {
-    render(<SpecWorkbookView content={minimalSpec} onDownloadXlsx={() => {}} />)
+    render(<SpecWorkbookView content={minimalSpec} />)
     expect(await screen.findByText(/\$\s?100/)).toBeTruthy()
   })
 
   it("shows error banner when content is invalid JSON", async () => {
-    render(<SpecWorkbookView content="{not valid" onDownloadXlsx={() => {}} />)
+    render(<SpecWorkbookView content="{not valid" />)
     expect(screen.getByText(/Invalid spreadsheet spec/i)).toBeTruthy()
   })
 })
