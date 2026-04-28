@@ -717,7 +717,6 @@ export function ArtifactPanel({
                   <ArtifactRenderer
                     artifact={displayArtifact}
                     onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
-                    onDownloadXlsx={handleDownload}
                   />
                 </div>
               </div>
@@ -725,7 +724,6 @@ export function ArtifactPanel({
               <ArtifactRenderer
                 artifact={displayArtifact}
                 onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
-                onDownloadXlsx={handleDownload}
               />
             )}
           </div>

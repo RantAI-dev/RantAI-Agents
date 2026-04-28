@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { AlertTriangle, Download, FunctionSquare } from "@/lib/icons"
+import { AlertTriangle, FunctionSquare } from "@/lib/icons"
 import {
   type SpreadsheetSpec,
   type WorkbookValues,
@@ -18,7 +18,6 @@ import { SheetChartView } from "./sheet-chart-view"
 interface SpecWorkbookViewProps {
   content: string
   title?: string
-  onDownloadXlsx: () => void
 }
 
 interface CellEntry {
@@ -57,7 +56,7 @@ function cellAlignmentClass(value: unknown): string {
   return "text-left"
 }
 
-export function SpecWorkbookView({ content, onDownloadXlsx }: SpecWorkbookViewProps) {
+export function SpecWorkbookView({ content }: SpecWorkbookViewProps) {
   const [activeSheet, setActiveSheet] = useState(0)
   const [selectedRef, setSelectedRef] = useState<string | null>(null)
   const [values, setValues] = useState<WorkbookValues | null>(null)
@@ -169,20 +168,13 @@ export function SpecWorkbookView({ content, onDownloadXlsx }: SpecWorkbookViewPr
 
       {view === "data" && (
         <>
-      {/* Toolbar (compact) */}
+      {/* Toolbar (compact info) — XLSX download lives in the panel header,
+          not duplicated here. */}
       <div className="flex items-center gap-2 px-4 py-1.5 border-b shrink-0 bg-muted/20 text-xs text-muted-foreground">
         <FunctionSquare className="h-3.5 w-3.5 opacity-60" />
         <span className="tabular-nums flex-1">
           {sheet.name} · {sheet.cells.length} cells
         </span>
-        <button
-          type="button"
-          onClick={onDownloadXlsx}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md hover:text-foreground hover:bg-muted transition-colors"
-        >
-          <Download className="h-3.5 w-3.5" />
-          XLSX
-        </button>
       </div>
 
       {/* Grid */}
