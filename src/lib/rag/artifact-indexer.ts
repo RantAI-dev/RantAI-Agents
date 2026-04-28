@@ -7,8 +7,6 @@ import { chunkDocument } from "./chunker"
 import { generateEmbeddings } from "./embeddings"
 import { storeChunks, deleteChunksByDocumentId } from "./vector-store"
 import { prisma } from "@/lib/prisma"
-import { runScriptInSandbox } from "@/lib/document-script/sandbox-runner"
-import { extractDocxText } from "@/lib/document-script/extract-text"
 import type { Prisma } from "@prisma/client"
 
 /**
@@ -80,6 +78,8 @@ async function resolveTextToEmbed(documentId: string, content: string): Promise<
     if (doc?.artifactType !== "text/document" || doc?.documentFormat !== "script") {
       return content
     }
+    const { runScriptInSandbox } = await import("@/lib/document-script/sandbox-runner")
+    const { extractDocxText } = await import("@/lib/document-script/extract-text")
     const r = await runScriptInSandbox(content, {})
     if (!r.ok || !r.buf) {
       console.warn(`[ArtifactIndexer] sandbox failed for ${documentId}, embedding script source: ${r.ok ? "no buffer" : r.error}`)

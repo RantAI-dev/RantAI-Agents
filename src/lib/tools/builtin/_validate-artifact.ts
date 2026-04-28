@@ -30,7 +30,6 @@ import {
 import { validateDocumentAst } from "@/lib/document-ast/validate"
 import { resolveUnsplashInAst } from "@/lib/document-ast/resolve-unsplash"
 import { MERMAID_DIAGRAM_TYPES as MERMAID_DIAGRAM_TYPES_SHARED } from "@/lib/document-ast/_mermaid-types"
-import { validateScriptArtifact } from "@/lib/document-script/validator"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -136,6 +135,7 @@ export async function validateArtifactContent(
   // (TS syntax check + sandbox dry-run + .docx magic-byte check). The legacy
   // AST path below is unchanged when documentFormat is "ast" or unset.
   if (type === "text/document" && ctx?.documentFormat === "script") {
+    const { validateScriptArtifact } = await import("@/lib/document-script/validator")
     const r = await validateScriptArtifact(content)
     return { ok: r.ok, errors: r.errors, warnings: [] }
   }
