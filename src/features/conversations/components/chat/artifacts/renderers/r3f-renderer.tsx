@@ -516,7 +516,6 @@ interface R3FRendererProps {
 export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
     const [error, setError] = useState<string | null>(null)
     const [webglError, setWebglError] = useState(false)
-    const [ready, setReady] = useState(false)
     const iframeRef = useRef<HTMLIFrameElement>(null)
     // Persist didReady across content changes via a ref. Earlier code held
     // it as a `let` inside the message-handler effect closure — when content
@@ -530,7 +529,6 @@ export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
     useEffect(() => {
         setError(null)
         setWebglError(false)
-        setReady(false)
         didReadyRef.current = false
     }, [content])
 
@@ -554,7 +552,6 @@ export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
                     }
                 } else if (event.data?.type === "r3f-ready") {
                     didReadyRef.current = true
-                    setReady(true)
                 }
             } catch {
                 /* ignore */

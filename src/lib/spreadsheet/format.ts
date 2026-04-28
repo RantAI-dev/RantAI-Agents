@@ -17,9 +17,7 @@ export function formatNumber(
     if (typeof value === "boolean") return value ? "TRUE" : "FALSE"
     return String(value)
   }
-  if (!format) {
-    return Number.isInteger(value) ? String(value) : String(value)
-  }
+  if (!format) return String(value)
   try {
     return numfmtFormat(format, value) as string
   } catch {

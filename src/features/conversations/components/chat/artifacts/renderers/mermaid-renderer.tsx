@@ -39,7 +39,6 @@ export function MermaidRenderer({ content, onFixWithAI }: MermaidRendererProps) 
   const [loading, setLoading] = useState(true)
   const [showSource, setShowSource] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
-  const containerRef = useRef<HTMLDivElement>(null)
   const idRef = useRef(`mermaid-${crypto.randomUUID().slice(0, 8)}`)
   const { resolvedTheme } = useTheme()
 
@@ -163,7 +162,6 @@ export function MermaidRenderer({ content, onFixWithAI }: MermaidRendererProps) 
 
   return (
     <div
-      ref={containerRef}
       className="flex items-center justify-center p-4 overflow-auto min-h-[200px] [&>svg]:max-w-full [&>svg]:h-auto [&>svg]:rounded-md"
       dangerouslySetInnerHTML={{ __html: svg || "" }}
     />

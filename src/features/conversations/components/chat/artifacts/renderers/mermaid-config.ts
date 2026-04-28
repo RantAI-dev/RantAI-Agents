@@ -483,8 +483,6 @@ export function getMermaidConfig(theme: "dark" | "default"): MermaidConfig {
     theme: "base",
     themeVariables,
     fontFamily: FONT_FAMILY,
-    deterministicIds: true,
-    deterministicIDSeed: "mermaid",
     htmlLabels: false,
     flowchart: flowchartConfig,
     sequence: sequenceConfig,
