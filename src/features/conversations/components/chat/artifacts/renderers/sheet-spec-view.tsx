@@ -13,6 +13,7 @@ import { resolveCellStyle, colorClassToClassName } from "@/lib/spreadsheet/style
 import { classifyCell } from "@/lib/spreadsheet/cell-classify"
 import { formatNumber } from "@/lib/spreadsheet/format"
 import { SheetFormulaBar } from "./sheet-formula-bar"
+import { SheetChartView } from "./sheet-chart-view"
 
 interface SpecWorkbookViewProps {
   content: string
@@ -61,11 +62,13 @@ export function SpecWorkbookView({ content, onDownloadXlsx }: SpecWorkbookViewPr
   const [selectedRef, setSelectedRef] = useState<string | null>(null)
   const [values, setValues] = useState<WorkbookValues | null>(null)
   const [evalError, setEvalError] = useState<string | null>(null)
+  const [view, setView] = useState<"data" | "charts">("data")
 
   // Reset selection / active-sheet when the underlying content changes.
   useEffect(() => {
     setActiveSheet(0)
     setSelectedRef(null)
+    setView("data")
   }, [content])
 
   const parsed = useMemo(() => parseSpec(content), [content])
@@ -138,6 +141,34 @@ export function SpecWorkbookView({ content, onDownloadXlsx }: SpecWorkbookViewPr
       {/* Top formula bar — Excel pattern */}
       <SheetFormulaBar selectedRef={selectedRef} formulaOrValue={formulaBarText} />
 
+      {/* Data / Charts tab toggle — only when charts present */}
+      {spec.charts && spec.charts.length > 0 && (
+        <div className="flex items-center gap-1 px-2 py-1 border-b shrink-0 bg-muted/10 text-xs">
+          <button
+            type="button"
+            onClick={() => setView("data")}
+            className={
+              "px-3 py-1 rounded-md transition-colors " +
+              (view === "data" ? "bg-background border border-gray-300 font-medium" : "text-muted-foreground hover:bg-muted/60")
+            }
+          >
+            Data
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("charts")}
+            className={
+              "px-3 py-1 rounded-md transition-colors " +
+              (view === "charts" ? "bg-background border border-gray-300 font-medium" : "text-muted-foreground hover:bg-muted/60")
+            }
+          >
+            Charts
+          </button>
+        </div>
+      )}
+
+      {view === "data" && (
+        <>
       {/* Toolbar (compact) */}
       <div className="flex items-center gap-2 px-4 py-1.5 border-b shrink-0 bg-muted/20 text-xs text-muted-foreground">
         <FunctionSquare className="h-3.5 w-3.5 opacity-60" />
@@ -262,6 +293,12 @@ export function SpecWorkbookView({ content, onDownloadXlsx }: SpecWorkbookViewPr
             </button>
           ))}
         </div>
+      )}
+        </>
+      )}
+
+      {view === "charts" && spec.charts && (
+        <SheetChartView charts={spec.charts} values={values ?? new Map()} />
       )}
 
       {evalError && (
