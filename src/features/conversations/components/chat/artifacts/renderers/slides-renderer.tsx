@@ -102,7 +102,7 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Slide preview */}
-      <div className="flex-1 min-h-0 bg-black/5">
+      <div className="flex-1 min-h-0">
         <iframe
           ref={iframeRef}
           srcDoc={srcdoc}
