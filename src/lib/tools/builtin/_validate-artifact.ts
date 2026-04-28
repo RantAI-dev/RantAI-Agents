@@ -19,6 +19,7 @@ import { parse as parseJs } from "@babel/parser"
 import type { ArtifactType } from "@/features/conversations/components/chat/artifacts/registry"
 import { detectShape, parseSpec } from "@/lib/spreadsheet/parse"
 import { evaluateWorkbook } from "@/lib/spreadsheet/formulas"
+import { tokenizeCsv } from "@/lib/spreadsheet/csv"
 import {
   AESTHETIC_DIRECTIONS,
   DEFAULT_FONTS_BY_DIRECTION,
@@ -807,52 +808,6 @@ function validate3d(content: string): ArtifactValidationResult {
 // ---------------------------------------------------------------------------
 // Sheet validation (CSV or JSON-array-of-objects)
 // ---------------------------------------------------------------------------
-
-/**
- * Inline CSV tokenizer matching the renderer's parseCSV semantics. Field
- * values are preserved untrimmed so the validator and the renderer agree on
- * exactly what bytes are in the document — trimming is a display concern.
- */
-function tokenizeCsv(text: string): string[][] {
-  const rows: string[][] = []
-  let current: string[] = []
-  let field = ""
-  let inQuotes = false
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (inQuotes) {
-      if (ch === '"' && text[i + 1] === '"') {
-        field += '"'
-        i++
-      } else if (ch === '"') {
-        inQuotes = false
-      } else {
-        field += ch
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true
-      } else if (ch === ",") {
-        current.push(field)
-        field = ""
-      } else if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
-        current.push(field)
-        field = ""
-        if (current.some((c) => c.trim().length > 0)) rows.push(current)
-        current = []
-        if (ch === "\r") i++
-      } else {
-        field += ch
-      }
-    }
-  }
-  if (field || current.length) {
-    current.push(field)
-    if (current.some((c) => c.trim().length > 0)) rows.push(current)
-  }
-  return rows
-}
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const NON_ISO_DATE =

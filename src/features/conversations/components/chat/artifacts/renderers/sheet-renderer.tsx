@@ -12,6 +12,7 @@ import {
 } from "@tanstack/react-table"
 import { ArrowUpDown, Download, Search, AlertTriangle } from "@/lib/icons"
 import { detectShape } from "@/lib/spreadsheet/parse"
+import { tokenizeCsv } from "@/lib/spreadsheet/csv"
 
 const SpecWorkbookView = lazy(() =>
   import("./sheet-spec-view").then((m) => ({ default: m.SpecWorkbookView }))
@@ -86,7 +87,7 @@ function CsvOrArrayView({
           return { headers, rows, parseError: null }
         }
       }
-      const lines = parseCSV(content)
+      const lines = tokenizeCsv(content)
       if (lines.length < 2)
         return { headers: [], rows: [], parseError: "No data rows found" }
       const headers = lines[0]
@@ -235,43 +236,3 @@ function CsvOrArrayView({
   )
 }
 
-function parseCSV(text: string): string[][] {
-  const rows: string[][] = []
-  let current: string[] = []
-  let field = ""
-  let inQuotes = false
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]
-    if (inQuotes) {
-      if (ch === '"' && text[i + 1] === '"') {
-        field += '"'
-        i++
-      } else if (ch === '"') {
-        inQuotes = false
-      } else {
-        field += ch
-      }
-    } else {
-      if (ch === '"') {
-        inQuotes = true
-      } else if (ch === ",") {
-        current.push(field)
-        field = ""
-      } else if (ch === "\n" || (ch === "\r" && text[i + 1] === "\n")) {
-        current.push(field)
-        field = ""
-        if (current.some((c) => c.trim().length > 0)) rows.push(current)
-        current = []
-        if (ch === "\r") i++
-      } else {
-        field += ch
-      }
-    }
-  }
-  if (field || current.length) {
-    current.push(field)
-    if (current.some((c) => c.trim().length > 0)) rows.push(current)
-  }
-  return rows
-}

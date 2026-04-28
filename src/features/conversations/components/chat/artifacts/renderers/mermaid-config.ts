@@ -76,7 +76,7 @@ const FONT_FAMILY =
 // Theme Variables
 // ============================================================================
 
-export const lightThemeVariables = {
+const lightThemeVariables = {
   // Canvas
   background: LIGHT.background,
 
@@ -208,7 +208,7 @@ export const lightThemeVariables = {
   fontSize: "14px",
 } as const
 
-export const darkThemeVariables = {
+const darkThemeVariables = {
   // Canvas
   background: DARK.background,
 
@@ -347,7 +347,7 @@ export const darkThemeVariables = {
 // Diagram-Specific Configurations
 // ============================================================================
 
-export const flowchartConfig = {
+const flowchartConfig = {
   useMaxWidth: true,
   htmlLabels: false,
   curve: "basis" as const,
@@ -358,7 +358,7 @@ export const flowchartConfig = {
   wrappingWidth: 200,
 }
 
-export const sequenceConfig = {
+const sequenceConfig = {
   useMaxWidth: true,
   diagramMarginX: 50,
   diagramMarginY: 10,
@@ -376,7 +376,7 @@ export const sequenceConfig = {
   showSequenceNumbers: false,
 }
 
-export const erConfig = {
+const erConfig = {
   useMaxWidth: true,
   diagramPadding: 20,
   layoutDirection: "TB" as const,
@@ -386,7 +386,7 @@ export const erConfig = {
   fontSize: 12,
 }
 
-export const stateConfig = {
+const stateConfig = {
   useMaxWidth: true,
   dividerMargin: 10,
   sizeUnit: 5,
@@ -396,7 +396,7 @@ export const stateConfig = {
   noteMargin: 10,
 }
 
-export const classConfig = {
+const classConfig = {
   useMaxWidth: true,
   titleTopMargin: 25,
   dividerMargin: 10,
@@ -405,7 +405,7 @@ export const classConfig = {
   htmlLabels: false,
 }
 
-export const ganttConfig = {
+const ganttConfig = {
   useMaxWidth: true,
   titleTopMargin: 25,
   barHeight: 20,
@@ -419,13 +419,13 @@ export const ganttConfig = {
   axisFormat: "%Y-%m-%d",
 }
 
-export const mindmapConfig = {
+const mindmapConfig = {
   useMaxWidth: true,
   padding: 10,
   maxNodeWidth: 200,
 }
 
-export const gitGraphConfig = {
+const gitGraphConfig = {
   useMaxWidth: true,
   titleTopMargin: 25,
   diagramPadding: 8,
@@ -434,12 +434,12 @@ export const gitGraphConfig = {
   rotateCommitLabel: true,
 }
 
-export const pieConfig = {
+const pieConfig = {
   useMaxWidth: true,
   textPosition: 0.75,
 }
 
-export const journeyConfig = {
+const journeyConfig = {
   useMaxWidth: true,
   diagramMarginX: 50,
   diagramMarginY: 10,
@@ -455,7 +455,7 @@ export const journeyConfig = {
   rightAngles: false,
 }
 
-export const quadrantConfig = {
+const quadrantConfig = {
   useMaxWidth: true,
   chartWidth: 500,
   chartHeight: 500,
