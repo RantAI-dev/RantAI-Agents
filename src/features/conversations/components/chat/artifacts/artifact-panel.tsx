@@ -9,8 +9,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  Pencil,
-  Save,
   Trash2,
   MoreHorizontal,
   RotateCcw,
@@ -35,7 +33,6 @@ import type { Artifact } from "./types"
 import { TYPE_SHORT_LABELS, getArtifactRegistryEntry } from "./registry"
 import { ArtifactRenderer } from "./artifact-renderer"
 import { DocumentScriptRenderer } from "./renderers/document-script-renderer"
-import { EditDocumentModal } from "./edit-document-modal"
 
 type ArtifactInput = Omit<Artifact, "version" | "previousVersions"> & {
   version?: number
@@ -69,16 +66,12 @@ export function ArtifactPanel({
   isStreaming = false,
 }: ArtifactPanelProps) {
   const isTextDocument = artifact.type === "text/document"
-  const [isEditing, setIsEditing] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [viewingVersionIdx, setViewingVersionIdx] = useState<number | null>(
     null
   )
 
-  // Edit state
-  const [editContent, setEditContent] = useState("")
-  const [isDirty, setIsDirty] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -88,13 +81,6 @@ export function ArtifactPanel({
   // (.docx). Users wanting PDF should open the .docx in Word and Save as PDF.
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
-
-  // Script-document edit modal. Gated on documentFormat=script — legacy AST
-  // text/document artifacts stay read-only. The `onSaved` callback fires
-  // after the API call resolves; we bump a key to force the renderer to
-  // refetch its render-status / preview, since the persisted content has
-  // been replaced server-side.
-  const [editModalOpen, setEditModalOpen] = useState(false)
 
   const hasVersions = artifact.previousVersions.length > 0
   const totalVersions = artifact.version
@@ -113,27 +99,6 @@ export function ArtifactPanel({
     if (!ver) return artifact
     return { ...artifact, content: ver.content, title: ver.title }
   }, [artifact, viewingVersionIdx])
-
-  // Initialize edit content when entering edit mode or artifact changes.
-  // Skip if a save is in progress to prevent overwriting the editor.
-  // Also skip when the editor is mid-edit (`isDirty`) so an LLM update
-  // arriving while the user types doesn't silently discard their
-  // unsaved changes — a banner surfaces instead so the user can either
-  // discard their edit (re-enter edit mode to pull the new content) or
-  // save what they have on top of the new content.
-  useEffect(() => {
-    if (!isEditing) return
-    if (isSaving) return
-    if (isDirty) {
-      setSaveError(
-        "The artifact was updated elsewhere while you were editing. Your unsaved changes are still in this editor; click Save to overwrite the new version, or click Discard to load the latest content.",
-      )
-      return
-    }
-    setEditContent(displayArtifact.content)
-    setIsDirty(false)
-    setSaveError(null)
-  }, [isEditing, displayArtifact.content, isSaving, isDirty])
 
   // Reset version view to latest when artifact is updated externally
   useEffect(() => {
@@ -349,67 +314,6 @@ export function ArtifactPanel({
     }
   }, [viewingVersionIdx, artifact.previousVersions.length])
 
-  const handleSave = useCallback(async () => {
-    if (!editContent || !isDirty || isSaving) return
-    setIsSaving(true)
-    setSaveError(null)
-
-    try {
-      // If a sessionId is wired up we hit the REST endpoint FIRST so the
-      // server-side validator gets a chance to reject the edit. We only
-      // commit the in-memory update once the server accepts the content,
-      // otherwise the panel would jump to a stale-but-valid state while
-      // showing an error from the rejected save.
-      if (sessionId) {
-        const res = await fetch(
-          `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifact.id}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: editContent }),
-          }
-        )
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string }
-          setSaveError(
-            body.error ||
-              `Save failed with HTTP ${res.status}. Try again or fix the highlighted issues.`,
-          )
-          return
-        }
-      }
-
-      if (onUpdateArtifact) {
-        onUpdateArtifact({
-          id: artifact.id,
-          title: artifact.title,
-          type: artifact.type,
-          content: editContent,
-          language: artifact.language,
-        })
-      }
-
-      setIsDirty(false)
-      setIsEditing(false)
-    } catch (err) {
-      console.error("[ArtifactPanel] Save error:", err)
-      setSaveError(
-        err instanceof Error
-          ? err.message
-          : "Save failed — check your network connection.",
-      )
-    } finally {
-      setIsSaving(false)
-    }
-  }, [
-    editContent,
-    isDirty,
-    isSaving,
-    artifact,
-    onUpdateArtifact,
-    sessionId,
-  ])
-
   /**
    * Restore the currently-viewed historical version as a brand-new edit.
    * Goes through the same `onUpdateArtifact` + PUT path as a manual save so
@@ -517,7 +421,6 @@ export function ArtifactPanel({
   }, [])
 
   const panelContent = (
-    <>
     <div
       className={cn(
         "flex flex-col bg-background",
@@ -701,25 +604,6 @@ export function ArtifactPanel({
             </Tooltip>
           )}
 
-          {/* Edit toggle — replaces the old Preview/Code tab affordance.
-              Hidden for text/document (script has its own modal-pencil overlay
-              on the renderer, AST is read-only legacy) and during edit. */}
-          {onUpdateArtifact && !isEditing && !isTextDocument && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setIsEditing(true)}
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Edit source</TooltipContent>
-            </Tooltip>
-          )}
-
           {/* More menu (delete lives here) */}
           {onDeleteArtifact && (
             <DropdownMenu>
@@ -804,95 +688,21 @@ export function ArtifactPanel({
       )}
 
       {/* Content — preview-first; the old Preview/Code tab pair is replaced
-          by a header pencil for edit and a bottom-corner Code toggle for the
-          opt-in source view (matches document-script-renderer's pattern). */}
+          read-only across every artifact type. Edits happen via the chat
+          (the LLM `update_artifact` tool); the panel reflects the latest
+          persisted state. text/document AST is gated behind a legacy
+          banner. */}
       <div className="flex-1 overflow-auto flex flex-col min-h-0">
-        {isEditing ? (
-          /* Edit mode — full-panel textarea with footer */
-          <div className="flex flex-col h-full">
-            <textarea
-              value={editContent}
-              onChange={(e) => {
-                setEditContent(e.target.value)
-                setIsDirty(true)
-                if (saveError) setSaveError(null)
-              }}
-              className="flex-1 w-full p-4 font-mono text-sm bg-background text-foreground resize-none outline-none"
-              spellCheck={false}
-            />
-            {saveError && (
-              <div className="px-4 py-2 border-t bg-amber-500/5 text-xs text-amber-600 dark:text-amber-400 whitespace-pre-wrap">
-                <div className="flex items-center gap-1.5 font-medium mb-1">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Save rejected
-                </div>
-                {saveError}
-              </div>
-            )}
-            <div className="flex items-center justify-end gap-2 px-4 py-2 border-t bg-muted/30 shrink-0">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEditContent(displayArtifact.content)
-                  setIsDirty(false)
-                  setIsEditing(false)
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEditContent(displayArtifact.content)
-                  setIsDirty(false)
-                }}
-                disabled={!isDirty}
-              >
-                Discard
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSave}
-                disabled={!isDirty || isSaving}
-              >
-                <Save className="h-3.5 w-3.5 mr-1.5" />
-                {isSaving ? "Saving..." : "Save"}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          /* Preview — primary (and only) view. Edit access lives in the
-             header pencil; raw source is reachable via Copy or Download in
-             the same header. text/document keeps its renderer-internal
-             controls (script: floating modal pencil; AST: legacy banner). */
           <div className="flex-1 min-h-0 overflow-auto">
             {displayArtifact.type === "text/document" &&
             displayArtifact.documentFormat === "script" ? (
               sessionId ? (
-                <div className="relative h-full">
-                  <DocumentScriptRenderer
-                    sessionId={sessionId}
-                    artifactId={displayArtifact.id}
-                    content={displayArtifact.content}
-                    isStreaming={isStreaming}
-                  />
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="absolute top-3 right-3 h-8 w-8 shadow-sm"
-                        onClick={() => setEditModalOpen(true)}
-                        disabled={isStreaming}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="left">Edit document</TooltipContent>
-                  </Tooltip>
-                </div>
+                <DocumentScriptRenderer
+                  sessionId={sessionId}
+                  artifactId={displayArtifact.id}
+                  content={displayArtifact.content}
+                  isStreaming={isStreaming}
+                />
               ) : (
                 <div className="p-4 text-sm text-muted-foreground">
                   Preview unavailable: missing session context.
@@ -919,28 +729,8 @@ export function ArtifactPanel({
               />
             )}
           </div>
-        )}
       </div>
     </div>
-    {sessionId &&
-      displayArtifact.type === "text/document" &&
-      displayArtifact.documentFormat === "script" && (
-        <EditDocumentModal
-          open={editModalOpen}
-          onOpenChange={setEditModalOpen}
-          sessionId={sessionId}
-          artifactId={displayArtifact.id}
-          onSaved={() => {
-            // Re-emit the current artifact through onUpdateArtifact so the
-            // parent re-fetches/refreshes any cached state. The actual
-            // content has already been replaced server-side; this nudge
-            // forces dependent renderers (status fetch, preview hash) to
-            // re-run on the next mount cycle.
-            onUpdateArtifact?.(displayArtifact)
-          }}
-        />
-      )}
-    </>
   )
 
   // When fullscreen, render via portal with backdrop. The early return
