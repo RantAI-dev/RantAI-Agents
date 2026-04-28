@@ -28,8 +28,6 @@ import {
   validateFontSpec,
   type AestheticDirection,
 } from "@/features/conversations/components/chat/artifacts/renderers/_react-directives"
-import { validateDocumentAst } from "@/lib/document-ast/validate"
-import { resolveUnsplashInAst } from "@/lib/document-ast/resolve-unsplash"
 import { MERMAID_DIAGRAM_TYPES as MERMAID_DIAGRAM_TYPES_SHARED } from "@/lib/document-ast/_mermaid-types"
 
 export interface ArtifactValidationResult {
@@ -69,7 +67,6 @@ const MAX_INLINE_STYLE_LINES = 10
  */
 export interface ValidationContext {
   isNew?: boolean
-  documentFormat?: "ast" | "script"
 }
 
 const VALIDATORS: Record<
@@ -132,14 +129,6 @@ export async function validateArtifactContent(
   content: string,
   ctx?: ValidationContext,
 ): Promise<ArtifactValidationResult> {
-  // Script-based text/document branch: delegate to the dedicated validator
-  // (TS syntax check + sandbox dry-run + .docx magic-byte check). The legacy
-  // AST path below is unchanged when documentFormat is "ast" or unset.
-  if (type === "text/document" && ctx?.documentFormat === "script") {
-    const { validateScriptArtifact } = await import("@/lib/document-script/validator")
-    const r = await validateScriptArtifact(content)
-    return { ok: r.ok, errors: r.errors, warnings: [] }
-  }
   const validator = VALIDATORS[type as ArtifactType]
   if (!validator) return { ok: true, errors: [], warnings: [] }
   const timeoutMs = getValidateTimeoutMs()
@@ -174,42 +163,17 @@ export async function validateArtifactContent(
 }
 
 // ---------------------------------------------------------------------------
-// Document validation — DocumentAst + Unsplash resolver
+// Document validation — docx-js script (TS parse + sandbox dry-run)
 // ---------------------------------------------------------------------------
 
 async function validateDocument(
   content: string,
-  // ctx accepted for parity with the other validators even though we don't
-  // currently key any rules off `isNew` for documents — adding the parameter
-  // now means future strict gates (e.g. a document size cap on creates) can
-  // plug in without changing the signature and breaking callers.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _ctx?: ValidationContext,
 ): Promise<ArtifactValidationResult> {
-  let raw: unknown
-  try {
-    raw = JSON.parse(content)
-  } catch (e) {
-    return {
-      ok: false,
-      errors: [`text/document content must be JSON: ${(e as Error).message}`],
-      warnings: [],
-    }
-  }
-  const v = validateDocumentAst(raw)
-  if (!v.ok) return { ok: false, errors: [v.error], warnings: [] }
-  let resolved = v.ast
-  try {
-    resolved = await resolveUnsplashInAst(v.ast)
-  } catch (e) {
-    // resolver never throws per its contract — but be defensive
-    return {
-      ok: false,
-      errors: [`Unsplash resolution failed: ${(e as Error).message}`],
-      warnings: [],
-    }
-  }
-  return { ok: true, errors: [], warnings: [], content: JSON.stringify(resolved) }
+  const { validateScriptArtifact } = await import("@/lib/document-script/validator")
+  const r = await validateScriptArtifact(content)
+  return { ok: r.ok, errors: r.errors, warnings: [] }
 }
 
 

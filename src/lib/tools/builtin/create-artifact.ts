@@ -15,14 +15,8 @@ import {
 /** Maximum artifact content size: 512 KB */
 const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
 
-/**
- * Default `documentFormat` for new `text/document` artifacts. Reads
- * `ARTIFACT_DOC_FORMAT_DEFAULT` at module load — defaults to `"script"` so
- * new artifacts use the docx-js pipeline. Set the env to `"ast"` to fall
- * back to the legacy AST schema (kept for rollback only).
- */
-const DEFAULT_DOC_FORMAT: "ast" | "script" =
-  process.env.ARTIFACT_DOC_FORMAT_DEFAULT === "ast" ? "ast" : "script"
+/** All `text/document` artifacts now use the docx-js script pipeline. */
+const DOC_FORMAT = "script" as const
 
 export const createArtifactTool: ToolDefinition = {
   name: "create_artifact",
@@ -112,11 +106,8 @@ export const createArtifactTool: ToolDefinition = {
     // Structural validation for HTML/React. Failures are surfaced back to the
     // LLM so it can self-correct on the next tool call. Other artifact types
     // pass through unchanged.
-    const documentFormat: "ast" | "script" | undefined =
-      type === "text/document" ? DEFAULT_DOC_FORMAT : undefined
     const validation = await validateArtifactContent(type, content, {
       isNew: true,
-      documentFormat,
     })
     let validationWarnings: string[] = validation.warnings
     if (!validation.ok) {
@@ -170,7 +161,7 @@ export const createArtifactTool: ToolDefinition = {
           fileType: "artifact",
           fileSize: contentBytes,
           mimeType,
-          ...(documentFormat ? { documentFormat } : {}),
+          ...(type === "text/document" ? { documentFormat: DOC_FORMAT } : {}),
           metadata: {
             artifactLanguage: language,
             ...(validationWarnings.length > 0
@@ -196,7 +187,6 @@ export const createArtifactTool: ToolDefinition = {
       content: finalContent,
       language,
       persisted,
-      ...(documentFormat ? { documentFormat } : {}),
       ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),
     }
   },

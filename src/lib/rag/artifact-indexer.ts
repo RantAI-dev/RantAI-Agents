@@ -65,17 +65,17 @@ export async function indexArtifactContent(
 }
 
 /**
- * For script-format text/document artifacts, run the JS in sandbox and
- * pandoc-extract plain text. AST artifacts and all other types pass
- * through unchanged. Failures fall back to the original content.
+ * For text/document artifacts, run the JS in sandbox and pandoc-extract
+ * plain text. All other types pass through unchanged. Failures fall
+ * back to the original content.
  */
 async function resolveTextToEmbed(documentId: string, content: string): Promise<string> {
   try {
     const doc = await prisma.document.findUnique({
       where: { id: documentId },
-      select: { artifactType: true, documentFormat: true },
+      select: { artifactType: true },
     })
-    if (doc?.artifactType !== "text/document" || doc?.documentFormat !== "script") {
+    if (doc?.artifactType !== "text/document") {
       return content
     }
     const { runScriptInSandbox } = await import("@/lib/document-script/sandbox-runner")

@@ -62,9 +62,9 @@ export async function POST(
   if (isHttpServiceError(artifact)) {
     return NextResponse.json({ error: artifact.error }, { status: artifact.status })
   }
-  if (artifact.artifactType !== "text/document" || artifact.documentFormat !== "script") {
+  if (artifact.artifactType !== "text/document") {
     return NextResponse.json(
-      { error: "edit only supported for script-format documents" },
+      { error: "edit only supported for text/document artifacts" },
       { status: 400 },
     )
   }

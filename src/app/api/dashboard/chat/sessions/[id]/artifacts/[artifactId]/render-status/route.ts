@@ -19,7 +19,7 @@ export async function GET(
     userId: session.user.id, sessionId: id, artifactId,
   })
   if (isHttpServiceError(result)) return NextResponse.json({ error: result.error }, { status: result.status })
-  if (result.artifactType !== "text/document" || result.documentFormat !== "script") {
+  if (result.artifactType !== "text/document") {
     return NextResponse.json({ error: "preview not applicable" }, { status: 400 })
   }
   try {

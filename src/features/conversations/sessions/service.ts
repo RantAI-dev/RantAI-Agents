@@ -68,7 +68,6 @@ export interface DashboardChatSessionArtifact {
   title: string
   content: string
   artifactType: string | null
-  documentFormat: string | null
   metadata: Record<string, unknown> | null
 }
 
@@ -97,7 +96,6 @@ type DashboardChatSessionArtifactRow = {
   title: string
   content: string
   artifactType: string | null
-  documentFormat: string | null
   metadata: Record<string, unknown> | null
 }
 
@@ -158,7 +156,6 @@ function formatArtifact(artifact: {
   title: string
   content: string
   artifactType: string | null
-  documentFormat: string | null
   metadata: Record<string, unknown> | null
 }): DashboardChatSessionArtifact {
   return {
@@ -166,7 +163,6 @@ function formatArtifact(artifact: {
     title: artifact.title,
     content: artifact.content,
     artifactType: artifact.artifactType,
-    documentFormat: artifact.documentFormat,
     metadata: artifact.metadata,
   }
 }
@@ -620,7 +616,6 @@ export async function updateDashboardChatSessionArtifact(params: {
     title: updated.title,
     content: updated.content,
     artifactType: updated.artifactType,
-    documentFormat: updated.documentFormat,
     metadata: updated.metadata,
   }
 }
@@ -645,7 +640,6 @@ export async function getDashboardChatSessionArtifact(params: {
     title: artifact.title,
     content: artifact.content,
     artifactType: artifact.artifactType ?? "",
-    documentFormat: artifact.documentFormat ?? null,
     metadata: (artifact.metadata as Record<string, unknown> | null) ?? null,
   }
 }

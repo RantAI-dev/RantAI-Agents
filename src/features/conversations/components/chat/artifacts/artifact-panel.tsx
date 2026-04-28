@@ -690,12 +690,10 @@ export function ArtifactPanel({
       {/* Content — preview-first; the old Preview/Code tab pair is replaced
           read-only across every artifact type. Edits happen via the chat
           (the LLM `update_artifact` tool); the panel reflects the latest
-          persisted state. text/document AST is gated behind a legacy
-          banner. */}
+          persisted state. */}
       <div className="flex-1 overflow-auto flex flex-col min-h-0">
           <div className="flex-1 min-h-0 overflow-auto">
-            {displayArtifact.type === "text/document" &&
-            displayArtifact.documentFormat === "script" ? (
+            {displayArtifact.type === "text/document" ? (
               sessionId ? (
                 <DocumentScriptRenderer
                   sessionId={sessionId}
@@ -708,18 +706,6 @@ export function ArtifactPanel({
                   Preview unavailable: missing session context.
                 </div>
               )
-            ) : displayArtifact.type === "text/document" ? (
-              <div className="flex flex-col h-full">
-                <div className="bg-amber-50 border-b border-amber-200 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-900/60 dark:text-amber-200">
-                  This is a legacy document format. Create a new document to use the latest features.
-                </div>
-                <div className="flex-1 overflow-auto">
-                  <ArtifactRenderer
-                    artifact={displayArtifact}
-                    onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
-                  />
-                </div>
-              </div>
             ) : (
               <ArtifactRenderer
                 artifact={displayArtifact}

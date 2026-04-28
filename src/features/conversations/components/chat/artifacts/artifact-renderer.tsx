@@ -69,12 +69,6 @@ const R3FRenderer = dynamic(
   }
 )
 
-const DocumentRenderer = dynamic(
-  () => import("./renderers/document-renderer").then((m) => ({ default: m.DocumentRenderer })),
-  {
-    loading: () => <RendererLoading message="Preparing document..." />,
-  }
-)
 
 function RendererLoading({ message = "Loading preview..." }: { message?: string }) {
   return (
@@ -127,8 +121,6 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
     }
     case "text/markdown":
       return <StreamdownContent content={artifact.content} className="p-4" />
-    case "text/document":
-      return <DocumentRenderer content={artifact.content} />
     default:
       return (
         <pre className="p-4 text-sm whitespace-pre-wrap">{artifact.content}</pre>

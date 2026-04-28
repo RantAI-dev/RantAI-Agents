@@ -1,13 +1,9 @@
 /**
- * Shared Mermaid theme variables used by both the client-side PPTX
- * rasterizer (`rendering/client/mermaid-to-png.ts`) and the server-side
- * docx rasterizer (`rendering/server/mermaid-to-svg.ts`).
- *
- * Keeping the visual contract in one file prevents silent drift when
- * a theme tweak is made on one surface but not the other.
+ * Shared Mermaid theme variables used by the client-side PPTX rasterizer
+ * (`rendering/client/mermaid-to-png.ts`).
  */
 
-export const MERMAID_THEME_VARIABLES = {
+const MERMAID_THEME_VARIABLES_LIGHT = {
   background: "#ffffff",
   primaryColor: "#ffffff",
   primaryTextColor: "#1c1c1c",
@@ -18,7 +14,7 @@ export const MERMAID_THEME_VARIABLES = {
   fontSize: "14px",
 } as const
 
-export const MERMAID_THEME_VARIABLES_DARK = {
+const MERMAID_THEME_VARIABLES_DARK = {
   background: "#0b0b0c",
   primaryColor: "#1a1a1d",
   primaryTextColor: "#e8e7e3",
@@ -29,22 +25,16 @@ export const MERMAID_THEME_VARIABLES_DARK = {
   fontSize: "14px",
 } as const
 
-export const MERMAID_INIT_OPTIONS = {
-  startOnLoad: false,
-  theme: "base" as const,
-  themeVariables: MERMAID_THEME_VARIABLES,
-}
-
 /**
- * Theme-aware mermaid init options. Use this in client renderers that need
- * to switch between light and dark; server-side rasterizers (DOCX export)
- * stay on the light variant since the document body is always white.
+ * Theme-aware mermaid init options for client renderers that switch between
+ * light and dark. The DOCX export path no longer exists — only PPTX uses
+ * this module.
  */
 export function getMermaidInitOptions(theme: "light" | "dark") {
   return {
     startOnLoad: false,
     theme: "base" as const,
     themeVariables:
-      theme === "dark" ? MERMAID_THEME_VARIABLES_DARK : MERMAID_THEME_VARIABLES,
+      theme === "dark" ? MERMAID_THEME_VARIABLES_DARK : MERMAID_THEME_VARIABLES_LIGHT,
   }
 }
