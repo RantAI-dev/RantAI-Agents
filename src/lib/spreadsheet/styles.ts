@@ -1,3 +1,4 @@
+import type { ColorClass } from "./cell-classify"
 import { DEFAULT_THEME, type CellStyleName, type SpreadsheetTheme } from "./types"
 
 export interface ResolvedCellStyle {
@@ -125,4 +126,24 @@ function renderDate(d: Date, format: string): string {
     return `${y}-${m2}-${d2}`
   }
   return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Map a ColorClass to Tailwind utility classes for cell text styling.
+ * Background-color (highlight yellow) is applied separately by caller.
+ */
+export function colorClassToClassName(c: ColorClass): string {
+  switch (c) {
+    case "input":
+      return "text-blue-700"          // ~#0000FF, but Tailwind picks the closest semantic
+    case "cross-sheet":
+      return "text-green-700"         // ~#008000
+    case "external":
+      return "text-red-600"           // ~#FF0000
+    case "header":
+      return "font-bold text-base"    // bold + slightly larger than default text-sm
+    case "formula":
+    case "default":
+      return ""
+  }
 }
