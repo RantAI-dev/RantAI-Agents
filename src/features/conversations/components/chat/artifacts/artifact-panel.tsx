@@ -9,7 +9,6 @@ import {
   Check,
   Code,
   Eye,
-  Play,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -72,16 +71,15 @@ export function ArtifactPanel({
   sessionId,
   isStreaming = false,
 }: ArtifactPanelProps) {
-  const isCodeOnly = artifact.type === "application/code"
-  const isRunnable = artifact.type === "application/python"
-  // text/document hides the Code tab — the preview is the source of truth
-  // (renders the same DOCX bytes the user downloads, so a separate source view
-  // would just duplicate what's already in the tool call).
   const isTextDocument = artifact.type === "text/document"
-  const [tab, setTab] = useState<"preview" | "code">(
-    isCodeOnly ? "code" : "preview"
-  )
+  const isCodeOnly = artifact.type === "application/code"
+  // Code-only artifacts are already syntax-highlighted in the preview, so a
+  // separate "show source" toggle is redundant. text/document uses its own
+  // renderer-level controls (script has the EditDocumentModal pencil; AST is
+  // read-only). Everything else gets the bottom-corner Code toggle.
+  const showSourceToggle = !isCodeOnly && !isTextDocument
   const [isEditing, setIsEditing] = useState(false)
+  const [showSource, setShowSource] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [viewingVersionIdx, setViewingVersionIdx] = useState<number | null>(
@@ -151,11 +149,6 @@ export function ArtifactPanel({
   useEffect(() => {
     setViewingVersionIdx(null)
   }, [artifact.version])
-
-  // Exit edit mode when switching tabs
-  useEffect(() => {
-    setIsEditing(false)
-  }, [tab])
 
   // Escape key exits fullscreen
   useEffect(() => {
@@ -552,7 +545,11 @@ export function ArtifactPanel({
           </div>
           <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 shrink-0">
             {TYPE_SHORT_LABELS[artifact.type] || artifact.type}
-            {artifact.language ? ` · ${artifact.language}` : ""}
+            {/* Language suffix only carries information for application/code,
+                where TypeScript vs Python vs Rust is the actual differentiator.
+                For Spreadsheet / Slides / Mermaid / SVG / etc. the type label
+                already conveys the format, so appending "· json" is just noise. */}
+            {isCodeOnly && artifact.language ? ` · ${artifact.language}` : ""}
           </span>
 
           {/* Version pill (inline in header) */}
@@ -712,6 +709,25 @@ export function ArtifactPanel({
             </Tooltip>
           )}
 
+          {/* Edit toggle — replaces the old Preview/Code tab affordance.
+              Hidden for text/document (script has its own modal-pencil overlay
+              on the renderer, AST is read-only legacy) and during edit. */}
+          {onUpdateArtifact && !isEditing && !isTextDocument && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setIsEditing(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">Edit source</TooltipContent>
+            </Tooltip>
+          )}
+
           {/* More menu (delete lives here) */}
           {onDeleteArtifact && (
             <DropdownMenu>
@@ -795,104 +811,12 @@ export function ArtifactPanel({
         </div>
       )}
 
-      {/* Tab bar — hidden for application/code (preview == code, redundant)
-          and for text/document (preview is the source of truth for exports;
-          a separate Code tab would mislead users into thinking they can edit
-          the .docx directly from there). */}
-      {!isCodeOnly && !isTextDocument && (
-      <div className="flex border-b border-border/50 px-4">
-        <button
-          type="button"
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
-            tab === "preview"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-          onClick={() => setTab("preview")}
-        >
-          {isRunnable ? <Play className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          {isRunnable ? "Run" : "Preview"}
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition-colors",
-            tab === "code"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-          onClick={() => setTab("code")}
-        >
-          <Code className="h-3.5 w-3.5" />
-          Code
-          {isDirty && isEditing && (
-            <span className="w-1.5 h-1.5 rounded-full bg-chart-1" />
-          )}
-        </button>
-      </div>
-      )}
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto">
-        {tab === "preview" || isTextDocument ? (
-          // text/document branches on documentFormat:
-          //   "script" → DocumentScriptRenderer (server-rendered PNG carousel)
-          //   "ast" or undefined → legacy DocumentRenderer (via ArtifactRenderer),
-          //                       prefixed with a banner steering users toward the
-          //                       new format on their next document.
-          displayArtifact.type === "text/document" &&
-          displayArtifact.documentFormat === "script" ? (
-            sessionId ? (
-              <div className="relative h-full">
-                <DocumentScriptRenderer
-                  sessionId={sessionId}
-                  artifactId={displayArtifact.id}
-                  content={displayArtifact.content}
-                  isStreaming={isStreaming}
-                />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="absolute top-3 right-3 h-8 w-8 shadow-sm"
-                      onClick={() => setEditModalOpen(true)}
-                      disabled={isStreaming}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="left">Edit document</TooltipContent>
-                </Tooltip>
-              </div>
-            ) : (
-              <div className="p-4 text-sm text-muted-foreground">
-                Preview unavailable: missing session context.
-              </div>
-            )
-          ) : displayArtifact.type === "text/document" ? (
-            <div className="flex flex-col h-full">
-              <div className="bg-amber-50 border-b border-amber-200 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-900/60 dark:text-amber-200">
-                This is a legacy document format. Create a new document to use the latest features.
-              </div>
-              <div className="flex-1 overflow-auto">
-                <ArtifactRenderer
-                  artifact={displayArtifact}
-                  onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
-                  onDownloadXlsx={handleDownload}
-                />
-              </div>
-            </div>
-          ) : (
-            <ArtifactRenderer
-              artifact={displayArtifact}
-              onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
-              onDownloadXlsx={handleDownload}
-            />
-          )
-        ) : isEditing ? (
-          /* Code tab — edit mode */
+      {/* Content — preview-first; the old Preview/Code tab pair is replaced
+          by a header pencil for edit and a bottom-corner Code toggle for the
+          opt-in source view (matches document-script-renderer's pattern). */}
+      <div className="flex-1 overflow-auto flex flex-col min-h-0">
+        {isEditing ? (
+          /* Edit mode — full-panel textarea with footer */
           <div className="flex flex-col h-full">
             <textarea
               value={editContent}
@@ -913,7 +837,7 @@ export function ArtifactPanel({
                 {saveError}
               </div>
             )}
-            <div className="flex items-center justify-end gap-2 px-4 py-2 border-t bg-muted/30">
+            <div className="flex items-center justify-end gap-2 px-4 py-2 border-t bg-muted/30 shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
@@ -946,29 +870,99 @@ export function ArtifactPanel({
               </Button>
             </div>
           </div>
+        ) : showSource ? (
+          /* Opt-in source view (only for non-code, non-document types) —
+             bottom bar lets the user flip back to the preview. */
+          <>
+            <div className="flex-1 min-h-0 overflow-auto">
+              <StreamdownContent
+                content={`\`\`\`${getCodeLanguage(displayArtifact)}\n${displayArtifact.content}\n\`\`\``}
+                className="p-4"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 px-4 py-2 border-t bg-muted/30 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowSource(false)}
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs hover:bg-muted transition-colors"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Show preview
+              </button>
+            </div>
+          </>
         ) : (
-          /* Code tab — view mode with floating edit button */
-          <div className="relative">
-            <StreamdownContent
-              content={`\`\`\`${getCodeLanguage(displayArtifact)}\n${displayArtifact.content}\n\`\`\``}
-              className="p-4"
-            />
-            {onUpdateArtifact && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="secondary"
-                    size="icon"
-                    className="absolute top-3 right-3 h-8 w-8 shadow-sm"
-                    onClick={() => setIsEditing(true)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="left">Edit code</TooltipContent>
-              </Tooltip>
+          /* Preview — primary view for every artifact type. text/document
+             keeps its renderer-internal controls (script: floating modal
+             pencil; AST: legacy banner). The Code toggle in the bottom bar
+             is added underneath for non-code, non-document types so the raw
+             source stays one click away without dominating the chrome. */
+          <>
+            <div className="flex-1 min-h-0 overflow-auto">
+              {displayArtifact.type === "text/document" &&
+              displayArtifact.documentFormat === "script" ? (
+                sessionId ? (
+                  <div className="relative h-full">
+                    <DocumentScriptRenderer
+                      sessionId={sessionId}
+                      artifactId={displayArtifact.id}
+                      content={displayArtifact.content}
+                      isStreaming={isStreaming}
+                    />
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="absolute top-3 right-3 h-8 w-8 shadow-sm"
+                          onClick={() => setEditModalOpen(true)}
+                          disabled={isStreaming}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left">Edit document</TooltipContent>
+                    </Tooltip>
+                  </div>
+                ) : (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    Preview unavailable: missing session context.
+                  </div>
+                )
+              ) : displayArtifact.type === "text/document" ? (
+                <div className="flex flex-col h-full">
+                  <div className="bg-amber-50 border-b border-amber-200 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-900/60 dark:text-amber-200">
+                    This is a legacy document format. Create a new document to use the latest features.
+                  </div>
+                  <div className="flex-1 overflow-auto">
+                    <ArtifactRenderer
+                      artifact={displayArtifact}
+                      onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+                      onDownloadXlsx={handleDownload}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <ArtifactRenderer
+                  artifact={displayArtifact}
+                  onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+                  onDownloadXlsx={handleDownload}
+                />
+              )}
+            </div>
+            {showSourceToggle && (
+              <div className="flex items-center justify-end gap-2 px-4 py-2 border-t bg-muted/30 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowSource(true)}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs hover:bg-muted transition-colors"
+                >
+                  <Code className="h-3.5 w-3.5" />
+                  Source
+                </button>
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </div>
