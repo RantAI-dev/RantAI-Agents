@@ -7,8 +7,6 @@ import {
   Copy,
   Download,
   Check,
-  Code,
-  Eye,
   ChevronLeft,
   ChevronRight,
   Pencil,
@@ -38,7 +36,6 @@ import { TYPE_SHORT_LABELS, getArtifactRegistryEntry } from "./registry"
 import { ArtifactRenderer } from "./artifact-renderer"
 import { DocumentScriptRenderer } from "./renderers/document-script-renderer"
 import { EditDocumentModal } from "./edit-document-modal"
-import { StreamdownContent } from "../streamdown-content"
 
 type ArtifactInput = Omit<Artifact, "version" | "previousVersions"> & {
   version?: number
@@ -72,14 +69,7 @@ export function ArtifactPanel({
   isStreaming = false,
 }: ArtifactPanelProps) {
   const isTextDocument = artifact.type === "text/document"
-  const isCodeOnly = artifact.type === "application/code"
-  // Code-only artifacts are already syntax-highlighted in the preview, so a
-  // separate "show source" toggle is redundant. text/document uses its own
-  // renderer-level controls (script has the EditDocumentModal pencil; AST is
-  // read-only). Everything else gets the bottom-corner Code toggle.
-  const showSourceToggle = !isCodeOnly && !isTextDocument
   const [isEditing, setIsEditing] = useState(false)
-  const [showSource, setShowSource] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [viewingVersionIdx, setViewingVersionIdx] = useState<number | null>(
@@ -549,7 +539,9 @@ export function ArtifactPanel({
                 where TypeScript vs Python vs Rust is the actual differentiator.
                 For Spreadsheet / Slides / Mermaid / SVG / etc. the type label
                 already conveys the format, so appending "· json" is just noise. */}
-            {isCodeOnly && artifact.language ? ` · ${artifact.language}` : ""}
+            {artifact.type === "application/code" && artifact.language
+              ? ` · ${artifact.language}`
+              : ""}
           </span>
 
           {/* Version pill (inline in header) */}
@@ -870,99 +862,63 @@ export function ArtifactPanel({
               </Button>
             </div>
           </div>
-        ) : showSource ? (
-          /* Opt-in source view (only for non-code, non-document types) —
-             bottom bar lets the user flip back to the preview. */
-          <>
-            <div className="flex-1 min-h-0 overflow-auto">
-              <StreamdownContent
-                content={`\`\`\`${getCodeLanguage(displayArtifact)}\n${displayArtifact.content}\n\`\`\``}
-                className="p-4"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2 px-4 py-2 border-t bg-muted/30 shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowSource(false)}
-                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs hover:bg-muted transition-colors"
-              >
-                <Eye className="h-3.5 w-3.5" />
-                Show preview
-              </button>
-            </div>
-          </>
         ) : (
-          /* Preview — primary view for every artifact type. text/document
-             keeps its renderer-internal controls (script: floating modal
-             pencil; AST: legacy banner). The Code toggle in the bottom bar
-             is added underneath for non-code, non-document types so the raw
-             source stays one click away without dominating the chrome. */
-          <>
-            <div className="flex-1 min-h-0 overflow-auto">
-              {displayArtifact.type === "text/document" &&
-              displayArtifact.documentFormat === "script" ? (
-                sessionId ? (
-                  <div className="relative h-full">
-                    <DocumentScriptRenderer
-                      sessionId={sessionId}
-                      artifactId={displayArtifact.id}
-                      content={displayArtifact.content}
-                      isStreaming={isStreaming}
-                    />
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="absolute top-3 right-3 h-8 w-8 shadow-sm"
-                          onClick={() => setEditModalOpen(true)}
-                          disabled={isStreaming}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="left">Edit document</TooltipContent>
-                    </Tooltip>
-                  </div>
-                ) : (
-                  <div className="p-4 text-sm text-muted-foreground">
-                    Preview unavailable: missing session context.
-                  </div>
-                )
-              ) : displayArtifact.type === "text/document" ? (
-                <div className="flex flex-col h-full">
-                  <div className="bg-amber-50 border-b border-amber-200 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-900/60 dark:text-amber-200">
-                    This is a legacy document format. Create a new document to use the latest features.
-                  </div>
-                  <div className="flex-1 overflow-auto">
-                    <ArtifactRenderer
-                      artifact={displayArtifact}
-                      onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
-                      onDownloadXlsx={handleDownload}
-                    />
-                  </div>
+          /* Preview — primary (and only) view. Edit access lives in the
+             header pencil; raw source is reachable via Copy or Download in
+             the same header. text/document keeps its renderer-internal
+             controls (script: floating modal pencil; AST: legacy banner). */
+          <div className="flex-1 min-h-0 overflow-auto">
+            {displayArtifact.type === "text/document" &&
+            displayArtifact.documentFormat === "script" ? (
+              sessionId ? (
+                <div className="relative h-full">
+                  <DocumentScriptRenderer
+                    sessionId={sessionId}
+                    artifactId={displayArtifact.id}
+                    content={displayArtifact.content}
+                    isStreaming={isStreaming}
+                  />
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="absolute top-3 right-3 h-8 w-8 shadow-sm"
+                        onClick={() => setEditModalOpen(true)}
+                        disabled={isStreaming}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">Edit document</TooltipContent>
+                  </Tooltip>
                 </div>
               ) : (
-                <ArtifactRenderer
-                  artifact={displayArtifact}
-                  onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
-                  onDownloadXlsx={handleDownload}
-                />
-              )}
-            </div>
-            {showSourceToggle && (
-              <div className="flex items-center justify-end gap-2 px-4 py-2 border-t bg-muted/30 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setShowSource(true)}
-                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs hover:bg-muted transition-colors"
-                >
-                  <Code className="h-3.5 w-3.5" />
-                  Source
-                </button>
+                <div className="p-4 text-sm text-muted-foreground">
+                  Preview unavailable: missing session context.
+                </div>
+              )
+            ) : displayArtifact.type === "text/document" ? (
+              <div className="flex flex-col h-full">
+                <div className="bg-amber-50 border-b border-amber-200 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950/40 dark:border-amber-900/60 dark:text-amber-200">
+                  This is a legacy document format. Create a new document to use the latest features.
+                </div>
+                <div className="flex-1 overflow-auto">
+                  <ArtifactRenderer
+                    artifact={displayArtifact}
+                    onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+                    onDownloadXlsx={handleDownload}
+                  />
+                </div>
               </div>
+            ) : (
+              <ArtifactRenderer
+                artifact={displayArtifact}
+                onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+                onDownloadXlsx={handleDownload}
+              />
             )}
-          </>
+          </div>
         )}
       </div>
     </div>
@@ -1109,7 +1065,3 @@ ${body.trim()}
 `
 }
 
-function getCodeLanguage(artifact: Artifact): string {
-  if (artifact.type === "application/code") return artifact.language || ""
-  return getArtifactRegistryEntry(artifact.type)?.codeLanguage ?? ""
-}

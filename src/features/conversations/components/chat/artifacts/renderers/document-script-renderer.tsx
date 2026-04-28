@@ -1,6 +1,6 @@
 "use client"
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, ChevronLeft, ChevronRight, Code, FileText } from "lucide-react"
+import { Loader2, ChevronLeft, ChevronRight } from "lucide-react"
 
 interface RenderStatus {
   hash: string
@@ -11,7 +11,7 @@ interface RenderStatus {
 interface Props {
   sessionId: string
   artifactId: string
-  /** the JS script — shown via the Code toggle and faded during streaming */
+  /** the JS script — faded preview during streaming, otherwise unused for display */
   content: string
   isStreaming: boolean
 }
@@ -21,7 +21,7 @@ interface Props {
  *
  * Layout mirrors `slides-renderer.tsx`:
  *  - main page area (bg-black/5 backdrop, page image centered)
- *  - bottom-anchored navigation bar (chevrons + counter + dots + Code toggle)
+ *  - bottom-anchored navigation bar (chevrons + counter + dots)
  *  - keyboard arrow nav (guarded against text-entry focus)
  *  - dot strip when pageCount ≤ 20
  */
@@ -29,7 +29,6 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
   const [status, setStatus] = useState<RenderStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pageIdx, setPageIdx] = useState(0)
-  const [showCode, setShowCode] = useState(false)
 
   // Trigger render-status fetch whenever the script changes (or streaming
   // ends). Skip while the LLM is still typing the script.
@@ -71,7 +70,7 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
   // a text input has focus so the chat composer / search bars keep their
   // arrow-key behaviour.
   useEffect(() => {
-    if (!status || showCode || isStreaming) return
+    if (!status || isStreaming) return
     const isTextEntry = (el: Element | null): boolean => {
       if (!el) return false
       const tag = el.tagName
@@ -91,7 +90,7 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
     }
     window.addEventListener("keydown", handler)
     return () => window.removeEventListener("keydown", handler)
-  }, [status, showCode, isStreaming, goPrev, goNext])
+  }, [status, isStreaming, goPrev, goNext])
 
   // ── streaming: show the JS code being typed ──
   if (isStreaming) {
@@ -108,26 +107,6 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
     )
   }
 
-  // ── code view toggle ──
-  if (showCode) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b bg-muted/30 shrink-0">
-          <span className="text-xs font-medium text-muted-foreground">Source script</span>
-          <button
-            type="button"
-            onClick={() => setShowCode(false)}
-            className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs hover:bg-muted transition-colors"
-          >
-            <FileText className="h-3.5 w-3.5" />
-            Show preview
-          </button>
-        </div>
-        <CodeView content={content} />
-      </div>
-    )
-  }
-
   // ── error ──
   if (error) {
     return (
@@ -136,14 +115,6 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
           <div className="max-w-md text-center space-y-3">
             <div className="text-sm text-destructive">Preview unavailable</div>
             <div className="text-xs text-muted-foreground break-words">{error}</div>
-            <button
-              type="button"
-              onClick={() => setShowCode(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border hover:bg-muted transition-colors"
-            >
-              <Code className="h-3.5 w-3.5" />
-              View source
-            </button>
           </div>
         </div>
       </div>
@@ -221,15 +192,6 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
             ))}
           </div>
         )}
-
-        <button
-          type="button"
-          onClick={() => setShowCode(true)}
-          className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs hover:bg-muted transition-colors"
-        >
-          <Code className="h-3.5 w-3.5" />
-          Code
-        </button>
       </div>
     </div>
   )
