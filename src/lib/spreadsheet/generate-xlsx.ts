@@ -135,7 +135,7 @@ function applyStyle(
       cell.font = {
         ...(cell.font ?? {}),
         italic: true,
-        color: { argb: hexToArgb("#666666") },
+        color: { argb: hexToArgb(theme.noteColor) },
         name: theme.font,
       }
       break
