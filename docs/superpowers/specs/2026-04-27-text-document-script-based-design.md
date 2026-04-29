@@ -1,5 +1,12 @@
 # Text/Document Artifact — Script-Based Rebuild Design
 
+> **Status (2026-04-29):** ✅ **SHIPPED + AST FULLY REMOVED.** The
+> dual-format `documentFormat: "ast" | "script"` discriminant described
+> below was retired in `a81c343` + migration
+> `20260429100656_drop_document_format`. `text/document` is now
+> script-only with no AST fallback. Treat the rest of this doc as
+> historical design context.
+
 **Status:** Approved by user 2026-04-27. Awaiting spec review before implementation plan.
 **Author:** Claude (brainstorming session)
 **Goal:** Bring `text/document` artifact output and preview fidelity to parity with Claude.ai's docx-skill workflow (90–100% confidence rate). User chose this path explicitly: "harus setara dengan claude".

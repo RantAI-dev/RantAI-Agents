@@ -1,5 +1,15 @@
 # Text/Document Script-Based Rebuild — Implementation Plan
 
+> **Status (2026-04-29):** ✅ **SHIPPED + AST FULLY REMOVED.** This plan
+> built the dual-format script/AST pipeline. The AST half was
+> subsequently retired in `a81c343` + migration
+> `20260429100656_drop_document_format`. The `documentFormat` column,
+> `ValidationContext.documentFormat`, AST module tree, AST renderer,
+> server `mermaid-to-svg.ts`, edit-document modal, and the entire
+> `tests/unit/document-ast/` suite are all gone. Treat tasks below as
+> historical record of the rebuild path; current code is single-format
+> script-only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the AST-based `text/document` artifact pipeline with a script-based pipeline + LibreOffice preview, achieving 90–100% output and preview fidelity vs Word.

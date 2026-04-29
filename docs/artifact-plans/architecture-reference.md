@@ -6,12 +6,16 @@
 > the system narrative read [`artifacts-deepscan.md`](./artifacts-deepscan.md);
 > for per-type capabilities read [`artifacts-capabilities.md`](./artifacts-capabilities.md).
 >
-> **Last regenerated:** 2026-04-25, post-Priority-C, pinned to merge `f0264f8`.
-> Replaces all prior versions. Line numbers verified against `wc -l` and
-> `grep -n` output during a 5-agent ground-up rescan.
+> **Last regenerated:** 2026-04-28, post AST-fallback-removal, pinned to
+> commit `a81c343`. Replaces all prior versions. Reflects three commits
+> after the prior `8b6e69b` cut — the AST path was removed
+> (`a81c343`), CSV tokenizer deduped to `lib/spreadsheet/csv.ts`
+> (`02e24a6`), and dead state + orphan modal dropped (`0b25e56`).
+> Line numbers re-verified against `grep -n` after those commits;
+> ranges marked "(L… area)" are approximate to ±10 lines.
 >
-> Cross-references to **N-N** items below point at finding numbers in
-> [`2026-04-25-deepscan-rescan-findings.md`](./2026-04-25-deepscan-rescan-findings.md).
+> Cross-references to **D-N** items below point at finding numbers in
+> [`artifacts-deepscan.md`](./artifacts-deepscan.md).
 
 ---
 
@@ -22,753 +26,677 @@ src/
 ├── features/conversations/
 │   ├── components/chat/
 │   │   ├── chat-workspace.tsx                       artifact lifecycle host
-│   │   ├── chat-input-toolbar.tsx                   CanvasMode type definition
-│   │   ├── streamdown-content.tsx                   shared markdown renderer
+│   │   ├── streamdown-content.tsx                   shared markdown renderer (own mermaid path)
 │   │   └── artifacts/
-│   │       ├── registry.ts                          single source of truth (218 LoC)
-│   │       ├── types.ts                             ArtifactType + Artifact shape (61 LoC)
-│   │       ├── use-artifacts.ts                     React hook (143 LoC)
-│   │       ├── artifact-renderer.tsx                type-switch dispatcher (139 LoC)
-│   │       ├── artifact-panel.tsx                   panel chrome (985 LoC)
-│   │       ├── artifact-indicator.tsx               chat-bubble pill (48 LoC)
+│   │       ├── registry.ts                          single source of truth (~218 LoC)
+│   │       ├── types.ts                             ArtifactType + Artifact + PersistedArtifact (~61 LoC)
+│   │       ├── use-artifacts.ts                     React hook (~143 LoC)
+│   │       ├── artifact-renderer.tsx                type-switch dispatcher (~129 LoC)
+│   │       ├── artifact-panel.tsx                   panel chrome (post-overhaul, ~841 LoC)
+│   │       ├── artifact-indicator.tsx               chat-bubble pill
 │   │       └── renderers/                           per-type previews (lazy)
+│   │           ├── document-script-renderer.tsx     PNG carousel for text/document
+│   │           ├── html-renderer.tsx
+│   │           ├── _iframe-nav-blocker.ts           shared (html + react)
+│   │           ├── latex-renderer.tsx
+│   │           ├── mermaid-config.ts                shared init options
+│   │           ├── mermaid-renderer.tsx
+│   │           ├── python-renderer.tsx              Pyodide in Web Worker
+│   │           ├── r3f-renderer.tsx                 React Three Fiber (no sandbox)
+│   │           ├── _react-directives.ts             @aesthetic / @fonts parser
+│   │           ├── react-renderer.tsx
+│   │           ├── sheet-chart-view.tsx             Recharts dispatch
+│   │           ├── sheet-formula-bar.tsx            Excel-style top bar
+│   │           ├── sheet-renderer.tsx               detectShape gate
+│   │           ├── sheet-spec-view.tsx              SpecWorkbookView (Excel chrome)
+│   │           ├── slides-renderer.tsx              iframe-based deck
+│   │           └── svg-renderer.tsx                 DOMPurify inline render
 │   └── sessions/
-│       ├── service.ts                               chat-session API service (643 LoC)
-│       ├── repository.ts                            Prisma query layer (215 LoC)
+│       ├── service.ts                               chat-session API service
+│       ├── repository.ts                            Prisma query layer
 │       └── schema.ts                                Zod request schemas
 ├── lib/
 │   ├── tools/builtin/
-│   │   ├── create-artifact.ts                       LLM tool: create (187 LoC)
-│   │   ├── update-artifact.ts                       LLM tool: update (256 LoC)
-│   │   └── _validate-artifact.ts                    dispatcher + 12 validators (2110 LoC)
-│   ├── prompts/artifacts/                           per-type LLM rules (12 + index + context)
-│   ├── document-ast/
-│   │   ├── schema.ts                                Zod tree (376 LoC)
-│   │   ├── validate.ts                              validateDocumentAst (213 LoC)
-│   │   ├── to-docx.ts                               DOCX renderer (699 LoC)
-│   │   └── resolve-unsplash.ts                      AST tree-walker (139 LoC)
+│   │   ├── create-artifact.ts                       LLM tool: create
+│   │   ├── update-artifact.ts                       LLM tool: update
+│   │   └── _validate-artifact.ts                    dispatcher + 12 validators (~2036 LoC)
+│   ├── prompts/artifacts/                           per-type LLM rules
+│   │   ├── index.ts
+│   │   ├── context.ts                               shared context block + VISUAL_ARTIFACT_TYPES
+│   │   └── {code,document,html,latex,markdown,mermaid,python,r3f,react,sheet,slides,svg}.ts
+│   ├── document-script/
+│   │   └── validator                                validateScriptArtifact (TS + sandbox + magic-byte)
 │   ├── rendering/
-│   │   ├── mermaid-theme.ts                         shared light/dark vars + factory (50 LoC)
-│   │   ├── server/mermaid-to-svg.ts                 jsdom shim + Promise mutex (140 LoC)
-│   │   ├── server/svg-to-png.ts                     sharp rasterizer (25 LoC)
-│   │   ├── client/mermaid-to-png.ts                 client-side PNG path (34 LoC)
-│   │   ├── client/svg-to-png.ts                     client SVG → PNG (91 LoC)
-│   │   ├── chart-to-svg.ts                          chart block → SVG (413 LoC)
-│   │   └── resize-svg.ts                            <svg width/height> helper (18 LoC)
+│   │   ├── chart-to-svg.ts                          chart block → SVG (light theme only)
+│   │   ├── mermaid-theme.ts                         export-layer mermaid theme keys
+│   │   ├── mermaid-types.ts                         shared 25-entry diagram-type list (validator + slides)
+│   │   ├── resize-svg.ts                            isomorphic SVG resize
+│   │   ├── client/                                  browser-side helpers (svg-to-png, mermaid-to-png)
+│   │   └── server/                                  docx-preview-pipeline, soffice/pdftoppm shells
 │   ├── unsplash/
-│   │   ├── client.ts                                searchPhoto via REST (45 LoC)
-│   │   ├── resolver.ts                              resolveHtmlImages/SlideImages/Queries (207 LoC)
-│   │   ├── index.ts                                 re-exports (61 LoC)
-│   │   └── types.ts                                 (24 LoC)
+│   │   ├── client.ts                                searchPhoto via REST
+│   │   ├── resolver.ts                              resolveImages / resolveSlideImages / resolveQueries
+│   │   └── index.ts                                 re-exports
 │   ├── spreadsheet/
-│   │   ├── parse.ts                                 detectShape + parseSpec (204 LoC)
-│   │   ├── formulas.ts                              evaluateWorkbook (274 LoC)
-│   │   ├── generate-xlsx.ts                         .xlsx export (144 LoC)
-│   │   ├── styles.ts                                (128 LoC)
-│   │   └── types.ts                                 SpreadsheetSpec + callback fields (88 LoC)
-│   ├── slides/
-│   │   ├── types.ts                                 SlideData / ChartData (referenced by validator)
-│   │   └── types.zod.ts                             ChartDataSchema (referenced by DocumentAst)
+│   │   ├── csv.ts                                   shared tokenizeCsv (post `02e24a6` dedup)
+│   │   ├── parse.ts                                 detectShape + parseSpec
+│   │   ├── formulas.ts                              evaluateWorkbook
+│   │   ├── chart-data.ts                            resolveChartData (chart spec → rows/series)
+│   │   └── types.ts                                 SpreadsheetSpec
+│   ├── slides/types.ts                              SlideData / ChartData
 │   ├── rag/
-│   │   ├── artifact-indexer.ts                      fire-and-forget indexer (77 LoC)
+│   │   ├── artifact-indexer.ts                      fire-and-forget indexer
 │   │   ├── chunker.ts                               chunkDocument
 │   │   ├── vector-store.ts                          deleteChunksByDocumentId, storeChunks
 │   │   └── embeddings.ts                            generateEmbeddings (BATCH_SIZE=128, EMBED_CONCURRENCY=4)
-│   └── s3/index.ts                                  S3Paths, uploadFile, deleteFile, deleteFiles (508 LoC)
-├── app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/
-│   ├── route.ts                                     PUT/DELETE (82 LoC)
-│   └── download/route.ts                            GET stream (text/document only)
-└── scripts/
-    └── migrate-artifact-deprecations.ts             idempotent migration (177 LoC)
+│   └── s3/index.ts                                  S3Paths, uploadFile, deleteFile, deleteFiles
+└── app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/
+    ├── route.ts                                     PUT/DELETE
+    ├── download/route.ts                            GET (text/document only; .docx only — no PDF)
+    ├── edit-document/route.ts                       POST (text/document script rewrite)
+    ├── render-status/route.ts                       GET hash + pageCount
+    └── render-pages/[contentHash]/[pageIndex]/route.ts  GET PNG bytes
 ```
 
----
-
-## 1. Registry & Types
-
-### `src/features/conversations/components/chat/artifacts/registry.ts`
-
-| Symbol | Lines | Notes |
-|--------|-------|-------|
-| `ArtifactRegistryEntry` interface | 35–60 | Shape: `type`, `label`, `shortLabel`, `icon`, `colorClasses`, `extension`, `codeLanguage`, `hasCodeTab` |
-| `ARTIFACT_REGISTRY` | 62–183 | Twelve `as const satisfies readonly ArtifactRegistryEntry[]` entries |
-| `ArtifactType` type | 185 | `(typeof ARTIFACT_REGISTRY)[number]["type"]` |
-| `ARTIFACT_TYPES` | 187 | Derived array |
-| `VALID_ARTIFACT_TYPES` | 189 | Derived `Set` |
-| `BY_TYPE` | 191–193 | Internal `Map<ArtifactType, Entry>` |
-| `getArtifactRegistryEntry(type)` | 196–200 | Safe accessor |
-| `TYPE_ICONS` / `TYPE_LABELS` / `TYPE_SHORT_LABELS` / `TYPE_COLORS` | 202–218 | Derived `Record<ArtifactType, …>` maps |
-
-### `src/features/conversations/components/chat/artifacts/types.ts`
-
-| Symbol | Lines |
-|--------|-------|
-| Re-exports of `ARTIFACT_TYPES`, `VALID_ARTIFACT_TYPES`, `ArtifactType` | 9–13 |
-| `isValidArtifactType(value)` | 17–19 |
-| `ArtifactVersion` interface | 21–25 |
-| `Artifact` interface (incl. `evictedVersionCount?`, `ragIndexed?`) | 27–47 |
-| `PersistedArtifact` (wire shape from API) | 50–61 |
-
-### `src/features/conversations/components/chat/artifacts/use-artifacts.ts`
-
-| Lines | Symbol |
-|-------|--------|
-| 17 | `ACTIVE_ARTIFACT_KEY_PREFIX = "rantai.artifact.active."` |
-| 19–35 | sessionStorage restore on `sessionKey` change |
-| 37–50 | sessionStorage persist on `activeArtifactId` change |
-| 52–83 | `addOrUpdateArtifact` — pushes prior version onto `previousVersions`, bumps `version` |
-| 85–92 | `removeArtifact` |
-| 94–96 | `closeArtifact` |
-| 98–100 | `openArtifact` |
-| 102–127 | `loadFromPersisted` — replaces map, reconciles active id |
+Files **removed since the prior `8b6e69b` cut**: `lib/document-ast/{schema,
+validate,to-docx,resolve-unsplash}.ts` plus the `examples/` folder
+(`a81c343`); `renderers/document-renderer.tsx`,
+`artifacts/edit-document-modal.tsx`, `lib/rendering/server/mermaid-to-svg.ts`
+(`a81c343` + `0b25e56`).
 
 ---
 
-## 2. LLM tool layer
+## 1. Registry — `registry.ts`
 
-### `src/lib/tools/builtin/create-artifact.ts` (187 LoC)
+All claims verified against `src/features/conversations/components/chat/artifacts/registry.ts`.
 
-| Lines | What |
-|-------|------|
-| 16 | `MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024` |
-| 18–22 | Tool definition: `name: "create_artifact"` |
-| 23–40 | Zod params: `title`, `type` (enum from `ARTIFACT_TYPES`), `content`, `language?` — every `.describe()` text is the LLM-facing parameter doc |
-| 42–46 | `execute()` entry — `crypto.randomUUID()`, parameter extraction |
-| 49–60 | 512 KiB content cap (`Buffer.byteLength`) |
-| 67–85 | Canvas-mode lock: `canvasMode && canvasMode !== "auto" && canvasMode !== type` → `{ persisted: false, error: "...", validationErrors: [...] }` |
-| 89–101 | `application/code` requires `language` arg → error result on missing |
-| 106 | **`validateArtifactContent(type, content, { isNew: true })`** |
-| 108–119 | `!validation.ok` → return error result; AI SDK retry signals LLM |
-| 124 | **`finalContent = validation.content ?? content`** — picks up Unsplash rewrite |
-| 130–143 | S3 upload via `S3Paths.artifact(orgId, sessionId|"orphan", id, ext)` |
-| 145–166 | `prisma.document.create({ ..., content: finalContent, metadata: { artifactLanguage, validationWarnings? } })` |
-| 168–170 | `indexArtifactContent(id, title, finalContent).catch(...)` — fire-and-forget |
-| 177–185 | Return `{ id, title, type, content: finalContent, language, persisted, warnings? }` |
+| Surface | Location |
+|---|---|
+| `ARTIFACT_REGISTRY` array (12 entries) | L62-L186 |
+| `ARTIFACT_TYPES` (readonly tuple) | L187 |
+| `VALID_ARTIFACT_TYPES` (`ReadonlySet`) | L189 |
+| `BY_TYPE` (private `Map`) | L191 |
+| `getArtifactRegistryEntry(type)` | uses `BY_TYPE` |
+| `TYPE_ICONS` / `TYPE_LABELS` / `TYPE_SHORT_LABELS` / `TYPE_COLORS` | L202-L218 |
 
-### `src/lib/tools/builtin/update-artifact.ts` (256 LoC)
+Per-entry fields: `type, label, shortLabel, color, icon, extension,
+hasCodeTab, codeLanguage`. `hasCodeTab: false` only for `text/document`
+and `application/code`.
 
-| Lines | What |
-|-------|------|
-| 13 | `MAX_VERSION_HISTORY = 20` |
-| 16 | `MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024` |
-| 25 | `MAX_INLINE_FALLBACK_BYTES = 32 * 1024` |
-| 27–44 | Tool definition + Zod params (`id`, `title?`, `content`); **rescan N-12: no `language` / `type` parameters** |
-| 51–61 | 512 KiB cap |
-| 67–82 | **Missing-artifact early return** — returns `"Artifact \"${id}\" not found. Call create_artifact instead..."` |
-| 89–107 | **Canvas-mode lock against `existing.artifactType`** — **rescan N-7: silently bypassed when `existing.artifactType` is null** |
-| 111–127 | Validator dispatch (no `ctx`, so `isNew` is effectively false) |
-| 132–134 | **`finalContent = validation.content`** — picks up Unsplash rewrite |
-| 141–162 | Versioning: archive previous content to `<s3Key>.v<N>` |
-| 168–173 | Inline fallback (≤ 32 KiB) or `archiveFailed: true` marker |
-| 175–181 | Push version entry + FIFO eviction at 20 |
-| 192–199 | Upload new content to canonical s3Key |
-| 201–222 | **Optimistic lock**: `prisma.document.updateMany({ where: { id, updatedAt: existing.updatedAt }, ... })` |
-| 223–235 | `lockResult.count === 0` → `{ updated: false, persisted: false, error: "Concurrent update detected: another writer modified this artifact between read and write. Re-fetch the artifact and retry the update." }` |
-| 238–240 | Background re-index via `indexArtifactContent(id, updatedTitle, finalContent, { isUpdate: true })` |
-| 242–244 | Catch block — sets `persisted = false` and **falls through to success return** (rescan **N-9**) |
-| 247–255 | Return `{ id, title: newTitle, content: finalContent, updated: true, persisted, warnings? }` — **rescan N-8: `title: undefined` when not provided** |
+`types.ts` re-exports `ArtifactType`, `VALID_ARTIFACT_TYPES`,
+`ARTIFACT_TYPES`. Adds:
+
+| Name | Location |
+|---|---|
+| `isValidArtifactType(value)` type guard | types.ts L17-L19 |
+| `ArtifactVersion` shape | types.ts L21-L25 |
+| `Artifact` (client) — `evictedVersionCount?`, `ragIndexed?`. **No `documentFormat` field** post `a81c343`. | types.ts L27-L47 |
+| `PersistedArtifact` — `metadata?: { artifactLanguage?, versions?, evictedVersionCount?, ragIndexed? }`. Same — no `documentFormat`. | types.ts L50-L61 |
 
 ---
 
-## 3. Validator dispatcher
+## 2. Validation dispatcher — `_validate-artifact.ts`
 
-### `src/lib/tools/builtin/_validate-artifact.ts` (2110 LoC)
+`src/lib/tools/builtin/_validate-artifact.ts` (~2036 LoC post `a81c343`).
 
-| Lines | Symbol / Purpose |
-|-------|-----------------|
-| 33–39 | `ArtifactValidationResult` interface (`ok`, `errors`, `warnings`, `content?`) |
-| 42–48 | `REACT_IMPORT_WHITELIST` — react, react-dom, recharts, lucide-react, framer-motion |
-| 51 | `MAX_INLINE_STYLE_LINES = 10` (rescan **N-13**: validator threshold appears to be 15 in tests) |
-| 68–70 | `ValidationContext` interface — `{ isNew?: boolean }` |
-| 72–91 | `VALIDATORS: Record<ArtifactType, ...>` — exhaustive |
-| 103 | **`export let VALIDATE_TIMEOUT_MS = 5_000`** — rescan **N-55: mutable module-level state** |
-| 106–108 | `__setValidateTimeoutMsForTesting(ms)` — test-only hook |
-| 110–145 | **`validateArtifactContent(type, content, ctx?)`** |
-| 117–130 | Promise.race against timeout; produces `{ ok: false, errors: ["Validation timeout: ${type} validator exceeded ${VALIDATE_TIMEOUT_MS}ms budget. Content may be too complex (e.g. deeply nested structures, oversized formula DAG)."] }` |
-| 136–139 | Post-Unsplash for `text/html` via `resolveImages(result.content ?? content)` |
-| 140–143 | Post-Unsplash for `application/slides` via `resolveSlideImages(result.content ?? content)` |
-| 151–176 | `validateDocument` — **rescan N-26: no `ctx` parameter; rescan N-25: discards warnings from `validateDocumentAst`** |
-| 186–206 | `SLIDE_LAYOUTS` set (17 entries; `image-text` is layout #6, deprecated) |
-| 207–210 | `MAX_SLIDE_BULLETS=6`, `MAX_BULLET_WORDS=10`, `MIN_DECK_SLIDES=7`, `MAX_DECK_SLIDES=12` |
-| 212–636 | `validateSlides(content, ctx?)` — full layout matrix |
-| 336–343 | **`image-text` deprecation gate**: hard error when `ctx?.isNew`, warning otherwise |
-| 364 | Inline `validMermaidStarts` list — **rescan N-15: omits `stateDiagram-v2`, subset of `MERMAID_DIAGRAM_TYPES`** |
-| 400–421 | `validateSlides` chart guard — **rescan: no `Array.isArray` check; `chart: []` slips through `typeof === "object"`** |
-| 638–737 | `validate3d` — non-empty + R3F dep whitelist (`R3F_ALLOWED_DEPS` at line 641, 35 entries) + `export default` requirement |
-| 790–828 | `tokenizeCsv` — **rescan: doesn't handle bare `\r` (old Mac line endings)** |
-| 831–835 | Sheet validation regexes (`ISO_DATE`, `NON_ISO_DATE`, `CURRENCY_NUMBER`, `THOUSANDS_NUMBER`) |
-| 837–1061 | `validateSheet` — CSV + JSON-array + v1-spec branches; runs `evaluateWorkbook` for spec validation |
-| 1037 | **CSV currency warning fires at `currencyHits >= 1`** — rescan: noisy asymmetry vs ISO date `>= 2` |
-| 1068 | `MARKDOWN_NEW_CAP_BYTES = 128 * 1024` |
-| 1070–1187 | `validateMarkdown(content, ctx?)` |
-| 1082–1089 | **128 KiB cap on creates** (`ctx?.isNew`) |
-| 1123–1135 | **Strict-mode `<script>`** — `process.env.ARTIFACT_STRICT_MARKDOWN_VALIDATION === "true"` |
-| 1141–1162 | Raw-HTML disallow list: `details`, `summary`, `kbd`, `mark`, `iframe`, `video`, `audio`, `object`, `embed`, `table` |
-| 1166–1183 | Unlabeled fenced-code-block warning — **rescan: fragile under nested fences** |
-| 1200–1297 | LaTeX command tables + `validateLatex` — **rescan: preamble errors short-circuit before unsupported-command scan** |
-| 1298–1370 | `validateCode` + truncation marker tables |
-| 1353 | **Code size warning uses `content.length` (chars)** — rescan **N-57**: should be `Buffer.byteLength` |
-| 1372–1508 | `validateMermaid` + diagram-type list (`MERMAID_DIAGRAM_TYPES` at line 1372) — **rescan N-16: missing `xychart-beta`, `block-beta`, `kanban`** |
-| 1490 | Mermaid `%%{init: ... theme ...}%%` warning — rescan **N-14**: regex easily evaded |
-| 1510–1651 | `validateSvg` |
-| 1653–1764 | `validateHtml` (parse5) |
-| 1766–1776 | `KNOWN_SERIF_FAMILIES` |
-| 1777 | `PALETTE_MISMATCH_THRESHOLD = 6` |
-| 1779–~1900 | `appendAestheticWarnings` + `validateReact` |
-| 1847 | `aestheticRequired = process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"` — **rescan: enforced by default** |
-| ~1900–end | `formatValidationError` — rescan: hidden LLM-retry contract |
+| Surface | Location |
+|---|---|
+| `ValidationContext` interface (`isNew?` only — `documentFormat` removed) | L68-L70 |
+| `VALIDATORS` map (12 entries, exhaustive) | L72-L91 |
+| `getValidateTimeoutMs()` + `__setValidateTimeoutMsForTesting` | L106-L125 |
+| `validateArtifactContent` entry | L127-L163 |
+| 5-second `Promise.race` timeout, `.unref?.()` | L134-L148 |
+| Post-validation Unsplash for HTML | L154-L157 |
+| Post-validation Unsplash for slides | L158-L161 |
+| `formatValidationError(type, result)` | end of file |
 
-### `src/features/conversations/components/chat/artifacts/renderers/_react-directives.ts`
+The previous "script-document early branch" (old L137-L141) is gone —
+`validateDocument` lives inside the `VALIDATORS` map and dynamic-imports
+`validateScriptArtifact` itself.
 
-| Lines | Symbol |
-|-------|--------|
-| 11 | `AESTHETIC_DIRECTIONS` — 7 entries: `editorial, brutalist, luxury, playful, industrial, organic, retro-futuristic` |
-| 23 | `DEFAULT_FONTS_BY_DIRECTION` — per-direction Google Fonts spec |
-| 54 | `MAX_FONT_FAMILIES = 3` |
-| 67 | `AESTHETIC_LINE_REGEX = /^\s*\/\/\s*@aesthetic\s*:\s*([a-z-]+)\s*$/` |
-| 68 | `FONTS_LINE_REGEX = /^\s*\/\/\s*@fonts\s*:\s*(.+?)\s*$/` |
-| 110 | `FONT_SPEC_REGEX` — accepts `wght@`, `ital,wght@`, `opsz,wght@`, `ital,opsz,wght@` axis forms only |
-| 143–154 | `buildFontLinks` silent fallback to direction defaults |
-| 162 | `encodeFontSpec` — only space-to-`+` (no full URL encoding) |
+Per-validator entry points with verified line ranges (post `a81c343`):
 
-`stripDirectiveLines` at `_validate-artifact.ts:1829-1831` replaces directive
-lines with empty strings rather than removing them — Babel parse error
-line numbers are off-by-2 from the original source (rescan, low priority).
+| Type | Validator export | Body range |
+|---|---|---|
+| `text/document` | `validateDocument` | L169-L177 — thin async wrapper: `dynamic-import("@/lib/document-script/validator").validateScriptArtifact(content)`. Returns `{ ok, errors, warnings: [] }`. Accepts `_ctx` but never reads it (eslint-disable). |
+| `application/slides` | `validateSlides` | L213-L600 area. Constants L187-L211: `SLIDE_LAYOUTS` Set (**18 entries**), `MAX_SLIDE_BULLETS=6`, `MAX_BULLET_WORDS=10`, `MIN_DECK_SLIDES=7`, `MAX_DECK_SLIDES=12`. The `image-text` deprecation is the only `ctx`-gated check. No primaryColor/secondaryColor hex whitelist. |
+| `application/3d` | `validate3d` | post-slides block. Constant `R3F_ALLOWED_DEPS` (34 entries verified — header comment claims 36). |
+| `application/sheet` | `validateSheet` | 3-branch dispatch (CSV / JSON array / spec). Spec branch calls `parseSpec` + `evaluateWorkbook`. CSV branch now imports `tokenizeCsv` from `@/lib/spreadsheet/csv` (post `02e24a6`); the inline duplicate is gone. |
+| `text/markdown` | `validateMarkdown` | `MARKDOWN_NEW_CAP_BYTES = 128 * 1024` L1013. **Size cap gated on `ctx?.isNew` only** L1029-L1031. `<script>` env-gate via `ARTIFACT_STRICT_MARKDOWN_VALIDATION` (warning by default, hard error when `"true"`). `RAW_HTML_DISALLOWED` **10 entries** L1086-L1097: `["details","summary","kbd","mark","iframe","video","audio","object","embed","table"]`. |
+| `text/latex` | `validateLatex` | `LATEX_UNSUPPORTED_COMMANDS` ~14 entries (9 errors + 5 warnings). |
+| `application/code` | `validateCode` | `CODE_TRUNCATION_MARKERS` ~10 patterns. HTML doc detection. **`language` parameter never inspected** (D-18). |
+| `application/mermaid` | `validateMermaid` | `MERMAID_DIAGRAM_TYPES = MERMAID_DIAGRAM_TYPES_SHARED` L1324 (alias to **25-entry** constant from `_mermaid-types.ts`). >15-node heuristic only fires for flowchart/graph. |
+| `image/svg+xml` | `validateSvg` | **`<style>` block = error** (D-42). Precision regex `/\d\.\d{3,}/` (3+ dp) — drift vs prompt's "1 dp max" (D-17). Color count `> 5` → warning. |
+| `text/html` | `validateHtml` | `MAX_INLINE_STYLE_LINES = 10` (warning, not error — D-43). `<form action>` → error. |
+| `application/react` | `validateReact` | Helpers + `KNOWN_SERIF_FAMILIES` + `PALETTE_MISMATCH_THRESHOLD = 6`. **`ARTIFACT_REACT_AESTHETIC_REQUIRED` default = true when env absent** (`!== "false"`). |
+| `application/python` | `validatePython` | `PYTHON_UNAVAILABLE_PACKAGES` L1925-L1942 (**15 entries**). `stripComment` helper. **`open()` write-mode regex** `/\bopen\s*\([^)]*,\s*['"][wax]b?\+?['"]/m` — read-mode passes silently (D-16). `time.sleep > 2s` heuristic. `while True` heuristic. |
 
 ---
 
-## 4. Prompts
+## 3. LLM tool — `create-artifact.ts`
 
-`src/lib/prompts/artifacts/*.ts` — one file per artifact type plus shared
-infrastructure:
+`src/lib/tools/builtin/create-artifact.ts`.
 
-- `index.ts` — `ALL_ARTIFACTS` tuple (12 entries) with `satisfies` clause
-  forcing every entry's `type` to match a registered `ArtifactType`.
-- `context.ts` — `assembleArtifactContext(type, mode)` dispatcher.
-  - `mode: "summary"` returns one-liner per type for type-pick prompt.
-  - `mode: "full"` returns `rules` + design tokens (visual types only) +
-    up to 2 few-shot examples.
-  - `VISUAL_ARTIFACT_TYPES` Set at lines 47–53: `text/html`,
-    `application/react`, `image/svg+xml`, `application/slides`,
-    `application/3d` get design tokens; others don't.
-- Per-type files: `code.ts`, `document.ts`, `html.ts`, `latex.ts`,
-  `markdown.ts`, `mermaid.ts`, `python.ts`, `r3f.ts`, `react.ts`,
-  `sheet.ts`, `slides.ts`, `svg.ts` — each exports
-  `{ type, label, summary, rules, examples? }`.
+| Step | Location |
+|---|---|
+| ID generation (`crypto.randomUUID()`) | mid-file |
+| Content size cap (`MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024`) | early |
+| Canvas-mode lock | mid |
+| `application/code` language guard | mid |
+| `validateArtifactContent({ isNew: true })` | mid |
+| `finalContent = validation.content ?? content` | mid |
+| S3 upload (`S3Paths.artifact`) | mid |
+| Prisma create (no `documentFormat` field — column dropped) | L155-L168 |
+| Background `indexArtifactContent(...).catch(...)` | post-create |
+| Persistence-error swallow path (`persisted = false`) | post-create |
+| Return shape | end |
 
-**Drift reference** (rescan §B):
+Constants:
+- `MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024` — L16
 
-- **N-13** `prompts/artifacts/html.ts:78` says inline `<style>` ≤ 10 lines;
-  validator threshold appears to be 15.
-- **N-14** `prompts/artifacts/mermaid.ts` forbids
-  `%%{init: {'theme':'...'}}%%`; validator only warns and the regex is
-  evadable.
-- **N-17** `prompts/artifacts/markdown.ts` and `prompts/artifacts/document.ts`
-  both export `label: "Document"` (UI ambiguity).
+The earlier `ARTIFACT_DOC_FORMAT_DEFAULT` env switch and the
+`DOC_FORMAT = "script"` constant were both removed; the column itself
+was dropped by migration `20260429100656_drop_document_format`.
 
 ---
 
-## 5. Sessions service / repository / API
+## 4. LLM tool — `update-artifact.ts`
 
-### `src/features/conversations/sessions/service.ts` (643 LoC)
+`src/lib/tools/builtin/update-artifact.ts`.
 
-| Lines | Symbol |
-|-------|--------|
-| 34–37 | `ServiceError` interface |
-| 39–82 | `DashboardChatSession*` summary types |
-| 113–172 | `formatSessionSummary` / `formatMessage` / `formatArtifact` — **rescan N-40: drops `mimeType` field** |
-| 175–183 | `listDashboardChatSessions` |
-| 185–212 | `createDashboardChatSession` — **rescan N-6: no assistantId org-membership check** |
-| 214–237 | `getDashboardChatSession` (includes artifacts via repository) |
-| 239–262 | `updateDashboardChatSession` (rename) |
-| 263–296 | `deleteDashboardChatSession` — **rescan N-47: only fetches `{id, s3Key}` from artifacts; rescan N-48: not transactional** |
-| 297–349 | `addDashboardChatSessionMessages` — **rescan N-5: upsert can move messages between sessions** |
-| 350–399 | `updateDashboardChatSessionMessage` |
-| 401–418 | `deleteDashboardChatSessionMessages` |
-| 427 | `MAX_INLINE_FALLBACK_BYTES = 32 * 1024` |
-| 429 | `MAX_VERSION_HISTORY = 20` |
-| 431–567 | **`updateDashboardChatSessionArtifact`** — manual edit path |
-| 463–478 | Validator + `finalContent = validation.content ?? content` |
-| 486–498 | Archive prior content to `<s3Key>.v<N>` |
-| 504–510 | Inline fallback ≤ 32 KiB or `archiveFailed` marker |
-| 522–527 | FIFO eviction tracking |
-| 537–558 | **`updateDashboardArtifactByIdLocked`** call — null → 409 with `"Concurrent update detected: another writer changed this artifact while you were editing. Reload to see the latest version, then retry your save."` |
-| (no RAG re-index) | **rescan N-1: HTTP path doesn't call `indexArtifactContent`** |
-| 569–591 | `getDashboardChatSessionArtifact` |
-| 596–643 | **`deleteDashboardChatSessionArtifact`** — canonical S3 + versioned S3 + RAG cleanup |
-| 619–634 | Versioned S3 cleanup via `metadata.versions[].s3Key` |
-| 637–639 | RAG cleanup via `deleteChunksByDocumentId(artifactId).catch(...)` |
-
-### `src/features/conversations/sessions/repository.ts` (215 LoC)
-
-| Lines | Symbol |
-|-------|--------|
-| 4–17 | `findDashboardSessionsByUser` |
-| 19–28 | `createDashboardSession` |
-| 30–50 | `findDashboardSessionByIdAndUser` (includes artifacts; selects `mimeType` then drops) |
-| 52–56 | `findDashboardSessionBasicByIdAndUser` |
-| 58–69 | session title CRUD |
-| 71–105 | `createDashboardMessages` — `prisma.$transaction` upsert; **rescan N-5: no cross-session ownership check** |
-| 107–140 | message edit/delete |
-| 143–150 | `findDashboardArtifactByIdAndSession` |
-| 152–168 | `updateDashboardArtifactById` (legacy unlocked) — **rescan N-39: dead export, no callers** |
-| 170–196 | **`updateDashboardArtifactByIdLocked(id, expectedUpdatedAt, data)`** — `prisma.document.updateMany({ where: { id, updatedAt: expectedUpdatedAt }, … })`; returns `null` on `count===0`; two-step (updateMany + findUnique) has tiny race window |
-| 198–202 | `deleteDashboardArtifactById` |
-| 204–209 | `findArtifactsBySessionId` — **rescan N-47: only selects `{id, s3Key}`** |
-| 211–215 | `deleteArtifactsBySessionId` |
-
-### `src/app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/route.ts` (82 LoC)
-
-| Lines | What |
-|-------|------|
-| 13–49 | `PUT` — auth → param schema → body schema → `updateDashboardChatSessionArtifact` |
-| 23–25 | param 404: `"Artifact not found"` |
-| 28–31 | body 400: `"Invalid request body"` |
-| 40–42 | service-error pass-through (404/422/409) |
-| 51–81 | `DELETE` — same pattern |
-
-### `src/app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/download/route.ts`
-
-| Lines | What |
-|-------|------|
-| (top) | `runtime = "nodejs"` (required for docx generation) |
-| (path) | `format` query param defaults to `"docx"`; only `text/document` accepted — others return 400 `"Unsupported format: ${format}"` |
-| (parse) | DocumentAstSchema parse → **rescan N-42: returns 409 on parse fail (should be 422)** |
-| (sanitize) | Title → `[^a-z0-9._-]+` → `_`, sliced to 80 chars; sets `Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `Content-Disposition: attachment; filename="<safeTitle>.docx"`, `Cache-Control: no-store` |
-
-### `src/app/api/dashboard/chat/sessions/route.ts` (Sessions)
-
-- `POST` body: **rescan N-41: passes `parsedBody.data` (undefined on Zod
-  failure) to the service**.
-
-### `src/app/api/dashboard/chat/sessions/[id]/route.ts`
-
-- `PATCH` body: same `parsedBody.data` undefined-pass quirk.
-
-### Auth model
-
-- `auth()` from `@/lib/auth` (NextAuth v5 Credentials provider).
-- Session shape: `{ user: { id, email, name, role } }`.
-- **No org-membership check** anywhere in this layer.
-- **No role check** (USER vs ADMIN are equivalent here).
-- Authorization is `userId === DashboardSession.userId` ownership only.
-- **Rescan N-6**: `createDashboardChatSession` doesn't validate
-  `assistantId` belongs to caller's org.
+| Step | Location |
+|---|---|
+| `MAX_VERSION_HISTORY = 20` | L13 |
+| `MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024` | L16 |
+| `MAX_INLINE_FALLBACK_BYTES = 32 * 1024` | L25 |
+| Size check (early return) | L52-L65 |
+| `prisma.document.findUnique` | mid |
+| Not-found guard | post-find |
+| Canvas-mode check | mid |
+| `validateArtifactContent(type, content)` (no `documentFormat` context — field removed with `a81c343`) | L118 |
+| Version archive: read existing versions, compute `versionS3Key = "${s3Key}.v${N}"` | mid |
+| Upload prior content to versioned key | mid |
+| Inline fallback decision (≤ 32 KiB inline, > 32 KiB marker) | L178 area |
+| FIFO eviction (>20 entries) | L195-L196 area |
+| New content S3 overwrite | mid |
+| Optimistic lock `prisma.document.updateMany` | mid |
+| Background RAG re-index | post-update |
+| Persistence-failure return | post-update |
+| Return shape | end |
 
 ---
 
-## 6. S3 layer (`src/lib/s3/index.ts`, 508 LoC)
+## 5. Sessions service — `service.ts` + `repository.ts`
 
-| Lines | Symbol |
-|-------|--------|
-| 107 | `S3Paths.artifact(orgId, sessionId, artifactId, ext)` → `artifacts/${orgId || "global"}/${sessionId}/${artifactId}${ext}` |
-| 116 | `getArtifactExtension(type)` → `getArtifactRegistryEntry(type)?.extension ?? ".txt"` |
-| 133 | `uploadFile(key, buffer, contentType, metadata?)` — `PutObjectCommand` + presigned URL generation; **rescan N-45: presigned URL generated but discarded by every artifact-write caller** |
-| 261 | `deleteFile(key)` — single `DeleteObjectCommand` |
-| 275 | `deleteFiles(keys)` — chunked `DeleteObjectsCommand` (1000-batch); **rescan N-46: per-object `Errors[]` ignored** |
+`src/features/conversations/sessions/service.ts`.
 
-Versioned key format: `<canonicalKey>.v<N>` — produces keys with two
-extensions (e.g. `.html.v1`), unusual but harmless.
+| Surface | Location |
+|---|---|
+| `getDashboardChatSessionArtifact` | upper third |
+| `updateDashboardChatSessionArtifact` | mid third |
+| `validateArtifactContent(existing.artifactType, String(content))` — no third arg needed (D-1 closed; `ValidationContext` only carries `isNew`) | L509-L512 |
+| `finalContent = validation.content ?? content` | L520 area |
+| Versioning (mirrors LLM update) | post-validation |
+| `updateDashboardArtifactByIdLocked` call | post-versioning |
+| Background `indexArtifactContent({ isUpdate: true })` — **fixes N-1** | post-update |
+| `deleteDashboardChatSessionArtifact` | lower third |
+| Session delete cascade (S3 canonical, S3 versioned, RAG, Prisma) | mid |
 
----
+`src/features/conversations/sessions/repository.ts`.
 
-## 7. Prisma schema (artifact-relevant)
-
-`prisma/schema.prisma`:
-
-```prisma
-model Document {
-  id             String          @id @default(cuid())
-  title          String
-  content        String                              // ⚠ no @db.Text (DashboardMessage.content has it)
-  categories     String[]
-  metadata       Json?
-  s3Key          String?
-  fileType       String?
-  fileSize       Int?
-  mimeType       String?
-  organizationId String?
-  organization   Organization?   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdBy      String?                             // ⚠ no FK to User (rescan N-44)
-  sessionId      String?
-  session        DashboardSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
-  artifactType   String?                             // null = file upload; non-null = artifact
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt          // ⚡ optimistic-lock token
-  @@index([organizationId])
-  @@index([s3Key])
-  @@index([sessionId])
-}
-
-model DashboardSession {
-  id             String              @id @default(cuid())
-  userId         String                                 // ⚠ no FK to User
-  title          String              @default("New Chat")
-  assistantId    String                                 // ⚠ not validated against org membership
-  messages       DashboardMessage[]
-  artifacts      Document[]
-  organizationId String?
-  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-  @@index([userId])
-  @@index([assistantId])
-  @@index([organizationId])
-}
-
-model ResolvedImage {
-  id          String   @id @default(cuid())
-  query       String   @unique
-  url         String
-  attribution String
-  createdAt   DateTime @default(now())
-  expiresAt   DateTime
-  @@index([expiresAt])
-}
-```
-
-`Document.session` uses `onDelete: SetNull` — when a session is deleted,
-artifact-type Documents are explicitly deleted by `deleteArtifactsBySessionId`
-**before** the session row is removed, so the SetNull cascade never fires
-for artifacts. If `deleteArtifactsBySessionId` throws, the SetNull cascade
-runs for any survivors (rescan **N-48**).
+| Surface | Location |
+|---|---|
+| `findDashboardArtifactById` | upper |
+| `updateDashboardArtifactByIdLocked` (returns `null` on count 0) | mid |
+| `deleteDashboardArtifactById` | repository |
+| `findArtifactsBySessionId` — selects `id, s3Key, metadata` (the `metadata` selection enables N-47 cascade) | L220-L230 |
 
 ---
 
-## 8. Renderers (lazy-loaded)
+## 6. API routes
 
-### `src/features/conversations/components/chat/artifacts/artifact-renderer.tsx` (139 LoC)
+All under `src/app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/`.
 
-| Lines | What |
-|-------|------|
-| 9–77 | `next/dynamic` lazy imports for every renderer (no `ssr: false` set explicitly — implicit via `"use client"` tree) |
-| 79–86 | `RendererLoading` skeleton |
-| 96–138 | **`ArtifactRenderer` switch** — exhaustive over `ArtifactType` |
-| 116–129 | `application/code` reuses `StreamdownContent` with fence longer than longest backtick run inside content |
-| 130–131 | `text/markdown` reuses `StreamdownContent` |
-| 132–133 | `text/document` → `DocumentRenderer` |
-
-### Per-renderer locations
-
-| File | LoC | Highlights |
-|------|-----|-----------|
-| `renderers/html-renderer.tsx` | 135 | `srcDoc` iframe, `sandbox="allow-scripts allow-modals"`; auto-injects Tailwind + Inter; nav-blocker shim; slow-load detector at 5s |
-| `renderers/react-renderer.tsx` | 595 | `srcDoc` iframe, `sandbox="allow-scripts"`; Babel-standalone in iframe; postMessage error→host with **origin guard** at line 459 |
-| `renderers/svg-renderer.tsx` | 91 | inline `dangerouslySetInnerHTML`; DOMPurify with `USE_PROFILES: { svg: true, svgFilters: true }`, `ADD_TAGS: ["use"]` |
-| `renderers/mermaid-renderer.tsx` | 171 | inline; module-level `mermaidPromise` + `lastInitTheme` singleton (lines 21–22); `securityLevel: "strict"`; **rescan N-54: separate init path from document-renderer** |
-| `renderers/mermaid-config.ts` | (small) | `getMermaidConfig()` — used only by `mermaid-renderer.tsx` |
-| `renderers/sheet-renderer.tsx` | 276 | dispatches via `detectShape(content)` to CSV table or `sheet-spec-view.tsx`; **rescan: state not reset on content change** |
-| `renderers/sheet-spec-view.tsx` | 249 | `lazy()`-imports `evaluateWorkbook` inside `useEffect` |
-| `renderers/latex-renderer.tsx` | 522 | KaTeX with **`trust: true`** (rescan **N-30**); `readBracedArg` balanced-brace scanner |
-| `renderers/slides-renderer.tsx` | 151 | iframe `srcDoc` with **`sandbox="allow-scripts allow-same-origin"`** (rescan **N-28**); origin-guarded postMessage at line 45; **rescan N-9: keyboard handler global at window** at lines 66–78 |
-| `renderers/python-renderer.tsx` | 307 | Web Worker (Pyodide v0.27.6); reused across runs, terminated on stop |
-| `renderers/r3f-renderer.tsx` | 621 | iframe `srcDoc` with **NO sandbox** (rescan **N-29**); `sceneSig`-keyed remount; **rescan N-27: NO postMessage origin guard at lines 531–551**; 20s `r3f-ready` timeout |
-| `renderers/document-renderer.tsx` | 622 | inline AST render; per-render `newFootnoteSink()` at line 406; `MermaidPreviewBlock` at lines 509–570 uses `getMermaidInitOptions(themeKey)` from `lib/rendering/mermaid-theme.ts` (rescan **N-54**: divergent from mermaid-renderer.tsx) |
-| `renderers/_iframe-nav-blocker.ts` | (small) | shim injected into HTML iframe `srcDoc`s |
+| Route | File | Method | Notes |
+|---|---|---|---|
+| Update / Delete | `route.ts` | PUT, DELETE | Auth → params → body → service. **No GET handler (D-9)**. |
+| Document download | `download/route.ts` | GET | `?format=docx` (default). Calls `runScriptInSandbox` → `.docx` bytes. **Any other `format` value returns 400 `Unsupported format: <x>` (D-3)** — no PDF path. |
+| Edit document | `edit-document/route.ts` | POST | Rate limit token bucket (**in-process only — D-4**). Guards `artifactType === "text/document"`. Calls `llmRewriteWithRetry` then `updateDashboardChatSessionArtifact`. |
+| Render status | `render-status/route.ts` | GET | `text/document` only. `renderArtifactPreview(artifactId, content)` → `{ hash, pageCount, cached }`. |
+| Render pages | `render-pages/[contentHash]/[pageIndex]/route.ts` | GET | `getCachedPngs(...)`. PNG bytes with `Cache-Control: public, max-age=31536000, immutable`. Returns 404 on miss — **never triggers a re-render** (D-35). |
 
 ---
 
-## 9. Panel chrome
+## 7. Renderers (audit by file)
 
-### `src/features/conversations/components/chat/artifacts/artifact-panel.tsx` (985 LoC)
+### `artifact-renderer.tsx`
 
-| Lines | What |
-|-------|------|
-| 91 | `const [exportError, setExportError] = useState<string | null>(null)` |
-| 113–119 | Edit-content effect — **rescan N-32: silently discards unsaved edits when LLM updates artifact** |
-| 121–124 | `viewingVersionIdx` reset on `artifact.version` change |
-| 127–129 | Tab-switch effect resets `isEditing` |
-| 220–226, 277–285 | **Historical version content guards** — show "version content unavailable" when content blob is missing |
-| 256–320 | **Split-button download for `text/document`** — `.md` (raw AST) vs `.docx` (rendered) |
-| 413–435 | `handleRestoreVersion` — **rescan N-33: optimistic; failure only `console.error`** |
-| 452–463 | `handleDelete` — **rescan N-34: ignores response status** |
-| 587–647 | Download button logic — split-button for `text/document`, single button for others |
-| 626–629 | `DocumentExportError` card render |
-| 717–730 | **Inline `exportError` banner for non-document types** |
-| 736 | Tab bar hidden when `isCodeOnly` or `isTextDocument` |
-| 738–766 | Tab bar buttons — **rescan: not `role="tab"`/`aria-selected`** |
-| 781–790 | Edit textarea — **rescan: no `aria-label`** |
-| 861–877 | Fullscreen via `createPortal(JSX, document.body)` |
-| 943–956 | `getExtension` — derives `.xlsx` for v1 sheet specs (registry says `.csv`) |
+| Surface | Location |
+|---|---|
+| Type-switch dispatch | L88-L128 |
+| `application/code` → `StreamdownContent` with adaptive fence | L108-L121 |
+| `text/markdown` → `StreamdownContent` raw | L122-L123 |
+| `application/sheet` → `SheetRenderer` | L98-L99 |
+| `text/document` — **no case** (post `a81c343`); falls to `default <pre>`. The panel intercepts above (D-10 closed). | L124-L127 (default branch) |
 
----
+### `artifact-panel.tsx`
 
-## 10. Chat-workspace integration
+| Surface | Location |
+|---|---|
+| `text/document + sessionId` → `DocumentScriptRenderer` | L696-L705 |
+| `text/document` no-session fallback ("Preview unavailable…") | L706-L708 |
+| Other types → `<ArtifactRenderer>` | L710-L713 |
+| Default content area (no Preview/Code tabs) — comment | L690-L694 |
+| Title (truncated) | upper third |
+| Type badge — language suffix only for `application/code` | header bar |
+| Version navigator pill | header bar |
+| Restore button | header bar |
+| RAG-not-searchable badge (`ragIndexed === false`) | header bar |
+| Copy button | header bar |
+| Document split-button download (`.md` + `.docx`, no `.pdf`) | L545-L591 |
+| Single-button download (others) | L592-L605 |
+| Delete menu | post-download |
+| Fullscreen / Escape exit | mid + portal branch |
+| Close | header bar |
+| Export-error banner | post-header (gated on `!isTextDocument`) | L675-L688 |
+| `handleDelete` (pessimistic — D-fixed) | mid |
+| `handleRestoreVersion` (`isSaving` guard) | mid |
 
-### `src/features/conversations/components/chat/chat-workspace.tsx`
+### `use-artifacts.ts`
 
-| Lines | What |
-|-------|------|
-| 974 | `const [error, setError] = useState<{ … } | null>(null)` |
-| 1030 | `const [canvasMode, setCanvasMode] = useState<CanvasMode>(false)` |
-| 1105 | `removeArtifact` from `useArtifacts` |
-| 1128–1138 | Dispatches `"artifact-panel-changed"` custom event on `activeArtifactId` change |
-| 1613–1661 | `SessionToolbarStateSnapshot` hydration on `apiSessionId` / `session.id` change |
-| 1663–1691 | Persists snapshot (incl. `canvasMode`) to sessionStorage under `chat-toolbar-state:${sessionId}` |
-| 1943 | `resolvedCanvasMode = toolOverrides?.canvasMode ?? canvasMode` |
-| 2045 | `...(resolvedCanvasMode && { canvasMode: resolvedCanvasMode })` — `false` is omitted from POST body |
-| 2144–2163 | **`tool-input-available` handler** for streaming placeholders |
-| 2151–2156 | `create_artifact` streaming: id = `streaming-${toolCallId}` |
-| 2157–2163 | `update_artifact` streaming: id = real artifact id (rescan **N-2** entry point) |
-| 2173–2204 | **`tool-output-available` handler** for `create_artifact` |
-| 2177 | `removeArtifact("streaming-${toolCallId}")` on tool error |
-| 2192 | Same on malformed/missing-output |
-| 2207–2234 | `update_artifact` tool-output-available handler |
-| 2210 | **`if (out.id && out.content && out.updated)`** — rescan **N-3: silently discards if `existing` not in map** |
-| 2228–2232 | Update error path — only `console.warn`s (rescan **N-2**) |
-| 2411–2451 | Catch block — rescan **N-4: doesn't clean up `streaming-` placeholders on abort** |
-| 2567–2570 | `handleStop()` — same gap |
-| 2668–2685 | `handleFixWithAI` — `useCallback` deps `[sendMessage, chat.messages]` |
+| Surface | Location |
+|---|---|
+| `addOrUpdateArtifact` (push to previousVersions on existing id) | L52-L83 |
+| `removeArtifact` (clears `activeArtifactId` on match) | L85-L92 |
+| `closeArtifact` / `openArtifact` | L94-L100 |
+| `loadFromPersisted` | L102-L127 |
+| `previousVersions` from `metadata.versions` | L113-L117 |
+| `evictedVersionCount` from metadata | L118 |
+| `ragIndexed` from metadata | L119 |
+| (No `documentFormat` hydration — field removed with `a81c343`.) | — |
 
-### `src/features/conversations/components/chat/chat-input-toolbar.tsx`
+### `chat-workspace.tsx` — artifact-related ranges
 
-| Lines | What |
-|-------|------|
-| 54 | `export type CanvasMode = false | "auto" | ArtifactType` |
+| Surface | Location |
+|---|---|
+| `preStreamSnapshots` + `createdStreamingIds` declarations | mid (around L1940) |
+| `tool-input-available` handler | following |
+| `tool-output-available` create success (no `documentFormat` propagation any more) | following |
+| Create failure ghost cleanup | following |
+| Update success | following |
+| Update failure restore | following |
+| Abort cleanup (D-fixed N-4) | following |
+| `AbortError` guard — skip toast | following |
+| `handleStop` (3-line minimal) | mid |
+| `<ArtifactPanel isStreaming={isStreaming}>` (D-fixed) | render block |
 
----
+The `documentFormat`-propagation lines that earlier versions of this
+table cited at L2195/L2237-L2239/L2285-L2288 were removed with
+`a81c343`.
 
-## 11. RAG indexer
+### Renderer-by-renderer
 
-### `src/lib/rag/artifact-indexer.ts` (77 LoC)
+#### `html-renderer.tsx`
 
-| Lines | What |
-|-------|------|
-| 21–57 | `indexArtifactContent(documentId, title, content, { isUpdate? })` |
-| 28–30 | `if (isUpdate) await deleteChunksByDocumentId(documentId)` |
-| 32–35 | `chunkDocument(content, title, "ARTIFACT", undefined, { chunkSize: 1000, chunkOverlap: 200 })` |
-| 36–39 | Empty-chunks short-circuit → `markRagStatus(documentId, false)` |
-| 41 | `chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)` — title prepended to every chunk |
-| 42–43 | `generateEmbeddings` + `storeChunks` — **rescan N-49: storeChunks is N sequential SurrealDB inserts** |
-| 45 | `markRagStatus(documentId, true)` |
-| 49–56 | **catch block** — logs, calls `markRagStatus(documentId, false).catch(() => {})`, **does NOT rethrow** |
-| 60–77 | `markRagStatus(documentId, indexed)` — patches `metadata.ragIndexed` without overwriting siblings |
+| Surface | Location |
+|---|---|
+| `sandbox="allow-scripts allow-modals"` | L128 |
+| Nav blocker injection (full doc) | L38 |
+| Nav blocker injection (partial wrap) | L60 |
+| Tailwind CDN injection | L39 |
+| `loading` cleared on `onLoad`, 5s `slowLoad` warning | L71-L89 |
+| `restoring` ref to prevent infinite nav-restoration | L99-L107 |
 
----
+No postMessage listener; no theme sync.
 
-## 12. Document AST → DOCX
+#### `react-renderer.tsx`
 
-### `src/lib/document-ast/schema.ts` (376 LoC)
+| Surface | Location |
+|---|---|
+| `sandbox="allow-scripts"` (tighter than html) | L588 |
+| postMessage origin guard `e.source !== iframeRef.current?.contentWindow` | L454-L467 |
+| Origin-guard rationale comment | L456-L459 |
+| `setError` in `useEffect` (moved out of `useMemo`) | L414-L427 |
+| `processError` `useMemo` (returns plain value) | L394-L410 |
+| Window globals (React 18 UMD, ReactDOM, Babel, Recharts, lucide-react, framer-motion) | L261-L270 |
+| `window.react = window.React` Recharts peer-dep alias | L267 |
+| `preprocessCode` directive parsing | L81 area |
+| Directive stripping from lines 0/1 | L83-L91 area |
+| Iframe error boundary postMessage | L293-L332 |
+| Window `onerror` / `unhandledrejection` | L359-L373 |
+| Loading state set/clear | L388, L432 |
+| Error skips spinner | L532 |
+| Nav blocker injection at body level (srcdoc) | L282 area |
 
-| Lines | What |
-|-------|------|
-| 9–29 | `DocumentMetaSchema` — title, author, date, pageSize, orientation, margins, font, fontSize |
-| 31–39 | `CoverPageSchema` — `logoUrl` deliberately *not* `.url()` (allows `unsplash:keyword`) |
-| 45–60 | `InlineNode` discriminated union: text, link, anchor, footnote, lineBreak, pageNumber, tab |
-| 60+ | `BlockNode` discriminated union: paragraph, heading, list, table, image, blockquote, codeBlock, horizontalRule, pageBreak, toc, mermaid, chart |
-| 350–368 | `DocumentMeta` hand-written TS type — **rescan: drift with Zod (Zod applies `.default()`)** |
+#### `_react-directives.ts`
 
-Schema accepts but renderer drops:
-- `tab.leader: "dot"` (rescan **N-18**)
-- `list.startAt` (rescan **N-19**)
-- `table.shading: "striped"` (rescan **N-20**)
+| Surface | Location |
+|---|---|
+| `MAX_FONT_FAMILIES = 3` | L54 |
+| `FONT_SPEC_REGEX` (rejects URL-injection chars) | L110 |
+| `preprocessCode` entry | L81 area |
+| Template-literal hiding (avoids false import matches inside strings) | L95-L98 |
 
-### `src/lib/document-ast/validate.ts` (213 LoC)
+#### `svg-renderer.tsx`
 
-| Lines | What |
-|-------|------|
-| 17 | `SIZE_BUDGET = 128 * 1024` |
-| 19–24 | Whitelist of mermaid diagram types — **rescan N-16: misses xychart-beta, block-beta, kanban** |
-| 26–35 | `validateMermaidNode` |
-| 67–95 | `walkBlocks` |
-| 114–118 | Heading bookmark collection — **rescan N-22: doesn't enforce uniqueness** |
-| 117–131 | Anchor → bookmark resolution check |
-| 188 | `JSON.stringify(raw)` for size check |
+| Surface | Location |
+|---|---|
+| DOMParser pre-validation | L29-L53 |
+| Server-side regexp fallback (safe — DOMPurify runs client-side) | L52-L54 |
+| DOMPurify `USE_PROFILES: { svg: true, svgFilters: true }`, `ADD_TAGS: ["use"]` | L56-L60 |
+| Container scaling (`[&>svg]:max-w-full [&>svg]:h-auto`) | L87 |
+| `dangerouslySetInnerHTML` mount | L88 |
 
-### `src/lib/document-ast/to-docx.ts` (699 LoC)
+No iframe, no theme sync, no loading state (sync useMemo).
 
-| Lines | What |
-|-------|------|
-| 40–44 | `PAGE_SIZES` (letter/a4 in dxa) |
-| 46 | `HEADING_SIZES_PT = [20, 16, 14, 12, 12, 12]` |
-| 48 | `BULLET_CHARS` (3 levels) |
-| 50 | `DEFAULT_MARGIN = 1440` |
-| 53–56 | `PLACEHOLDER_PNG` (1×1 transparent fallback) |
-| 62–73 | `RenderCtx` + `newRenderCtx()` |
-| 75–131 | `renderInline` — runs, hyperlinks, footnotes |
-| 121 | `tab` case — **renders all tabs as `\t`** (rescan **N-18**) |
-| 133–154 | `fetchImage` — content-type sniff; rejects SVG (`"svg not supported"` redirected to placeholder) |
-| 156–188 | `renderImage` — placeholder on fetch fail |
-| 190–236 | `renderMermaid` — try/catch around `mermaidToSvg + svgToPng`, marker on failure |
-| 238–271 | `renderChart` — **rescan N-24: NO try/catch around `svgToPng`** |
-| 277–294 | `HEADING_LEVELS` map + `alignTo` |
-| 296–397 | `renderBlocks` / `renderBlock` |
-| 372–385 | TOC rendering — **rescan N-21: title rendered TWICE when `node.title` set** |
-| 396–398 | `renderList` comment: `// Note: startAt is accepted by the schema but DOCX v1 always begins ordered lists at 1.` |
-| 399–438 | `renderList` |
-| 440–477 | `renderTable` — **rescan N-20: `node.shading` (table-level) never read; only cell shading consumed** |
-| 479–540 | **`renderCoverPage`** — fetches logoUrl, embeds as `ImageRun(160 × 160)` |
-| 542–645 | `astToDocx` — orchestration; cover + header + footer + body + footnote post-pass |
-| 576–592 | **Footnote table guard** — drops Table blocks, emits italic-grey paragraph: *"[table omitted from footnote — see body for full content]"* (color `6B7280`) |
-| 634 | `children: [...coverChildren, ...bodyChildren]` — **single section; no separate cover margins** |
-| 646–698 | `buildHeadingStyles` / `buildNumberingConfig` (only 3 bullet/numbered levels — deeper nesting overflows) |
+#### `mermaid-renderer.tsx` + `mermaid-config.ts`
 
-### `src/lib/document-ast/resolve-unsplash.ts` (139 LoC)
+| Surface | Location |
+|---|---|
+| `mermaidPromise` module cache | mermaid-renderer.tsx top |
+| `getMermaid()` re-init only on theme change | early |
+| `useTheme()` from next-themes | mid |
+| `resolvedTheme === "dark"` mapping | mid |
+| `mermaid.parse({ suppressErrors: true })` | mid |
+| Trimmed catch path | mid |
+| Retry counter | mid |
+| Per-render UUID id | mid |
+| Spinner condition | mid |
+| `getMermaidConfig(theme)` export | mermaid-config.ts L475 |
+| Init options (securityLevel: strict, theme: base, themeVariables) | mermaid-config.ts L475-L499 area |
 
-| Lines | What |
-|-------|------|
-| 9 | `import { resolveQueries } from "@/lib/unsplash/resolver"` |
-| 14 | `UNSPLASH_PREFIX = "unsplash:"` |
-| 16–28 | `isUnsplash` + `extractKeyword` + `fallback` helpers |
-| 37–62 | `collectFromBlocks` / `collectFromListItem` — gathers all `unsplash:keyword` strings |
-| 64–91 | `replaceInBlocks` / `replaceInListItem` — applies resolved Map back into AST |
-| 93–139 | `resolveUnsplashInAst(ast)` — collects, calls `resolveQueries(keywords)` at line 117, replaces |
+The earlier `containerRef` (D-22), `lastInitTheme` cache, and
+`deterministicIDSeed` (D-23) were removed with `0b25e56` /
+`02e24a6` (commit message: "tighten mermaid-config exports").
 
----
+#### `latex-renderer.tsx`
 
-## 13. Mermaid
+| Surface | Location |
+|---|---|
+| `isKatexCommandAllowed` trust callback (`https?://` only) | L18-L23 |
+| Balanced-brace scanner (`readBracedArg`) | L54-L78 |
+| `\href` HTML emission with `escapeHtml` | L188-L191 |
+| `dangerouslySetInnerHTML` mount in `prose dark:prose-invert` | L532 |
 
-### `src/lib/rendering/mermaid-theme.ts` (50 LoC)
+No iframe, no MathJax, no macros.
 
-| Lines | What |
-|-------|------|
-| 10–19 | `MERMAID_THEME_VARIABLES` (light) |
-| 21–30 | `MERMAID_THEME_VARIABLES_DARK` |
-| 32–36 | `MERMAID_INIT_OPTIONS` (light default) |
-| 43–50 | **`getMermaidInitOptions(theme: "light" | "dark")`** factory |
+#### `r3f-renderer.tsx`
 
-### `src/lib/rendering/server/mermaid-to-svg.ts` (140 LoC)
+| Surface | Location |
+|---|---|
+| Iframe **without** `sandbox` attribute (WebGL needs GPU) — comment | mid |
+| postMessage origin guard `event.source !== iframeRef.current?.contentWindow` | mid |
+| Origin-guard rationale | mid |
+| `didReadyRef` `useRef(false)` (replaces closure-local `let`) | L520-L535 area |
+| `didReadyRef.current = false` reset on content change | L534 area |
+| 20 s timeout reads `didReadyRef.current` | following |
+| Importmap inside srcdoc (esm.sh) | early |
+| Babel standalone via unpkg | early |
+| Scene code via JSON `<script id="scene-data" type="application/json">` | early |
+| Scene parse | mid |
+| WebGL error bifurcation (`isWebGLError`) | mid |
 
-| Lines | What |
-|-------|------|
-| 16 | `import "server-only"` |
-| 18 | `import { MERMAID_INIT_OPTIONS } from "../mermaid-theme"` |
-| 20–21 | `SHIM_KEYS = ["window", "document", "DOMParser", "navigator"] as const` |
-| 23–41 | `Snapshot` + `captureAndAssign` (uses `defineProperty` because some globals are getter-only) |
-| 43–51 | `restore` |
-| 56 | **`let renderQueue: Promise<unknown> = Promise.resolve()`** — per-process Promise mutex |
-| 58–65 | **`mermaidToSvg(code)`** — chains through `renderQueue.then(() => doRender(...))` with `.catch(() => undefined)` to keep the chain alive |
-| 67–139 | `doRender` — JSDOM, shim install, mermaid render, finally restore + close |
-| 91–116 | jsdom SVG stubs for `getBBox` / `getComputedTextLength` (8 px/char) |
-| 127 | `mermaid.initialize({ ...MERMAID_INIT_OPTIONS, securityLevel: "loose" })` (server uses light theme) |
-| 131 | `await mermaid.render(id, trimmed, host)` |
-| 133–139 | `finally`: restore globals + `dom.window.close()` |
+The earlier `setReady`/`ready` dead state (D-21) was removed with
+`0b25e56`. Only `didReadyRef` remains.
 
-### `src/lib/rendering/client/mermaid-to-png.ts` (34 LoC)
+#### `_iframe-nav-blocker.ts`
 
-- Uses `MERMAID_INIT_OPTIONS` directly — **rescan N-53: always light theme; `getMermaidInitOptions(theme)` never called on this path**.
-- No serialization queue; concurrent `mermaid.initialize` may race on theme.
+| Surface | Location |
+|---|---|
+| `IFRAME_NAV_BLOCKER_SCRIPT` export | top |
+| `window.open` stub with `postMessage: noop` | L16 area |
 
-### `src/lib/rendering/client/svg-to-png.ts` (91 LoC)
+Blocks: `Location.assign/replace/reload`, `href` setter, direct `window.location` assignment, non-fragment anchor clicks, form submits, `history.pushState/replaceState` to non-empty URLs, `window.open`.
 
-| Lines | What |
-|-------|------|
-| 70–91 | `fetchImageAsBase64` — **rescan N-52: hardcoded deprecated `https://source.unsplash.com/1600x900/?${keyword}` URL** |
+#### `sheet-renderer.tsx`
 
----
+| Surface | Location |
+|---|---|
+| `detectShape(content)` from `lib/spreadsheet/parse.ts` | L28-L38 |
+| `"spec"` → `React.lazy(SpecWorkbookView)` + Suspense | L43 area |
+| `"csv"`/`"array"` → `CsvOrArrayView` | L53-L236 |
+| Toolbar (Search + CSV download with `-filtered` suffix) | L53-L236 |
+| Error state (amber + raw `<pre>`) | L98-L109, L159-L176 |
 
-## 14. Unsplash
+#### `sheet-spec-view.tsx`
 
-### `src/lib/unsplash/resolver.ts` (207 LoC)
+| Surface | Location |
+|---|---|
+| State (`activeSheet`, `selectedRef`, `values`, `evalError`, `view`) | L60-L64 |
+| `view` reset on content change | L71 |
+| Async formula eval (cancellable) | L76-L93 |
+| `SheetFormulaBar` mount (always) | L141 |
+| **Data/Charts toggle (only when `spec.charts.length > 0`)** | L144-L167 |
+| Data view (sticky corner, A/B/C headers, frozen borders, selected outline, `bg-yellow-200/80` highlight, error `#ERR!`) | L169-L289 |
+| Column width formula `width * 7 + 16` | L194 |
+| Frozen border classes | L237-L241 |
+| Bottom sheet tabs | L270-L288 |
+| `<SheetChartView />` mount | L292-L294 |
+| evalError footer | L296-L299 |
+| Comment "XLSX download lives in the panel header, not duplicated here" | L171-L172 |
 
-| Lines | What |
-|-------|------|
-| 10 | `UNSPLASH_REGEX = /src=["']unsplash:([^"']+)["']/gi` |
-| 13 | `CACHE_DAYS = 30` |
-| 18–24 | `normalize(query)` — lowercase, collapse whitespace, slice to 50 chars |
-| 29–33 | `fallbackUrl(query)` — `placehold.co/1200x800/...` |
-| 39–56 | `resolveHtmlImages(content)` — extracts URLs, dedupes, calls `resolveQueries`, replaces |
-| 70–139 | `resolveSlideImages(content)` — JSON walk over `imageUrl`/`backgroundImage`/`quoteImage`/`gallery[].imageUrl` |
-| 150–207 | **`resolveQueries(queries)`** — exported, shared cache + parallel-fetch primitive |
-| 154–163 | Cache lookup via `prisma.resolvedImage.findMany({ where: { query: { in: queries } } })` |
-| 168–179 | Per-query `try/catch` around `searchPhoto` — failure → placeholder, doesn't poison batch |
-| 185–198 | **`prisma.resolvedImage.upsert`** — handles concurrent writers on `@unique query` constraint |
+#### `sheet-formula-bar.tsx`
 
-### `src/lib/unsplash/index.ts` (61 LoC)
+| Surface | Location |
+|---|---|
+| 36 px (h-9) bar | L30-L49 |
+| Left zone (96 px min, ChevronDown decorative) | L30-L49 |
+| Right zone (FunctionSquare + mono span; formulas italicised) | L30-L49 |
 
-| Lines | What |
-|-------|------|
-| 11 | `const ENABLED = true` — **rescan N-58: hardcoded; no env binding** |
+#### `sheet-chart-view.tsx`
 
-### `src/lib/unsplash/client.ts` (45 LoC)
+| Surface | Location |
+|---|---|
+| `renderChart` switch (bar/line/area/pie) | L63-L124 |
+| `BarChart` `stackId="stack"` when `chart.stacked` | within renderChart |
+| `LineChart` `type="monotone"`, `strokeWidth={2}` | within renderChart |
+| `AreaChart` `fillOpacity={0.4}` | within renderChart |
+| **Pie `fillOpacity={1 - i * 0.1}` (D-19)** | L118 |
+| `resolveChartData(chart, values)` | L36 area |
+| Empty rows → empty-state card | L36-L41 |
 
-`searchPhoto(query)` — REST call to `api.unsplash.com/search/photos`,
-returns first result or null.
+#### `slides-renderer.tsx`
 
----
+| Surface | Location |
+|---|---|
+| `sandbox="allow-scripts"` only | L116 |
+| Sandbox-tightening rationale comment | L109-L116 |
+| postMessage source check | L40-L53 |
+| Keyboard nav scope guard (`isTextEntryElement`) | L71-L92 |
+| Navigation bar (chevrons + counter) | L123-L169 |
+| Dot strip when `1 < totalSlides ≤ 20` | L147-L168 |
+| Empty state | L94-L100 |
 
-## 15. Spreadsheet
+#### `python-renderer.tsx`
 
-| File | LoC | Highlights |
-|------|-----|-----------|
-| `lib/spreadsheet/parse.ts` | 204 | `detectShape(content)` returns `"array"` | `"spec"` | `"csv"` (lines 11–29); `parseSpec(json)` validates v1 spec |
-| `lib/spreadsheet/formulas.ts` | 274 | `evaluateWorkbook(spec)` returns `Map<string, EvaluatedCell>` keyed `"SheetName!A1"`; **rescan N-50: O(n²) topological sort lines 147–168**; **rescan N-51: `onCell` collapses errors to `REF` lines 183–188** |
-| `lib/spreadsheet/generate-xlsx.ts` | 144 | `generateXlsx(spec)` — uses `ExcelJS`; returns `Blob` (browser API) |
-| `lib/spreadsheet/styles.ts` | 128 | `formatCellValue` — minimal number-format interpreter |
-| `lib/spreadsheet/types.ts` | 88 | `SpreadsheetSpec` + callbacks (`onCell`, `onRange`, `onVariable`) — **the structured-clone obstacle for Priority D Web Worker migration** |
+| Surface | Location |
+|---|---|
+| Pyodide v0.27.6 from jsdelivr | L28 |
+| Pre-loaded packages (numpy, micropip, matplotlib, scikit-learn) | L52 |
+| `plt.show` monkey-patch into `__plot_images__` | L57-L73 (worker source) |
+| `__plot_images__` reset per run | L97 |
+| Web Worker creation (Blob URL revoked immediately) | L40-L123 |
+| **Hardcoded triple-backtick fence (D-27)** | L204-L208 |
+| Output panel responsive height | L259 |
+| "Fix with AI" error banner | L262-L281 |
 
----
+#### `document-script-renderer.tsx`
 
-## 16. Migration script
+| Surface | Location |
+|---|---|
+| Props (`sessionId`, `artifactId`, `content`, `isStreaming`) | L11-L16 |
+| Streaming state — CodeView with `opacity-60` | L96-L108 |
+| Fetch effect deps `[sessionId, artifactId, content, isStreaming]` | L35-L61 |
+| GET `/render-status` | L35-L61 |
+| Page image URL `/render-pages/${hash}/${pageIdx}` | L134 |
+| Image `key={`${hash}-${pageIdx}`}` (force remount) | L134 |
+| Keyboard nav (same `isTextEntry` guard) | L70-L93 |
+| Dot strip when `1 < pageCount ≤ 20` | L135 |
+| **Error state without retry (D-11)** | L111-L122 |
+| Loading "Rendering preview…" | L124-L132 |
+| `CodeView` subcomponent | L200-L210 |
+| **Direct `lucide-react` import (D-28)** | L3 |
 
-### `scripts/migrate-artifact-deprecations.ts` (177 LoC)
+#### `streamdown-content.tsx`
 
-| Lines | What |
-|-------|------|
-| 25 | `import { PrismaClient } from "@prisma/client"` (standalone, not the singleton) |
-| 29–34 | argv flags: `--dry-run`, `--slides`, `--markdown` |
-| 36 | `MARKDOWN_CAP_BYTES = 128 * 1024` |
-| 38–50 | `SlideStats` / `MarkdownStats` types |
-| 52–~110 | **`migrateSlides()`** — Pass A, mutating; idempotent |
-| 55–60 | Scoped `findMany({ where: { artifactType: "application/slides" } })` |
-| 73–79 | Walks `deck.slides[]`, replaces `layout === "image-text"` → `"content"` |
-| ~110–~165 | **`auditMarkdown()`** — Pass B, report-only |
-| ~165–177 | `main()` — runSlides, runMarkdown, dry-run gating, prisma.$disconnect |
+| Surface | Location |
+|---|---|
+| Streamdown wrapper props (`shikiTheme`, `controls: { code, table, mermaid }`, KaTeX plugins) | L62-L95 |
+| `MermaidError` (Retry + Source toggle) | within file |
 
----
-
-## 17. Audit cross-reference
-
-The 23 issues from the original `2026-04-25-artifact-system-audit.md` map
-to specific fix locations. All shipped in Priority A/B/C; rescan items
-(N-N) below are unshipped backlog from
-[`2026-04-25-deepscan-rescan-findings.md`](./2026-04-25-deepscan-rescan-findings.md).
-
-| Audit ID | Status | Fix Location |
-|----------|--------|--------------|
-| #1 unsplash post-resolve in dispatcher | ✅ Shipped | `_validate-artifact.ts:131-144` |
-| #2 update-artifact discards `validation.content` | ✅ Shipped | `update-artifact.ts:132-134` |
-| #3 image-text deprecation | ✅ Shipped | `_validate-artifact.ts:336-343` |
-| #4 service Unsplash on manual edit | ✅ Shipped | `service.ts:463-478` (via dispatcher) |
-| #5 to-docx renderCoverPage logoUrl | ✅ Shipped | `to-docx.ts:479-540` |
-| #6 update-artifact canvas-mode lock | ✅ Shipped | `update-artifact.ts:89-107` (rescan **N-7** flags edge: bypass when `existing.artifactType` is null) |
-| #7 react setError out of useMemo | ✅ Shipped | `react-renderer.tsx:393-426` |
-| #8 indexer fire-and-forget never throws | ✅ Shipped | `artifact-indexer.ts:49-56` |
-| #9 footnote sink not memoized | ✅ Shipped | `document-renderer.tsx:406` |
-| #10 mermaid theme dark variant | ✅ Shipped | `mermaid-theme.ts:21-50` |
-| #11 docx footnote table guard | ✅ Shipped | `to-docx.ts:576-592` |
-| #12 react/slides postMessage source guard | ✅ Shipped | `react-renderer.tsx:459`, `slides-renderer.tsx:45` (rescan **N-27**: R3F still missing the same guard) |
-| #13 unsplash resolver upsert | ✅ Shipped | `resolver.ts:185-198` |
-| #14 unsplash per-query try/catch | ✅ Shipped | `resolver.ts:168-179` |
-| #15 mermaid-to-svg renderQueue | ✅ Shipped | `mermaid-to-svg.ts:56-65` |
-| #16 markdown strict <script> | ✅ Shipped | `_validate-artifact.ts:1123-1135` |
-| #17 markdown 128KB cap on creates | ✅ Shipped | `_validate-artifact.ts:1068, 1082-1089` |
-| #18 update-artifact optimistic lock | ✅ Shipped | `update-artifact.ts:201-235` |
-| #19 image-text isNew gate | ✅ Shipped | `_validate-artifact.ts:336-343` |
-| #20 spreadsheet Web Worker | 🟡 Deferred | Priority D parked |
-| #21 service-side optimistic lock | ✅ Shipped | `service.ts:537-558`, `repository.ts:170-196` |
-| #22 delete: versioned S3 + RAG cleanup | ✅ Shipped (artifact-level) | `service.ts:619-639` (rescan **N-47**: session-level still leaks versioned keys) |
-| #23 update-artifact missing-artifact | ✅ Shipped | `update-artifact.ts:67-82` |
-| NEW-1 chat-workspace clear streaming on error | ✅ Shipped | `chat-workspace.tsx:2173-2233` |
-| NEW-2 chat-workspace only apply on `out.updated` | ✅ Shipped | `chat-workspace.tsx:2210` (rescan **N-3**: silent drop when `existing` missing) |
-| NEW-3 panel exportError state | ✅ Shipped | `artifact-panel.tsx:91, 717-730` |
-| NEW-4 panel historical version content guards | ✅ Shipped | `artifact-panel.tsx:220-226, 277-285` |
-| NEW-5 panel split-button download | ✅ Shipped | `artifact-panel.tsx:256-320` |
-| NEW-6 validateArtifactContent timeout | ✅ Shipped | `_validate-artifact.ts:103-130` |
-| NEW-7 document-renderer themed mermaid | ✅ Shipped | `document-renderer.tsx:512-554` |
+**Note:** Streamdown's internal mermaid pipeline is a **separate path
+that does not use `mermaid-config.ts`** (D-25). No fix in tree.
 
 ---
 
-## 18. Test files
+## 8. Prompt modules
+
+`src/lib/prompts/artifacts/` — one file per type plus `index.ts` and
+`context.ts`.
+
+| File | Label | Visual? | Notable line |
+|---|---|---|---|
+| `code.ts` | "Code" | no | (no `language` enforcement — D-18) |
+| `context.ts` | shared context | — | `VISUAL_ARTIFACT_TYPES` Set at top |
+| `document.ts` | "Document" | no | Script-only after `a81c343` (~429 LoC, the prior AST-mode branching + 316-line example tree was removed). |
+| `html.ts` | "HTML Page" | yes | structural rules + Unsplash flow |
+| `latex.ts` | "LaTeX / Math" | no | full alignment with `LATEX_UNSUPPORTED_COMMANDS` |
+| `markdown.ts` | "Markdown" | no | label change comment refutes prior N-17 |
+| `mermaid.ts` | "Mermaid Diagram" | no | 19 documented vs **25** in `_mermaid-types.ts` (D-13) |
+| `python.ts` | "Python Script" | no | 13 unavailable in prompt vs **15** in validator (urllib3 + 2 others mismatch) |
+| `r3f.ts` | "R3F 3D Scene" | yes | drei symbol list (19) |
+| `react.ts` | "React Component" | yes | `@aesthetic` + `@fonts` directive grammar |
+| `sheet.ts` | "Spreadsheet" | no | three shapes; spec chart types incl. `area` (not in slides validator) |
+| `slides.ts` | "Slides" | yes | 17 active layouts + 1 deprecated (`image-text`); 6 approved primary/secondary colors |
+| `svg.ts` | "SVG Graphic" | yes | "round to 1 dp max" (validator warns at 3+ dp — D-17) |
+
+---
+
+## 9. RAG indexer — `artifact-indexer.ts`
+
+`src/lib/rag/artifact-indexer.ts`.
+
+| Surface | Location |
+|---|---|
+| `indexArtifactContent(documentId, title, content, options?)` | L21-L65 |
+| `await deleteChunksByDocumentId` (when `isUpdate`) | inside function |
+| `resolveTextToEmbed` (extra `findUnique` D-7) | L72-L93 |
+| `chunkDocument(...)` with `chunkSize: 1000, chunkOverlap: 200` | within function |
+| `markRagStatus(false)` on zero chunks | within function |
+| `generateEmbeddings(chunkTexts)` | within function |
+| `storeChunks(documentId, chunks, embeddings)` (concurrency 8 — `STORE_CHUNKS_CONCURRENCY` in vector-store.ts L513) | within function |
+| `markRagStatus(documentId, true)` (read-then-write — D-2) | L96-L113 |
+| Exception path swallow | end of function |
+
+---
+
+## 10. S3 — `s3/index.ts`
+
+| Surface | Location |
+|---|---|
+| `S3Paths.artifact(orgId, sessionId, id, ext)` | mid file |
+| `getArtifactExtension(type)` (uses `getArtifactRegistryEntry`) | L116-L118 |
+| `uploadFile(key, body, contentType)` | mid file |
+| `deleteFile(key)` | mid file |
+| `deleteFiles(keys[])` (batches ≤ 1000; per-object errors logged but not thrown — D-5) | L304-L312 area |
+
+Canonical key shape: `artifacts/<orgId|"global">/<sessionId|"orphan">/<id><ext>`.
+Versioned key shape: `<canonical>.v<N>`.
+
+---
+
+## 11. Document-script subsystem — `lib/document-script/*`
+
+| File | LoC | Purpose |
+|---|---|---|
+| `sandbox-runner.ts` | 98 | OS-process sandbox (`spawn(process.execPath, ...)`). Caps: `--max-old-space-size=${maxHeapMb}` (default 256 MiB), wall-clock SIGKILL after `timeoutMs` (default 10 s, 5 s for dry-run), 100 MiB stdout cap. **No cgroup/seccomp/namespace.** Inherits full `process.env`. |
+| `sandbox-loader.mjs` | — | ESM loader hook via `module.register()`. Runs in dedicated worker thread. Blocks bare-specifier imports of `FORBIDDEN_SPECIFIERS` (incl. `"fs"`, `"node:fs"`). Fires before any module code runs. |
+| `sandbox-wrapper.mjs` | — | `Object.defineProperty(globalThis, m, { get() { throw … } })` for `FORBIDDEN_MODULES`. Catches `require()`-style global access. Blocks `fetch`. **Does NOT block `Function`/`eval`** (docx uses function-bind). |
+| `validator.ts` | 41 | Two-phase: `quickSyntaxCheck` (TypeScript `createSourceFile` AST parse) → `runScriptInSandbox` with `timeoutMs: 5_000` and PK magic-byte check (`50 4b 03 04`). |
+| `cache.ts` | 45 | `computeContentHash`: SHA-256[:16 hex chars] of script source. `getCachedPngs` / `putCachedPngs` — **S3-only**, no memory/disk/Redis layer. Layout: `artifact-preview/{artifactId}/{hash}/manifest.json + page-N.png`. |
+| `extract-text.ts` | 44 | Receives rendered DOCX `Buffer`, writes temp file, spawns `pandoc -f docx -t plain`. 15 s timeout. Used by RAG indexer for embedding text. |
+| `llm-rewrite.ts` | 48 | `MAX_RETRIES = 2` (3 attempts total). Self-correction prepends prior validator error to `editPrompt`. |
+| `metrics.ts` | 47 | 9 in-memory counters. **No external sink** — no Prometheus/StatsD/Datadog. Process-local. |
+| `types.ts` | 22 | `SandboxOptions`, `SandboxResult`, `ScriptValidationResult`. |
+
+`lib/rendering/server/`:
 
 | File | Purpose |
-|------|---------|
-| `tests/unit/validate-artifact.test.ts` | base validator suite (~1660 lines, 12 types) |
-| `tests/unit/tools/validate-artifact-timeout.test.ts` | 5s timeout (`__setValidateTimeoutMsForTesting`) |
-| `tests/unit/tools/validate-artifact-resolves-unsplash.test.ts` | dispatcher post-Unsplash for HTML and slides |
-| `tests/unit/tools/create-artifact-resolve.test.ts` | `finalContent = validation.content` flow |
-| `tests/unit/tools/update-artifact.test.ts` | locked update, missing artifact, canvas-mode |
-| `tests/unit/rag/artifact-indexer-rethrow.test.ts` | indexer never rethrows |
-| `tests/unit/features/conversations/sessions/delete-artifact.test.ts` | versioned S3 + RAG cleanup |
-| `tests/unit/react-artifact/directive-parser.test.ts` | `_react-directives.ts` |
-| `tests/unit/react-artifact/fixtures.test.ts` | **rescan N-56: missing `await` at line 29 — likely tests Promise objects vacuously** |
+|---|---|
+| `docx-preview-pipeline.ts` | Orchestrates sandbox → soffice → pdftoppm. |
+| `docx-to-pdf.ts` | `soffice --headless --convert-to pdf`. 30 s timeout. **Cold-start every call.** |
+| `pdf-to-pngs.ts` | `pdftoppm -png -r 120 -l 50`. 30 s timeout. Max 50 pages. |
+| `render-queue.ts` | Counting semaphore. `RENDER_CONCURRENCY` env (default 3). **Process-local. No TTL. No single-flight per `(artifactId, hash)`**. |
+| `svg-to-png.ts` | sharp PNG encoder used by the chart export path. |
+
+The earlier `mermaid-to-svg.ts` (JSDOM + DOMPurify "loose") was removed
+with `a81c343` — its only consumer was the deleted AST `to-docx.ts`.
+
+## 12. `lib/document-ast/*` (removed)
+
+The directory no longer exists. The legacy AST mode for `text/document`
+was retired with `a81c343`; the orphan `_mermaid-types.ts` was relocated
+to `src/lib/rendering/mermaid-types.ts` (now §14) and the empty directory
+was removed. The `text/document` artifact type is now exclusively
+served by the script-format pipeline in §11.
+
+Files deleted (~2,032 LoC total): `schema.ts`, `validate.ts`,
+`to-docx.ts`, `resolve-unsplash.ts`, and the `examples/{letter,
+proposal,report}.ts` example tree.
+
+## 13. `lib/spreadsheet/*`
+
+| File | LoC | Purpose |
+|---|---|---|
+| `csv.ts` | 47 | **Shared `tokenizeCsv`** (post `02e24a6`). Single source of truth for CSV parsing in both validator and renderer. Closes D-60. |
+| `types.ts` | 114 | `SPREADSHEET_CAPS` L6-L13 (8/500/200/64/31/8). `SPREADSHEET_SPEC_VERSION = "spreadsheet/v1"`. `DEFAULT_THEME` L60-L66. |
+| `parse.ts` | 241 | `detectShape` L38-L57 (no JSON parse on `"csv"` branch). `parseSpec` L70-L241 (171-line accumulating validator — complexity hotspot). |
+| `formulas.ts` | 324 | `evaluateWorkbook` — pure. Kahn's O(V+E) topological sort L145-L194. CIRCULAR marking before eval. **No function whitelist** — `fast-formula-parser` handles ~150+ Excel functions. **No array spillover.** Range-type named ranges → `null` silently. |
+| `chart-data.ts` | 84 | `RANGE_RE` L19-L56 sheet-qualified only. `resolveChartData` clips to shortest range. Missing series values default to `0`. Cross-sheet refs work. |
+| `generate-xlsx.ts` | 150 | ExcelJS v4.4 client-side. Bakes in cached formula results. **Charts NOT emitted** L86-L90 (ExcelJS API limitation, D-64). `note` style hardcoded gray `#666666` (D-65). |
+| `styles.ts` | 149 | `resolveCellStyle` 6 styles. **Tailwind classes diverge from theme hex** (D-66) — dark mode approximate. `formatCellValue` parallel formatter (handwritten, supports percent/decimals/dates). |
+| `format.ts` | 28 | `numfmt` wrapper. **L21 dead-code branch** (D-62) — both integer/float return `String(value)`. |
+| `cell-classify.ts` | 30 | 6 priority rules. `EXTERNAL_REF` / `SHEET_REF` regexes. **Renderer-only — not used by validator.** |
+
+## 14. `lib/unsplash/*` + `lib/s3/index.ts` + Rendering helpers
+
+| File | LoC | Purpose |
+|---|---|---|
+| `unsplash/client.ts` | 45 | `searchPhoto(query)` — `per_page=1&orientation=landscape`, 5000 ms `AbortSignal.timeout`. No retry. |
+| `unsplash/index.ts` | 65 | Public wrappers. **Kill switch `UNSPLASH_RESOLUTION_DISABLED=true`**. Catch-all → original on throw. |
+| `unsplash/resolver.ts` | 207 | `UNSPLASH_REGEX` L10. `normalize` L18 (lowercase + truncate 50). `fallbackUrl` L29 — never null. `resolveQueries` L150 — Prisma 30-day cache, parallel fetch (no rate-limit throttle), per-query catch isolates failures. |
+| `s3/index.ts` | 527 | `S3Paths.artifact = artifacts/{orgId\|global}/{sessionId}/{artifactId}{ext}`. `getArtifactExtension` L116-L118 → registry. `uploadFile` L139 returns empty `url` by default (opt-in via `includeUrl`). `deleteFiles` L282 batches ≤ 1000, sequential, **logs but does NOT throw on per-key failures** L304-L312. |
+| `rendering/mermaid-theme.ts` | ~25 | `MERMAID_THEME_VARIABLES` (light) + `_DARK` and `getMermaidInitOptions(theme)` for the client PPTX path. The earlier hardwired-light DOCX export consumer was removed when `mermaid-to-svg.ts` was deleted (`a81c343`). |
+| `rendering/chart-to-svg.ts` | 414 | Pure D3. Hardcoded light theme (D-51). Default 600×400. 8-color palette matching mermaid pie colors. |
+| `rendering/resize-svg.ts` | 18 | Pure regex rewrite of root `<svg>` tag. Strips existing `width`/`height`/`preserveAspectRatio`, injects new. Isomorphic. |
+| `rendering/server/svg-to-png.ts` | 25 | sharp. `fit: "contain"`, white background, lanczos3, flatten alpha, PNG compression 6. |
+| `rendering/client/svg-to-png.ts` | 100 | Canvas API, **2× internal scale (HiDPI)**. **Secondary `unsplash:` fallback** L73-L78 if URL slips through. |
+| `rendering/client/mermaid-to-png.ts` | 41 | Browser-only mermaid → PNG via `getMermaidInitOptions(theme)`. Returns `null` on error. |
+
+Files **deleted with `a81c343`**: `lib/rendering/server/mermaid-to-svg.ts`
+(was the JSDOM + DOMPurify "loose" path; D-49/D-50/D-68/D-69 closed by
+its removal).
+
+## 15. RAG (artifact subset) — `lib/rag/`
+
+| File | LoC | Purpose |
+|---|---|---|
+| `artifact-indexer.ts` | 113 | `indexArtifactContent`. `resolveTextToEmbed` L72-L93 — extra DB round-trip; for script docs: sandbox + pandoc to embed rendered text. `markRagStatus` L96-L113 — **read-then-write, NOT atomic**. |
+| `chunker.ts` | 195 | Default `chunkSize=1000`, `chunkOverlap=200`. Separator priority `["\n## ","\n### ","\n#### ","\n\n","\n",". "," "]`. Overlap **prepended** (not appended). `prepareChunkForEmbedding` adds Category/Topic/Section/Context prefix. |
+| `embeddings.ts` | 233 | `BATCH_SIZE = 128`, `EMBED_CONCURRENCY = 4`, `MAX_RETRIES = 3`, `RETRY_DELAY_MS = 1000` (doubles, cap 10000). Model from `KB_EMBEDDING_MODEL` (default `qwen/qwen3-embedding-8b`). API key `KB_EMBEDDING_API_KEY` or fallback `OPENROUTER_API_KEY`. |
+| `vector-store.ts` | 561 | `STORE_CHUNKS_CONCURRENCY = 8` L513. Chunk ID: `${documentId}_${i}`. SurrealDB `CREATE document_chunk` (no upsert — relies on prior delete). `deleteChunksByDocumentId` single DELETE-WHERE. |
+
+## 16. Where the line numbers come from
+
+This document was regenerated by reading every cited file at commit
+`a81c343` (post AST-fallback-removal). Line numbers should be treated
+as **stable to the line** for that commit; edits since then may shift
+them. Run `git log -p <file>` between this commit and HEAD for a delta
+when reading older versions of this doc.
+
+A number of ranges are marked **"(L… area)" or with positional hints
+("upper", "mid", "post-find")** rather than exact lines — those are
+sections that survived the `8b6e69b → a81c343` AST-removal but where
+the exact lines shifted by tens of lines. Re-grep against the cited
+file when you need the precise line; the surface itself still lives
+where the row says it does.

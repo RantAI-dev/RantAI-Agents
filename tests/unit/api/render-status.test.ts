@@ -26,7 +26,7 @@ describe("render-status route", () => {
   it("triggers render and returns hash + pageCount on success", async () => {
     authMock.mockResolvedValue({ user: { id: "u-1" } })
     getArtifactMock.mockResolvedValue({
-      id: "a-1", artifactType: "text/document", documentFormat: "script",
+      id: "a-1", artifactType: "text/document",
       content: "/* script */",
     })
     renderMock.mockResolvedValue({ hash: "abc123", pages: [Buffer.from([0x89,0x50])], cached: false })

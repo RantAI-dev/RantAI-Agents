@@ -15,9 +15,6 @@ import {
 /** Maximum artifact content size: 512 KB */
 const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
 
-/** All `text/document` artifacts now use the docx-js script pipeline. */
-const DOC_FORMAT = "script" as const
-
 export const createArtifactTool: ToolDefinition = {
   name: "create_artifact",
   displayName: "Create Artifact",
@@ -161,7 +158,6 @@ export const createArtifactTool: ToolDefinition = {
           fileType: "artifact",
           fileSize: contentBytes,
           mimeType,
-          ...(type === "text/document" ? { documentFormat: DOC_FORMAT } : {}),
           metadata: {
             artifactLanguage: language,
             ...(validationWarnings.length > 0
@@ -171,7 +167,7 @@ export const createArtifactTool: ToolDefinition = {
         },
       })
       // Background: chunk + embed so it's searchable in RAG
-      indexArtifactContent(id, title, finalContent).catch((err) =>
+      indexArtifactContent(id, title, finalContent, { artifactType: type }).catch((err) =>
         console.error("[create_artifact] Background indexing error:", err)
       )
     } catch (err) {

@@ -17,12 +17,16 @@ import type { Prisma } from "@prisma/client"
  * on failure (or zero chunks) it gets `ragIndexed: false`. The panel uses
  * this flag to surface a "not searchable" badge so users aren't surprised
  * when an artifact is missing from semantic search.
+ *
+ * Pass `artifactType` to skip the per-call DB round-trip inside
+ * `resolveTextToEmbed` — callers already know it from the row they just
+ * created or updated.
  */
 export async function indexArtifactContent(
   documentId: string,
   title: string,
   content: string,
-  options?: { isUpdate?: boolean }
+  options?: { isUpdate?: boolean; artifactType?: string | null }
 ) {
   try {
     if (options?.isUpdate) {
@@ -35,7 +39,7 @@ export async function indexArtifactContent(
     // from the resulting docx so semantic search hits the actual prose.
     // Falls back to the script source if either step fails — code-style
     // search is still better than nothing.
-    const textToEmbed = await resolveTextToEmbed(documentId, content)
+    const textToEmbed = await resolveTextToEmbed(documentId, content, options?.artifactType)
 
     const chunks = chunkDocument(textToEmbed, title, "ARTIFACT", undefined, {
       chunkSize: 1000,
@@ -68,14 +72,25 @@ export async function indexArtifactContent(
  * For text/document artifacts, run the JS in sandbox and pandoc-extract
  * plain text. All other types pass through unchanged. Failures fall
  * back to the original content.
+ *
+ * `artifactType` may be passed in by the caller; otherwise we fetch it
+ * (kept as a fallback so older call sites that omit the option don't break).
  */
-async function resolveTextToEmbed(documentId: string, content: string): Promise<string> {
+async function resolveTextToEmbed(
+  documentId: string,
+  content: string,
+  artifactType: string | null | undefined,
+): Promise<string> {
   try {
-    const doc = await prisma.document.findUnique({
-      where: { id: documentId },
-      select: { artifactType: true },
-    })
-    if (doc?.artifactType !== "text/document") {
+    let type = artifactType
+    if (type === undefined) {
+      const doc = await prisma.document.findUnique({
+        where: { id: documentId },
+        select: { artifactType: true },
+      })
+      type = doc?.artifactType ?? null
+    }
+    if (type !== "text/document") {
       return content
     }
     const { runScriptInSandbox } = await import("@/lib/document-script/sandbox-runner")

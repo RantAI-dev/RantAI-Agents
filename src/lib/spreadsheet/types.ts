@@ -55,6 +55,7 @@ export interface SpreadsheetTheme {
   formulaColor?: string
   crossSheetColor?: string
   highlightFill?: string
+  noteColor?: string
 }
 
 export const DEFAULT_THEME: Required<SpreadsheetTheme> = {
@@ -63,6 +64,7 @@ export const DEFAULT_THEME: Required<SpreadsheetTheme> = {
   formulaColor: "#000000",
   crossSheetColor: "#008000",
   highlightFill: "#FFFF00",
+  noteColor: "#666666",
 }
 
 export interface ChartAxis {

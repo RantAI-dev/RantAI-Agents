@@ -20,41 +20,24 @@ describe("validateArtifactContent — timeout", () => {
 
   it("validates fast content well under the default budget", async () => {
     const start = Date.now()
-    const result = await validateArtifactContent(
-      "text/document",
-      JSON.stringify({
-        meta: { title: "x" },
-        body: [{ type: "paragraph", children: [{ type: "text", text: "y" }] }],
-      }),
-    )
+    const result = await validateArtifactContent("text/markdown", "# Hello\n\nbody")
     const elapsed = Date.now() - start
     expect(result.ok).toBe(true)
     expect(elapsed).toBeLessThan(VALIDATE_TIMEOUT_MS)
   })
 
   it("returns a timeout error with the budget in the message when a slow validator hangs", async () => {
-    // Validators are dispatched through `Promise.resolve().then(...)` (a
-    // microtask) which can settle before any setTimeout-based timer
-    // fires for sync validators, so a tiny-but-positive budget is not
-    // a reliable trigger. We use validateDocument with a large body
-    // that pulls in the Unsplash resolver and then trip the timeout
-    // by setting the budget to 0 — at that boundary even an awaited
-    // microtask path is reliably interrupted because the resolver's
-    // own awaits surrender control.
+    // `validateDocument` is genuinely async: it dynamic-imports the
+    // script validator, which then spawns a child Node process for the
+    // sandbox dry-run. That spawn yields the event loop, so a 0 ms
+    // budget reliably fires before the sandbox returns.
     __setValidateTimeoutMsForTesting(0)
-    // text/document validator is genuinely async (Zod parse + Unsplash
-    // resolution); the awaits inside it yield control, letting the
-    // 0ms timer beat the validator.
-    const result = await validateArtifactContent(
-      "text/document",
-      JSON.stringify({
-        meta: { title: "x" },
-        body: [
-          { type: "image", src: "unsplash:mountain", alt: "a", width: 100, height: 100 },
-          { type: "paragraph", children: [{ type: "text", text: "y" }] },
-        ],
-      }),
-    )
+    const validScript = `
+      import { Document, Paragraph, TextRun, Packer } from "docx"
+      const doc = new Document({ sections: [{ children: [new Paragraph({ children: [new TextRun("x")] })] }] })
+      Packer.toBuffer(doc).then(buf => process.stdout.write(buf.toString("base64")))
+    `
+    const result = await validateArtifactContent("text/document", validScript)
     expect(result.ok).toBe(false)
     const message = result.errors.join(" ")
     expect(message).toMatch(/timeout/i)
@@ -64,15 +47,12 @@ describe("validateArtifactContent — timeout", () => {
 
   it("clearing the test override restores the default budget", async () => {
     __setValidateTimeoutMsForTesting(0)
-    const slow = await validateArtifactContent(
-      "text/document",
-      JSON.stringify({
-        meta: { title: "x" },
-        body: [
-          { type: "image", src: "unsplash:cat", alt: "a", width: 100, height: 100 },
-        ],
-      }),
-    )
+    const validScript = `
+      import { Document, Paragraph, TextRun, Packer } from "docx"
+      const doc = new Document({ sections: [{ children: [new Paragraph({ children: [new TextRun("y")] })] }] })
+      Packer.toBuffer(doc).then(buf => process.stdout.write(buf.toString("base64")))
+    `
+    const slow = await validateArtifactContent("text/document", validScript)
     expect(slow.ok).toBe(false)
     expect(slow.errors.join(" ")).toMatch(/timeout/i)
 

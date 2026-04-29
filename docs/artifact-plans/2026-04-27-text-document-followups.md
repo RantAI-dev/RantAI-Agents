@@ -209,15 +209,24 @@ These were considered and explicitly rejected:
 
 ---
 
-## Cleanup task (separate, scheduled)
+## ~~Cleanup task (separate, scheduled)~~ — **DONE 2026-04-29**
 
-Per spec §9.4, a Phase 2 cleanup is queued:
+Per spec §9.4, a Phase 2 cleanup was queued. Completed in branch
+`cleanup/text-document-stack` (this rev):
 
-- After 2–4 weeks of script-mode soak in production with sandbox + render failure rates within targets (sandbox <1%, LibreOffice <0.5%)
-- LLM bulk-migrates remaining `documentFormat="ast"` rows to script (with validation + S3 archival)
-- Code removal PR: delete `document-ast/`, `document-renderer.tsx`, AST branches in route/validator/service, drop `documentFormat` column
-
-That's a standalone `docs/superpowers/plans/` plan, not part of this roadmap.
+- ~~LLM bulk-migrates remaining `documentFormat="ast"` rows to script~~
+  — skipped; AST rows (15) abandoned with the column drop. Acceptable
+  loss because no AST renderer remains to display them.
+- ~~Code removal PR: delete `document-ast/`, `document-renderer.tsx`,
+  AST branches in route/validator/service, drop `documentFormat`
+  column~~ — done. `lib/document-ast/` directory removed
+  (`_mermaid-types.ts` relocated to `lib/rendering/`); `document-renderer.tsx`
+  + `edit-document-modal.tsx` + server `mermaid-to-svg.ts` deleted;
+  `documentFormat` column dropped via migration
+  `20260429100656_drop_document_format`; `ValidationContext.documentFormat`
+  + `Artifact.documentFormat` + `PersistedArtifact.documentFormat` all
+  removed from the type surface; obsolete document-AST test suite (8
+  files) deleted.
 
 ---
 
