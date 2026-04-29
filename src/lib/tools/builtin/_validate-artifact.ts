@@ -166,11 +166,7 @@ export async function validateArtifactContent(
 // Document validation — docx-js script (TS parse + sandbox dry-run)
 // ---------------------------------------------------------------------------
 
-async function validateDocument(
-  content: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _ctx?: ValidationContext,
-): Promise<ArtifactValidationResult> {
+async function validateDocument(content: string): Promise<ArtifactValidationResult> {
   const { validateScriptArtifact } = await import("@/lib/document-script/validator")
   const r = await validateScriptArtifact(content)
   return { ok: r.ok, errors: r.errors, warnings: [] }
@@ -626,9 +622,10 @@ function validateSlides(content: string, ctx?: ValidationContext): ArtifactValid
 // ---------------------------------------------------------------------------
 //
 // Mirrors `r3f-renderer.tsx` — the renderer's `sanitizeSceneCode` strips
-// imports, exports, <Canvas>, <OrbitControls>, <Environment>, and <color>.
-// We surface the same constraints to the LLM so it doesn't unwittingly
-// produce code where critical elements get silently removed.
+// imports, exports, <Canvas>, <OrbitControls>, and <Environment>. (User-
+// specified <color attach="background"> is kept by the renderer.) We surface
+// the same constraints to the LLM so it doesn't unwittingly produce code
+// where critical elements get silently removed.
 const R3F_ALLOWED_DEPS = new Set([
   // React
   "React",

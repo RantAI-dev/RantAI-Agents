@@ -1,6 +1,6 @@
 "use client"
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, ChevronLeft, ChevronRight } from "lucide-react"
+import { Loader2, ChevronLeft, ChevronRight } from "@/lib/icons"
 
 interface RenderStatus {
   hash: string
