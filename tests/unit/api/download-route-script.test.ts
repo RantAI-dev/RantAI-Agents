@@ -1,4 +1,3 @@
-// tests/unit/document-ast/download-route-script.test.ts
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -23,7 +22,7 @@ beforeEach(() => {
   getArtifactMock.mockReset()
 })
 
-describe("download route — text/document with documentFormat=script", () => {
+describe("download route — text/document (docx-js script)", () => {
   it("runs the script and returns docx bytes", async () => {
     authMock.mockResolvedValue({ user: { id: "u-1" } })
     getArtifactMock.mockResolvedValue({
@@ -31,7 +30,6 @@ describe("download route — text/document with documentFormat=script", () => {
       title: "doc",
       content: SCRIPT,
       artifactType: "text/document",
-      documentFormat: "script",
     })
     const req = new Request("https://example.test/?format=docx")
     const res = await GET(req as Request, {

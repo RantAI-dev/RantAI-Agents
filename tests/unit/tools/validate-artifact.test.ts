@@ -1887,28 +1887,3 @@ describe("validateArtifactContent — application/react — rollback flag", () =
   })
 })
 
-// ---------------------------------------------------------------------------
-// NEW — text/document AST pipeline tests
-// ---------------------------------------------------------------------------
-
-import { proposalExample } from "@/lib/document-ast/examples/proposal"
-
-describe("validateArtifactContent — text/document (AST)", () => {
-  it("accepts a valid DocumentAst JSON", async () => {
-    const result = await validateArtifactContent("text/document", JSON.stringify(proposalExample))
-    expect(result.ok).toBe(true)
-  })
-
-  it("rejects non-JSON content", async () => {
-    const result = await validateArtifactContent("text/document", "# A markdown doc\n\nBody.")
-    expect(result.ok).toBe(false)
-  })
-
-  it("rejects invalid AST shape (empty body)", async () => {
-    const result = await validateArtifactContent(
-      "text/document",
-      JSON.stringify({ meta: { title: "T" }, body: [] })
-    )
-    expect(result.ok).toBe(false)
-  })
-})

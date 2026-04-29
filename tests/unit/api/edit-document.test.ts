@@ -34,7 +34,6 @@ describe("edit-document route", () => {
       id: "a-1",
       title: "doc",
       artifactType: "text/document",
-      documentFormat: "script",
       content: "/* old */",
       metadata: null,
     })
@@ -49,7 +48,6 @@ describe("edit-document route", () => {
       title: "doc",
       content: newScript,
       artifactType: "text/document",
-      documentFormat: "script",
       metadata: null,
     })
 
