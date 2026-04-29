@@ -167,7 +167,7 @@ export const createArtifactTool: ToolDefinition = {
         },
       })
       // Background: chunk + embed so it's searchable in RAG
-      indexArtifactContent(id, title, finalContent).catch((err) =>
+      indexArtifactContent(id, title, finalContent, { artifactType: type }).catch((err) =>
         console.error("[create_artifact] Background indexing error:", err)
       )
     } catch (err) {

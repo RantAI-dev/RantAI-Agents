@@ -607,7 +607,10 @@ export async function updateDashboardChatSessionArtifact(params: {
   // content until the next LLM-driven update touches the artifact.
   // Fire-and-forget — `indexArtifactContent` swallows its own failures
   // and writes `metadata.ragIndexed: false` for the panel badge.
-  indexArtifactContent(updated.id, updated.title, updated.content, { isUpdate: true }).catch(
+  indexArtifactContent(updated.id, updated.title, updated.content, {
+    isUpdate: true,
+    artifactType: existing.artifactType,
+  }).catch(
     (err) => console.error("[updateDashboardChatSessionArtifact] Background re-indexing error:", err),
   )
 

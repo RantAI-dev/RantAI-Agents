@@ -244,7 +244,10 @@ export const updateArtifactTool: ToolDefinition = {
         }
 
         // Background: re-index updated content for RAG search
-        indexArtifactContent(id, updatedTitle, finalContent, { isUpdate: true }).catch((err) =>
+        indexArtifactContent(id, updatedTitle, finalContent, {
+          isUpdate: true,
+          artifactType: existing.artifactType,
+        }).catch((err) =>
           console.error("[update_artifact] Background re-indexing error:", err)
         )
       }
