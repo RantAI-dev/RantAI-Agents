@@ -28,7 +28,7 @@ import {
   validateFontSpec,
   type AestheticDirection,
 } from "@/features/conversations/components/chat/artifacts/renderers/_react-directives"
-import { MERMAID_DIAGRAM_TYPES as MERMAID_DIAGRAM_TYPES_SHARED } from "@/lib/document-ast/_mermaid-types"
+import { MERMAID_DIAGRAM_TYPES as MERMAID_DIAGRAM_TYPES_SHARED } from "@/lib/rendering/mermaid-types"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -1315,11 +1315,11 @@ function validateCode(content: string): ArtifactValidationResult {
 
 /**
  * Recognized Mermaid diagram type declarations. Single source of truth is
- * `@/lib/document-ast/_mermaid-types` (imported at the top of this file as
+ * `@/lib/rendering/mermaid-types` (imported at the top of this file as
  * `MERMAID_DIAGRAM_TYPES_SHARED`); we alias under the local name
  * `MERMAID_DIAGRAM_TYPES` so the longer-prefix-first ordering this validator
  * relies on (e.g. `stateDiagram-v2` before `stateDiagram`) stays in lockstep
- * with the document-AST and slides validators.
+ * with the slides validator.
  */
 const MERMAID_DIAGRAM_TYPES: readonly string[] = MERMAID_DIAGRAM_TYPES_SHARED
 

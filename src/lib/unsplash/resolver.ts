@@ -140,12 +140,11 @@ export async function resolveSlideImages(content: string): Promise<string> {
 
 /**
  * Resolve a list of queries to URLs (with caching).
- * Shared logic between HTML, Slides, and DocumentAst resolvers.
+ * Shared logic between the HTML and Slides post-validation resolvers.
  *
- * Exported so the DocumentAst tree-walker can reuse the same Prisma cache
- * + parallel-fetch + fallback semantics rather than calling `searchPhoto`
- * directly (which would bypass the 30-day cache and hammer the rate-limited
- * Unsplash API on every document validation / DOCX export).
+ * The cache + parallel-fetch + fallback semantics live here so callers
+ * don't bypass the 30-day Prisma cache and hammer the rate-limited
+ * Unsplash API on every validation pass.
  */
 export async function resolveQueries(queries: string[]): Promise<Map<string, string>> {
   const resolved = new Map<string, string>()

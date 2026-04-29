@@ -6,12 +6,10 @@
  *    `application/mermaid` artifacts.
  *  - `_validate-artifact.ts` (`validateSlides`) — gates per-slide
  *    `diagram` fields on `diagram` / `diagram-content` layouts.
- *  - `document-ast/validate.ts` (`validateMermaidNode`) — gates the
- *    `mermaid` block node inside `text/document` artifacts.
  *
  * Keeping these in lockstep prevents the historical drift where a
  * diagram type the standalone renderer accepts gets a "may be invalid"
- * warning when the same code is embedded in a slide or document.
+ * warning when the same code is embedded in a slide.
  */
 export const MERMAID_DIAGRAM_TYPES = [
   "flowchart",
