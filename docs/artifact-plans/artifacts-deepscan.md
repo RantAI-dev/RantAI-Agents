@@ -907,6 +907,16 @@ along with the modules.
 - **D-33** — `Function`/`eval` deliberately unblocked because `docx`
   transitively uses `function-bind`. Documented in `sandbox-wrapper.mjs`
   with explanatory comment.
+- **D-35** — `render-pages` route returning 404 on cache miss is the
+  intentional two-step protocol: client must call `/render-status` first
+  (which runs the pipeline + populates the cache via the single-flight
+  Map from D-34), then fetch individual pages. Triggering a re-render
+  from `/render-pages` would couple the page-image endpoint to the
+  pipeline and violate cache-as-source-of-truth.
+- **D-48** — `mermaid-theme.ts` (export-layer, used by client PPTX path)
+  and renderer-side `mermaid-config.ts` (live preview) are
+  complementary, not redundant. Both share the theme-key vocabulary;
+  splitting the consumers means each can evolve independently.
 - **D-39 / D-41** — `SLIDE_LAYOUTS` is 18 entries; `R3F_ALLOWED_DEPS`
   is 34 entries. Counts captured for reference; nothing to fix.
 - **D-52** — `s3.uploadFile` empty-`url` default is opt-in via
