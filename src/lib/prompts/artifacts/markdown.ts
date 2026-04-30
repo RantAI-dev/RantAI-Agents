@@ -34,6 +34,9 @@ You are generating a long-form document that will be rendered as Markdown in a r
 
 If the user wants to **read words and look at structure**, it's Markdown. If they want to **click, type, or compute**, it's HTML.
 
+## Hard Limits
+- **Size cap: 128 KiB** for new artifacts. The validator hard-fails new \`create_artifact\` calls above this limit. Updates to existing artifacts can grow past it but should not. As a rule of thumb, 128 KiB ≈ 25,000 words of prose or ≈ 3,500 lines of mixed code+prose. If your draft would exceed this, split into multiple artifacts (e.g. one per major section) and link between them.
+
 ## Document Structure
 - Start with a single \`# Title\` (one H1, at the top).
 - Use heading hierarchy consistently: \`##\` for major sections, \`###\` for subsections, \`####\` for sub-subsections. **Never skip levels** (no \`#\` followed directly by \`###\`).

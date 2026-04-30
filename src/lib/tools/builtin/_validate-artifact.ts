@@ -1381,7 +1381,7 @@ function validateMermaid(content: string): ArtifactValidationResult {
 
   if (!hasDeclaration) {
     errors.push(
-      "Missing or unrecognized diagram type declaration on the first non-empty line. Must start with one of: flowchart, sequenceDiagram, erDiagram, stateDiagram-v2, classDiagram, gantt, pie, mindmap, gitGraph, journey, quadrantChart, timeline, sankey-beta, xychart-beta, block-beta, kanban, C4Context, requirementDiagram, architecture-beta."
+      `Missing or unrecognized diagram type declaration on the first non-empty line. Must start with one of: ${MERMAID_DIAGRAM_TYPES.join(", ")}.`
     )
     return { ok: false, errors, warnings }
   }
