@@ -33,16 +33,27 @@ services:
       timeout: 5s
       retries: 5
 
-  # S3-compatible object storage (RustFS)
-  rustfs:
-    image: rustfs/rustfs:latest
-    container_name: rantai-agents-rustfs
+  # S3-compatible object storage (SeaweedFS)
+  # All-in-one server (master + volume + filer + S3 gateway).
+  # S3 API stays on :9000 so existing S3_ENDPOINT values keep working.
+  # Identities/credentials are loaded from docker/seaweedfs/s3.json.
+  seaweedfs:
+    image: chrislusf/seaweedfs:latest
+    container_name: rantai-agents-seaweedfs
     restart: unless-stopped
+    command: >-
+      server
+      -dir=/data
+      -s3
+      -s3.port=9000
+      -s3.config=/etc/seaweedfs/s3.json
+      -master.volumeSizeLimitMB=1024
     ports:
       - "9000:9000"  # S3 API
-      - "9001:9001"  # Web Console
+      - "9333:9333"  # Master UI / cluster admin
     volumes:
-      - rustfs_data:/data
+      - seaweedfs_data:/data
+      - ./docker/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
 
   # Ollama for local OCR models (optional)
   # Supports: GLM-OCR, Moondream, MiniCPM-V, Qwen3-VL
@@ -123,7 +134,7 @@ services:
 volumes:
   postgres_data:
   surrealdb_data:
-  rustfs_data:
+  seaweedfs_data:
   ollama_data:
   piston_packages:
   searxng_data:
