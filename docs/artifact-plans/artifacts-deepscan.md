@@ -8,6 +8,12 @@
 > validation core, tools+persistence+API, renderers+panel+state,
 > subsystem libs, and registry+prompts.
 >
+> **Status update — branch `cleanup/artifact-system` (2026-04-30, HEAD `2a3f110`)
+> closes 30+ findings in 9 atomic commits.** Items marked **[CLOSED]**
+> below are resolved on that branch but the original analysis is kept for
+> historical context. Re-pin the doc to the merge commit when the branch
+> lands on main.
+>
 > **Companion docs:**
 > - [`architecture-reference.md`](./architecture-reference.md) — file:line audit per module.
 > - [`artifacts-capabilities.md`](./artifacts-capabilities.md) — per-type capability spec.
@@ -750,6 +756,118 @@ authors seeing the error cannot discover `packet-beta`, `kanban`,
 
 Numbered `D-N` (deepscan-N). Originally written against `8b6e69b`;
 this rev marks status against HEAD `68b9d66`.
+
+### Closed on branch `cleanup/artifact-system` (2026-04-30)
+
+The branch lands 9 atomic commits that close the items below. Reasons
+are summarized here; commit messages on the branch carry the full
+detail.
+
+- **D-2** — `markRagStatus` rewritten to `prisma.$executeRaw` with
+  `jsonb_set` (atomic). Commit `4232559`.
+- **D-3** — PDF download wired through existing `docxToPdf` + soffice
+  pipeline; panel split-button gains `.pdf` option. Commit `b886805`.
+- **D-7 (residual)** — `findUnique` fallback in `resolveTextToEmbed`
+  removed; signature now requires `string | null`. Commit `7384337`.
+- **D-9** — GET single-artifact endpoint added at
+  `/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]`. Commit
+  `2a3f110`.
+- **D-11** — `DocumentScriptRenderer` error branch gains a Retry button
+  that bumps `retryCount` and re-fires the `/render-status` fetch.
+  Commit `b886805`.
+- **D-13** (prompt-side residual) — mermaid prompt now lists the 6
+  previously-undocumented diagram types (`packet-beta`, `C4Container`,
+  `C4Component`, `C4Deployment`, plus aliases `graph` /
+  `stateDiagram`). Commit `10ad714`.
+- **D-14** — slides MUST-rules (deck size 7-12, first=`title`,
+  last=`closing`) promoted to hard error on `ctx.isNew`. Commit
+  `939d277`.
+- **D-15** — markdown prompt gains an explicit "Hard Limits" section
+  documenting the 128 KiB new-create cap. Commit `10ad714`.
+- **D-16** — python validator now rejects all `open()` calls (read +
+  write); aligns with prompt that already forbids all I/O. Commit
+  `7d24aed`.
+- **D-17** — SVG dp regex tightened from 3+ dp to 2+ dp; warning
+  message updated to "more than 1 decimal place". Commit `7d24aed`.
+- **D-19** — pie `fillOpacity` floored at `0.25` so slices past index
+  10 stay visible. Commit `e1999c1`.
+- **D-20** — sheet tab switch now resets `view` state to `"data"`
+  alongside `selectedRef`. Commit `4e06a7f`.
+- **D-24** — `validateReact` warns when `@fonts` is on line 2 with no
+  `@aesthetic` on line 1. Commit `4e06a7f`.
+- **D-26** — html-renderer sandbox tightened to `"allow-scripts"` only;
+  validator emits warning for `alert/confirm/prompt` calls; html
+  prompt updated. Commit `7d24aed`.
+- **D-27** — python-renderer fence is adaptive (mirrors
+  `application/code`'s pattern). Commit `4e06a7f`.
+- **D-28** — artifact-panel imports `Maximize2`/`Minimize2` from
+  `@/lib/icons` instead of direct `lucide-react`. Commit `4e06a7f`.
+- **D-29** (prompt-side residual) — r3f prompt now documents
+  `<color attach="background" args={["#hex"]} />` as supported.
+  Commit `10ad714`.
+- **D-34** — docx-preview-pipeline gains per-`(artifactId, hash)`
+  single-flight Map; concurrent `/render-status` calls share one
+  pipeline run. Commit `4232559`.
+- **D-36** — `cache.ts` reads + writes manifest and pages in parallel
+  via `Promise.all`. Commit `4232559`.
+- **D-38** — `/api/dashboard/artifacts/metrics` exposes the 9 in-process
+  counters in Prometheus exposition format; auth-gated. Commit
+  `2a3f110`.
+- **D-40** — slides validator gains primaryColor / secondaryColor hex
+  whitelists (6+6 from the prompt); hard error on `ctx.isNew`,
+  warning otherwise. Commit `939d277`.
+- **D-46** — `validateDocument` now accepts `_ctx` for shape
+  consistency with the rest of `VALIDATORS`. Commit `e1999c1`.
+- **D-62** — `format.ts` annotated to clarify the catch is not strictly
+  dead (numfmt throws on malformed format strings). Commit `7384337`.
+- **D-66** — no code change; `styles.ts:9-17` already documents the
+  intentional Tailwind-vs-hex divergence. Status moved to
+  documented-by-design.
+- **D-68** — `application/3d` label canonicalized to `"3D Scene"`
+  across registry and prompt. Commit `10ad714`.
+- **D-69** — `S3Paths.artifact` applies `sessionId || "orphan"`
+  fallback; signature widened to accept null/undefined. Commit
+  `7384337`.
+- **D-71** — edit-document route validates params via
+  `DashboardChatSessionArtifactParamsSchema.safeParse`. Commit
+  `7d24aed`.
+- **D-72** — render-pages route now calls
+  `getDashboardChatSessionArtifact` for session ownership before
+  serving cached PNGs (was the IDOR surface). Commit `7d24aed`.
+- **D-73** — `useArtifacts.addOrUpdateArtifact` skips
+  `setActiveArtifactId` for `streaming-` placeholder ids. Commit
+  `7384337`.
+- **D-75** — `repository.deleteArtifactsBySessionId` dead export
+  removed; matching test mock also dropped. Commit `7384337`.
+- **D-77** — mermaid validator error string now generates from
+  `MERMAID_DIAGRAM_TYPES.join(", ")` so it tracks the shared array.
+  Commit `10ad714`.
+- **D-78** — r3f prompt header corrected from "20 helpers" to "19
+  helpers" in two locations. Commit `10ad714`.
+- **D-79** — `RANGE_RE` strips `$` markers before pattern match;
+  `$A$1:$B$5` now produces a real expansion instead of empty. Commit
+  `e1999c1`.
+- **D-80** — `s3.uploadStream` now opt-in `includeUrl` (mirrors
+  `uploadFile`); zero existing callers, no behavior break. Commit
+  `7384337`.
+- **D-82** — embeddings `BATCH_SIZE` / `EMBED_CONCURRENCY` read from
+  `KB_EMBED_BATCH_SIZE` / `KB_EMBED_CONCURRENCY` env. Commit
+  `4232559`.
+- **D-83** — `prompts/index.ts satisfies` shape extended to require
+  `examples`. Commit `10ad714`.
+- **D-85** — `resize-svg.ts` regex matches both single- and
+  double-quoted attribute values. Commit `7384337`.
+- **D-86** — `extract-text.ts` logs pandoc ENOENT once per process via
+  `pandocMissingLogged` sentinel. Commit `4232559`.
+- **D-42 / D-43 (rationale annotated)** — comment block on
+  `MAX_INLINE_STYLE_LINES` explains why HTML and SVG severities
+  diverge (iframe vs inline render boundary). Commit `e1999c1`.
+
+**Still open after `cleanup/artifact-system`:** D-4, D-5, D-8, D-18,
+D-25, D-30, D-32, D-33, D-37, D-39, D-41, D-47, D-51, D-52, D-54,
+D-55, D-56-D-59, D-61, D-63 (mitigated with loading indicator —
+commit `4e06a7f`), D-64, D-67, D-70, D-74, D-76, D-81, D-84, D-87,
+D-88. See entries below.
 
 ### Open
 
