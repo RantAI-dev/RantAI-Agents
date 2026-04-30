@@ -7,7 +7,6 @@ import { chunkDocument } from "./chunker"
 import { generateEmbeddings } from "./embeddings"
 import { storeChunks, deleteChunksByDocumentId } from "./vector-store"
 import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
 
 /**
  * Index artifact content: chunk, embed, and store in SurrealDB.
@@ -100,21 +99,29 @@ async function resolveTextToEmbed(
   }
 }
 
-/** Patch the artifact's metadata.ragIndexed field without overwriting siblings. */
+/**
+ * Patch the artifact's `metadata.ragIndexed` field atomically.
+ *
+ * D-2: previously this was read-then-write (findUnique → spread → update),
+ * which let a concurrent metadata write between the two queries silently
+ * clobber sibling keys. Postgres `jsonb_set` updates the single key in
+ * place server-side — siblings are preserved by definition.
+ *
+ * The COALESCE guards against rows whose `metadata` is NULL (jsonb_set
+ * returns NULL when the source is NULL, which would wipe the field).
+ */
 async function markRagStatus(documentId: string, indexed: boolean) {
   try {
-    const existing = await prisma.document.findUnique({
-      where: { id: documentId },
-      select: { metadata: true },
-    })
-    if (!existing) return
-    const meta = (existing.metadata as Record<string, unknown>) || {}
-    await prisma.document.update({
-      where: { id: documentId },
-      data: {
-        metadata: { ...meta, ragIndexed: indexed } as Prisma.InputJsonValue,
-      },
-    })
+    await prisma.$executeRaw`
+      UPDATE "Document"
+      SET "metadata" = jsonb_set(
+        COALESCE("metadata", '{}'::jsonb),
+        '{ragIndexed}',
+        to_jsonb(${indexed}::boolean),
+        true
+      )
+      WHERE "id" = ${documentId}
+    `
   } catch (err) {
     console.error("[ArtifactIndexer] Failed to write ragIndexed flag:", err)
   }

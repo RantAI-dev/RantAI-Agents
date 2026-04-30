@@ -12,13 +12,19 @@ export interface PreviewResult {
   cached: boolean
 }
 
-export async function renderArtifactPreview(artifactId: string, script: string): Promise<PreviewResult> {
-  const hash = computeContentHash(script)
-  const cached = await getCachedPngs(artifactId, hash).catch(() => null)
-  if (cached && cached.length > 0) {
-    return { hash, pages: cached, cached: true }
-  }
-  // Cache miss → CPU-heavy work, gate via semaphore so we don't OOM under load
+/**
+ * D-34: per-(artifactId, hash) single-flight map. Two concurrent requests
+ * for the same content share the underlying pipeline run instead of each
+ * spawning their own sandbox + soffice + pdftoppm. Process-local; entries
+ * delete themselves on settle so the Map can't grow without bound.
+ */
+const inFlight = new Map<string, Promise<PreviewResult>>()
+
+async function runPipeline(
+  artifactId: string,
+  hash: string,
+  script: string,
+): Promise<PreviewResult> {
   return withRenderSlot(async () => {
     const startedAt = Date.now()
     try {
@@ -42,4 +48,20 @@ export async function renderArtifactPreview(artifactId: string, script: string):
       throw err
     }
   })
+}
+
+export async function renderArtifactPreview(artifactId: string, script: string): Promise<PreviewResult> {
+  const hash = computeContentHash(script)
+  const cached = await getCachedPngs(artifactId, hash).catch(() => null)
+  if (cached && cached.length > 0) {
+    return { hash, pages: cached, cached: true }
+  }
+  const key = `${artifactId}:${hash}`
+  const existing = inFlight.get(key)
+  if (existing) return existing
+  const promise = runPipeline(artifactId, hash, script).finally(() => {
+    inFlight.delete(key)
+  })
+  inFlight.set(key, promise)
+  return promise
 }
