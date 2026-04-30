@@ -56,7 +56,7 @@ Ingest throughput demand at 5K pages/day: 0.06 pages/sec — trivial for the ded
 | **searxng** | `searxng/searxng:latest` | `8888` | web search (air-gapped) |
 | **postgres** | `postgres:16` | `5432` | document metadata |
 | **surrealdb** | `surrealdb/surrealdb:latest` | `8788` | vector + BM25 |
-| **rustfs** | `rustfs/rustfs:latest` | `9000` | S3-compat file storage |
+| **seaweedfs** | `chrislusf/seaweedfs:latest` | `9000` | S3-compat file storage |
 | **rantai-app** | this repo | `3000` | the platform itself |
 
 ---
@@ -199,7 +199,7 @@ services:
     volumes:
       - ~/.cache/huggingface:/root/.cache/huggingface
 
-  # searxng, postgres, surrealdb, rustfs — use existing service definitions
+  # searxng, postgres, surrealdb, seaweedfs — use existing service definitions
 ```
 
 ---
@@ -245,9 +245,9 @@ WEB_SEARCH_MODE="local"
 SEARCH_API_URL="http://searxng:8888/search"
 # SERPER_API_KEY=""                      # leave unset for fully air-gapped
 
-# ─── S3 storage (RustFS — keep as-is) ──────────────────
-S3_ENDPOINT="http://rustfs:9000"
-S3_ACCESS_KEY_ID="rustfsadmin"
+# ─── S3 storage (SeaweedFS) ────────────────────────────
+S3_ENDPOINT="http://seaweedfs:9000"
+S3_ACCESS_KEY_ID="s3admin"
 S3_SECRET_ACCESS_KEY="<secret>"
 S3_BUCKET="rantai-files"
 S3_REGION="us-east-1"
