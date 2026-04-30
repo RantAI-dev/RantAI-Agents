@@ -353,7 +353,7 @@ When using \`chart\` or \`chart-content\` layouts, provide a \`chart\` object:
 ## Mermaid Guidelines
 
 When using \`diagram\` or \`diagram-content\`:
-- Start with a valid declaration: \`flowchart TD\`, \`sequenceDiagram\`, \`erDiagram\`, \`stateDiagram-v2\`, \`classDiagram\`, \`gantt\`, \`pie\`, \`mindmap\`, \`gitGraph\`, \`journey\`.
+- Start with a valid declaration: \`flowchart TD\`, \`sequenceDiagram\`, \`erDiagram\`, \`stateDiagram-v2\`, \`classDiagram\`, \`gantt\`, \`pie\`, \`mindmap\`, \`gitGraph\`, \`journey\`. (The validator accepts the full 25-type Mermaid set, but slides intentionally restrict to these 10 well-established types — exotic diagrams like \`packet-beta\`, \`C4Container\`, \`architecture-beta\` are accepted at the validator level but discouraged in slide context for legibility at presentation distances.)
 - Keep diagrams simple — max 15 nodes for full-slide, max 10 for split layout.
 - Do NOT use \`%%{init}%%\` directives — the renderer handles theming.
 - Use short, clear node labels.

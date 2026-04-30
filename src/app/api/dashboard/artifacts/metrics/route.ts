@@ -10,14 +10,17 @@ export const runtime = "nodejs"
  * endpoint. Scrapers (Prometheus, Datadog Agent, Vector) consume the
  * exposition format directly; humans can curl it.
  *
- * Auth-gated to logged-in users so the endpoint can sit on a public host
- * without leaking internal counters anonymously. Tighten further (e.g.
- * admin-only) if your deployment exposes this through a reverse proxy.
+ * NEW-T-4: gated to ADMIN role so capacity / error-rate signals don't leak
+ * to non-admin tenants in a multi-user deployment. Scrapers should use a
+ * service account that has the ADMIN role.
  */
 export async function GET() {
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+  if (session.user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
   const c = metrics()
   const lines: string[] = []
