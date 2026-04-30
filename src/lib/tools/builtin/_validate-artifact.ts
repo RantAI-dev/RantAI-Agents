@@ -225,6 +225,37 @@ const MAX_BULLET_WORDS = 10
 const MIN_DECK_SLIDES = 7
 const MAX_DECK_SLIDES = 12
 
+/** Approved primaryColor hex values from the slides prompt
+ *  (`prompts/artifacts/slides.ts:40-47`). New decks (`ctx.isNew`) that
+ *  declare a `theme.primaryColor` outside this set hard-error. Existing
+ *  decks are grandfathered (warning only). */
+const APPROVED_SLIDE_PRIMARY_COLORS = new Set([
+  "#0F172A",
+  "#1E293B",
+  "#0C1222",
+  "#042F2E",
+  "#1C1917",
+  "#1A1A2E",
+])
+
+/** Approved secondaryColor hex values from the slides prompt
+ *  (`prompts/artifacts/slides.ts:50-56`). Same gating as primaryColor. */
+const APPROVED_SLIDE_SECONDARY_COLORS = new Set([
+  "#3B82F6",
+  "#06B6D4",
+  "#10B981",
+  "#F59E0B",
+  "#8B5CF6",
+  "#EC4899",
+])
+
+function normalizeHex(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!/^#[0-9A-Fa-f]{6}$/.test(trimmed)) return null
+  return "#" + trimmed.slice(1).toUpperCase()
+}
+
 function validateSlides(content: string, ctx?: ValidationContext): ArtifactValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
@@ -595,16 +626,18 @@ function validateSlides(content: string, ctx?: ValidationContext): ArtifactValid
     }
   }
 
-  // Deck size convention — outside this range and the deck reads as either
-  // too thin or too long for a single sitting.
-  if (slides.length < MIN_DECK_SLIDES) {
-    warnings.push(
-      `Deck has ${slides.length} slides — convention is ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. Fewer than ${MIN_DECK_SLIDES} feels thin.`,
-    )
-  } else if (slides.length > MAX_DECK_SLIDES) {
-    warnings.push(
-      `Deck has ${slides.length} slides — convention is ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. More than ${MAX_DECK_SLIDES} loses the audience.`,
-    )
+  // Deck size — for NEW decks (ctx.isNew) the 7–12 range is a hard rule;
+  // existing decks outside the range are grandfathered to a warning so
+  // updates don't get blocked retroactively.
+  const deckSizeMessage =
+    slides.length < MIN_DECK_SLIDES
+      ? `Deck has ${slides.length} slides — must be ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. Fewer than ${MIN_DECK_SLIDES} feels thin.`
+      : slides.length > MAX_DECK_SLIDES
+        ? `Deck has ${slides.length} slides — must be ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. More than ${MAX_DECK_SLIDES} loses the audience.`
+        : null
+  if (deckSizeMessage) {
+    if (ctx?.isNew) errors.push(deckSizeMessage)
+    else warnings.push(deckSizeMessage)
   }
 
   // Layout diversity — a deck of all `content` slides is boring.
@@ -619,18 +652,38 @@ function validateSlides(content: string, ctx?: ValidationContext): ArtifactValid
     )
   }
 
-  // First slide should be a title; last slide should be a closing.
+  // First slide MUST be `title`; last MUST be `closing`. Hard error on
+  // ctx.isNew so the LLM regenerates; warning otherwise so manual edits
+  // to legacy decks don't get blocked.
   const firstLayout = (slides[0] as { layout?: string } | null)?.layout
   if (firstLayout && firstLayout !== "title") {
-    warnings.push(
-      `First slide has layout "${firstLayout}" — convention is to open with a \`title\` slide.`,
-    )
+    const msg = `First slide has layout "${firstLayout}" — must open with a \`title\` slide.`
+    if (ctx?.isNew) errors.push(msg)
+    else warnings.push(msg)
   }
   const lastLayout = (slides[slides.length - 1] as { layout?: string } | null)?.layout
   if (lastLayout && lastLayout !== "closing") {
-    warnings.push(
-      `Last slide has layout "${lastLayout}" — convention is to end with a \`closing\` slide.`,
-    )
+    const msg = `Last slide has layout "${lastLayout}" — must end with a \`closing\` slide.`
+    if (ctx?.isNew) errors.push(msg)
+    else warnings.push(msg)
+  }
+
+  // Theme color whitelist — only checked when a `theme` object is present.
+  // Hard error on ctx.isNew, warning otherwise.
+  const theme = root.theme as Record<string, unknown> | undefined
+  if (theme && typeof theme === "object" && !Array.isArray(theme)) {
+    const primary = normalizeHex(theme.primaryColor)
+    if (primary !== null && !APPROVED_SLIDE_PRIMARY_COLORS.has(primary)) {
+      const msg = `theme.primaryColor "${theme.primaryColor}" is not in the approved set (${[...APPROVED_SLIDE_PRIMARY_COLORS].join(", ")}). The prompt requires a dark, conservative primary color.`
+      if (ctx?.isNew) errors.push(msg)
+      else warnings.push(msg)
+    }
+    const secondary = normalizeHex(theme.secondaryColor)
+    if (secondary !== null && !APPROVED_SLIDE_SECONDARY_COLORS.has(secondary)) {
+      const msg = `theme.secondaryColor "${theme.secondaryColor}" is not in the approved set (${[...APPROVED_SLIDE_SECONDARY_COLORS].join(", ")}).`
+      if (ctx?.isNew) errors.push(msg)
+      else warnings.push(msg)
+    }
   }
 
   return { ok: errors.length === 0, errors, warnings }
