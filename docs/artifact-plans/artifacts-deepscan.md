@@ -863,11 +863,17 @@ detail.
   `MAX_INLINE_STYLE_LINES` explains why HTML and SVG severities
   diverge (iframe vs inline render boundary). Commit `e1999c1`.
 
-**Still open after `cleanup/artifact-system`:** D-4, D-5, D-8, D-18,
-D-25, D-30, D-32, D-33, D-37, D-39, D-41, D-47, D-51, D-52, D-54,
-D-55, D-56-D-59, D-61, D-63 (mitigated with loading indicator —
-commit `4e06a7f`), D-64, D-67, D-70, D-74, D-76, D-81, D-84, D-87,
-D-88. See entries below.
+**MOOT via dead-code deletion (commit `6c1dd82`):** D-4, D-54, D-55,
+D-71 (edit-document subsystem dropped — orphan since `0b25e56` UI
+removal); D-80 (`s3.uploadStream` dropped — zero callers); D-85
+(`resize-svg.ts` dropped — zero callers). The Tier 2/3/4 fixes for
+D-71, D-80, D-85 patched code that was already dead — work is gone
+along with the modules.
+
+**Still open after `cleanup/artifact-system`:** D-5, D-8, D-18, D-25,
+D-30, D-32, D-33, D-37, D-39, D-41, D-47, D-51, D-52, D-56-D-59, D-61,
+D-63 (mitigated with loading indicator — commit `4e06a7f`), D-64,
+D-67, D-70, D-74, D-76, D-81, D-84, D-87, D-88. See entries below.
 
 ### Open
 
