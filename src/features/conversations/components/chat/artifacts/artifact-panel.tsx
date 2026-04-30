@@ -14,8 +14,9 @@ import {
   RotateCcw,
   AlertTriangle,
   AlertCircle,
+  Maximize2,
+  Minimize2,
 } from "@/lib/icons"
-import { Maximize, Minimize } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Tooltip,
@@ -646,9 +647,9 @@ export function ArtifactPanel({
                 onClick={() => setIsFullscreen((prev) => !prev)}
               >
                 {isFullscreen ? (
-                  <Minimize className="h-4 w-4" />
+                  <Minimize2 className="h-4 w-4" />
                 ) : (
-                  <Maximize className="h-4 w-4" />
+                  <Maximize2 className="h-4 w-4" />
                 )}
               </Button>
             </TooltipTrigger>

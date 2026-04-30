@@ -1866,6 +1866,14 @@ function validateReact(content: string): ArtifactValidationResult {
       // Continue without aesthetic — soft-warns below are skipped because
       // directives.aesthetic is null.
     }
+    // D-24: orphan @fonts on line 2 with no @aesthetic on line 1 is
+    // silently stripped by the parser. Surface it as a warning so the
+    // LLM moves @fonts after a real @aesthetic directive.
+    if (directives.rawFontsLine) {
+      warnings.push(
+        "@fonts directive on line 2 has no @aesthetic on line 1 to pair with — fonts are positionally parsed and will be stripped from the source. Add `// @aesthetic: <direction>` on line 1 first.",
+      )
+    }
   } else if (!directives.aesthetic) {
     const badValue = directives.rawAestheticLine
       .replace(/^\s*\/\/\s*@aesthetic\s*:\s*/, "")
