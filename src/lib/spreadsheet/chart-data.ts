@@ -40,7 +40,10 @@ function colNumToLetter(n: number): string {
  * Single-row ranges (A2:F2) and single-cell (A2:A2) supported.
  */
 function expandRange(range: string): string[] {
-  const m = range.match(RANGE_RE)
+  // Strip Excel-style absolute-ref `$` markers ($A$1:$B$5) before pattern match —
+  // the regex doesn't handle them but they're semantically equivalent here.
+  const normalized = range.replace(/\$/g, "")
+  const m = normalized.match(RANGE_RE)
   if (!m) return []
   const [, sheet, c1, r1, c2, r2] = m
   const startCol = colLetterToNum(c1)

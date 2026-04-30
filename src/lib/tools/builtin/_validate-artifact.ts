@@ -47,7 +47,20 @@ const REACT_IMPORT_WHITELIST = new Set([
   "framer-motion",
 ])
 
-/** Maximum non-blank lines allowed inside inline <style> blocks. */
+/** Maximum non-blank lines allowed inside inline <style> blocks
+ *  inside HTML artifacts.
+ *
+ *  Note on severity divergence vs. SVG (`validateSvg`):
+ *  - HTML renders inside an iframe (sandboxed document). `<style>` is
+ *    contained — it only affects iframe DOM, not host page CSS. So the
+ *    10-line limit here is purely a stylistic nudge ("prefer Tailwind")
+ *    and emits a *warning*, not a hard error.
+ *  - SVG renders inline via `dangerouslySetInnerHTML` (not iframed).
+ *    `<style>` inside SVG would leak into host page CSS scope, so
+ *    `validateSvg` rejects it as a *hard error* with no length threshold.
+ *  Both severities are correct for their respective security boundaries;
+ *  do not "unify" them without first re-evaluating the iframe model.
+ */
 const MAX_INLINE_STYLE_LINES = 10
 
 /**
@@ -166,7 +179,13 @@ export async function validateArtifactContent(
 // Document validation — docx-js script (TS parse + sandbox dry-run)
 // ---------------------------------------------------------------------------
 
-async function validateDocument(content: string): Promise<ArtifactValidationResult> {
+async function validateDocument(
+  content: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _ctx?: ValidationContext,
+): Promise<ArtifactValidationResult> {
+  // _ctx accepted for shape consistency with the rest of VALIDATORS;
+  // delegated validator currently has no isNew-only rules.
   const { validateScriptArtifact } = await import("@/lib/document-script/validator")
   const r = await validateScriptArtifact(content)
   return { ok: r.ok, errors: r.errors, warnings: [] }
