@@ -65,6 +65,27 @@ function getColor(index: number, customColor?: string): string {
   return customColor || DEFAULT_COLORS[index % DEFAULT_COLORS.length]
 }
 
+/**
+ * Derive a `ChartTheme` from a hex color via relative luminance.
+ * Returns `"dark"` when the supplied background is dark enough that the
+ * default light-theme chart palette would clash. Used by slide exporters
+ * (PPTX + HTML preview) to pick a chart palette that matches the deck's
+ * `theme.primaryColor` automatically.
+ */
+export function inferChartTheme(hex: string | undefined | null): ChartTheme {
+  if (!hex || typeof hex !== "string") return "light"
+  const m = hex.trim().match(/^#?([0-9a-fA-F]{6})$/)
+  if (!m) return "light"
+  const v = parseInt(m[1], 16)
+  const r = (v >> 16) & 0xff
+  const g = (v >> 8) & 0xff
+  const b = v & 0xff
+  // Standard relative-luminance formula (sRGB; non-linearized for speed —
+  // accurate enough for a binary light/dark decision).
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  return lum < 0.5 ? "dark" : "light"
+}
+
 function escapeXml(text: string): string {
   return text
     .replace(/&/g, "&amp;")

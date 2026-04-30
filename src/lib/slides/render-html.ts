@@ -1,5 +1,5 @@
 import type { PresentationData, SlideData } from "./types"
-import { chartToSvg } from "@/lib/rendering/chart-to-svg"
+import { chartToSvg, inferChartTheme } from "@/lib/rendering/chart-to-svg"
 import { cleanMarkdown, darkenColor, CHART_DIMENSIONS } from "./utils"
 import { resolveIconsInText, getIconSvg } from "./icons"
 
@@ -162,7 +162,7 @@ function renderSlideContent(slide: SlideData, index: number, total: number): str
         parts.push(`</div>`)
       }
       if (slide.chart) {
-        const chartSvg = chartToSvg(slide.chart, CHART_DIMENSIONS.html.fullSlide.width, CHART_DIMENSIONS.html.fullSlide.height)
+        const chartSvg = chartToSvg(slide.chart, CHART_DIMENSIONS.html.fullSlide.width, CHART_DIMENSIONS.html.fullSlide.height, { theme: inferChartTheme(theme.primaryColor) })
         parts.push(`<div class="chart-container">${chartSvg}</div>`)
       }
       parts.push(`</div>`)
@@ -222,7 +222,7 @@ function renderSlideContent(slide: SlideData, index: number, total: number): str
       parts.push(`<div class="split-layout">`)
       parts.push(`<div class="visual-side">`)
       if (slide.chart) {
-        const chartSvg = chartToSvg(slide.chart, CHART_DIMENSIONS.html.splitLayout.width, CHART_DIMENSIONS.html.splitLayout.height)
+        const chartSvg = chartToSvg(slide.chart, CHART_DIMENSIONS.html.splitLayout.width, CHART_DIMENSIONS.html.splitLayout.height, { theme: inferChartTheme(theme.primaryColor) })
         parts.push(`<div class="chart-container">${chartSvg}</div>`)
       }
       parts.push(`</div>`)
