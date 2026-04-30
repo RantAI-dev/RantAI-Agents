@@ -77,9 +77,13 @@ const MAX_INLINE_STYLE_LINES = 10
  * - `isNew`: this content is being CREATED, not updated. Lets validators apply
  *   stricter rules (e.g. size caps, layout deprecations) only to fresh content
  *   and grandfather existing artifacts that pre-date the rule.
+ * - `language`: the `language` field on `application/code` artifacts. Read by
+ *   `validateCode` to flag unrecognised Shiki names so a `language: "pyhton"`
+ *   typo doesn't silently pass.
  */
 export interface ValidationContext {
   isNew?: boolean
+  language?: string
 }
 
 const VALIDATORS: Record<
@@ -1322,7 +1326,20 @@ const CODE_TRUNCATION_MARKERS: ReadonlyArray<{ marker: RegExp; label: string }> 
   { marker: /\bpass\s*#\s*(placeholder|implement|todo)/i, label: "pass  # placeholder" },
 ]
 
-function validateCode(content: string): ArtifactValidationResult {
+/** D-18: canonical Shiki language names that the prompt advertises
+ *  (`prompts/artifacts/code.ts`). The `application/code` create-artifact
+ *  guard already requires `language` exists; this catches typos and
+ *  off-list values that would otherwise render as plain text. */
+const CANONICAL_CODE_LANGUAGES = new Set([
+  "typescript", "tsx", "javascript", "jsx",
+  "python", "rust", "go", "java", "csharp", "cpp", "c",
+  "ruby", "php", "swift", "kotlin",
+  "sql", "bash", "shell",
+  "yaml", "json", "toml", "dockerfile",
+  "html", "css", "scss", "markdown",
+])
+
+function validateCode(content: string, ctx?: ValidationContext): ArtifactValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
@@ -1331,6 +1348,19 @@ function validateCode(content: string): ArtifactValidationResult {
   if (!trimmed) {
     errors.push("Code content is empty.")
     return { ok: false, errors, warnings }
+  }
+
+  // D-18: cross-validate the artifact's `language` field against the
+  // canonical Shiki list. The create-artifact guard already requires it
+  // exists; this surfaces typos / off-list values to the LLM as a warning
+  // (Shiki silently falls back to plain text otherwise).
+  if (ctx?.language) {
+    const lang = ctx.language.toLowerCase().trim()
+    if (lang && !CANONICAL_CODE_LANGUAGES.has(lang)) {
+      warnings.push(
+        `language "${ctx.language}" is not in the canonical Shiki list. Use one of: ${[...CANONICAL_CODE_LANGUAGES].join(", ")}. Off-list values render as plain text without syntax highlighting.`,
+      )
+    }
   }
 
   // Wrong-type guard: HTML document masquerading as code.

@@ -68,6 +68,33 @@ export async function indexArtifactContent(
 }
 
 /**
+ * D-47: per-process cache of extracted DOCX text keyed by content hash.
+ * Re-indexing the same `text/document` artifact (e.g. after a metadata
+ * tweak that bumps `updatedAt` but doesn't change `content`) used to
+ * spawn the sandbox + pandoc again every time. Cap entries so a long-
+ * running process doesn't accumulate unbounded; FIFO eviction is fine
+ * because we're only optimising re-index hot paths, not first-index.
+ */
+const DOCX_TEXT_CACHE_CAP = 128
+const docxTextCache = new Map<string, string>()
+function cacheKey(documentId: string, content: string): string {
+  // Cheap content hash — keep distinct from the full SHA in cache.ts;
+  // collisions across artifacts are bounded by including documentId.
+  let h = 5381
+  for (let i = 0; i < content.length; i++) {
+    h = ((h << 5) + h + content.charCodeAt(i)) | 0
+  }
+  return `${documentId}:${h}`
+}
+function setCachedDocxText(key: string, text: string): void {
+  if (docxTextCache.size >= DOCX_TEXT_CACHE_CAP) {
+    const oldest = docxTextCache.keys().next().value
+    if (oldest) docxTextCache.delete(oldest)
+  }
+  docxTextCache.set(key, text)
+}
+
+/**
  * For text/document artifacts, run the JS in sandbox and pandoc-extract
  * plain text. All other types pass through unchanged. Failures fall
  * back to the original content.
@@ -85,6 +112,9 @@ async function resolveTextToEmbed(
     if (artifactType !== "text/document") {
       return content
     }
+    const ck = cacheKey(documentId, content)
+    const cached = docxTextCache.get(ck)
+    if (cached !== undefined) return cached
     const { runScriptInSandbox } = await import("@/lib/document-script/sandbox-runner")
     const { extractDocxText } = await import("@/lib/document-script/extract-text")
     const r = await runScriptInSandbox(content, {})
@@ -92,7 +122,9 @@ async function resolveTextToEmbed(
       console.warn(`[ArtifactIndexer] sandbox failed for ${documentId}, embedding script source: ${r.ok ? "no buffer" : r.error}`)
       return content
     }
-    return await extractDocxText(r.buf)
+    const text = await extractDocxText(r.buf)
+    setCachedDocxText(ck, text)
+    return text
   } catch (err) {
     console.warn(`[ArtifactIndexer] script extract failed for ${documentId}, embedding script source:`, err)
     return content

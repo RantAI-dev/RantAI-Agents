@@ -5,10 +5,14 @@
 // the user script. The user script does its own `Packer.toBuffer(doc).then(buf
 // => process.stdout.write(buf.toString("base64")))` per the prompt contract.
 
+// D-76: kept symmetrical with `sandbox-loader.mjs:FORBIDDEN_SPECIFIERS`
+// — every entry blocked by the loader hook is also globalThis-shadowed
+// here so `require("http2")` (via `createRequire`) and other CommonJS
+// access paths don't slip through.
 const FORBIDDEN_MODULES = [
-  "fs", "net", "http", "https", "child_process", "worker_threads",
+  "fs", "net", "http", "http2", "https", "child_process", "worker_threads",
   "dgram", "tls", "cluster",
-  "node:fs", "node:net", "node:http", "node:https",
+  "node:fs", "node:net", "node:http", "node:http2", "node:https",
   "node:child_process", "node:worker_threads", "node:dgram",
   "node:tls", "node:cluster",
 ]
