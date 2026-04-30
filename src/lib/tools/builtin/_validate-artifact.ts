@@ -676,15 +676,18 @@ function validateSlides(content: string, ctx?: ValidationContext): ArtifactValid
   // Hard error on ctx.isNew, warning otherwise.
   const theme = root.theme as Record<string, unknown> | undefined
   if (theme && typeof theme === "object" && !Array.isArray(theme)) {
+    // Echo the normalized (uppercase) form in the error so it reads cleanly
+    // alongside the uppercase approved-list — lowercase input shown next to
+    // uppercase examples was visually confusing (NEW-P-2).
     const primary = normalizeHex(theme.primaryColor)
     if (primary !== null && !APPROVED_SLIDE_PRIMARY_COLORS.has(primary)) {
-      const msg = `theme.primaryColor "${theme.primaryColor}" is not in the approved set (${[...APPROVED_SLIDE_PRIMARY_COLORS].join(", ")}). The prompt requires a dark, conservative primary color.`
+      const msg = `theme.primaryColor ${primary} is not in the approved set (${[...APPROVED_SLIDE_PRIMARY_COLORS].join(", ")}). The prompt requires a dark, conservative primary color.`
       if (ctx?.isNew) errors.push(msg)
       else warnings.push(msg)
     }
     const secondary = normalizeHex(theme.secondaryColor)
     if (secondary !== null && !APPROVED_SLIDE_SECONDARY_COLORS.has(secondary)) {
-      const msg = `theme.secondaryColor "${theme.secondaryColor}" is not in the approved set (${[...APPROVED_SLIDE_SECONDARY_COLORS].join(", ")}).`
+      const msg = `theme.secondaryColor ${secondary} is not in the approved set (${[...APPROVED_SLIDE_SECONDARY_COLORS].join(", ")}).`
       if (ctx?.isNew) errors.push(msg)
       else warnings.push(msg)
     }

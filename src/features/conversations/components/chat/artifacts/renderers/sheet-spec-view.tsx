@@ -64,10 +64,16 @@ export function SpecWorkbookView({ content }: SpecWorkbookViewProps) {
   const [view, setView] = useState<"data" | "charts">("data")
 
   // Reset selection / active-sheet when the underlying content changes.
+  // Also reset `values` to null so the "Calculating formulas…" footer fires
+  // during re-evaluation (NEW-R-5) — without this, stale values from the
+  // previous spec briefly render in cells until the async evaluator resolves
+  // to the new result.
   useEffect(() => {
     setActiveSheet(0)
     setSelectedRef(null)
     setView("data")
+    setValues(null)
+    setEvalError(null)
   }, [content])
 
   const parsed = useMemo(() => parseSpec(content), [content])

@@ -109,9 +109,12 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
   }
 
   // ── error ──
+  // NEW-R-2: announce loading via aria-live when Retry is clicked so
+  // screen-reader users get context for the focus jump (the error branch
+  // unmounts on retry, removing the focused button from the DOM).
   if (error) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full" role="status" aria-live="polite">
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="max-w-md text-center space-y-3">
             <div className="text-sm text-destructive">Preview unavailable</div>
@@ -119,6 +122,7 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
             <button
               type="button"
               onClick={() => setRetryCount((n) => n + 1)}
+              aria-label="Retry preview render"
               className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
             >
               <RefreshCw className="h-3.5 w-3.5" />

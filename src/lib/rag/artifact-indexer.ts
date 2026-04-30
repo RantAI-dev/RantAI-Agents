@@ -3,6 +3,7 @@
  * Used by both create_artifact and update_artifact tools.
  */
 
+import { createHash } from "node:crypto"
 import { chunkDocument } from "./chunker"
 import { generateEmbeddings } from "./embeddings"
 import { storeChunks, deleteChunksByDocumentId } from "./vector-store"
@@ -78,12 +79,10 @@ export async function indexArtifactContent(
 const DOCX_TEXT_CACHE_CAP = 128
 const docxTextCache = new Map<string, string>()
 function cacheKey(documentId: string, content: string): string {
-  // Cheap content hash — keep distinct from the full SHA in cache.ts;
-  // collisions across artifacts are bounded by including documentId.
-  let h = 5381
-  for (let i = 0; i < content.length; i++) {
-    h = ((h << 5) + h + content.charCodeAt(i)) | 0
-  }
+  // SHA-256[:16] (matches the same hash function in lib/document-script/cache.ts).
+  // 64-bit prefix is collision-safe even for high-churn long-lived documents
+  // (autosave streams) where djb2's 32-bit space would risk false-positives.
+  const h = createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16)
   return `${documentId}:${h}`
 }
 function setCachedDocxText(key: string, text: string): void {
