@@ -1,6 +1,6 @@
 "use client"
 import { useCallback, useEffect, useState } from "react"
-import { Loader2, ChevronLeft, ChevronRight } from "@/lib/icons"
+import { Loader2, ChevronLeft, ChevronRight, RefreshCw } from "@/lib/icons"
 
 interface RenderStatus {
   hash: string
@@ -29,6 +29,7 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
   const [status, setStatus] = useState<RenderStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pageIdx, setPageIdx] = useState(0)
+  const [retryCount, setRetryCount] = useState(0)
 
   // Trigger render-status fetch whenever the script changes (or streaming
   // ends). Skip while the LLM is still typing the script.
@@ -58,7 +59,7 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
     return () => {
       cancelled = true
     }
-  }, [sessionId, artifactId, content, isStreaming])
+  }, [sessionId, artifactId, content, isStreaming, retryCount])
 
   const goPrev = useCallback(() => setPageIdx((i) => Math.max(0, i - 1)), [])
   const goNext = useCallback(
@@ -115,6 +116,14 @@ export function DocumentScriptRenderer({ sessionId, artifactId, content, isStrea
           <div className="max-w-md text-center space-y-3">
             <div className="text-sm text-destructive">Preview unavailable</div>
             <div className="text-xs text-muted-foreground break-words">{error}</div>
+            <button
+              type="button"
+              onClick={() => setRetryCount((n) => n + 1)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent transition-colors"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </button>
           </div>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { DashboardChatSessionArtifactParamsSchema } from "@/features/conversatio
 import { getDashboardChatSessionArtifact } from "@/features/conversations/sessions/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
 import { runScriptInSandbox } from "@/lib/document-script/sandbox-runner"
+import { docxToPdf } from "@/lib/rendering/server/docx-to-pdf"
 
 export const runtime = "nodejs"
 
@@ -41,7 +42,7 @@ export async function GET(
       )
     }
 
-    if (format !== "docx") {
+    if (format !== "docx" && format !== "pdf") {
       return NextResponse.json(
         { error: `Unsupported format: ${format}` },
         { status: 400 }
@@ -59,6 +60,30 @@ export async function GET(
         { status: 500 }
       )
     }
+
+    if (format === "pdf") {
+      // D-3: route the rendered DOCX through soffice to produce a PDF.
+      // The same conversion is already used internally by the preview
+      // pipeline (docx → pdf → png pages); here we just stop at the PDF.
+      let pdf: Buffer
+      try {
+        pdf = await docxToPdf(r.buf)
+      } catch (err) {
+        return NextResponse.json(
+          { error: `pdf conversion failed: ${(err as Error).message}` },
+          { status: 500 }
+        )
+      }
+      return new Response(new Uint8Array(pdf), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="${safeTitle}.pdf"`,
+          "Cache-Control": "no-store",
+        },
+      })
+    }
+
     return new Response(new Uint8Array(r.buf), {
       status: 200,
       headers: {

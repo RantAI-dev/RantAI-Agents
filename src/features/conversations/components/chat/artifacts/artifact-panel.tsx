@@ -231,7 +231,7 @@ export function ArtifactPanel({
    * the panel never crashes.
    */
   const handleDocumentDownload = useCallback(
-    async (format: "md" | "docx") => {
+    async (format: "md" | "docx" | "pdf") => {
       if (isExporting) return
       setExportError(null)
       const slug = displayArtifact.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()
@@ -264,14 +264,14 @@ export function ArtifactPanel({
 
         setIsExporting(true)
 
-        if (format === "docx") {
+        if (format === "docx" || format === "pdf") {
           if (!sessionId) {
             throw new Error(
               "Session context missing; reload the page and retry the download."
             )
           }
           const res = await fetch(
-            `/api/dashboard/chat/sessions/${sessionId}/artifacts/${displayArtifact.id}/download?format=docx`
+            `/api/dashboard/chat/sessions/${sessionId}/artifacts/${displayArtifact.id}/download?format=${format}`
           )
           if (!res.ok) {
             const payload = (await res.json().catch(() => null)) as
@@ -282,7 +282,7 @@ export function ArtifactPanel({
             )
           }
           const blob = await res.blob()
-          triggerDownload(blob, `${slug}.docx`)
+          triggerDownload(blob, `${slug}.${format}`)
           return
         }
       } catch (err) {
@@ -580,6 +580,13 @@ export function ArtifactPanel({
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download as Word (.docx)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleDocumentDownload("pdf")}
+                  disabled={isExporting}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download as PDF (.pdf)
                 </DropdownMenuItem>
                 {exportError && (
                   <div className="px-2 py-1.5 text-xs text-destructive border-t mt-1">
