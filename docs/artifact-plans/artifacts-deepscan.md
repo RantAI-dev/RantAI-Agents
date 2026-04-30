@@ -870,10 +870,85 @@ removal); D-80 (`s3.uploadStream` dropped — zero callers); D-85
 D-71, D-80, D-85 patched code that was already dead — work is gone
 along with the modules.
 
-**Still open after `cleanup/artifact-system`:** D-5, D-8, D-18, D-25,
-D-30, D-32, D-33, D-37, D-39, D-41, D-47, D-51, D-52, D-56-D-59, D-61,
-D-63 (mitigated with loading indicator — commit `4e06a7f`), D-64,
-D-67, D-70, D-74, D-76, D-81, D-84, D-87, D-88. See entries below.
+**Closed in second batch (commits `414fe1a`, `9732b9a`):**
+- **D-18** — `ValidationContext` gains `language?: string`; `validateCode`
+  warns on values outside the canonical Shiki list. `create-artifact`
+  threads the field through.
+- **D-47** — DOCX-extracted text is now cached per `(documentId, content
+  hash)` in a 128-entry FIFO Map inside `artifact-indexer.ts`; re-indexes
+  of unchanged content skip the sandbox + pandoc spawn entirely.
+- **D-51** — `chart-to-svg.ts` gains `options.theme: "light" | "dark"`;
+  defaults to `"light"` so existing callers are unchanged. Light palette
+  mirrors prior tokens; dark palette uses slate-700/900 grid/axis and
+  slate-100/300 text.
+- **D-76** — `sandbox-wrapper.mjs` `FORBIDDEN_MODULES` now includes
+  `http2` and `node:http2` to match `sandbox-loader.mjs`'s
+  `FORBIDDEN_SPECIFIERS`. The static-import path was already covered;
+  this closes the `require("http2")` via `createRequire` corner.
+- **D-84** — `pdf-to-pngs.ts` extracts the page index via regex and sorts
+  numerically rather than relying on `pdftoppm`'s zero-padding.
+
+**Closed as won't-fix / by-design (no code change, doc status only):**
+- **D-5** — `s3.deleteFiles` per-key swallow is intentional (best-effort
+  cleanup; per-object errors logged for diagnostics, not escalated).
+- **D-8** — `evaluateWorkbook` complexity bounded by the 5 s validator
+  timeout; `parseSpec` caps + Kahn's O(V+E) topo sort make pathological
+  inputs the LLM's problem to fix, not the validator's.
+- **D-25** — Streamdown's internal mermaid pipeline is third-party; we
+  can't override config without forking the package. Live with the dual
+  source-of-truth for fenced mermaid in markdown artifacts.
+- **D-30** — unsaved-edit nav guard moot post panel-chrome overhaul
+  (panel is view-only across every type). Re-evaluate if editing
+  returns.
+- **D-32** — sandbox isolation model documented inline in
+  `sandbox-runner.ts` (OS child process, no cgroup/seccomp/namespace,
+  threat model: trusted-but-fallible LLM). Tightening to a VM /
+  worker-thread is a separate plan.
+- **D-33** — `Function`/`eval` deliberately unblocked because `docx`
+  transitively uses `function-bind`. Documented in `sandbox-wrapper.mjs`
+  with explanatory comment.
+- **D-39 / D-41** — `SLIDE_LAYOUTS` is 18 entries; `R3F_ALLOWED_DEPS`
+  is 34 entries. Counts captured for reference; nothing to fix.
+- **D-52** — `s3.uploadFile` empty-`url` default is opt-in via
+  `includeUrl` for callers that don't need a presigned URL. Documented
+  on the function.
+- **D-56 / D-57 / D-58 / D-59** — spreadsheet engine bounds: pure
+  `evaluateWorkbook` (concurrent-safe), no formula whitelist (uses
+  `fast-formula-parser`'s native ~150 functions), no array spillover,
+  range-type named ranges silently `null`. All structural — by design,
+  not a bug.
+- **D-61** — folded into D-66 (Tailwind class strings vs theme hex);
+  styles.ts top-of-file comment explains the divergence.
+- **D-63** — mitigated by the "Calculating formulas…" footer added in
+  commit `4e06a7f`. Two-pass render itself is intrinsic to the
+  parseSpec-sync / evaluateWorkbook-async architecture.
+- **D-67** — `_mermaid-types.ts` relocation closed; nothing pending.
+- **D-70** — concurrent-write error-message divergence between LLM tool
+  path and HTTP path is intentional (different audiences, different
+  retry advice). Documented as such.
+- **D-74** — `getDashboardChatSessionArtifact` coercing null
+  `artifactType` to `""` is the safest behaviour for the existing
+  consumers (every caller compares to `"text/document"` and rejects
+  empty). Documented; throw-404 alternative considered and skipped.
+- **D-87** — 16-char SHA-256 prefix for cache keys (64 bits) is
+  collision-safe for any realistic artifact-id × hash space.
+- **D-88** — false positive in original audit; `mermaid-to-png.ts:9`
+  comment is current. Closed.
+
+**Open with separate plan needed:**
+- **D-37** — `soffice` cold-start. LibreOffice listener-socket / daemon
+  mode would shave ~1–3 s per render but requires subprocess-management
+  rewrite; benchmark first.
+- **D-64** — XLSX export emits no chart objects. ExcelJS upstream lacks
+  a stable chart API. Known limitation; track upstream or swap library.
+- **D-81** — `vector-store.ts` legacy `storeDocument` (sequential loop)
+  vs newer `storeChunks` (batched parallel). Knowledge-upload path uses
+  the legacy version; reconciliation needs careful test coverage to
+  avoid behaviour drift on metadata enrichment paths.
+
+**No remaining open items after this batch.** All findings either
+closed, made moot, mitigated, documented as by-design, or moved to a
+separate plan tracker.
 
 ### Open
 
