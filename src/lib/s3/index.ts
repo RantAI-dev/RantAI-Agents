@@ -175,39 +175,6 @@ export async function uploadFile(
 }
 
 /**
- * Upload a file from a stream/blob.
- *
- * `options.includeUrl` mirrors `uploadFile` — when omitted, the returned
- * `url` is empty so callers that don't need a presigned download URL
- * skip the extra signing round-trip. (D-80)
- */
-export async function uploadStream(
-  key: string,
-  body: ReadableStream | Blob | Uint8Array,
-  contentType: string,
-  contentLength?: number,
-  metadata?: Record<string, string>,
-  options?: { includeUrl?: boolean },
-): Promise<{ key: string; url: string }> {
-  const client = getS3Client()
-
-  await client.send(
-    new PutObjectCommand({
-      Bucket: S3_CONFIG.bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-      ContentLength: contentLength,
-      Metadata: metadata,
-    })
-  )
-
-  const url = options?.includeUrl ? await getPresignedDownloadUrl(key) : ""
-
-  return { key, url }
-}
-
-/**
  * Generate a presigned URL for downloading a file
  */
 export async function getPresignedDownloadUrl(

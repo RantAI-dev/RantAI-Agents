@@ -2,8 +2,9 @@
  * Server-side SVG → PNG rasterizer using sharp.
  *
  * Uses fit:'contain' + white background so aspect-mismatched SVGs are
- * letterboxed rather than distorted or clipped. Pairs with `resize-svg`
- * upstream when the SVG's intrinsic dimensions differ from the target.
+ * letterboxed rather than distorted or clipped. sharp handles the
+ * resize internally — the source SVG's width/height/viewBox are taken
+ * verbatim and `.resize()` letterboxes onto the requested canvas.
  */
 
 import sharp from "sharp"
