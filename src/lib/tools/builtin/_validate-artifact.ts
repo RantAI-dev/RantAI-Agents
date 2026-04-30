@@ -1559,7 +1559,9 @@ function validateSvg(content: string): ArtifactValidationResult {
       ) {
         colorValues.add(a.value.toLowerCase())
       }
-      if (a.name === "d" && /\d\.\d{3,}/.test(a.value)) highPrecisionPath = true
+      // D-17: prompt rule is "1 decimal place max"; warn at 2+ dp so the
+      // validator matches the prompt's threshold (was 3+ dp).
+      if (a.name === "d" && /\d\.\d{2,}/.test(a.value)) highPrecisionPath = true
     })
     node.childNodes?.forEach(walk)
   }
@@ -1634,7 +1636,7 @@ function validateSvg(content: string): ArtifactValidationResult {
   }
   if (highPrecisionPath) {
     warnings.push(
-      "Some path coordinates use more than 2 decimal places. Round to 1 decimal for readability and smaller file size."
+      "Some path coordinates use more than 1 decimal place. Round to 1 decimal max for readability and smaller file size."
     )
   }
 
@@ -1747,6 +1749,16 @@ function validateHtml(content: string): ArtifactValidationResult {
   if (found.inlineStyleOverflow) {
     warnings.push(
       `Inline <style> block exceeds ${MAX_INLINE_STYLE_LINES} non-blank lines. Prefer Tailwind utility classes instead of custom CSS.`
+    )
+  }
+
+  // D-26: the iframe sandbox no longer includes `allow-modals`, so
+  // `alert()` / `confirm()` / `prompt()` calls silently no-op at runtime.
+  // Warn so the LLM regenerates with a custom in-page modal instead of
+  // browser-native dialogs.
+  if (/(^|[^.\w])(alert|confirm|prompt)\s*\(/.test(content)) {
+    warnings.push(
+      "Found alert()/confirm()/prompt() — these are blocked by the sandbox (allow-modals dropped). Build a custom in-page modal with HTML/CSS/JS instead."
     )
   }
 
@@ -2062,9 +2074,12 @@ function validatePython(content: string): ArtifactValidationResult {
     )
   }
 
-  if (/\bopen\s*\([^)]*,\s*['"][wax]b?\+?['"]/m.test(codeNoComments)) {
+  // D-16: the Pyodide Worker has no persistent filesystem at all — neither
+  // read nor write open() will work. The prompt forbids all open(); the
+  // validator now matches all open() calls, not just write modes.
+  if (/(^|[^.\w])open\s*\(/m.test(codeNoComments)) {
     errors.push(
-      "Found open() with a write mode — there is no persistent filesystem in the Pyodide Worker. Remove file writes; use print() or plt.show() for output."
+      "Found open() — there is no persistent filesystem in the Pyodide Worker. Hard-code values or generate them; use print() or plt.show() for output."
     )
   }
 

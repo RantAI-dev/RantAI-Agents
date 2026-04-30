@@ -10,7 +10,7 @@ You are generating a complete, production-quality HTML document that will render
 ## Runtime Environment
 - **Tailwind CSS v3 is auto-injected** from \`https://cdn.tailwindcss.com\`. Do NOT add another Tailwind <script>.
 - **You MUST include the Inter font yourself** via \`<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">\` and apply \`font-family: 'Inter', system-ui, sans-serif\` on body.
-- **Sandbox restrictions**: \`allow-scripts allow-modals\` only. \`location.*\`, \`history.*\`, \`window.open()\`, anchor navigation, and form submission are all blocked. Build single-page interactivity with JS state — never rely on real navigation or form POST.
+- **Sandbox restrictions**: \`allow-scripts\` only — \`allow-modals\` is intentionally NOT granted. \`location.*\`, \`history.*\`, \`window.open()\`, anchor navigation, form submission, AND browser-native dialogs (\`alert()\`, \`confirm()\`, \`prompt()\`) are all blocked. Build single-page interactivity with JS state and a custom in-page modal — never rely on real navigation, form POST, or alert/confirm/prompt.
 - **No external network** beyond Google Fonts and the Tailwind CDN. No \`fetch()\` to real APIs. Mock data inline.
 - \`localStorage\` works inside the iframe — use it for user preferences if relevant.
 

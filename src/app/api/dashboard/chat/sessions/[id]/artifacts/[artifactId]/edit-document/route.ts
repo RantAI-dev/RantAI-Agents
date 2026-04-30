@@ -7,6 +7,7 @@ import {
 } from "@/features/conversations/sessions/service"
 import { llmRewriteWithRetry } from "@/lib/document-script/llm-rewrite"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
+import { DashboardChatSessionArtifactParamsSchema } from "@/features/conversations/sessions/schema"
 
 export const runtime = "nodejs"
 
@@ -42,7 +43,18 @@ export async function POST(
     return NextResponse.json({ error: "rate limit: 10 edits/min" }, { status: 429 })
   }
 
-  const { id, artifactId } = await params
+  // D-71: validate route params via Zod the same way `route.ts` (PUT/DELETE)
+  // and `download/route.ts` do — empty/malformed ids previously fell through
+  // to the DB and surfaced a 404 instead of a clean 400.
+  const rawParams = await params
+  const paramParse = DashboardChatSessionArtifactParamsSchema.safeParse(rawParams)
+  if (!paramParse.success) {
+    return NextResponse.json(
+      { error: "invalid params", issues: paramParse.error.issues },
+      { status: 400 },
+    )
+  }
+  const { id, artifactId } = paramParse.data
 
   let body: { editPrompt?: unknown }
   try {

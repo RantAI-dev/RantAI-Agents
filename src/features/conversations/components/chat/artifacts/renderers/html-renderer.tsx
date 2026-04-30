@@ -125,7 +125,7 @@ export function HtmlRenderer({ content }: HtmlRendererProps) {
         ref={iframeRef}
         srcDoc={srcdoc}
         onLoad={handleLoad}
-        sandbox="allow-scripts allow-modals"
+        sandbox="allow-scripts"
         className="w-full h-full border-0 bg-background"
         style={{ minHeight: "100%" }}
         title="HTML Artifact Preview"
