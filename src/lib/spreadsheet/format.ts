@@ -17,6 +17,10 @@ export function formatNumber(
     if (typeof value === "boolean") return value ? "TRUE" : "FALSE"
     return String(value)
   }
+  // D-62 note: the early-return covers the missing-format case; the catch
+  // is NOT dead — `numfmt` throws on malformed format strings (e.g. an
+  // unsupported token from the LLM). Both paths fall back to plain
+  // String(value), but they catch different failure modes.
   if (!format) return String(value)
   try {
     return numfmtFormat(format, value) as string

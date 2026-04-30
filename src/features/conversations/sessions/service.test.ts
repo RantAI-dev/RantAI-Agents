@@ -17,7 +17,6 @@ import { deleteFile, uploadFile } from "@/lib/s3"
 vi.mock("./repository", () => ({
   createDashboardMessages: vi.fn(),
   createDashboardSession: vi.fn(),
-  deleteArtifactsBySessionId: vi.fn(),
   deleteDashboardArtifactById: vi.fn(),
   deleteDashboardMessagesBySession: vi.fn(),
   deleteDashboardSessionById: vi.fn(),

@@ -101,11 +101,21 @@ export const S3Paths = {
     `temp/${uploadId}/${sanitizeFilename(filename)}`,
 
   /**
-   * Path for chat artifacts (stored as knowledge documents)
-   * Format: artifacts/{orgId|global}/{sessionId}/{artifactId}{ext}
+   * Path for chat artifacts (stored as knowledge documents).
+   * Format: `artifacts/{orgId|"global"}/{sessionId|"orphan"}/{artifactId}{ext}`.
+   *
+   * Both segments fall back to a stable sentinel when missing:
+   * - `orgId` → `"global"` for cross-org artifacts.
+   * - `sessionId` → `"orphan"` so artifacts created outside a session
+   *   (admin tools, migrations) don't write to `artifacts/.../undefined/...`.
    */
-  artifact: (orgId: string | null, sessionId: string, artifactId: string, ext: string): string =>
-    `artifacts/${orgId || "global"}/${sessionId}/${artifactId}${ext}`,
+  artifact: (
+    orgId: string | null,
+    sessionId: string | null | undefined,
+    artifactId: string,
+    ext: string,
+  ): string =>
+    `artifacts/${orgId || "global"}/${sessionId || "orphan"}/${artifactId}${ext}`,
 }
 
 /**
@@ -165,14 +175,19 @@ export async function uploadFile(
 }
 
 /**
- * Upload a file from a stream/blob
+ * Upload a file from a stream/blob.
+ *
+ * `options.includeUrl` mirrors `uploadFile` — when omitted, the returned
+ * `url` is empty so callers that don't need a presigned download URL
+ * skip the extra signing round-trip. (D-80)
  */
 export async function uploadStream(
   key: string,
   body: ReadableStream | Blob | Uint8Array,
   contentType: string,
   contentLength?: number,
-  metadata?: Record<string, string>
+  metadata?: Record<string, string>,
+  options?: { includeUrl?: boolean },
 ): Promise<{ key: string; url: string }> {
   const client = getS3Client()
 
@@ -187,7 +202,7 @@ export async function uploadStream(
     })
   )
 
-  const url = await getPresignedDownloadUrl(key)
+  const url = options?.includeUrl ? await getPresignedDownloadUrl(key) : ""
 
   return { key, url }
 }

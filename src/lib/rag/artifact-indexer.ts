@@ -39,7 +39,7 @@ export async function indexArtifactContent(
     // from the resulting docx so semantic search hits the actual prose.
     // Falls back to the script source if either step fails — code-style
     // search is still better than nothing.
-    const textToEmbed = await resolveTextToEmbed(documentId, content, options?.artifactType)
+    const textToEmbed = await resolveTextToEmbed(documentId, content, options?.artifactType ?? null)
 
     const chunks = chunkDocument(textToEmbed, title, "ARTIFACT", undefined, {
       chunkSize: 1000,
@@ -73,24 +73,17 @@ export async function indexArtifactContent(
  * plain text. All other types pass through unchanged. Failures fall
  * back to the original content.
  *
- * `artifactType` may be passed in by the caller; otherwise we fetch it
- * (kept as a fallback so older call sites that omit the option don't break).
+ * `artifactType` is required — every in-tree caller of `indexArtifactContent`
+ * passes it (the option was made mandatory after `b23e06f` audit confirmed
+ * full coverage). Pass `null` for legacy / unknown rows.
  */
 async function resolveTextToEmbed(
   documentId: string,
   content: string,
-  artifactType: string | null | undefined,
+  artifactType: string | null,
 ): Promise<string> {
   try {
-    let type = artifactType
-    if (type === undefined) {
-      const doc = await prisma.document.findUnique({
-        where: { id: documentId },
-        select: { artifactType: true },
-      })
-      type = doc?.artifactType ?? null
-    }
-    if (type !== "text/document") {
+    if (artifactType !== "text/document") {
       return content
     }
     const { runScriptInSandbox } = await import("@/lib/document-script/sandbox-runner")
