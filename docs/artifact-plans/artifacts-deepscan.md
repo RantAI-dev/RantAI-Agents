@@ -960,6 +960,97 @@ along with the modules.
 closed, made moot, mitigated, documented as by-design, or moved to a
 separate plan tracker.
 
+### Second-pass re-scan findings (2026-04-30, against HEAD `f5ddef1`)
+
+A follow-up 5-agent re-scan against HEAD `f5ddef1` surfaced 12 new
+items. All are now classified:
+
+**Closed in commits `e62ccde`, `c41d32c`, `9aeb8b7`, `3ea9e3e`:**
+
+- **D-89 (NEW-V-2). docx-preview-pipeline TOCTOU window.** Two
+  concurrent `renderArtifactPreview` calls could both miss the S3 cache
+  between `Map.get(key)` and `Map.set(key, …)`, each spawning an
+  independent pipeline run. Fixed in `e62ccde`: the `inFlight.get(key)`
+  check now happens BEFORE the await on `getCachedPngs`; the cache check
+  is moved INSIDE the inFlight-tracked work promise. Single-flight
+  guarantee now holds for concurrent entry.
+- **D-90 (NEW-S-1). djb2 32-bit cacheKey in artifact-indexer.**
+  Replaced with SHA-256[:16] (`e62ccde`) to match the cache-key
+  algorithm in `lib/document-script/cache.ts`. 64-bit prefix is
+  collision-safe for high-churn long-lived documents.
+- **D-91 (NEW-P-2). Slides hex error message echoed lowercase input
+  vs uppercase example list.** Now echoes the normalized (uppercase)
+  form via existing `normalizeHex` result (`e62ccde`).
+- **D-92 (NEW-R-5). Sheet "Calculating formulas…" footer didn't fire
+  during content re-evaluation.** Content-change effect now resets
+  `values=null` and `evalError=null` so the footer fires on
+  re-evaluation, not just first-ever load (`e62ccde`).
+- **D-93 (NEW-R-2). DocumentScriptRenderer Retry button focus-loss
+  on click.** Error wrapper now carries `role="status"
+  aria-live="polite"`; Retry button gains `aria-label`. Screen-reader
+  users get spoken context for the loading-state transition (`e62ccde`).
+- **D-94 (NEW-R-1). `.md` download path's isExporting guard
+  unreachable.** Resolved by dropping the `.md` download option
+  entirely per user request (`e62ccde`) — `text/document` artifacts now
+  download as `.docx` or `.pdf` only. The orphaned guard moot.
+- **D-95 (NEW-R-4). chart-to-svg theme parameter not wired.**
+  Previously the API gained an `options.theme` argument (commit
+  `9732b9a`) but neither caller passed it. Wired in `c41d32c`:
+  `slides/render-html.ts` and `slides/generate-pptx.ts` now derive
+  `theme` from `theme.primaryColor` via the new exported helper
+  `inferChartTheme(hex)` (sRGB relative-luminance threshold at 0.5).
+  Approved-list slide primaries are all dark, so charts now render with
+  the dark palette in both preview HTML and PPTX export.
+- **D-96 (NEW-T-2). Download route bypass single-flight + back-
+  pressure.** New module `lib/document-script/docx-cache.ts` with
+  `getOrComputeDocx()`: process-local Map cache (cap 16, FIFO) +
+  inFlight Map keyed by `${artifactId}:${sha256(content)[:16]}`. Gates
+  fresh sandbox runs through `withRenderSlot` (the existing semaphore
+  shared with the preview pipeline). Concurrent DOCX→PDF clicks for
+  the same artifact share one sandbox run (`9aeb8b7`).
+- **D-97 (NEW-T-4). Metrics endpoint auth = any-logged-in-user.**
+  Tightened to `role === "ADMIN"` (`3ea9e3e`). Scrapers should use a
+  service account with the ADMIN role.
+- **D-98 (NEW-P-3). r3f sanitizeSceneCode kept all `<color>`
+  variants.** Restricted to `attach="background"` only (`3ea9e3e`);
+  other variants (fog, environment, etc.) are silently stripped. The
+  prompt only documents background-attach; other variants are out of
+  scope and Three.js silently ignored them anyway.
+- **D-99 (NEW-P-7). Slides mermaid prompt list (10) vs validator
+  (25) split was undocumented.** Now explicitly noted in `slides.ts`
+  prompt as intentional ("validator accepts full 25-type set, slides
+  intentionally restrict to these 10 for legibility at presentation
+  distances"). `3ea9e3e`.
+
+**Closed as by-design (no code change):**
+
+- **D-100 (NEW-S-5). XLSX export always light-themed.** Excel/XLSX
+  document format is inherently light-surface — there is no dark mode
+  in the format itself. The always-light `DEFAULT_THEME` is correct
+  behaviour. Folded into D-66's existing rationale.
+
+**Doc-vs-code drift surfaced by re-scan (fixed in this commit):**
+
+- architecture-reference §6 route table now reflects `route.ts`
+  GET/PUT/DELETE; download `?format=docx|pdf`; render-pages session-
+  ownership check; edit-document row removed.
+- Module-map tree no longer lists `edit-document/route.ts`.
+- §10 S3Paths.artifact reflects `sessionId || "orphan"` fallback.
+- §5 per-validator highlights updated for `validateCode` language plumb,
+  `validateSlides` MUST→ctx.isNew error + hex whitelist, `validateSvg`
+  `\d{2,}` regex, `validateDocument` `_ctx` parameter.
+- D-2, D-7, D-82, D-69 entries in body sections now consistent with
+  closed-list metadata.
+- §12 D-38 description updated from "9 counters" to "6 counters" post-
+  `6c1dd82` deletion of `llm_rewrite_*`.
+- `_validate-artifact.ts` LoC: 2034 → 2159; `repository.ts` LoC: 237
+  → 232.
+- artifacts-capabilities §52 Common contracts no longer claims "no PDF
+  download for any type" or references `/edit-document` POST.
+
+**Re-scan summary: 12 new findings classified, all closed within the
+batch. No deferred items added to the separate-plan tracker.**
+
 ### Open
 
 2. **D-2. `markRagStatus` is read-then-write, not atomic**

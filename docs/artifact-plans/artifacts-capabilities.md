@@ -81,12 +81,17 @@ All twelve types share these guarantees:
 - **Session delete**: cascades into all of the above (N-47 fixed —
   `findArtifactsBySessionId` selects `metadata` so the cascade can
   flatten versioned keys).
-- **No PDF download** for any type. `text/document` exposes `.md` and
-  `.docx`; everything else is a single Download button.
+- **`text/document` exposes `.docx` + `.pdf`** via a split-button (the
+  prior `.md` option was dropped). Both go through the same server
+  endpoint which routes through `getOrComputeDocx` (process-local
+  cache + single-flight via `withRenderSlot`); PDF additionally pipes
+  through `soffice --convert-to pdf`. Every other type uses a single
+  Download button.
 - **No in-panel editing**. Preview is view-only across every type
   (post panel-chrome overhaul). Updates go through `update_artifact`
-  tool, the HTTP PUT endpoint, the `/edit-document` POST endpoint
-  (script docs), or version restore.
+  tool, the HTTP PUT endpoint, or version restore. (The legacy
+  `/edit-document` POST endpoint was deleted in `6c1dd82` — orphan
+  since the UI modal was removed in `0b25e56`.)
 - **Streaming placeholders** with id `streaming-${toolCallId}`. The
   `sendMessage` catch block iterates `createdStreamingIds` and
   `preStreamSnapshots` to clean up on abort/error.
@@ -413,16 +418,18 @@ direct from lucide-react).
 ### Download
 
 `GET /api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/download`.
-Only `?format=docx` (default) is implemented; any other format returns
-400 with `Unsupported format: <x>`. Server runs the script in the
-sandbox and streams the produced DOCX bytes. **No PDF path** (D-3).
+Accepts `?format=docx` (default) and `?format=pdf`. Server routes both
+through `getOrComputeDocx` (process-local cache + single-flight via
+`withRenderSlot`); the PDF branch additionally pipes the cached DOCX
+buffer through `docxToPdf` (soffice). D-3 + NEW-D-96 closed.
 
 ### Edit flow
 
-`POST /api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/edit-document`
-with `{ editPrompt }`. Rate-limited 10/60 s/user (in-process —
-distributed-unsafe, D-4). Calls `llmRewriteWithRetry`, then
-`updateDashboardChatSessionArtifact` (full versioning + RAG re-index).
+The `/edit-document` POST endpoint was deleted in `6c1dd82` — orphan
+since the UI modal was removed in `0b25e56`. To edit a `text/document`
+artifact, regenerate via `update_artifact` tool, the HTTP PUT
+endpoint, or restore a previous version. D-4, D-54, D-55, D-71 are
+MOOT.
 
 ---
 
@@ -872,7 +879,7 @@ Documented in [`artifacts-deepscan.md`](./artifacts-deepscan.md) §12
 as numbered findings (D-N). User-facing gaps still open on HEAD
 (`68b9d66`):
 
-- **D-3**: PDF download not implemented; only `?format=docx` works.
+- ~~**D-3**: PDF download~~ — closed in `b886805`; route accepts `?format=pdf` and pipes through `getOrComputeDocx` + `docxToPdf` post-`9aeb8b7`.
 - **D-11**: `DocumentScriptRenderer` has no retry button on render
   error.
 - **D-13**: Mermaid prompt lists 19 types; validator accepts 25 via

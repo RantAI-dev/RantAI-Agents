@@ -68,20 +68,19 @@ src/
 │   │   └── {code,document,html,latex,markdown,mermaid,python,r3f,react,sheet,slides,svg}.ts
 │   ├── document-script/
 │   │   ├── validator.ts                             validateScriptArtifact (TS + sandbox + magic-byte; single flat file, 41 LoC)
-│   │   ├── sandbox-runner.ts                        OS child-process sandbox (98 LoC)
-│   │   ├── sandbox-loader.mjs                       ESM loader hook (26 LoC)
-│   │   ├── sandbox-wrapper.mjs                      globalThis shadows (43 LoC)
-│   │   ├── llm-rewrite.ts                           edit-document rewriter (48 LoC)
-│   │   ├── cache.ts                                 S3-backed PNG cache (45 LoC)
-│   │   ├── extract-text.ts                          pandoc DOCX→plain (44 LoC)
-│   │   └── metrics.ts                               9 in-process counters (47 LoC)
+│   │   ├── sandbox-runner.ts                        OS child-process sandbox (~98 LoC)
+│   │   ├── sandbox-loader.mjs                       ESM loader hook
+│   │   ├── sandbox-wrapper.mjs                      globalThis shadows (incl. http2 sym)
+│   │   ├── cache.ts                                 S3-backed PNG cache (~45 LoC)
+│   │   ├── docx-cache.ts                            process-local DOCX bytes cache + single-flight (~67 LoC, NEW-D-96)
+│   │   ├── extract-text.ts                          pandoc DOCX→plain
+│   │   └── metrics.ts                               6 in-process counters (post-llm_rewrite_* deletion)
 │   ├── rendering/
-│   │   ├── chart-to-svg.ts                          chart block → SVG (light theme only)
+│   │   ├── chart-to-svg.ts                          chart → SVG, themable via `inferChartTheme(hex)` (NEW-D-95)
 │   │   ├── mermaid-theme.ts                         export-layer mermaid theme keys
 │   │   ├── mermaid-types.ts                         shared 25-entry diagram-type list (validator + slides)
-│   │   ├── resize-svg.ts                            isomorphic SVG resize
 │   │   ├── client/                                  browser-side helpers (svg-to-png, mermaid-to-png)
-│   │   └── server/                                  docx-preview-pipeline, soffice/pdftoppm shells
+│   │   └── server/                                  docx-preview-pipeline (single-flight via inFlight Map, NEW-D-89), soffice/pdftoppm shells
 │   ├── unsplash/
 │   │   ├── client.ts                                searchPhoto via REST
 │   │   ├── resolver.ts                              resolveImages / resolveSlideImages / resolveQueries
@@ -99,12 +98,13 @@ src/
 │   │   ├── vector-store.ts                          deleteChunksByDocumentId, storeChunks
 │   │   └── embeddings.ts                            generateEmbeddings (BATCH_SIZE=128, EMBED_CONCURRENCY=4)
 │   └── s3/index.ts                                  S3Paths, uploadFile, deleteFile, deleteFiles
-└── app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/
-    ├── route.ts                                     PUT/DELETE
-    ├── download/route.ts                            GET (text/document only; .docx only — no PDF)
-    ├── edit-document/route.ts                       POST (text/document script rewrite)
-    ├── render-status/route.ts                       GET hash + pageCount
-    └── render-pages/[contentHash]/[pageIndex]/route.ts  GET PNG bytes
+└── app/api/dashboard/
+    ├── chat/sessions/[id]/artifacts/[artifactId]/
+    │   ├── route.ts                                 GET/PUT/DELETE
+    │   ├── download/route.ts                        GET (text/document only; .docx + .pdf via shared docx-cache)
+    │   ├── render-status/route.ts                   GET hash + pageCount
+    │   └── render-pages/[contentHash]/[pageIndex]/route.ts  GET PNG bytes (session-ownership gated)
+    └── artifacts/metrics/route.ts                   GET Prometheus exposition (ADMIN only)
 ```
 
 Files **removed since the prior `8b6e69b` cut**: `lib/document-ast/{schema,
@@ -294,11 +294,13 @@ All under `src/app/api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/`.
 
 | Route | File | Method | Notes |
 |---|---|---|---|
-| Update / Delete | `route.ts` (82 LoC) | PUT, DELETE | Auth → params → body → service. **No GET handler (D-9)**. |
-| Document download | `download/route.ts` (79 LoC) | GET | `?format=docx` (default). Calls `runScriptInSandbox` → `.docx` bytes. **Any other `format` value returns 400 `Unsupported format: <x>` (D-3)** — no PDF path. |
-| Edit document | `edit-document/route.ts` (93 LoC) | POST | Rate limit token bucket (`buckets` Map L18, `RATE_LIMIT=10` L16, `RATE_WINDOW_MS=60_000` L17 — **in-process only — D-4**). Guards `artifactType === "text/document"`. Calls `llmRewriteWithRetry` then `updateDashboardChatSessionArtifact`. **Skips Zod schema validation on params** (D-71). |
+| Get / Update / Delete | `route.ts` (119 LoC) | GET, PUT, DELETE | Auth → params → body → service. GET added per D-9 closure (`2a3f110`). |
+| Document download | `download/route.ts` (103 LoC) | GET | `?format=docx` (default) and `?format=pdf` both supported. Routes through `getOrComputeDocx` (process-local cache + single-flight via `withRenderSlot`); PDF additionally pipes through `docxToPdf` (soffice). D-3 closed; NEW-D-96 closed. |
+| Metrics | `/api/dashboard/artifacts/metrics/route.ts` (44 LoC) | GET | Prometheus exposition format; 6 counters (sandbox + render). **ADMIN role required** (NEW-D-97). |
 | Render status | `render-status/route.ts` (32 LoC) | GET | `text/document` only. `renderArtifactPreview(artifactId, content)` → `{ hash, pageCount, cached }`. |
-| Render pages | `render-pages/[contentHash]/[pageIndex]/route.ts` (28 LoC) | GET | `getCachedPngs(...)`. PNG bytes with `Cache-Control: public, max-age=31536000, immutable`. Returns 404 on miss — **never triggers a re-render** (D-35). **Bypasses session-ownership check** — only auth + content-hash (D-72). |
+| Render pages | `render-pages/[contentHash]/[pageIndex]/route.ts` (44 LoC) | GET | `getCachedPngs(...)`. PNG bytes with `Cache-Control: public, max-age=31536000, immutable`. Returns 404 on miss — **never triggers a re-render** (D-35). Calls `getDashboardChatSessionArtifact` for session ownership before serving (D-72 closed in `7d24aed`). |
+
+The `edit-document/route.ts` POST endpoint (rate-limited `llmRewriteWithRetry`) was deleted in `6c1dd82` — orphan since `0b25e56` removed the UI modal. D-4, D-54, D-55, D-71 are MOOT.
 
 ---
 
@@ -667,11 +669,10 @@ validator (`_validate-artifact.ts`), not in `markdown.ts`.
 | `deleteFile(key)` | mid file |
 | `deleteFiles(keys[])` (batches ≤ 1000; per-object errors logged but not thrown — D-5) | L282 / L308-L314 |
 
-Canonical key shape: `artifacts/${orgId || "global"}/${sessionId}/${id}${ext}`.
-**No `"orphan"` fallback for `sessionId`** (D-69) — the `||` fallback
-is only applied to `orgId`. If `sessionId` is null/undefined the
-segment becomes `"undefined"` or `""`. Prior docs claimed
-`sessionId|"orphan"`; the code does not.
+Canonical key shape: `artifacts/${orgId || "global"}/${sessionId || "orphan"}/${id}${ext}`.
+Both `orgId` and `sessionId` segments fall back to a sentinel when
+missing (D-69 closed in `7384337`); artifacts created without a
+session no longer write to `artifacts/.../undefined/...`.
 
 Versioned key shape: `<canonical>.v<N>` where `N = versions.length + 1`.
 
