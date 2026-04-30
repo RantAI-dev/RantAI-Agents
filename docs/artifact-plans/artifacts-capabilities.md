@@ -4,11 +4,13 @@
 > use for X?", or implementing a new capability for an existing type.
 > Each section is self-contained.
 >
-> **Last regenerated:** 2026-04-28, post AST-fallback-removal, pinned to
-> commit `a81c343`. Replaces all prior versions. Reflects three commits
-> after the previous `8b6e69b` cut: AST path removed (`a81c343`), CSV
-> tokenizer deduped (`02e24a6`), dead state + orphan modal dropped
-> (`0b25e56`).
+> **Last regenerated:** 2026-04-30, post text/document AST cleanup +
+> RAG indexer artifactType plumbing + sheet `note` themability, pinned
+> to commit `68b9d66`. Replaces all prior versions. Reflects commits
+> since `a81c343`: `b23e06f` (RAG indexer takes `artifactType`),
+> `b3e6cdf` (sheet `note` themable + `formatCellValue` dropped),
+> `f738130`/`a05f802` (AST source residue + env-var/test cleanup),
+> `6a019db` (Prisma `documentFormat` column drop).
 >
 > Companion docs:
 > - [`artifacts-deepscan.md`](./artifacts-deepscan.md) — system flow.
@@ -70,8 +72,10 @@ All twelve types share these guarantees:
   Inline fallback when archive upload fails: ≤ 32 KiB inline, > 32 KiB
   marker `{ archiveFailed: true }`.
 - **RAG indexing**: fire-and-forget after both LLM tool persistence and
-  HTTP PUT (N-1 fixed). Failures patch `metadata.ragIndexed = false`
-  instead of throwing.
+  HTTP PUT (N-1 fixed). All current callers pass `artifactType` to
+  `indexArtifactContent` (`b23e06f`) so the indexer skips its prior
+  per-call DB round-trip (D-7 partially closed). Failures patch
+  `metadata.ragIndexed = false` instead of throwing.
 - **Full delete**: canonical S3 key, all versioned S3 keys, RAG chunks,
   Postgres row.
 - **Session delete**: cascades into all of the above (N-47 fixed —
@@ -266,9 +270,14 @@ quadrantChart.
 Secondary: timeline, sankey-beta, xychart-beta, block-beta, kanban,
 C4Context, requirementDiagram, architecture-beta.
 **Validator additionally accepts** (not in prompt — D-13): `graph`,
-`stateDiagram` (alongside `stateDiagram-v2`), `packet-beta`, `C4Container`,
-`C4Component`, `C4Deployment`. The shared `MERMAID_DIAGRAM_TYPES`
-constant in `_mermaid-types.ts` has **25 entries** (verified verbatim).
+`stateDiagram` (alongside `stateDiagram-v2`), `packet-beta`,
+`C4Container`, `C4Component`, `C4Deployment`. The shared
+`MERMAID_DIAGRAM_TYPES_SHARED` constant in
+`lib/rendering/mermaid-types.ts:14-40` has **25 entries**, imported by
+the validator at `_validate-artifact.ts:31` and aliased locally at
+L1321. The 25-vs-19 count drift is now closed at the type-system
+level. **Residual prompt-side gap (D-13) and stale validator error
+prose at L1384 still references 19 types (D-77).**
 
 ### Boundaries
 
@@ -375,23 +384,31 @@ Packer.toBuffer(doc).then(buf => process.stdout.write(buf.toString("base64")))
 
 ### Validator
 
-`validateDocument` (`_validate-artifact.ts:169-177`) is a thin async
-wrapper: dynamic-imports `@/lib/document-script/validator` and returns
-its `{ ok, errors }`. The validator itself runs TS syntax check +
-sandbox dry-run + `.docx` magic-byte check. `ValidationContext.isNew`
-is unused for this type.
+`validateDocument` (`_validate-artifact.ts:169-173`) is a thin async
+wrapper: dynamic-imports `@/lib/document-script/validator` (a single
+flat file, 41 LoC) and returns its `{ ok, errors }`. The validator
+itself runs TS syntax check (TypeScript `createSourceFile` AST parse,
+L9-L26) + sandbox dry-run (`DRY_RUN_TIMEOUT_MS = 5000`, L7) + `.docx`
+magic-byte check (PK header `[0x50, 0x4b, 0x03, 0x04]`, L6).
+**`validateDocument`'s signature does not accept a `ctx` parameter**
+(D-46) — it is the only entry in the `VALIDATORS` map whose shape is
+`(content) => …` rather than `(content, ctx?) => …`.
+`ValidationContext.isNew` cannot be plumbed into it without a
+signature change.
 
 ### Renderer
 
-`document-script-renderer.tsx`. Panel routes `text/document` directly
-to this component (`artifact-panel.tsx:696-708`); the generic
+`document-script-renderer.tsx` (210 LoC). Panel routes `text/document`
+directly to this component (`artifact-panel.tsx:696-708`); the generic
 `ArtifactRenderer` no longer has a case for this type. Server fetches
 `/render-status` for `{ hash, pageCount, cached }`, then renders a PNG
 carousel using `/render-pages/[contentHash]/[pageIndex]`. While
 streaming, shows a faded `CodeView` with a "Generating script…" spinner
 — no fetch fires. Keyboard navigation guarded against text-entry focus.
-**No retry button on error (D-11).** **Imports `lucide-react` directly
-instead of `@/lib/icons`** (D-28, L3).
+**No retry button on error (D-11).** Imports cleanly from `@/lib/icons`
+at L3 — the prior direct `lucide-react` import is gone. **D-28 has
+relocated to `artifact-panel.tsx:18`** (`Maximize`, `Minimize` still
+direct from lucide-react).
 
 ### Download
 
@@ -510,7 +527,17 @@ which floors at 0 (D-19 — bug at 11+ slices). Empty rows render
 empty-state card.
 
 XLSX download is in the panel header only — no in-sheet button (commit
-4d3d199).
+4d3d199). XLSX export does **not** emit chart objects (D-64) — charts
+exist only in the browser preview.
+
+**Theming.** `note` cell color is now fully themable end-to-end (post
+`b3e6cdf`): `SpreadsheetTheme.noteColor?` (`spreadsheet/types.ts:58`)
+with default `"#666666"` (L67). HTML preview reads it via
+`styles.ts:54` (`fontColor: t.noteColor`); XLSX export reads it via
+`generate-xlsx.ts:138` (`hexToArgb(theme.noteColor)`). **D-65 closed.**
+The `formatCellValue` helper that previously lived in `styles.ts` was
+also dropped by the same commit; the live grid uses
+`format.ts.formatNumber` (`numfmt` wrapper) exclusively.
 
 ---
 
@@ -746,15 +773,31 @@ as function arguments.
 
 ### Renderer
 
-`r3f-renderer.tsx`. Iframe **without** `sandbox` attribute (WebGL needs
-GPU access — comment at L583). postMessage source-checked. `didReadyRef`
-(`useRef(false)`) replaces prior closure-local `let`, reset on content
-change so rapid swaps don't trigger false-positive 20 s timeouts. Bundle
-delivered via importmap (esm.sh) inside srcdoc; Babel standalone via
-unpkg. Scene code passed as JSON inside `<script id="scene-data" type="application/json">`
-to avoid HTML-escaping issues. WebGL errors detected via `isWebGLError()`
+`r3f-renderer.tsx` (633 LoC). Iframe **without** `sandbox` attribute
+(WebGL needs GPU access — comment at L580-L581). postMessage
+source-checked at L544 (`event.source !== iframeRef.current?.contentWindow`).
+`didReadyRef` (`useRef(false)`, L525) replaces prior closure-local
+`let`, reset on content change (L529-L533) so rapid swaps don't
+trigger false-positive 20 s timeouts (L562-L566). Bundle delivered via
+importmap (esm.sh) inside srcdoc; Babel standalone via unpkg. Scene
+code passed as JSON inside
+`<script id="scene-data" type="application/json">` to avoid
+HTML-escaping issues. WebGL errors detected via `isWebGLError()`
 keyword sniff and routed to a `WebGLHelpOverlay` instead of generic
-error UI.
+error UI (L437-L507).
+
+**`<color attach="background">` is now explicitly preserved** by
+`sanitizeSceneCode` (L118-L123 with explanatory comment): "User-
+specified `<color attach="background">` is kept by the renderer." The
+prior silent stripping is gone. **D-29 is closed at the renderer**;
+the prompt still does not document this — silent pass on the LLM side.
+
+**Label drift (D-68).** Registry exports `label = "3D Scene"` and
+`shortLabel = "R3F Scene"` (`registry.ts:177`). The prompt module
+exports `label = "R3F 3D Scene"` (`prompts/artifacts/r3f.ts:4`).
+Three different strings for the same type across three surfaces.
+`CANVAS_TYPE_LABELS` and the panel chrome surface different copy
+depending on which source they read. Cosmetic; no functional break.
 
 ---
 
@@ -827,15 +870,17 @@ share an isolation model worth calling out explicitly:
 
 Documented in [`artifacts-deepscan.md`](./artifacts-deepscan.md) §12
 as numbered findings (D-N). User-facing gaps still open on HEAD
-(`a81c343`):
+(`68b9d66`):
 
 - **D-3**: PDF download not implemented; only `?format=docx` works.
 - **D-11**: `DocumentScriptRenderer` has no retry button on render
   error.
 - **D-13**: Mermaid prompt lists 19 types; validator accepts 25 via
-  `_mermaid-types.ts` (incl. `graph`, `stateDiagram`, `packet-beta`,
-  `C4Container`, `C4Component`, `C4Deployment`, `requirementDiagram`,
-  `architecture-beta`).
+  the shared `lib/rendering/mermaid-types.ts` (incl. `graph`,
+  `stateDiagram`, `packet-beta`, `C4Container`, `C4Component`,
+  `C4Deployment`). The validator's user-facing error message at
+  `_validate-artifact.ts:1384` still hardcodes the stale 19-type
+  list (D-77).
 - **D-14**: Slides MUST-rules (first=title, last=closing, deck size
   7-12, dark primaryColor) only warn or are absent in validator.
 - **D-15**: Markdown 128 KiB new-creates cap not surfaced in prompt;
@@ -846,15 +891,57 @@ as numbered findings (D-N). User-facing gaps still open on HEAD
 - **D-18**: Code `language` parameter unvalidated.
 - **D-19**: Pie chart `fillOpacity={1 - i * 0.1}` floors at 0 — slices
   invisible past 11.
+- **D-20**: Sheet Data/Charts `view` state shared across sheet tabs —
+  switching from a charts-having sheet to one without leaves the user
+  on the empty-state screen with no toggle to escape.
 - **D-25**: Streamdown's internal mermaid pipeline is a separate config
   source-of-truth from `mermaid-config.ts`.
 - **D-26**: HTML `allow-modals` widens sandbox vs React's
   `allow-scripts` only.
 - **D-27**: Python renderer hardcodes triple-backtick fence (no
   adaptive length like `application/code`).
-- **D-28**: `DocumentScriptRenderer` imports `lucide-react` directly;
-  every other renderer routes through `@/lib/icons`.
+- **D-28** (relocated): the remaining direct `lucide-react` import
+  lives in `artifact-panel.tsx:18` (`Maximize`, `Minimize`).
+  `document-script-renderer.tsx` no longer holds this gap.
+- **D-29** (residual prompt-side): R3F renderer now explicitly
+  preserves `<color attach="background">`, but the prompt does not
+  document that `<color>` is permitted.
+- **D-46** (changed shape): `validateDocument` no longer accepts a
+  `ctx` parameter at all — the only `VALIDATORS` entry that does not
+  match the `(content, ctx?)` shape; cannot be given `isNew`-only
+  rules without a signature change.
+- **D-68**: `application/3d` has three different label strings across
+  registry / shortLabel / prompt.
+- **D-69**: `S3Paths.artifact` lacks an `"orphan"` fallback for
+  null/undefined `sessionId`.
+- **D-70**: Concurrent-write error messages diverge between the LLM
+  tool path and the HTTP path.
+- **D-71**: `edit-document/route.ts` skips Zod schema validation on
+  params.
+- **D-72**: `render-pages` route bypasses session-ownership check —
+  IDOR by design (`contentHash` is the unguessable token).
+- **D-73**: `addOrUpdateArtifact` always calls `setActiveArtifactId`,
+  including for streaming placeholders — minor flicker.
+- **D-74**: `getDashboardChatSessionArtifact` coerces null
+  `artifactType` to `""`.
+- **D-75**: `repository.ts deleteArtifactsBySessionId` is dead code.
+- **D-76**: Sandbox `http2` block asymmetry — loader blocks both
+  `http2` and `node:http2`; wrapper blocks neither.
+- **D-77**: Mermaid validator error message hardcodes 19 types
+  (shared array has 25).
+- **D-78**: `r3f.ts:44` claims "20 helpers"; table has 19 rows.
+- **D-79**: Sheet chart `RANGE_RE` does not handle `$`-absolute
+  refs — silent empty chart.
+- **D-80**: `s3.uploadStream` always presigns (inconsistent with
+  `uploadFile` opt-in).
+- **D-81**: Two divergent SurrealDB chunk-write paths
+  (`storeChunks` vs legacy `storeDocument`).
+- **D-82**: Embedding `BATCH_SIZE` / `EMBED_CONCURRENCY` are
+  compile-time constants — no env override.
 
-Findings closed since the prior `8b6e69b` cut: D-1, D-6, D-10, D-12,
-D-21, D-22, D-23, D-31, D-44, D-45, D-46, D-49, D-50, D-60, D-68,
-D-69, D-70 (see deepscan §12 for resolution notes).
+**Findings closed since the prior `8b6e69b`/`a81c343` cuts:** D-1,
+D-6, D-7 (mostly), D-10, D-12, D-13 (at type-system level), D-21,
+D-22, D-23, D-29 (at renderer level), D-31, D-44, D-45, D-49, D-50,
+D-60, D-65, D-68 (legacy mermaid-svg), D-69 (legacy mermaid-svg),
+D-70 (legacy mermaid AST footnote bug), D-67 (mermaid-types
+relocation). See deepscan §12 for resolution notes.
