@@ -62,8 +62,8 @@
     "setup:db:clean": "bun scripts/wait-for-db.ts && bun run db:push && bun run db:generate && FORCE_RESEED=true bun run db:seed && bun run db:seed:marketplace",
     "migrate:s3": "bun scripts/migrate-files-to-s3.ts",
     "migrate:s3:dry-run": "bun scripts/migrate-files-to-s3.ts --dry-run",
-    "migrate:knowledge:rustfs": "bun scripts/migrate-knowledge-to-rustfs.ts",
-    "migrate:knowledge:rustfs:dry-run": "bun scripts/migrate-knowledge-to-rustfs.ts --dry-run",
+    "migrate:knowledge:s3": "bun scripts/migrate-knowledge-to-s3.ts",
+    "migrate:knowledge:s3:dry-run": "bun scripts/migrate-knowledge-to-s3.ts --dry-run",
     "docs:dev": "cd docs-site && bun dev",
     "docs:build": "cd docs-site && bun run build",
     "docs:install": "cd docs-site && bun install"

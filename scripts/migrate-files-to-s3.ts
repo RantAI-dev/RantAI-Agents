@@ -60,7 +60,7 @@ async function migrateDocumentsToS3(options: {
       console.log("S3 bucket verified/created successfully\n")
     } catch (error) {
       console.error("Failed to ensure S3 bucket exists:", error)
-      console.error("\nPlease make sure RustFS is running and S3 credentials are correct.")
+      console.error("\nPlease make sure SeaweedFS (or your S3 backend) is running and S3 credentials are correct.")
       process.exit(1)
     }
   }

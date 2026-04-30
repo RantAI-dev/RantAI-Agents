@@ -989,7 +989,7 @@ async function main() {
     const { ensureBucket } = await import("../src/lib/s3")
     await ensureBucket()
   } catch (e) {
-    console.warn("  [S3] Could not ensure bucket (RustFS may not be ready):", e instanceof Error ? e.message : e)
+    console.warn("  [S3] Could not ensure bucket (SeaweedFS may not be ready):", e instanceof Error ? e.message : e)
   }
 
   // FORCE_RESEED: clean up memory + assistants BEFORE seeding

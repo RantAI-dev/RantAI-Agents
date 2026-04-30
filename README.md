@@ -80,7 +80,7 @@ Migration status map:
 | **AI/LLM** | Vercel AI SDK v6 (`ai@6.0.39`), OpenRouter API, OpenAI Embeddings, Ollama (Local OCR) |
 | **Agent Runtime** | RantaiClaw (Rust), Docker / Dockerode |
 | **Databases** | PostgreSQL 16 (Prisma ORM), SurrealDB (Vector Store) |
-| **Storage** | RustFS (S3-compatible object storage) |
+| **Storage** | SeaweedFS (S3-compatible object storage) |
 | **Workflows** | XYFlow (visual DAG builder) |
 | **Code Execution** | Piston (sandboxed Python/JS/TS) |
 | **Web Search** | SearXNG (self-hosted), Serper.dev (optional paid) |
@@ -173,7 +173,7 @@ OPENROUTER_API_KEY="sk-or-v1-your-key"
 ### 3. Start Services
 
 ```bash
-# Start PostgreSQL, SurrealDB, RustFS, Ollama, Piston, and SearXNG containers
+# Start PostgreSQL, SurrealDB, SeaweedFS, Ollama, Piston, and SearXNG containers
 bun docker:up
 
 # Initialize database (migrations + generate + full seed)
@@ -527,7 +527,7 @@ All infrastructure runs via Docker Compose:
 |---------|-----------|---------|---------|
 | **PostgreSQL 16** | `rantai-agents-postgres` | 5432 | Primary database |
 | **SurrealDB** | `rantai-agents-surrealdb` | 8000 | Vector embeddings (RAG) |
-| **RustFS** | `rantai-agents-rustfs` | 9000 (API), 9001 (Console) | S3-compatible object storage |
+| **SeaweedFS** | `rantai-agents-seaweedfs` | 9000 (S3 API), 9333 (Master UI) | S3-compatible object storage |
 | **Ollama** | `rantai-agents-ollama` | 11434 | Local OCR models |
 | **Piston** | `rantai-agents-piston` | 2000 | Sandboxed code execution |
 | **SearXNG** | `rantai-agents-searxng` | 8080 | Private meta-search engine |
@@ -709,7 +709,7 @@ A first-class workspace for generating images, audio, and video through OpenRout
 - **Audio** — GPT Audio and other OpenRouter audio-output models
 - **Video** — Veo 3.1 (alpha, gated by `MEDIA_VIDEO_ENABLED=true`)
 
-Generated assets are stored in RustFS S3 and indexed in PostgreSQL. Every generation goes through `MediaJob` → `MediaAsset` rows so the library, audit trail, and per-user cost limits all share one data path.
+Generated assets are stored in SeaweedFS S3 and indexed in PostgreSQL. Every generation goes through `MediaJob` → `MediaAsset` rows so the library, audit trail, and per-user cost limits all share one data path.
 
 ### Library
 
@@ -770,7 +770,7 @@ Audit logs are viewable and filterable in the dashboard. Data retention policies
 
 | Variable | Description |
 |----------|-------------|
-| `S3_ENDPOINT` | RustFS/S3 endpoint |
+| `S3_ENDPOINT` | SeaweedFS / S3 endpoint |
 | `S3_ACCESS_KEY_ID` | S3 access key |
 | `S3_SECRET_ACCESS_KEY` | S3 secret key |
 | `S3_BUCKET` | Bucket name |
@@ -877,8 +877,8 @@ bun rag:test         # Test RAG retrieval
 ```bash
 bun migrate:s3           # Migrate files to S3
 bun migrate:s3:dry-run   # Dry run S3 migration
-bun migrate:knowledge:rustfs         # Migrate knowledge to RustFS
-bun migrate:knowledge:rustfs:dry-run # Dry run knowledge migration
+bun migrate:knowledge:s3             # Migrate knowledge to S3 (SeaweedFS)
+bun migrate:knowledge:s3:dry-run     # Dry run knowledge migration
 ```
 
 ### Compliance Checks
@@ -950,7 +950,7 @@ User Message -> AI Agent (RAG-Enhanced) -> Response
 
 ```
 +-------------------+     +-------------------+     +-------------------+
-|   PostgreSQL 16   |     |    SurrealDB      |     |     RustFS        |
+|   PostgreSQL 16   |     |    SurrealDB      |     |    SeaweedFS      |
 |   (Prisma ORM)    |     |  (Vector Store)   |     |  (S3 Storage)     |
 +-------------------+     +-------------------+     +-------------------+
 | Employees         |     | Document chunks   |     | Uploaded files    |
@@ -1084,7 +1084,7 @@ Features: API key validation, domain whitelisting, customizable theme/position/m
 - **Ollama models not loading**: Ensure the container is running (`docker ps`) and pull models with `docker exec`.
 - **Piston runtimes unavailable**: Install language runtimes after first start (see Quick Start step 4).
 - **SurrealDB connection refused**: Check WebSocket endpoint matches `SURREAL_DB_URL` in `.env`.
-- **S3/RustFS upload fails**: Verify RustFS is running and bucket exists (`S3_BUCKET` in `.env`).
+- **S3/SeaweedFS upload fails**: Verify SeaweedFS is running and bucket exists (`S3_BUCKET` in `.env`).
 
 ---
 

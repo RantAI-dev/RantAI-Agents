@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "rantai-admin",
+      "credentials": [
+        {
+          "accessKey": "s3admin",
+          "secretKey": "s3admin"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

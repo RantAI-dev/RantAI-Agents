@@ -83,11 +83,11 @@ jobs:
         run: |
           docker pull postgres:16
           docker pull surrealdb/surrealdb:latest
-          docker pull rustfs/rustfs:latest
+          docker pull chrislusf/seaweedfs:latest
           mkdir -p /tmp/docker-images
           docker save postgres:16 | gzip > /tmp/docker-images/postgres-16.tar.gz
           docker save surrealdb/surrealdb:latest | gzip > /tmp/docker-images/surrealdb.tar.gz
-          docker save rustfs/rustfs:latest | gzip > /tmp/docker-images/rustfs.tar.gz
+          docker save chrislusf/seaweedfs:latest | gzip > /tmp/docker-images/seaweedfs.tar.gz
 
       - name: Assemble bundle
         run: |

@@ -91,8 +91,8 @@ async function main() {
           fileSize: uploaded.size,
           metadata: {
             ...currentMeta,
-            rustfsMigratedFromContent: true,
-            rustfsMigratedAt: new Date().toISOString(),
+            s3MigratedFromContent: true,
+            s3MigratedAt: new Date().toISOString(),
           },
         },
       })
