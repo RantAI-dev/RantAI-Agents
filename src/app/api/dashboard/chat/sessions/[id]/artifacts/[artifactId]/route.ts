@@ -6,9 +6,46 @@ import {
 } from "@/features/conversations/sessions/schema"
 import {
   deleteDashboardChatSessionArtifact,
+  getDashboardChatSessionArtifact,
   updateDashboardChatSessionArtifact,
 } from "@/features/conversations/sessions/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
+
+// D-9: single-artifact GET — previously the only way to read one artifact
+// was via the session-detail endpoint, which loads every artifact on the
+// session. This endpoint pairs with PUT/DELETE so callers can refresh a
+// single row after edits.
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string; artifactId: string }> },
+) {
+  try {
+    const session = await auth()
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const parsedParams = DashboardChatSessionArtifactParamsSchema.safeParse(await params)
+    if (!parsedParams.success) {
+      return NextResponse.json({ error: "Artifact not found" }, { status: 404 })
+    }
+
+    const result = await getDashboardChatSessionArtifact({
+      userId: session.user.id,
+      sessionId: parsedParams.data.id,
+      artifactId: parsedParams.data.artifactId,
+    })
+
+    if (isHttpServiceError(result)) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result)
+  } catch (error) {
+    console.error("[Artifact API] GET error:", error)
+    return NextResponse.json({ error: "Failed to fetch artifact" }, { status: 500 })
+  }
+}
 
 export async function PUT(
   req: Request,

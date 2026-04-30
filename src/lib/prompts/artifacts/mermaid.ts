@@ -31,7 +31,7 @@ Choose the type that matches the user's intent. When ambiguous, default to \`flo
 | user journey / experience map | **journey** | \`journey\` |
 | 2×2 priority / effort-impact matrix | **quadrantChart** | \`quadrantChart\` |
 
-Also available (use by name if explicitly asked): \`timeline\`, \`sankey-beta\`, \`xychart-beta\`, \`block-beta\`, \`kanban\`, \`C4Context\`, \`requirementDiagram\`, \`architecture-beta\`.
+Also available (use by name if explicitly asked): \`timeline\`, \`sankey-beta\`, \`xychart-beta\`, \`block-beta\`, \`packet-beta\`, \`kanban\`, \`C4Context\`, \`C4Container\`, \`C4Component\`, \`C4Deployment\`, \`requirementDiagram\`, \`architecture-beta\`. Legacy aliases \`graph\` (= \`flowchart\`) and \`stateDiagram\` (= \`stateDiagram-v2\`) are accepted but prefer the canonical names.
 
 **Disambiguation:** "architecture diagram" → \`flowchart LR\` with \`subgraph\` per layer. "Block diagram" → \`flowchart LR\`. Do NOT reach for \`C4Context\` unless the user explicitly asks for C4.
 

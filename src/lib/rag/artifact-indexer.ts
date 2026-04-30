@@ -3,11 +3,11 @@
  * Used by both create_artifact and update_artifact tools.
  */
 
+import { createHash } from "node:crypto"
 import { chunkDocument } from "./chunker"
 import { generateEmbeddings } from "./embeddings"
 import { storeChunks, deleteChunksByDocumentId } from "./vector-store"
 import { prisma } from "@/lib/prisma"
-import type { Prisma } from "@prisma/client"
 
 /**
  * Index artifact content: chunk, embed, and store in SurrealDB.
@@ -39,7 +39,7 @@ export async function indexArtifactContent(
     // from the resulting docx so semantic search hits the actual prose.
     // Falls back to the script source if either step fails — code-style
     // search is still better than nothing.
-    const textToEmbed = await resolveTextToEmbed(documentId, content, options?.artifactType)
+    const textToEmbed = await resolveTextToEmbed(documentId, content, options?.artifactType ?? null)
 
     const chunks = chunkDocument(textToEmbed, title, "ARTIFACT", undefined, {
       chunkSize: 1000,
@@ -69,30 +69,51 @@ export async function indexArtifactContent(
 }
 
 /**
+ * D-47: per-process cache of extracted DOCX text keyed by content hash.
+ * Re-indexing the same `text/document` artifact (e.g. after a metadata
+ * tweak that bumps `updatedAt` but doesn't change `content`) used to
+ * spawn the sandbox + pandoc again every time. Cap entries so a long-
+ * running process doesn't accumulate unbounded; FIFO eviction is fine
+ * because we're only optimising re-index hot paths, not first-index.
+ */
+const DOCX_TEXT_CACHE_CAP = 128
+const docxTextCache = new Map<string, string>()
+function cacheKey(documentId: string, content: string): string {
+  // SHA-256[:16] (matches the same hash function in lib/document-script/cache.ts).
+  // 64-bit prefix is collision-safe even for high-churn long-lived documents
+  // (autosave streams) where djb2's 32-bit space would risk false-positives.
+  const h = createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16)
+  return `${documentId}:${h}`
+}
+function setCachedDocxText(key: string, text: string): void {
+  if (docxTextCache.size >= DOCX_TEXT_CACHE_CAP) {
+    const oldest = docxTextCache.keys().next().value
+    if (oldest) docxTextCache.delete(oldest)
+  }
+  docxTextCache.set(key, text)
+}
+
+/**
  * For text/document artifacts, run the JS in sandbox and pandoc-extract
  * plain text. All other types pass through unchanged. Failures fall
  * back to the original content.
  *
- * `artifactType` may be passed in by the caller; otherwise we fetch it
- * (kept as a fallback so older call sites that omit the option don't break).
+ * `artifactType` is required — every in-tree caller of `indexArtifactContent`
+ * passes it (the option was made mandatory after `b23e06f` audit confirmed
+ * full coverage). Pass `null` for legacy / unknown rows.
  */
 async function resolveTextToEmbed(
   documentId: string,
   content: string,
-  artifactType: string | null | undefined,
+  artifactType: string | null,
 ): Promise<string> {
   try {
-    let type = artifactType
-    if (type === undefined) {
-      const doc = await prisma.document.findUnique({
-        where: { id: documentId },
-        select: { artifactType: true },
-      })
-      type = doc?.artifactType ?? null
-    }
-    if (type !== "text/document") {
+    if (artifactType !== "text/document") {
       return content
     }
+    const ck = cacheKey(documentId, content)
+    const cached = docxTextCache.get(ck)
+    if (cached !== undefined) return cached
     const { runScriptInSandbox } = await import("@/lib/document-script/sandbox-runner")
     const { extractDocxText } = await import("@/lib/document-script/extract-text")
     const r = await runScriptInSandbox(content, {})
@@ -100,28 +121,38 @@ async function resolveTextToEmbed(
       console.warn(`[ArtifactIndexer] sandbox failed for ${documentId}, embedding script source: ${r.ok ? "no buffer" : r.error}`)
       return content
     }
-    return await extractDocxText(r.buf)
+    const text = await extractDocxText(r.buf)
+    setCachedDocxText(ck, text)
+    return text
   } catch (err) {
     console.warn(`[ArtifactIndexer] script extract failed for ${documentId}, embedding script source:`, err)
     return content
   }
 }
 
-/** Patch the artifact's metadata.ragIndexed field without overwriting siblings. */
+/**
+ * Patch the artifact's `metadata.ragIndexed` field atomically.
+ *
+ * D-2: previously this was read-then-write (findUnique → spread → update),
+ * which let a concurrent metadata write between the two queries silently
+ * clobber sibling keys. Postgres `jsonb_set` updates the single key in
+ * place server-side — siblings are preserved by definition.
+ *
+ * The COALESCE guards against rows whose `metadata` is NULL (jsonb_set
+ * returns NULL when the source is NULL, which would wipe the field).
+ */
 async function markRagStatus(documentId: string, indexed: boolean) {
   try {
-    const existing = await prisma.document.findUnique({
-      where: { id: documentId },
-      select: { metadata: true },
-    })
-    if (!existing) return
-    const meta = (existing.metadata as Record<string, unknown>) || {}
-    await prisma.document.update({
-      where: { id: documentId },
-      data: {
-        metadata: { ...meta, ragIndexed: indexed } as Prisma.InputJsonValue,
-      },
-    })
+    await prisma.$executeRaw`
+      UPDATE "Document"
+      SET "metadata" = jsonb_set(
+        COALESCE("metadata", '{}'::jsonb),
+        '{ragIndexed}',
+        to_jsonb(${indexed}::boolean),
+        true
+      )
+      WHERE "id" = ${documentId}
+    `
   } catch (err) {
     console.error("[ArtifactIndexer] Failed to write ragIndexed flag:", err)
   }

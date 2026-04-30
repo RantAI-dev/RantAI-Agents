@@ -12,8 +12,16 @@
 import { getRagConfig, resolveApiKey } from "./config";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
-const BATCH_SIZE = 128;
-const EMBED_CONCURRENCY = 4;
+// D-82: BATCH_SIZE / EMBED_CONCURRENCY were compile-time constants —
+// operators couldn't tune embedding parallelism without a code edit.
+// Read from env on module load with the historical defaults preserved.
+const parsePositiveInt = (raw: string | undefined, fallback: number): number => {
+  if (!raw) return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+const BATCH_SIZE = parsePositiveInt(process.env.KB_EMBED_BATCH_SIZE, 128);
+const EMBED_CONCURRENCY = parsePositiveInt(process.env.KB_EMBED_CONCURRENCY, 4);
 
 /**
  * Sleep for specified milliseconds

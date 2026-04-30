@@ -101,11 +101,21 @@ export const S3Paths = {
     `temp/${uploadId}/${sanitizeFilename(filename)}`,
 
   /**
-   * Path for chat artifacts (stored as knowledge documents)
-   * Format: artifacts/{orgId|global}/{sessionId}/{artifactId}{ext}
+   * Path for chat artifacts (stored as knowledge documents).
+   * Format: `artifacts/{orgId|"global"}/{sessionId|"orphan"}/{artifactId}{ext}`.
+   *
+   * Both segments fall back to a stable sentinel when missing:
+   * - `orgId` → `"global"` for cross-org artifacts.
+   * - `sessionId` → `"orphan"` so artifacts created outside a session
+   *   (admin tools, migrations) don't write to `artifacts/.../undefined/...`.
    */
-  artifact: (orgId: string | null, sessionId: string, artifactId: string, ext: string): string =>
-    `artifacts/${orgId || "global"}/${sessionId}/${artifactId}${ext}`,
+  artifact: (
+    orgId: string | null,
+    sessionId: string | null | undefined,
+    artifactId: string,
+    ext: string,
+  ): string =>
+    `artifacts/${orgId || "global"}/${sessionId || "orphan"}/${artifactId}${ext}`,
 }
 
 /**
@@ -162,34 +172,6 @@ export async function uploadFile(
     url,
     size: buffer.length,
   }
-}
-
-/**
- * Upload a file from a stream/blob
- */
-export async function uploadStream(
-  key: string,
-  body: ReadableStream | Blob | Uint8Array,
-  contentType: string,
-  contentLength?: number,
-  metadata?: Record<string, string>
-): Promise<{ key: string; url: string }> {
-  const client = getS3Client()
-
-  await client.send(
-    new PutObjectCommand({
-      Bucket: S3_CONFIG.bucket,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-      ContentLength: contentLength,
-      Metadata: metadata,
-    })
-  )
-
-  const url = await getPresignedDownloadUrl(key)
-
-  return { key, url }
 }
 
 /**

@@ -1,6 +1,6 @@
 import PptxGenJS from "pptxgenjs"
 import type { PresentationData, SlideData, SlideTheme } from "./types"
-import { chartToSvg } from "@/lib/rendering/chart-to-svg"
+import { chartToSvg, inferChartTheme } from "@/lib/rendering/chart-to-svg"
 import { svgToBase64Png, fetchImageAsBase64 } from "@/lib/rendering/client/svg-to-png"
 import { mermaidToBase64Png } from "@/lib/rendering/client/mermaid-to-png"
 import {
@@ -618,7 +618,7 @@ async function renderChartSlide(
   }
 
   if (slide.chart) {
-    const svgString = chartToSvg(slide.chart, CHART_DIMENSIONS.pptx.fullSlide.width, CHART_DIMENSIONS.pptx.fullSlide.height)
+    const svgString = chartToSvg(slide.chart, CHART_DIMENSIONS.pptx.fullSlide.width, CHART_DIMENSIONS.pptx.fullSlide.height, { theme: inferChartTheme(theme.primaryColor) })
     const pngData = await svgToBase64Png(svgString, 900, 500)
     s.addImage({
       data: pngData,
@@ -823,7 +823,7 @@ async function renderChartContentSlide(
 
   // Chart on left
   if (slide.chart) {
-    const svgString = chartToSvg(slide.chart, CHART_DIMENSIONS.pptx.splitLayout.width, CHART_DIMENSIONS.pptx.splitLayout.height)
+    const svgString = chartToSvg(slide.chart, CHART_DIMENSIONS.pptx.splitLayout.width, CHART_DIMENSIONS.pptx.splitLayout.height, { theme: inferChartTheme(theme.primaryColor) })
     const pngData = await svgToBase64Png(svgString, 600, 450)
     s.addImage({
       data: pngData,

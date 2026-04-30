@@ -115,7 +115,11 @@ function renderChart(
             label
           >
             {rows.map((_row, i) => (
-              <Cell key={i} fill={series[0]?.color ?? "#1a73e8"} fillOpacity={1 - i * 0.1} />
+              <Cell
+                key={i}
+                fill={series[0]?.color ?? "#1a73e8"}
+                fillOpacity={Math.max(0.25, 1 - i * 0.1)}
+              />
             ))}
           </Pie>
         </PieChart>

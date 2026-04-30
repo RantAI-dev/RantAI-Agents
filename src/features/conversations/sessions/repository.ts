@@ -229,8 +229,3 @@ export async function findArtifactsBySessionId(sessionId: string) {
   })
 }
 
-export async function deleteArtifactsBySessionId(sessionId: string) {
-  return prisma.document.deleteMany({
-    where: { sessionId, artifactType: { not: null } },
-  })
-}

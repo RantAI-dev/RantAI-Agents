@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
-import { AlertTriangle, FunctionSquare } from "@/lib/icons"
+import { AlertTriangle, FunctionSquare, Loader2 } from "@/lib/icons"
 import {
   type SpreadsheetSpec,
   type WorkbookValues,
@@ -64,10 +64,16 @@ export function SpecWorkbookView({ content }: SpecWorkbookViewProps) {
   const [view, setView] = useState<"data" | "charts">("data")
 
   // Reset selection / active-sheet when the underlying content changes.
+  // Also reset `values` to null so the "Calculating formulas…" footer fires
+  // during re-evaluation (NEW-R-5) — without this, stale values from the
+  // previous spec briefly render in cells until the async evaluator resolves
+  // to the new result.
   useEffect(() => {
     setActiveSheet(0)
     setSelectedRef(null)
     setView("data")
+    setValues(null)
+    setEvalError(null)
   }, [content])
 
   const parsed = useMemo(() => parseSpec(content), [content])
@@ -273,7 +279,11 @@ export function SpecWorkbookView({ content }: SpecWorkbookViewProps) {
             <button
               key={s.name}
               type="button"
-              onClick={() => { setActiveSheet(i); setSelectedRef(null) }}
+              // D-20: also reset Data/Charts toggle to "data" so switching to a
+              // sheet without charts doesn't strand the user on the empty-state
+              // SheetChartView (the toggle is hidden when spec.charts is empty,
+              // making it impossible to escape back to the data grid).
+              onClick={() => { setActiveSheet(i); setSelectedRef(null); setView("data") }}
               className={
                 "px-3 py-1 text-xs rounded-t-md whitespace-nowrap transition-colors " +
                 (i === activeSheet
@@ -291,6 +301,17 @@ export function SpecWorkbookView({ content }: SpecWorkbookViewProps) {
 
       {view === "charts" && spec.charts && (
         <SheetChartView charts={spec.charts} values={values ?? new Map()} />
+      )}
+
+      {/* D-63: thin "calculating formulas" indicator while the async
+          evaluateWorkbook effect is in flight. parseSpec runs synchronously
+          in useMemo so the grid paints immediately, but formula cells show
+          raw text until `values` arrives — surface that with a footer. */}
+      {!values && !evalError && (
+        <div className="flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground border-t shrink-0">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Calculating formulas…
+        </div>
       )}
 
       {evalError && (

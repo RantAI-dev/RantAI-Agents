@@ -115,10 +115,18 @@ function sanitizeSceneCode(code: string): string {
     // Remove components already provided by the App wrapper
     s = stripJsxTag(s, "OrbitControls")
     s = stripJsxTag(s, "Environment")
-    // Keep <color attach="background">. The wrapper sets a default dark
-    // background but if the LLM intentionally specifies a scene background
-    // we should honor it. (Previously this was stripped, silently dropping
-    // user-requested colors.)
+
+    // NEW-P-3: keep <color attach="background"> only — strip any other
+    // <color attach="..."> variant (fog, environment, etc.). The prompt
+    // documents only `attach="background"`, and Three.js silently ignores
+    // unknown attach targets — keeping them in the JSX bloats the scene
+    // graph with no observable effect. Background-attach colors set the
+    // Canvas clear color; other variants are out of scope for r3f
+    // artifacts and are routed away here so the surface stays explicit.
+    s = s.replace(
+      /<color\s+attach\s*=\s*"(?!background")[^"]*"[^>]*\/?\s*>/g,
+      "",
+    )
 
     return s
 }

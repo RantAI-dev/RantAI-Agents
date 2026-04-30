@@ -198,12 +198,21 @@ export function PythonRenderer({ content, onFixWithAI }: PythonRendererProps) {
     setError(null)
   }, [])
 
+  // D-27: adaptive fence length — match application/code's pattern so a
+  // Python script with embedded triple-backticks (e.g. docstrings showing
+  // markdown examples) doesn't break Streamdown's parser.
+  const longestRun = (content.match(/`+/g) ?? []).reduce(
+    (max, run) => Math.max(max, run.length),
+    0,
+  )
+  const fence = "`".repeat(Math.max(3, longestRun + 1))
+
   return (
     <div className="flex flex-col h-full">
       {/* Code display */}
       <div className="flex-1 overflow-auto border-b min-h-0">
         <StreamdownContent
-          content={`\`\`\`python\n${content}\n\`\`\``}
+          content={`${fence}python\n${content}\n${fence}`}
           className="p-4"
         />
       </div>

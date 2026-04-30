@@ -36,6 +36,7 @@ export const ALL_ARTIFACTS = [
   label: string
   summary: string
   rules: string
+  examples: ReadonlyArray<{ label: string; code: string }>
 }>
 
 export const CANVAS_TYPE_LABELS: Record<string, string> = Object.fromEntries(

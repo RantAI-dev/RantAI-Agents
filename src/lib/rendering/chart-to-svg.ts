@@ -3,6 +3,10 @@
  *
  * Generates SVG strings for bar, bar-horizontal, line, pie, and donut charts.
  * Works both server-side (for HTML generation) and client-side (for PPTX export).
+ *
+ * D-51: themable. Pass `theme: "dark"` so the title/axis/gridline tokens
+ * shift to a dark palette; data colours stay saturated either way (the
+ * series remain brand-neutral).
  */
 
 import * as d3Scale from "d3-scale"
@@ -21,8 +25,65 @@ const DEFAULT_COLORS = [
   "#14b8a6", // teal-500
 ]
 
+export type ChartTheme = "light" | "dark"
+
+interface ThemeTokens {
+  background: string
+  title: string
+  text: string
+  muted: string
+  gridline: string
+  axis: string
+  emptyBg: string
+  emptyText: string
+}
+
+const TOKENS: Record<ChartTheme, ThemeTokens> = {
+  light: {
+    background: "#ffffff",
+    title: "#1e293b",
+    text: "#64748b",
+    muted: "#94a3b8",
+    gridline: "#e2e8f0",
+    axis: "#cbd5e1",
+    emptyBg: "#f8fafc",
+    emptyText: "#94a3b8",
+  },
+  dark: {
+    background: "#0b0b0c",
+    title: "#f1f5f9",
+    text: "#cbd5e1",
+    muted: "#94a3b8",
+    gridline: "#334155",
+    axis: "#475569",
+    emptyBg: "#1e293b",
+    emptyText: "#94a3b8",
+  },
+}
+
 function getColor(index: number, customColor?: string): string {
   return customColor || DEFAULT_COLORS[index % DEFAULT_COLORS.length]
+}
+
+/**
+ * Derive a `ChartTheme` from a hex color via relative luminance.
+ * Returns `"dark"` when the supplied background is dark enough that the
+ * default light-theme chart palette would clash. Used by slide exporters
+ * (PPTX + HTML preview) to pick a chart palette that matches the deck's
+ * `theme.primaryColor` automatically.
+ */
+export function inferChartTheme(hex: string | undefined | null): ChartTheme {
+  if (!hex || typeof hex !== "string") return "light"
+  const m = hex.trim().match(/^#?([0-9a-fA-F]{6})$/)
+  if (!m) return "light"
+  const v = parseInt(m[1], 16)
+  const r = (v >> 16) & 0xff
+  const g = (v >> 8) & 0xff
+  const b = v & 0xff
+  // Standard relative-luminance formula (sRGB; non-linearized for speed —
+  // accurate enough for a binary light/dark decision).
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  return lum < 0.5 ? "dark" : "light"
 }
 
 function escapeXml(text: string): string {
@@ -61,14 +122,15 @@ function getDimensions(
   }
 }
 
-function renderTitle(title: string | undefined, width: number): string {
+function renderTitle(title: string | undefined, width: number, t: ThemeTokens): string {
   if (!title) return ""
-  return `<text x="${width / 2}" y="20" text-anchor="middle" font-size="16" font-weight="600" fill="#1e293b">${escapeXml(title)}</text>`
+  return `<text x="${width / 2}" y="20" text-anchor="middle" font-size="16" font-weight="600" fill="${t.title}">${escapeXml(title)}</text>`
 }
 
 function renderBarChart(
   data: ChartDataPoint[],
   dims: ChartDimensions,
+  t: ThemeTokens,
   title?: string,
   showValues = true
 ): string {
@@ -93,7 +155,7 @@ function renderBarChart(
       const barHeight = innerHeight - y
       const color = getColor(i, d.color)
       const valueText = showValues
-        ? `<text x="${x + xScale.bandwidth() / 2}" y="${y - 5}" text-anchor="middle" font-size="11" fill="#64748b">${d.value.toLocaleString()}</text>`
+        ? `<text x="${x + xScale.bandwidth() / 2}" y="${y - 5}" text-anchor="middle" font-size="11" fill="${t.text}">${d.value.toLocaleString()}</text>`
         : ""
       return `<rect x="${x}" y="${y}" width="${xScale.bandwidth()}" height="${barHeight}" fill="${color}" rx="4"/>${valueText}`
     })
@@ -102,7 +164,7 @@ function renderBarChart(
   const xAxisLabels = data
     .map((d) => {
       const x = (xScale(d.label) || 0) + xScale.bandwidth() / 2
-      return `<text x="${x}" y="${innerHeight + 20}" text-anchor="middle" font-size="12" fill="#64748b">${escapeXml(d.label)}</text>`
+      return `<text x="${x}" y="${innerHeight + 20}" text-anchor="middle" font-size="12" fill="${t.text}">${escapeXml(d.label)}</text>`
     })
     .join("")
 
@@ -111,19 +173,19 @@ function renderBarChart(
   const yAxisTicks = yTicks
     .map(
       (tick) =>
-        `<text x="-10" y="${yScale(tick)}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="#94a3b8">${tick.toLocaleString()}</text>
-         <line x1="0" y1="${yScale(tick)}" x2="${innerWidth}" y2="${yScale(tick)}" stroke="#e2e8f0" stroke-dasharray="4"/>`
+        `<text x="-10" y="${yScale(tick)}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="${t.muted}">${tick.toLocaleString()}</text>
+         <line x1="0" y1="${yScale(tick)}" x2="${innerWidth}" y2="${yScale(tick)}" stroke="${t.gridline}" stroke-dasharray="4"/>`
     )
     .join("")
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
-    <rect width="${width}" height="${height}" fill="white"/>
-    ${renderTitle(title, width)}
+    <rect width="${width}" height="${height}" fill="${t.background}"/>
+    ${renderTitle(title, width, t)}
     <g transform="translate(${margin.left},${margin.top})">
       ${yAxisTicks}
       ${bars}
       ${xAxisLabels}
-      <line x1="0" y1="${innerHeight}" x2="${innerWidth}" y2="${innerHeight}" stroke="#cbd5e1"/>
+      <line x1="0" y1="${innerHeight}" x2="${innerWidth}" y2="${innerHeight}" stroke="${t.axis}"/>
     </g>
   </svg>`
 }
@@ -131,6 +193,7 @@ function renderBarChart(
 function renderBarHorizontalChart(
   data: ChartDataPoint[],
   dims: ChartDimensions,
+  t: ThemeTokens,
   title?: string,
   showValues = true
 ): string {
@@ -154,7 +217,7 @@ function renderBarHorizontalChart(
       const barWidth = xScale(d.value)
       const color = getColor(i, d.color)
       const valueText = showValues
-        ? `<text x="${barWidth + 8}" y="${y + yScale.bandwidth() / 2}" dominant-baseline="middle" font-size="11" fill="#64748b">${d.value.toLocaleString()}</text>`
+        ? `<text x="${barWidth + 8}" y="${y + yScale.bandwidth() / 2}" dominant-baseline="middle" font-size="11" fill="${t.text}">${d.value.toLocaleString()}</text>`
         : ""
       return `<rect x="0" y="${y}" width="${barWidth}" height="${yScale.bandwidth()}" fill="${color}" rx="4"/>${valueText}`
     })
@@ -163,7 +226,7 @@ function renderBarHorizontalChart(
   const yAxisLabels = data
     .map((d) => {
       const y = (yScale(d.label) || 0) + yScale.bandwidth() / 2
-      return `<text x="-10" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="12" fill="#64748b">${escapeXml(d.label)}</text>`
+      return `<text x="-10" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="12" fill="${t.text}">${escapeXml(d.label)}</text>`
     })
     .join("")
 
@@ -172,19 +235,19 @@ function renderBarHorizontalChart(
   const xAxisTicks = xTicks
     .map(
       (tick) =>
-        `<text x="${xScale(tick)}" y="${innerHeight + 20}" text-anchor="middle" font-size="11" fill="#94a3b8">${tick.toLocaleString()}</text>
-         <line x1="${xScale(tick)}" y1="0" x2="${xScale(tick)}" y2="${innerHeight}" stroke="#e2e8f0" stroke-dasharray="4"/>`
+        `<text x="${xScale(tick)}" y="${innerHeight + 20}" text-anchor="middle" font-size="11" fill="${t.muted}">${tick.toLocaleString()}</text>
+         <line x1="${xScale(tick)}" y1="0" x2="${xScale(tick)}" y2="${innerHeight}" stroke="${t.gridline}" stroke-dasharray="4"/>`
     )
     .join("")
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
-    <rect width="${width}" height="${height}" fill="white"/>
-    ${renderTitle(title, width)}
+    <rect width="${width}" height="${height}" fill="${t.background}"/>
+    ${renderTitle(title, width, t)}
     <g transform="translate(${margin.left},${margin.top})">
       ${xAxisTicks}
       ${bars}
       ${yAxisLabels}
-      <line x1="0" y1="${innerHeight}" x2="${innerWidth}" y2="${innerHeight}" stroke="#cbd5e1"/>
+      <line x1="0" y1="${innerHeight}" x2="${innerWidth}" y2="${innerHeight}" stroke="${t.axis}"/>
     </g>
   </svg>`
 }
@@ -193,6 +256,7 @@ function renderLineChart(
   labels: string[],
   series: ChartSeries[],
   dims: ChartDimensions,
+  t: ThemeTokens,
   title?: string,
   showLegend = true
 ): string {
@@ -239,7 +303,7 @@ function renderLineChart(
   const xAxisLabels = labels
     .map((label) => {
       const x = xScale(label) || 0
-      return `<text x="${x}" y="${innerHeight + 20}" text-anchor="middle" font-size="12" fill="#64748b">${escapeXml(label)}</text>`
+      return `<text x="${x}" y="${innerHeight + 20}" text-anchor="middle" font-size="12" fill="${t.text}">${escapeXml(label)}</text>`
     })
     .join("")
 
@@ -248,8 +312,8 @@ function renderLineChart(
   const yAxisTicks = yTicks
     .map(
       (tick) =>
-        `<text x="-10" y="${yScale(tick)}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="#94a3b8">${tick.toLocaleString()}</text>
-         <line x1="0" y1="${yScale(tick)}" x2="${innerWidth}" y2="${yScale(tick)}" stroke="#e2e8f0" stroke-dasharray="4"/>`
+        `<text x="-10" y="${yScale(tick)}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="${t.muted}">${tick.toLocaleString()}</text>
+         <line x1="0" y1="${yScale(tick)}" x2="${innerWidth}" y2="${yScale(tick)}" stroke="${t.gridline}" stroke-dasharray="4"/>`
     )
     .join("")
 
@@ -260,19 +324,19 @@ function renderLineChart(
           const color = getColor(i, s.color)
           const x = margin.left + i * 100
           return `<rect x="${x}" y="${height - 20}" width="12" height="12" fill="${color}" rx="2"/>
-                  <text x="${x + 18}" y="${height - 10}" font-size="11" fill="#64748b">${escapeXml(s.name)}</text>`
+                  <text x="${x + 18}" y="${height - 10}" font-size="11" fill="${t.text}">${escapeXml(s.name)}</text>`
         })
         .join("")
     : ""
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
-    <rect width="${width}" height="${height}" fill="white"/>
-    ${renderTitle(title, width)}
+    <rect width="${width}" height="${height}" fill="${t.background}"/>
+    ${renderTitle(title, width, t)}
     <g transform="translate(${margin.left},${margin.top})">
       ${yAxisTicks}
       ${lines}
       ${xAxisLabels}
-      <line x1="0" y1="${innerHeight}" x2="${innerWidth}" y2="${innerHeight}" stroke="#cbd5e1"/>
+      <line x1="0" y1="${innerHeight}" x2="${innerWidth}" y2="${innerHeight}" stroke="${t.axis}"/>
     </g>
     ${legendItems}
   </svg>`
@@ -282,6 +346,7 @@ function renderPieChart(
   data: ChartDataPoint[],
   width: number,
   height: number,
+  t: ThemeTokens,
   title?: string,
   isDonut = false
 ): string {
@@ -335,13 +400,13 @@ function renderPieChart(
       const color = getColor(i, d.color)
       const x = legendStartX + i * legendSpacing
       return `<rect x="${x}" y="${legendY}" width="12" height="12" fill="${color}" rx="2"/>
-              <text x="${x + 18}" y="${legendY + 10}" font-size="11" fill="#64748b">${escapeXml(d.label)}</text>`
+              <text x="${x + 18}" y="${legendY + 10}" font-size="11" fill="${t.text}">${escapeXml(d.label)}</text>`
     })
     .join("")
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
-    <rect width="${width}" height="${height}" fill="white"/>
-    ${renderTitle(title, width)}
+    <rect width="${width}" height="${height}" fill="${t.background}"/>
+    ${renderTitle(title, width, t)}
     <g transform="translate(${centerX},${centerY})">
       ${slices}
     </g>
@@ -350,64 +415,70 @@ function renderPieChart(
 }
 
 /**
- * Convert ChartData to SVG string
+ * Convert ChartData to SVG string.
+ *
+ * D-51: pass `options.theme: "dark"` to render with the dark palette
+ * (slide deck on dark theme, etc.). Defaults to `"light"` so existing
+ * callers keep their current output verbatim.
  */
 export function chartToSvg(
   chart: ChartData,
   width = 600,
-  height = 400
+  height = 400,
+  options?: { theme?: ChartTheme }
 ): string {
+  const t = TOKENS[options?.theme ?? "light"]
   const { type, title, data, labels, series, showValues = true, showLegend = true } = chart
 
   switch (type) {
     case "bar": {
       if (!data || data.length === 0) {
-        return renderEmptyChart(width, height, "No data provided")
+        return renderEmptyChart(width, height, t, "No data provided")
       }
       const dims = getDimensions(width, height, true)
-      return renderBarChart(data, dims, title, showValues)
+      return renderBarChart(data, dims, t, title, showValues)
     }
 
     case "bar-horizontal": {
       if (!data || data.length === 0) {
-        return renderEmptyChart(width, height, "No data provided")
+        return renderEmptyChart(width, height, t, "No data provided")
       }
       const dims = getDimensions(width, height, true)
       dims.margin.left = 100 // More space for labels
       dims.innerWidth = width - dims.margin.left - dims.margin.right
-      return renderBarHorizontalChart(data, dims, title, showValues)
+      return renderBarHorizontalChart(data, dims, t, title, showValues)
     }
 
     case "line": {
       if (!labels || !series || labels.length === 0 || series.length === 0) {
-        return renderEmptyChart(width, height, "No series data provided")
+        return renderEmptyChart(width, height, t, "No series data provided")
       }
       const dims = getDimensions(width, height, true)
-      return renderLineChart(labels, series, dims, title, showLegend)
+      return renderLineChart(labels, series, dims, t, title, showLegend)
     }
 
     case "pie": {
       if (!data || data.length === 0) {
-        return renderEmptyChart(width, height, "No data provided")
+        return renderEmptyChart(width, height, t, "No data provided")
       }
-      return renderPieChart(data, width, height, title, false)
+      return renderPieChart(data, width, height, t, title, false)
     }
 
     case "donut": {
       if (!data || data.length === 0) {
-        return renderEmptyChart(width, height, "No data provided")
+        return renderEmptyChart(width, height, t, "No data provided")
       }
-      return renderPieChart(data, width, height, title, true)
+      return renderPieChart(data, width, height, t, title, true)
     }
 
     default:
-      return renderEmptyChart(width, height, `Unknown chart type: ${type}`)
+      return renderEmptyChart(width, height, t, `Unknown chart type: ${type}`)
   }
 }
 
-function renderEmptyChart(width: number, height: number, message: string): string {
+function renderEmptyChart(width: number, height: number, t: ThemeTokens, message: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
-    <rect width="${width}" height="${height}" fill="#f8fafc"/>
-    <text x="${width / 2}" y="${height / 2}" text-anchor="middle" font-size="14" fill="#94a3b8">${escapeXml(message)}</text>
+    <rect width="${width}" height="${height}" fill="${t.emptyBg}"/>
+    <text x="${width / 2}" y="${height / 2}" text-anchor="middle" font-size="14" fill="${t.emptyText}">${escapeXml(message)}</text>
   </svg>`
 }

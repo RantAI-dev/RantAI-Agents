@@ -1,6 +1,6 @@
 export const r3fArtifact = {
   type: "application/3d" as const,
-  label: "R3F 3D Scene",
+  label: "3D Scene",
   summary:
     "Interactive 3D scenes with React Three Fiber — primitives, glTF models, and animations inside a pre-existing Canvas with OrbitControls and Environment.",
   rules: `**application/3d — Interactive 3D R3F Scenes**
@@ -14,7 +14,7 @@ You write a single React component (the "Scene") that runs **inside** a pre-exis
 | React | 18.3.1 | All hooks available as direct symbols |
 | Three.js | 0.170.0 | Available as \`THREE\` namespace |
 | @react-three/fiber | 8.17.10 | \`useFrame\`, \`useThree\` |
-| @react-three/drei | 9.117.0 | 20 helpers listed below |
+| @react-three/drei | 9.117.0 | 19 helpers listed below |
 | Babel standalone | 7.26.10 | JSX + TypeScript compiled before execution |
 
 **What the wrapper provides (do NOT include these — they already exist):**
@@ -25,7 +25,9 @@ You write a single React component (the "Scene") that runs **inside** a pre-exis
 - \`<OrbitControls makeDefault dampingFactor={0.05} />\`
 - \`<Suspense>\` wrapping your Scene component
 
-Background is dark (\`#0a0a0f\`). The scene renders in a full-viewport iframe.
+Background is dark (\`#0a0a0f\`) by default. The scene renders in a full-viewport iframe.
+
+**Override the background** (optional): emit \`<color attach="background" args={["#hex"]} />\` as a top-level child of your returned group to set a custom Canvas background. The renderer preserves this tag intentionally — it's the only \`<color>\` element supported. Example: \`<color attach="background" args={["#1a1a2e"]} />\`.
 
 ## Available Dependencies — Complete List
 
@@ -41,7 +43,7 @@ These are the **only** symbols available at runtime. Anything not in this table 
 \`useFrame\` — render loop: \`useFrame((state, delta) => { ... })\`. Use \`delta\` for frame-rate-independent animation. **Never allocate objects inside useFrame** (no \`new THREE.Vector3()\` per frame — create outside and reuse).
 \`useThree\` — access renderer state: \`const { camera, gl, scene, size, viewport } = useThree()\`.
 
-### @react-three/drei helpers (20 total)
+### @react-three/drei helpers (19 total)
 | Symbol | What it does |
 |---|---|
 | \`useGLTF\` | Load .glb/.gltf models: \`const { scene, animations } = useGLTF(url)\` |

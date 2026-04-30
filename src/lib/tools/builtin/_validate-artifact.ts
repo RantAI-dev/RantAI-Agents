@@ -47,7 +47,20 @@ const REACT_IMPORT_WHITELIST = new Set([
   "framer-motion",
 ])
 
-/** Maximum non-blank lines allowed inside inline <style> blocks. */
+/** Maximum non-blank lines allowed inside inline <style> blocks
+ *  inside HTML artifacts.
+ *
+ *  Note on severity divergence vs. SVG (`validateSvg`):
+ *  - HTML renders inside an iframe (sandboxed document). `<style>` is
+ *    contained — it only affects iframe DOM, not host page CSS. So the
+ *    10-line limit here is purely a stylistic nudge ("prefer Tailwind")
+ *    and emits a *warning*, not a hard error.
+ *  - SVG renders inline via `dangerouslySetInnerHTML` (not iframed).
+ *    `<style>` inside SVG would leak into host page CSS scope, so
+ *    `validateSvg` rejects it as a *hard error* with no length threshold.
+ *  Both severities are correct for their respective security boundaries;
+ *  do not "unify" them without first re-evaluating the iframe model.
+ */
 const MAX_INLINE_STYLE_LINES = 10
 
 /**
@@ -64,9 +77,13 @@ const MAX_INLINE_STYLE_LINES = 10
  * - `isNew`: this content is being CREATED, not updated. Lets validators apply
  *   stricter rules (e.g. size caps, layout deprecations) only to fresh content
  *   and grandfather existing artifacts that pre-date the rule.
+ * - `language`: the `language` field on `application/code` artifacts. Read by
+ *   `validateCode` to flag unrecognised Shiki names so a `language: "pyhton"`
+ *   typo doesn't silently pass.
  */
 export interface ValidationContext {
   isNew?: boolean
+  language?: string
 }
 
 const VALIDATORS: Record<
@@ -166,7 +183,13 @@ export async function validateArtifactContent(
 // Document validation — docx-js script (TS parse + sandbox dry-run)
 // ---------------------------------------------------------------------------
 
-async function validateDocument(content: string): Promise<ArtifactValidationResult> {
+async function validateDocument(
+  content: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _ctx?: ValidationContext,
+): Promise<ArtifactValidationResult> {
+  // _ctx accepted for shape consistency with the rest of VALIDATORS;
+  // delegated validator currently has no isNew-only rules.
   const { validateScriptArtifact } = await import("@/lib/document-script/validator")
   const r = await validateScriptArtifact(content)
   return { ok: r.ok, errors: r.errors, warnings: [] }
@@ -205,6 +228,37 @@ const MAX_SLIDE_BULLETS = 6
 const MAX_BULLET_WORDS = 10
 const MIN_DECK_SLIDES = 7
 const MAX_DECK_SLIDES = 12
+
+/** Approved primaryColor hex values from the slides prompt
+ *  (`prompts/artifacts/slides.ts:40-47`). New decks (`ctx.isNew`) that
+ *  declare a `theme.primaryColor` outside this set hard-error. Existing
+ *  decks are grandfathered (warning only). */
+const APPROVED_SLIDE_PRIMARY_COLORS = new Set([
+  "#0F172A",
+  "#1E293B",
+  "#0C1222",
+  "#042F2E",
+  "#1C1917",
+  "#1A1A2E",
+])
+
+/** Approved secondaryColor hex values from the slides prompt
+ *  (`prompts/artifacts/slides.ts:50-56`). Same gating as primaryColor. */
+const APPROVED_SLIDE_SECONDARY_COLORS = new Set([
+  "#3B82F6",
+  "#06B6D4",
+  "#10B981",
+  "#F59E0B",
+  "#8B5CF6",
+  "#EC4899",
+])
+
+function normalizeHex(value: unknown): string | null {
+  if (typeof value !== "string") return null
+  const trimmed = value.trim()
+  if (!/^#[0-9A-Fa-f]{6}$/.test(trimmed)) return null
+  return "#" + trimmed.slice(1).toUpperCase()
+}
 
 function validateSlides(content: string, ctx?: ValidationContext): ArtifactValidationResult {
   const errors: string[] = []
@@ -576,16 +630,18 @@ function validateSlides(content: string, ctx?: ValidationContext): ArtifactValid
     }
   }
 
-  // Deck size convention — outside this range and the deck reads as either
-  // too thin or too long for a single sitting.
-  if (slides.length < MIN_DECK_SLIDES) {
-    warnings.push(
-      `Deck has ${slides.length} slides — convention is ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. Fewer than ${MIN_DECK_SLIDES} feels thin.`,
-    )
-  } else if (slides.length > MAX_DECK_SLIDES) {
-    warnings.push(
-      `Deck has ${slides.length} slides — convention is ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. More than ${MAX_DECK_SLIDES} loses the audience.`,
-    )
+  // Deck size — for NEW decks (ctx.isNew) the 7–12 range is a hard rule;
+  // existing decks outside the range are grandfathered to a warning so
+  // updates don't get blocked retroactively.
+  const deckSizeMessage =
+    slides.length < MIN_DECK_SLIDES
+      ? `Deck has ${slides.length} slides — must be ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. Fewer than ${MIN_DECK_SLIDES} feels thin.`
+      : slides.length > MAX_DECK_SLIDES
+        ? `Deck has ${slides.length} slides — must be ${MIN_DECK_SLIDES}–${MAX_DECK_SLIDES}. More than ${MAX_DECK_SLIDES} loses the audience.`
+        : null
+  if (deckSizeMessage) {
+    if (ctx?.isNew) errors.push(deckSizeMessage)
+    else warnings.push(deckSizeMessage)
   }
 
   // Layout diversity — a deck of all `content` slides is boring.
@@ -600,18 +656,41 @@ function validateSlides(content: string, ctx?: ValidationContext): ArtifactValid
     )
   }
 
-  // First slide should be a title; last slide should be a closing.
+  // First slide MUST be `title`; last MUST be `closing`. Hard error on
+  // ctx.isNew so the LLM regenerates; warning otherwise so manual edits
+  // to legacy decks don't get blocked.
   const firstLayout = (slides[0] as { layout?: string } | null)?.layout
   if (firstLayout && firstLayout !== "title") {
-    warnings.push(
-      `First slide has layout "${firstLayout}" — convention is to open with a \`title\` slide.`,
-    )
+    const msg = `First slide has layout "${firstLayout}" — must open with a \`title\` slide.`
+    if (ctx?.isNew) errors.push(msg)
+    else warnings.push(msg)
   }
   const lastLayout = (slides[slides.length - 1] as { layout?: string } | null)?.layout
   if (lastLayout && lastLayout !== "closing") {
-    warnings.push(
-      `Last slide has layout "${lastLayout}" — convention is to end with a \`closing\` slide.`,
-    )
+    const msg = `Last slide has layout "${lastLayout}" — must end with a \`closing\` slide.`
+    if (ctx?.isNew) errors.push(msg)
+    else warnings.push(msg)
+  }
+
+  // Theme color whitelist — only checked when a `theme` object is present.
+  // Hard error on ctx.isNew, warning otherwise.
+  const theme = root.theme as Record<string, unknown> | undefined
+  if (theme && typeof theme === "object" && !Array.isArray(theme)) {
+    // Echo the normalized (uppercase) form in the error so it reads cleanly
+    // alongside the uppercase approved-list — lowercase input shown next to
+    // uppercase examples was visually confusing (NEW-P-2).
+    const primary = normalizeHex(theme.primaryColor)
+    if (primary !== null && !APPROVED_SLIDE_PRIMARY_COLORS.has(primary)) {
+      const msg = `theme.primaryColor ${primary} is not in the approved set (${[...APPROVED_SLIDE_PRIMARY_COLORS].join(", ")}). The prompt requires a dark, conservative primary color.`
+      if (ctx?.isNew) errors.push(msg)
+      else warnings.push(msg)
+    }
+    const secondary = normalizeHex(theme.secondaryColor)
+    if (secondary !== null && !APPROVED_SLIDE_SECONDARY_COLORS.has(secondary)) {
+      const msg = `theme.secondaryColor ${secondary} is not in the approved set (${[...APPROVED_SLIDE_SECONDARY_COLORS].join(", ")}).`
+      if (ctx?.isNew) errors.push(msg)
+      else warnings.push(msg)
+    }
   }
 
   return { ok: errors.length === 0, errors, warnings }
@@ -1250,7 +1329,20 @@ const CODE_TRUNCATION_MARKERS: ReadonlyArray<{ marker: RegExp; label: string }> 
   { marker: /\bpass\s*#\s*(placeholder|implement|todo)/i, label: "pass  # placeholder" },
 ]
 
-function validateCode(content: string): ArtifactValidationResult {
+/** D-18: canonical Shiki language names that the prompt advertises
+ *  (`prompts/artifacts/code.ts`). The `application/code` create-artifact
+ *  guard already requires `language` exists; this catches typos and
+ *  off-list values that would otherwise render as plain text. */
+const CANONICAL_CODE_LANGUAGES = new Set([
+  "typescript", "tsx", "javascript", "jsx",
+  "python", "rust", "go", "java", "csharp", "cpp", "c",
+  "ruby", "php", "swift", "kotlin",
+  "sql", "bash", "shell",
+  "yaml", "json", "toml", "dockerfile",
+  "html", "css", "scss", "markdown",
+])
+
+function validateCode(content: string, ctx?: ValidationContext): ArtifactValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
 
@@ -1259,6 +1351,19 @@ function validateCode(content: string): ArtifactValidationResult {
   if (!trimmed) {
     errors.push("Code content is empty.")
     return { ok: false, errors, warnings }
+  }
+
+  // D-18: cross-validate the artifact's `language` field against the
+  // canonical Shiki list. The create-artifact guard already requires it
+  // exists; this surfaces typos / off-list values to the LLM as a warning
+  // (Shiki silently falls back to plain text otherwise).
+  if (ctx?.language) {
+    const lang = ctx.language.toLowerCase().trim()
+    if (lang && !CANONICAL_CODE_LANGUAGES.has(lang)) {
+      warnings.push(
+        `language "${ctx.language}" is not in the canonical Shiki list. Use one of: ${[...CANONICAL_CODE_LANGUAGES].join(", ")}. Off-list values render as plain text without syntax highlighting.`,
+      )
+    }
   }
 
   // Wrong-type guard: HTML document masquerading as code.
@@ -1381,7 +1486,7 @@ function validateMermaid(content: string): ArtifactValidationResult {
 
   if (!hasDeclaration) {
     errors.push(
-      "Missing or unrecognized diagram type declaration on the first non-empty line. Must start with one of: flowchart, sequenceDiagram, erDiagram, stateDiagram-v2, classDiagram, gantt, pie, mindmap, gitGraph, journey, quadrantChart, timeline, sankey-beta, xychart-beta, block-beta, kanban, C4Context, requirementDiagram, architecture-beta."
+      `Missing or unrecognized diagram type declaration on the first non-empty line. Must start with one of: ${MERMAID_DIAGRAM_TYPES.join(", ")}.`
     )
     return { ok: false, errors, warnings }
   }
@@ -1487,7 +1592,9 @@ function validateSvg(content: string): ArtifactValidationResult {
       ) {
         colorValues.add(a.value.toLowerCase())
       }
-      if (a.name === "d" && /\d\.\d{3,}/.test(a.value)) highPrecisionPath = true
+      // D-17: prompt rule is "1 decimal place max"; warn at 2+ dp so the
+      // validator matches the prompt's threshold (was 3+ dp).
+      if (a.name === "d" && /\d\.\d{2,}/.test(a.value)) highPrecisionPath = true
     })
     node.childNodes?.forEach(walk)
   }
@@ -1562,7 +1669,7 @@ function validateSvg(content: string): ArtifactValidationResult {
   }
   if (highPrecisionPath) {
     warnings.push(
-      "Some path coordinates use more than 2 decimal places. Round to 1 decimal for readability and smaller file size."
+      "Some path coordinates use more than 1 decimal place. Round to 1 decimal max for readability and smaller file size."
     )
   }
 
@@ -1678,6 +1785,16 @@ function validateHtml(content: string): ArtifactValidationResult {
     )
   }
 
+  // D-26: the iframe sandbox no longer includes `allow-modals`, so
+  // `alert()` / `confirm()` / `prompt()` calls silently no-op at runtime.
+  // Warn so the LLM regenerates with a custom in-page modal instead of
+  // browser-native dialogs.
+  if (/(^|[^.\w])(alert|confirm|prompt)\s*\(/.test(content)) {
+    warnings.push(
+      "Found alert()/confirm()/prompt() — these are blocked by the sandbox (allow-modals dropped). Build a custom in-page modal with HTML/CSS/JS instead."
+    )
+  }
+
   return { ok: errors.length === 0, errors, warnings }
 }
 
@@ -1781,6 +1898,14 @@ function validateReact(content: string): ArtifactValidationResult {
       warnings.push(message)
       // Continue without aesthetic — soft-warns below are skipped because
       // directives.aesthetic is null.
+    }
+    // D-24: orphan @fonts on line 2 with no @aesthetic on line 1 is
+    // silently stripped by the parser. Surface it as a warning so the
+    // LLM moves @fonts after a real @aesthetic directive.
+    if (directives.rawFontsLine) {
+      warnings.push(
+        "@fonts directive on line 2 has no @aesthetic on line 1 to pair with — fonts are positionally parsed and will be stripped from the source. Add `// @aesthetic: <direction>` on line 1 first.",
+      )
     }
   } else if (!directives.aesthetic) {
     const badValue = directives.rawAestheticLine
@@ -1990,9 +2115,12 @@ function validatePython(content: string): ArtifactValidationResult {
     )
   }
 
-  if (/\bopen\s*\([^)]*,\s*['"][wax]b?\+?['"]/m.test(codeNoComments)) {
+  // D-16: the Pyodide Worker has no persistent filesystem at all — neither
+  // read nor write open() will work. The prompt forbids all open(); the
+  // validator now matches all open() calls, not just write modes.
+  if (/(^|[^.\w])open\s*\(/m.test(codeNoComments)) {
     errors.push(
-      "Found open() with a write mode — there is no persistent filesystem in the Pyodide Worker. Remove file writes; use print() or plt.show() for output."
+      "Found open() — there is no persistent filesystem in the Pyodide Worker. Hard-code values or generate them; use print() or plt.show() for output."
     )
   }
 

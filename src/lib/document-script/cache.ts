@@ -29,17 +29,22 @@ export async function getCachedPngs(artifactId: string, hash: string): Promise<B
     if (code === "NoSuchKey" || code === "NotFound") return null
     throw err
   }
-  const pages: Buffer[] = []
-  for (let i = 0; i < manifest.pageCount; i++) {
-    pages.push(await downloadFile(pageKey(artifactId, hash, i)))
-  }
-  return pages
+  // D-36: pages are independent S3 GETs — fan them out in parallel. A
+  // 50-page document drops from 50 sequential round-trips to 1 batch
+  // bounded by S3 client connection pool / network parallelism.
+  const indices = Array.from({ length: manifest.pageCount }, (_, i) => i)
+  return Promise.all(indices.map((i) => downloadFile(pageKey(artifactId, hash, i))))
 }
 
 export async function putCachedPngs(artifactId: string, hash: string, pages: Buffer[]): Promise<void> {
   const manifest: Manifest = { pageCount: pages.length }
-  await uploadFile(manifestKey(artifactId, hash), Buffer.from(JSON.stringify(manifest)), "application/json")
-  for (let i = 0; i < pages.length; i++) {
-    await uploadFile(pageKey(artifactId, hash, i), pages[i], "image/png")
-  }
+  // D-36: upload manifest + all pages in parallel. Manifest is tiny so
+  // there's no benefit to writing it before the pages — clients are
+  // expected to fetch via /render-status (which returns pageCount from
+  // the in-memory pipeline result, not from the manifest), and only hit
+  // /render-pages once that succeeds, by which point all writes settled.
+  await Promise.all([
+    uploadFile(manifestKey(artifactId, hash), Buffer.from(JSON.stringify(manifest)), "application/json"),
+    ...pages.map((page, i) => uploadFile(pageKey(artifactId, hash, i), page, "image/png")),
+  ])
 }

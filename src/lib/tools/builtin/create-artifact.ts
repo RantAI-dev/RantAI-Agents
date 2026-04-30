@@ -105,6 +105,7 @@ export const createArtifactTool: ToolDefinition = {
     // pass through unchanged.
     const validation = await validateArtifactContent(type, content, {
       isNew: true,
+      language,
     })
     let validationWarnings: string[] = validation.warnings
     if (!validation.ok) {

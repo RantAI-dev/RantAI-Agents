@@ -79,7 +79,14 @@ export function useArtifacts(sessionKey?: string | null) {
       }
       return next
     })
-    setActiveArtifactId(artifact.id)
+    // D-73: don't auto-activate streaming placeholders. The chat-workspace
+    // creates a `streaming-${toolCallId}` artifact on tool-input-available
+    // and only commits the real id on tool-output-available. Activating the
+    // placeholder briefly during streaming caused panel flicker for rapid
+    // multi-artifact streams; the user's selection (if any) is preserved.
+    if (!artifact.id.startsWith("streaming-")) {
+      setActiveArtifactId(artifact.id)
+    }
   }, [])
 
   const removeArtifact = useCallback((id: string) => {

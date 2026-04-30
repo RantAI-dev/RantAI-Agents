@@ -40,15 +40,20 @@ export async function pdfToPngs(pdf: Buffer): Promise<Buffer[]> {
       })
     })
 
+    // D-84: pdftoppm names files `page-1.png … page-N.png` and zero-pads
+    // the index when N > 9, but the zero-padding behaviour is implicit.
+    // Sort numerically by the integer extracted from the filename so the
+    // page order is correct regardless of pdftoppm's padding heuristic.
+    const PAGE_RE = /^page-(\d+)\.png$/
     const files = (await readdir(dir))
-      .filter((f) => f.startsWith("page-") && f.endsWith(".png"))
-      .sort()  // page-1, page-2, …
+      .map((f) => {
+        const m = f.match(PAGE_RE)
+        return m ? { name: f, idx: parseInt(m[1], 10) } : null
+      })
+      .filter((x): x is { name: string; idx: number } => x !== null)
+      .sort((a, b) => a.idx - b.idx)
 
-    const buffers: Buffer[] = []
-    for (const f of files) {
-      buffers.push(await readFile(join(dir, f)))
-    }
-    return buffers
+    return Promise.all(files.map((f) => readFile(join(dir, f.name))))
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {})
   }
