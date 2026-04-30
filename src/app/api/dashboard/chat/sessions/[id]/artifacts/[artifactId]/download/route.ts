@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth"
 import { DashboardChatSessionArtifactParamsSchema } from "@/features/conversations/sessions/schema"
 import { getDashboardChatSessionArtifact } from "@/features/conversations/sessions/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
-import { runScriptInSandbox } from "@/lib/document-script/sandbox-runner"
+import { getOrComputeDocx } from "@/lib/document-script/docx-cache"
 import { docxToPdf } from "@/lib/rendering/server/docx-to-pdf"
 
 export const runtime = "nodejs"
@@ -53,21 +53,28 @@ export async function GET(
       (result.title ?? "").replace(/[^a-z0-9._-]+/gi, "_").slice(0, 80) ||
       "document"
 
-    const r = await runScriptInSandbox(result.content, {})
-    if (!r.ok || !r.buf) {
+    // NEW-T-2: route DOCX rendering through `getOrComputeDocx`, which
+    // gates the sandbox run via `withRenderSlot` (the same semaphore the
+    // preview pipeline uses) and dedupes concurrent requests for the same
+    // (artifactId, content) so a rapid DOCX→PDF click shares one sandbox
+    // run instead of spawning two.
+    let docxBuf: Buffer
+    try {
+      docxBuf = await getOrComputeDocx(parsedParams.data.artifactId, result.content)
+    } catch (err) {
       return NextResponse.json(
-        { error: `script failed: ${r.error ?? "unknown"}` },
+        { error: (err as Error).message },
         { status: 500 }
       )
     }
 
     if (format === "pdf") {
-      // D-3: route the rendered DOCX through soffice to produce a PDF.
-      // The same conversion is already used internally by the preview
-      // pipeline (docx → pdf → png pages); here we just stop at the PDF.
+      // D-3: route the cached DOCX through soffice to produce a PDF.
+      // The same conversion is used internally by the preview pipeline
+      // (docx → pdf → png pages); here we stop at the PDF.
       let pdf: Buffer
       try {
-        pdf = await docxToPdf(r.buf)
+        pdf = await docxToPdf(docxBuf)
       } catch (err) {
         return NextResponse.json(
           { error: `pdf conversion failed: ${(err as Error).message}` },
@@ -84,7 +91,7 @@ export async function GET(
       })
     }
 
-    return new Response(new Uint8Array(r.buf), {
+    return new Response(new Uint8Array(docxBuf), {
       status: 200,
       headers: {
         "Content-Type":
