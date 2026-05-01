@@ -81,11 +81,14 @@ function splitLastExpression(source: string): { body: string; tail: string | nul
   return { body, tail: lastLine }
 }
 
+const IMAGE_BUDGET_BYTES = 100 * 1024
+
 async function runCell(req: Extract<WorkerRequest, { type: "run" }>) {
   const { cellId, source, timeoutMs = 30_000 } = req
   await initPyodide()
   post({ type: "kernel-status", status: "running" })
   post({ type: "cell-status", cellId, status: "running" })
+  const startedAt = performance.now()
 
   pyodide.setStdout({ batched: (text: string) => post({ type: "stream", cellId, name: "stdout", text }) })
   pyodide.setStderr({ batched: (text: string) => post({ type: "stream", cellId, name: "stderr", text }) })
@@ -112,7 +115,8 @@ async function runCell(req: Extract<WorkerRequest, { type: "run" }>) {
       const arr = displays.toJs() as Array<[string, string]>
       for (const [mime, data] of arr) {
         if (mime === "image/png" || mime === "text/html") {
-          post({ type: "display", cellId, mime, data })
+          const oversize = mime === "image/png" && data.length > IMAGE_BUDGET_BYTES
+          post({ type: "display", cellId, mime, data, oversize })
         }
       }
     }
@@ -144,6 +148,8 @@ async function runCell(req: Extract<WorkerRequest, { type: "run" }>) {
     post({ type: "cell-status", cellId, status: "error" })
   } finally {
     if (timeoutId) clearTimeout(timeoutId)
+    const elapsedMs = Math.round(performance.now() - startedAt)
+    post({ type: "duration", cellId, ms: elapsedMs })
     post({ type: "kernel-status", status: "idle" })
   }
 }
