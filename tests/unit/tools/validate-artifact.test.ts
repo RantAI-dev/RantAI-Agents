@@ -389,7 +389,10 @@ describe("validateArtifactContent — application/mermaid", () => {
 })
 
 describe("validateArtifactContent — application/python", () => {
-  const v = async (code: string) => await validateArtifactContent("application/python", code)
+  const wrap = (source: string) =>
+    JSON.stringify({ cells: [{ type: "code", source }] })
+  const v = async (code: string) =>
+    await validateArtifactContent("application/python", wrap(code))
 
   it("accepts a valid numpy + print script", async () => {
     const r = await v(`import numpy as np\n\nx = np.arange(10)\nprint("sum =", int(x.sum()))\n`)
@@ -410,33 +413,33 @@ describe("validateArtifactContent — application/python", () => {
   })
 
   it("rejects empty content", async () => {
-    const r = await v("   \n  ")
+    const r = await validateArtifactContent("application/python", "   \n  ")
     expect(r.ok).toBe(false)
     expect(r.errors[0]).toMatch(/empty/i)
   })
 
-  it("rejects markdown fence wrap", async () => {
-    const r = await v("```python\nprint('hi')\n```")
+  it("rejects bare-string content (not wrapped in notebook JSON)", async () => {
+    const r = await validateArtifactContent("application/python", "print('hi')\n")
     expect(r.ok).toBe(false)
-    expect(r.errors[0]).toMatch(/markdown code fences/i)
+    expect(r.errors[0]).toMatch(/notebook JSON|bare string/i)
   })
 
   it("rejects `import requests`", async () => {
     const r = await v(`import requests\n\nprint(requests.get("https://x").text)\n`)
     expect(r.ok).toBe(false)
-    expect(r.errors[0]).toMatch(/requests/)
+    expect(r.errors[0]).toMatch(/cells\[0\].*requests/)
   })
 
   it("rejects `from flask import Flask`", async () => {
     const r = await v(`from flask import Flask\n\napp = Flask(__name__)\n`)
     expect(r.ok).toBe(false)
-    expect(r.errors[0]).toMatch(/flask/)
+    expect(r.errors[0]).toMatch(/cells\[0\].*flask/)
   })
 
   it("rejects `import torch`", async () => {
     const r = await v(`import torch\nprint(torch.tensor([1.0]))\n`)
     expect(r.ok).toBe(false)
-    expect(r.errors[0]).toMatch(/torch/)
+    expect(r.errors[0]).toMatch(/cells\[0\].*torch/)
   })
 
   it("does NOT reject a substring match like `requestsx`", async () => {
@@ -455,21 +458,16 @@ describe("validateArtifactContent — application/python", () => {
     expect(r.errors.some((e) => /input\(\)/.test(e))).toBe(true)
   })
 
-  it("rejects open() with write mode", async () => {
+  it("rejects open() (no persistent filesystem in Pyodide Worker)", async () => {
     const r = await v(`with open("out.txt", "w") as f:\n    f.write("hi")\n`)
     expect(r.ok).toBe(false)
     expect(r.errors.some((e) => /open\(\)/.test(e))).toBe(true)
   })
 
-  it("allows open() with read mode", async () => {
-    const r = await v(`try:\n    open("x.txt", "r")\nexcept Exception as e:\n    print(e)\n`)
-    expect(r.ok).toBe(true)
-  })
-
   it("warns when there is no print() and no plt.show()", async () => {
-    const r = await v(`x = 1 + 1\ny = x * 2\n`)
+    const r = await v(`x = 1 + 1\ny = x * 2 + 0\n`)
     expect(r.ok).toBe(true)
-    expect(r.warnings.some((w) => /no print\(\) or plt\.show\(\)/.test(w))).toBe(true)
+    expect(r.warnings.some((w) => /no visible output/i.test(w))).toBe(true)
   })
 
   it("warns on long time.sleep", async () => {
@@ -1535,11 +1533,14 @@ describe("python prompt ↔ validator blacklist", () => {
 
     // Round-trip every documented package through the validator with a
     // synthetic `import` statement and confirm it does NOT trigger the
-    // unavailable-packages error.
+    // unavailable-packages error. Wrap each script in a notebook cell now
+    // that the validator expects notebook JSON.
     for (const pkg of documentedAutoLoad) {
       const r = await validateArtifactContent(
         "application/python",
-        `import ${pkg}\nprint(${pkg})\n`,
+        JSON.stringify({
+          cells: [{ type: "code", source: `import ${pkg}\nprint(${pkg})\n` }],
+        }),
       )
       expect(
         r.errors.find((e) => /unavailable packages/i.test(e)),
