@@ -62,6 +62,23 @@ import { ArtifactIndicator } from "./artifacts/artifact-indicator"
 import { isPersistedArtifactToolCall, getEffectiveToolState } from "./artifact-tool-result"
 import { ArtifactPanel } from "./artifacts/artifact-panel"
 import { isValidArtifactType, type Artifact, type ArtifactType } from "./artifacts/types"
+import { collectAutoAttachments, type ChatAttachment } from "@/lib/notebook/chat-attachment"
+import { parseNotebookContentStreaming } from "@/lib/notebook/serialize"
+import { usePinToChat } from "./artifacts/renderers/notebook/use-pin-to-chat"
+
+function formatNotebookContext(attachments: ChatAttachment[]): string {
+  const parts: string[] = []
+  for (const a of attachments) {
+    if (a.kind === "text") {
+      parts.push(`[Python cell ${a.cellId} output]\n${a.text}`)
+    } else if (a.kind === "error") {
+      parts.push(
+        `[Python cell ${a.cellId} error] ${a.ename}: ${a.evalue}\n${a.traceback.join("\n")}`,
+      )
+    }
+  }
+  return parts.length > 0 ? `[Notebook context]\n${parts.join("\n\n")}` : ""
+}
 import { TYPE_ICONS, TYPE_LABELS, getArtifactRegistryEntry } from "./artifacts/registry"
 import { consumeSseChunk } from "./transports/sse"
 import { reduceEmployeePollEvents, type EmployeePollEvent } from "./transports/polling"
@@ -1115,6 +1132,9 @@ export function ChatWorkspace({
     openArtifact,
     closeArtifact,
   } = useArtifacts(apiSessionId || session?.id || null)
+
+  const { pinned: pinnedNotebookOutputs, togglePin: toggleNotebookPin } =
+    usePinToChat(activeArtifactId ?? "")
 
   const [artifactsSheetOpen, setArtifactsSheetOpen] = useState(false)
 
@@ -3133,6 +3153,30 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
       setGithubImportResult(null)
     }
 
+    // Auto-attach python notebook outputs to the side-context channel so the
+    // LLM can reason about errors, stdout, and dataframe text without the user
+    // having to describe them. Image-attachment via parts API is not supported
+    // on the existing send path; pinned images surface as composer chips for
+    // visibility but are not yet sent to the model.
+    if (activeArtifact?.type === "application/python") {
+      try {
+        const nb = parseNotebookContentStreaming(activeArtifact.content)
+        const attachments = collectAutoAttachments(nb, pinnedNotebookOutputs, {
+          maxTextChars: 8000,
+          maxAttachments: 10,
+        })
+        const ctx = formatNotebookContext(attachments)
+        if (ctx) {
+          fileCtx = {
+            fileContext: fileCtx?.fileContext ? `${fileCtx.fileContext}\n\n${ctx}` : ctx,
+            fileDocumentIds: fileCtx?.fileDocumentIds,
+          }
+        }
+      } catch {
+        // notebook parse failed — proceed without auto-attach
+      }
+    }
+
     // Send the message using shared logic
     await sendMessage(userInput, chat.messages, replyContext?.id, undefined, fileCtx, uploadAttachments.length > 0 ? uploadAttachments : undefined)
   }
@@ -3303,6 +3347,28 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                         </div>
                       )}
                     </AnimatePresence>
+
+                    {activeArtifact?.type === "application/python" && pinnedNotebookOutputs.length > 0 && (
+                      <div className="mb-2 flex flex-wrap gap-1">
+                        {pinnedNotebookOutputs.map((p) => (
+                          <span
+                            key={`${p.cellId}:${p.outputIdx}`}
+                            className="inline-flex items-center gap-1 rounded-full border bg-muted/50 px-2 py-0.5 text-[11px]"
+                            title="Pinned output (image — not yet sent to model)"
+                          >
+                            📎 Cell {p.cellId.slice(0, 6)} #{p.outputIdx}
+                            <button
+                              type="button"
+                              onClick={() => toggleNotebookPin(p.cellId, p.outputIdx)}
+                              className="ml-0.5 text-muted-foreground hover:text-foreground"
+                              aria-label="Unpin"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     <div className="rounded-2xl border border-border/60 bg-muted/30 shadow-sm transition-all focus-within:border-foreground/20 focus-within:shadow-md focus-within:bg-muted/40">
                       <div className="relative">
