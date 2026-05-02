@@ -2,7 +2,7 @@ export const pythonArtifact = {
   type: "application/python" as const,
   label: "Python Notebook",
   summary:
-    "Jupyter-like notebook with per-cell execution via Pyodide (WebAssembly). Cells are run independently; kernel state persists across cells. Supports numpy, matplotlib, pandas, scipy, sklearn. Output via print(), DataFrame display, and plt.show().",
+    "Jupyter-like notebook executed cell-by-cell in Pyodide (WebAssembly). CONTENT MUST BE A JSON OBJECT shaped {\"cells\":[{\"type\":\"code\"|\"markdown\",\"source\":\"...\"}, ...]} — never a bare Python script. Kernel state persists across cells. numpy/matplotlib/pandas/scipy/sklearn auto-load. Output via print(), DataFrame display, plt.show().",
   rules: `**application/python — Jupyter-like Python Notebooks**
 
 You are generating a notebook that will RUN in the user's browser via Pyodide (Python 3.12 in WebAssembly, executed in a Web Worker). The user runs cells independently and sees per-cell output: stdout, errors, plots, and DataFrame tables. Kernel globals persist across cells so cell N can use variables defined in cell N-1.
