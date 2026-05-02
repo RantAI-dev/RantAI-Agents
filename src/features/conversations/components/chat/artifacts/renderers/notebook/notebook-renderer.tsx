@@ -2,9 +2,6 @@
 
 import { useCallback, useMemo, useState } from "react"
 import { parseNotebookContentStreaming } from "@/lib/notebook/serialize"
-import { toIpynb } from "@/lib/notebook/ipynb"
-import { toPercent } from "@/lib/notebook/percent"
-import { toHtml } from "@/lib/notebook/html-export"
 import { makeCodeCell, makeMarkdownCell, type Cell, type NotebookContent } from "@/lib/notebook/types"
 import { useKernel, type CellRuntimeState } from "./use-kernel"
 import { NotebookCellView } from "./cell"
@@ -15,16 +12,6 @@ interface Props {
   artifactId: string
   content: string
   onFixWithAI?: (err: string) => void
-}
-
-function downloadBlob(filename: string, mime: string, body: string) {
-  const blob = new Blob([body], { type: mime })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 export function NotebookRenderer({ artifactId, content, onFixWithAI }: Props) {
@@ -58,19 +45,6 @@ export function NotebookRenderer({ artifactId, content, onFixWithAI }: Props) {
     )
   }, [])
 
-  const onDownload = useCallback(
-    (fmt: "ipynb" | "py" | "html") => {
-      if (fmt === "ipynb") {
-        downloadBlob("notebook.ipynb", "application/json", JSON.stringify(toIpynb(nb), null, 2))
-      } else if (fmt === "py") {
-        downloadBlob("notebook.py", "text/x-python", toPercent(nb))
-      } else {
-        downloadBlob("notebook.html", "text/html", toHtml(nb))
-      }
-    },
-    [nb],
-  )
-
   const pendingCount = useMemo(
     () =>
       nb.cells.filter((c) => {
@@ -98,7 +72,6 @@ export function NotebookRenderer({ artifactId, content, onFixWithAI }: Props) {
         onRunAll={() => runAll(nb.cells)}
         onInterrupt={interrupt}
         onRestart={restart}
-        onDownload={onDownload}
       />
       <div className="flex-1 overflow-auto px-6 py-4">
         {nb.cells.map((cell) => (

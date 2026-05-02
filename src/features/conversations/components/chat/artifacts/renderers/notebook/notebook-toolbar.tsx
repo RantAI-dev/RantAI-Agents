@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
-import { Play, Square, RotateCcw, Download, ChevronDown } from "@/lib/icons"
+import { Play, Square, RotateCcw } from "@/lib/icons"
 import type { KernelStatus } from "./use-kernel"
 
 interface Props {
@@ -11,7 +10,6 @@ interface Props {
   onRunAll: () => void
   onInterrupt: () => void
   onRestart: () => void
-  onDownload: (format: "ipynb" | "py" | "html") => void
 }
 
 export function NotebookToolbar({
@@ -21,19 +19,7 @@ export function NotebookToolbar({
   onRunAll,
   onInterrupt,
   onRestart,
-  onDownload,
 }: Props) {
-  const [open, setOpen] = useState(false)
-  const ddRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (!ddRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("mousedown", onClick)
-    return () => document.removeEventListener("mousedown", onClick)
-  }, [])
-
   const dot = {
     idle: "bg-muted-foreground",
     loading: "bg-yellow-500",
@@ -78,36 +64,6 @@ export function NotebookToolbar({
       >
         <RotateCcw className="h-3.5 w-3.5" /> Restart
       </button>
-      <div ref={ddRef} className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-muted"
-        >
-          <Download className="h-3.5 w-3.5" /> Download <ChevronDown className="h-3 w-3" />
-        </button>
-        {open && (
-          <div className="absolute right-0 mt-1 w-48 bg-popover border rounded-md shadow-md z-20 py-1">
-            {(["ipynb", "py", "html"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => {
-                  onDownload(f)
-                  setOpen(false)
-                }}
-                className="w-full text-left px-3 py-1.5 hover:bg-muted text-xs"
-              >
-                {f === "ipynb"
-                  ? ".ipynb (Jupyter)"
-                  : f === "py"
-                    ? ".py (percent format)"
-                    : ".html (rendered)"}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
       <div className="ml-auto inline-flex items-center gap-1.5 text-muted-foreground">
         <span className={`h-2 w-2 rounded-full ${dot}`} />
         {label}

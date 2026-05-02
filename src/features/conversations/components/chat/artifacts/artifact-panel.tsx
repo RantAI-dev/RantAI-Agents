@@ -34,6 +34,10 @@ import type { Artifact } from "./types"
 import { TYPE_SHORT_LABELS, getArtifactRegistryEntry } from "./registry"
 import { ArtifactRenderer } from "./artifact-renderer"
 import { DocumentScriptRenderer } from "./renderers/document-script-renderer"
+import { parseNotebookContentStreaming } from "@/lib/notebook/serialize"
+import { toIpynb } from "@/lib/notebook/ipynb"
+import { toPercent } from "@/lib/notebook/percent"
+import { toHtml as notebookToHtml } from "@/lib/notebook/html-export"
 
 type ArtifactInput = Omit<Artifact, "version" | "previousVersions"> & {
   version?: number
@@ -122,6 +126,43 @@ export function ArtifactPanel({
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }, [displayArtifact.content])
+
+  const handleNotebookDownload = useCallback(
+    (fmt: "ipynb" | "py" | "html") => {
+      setExportError(null)
+      const baseName = displayArtifact.title.replace(/[^a-z0-9]/gi, "-").toLowerCase() || "notebook"
+      try {
+        const nb = parseNotebookContentStreaming(displayArtifact.content)
+        let body: string
+        let mime: string
+        let ext: string
+        if (fmt === "ipynb") {
+          body = JSON.stringify(toIpynb(nb), null, 2)
+          mime = "application/json"
+          ext = ".ipynb"
+        } else if (fmt === "py") {
+          body = toPercent(nb)
+          mime = "text/x-python"
+          ext = ".py"
+        } else {
+          body = notebookToHtml(nb)
+          mime = "text/html"
+          ext = ".html"
+        }
+        const blob = new Blob([body], { type: mime })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `${baseName}${ext}`
+        a.click()
+        URL.revokeObjectURL(url)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error"
+        setExportError(`Notebook export failed: ${message}`)
+      }
+    },
+    [displayArtifact.content, displayArtifact.title],
+  )
 
   const handleDownload = useCallback(async () => {
     // Clear any prior error from a previous attempt before retrying.
@@ -558,6 +599,38 @@ export function ArtifactPanel({
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download as PDF (.pdf)
+                </DropdownMenuItem>
+                {exportError && (
+                  <div className="px-2 py-1.5 text-xs text-destructive border-t mt-1">
+                    {exportError}
+                  </div>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : displayArtifact.type === "application/python" ? (
+            <DropdownMenu>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Download as...</TooltipContent>
+              </Tooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => handleNotebookDownload("ipynb")}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Jupyter Notebook (.ipynb)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleNotebookDownload("py")}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Python percent (.py)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleNotebookDownload("html")}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Rendered HTML (.html)
                 </DropdownMenuItem>
                 {exportError && (
                   <div className="px-2 py-1.5 text-xs text-destructive border-t mt-1">
