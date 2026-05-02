@@ -102,6 +102,17 @@ async function runCell(req: Extract<WorkerRequest, { type: "run" }>) {
   })
 
   try {
+    // Auto-fetch any Pyodide-shipped packages the cell imports (pandas, scipy,
+    // sympy, networkx, pillow, bs4, lxml, yaml, etc.) before executing.
+    // Packages not in Pyodide's repo are silently ignored here and would fail
+    // at the runPythonAsync below with the usual ModuleNotFoundError.
+    if (typeof pyodide.loadPackagesFromImports === "function") {
+      try {
+        await pyodide.loadPackagesFromImports(source)
+      } catch {
+        // best-effort — proceed with whatever loaded
+      }
+    }
     if (body.trim()) {
       await Promise.race([pyodide.runPythonAsync(body), timeoutPromise])
     }
