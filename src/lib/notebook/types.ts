@@ -19,20 +19,31 @@ export const OutputSchema = z.discriminatedUnion("type", [
   }),
 ])
 
+// The LLM's wire format only carries `type` and `source`. Everything else is
+// runtime state that the renderer fills in. Defaulting these here means the
+// parser accepts the same minimal shape the validator does, instead of
+// rejecting it and rendering an empty notebook.
 export const CellSchema = z.object({
-  id: z.string(),
+  id: z.string().default(() => nanoid(8)),
   type: z.enum(["code", "markdown"]),
   source: z.string(),
-  outputs: z.array(OutputSchema),
-  executionCount: z.number().nullable(),
+  outputs: z.array(OutputSchema).default([]),
+  executionCount: z.number().nullable().default(null),
 })
+
+const DEFAULT_METADATA = {
+  kernelspec: { name: "python3" as const, display_name: "Python 3 (Pyodide)" },
+  language_info: { name: "python" as const, version: "3.12" },
+}
 
 export const NotebookContentSchema = z.object({
   cells: z.array(CellSchema).min(1),
-  metadata: z.object({
-    kernelspec: z.object({ name: z.literal("python3"), display_name: z.string() }),
-    language_info: z.object({ name: z.literal("python"), version: z.string() }),
-  }),
+  metadata: z
+    .object({
+      kernelspec: z.object({ name: z.literal("python3"), display_name: z.string() }),
+      language_info: z.object({ name: z.literal("python"), version: z.string() }),
+    })
+    .default(DEFAULT_METADATA),
 })
 
 export type Output = z.infer<typeof OutputSchema>

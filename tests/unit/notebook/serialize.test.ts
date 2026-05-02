@@ -26,6 +26,25 @@ describe("serialize", () => {
   it("throws on malformed JSON that is neither a notebook nor a string", () => {
     expect(() => parseNotebookContent('{"cells": 5}')).toThrow()
   })
+
+  // Regression: the LLM emits the minimal shape {type, source}. The parser
+  // must hydrate id/outputs/executionCount with defaults instead of rejecting,
+  // otherwise the panel mounts but renders zero cells.
+  it("hydrates missing id/outputs/executionCount from minimal LLM shape", () => {
+    const minimal = JSON.stringify({
+      cells: [
+        { type: "code", source: "print('hi')" },
+        { type: "markdown", source: "# heading" },
+      ],
+    })
+    const out = parseNotebookContent(minimal)
+    expect(out.cells.length).toBe(2)
+    expect(out.cells[0].source).toBe("print('hi')")
+    expect(out.cells[0].outputs).toEqual([])
+    expect(out.cells[0].executionCount).toBeNull()
+    expect(typeof out.cells[0].id).toBe("string")
+    expect(out.cells[0].id.length).toBeGreaterThan(0)
+  })
 })
 
 describe("parseNotebookContentStreaming", () => {
