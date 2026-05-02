@@ -2067,17 +2067,34 @@ function validatePython(content: string): ArtifactValidationResult {
   const warnings: string[] = []
 
   const trimmed = content.trim()
-
   if (!trimmed) {
-    errors.push("Python content is empty.")
+    errors.push("Notebook content is empty.")
     return { ok: false, errors, warnings }
   }
 
-  const firstLine = trimmed.split("\n")[0] ?? ""
-  if (/^\s*```/.test(firstLine)) {
+  if (!trimmed.startsWith("{")) {
     errors.push(
-      "Remove the markdown code fences (```python ... ```). The artifact content is the Python source itself — the renderer handles highlighting."
+      "Python artifact content must be a notebook JSON object with a top-level `cells` array. The model emitted a bare string."
     )
+    return { ok: false, errors, warnings }
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch (e) {
+    errors.push(`Notebook content is not valid JSON: ${(e as Error).message}`)
+    return { ok: false, errors, warnings }
+  }
+
+  if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { cells?: unknown }).cells)) {
+    errors.push("Notebook JSON must have a `cells` array at the top level.")
+    return { ok: false, errors, warnings }
+  }
+
+  const cells = (parsed as { cells: unknown[] }).cells
+  if (cells.length === 0) {
+    errors.push("Notebook must have at least one cell.")
     return { ok: false, errors, warnings }
   }
 
@@ -2086,63 +2103,71 @@ function validatePython(content: string): ArtifactValidationResult {
     return hashIdx === -1 ? line : line.slice(0, hashIdx)
   }
 
-  const codeNoComments = content.split("\n").map(stripComment).join("\n")
+  let anyVisibleOutput = false
 
-  const unavailableHits = new Set<string>()
-  for (const { pkg } of PYTHON_UNAVAILABLE_PACKAGES) {
-    const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-    const re = new RegExp(
-      `(^|\\n)\\s*(?:import\\s+${escaped}(?:\\s|$|,)|from\\s+${escaped}(?:\\.|\\s))`,
-      "m"
-    )
-    if (re.test(codeNoComments)) unavailableHits.add(pkg)
-  }
-  if (unavailableHits.size > 0) {
-    const details = [...unavailableHits]
-      .map((pkg) => {
-        const entry = PYTHON_UNAVAILABLE_PACKAGES.find((p) => p.pkg === pkg)
-        return `"${pkg}" (${entry?.reason ?? "not in Pyodide"})`
-      })
-      .join(", ")
-    errors.push(
-      `Imports unavailable packages: ${details}. These will crash the script on import. Use numpy/matplotlib/pandas/scipy or hard-code mock data instead.`
-    )
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i] as { type?: unknown; source?: unknown }
+    if (!cell || typeof cell !== "object") {
+      errors.push(`cells[${i}] is not an object.`)
+      continue
+    }
+    if (cell.type !== "code" && cell.type !== "markdown") {
+      errors.push(`cells[${i}].type must be "code" or "markdown" (got ${JSON.stringify(cell.type)}).`)
+      continue
+    }
+    if (typeof cell.source !== "string") {
+      errors.push(`cells[${i}].source must be a string.`)
+      continue
+    }
+    if (cell.type !== "code") continue
+
+    const code: string = cell.source
+    const codeNoComments: string = code.split("\n").map(stripComment).join("\n")
+
+    const unavailableHits = new Set<string>()
+    for (const { pkg } of PYTHON_UNAVAILABLE_PACKAGES) {
+      const escaped = pkg.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      const re = new RegExp(
+        `(^|\\n)\\s*(?:import\\s+${escaped}(?:\\s|$|,)|from\\s+${escaped}(?:\\.|\\s))`,
+        "m"
+      )
+      if (re.test(codeNoComments)) unavailableHits.add(pkg)
+    }
+    if (unavailableHits.size > 0) {
+      const details = [...unavailableHits]
+        .map((pkg) => {
+          const entry = PYTHON_UNAVAILABLE_PACKAGES.find((p) => p.pkg === pkg)
+          return `"${pkg}" (${entry?.reason ?? "not in Pyodide"})`
+        })
+        .join(", ")
+      errors.push(`cells[${i}] imports unavailable packages: ${details}.`)
+    }
+
+    if (/(^|[^.\w])input\s*\(/m.test(codeNoComments)) {
+      errors.push(`cells[${i}] uses input() — there is no stdin in the Pyodide Worker.`)
+    }
+    if (/(^|[^.\w])open\s*\(/m.test(codeNoComments)) {
+      errors.push(`cells[${i}] uses open() — there is no persistent filesystem.`)
+    }
+
+    const hasPrint = /(^|[^.\w])print\s*\(/m.test(codeNoComments)
+    const hasShow = /\bplt\.show\s*\(/m.test(codeNoComments)
+    const lines = codeNoComments.split("\n").map((l) => l.trimEnd()).filter((l) => l.trim() !== "")
+    const lastLine = lines[lines.length - 1] ?? ""
+    const hasFinalExpression = /^[a-zA-Z_][\w.()[\]"'\s,+\-*/<>=]*$/.test(lastLine) && !lastLine.includes("=")
+    if (hasPrint || hasShow || hasFinalExpression) anyVisibleOutput = true
+
+    const sleepMatch = codeNoComments.match(/\btime\.sleep\s*\(\s*([\d.]+)\s*\)/)
+    if (sleepMatch && Number.parseFloat(sleepMatch[1]) > 2) {
+      warnings.push(`cells[${i}] has time.sleep(${sleepMatch[1]}) — sleeps over 2s feel stuck.`)
+    }
+    if (/\bwhile\s+True\s*:/.test(codeNoComments) && !/\bbreak\b/.test(codeNoComments)) {
+      warnings.push(`cells[${i}] has while True without break — risk of infinite loop.`)
+    }
   }
 
-  if (/(^|[^.\w])input\s*\(/m.test(codeNoComments)) {
-    errors.push(
-      "Found input() call — there is no stdin in the Pyodide Worker, input() will hang the script. Hard-code values or generate them instead."
-    )
-  }
-
-  // D-16: the Pyodide Worker has no persistent filesystem at all — neither
-  // read nor write open() will work. The prompt forbids all open(); the
-  // validator now matches all open() calls, not just write modes.
-  if (/(^|[^.\w])open\s*\(/m.test(codeNoComments)) {
-    errors.push(
-      "Found open() — there is no persistent filesystem in the Pyodide Worker. Hard-code values or generate them; use print() or plt.show() for output."
-    )
-  }
-
-  const hasPrint = /(^|[^.\w])print\s*\(/m.test(codeNoComments)
-  const hasShow = /\bplt\.show\s*\(/m.test(codeNoComments)
-  if (!hasPrint && !hasShow) {
-    warnings.push(
-      "Script has no print() or plt.show() — it may run successfully but produce no visible output in the panel."
-    )
-  }
-
-  const sleepMatch = codeNoComments.match(/\btime\.sleep\s*\(\s*([\d.]+)\s*\)/)
-  if (sleepMatch && Number.parseFloat(sleepMatch[1]) > 2) {
-    warnings.push(
-      `Found time.sleep(${sleepMatch[1]}) — sleeps longer than ~2 seconds feel stuck to the user. Trim or remove.`
-    )
-  }
-
-  if (/\bwhile\s+True\s*:/.test(codeNoComments) && !/\bbreak\b/.test(codeNoComments)) {
-    warnings.push(
-      "Found `while True:` with no `break` in the script — potential infinite loop. The Worker has no enforced timeout; the user will have to click Stop."
-    )
+  if (errors.length === 0 && !anyVisibleOutput) {
+    warnings.push("No cell prints, shows a plot, or ends in an expression — notebook may produce no visible output.")
   }
 
   return { ok: errors.length === 0, errors, warnings }

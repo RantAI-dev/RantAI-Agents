@@ -55,8 +55,8 @@ const SlidesRenderer = dynamic(
   }
 )
 
-const PythonRenderer = dynamic(
-  () => import("./renderers/python-renderer").then((m) => ({ default: m.PythonRenderer })),
+const NotebookRenderer = dynamic(
+  () => import("./renderers/notebook/notebook-renderer").then((m) => ({ default: m.NotebookRenderer })),
   {
     loading: () => <RendererLoading message="Initializing Python runtime..." />,
   }
@@ -102,7 +102,13 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
     case "application/slides":
       return <SlidesRenderer content={artifact.content} />
     case "application/python":
-      return <PythonRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
+      return (
+        <NotebookRenderer
+          artifactId={artifact.id}
+          content={artifact.content}
+          onFixWithAI={onFixWithAI}
+        />
+      )
     case "application/3d":
       return <R3FRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
     case "application/code": {

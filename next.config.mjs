@@ -1,3 +1,21 @@
+import { fileURLToPath } from "node:url"
+import { dirname, resolve } from "node:path"
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+// Force a single physical copy of @codemirror/state and @codemirror/view.
+// Bun keeps nested copies even when versions match; the CodeMirror runtime
+// uses `instanceof` checks that fail across separate module instances.
+// Turbopack treats absolute paths as server-relative, so use project-relative.
+const codemirrorAliasesTurbo = {
+  "@codemirror/state": "./node_modules/@codemirror/state",
+  "@codemirror/view": "./node_modules/@codemirror/view",
+}
+const codemirrorAliasesWebpack = {
+  "@codemirror/state": resolve(__dirname, "node_modules/@codemirror/state"),
+  "@codemirror/view": resolve(__dirname, "node_modules/@codemirror/view"),
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   typescript: {
@@ -5,6 +23,13 @@ const nextConfig = {
   },
   images: {
     unoptimized: true,
+  },
+  turbopack: {
+    resolveAlias: codemirrorAliasesTurbo,
+  },
+  webpack: (config) => {
+    config.resolve.alias = { ...config.resolve.alias, ...codemirrorAliasesWebpack }
+    return config
   },
   // External packages with native bindings (canvas for OCR, LibSQL for database)
   serverExternalPackages: [
