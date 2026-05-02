@@ -5,6 +5,12 @@
   "prisma": {
     "seed": "bun prisma/seed.ts"
   },
+  "overrides": {
+    "@codemirror/state": "6.5.4"
+  },
+  "resolutions": {
+    "@codemirror/state": "6.5.4"
+  },
   "scripts": {
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
