@@ -157,6 +157,10 @@ function mergeHydratedSessions(
   for (const rawSession of incomingSessions) {
     const normalized = normalizeSerializedChatSession(rawSession)
 
+    // The list-summary endpoint returns sessions with messages: [] and
+    // artifacts: []. Falling back to the existing values when the
+    // hydration payload looks like a summary keeps in-memory message
+    // history and artifact references from being wiped on every merge.
     const exactMatchIndex = remaining.findIndex((session) => session.id === normalized.id)
     if (exactMatchIndex >= 0) {
       const existing = remaining.splice(exactMatchIndex, 1)[0]
@@ -166,7 +170,10 @@ function mergeHydratedSessions(
         id: existing.id,
         dbId: existing.dbId ?? normalized.dbId,
         messages: normalized.messages.length > 0 ? normalized.messages : existing.messages,
-        artifacts: normalized.artifacts ?? existing.artifacts,
+        artifacts:
+          normalized.artifacts && normalized.artifacts.length > 0
+            ? normalized.artifacts
+            : existing.artifacts,
       })
       continue
     }
@@ -180,7 +187,10 @@ function mergeHydratedSessions(
         assistantId: normalized.assistantId,
         createdAt: normalized.createdAt,
         messages: normalized.messages.length > 0 ? normalized.messages : existing.messages,
-        artifacts: normalized.artifacts ?? existing.artifacts,
+        artifacts:
+          normalized.artifacts && normalized.artifacts.length > 0
+            ? normalized.artifacts
+            : existing.artifacts,
         dbId: normalized.id,
       })
       continue
