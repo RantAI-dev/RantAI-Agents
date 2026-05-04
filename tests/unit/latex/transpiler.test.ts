@@ -124,12 +124,24 @@ describe("latexToHtml — cross references", () => {
     expect(out.html).toMatch(/<a href="#eq-foo"[^>]*data-eqref[^>]*>\(1\)<\/a>/)
   })
 
-  it("\\ref{thm:mvt} renders as bare number link", () => {
+  it("\\ref{thm:mvt} renders as bare number link AND the theorem block carries the matching id", () => {
     const src =
       "\\begin{theorem}\\label{thm:mvt}\nbody\n\\end{theorem}\n\nBy \\ref{thm:mvt}..."
     const reg = scanLabels(src)
     const out = latexToHtml(src, reg)
     expect(out.html).toMatch(/<a href="#thm-mvt"[^>]*>1<\/a>/)
+    // Without this assertion the same-line \begin{theorem}\label{} pattern silently
+    // dropped the theorem block (regression caught in code review of Task 5)
+    expect(out.html).toMatch(/<aside id="thm-mvt"/)
+  })
+
+  it("same-line \\begin{theorem}\\label{} renders the theorem block with anchor", () => {
+    const src = "\\begin{theorem}\\label{thm:foo}\nbody\n\\end{theorem}"
+    const reg = scanLabels(src)
+    const out = latexToHtml(src, reg)
+    expect(out.html).toMatch(/<aside id="thm-foo"/)
+    expect(out.html).toMatch(/Theorem 1\./)
+    expect(out.html).toContain("body")
   })
 
   it("unresolved \\eqref renders as red [?] and emits a warning", () => {

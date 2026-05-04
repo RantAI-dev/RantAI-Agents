@@ -41,7 +41,10 @@ const KIND_LABEL: Record<TheoremKind, string> = {
   proof: "Proof",
 }
 
-const BEGIN_RE = /^\s*\\begin\{([a-z]+)\}(?:\[([^\]]+)\])?\s*$/
+// Allow trailing content after \begin{kind}[Name] so patterns like
+// `\begin{theorem}\label{thm:foo}` (label on the same line, common in LLM output)
+// still match. The transpiler scans the begin line separately for an inline label.
+const BEGIN_RE = /^\s*\\begin\{([a-z]+)\}(?:\[([^\]]+)\])?/
 
 function isTheoremKind(s: string): s is TheoremKind {
   return THEOREM_KINDS.has(s as TheoremKind)

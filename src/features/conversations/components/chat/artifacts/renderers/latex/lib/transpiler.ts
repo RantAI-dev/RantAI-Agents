@@ -407,9 +407,12 @@ export function latexToHtml(source: string, registry: LabelRegistry): TranspileR
       }
       if (i < lines.length) i++   // consume the end tag line
 
-      // Pull a label from the block body if present (already registered by scanLabels)
-      const labelMatch = inner.match(/\\label\{([^}]+)\}/)
-      const labelKey = labelMatch?.[1]
+      // Pull a label from either the begin line itself (e.g. \begin{theorem}\label{thm:foo}
+      // on a single line — common in LLM output) or the block body. The begin-line label
+      // wins if both are present, matching scanLabels' first-match behavior.
+      const beginLineLabel = line.match(/\\label\{([^}]+)\}/)?.[1]
+      const innerLabel = inner.match(/\\label\{([^}]+)\}/)?.[1]
+      const labelKey = beginLineLabel ?? innerLabel
       const registryEntry = labelKey ? registry.get(labelKey) : undefined
       const anchorId = registryEntry?.anchorId ?? null
       const number = registryEntry?.number ?? null
