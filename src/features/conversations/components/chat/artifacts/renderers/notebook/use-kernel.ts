@@ -74,7 +74,6 @@ export function useKernel(onCellUpdate: (cellId: string, state: CellRuntimeState
       type: "run",
       cellId: next.id,
       source: next.source,
-      executionCount: execCounterRef.current,
     } satisfies WorkerRequest)
   }, [setCellState])
 

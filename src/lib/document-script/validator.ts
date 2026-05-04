@@ -25,10 +25,30 @@ function quickSyntaxCheck(src: string): string | null {
     .join("; ")
 }
 
-export async function validateScriptArtifact(content: string): Promise<ScriptValidationResult> {
+export interface ValidateScriptArtifactOptions {
+  /**
+   * True when validating a brand-new artifact via `create_artifact`. Lets
+   * the validator apply tighter rules to new submissions (e.g. minimum
+   * length) without retroactively breaking existing rows on update.
+   */
+  isNew?: boolean
+}
+
+export async function validateScriptArtifact(
+  content: string,
+  options: ValidateScriptArtifactOptions = {},
+): Promise<ScriptValidationResult> {
   const syntaxError = quickSyntaxCheck(content)
   if (syntaxError) {
     return { ok: false, errors: [`syntax error: ${syntaxError}`] }
+  }
+  if (options.isNew && content.trim().length < 100) {
+    return {
+      ok: false,
+      errors: [
+        "script is too short to plausibly produce a Document — emit a complete docx-js script with a Packer.toBuffer suffix",
+      ],
+    }
   }
   const r = await runScriptInSandbox(content, { timeoutMs: DRY_RUN_TIMEOUT_MS })
   if (!r.ok || !r.buf) {

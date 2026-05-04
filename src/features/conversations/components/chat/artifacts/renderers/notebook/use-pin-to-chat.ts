@@ -52,5 +52,19 @@ export function usePinToChat(artifactId: string) {
 
   const clear = useCallback(() => persist([]), [persist])
 
-  return { pinned, togglePin, isPinned, clear }
+  /**
+   * Drop any pins whose cellId is no longer in the notebook. Pins live
+   * in sessionStorage but cell outputs are recomputed every time the
+   * kernel restarts, so stale ids would otherwise dangle until the user
+   * notices the empty pinned-outputs bar.
+   */
+  const sweepStale = useCallback(
+    (validCellIds: ReadonlySet<string>) => {
+      const next = pinned.filter((p) => validCellIds.has(p.cellId))
+      if (next.length !== pinned.length) persist(next)
+    },
+    [pinned, persist],
+  )
+
+  return { pinned, togglePin, isPinned, clear, sweepStale }
 }

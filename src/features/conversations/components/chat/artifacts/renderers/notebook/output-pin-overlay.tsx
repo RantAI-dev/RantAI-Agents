@@ -14,7 +14,7 @@ export function OutputPinOverlay({ pinned, onTogglePin, onViewLarge }: Props) {
       <button
         type="button"
         onClick={onTogglePin}
-        title={pinned ? "Unpin from chat" : "Pin to chat — AI will see this in the next message"}
+        title={pinned ? "Unpin from chat (resets on tab close)" : "Pin to chat — AI sees this in the next message. Pins reset when the tab closes."}
         className={`rounded border bg-background/90 px-2 py-1 text-[10px] inline-flex items-center gap-1 ${
           pinned
             ? "border-primary text-primary"

@@ -1,16 +1,17 @@
 # Artifact Capabilities — per-type spec
 
-> **Audience:** anyone deciding "which artifact type should I (or my LLM)
-> use for X?", or implementing a new capability for an existing type.
-> Each section is self-contained.
+> **Audience:** anyone deciding "which artifact type should I (or my
+> LLM) use for X?", or implementing a new capability for an existing
+> type. Each section is self-contained.
 >
-> **Last regenerated:** 2026-04-30, post text/document AST cleanup +
-> RAG indexer artifactType plumbing + sheet `note` themability, pinned
-> to commit `68b9d66`. Replaces all prior versions. Reflects commits
-> since `a81c343`: `b23e06f` (RAG indexer takes `artifactType`),
-> `b3e6cdf` (sheet `note` themable + `formatCellValue` dropped),
-> `f738130`/`a05f802` (AST source residue + env-var/test cleanup),
-> `6a019db` (Prisma `documentFormat` column drop).
+> **Last regenerated:** 2026-05-04, post Python notebook redesign +
+> validator notebook-cell rewrite + 100-finding cleanup pass, pinned
+> to commit `78e2b0a`. Replaces all prior versions. Reflects 48
+> commits since `68b9d66` including:
+> - **`application/python` rebuilt as a Jupyter-style notebook**
+>   (cells JSON; live Pyodide kernel; pin-to-chat outputs).
+> - The full `cleanup/artifact-system` close-out and the second-pass
+>   re-scan close-out.
 >
 > Companion docs:
 > - [`artifacts-deepscan.md`](./artifacts-deepscan.md) — system flow.
@@ -27,12 +28,12 @@
 | Logo, icon, simple graphic | `image/svg+xml` | Inline SVG, sanitized |
 | Flowchart, sequence, ER, mindmap, Gantt | `application/mermaid` | Mermaid → SVG |
 | README, technical docs, articles, reports | `text/markdown` | GFM + KaTeX + mermaid + Shiki |
-| Formal deliverable (proposal, white paper, contract) | `text/document` | docx-js script → server-rendered PNG carousel + DOCX download |
+| Formal deliverable (proposal, white paper, contract) | `text/document` | docx-js script → server-rendered PNG carousel + DOCX/PDF download |
 | Source code (any language) for copy-paste | `application/code` | Shiki-highlighted, no execution |
 | CSV table or spreadsheet with formulas | `application/sheet` | CSV preview or v1-spec workbook with charts |
 | Math-heavy explainer with proofs | `text/latex` | KaTeX subset |
 | Slide deck (presentation) | `application/slides` | JSON deck → live preview + PPTX export |
-| Runnable Python (data munging, plotting) | `application/python` | Pyodide in browser |
+| Runnable Python notebook | `application/python` | **Jupyter-style notebook in Pyodide** with cells, plots, DataFrame display, pin-to-chat |
 | 3D scene | `application/3d` | React-Three-Fiber sandbox |
 
 When two types could work, the rule of thumb:
@@ -40,7 +41,7 @@ When two types could work, the rule of thumb:
 - **Read** vs. **interact**: readers → `text/markdown` or `text/document`;
   clickers → `text/html` or `application/react`.
 - **Display code** vs. **run code**: `application/code` is read-only;
-  `application/python` actually runs.
+  `application/python` actually runs as a notebook.
 - **Casual write-up** vs. **deliverable**: `text/markdown` is the README
   path; `text/document` is the printed-and-archived path.
 - **Tabular data** vs. **slides**: `application/sheet` for grids/charts
@@ -54,17 +55,17 @@ When two types could work, the rule of thumb:
 All twelve types share these guarantees:
 
 - **Hard size cap**: 512 KiB persisted content (`MAX_ARTIFACT_CONTENT_BYTES`).
-  Enforced by `Buffer.byteLength` in `create-artifact.ts:58-69` and
+  Enforced by `Buffer.byteLength` in `create-artifact.ts:49-60` and
   `update-artifact.ts:51-65`.
 - **Server-side validation** before persist via
   `validateArtifactContent(type, content, ctx?)` — fails the tool call
   with `validationErrors` so the LLM can self-correct.
 - **5-second wall-clock timeout** on validation (`VALIDATE_TIMEOUT_MS`).
-- **`ValidationContext.isNew = true`** is set on `create_artifact`,
-  omitted on `update_artifact`. `validateMarkdown` (128 KiB cap) and
-  `validateSlides` (`image-text` deprecation hard error) are the only
-  validators that read it. The interface has no other fields — the prior
-  `documentFormat` discriminant was removed when AST mode went away.
+- **`ValidationContext`** carries `isNew?: boolean` and `language?: string`.
+  `validateMarkdown` (128 KiB cap on `isNew`), `validateSlides`
+  (`image-text` deprecation hard error, color whitelist hard error on
+  `isNew`), and `validateCode` (canonical-language warning) consume it.
+  `validateDocument` is the only entry that ignores `ctx`.
 - **Optimistic locking** on update via `prisma.document.updateMany` keyed
   on `updatedAt`.
 - **Versioning**: `MAX_VERSION_HISTORY = 20` entries, FIFO eviction with
@@ -72,29 +73,33 @@ All twelve types share these guarantees:
   Inline fallback when archive upload fails: ≤ 32 KiB inline, > 32 KiB
   marker `{ archiveFailed: true }`.
 - **RAG indexing**: fire-and-forget after both LLM tool persistence and
-  HTTP PUT (N-1 fixed). All current callers pass `artifactType` to
+  HTTP PUT. All current callers pass `artifactType` to
   `indexArtifactContent` (`b23e06f`) so the indexer skips its prior
-  per-call DB round-trip (D-7 partially closed). Failures patch
-  `metadata.ragIndexed = false` instead of throwing.
+  per-call DB round-trip. `markRagStatus` is now an atomic `jsonb_set`
+  via `prisma.$executeRaw` (D-2 closed).
 - **Full delete**: canonical S3 key, all versioned S3 keys, RAG chunks,
   Postgres row.
-- **Session delete**: cascades into all of the above (N-47 fixed —
-  `findArtifactsBySessionId` selects `metadata` so the cascade can
-  flatten versioned keys).
-- **`text/document` exposes `.docx` + `.pdf`** via a split-button (the
-  prior `.md` option was dropped). Both go through the same server
-  endpoint which routes through `getOrComputeDocx` (process-local
-  cache + single-flight via `withRenderSlot`); PDF additionally pipes
-  through `soffice --convert-to pdf`. Every other type uses a single
-  Download button.
-- **No in-panel editing**. Preview is view-only across every type
-  (post panel-chrome overhaul). Updates go through `update_artifact`
-  tool, the HTTP PUT endpoint, or version restore. (The legacy
-  `/edit-document` POST endpoint was deleted in `6c1dd82` — orphan
-  since the UI modal was removed in `0b25e56`.)
-- **Streaming placeholders** with id `streaming-${toolCallId}`. The
-  `sendMessage` catch block iterates `createdStreamingIds` and
-  `preStreamSnapshots` to clean up on abort/error.
+- **Session delete**: cascades into all of the above.
+- **`text/document` exposes `.docx` + `.pdf`** via a split-button.
+  Both go through the same server endpoint which routes through
+  `getOrComputeDocx` (process-local FIFO cache + single-flight via
+  `withRenderSlot`); PDF additionally pipes through
+  `soffice --convert-to pdf`. The legacy `.md` option was dropped.
+- **`application/python` exposes `.ipynb`, `.py` (percent), `.html`**
+  via a three-item split-button. Built client-side from
+  `lib/notebook/{ipynb,percent,html-export}.ts`.
+- **All other types use a single Download button.**
+- **No in-panel editing**. Preview is view-only across every type.
+  Updates go through `update_artifact` tool, the HTTP PUT endpoint,
+  or version restore. (The legacy `/edit-document` POST endpoint was
+  deleted in `6c1dd82` — orphan since the UI modal was removed in
+  `0b25e56`.)
+- **Streaming placeholders** with id `streaming-${toolCallId}`.
+  `addOrUpdateArtifact` skips `setActiveArtifactId` for `streaming-`
+  ids so rapid multi-create does not flicker the active panel
+  (D-73 closed).
+- **Metrics endpoint** at `/api/dashboard/artifacts/metrics` exposes 6
+  Prometheus counters. **`role === "ADMIN"` required** (NEW-D-97).
 
 `hasCodeTab` lives on each registry entry. Post panel-chrome overhaul
 **there is no code tab in the panel** for any type — the flag now only
@@ -116,11 +121,11 @@ dashboards with vanilla JS state.
 - Inline `<script>` IIFE or DOMContentLoaded.
 - `unsplash:keyword` in `src` attributes — server-resolved post-validation.
 - `alert()` / `confirm()` / `prompt()` work (sandbox includes
-  `allow-modals` — D-26).
+  `allow-modals` — D-26 by-design).
 
 ### Boundaries
 
-- **Sandbox**: `sandbox="allow-scripts allow-modals"` (`html-renderer.tsx:128`).
+- **Sandbox**: `sandbox="allow-scripts allow-modals"` (`html-renderer.tsx`).
 - No external `fetch()` to real APIs.
 - No `window.open()`, `location.*`, `history.*`. Nav blocker
   (`_iframe-nav-blocker.ts`) intercepts.
@@ -128,36 +133,15 @@ dashboards with vanilla JS state.
 - No external image URLs (use `unsplash:keyword` instead).
 - No second Tailwind CDN script tag.
 - ≤ 2 fonts, ≤ 5 colors.
-- Inline `<style>` ≤ 10 non-blank lines (validator: warning; prompt: rule).
+- Inline `<style>` ≤ 10 non-blank lines (validator: warning).
 - No emoji as functional icons.
-
-### Schema
-
-```html
-<!DOCTYPE html>
-<html lang="en" class="h-full">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Required non-empty</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-</head>
-<body>
-  <h1>Single h1 per document</h1>
-  <main>...</main>
-  <script>
-    (function () { /* IIFE state */ })();
-  </script>
-</body>
-</html>
-```
 
 ### Renderer
 
-`html-renderer.tsx`. Theme: not synced (iframe is its own document).
-Loading state: spinner cleared on `onLoad`; 5 s `slowLoad` warning.
-Restoration loop guarded by `restoring` ref to prevent infinite triggers.
+`html-renderer.tsx`. Theme: not synced. Loading state: spinner
+cleared on `onLoad`; 5 s `slowLoad` warning. `HEAD_OPEN_RE`
+(L23) handles `>` inside attribute values for the Tailwind CDN
+injection.
 
 ---
 
@@ -175,12 +159,12 @@ Imports allowed (preprocessor strips them — globals preferred): `react`,
 
 ### Boundaries
 
-- **Sandbox**: `sandbox="allow-scripts"` only (`react-renderer.tsx:588`).
-  No `allow-modals` (tighter than HTML).
+- **Sandbox**: `sandbox="allow-scripts"` only (`react-renderer.tsx`).
+  No `allow-modals`.
 - No imports outside the whitelist.
 - No `class extends React.Component`.
 - No `document.getElementById` / `querySelector`.
-- No CSS imports (`import './styles.css'`).
+- No CSS imports.
 - No shadcn/ui.
 - No real `fetch()` / `window.open` / `location.href`.
 - No `<form action="...">` — use `onSubmit + e.preventDefault()`.
@@ -202,17 +186,16 @@ export default function App() {
 }
 ```
 
-`MAX_FONT_FAMILIES = 3` (`_react-directives.ts:54`). `FONT_SPEC_REGEX`
-(L110) rejects URL-injection chars. Template-literal hiding (L95-L98)
-prevents false import matches inside strings.
+`MAX_FONT_FAMILIES = 3`. `FONT_SPEC_REGEX` rejects URL-injection
+chars. Template-literal hiding prevents false import matches inside
+strings.
 
 ### Renderer
 
 `react-renderer.tsx`. Babel standalone transpiles in-iframe.
 `window.react = window.React` aliases the lowercase name so Recharts'
-peer-dep check passes (L267). postMessage handler is source-checked
-against `iframeRef.current?.contentWindow` (L454-L467). `setError` lives
-in `useEffect` (L414-L427) — not in `useMemo`.
+peer-dep check passes. postMessage handler is source-checked against
+`iframeRef.current?.contentWindow`. `setError` lives in `useEffect`.
 
 ---
 
@@ -223,35 +206,23 @@ Mermaid syntax, decorative patterns.
 
 ### Capabilities
 
-- All SVG presentation attrs (`fill`, `stroke`, `stroke-width`, `opacity`,
-  `transform`).
+- All SVG presentation attrs.
 - `<defs>` with gradients, patterns, `<use>` for reuse.
-- SMIL animation (`<animate>`, `<animateTransform>`) when explicitly
-  requested.
+- SMIL animation when explicitly requested.
 - `<text>` for labels.
 - `#fragment` `href` references only.
 
 ### Boundaries
 
 - Sanitized by DOMPurify (`USE_PROFILES: { svg: true, svgFilters: true }`,
-  `ADD_TAGS: ["use"]`). DOMParser pre-validation surfaces parse errors.
+  `ADD_TAGS: ["use"]`).
 - `<script>`, `<foreignObject>`, `<style>` blocks → hard errors.
 - External `href` / `xlink:href` to `http(s):` or `data:` → hard error.
-- Event handlers (`onclick`, etc.) → hard error.
-- Hardcoded `width=` / `height=` on root `<svg>` → hard error (breaks
-  responsive scaling).
+- Event handlers → hard error.
+- Hardcoded `width=` / `height=` on root `<svg>` → hard error.
 - Missing `viewBox` / `xmlns` → hard error.
-- Path coordinates: prompt says "round to 1 dp max"; validator warns at
-  3+ dp (D-17).
-
-### Schema
-
-```xml
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 W H" role="img" aria-labelledby="title-id">
-  <title id="title-id">Description</title>
-  ...
-</svg>
-```
+- Path coordinates: prompt says "round to 1 dp max"; validator warns
+  at 2+ dp via `\d{2,}` regex (D-17 narrowed).
 
 ### Renderer
 
@@ -269,42 +240,31 @@ journeys, quadrant charts.
 
 ### Capabilities
 
-Mermaid v11. Primary types (11): flowchart, sequenceDiagram, erDiagram,
-stateDiagram-v2, classDiagram, gantt, mindmap, gitGraph, pie, journey,
-quadrantChart.
-Secondary: timeline, sankey-beta, xychart-beta, block-beta, kanban,
-C4Context, requirementDiagram, architecture-beta.
-**Validator additionally accepts** (not in prompt — D-13): `graph`,
-`stateDiagram` (alongside `stateDiagram-v2`), `packet-beta`,
-`C4Container`, `C4Component`, `C4Deployment`. The shared
-`MERMAID_DIAGRAM_TYPES_SHARED` constant in
-`lib/rendering/mermaid-types.ts:14-40` has **25 entries**, imported by
-the validator at `_validate-artifact.ts:31` and aliased locally at
-L1321. The 25-vs-19 count drift is now closed at the type-system
-level. **Residual prompt-side gap (D-13) and stale validator error
-prose at L1384 still references 19 types (D-77).**
+Mermaid v11. Validator accepts the **shared 25-entry list** in
+`lib/rendering/mermaid-types.ts:14-40`, imported by both
+`_validate-artifact.ts:31` and (for the slides validator). Validator
+error message is generated from the shared array (D-77 closed) so
+authors see the canonical list.
 
 ### Boundaries
 
 - Markdown fences → hard error.
 - Missing diagram type on first non-empty line → hard error.
-- `%%{init: {'theme':...}}%%` overrides → warning (breaks dark mode).
+- `%%{init: {'theme':...}}%%` overrides → warning.
 - `click NodeId call fn()` / `click NodeId href` → silently accepted by
-  validator, but blocked at runtime (`securityLevel: "strict"`).
+  validator, blocked at runtime (`securityLevel: "strict"`).
 - `classDef` styling: max 3 highlight colors.
 - Labels: `<br/>` only.
 - Flowchart > 15 nodes → warning (heuristic; only fires for
-  flowchart/graph, not for erDiagram/classDiagram).
+  flowchart/graph).
 - > 3000 chars → warning.
 
 ### Renderer
 
-`mermaid-renderer.tsx`. Theme synced via `next-themes`
-(`resolvedTheme === "dark"` → mermaid `"dark"`, else `"default"`).
-Module-level `mermaidPromise` + `lastInitTheme` cache means
-`mermaid.initialize()` fires only on theme change. Init options come
-from the shared `mermaid-config.ts` (`securityLevel: "strict"`,
-`theme: "base"`, `themeVariables` derived from design tokens).
+`mermaid-renderer.tsx`. Theme synced via `next-themes`. Module-level
+singleton means `mermaid.initialize()` fires only on theme change. Init
+options come from `mermaid-config.ts` (`securityLevel: "strict"`,
+`theme: "base"`, theme variables derived from design tokens).
 
 ---
 
@@ -317,26 +277,22 @@ casual write-ups.
 
 Renderer: Streamdown (react-markdown wrapper) with GFM. Supported:
 
-- GFM tables (`|---|---|`).
+- GFM tables.
 - Shiki fenced code blocks (must tag language).
 - KaTeX inline (`$...$`) and display (`$$...$$` / `\[...\]`) math.
 - Mermaid fenced blocks (rendered through Streamdown's own pipeline —
-  separate from `mermaid-config.ts`, D-25).
-- Task lists (`- [ ]`, `- [x]`).
-- Strikethrough.
-- Clickable links.
+  separate from `mermaid-config.ts`, D-25 by-design).
+- Task lists, strikethrough, clickable links.
 - Images via absolute URLs.
 
 ### Boundaries
 
-- New artifacts: 128 KiB hard cap (`MARKDOWN_NEW_CAP_BYTES`). **The
-  prompt does NOT mention this — D-15.** LLM cannot self-check.
-- Raw HTML in `RAW_HTML_DISALLOWED` (10 entries, verified verbatim):
-  `<details>`, `<summary>`, `<kbd>`, `<mark>`, `<iframe>`, `<video>`,
-  `<audio>`, `<object>`, `<embed>`, `<table>` → validator warns.
+- New artifacts: 128 KiB hard cap (`MARKDOWN_NEW_CAP_BYTES`).
+  **Now surfaced in the prompt** at `markdown.ts:38` (D-15 closed).
+- Raw HTML in `RAW_HTML_DISALLOWED` (10 entries) → validator warns.
 - `<script>` is checked separately via env
   `ARTIFACT_STRICT_MARKDOWN_VALIDATION` — warning by default, hard
-  error when env is `"true"`. Not part of `RAW_HTML_DISALLOWED`.
+  error when env is `"true"`.
 - More than one `# H1` → warning.
 - Skipping heading levels → warning.
 - Code fences without language tag → warning.
@@ -345,20 +301,17 @@ Renderer: Streamdown (react-markdown wrapper) with GFM. Supported:
 
 `StreamdownContent` (no iframe). Code blocks use Shiki with a dual
 light/dark theme. Mermaid blocks use Streamdown's internal mermaid
-integration — does **not** call `getMermaidConfig`. KaTeX math via
-plugins.
+integration.
 
 ---
 
 ## 6. `text/document` — Document
 
 **Default for:** formal deliverables (proposals, white papers, reports,
-contracts) where DOCX export and printable layout matter.
+contracts) where DOCX/PDF export and printable layout matter.
 
-**Single format only** (post `a81c343` + `20260429100656_drop_document_format`).
-Content is an ES module JS script using the `docx` package. The prior
-AST mode and its `documentFormat` discriminant column were both
-removed.
+**Single format only** (post `a81c343` + Prisma column drop). Content
+is an ES module JS script using the `docx` package.
 
 ### Schema — docx-js script
 
@@ -381,55 +334,52 @@ Packer.toBuffer(doc).then(buf => process.stdout.write(buf.toString("base64")))
 
 - No JSON output, no markdown fences.
 - No `require()`. Imports only from `"docx"`.
-- No `fs`, `path`, `http`, `child_process`.
-- No `new TableOfContents()` (LibreOffice won't fill it — use manual
-  dot-leader paragraphs).
+- No `fs`, `path`, `http`, `child_process`. `http2` and `node:http2`
+  blocked symmetrically by the loader and the wrapper (D-76 closed).
+- No `new TableOfContents()`.
 - No `WidthType.PERCENTAGE`, no `ShadingType.SOLID`, no standalone
   `new PageBreak()`.
 
 ### Validator
 
-`validateDocument` (`_validate-artifact.ts:169-173`) is a thin async
-wrapper: dynamic-imports `@/lib/document-script/validator` (a single
-flat file, 41 LoC) and returns its `{ ok, errors }`. The validator
-itself runs TS syntax check (TypeScript `createSourceFile` AST parse,
-L9-L26) + sandbox dry-run (`DRY_RUN_TIMEOUT_MS = 5000`, L7) + `.docx`
-magic-byte check (PK header `[0x50, 0x4b, 0x03, 0x04]`, L6).
-**`validateDocument`'s signature does not accept a `ctx` parameter**
-(D-46) — it is the only entry in the `VALIDATORS` map whose shape is
-`(content) => …` rather than `(content, ctx?) => …`.
-`ValidationContext.isNew` cannot be plumbed into it without a
-signature change.
+`validateDocument` (`_validate-artifact.ts:186-196`) is a thin async
+wrapper: dynamic-imports `@/lib/document-script/validator` (single flat
+file, 41 LoC) and returns its `{ ok, errors }`. The validator runs TS
+syntax check + sandbox dry-run + `.docx` magic-byte check. Now accepts
+`_ctx` for shape consistency (D-46 partial close).
 
 ### Renderer
 
-`document-script-renderer.tsx` (210 LoC). Panel routes `text/document`
-directly to this component (`artifact-panel.tsx:696-708`); the generic
-`ArtifactRenderer` no longer has a case for this type. Server fetches
-`/render-status` for `{ hash, pageCount, cached }`, then renders a PNG
-carousel using `/render-pages/[contentHash]/[pageIndex]`. While
-streaming, shows a faded `CodeView` with a "Generating script…" spinner
-— no fetch fires. Keyboard navigation guarded against text-entry focus.
-**No retry button on error (D-11).** Imports cleanly from `@/lib/icons`
-at L3 — the prior direct `lucide-react` import is gone. **D-28 has
-relocated to `artifact-panel.tsx:18`** (`Maximize`, `Minimize` still
-direct from lucide-react).
+`document-script-renderer.tsx` (~224 LoC). Panel routes
+`text/document` directly to this component
+(`artifact-panel.tsx:747-759`). Server fetches `/render-status` for
+`{ hash, pageCount, cached }`, then renders a PNG carousel using
+`/render-pages/[contentHash]/[pageIndex]`. While streaming, shows a
+faded `CodeView` with a "Generating script…" spinner. Keyboard
+navigation guarded against text-entry focus.
+**Retry button** (L122-L134) on render error — refetches `/render-status`
+with bumped `retryCount` (D-11 closed). Error wrapper has
+`role="status" aria-live="polite"` (D-93 closed). Imports cleanly
+from `@/lib/icons` at L3.
 
 ### Download
 
 `GET /api/dashboard/chat/sessions/[id]/artifacts/[artifactId]/download`.
 Accepts `?format=docx` (default) and `?format=pdf`. Server routes both
-through `getOrComputeDocx` (process-local cache + single-flight via
-`withRenderSlot`); the PDF branch additionally pipes the cached DOCX
-buffer through `docxToPdf` (soffice). D-3 + NEW-D-96 closed.
+through `getOrComputeDocx` (process-local FIFO cache + single-flight
+via `withRenderSlot`, `lib/document-script/docx-cache.ts`); PDF
+additionally pipes the cached DOCX buffer through `docxToPdf` (soffice).
+D-3 + NEW-D-96 closed.
+
+The split-button in the panel exposes `.docx` and `.pdf` only —
+the prior `.md` option was dropped (NEW-D-94 closed via removal).
 
 ### Edit flow
 
-The `/edit-document` POST endpoint was deleted in `6c1dd82` — orphan
-since the UI modal was removed in `0b25e56`. To edit a `text/document`
-artifact, regenerate via `update_artifact` tool, the HTTP PUT
-endpoint, or restore a previous version. D-4, D-54, D-55, D-71 are
-MOOT.
+The `/edit-document` POST endpoint and its UI modal are gone. To edit
+a `text/document` artifact, regenerate via `update_artifact` tool, the
+HTTP PUT endpoint, or restore a previous version. D-4, D-54, D-55,
+D-71 are MOOT.
 
 ---
 
@@ -446,21 +396,22 @@ bash, shell, yaml, json, toml, dockerfile, html, css, scss, markdown.
 
 ### Boundaries
 
-- `language` parameter REQUIRED on `create_artifact`. **The validator
-  does not check it (D-18)** — wrong/missing language silently passes.
+- `language` parameter REQUIRED on `create_artifact`. **Validator
+  now enforces canonical Shiki list** via `ctx.language` cross-check
+  in `validateCode` (D-18 closed). Non-canonical values warn.
 - Markdown fence wrapping → hard error.
 - HTML document content (`<!DOCTYPE html>` / `<html`) → hard error.
 - Truncation markers (`...`, `// ...`) → warnings.
-- Placeholder bodies (`pass`, `todo!()`, `throw new Error("not implemented")`,
-  `unimplemented!()`) → warnings.
-- 512 KiB → warning.
+- Placeholder bodies (`pass`, `todo!()`, `unimplemented!()`,
+  `throw new Error("not implemented")`) → warnings.
+- 512 KiB → warning (also outer cap; effectively unreachable, see
+  D-N-4 in deepscan).
 
 ### Renderer
 
 Routed to `StreamdownContent` with adaptive fence length:
 `max(3, longestRun + 1)` where `longestRun` is the longest backtick run
-in `content` (`artifact-renderer.tsx:114-127`). Prevents content with
-nested triple-backticks from breaking syntax highlighting.
+in `content` (`artifact-renderer.tsx:114-127`).
 
 ---
 
@@ -473,8 +424,8 @@ data ready for chart visualisation.
 
 Three accepted shapes:
 
-- **Shape A — CSV**: standard CSV. First row = headers.
-- **Shape B — JSON array of objects**: `[{ "col": value, ... }, ...]`.
+- **Shape A — CSV**.
+- **Shape B — JSON array of objects**.
 - **Shape C — JSON spec**: `{ kind: "spreadsheet/v1", theme?,
   namedRanges?, sheets: SheetSpec[], charts?: ChartSpec[] }`.
 
@@ -485,10 +436,10 @@ Three accepted shapes:
 - Cell `style`: `"header" | "input" | "formula" | "cross-sheet" |
   "highlight" | "note"`.
 - Format strings: Excel number-format notation.
-- Named ranges: `"SheetName!A1:B5"` or `"A1:B5"` for same sheet.
-- Charts (`ChartSpec`): types `bar`, `line`, `area`, `pie`. `stacked: true`
-  for bar/area. `categoryRange` and `series[].range` use single-row /
-  single-column A1 ranges.
+- Named ranges: `"SheetName!A1:B5"` or `"A1:B5"`.
+- Charts: `bar`, `line`, `area`, `pie`. `stacked: true` for bar/area.
+  `categoryRange` and `series[].range` use single-row / single-column
+  A1 ranges. **`$`-absolute refs now supported** (D-79 closed).
 
 ### Boundaries
 
@@ -498,16 +449,11 @@ Three accepted shapes:
 - REF / NAME errors in formulas → hard error.
 - Duplicate refs / sheet names → hard error.
 - Sheet names with `!:*?/\[]` → hard error.
-- Caps (hard errors via `parseSpec`):
-  - 8 sheets max
-  - 500 cells per sheet
-  - 200 formulas per workbook
-  - 64 named ranges
-  - 8 charts
-- CSV with mismatched column counts → hard error.
-- JSON array with mismatched keys → hard error.
-- Nested values in JSON array, > 100 rows, > 10 cols, currency symbols /
-  thousand separators in CSV, mixed date formats → warnings.
+- Caps: 8 sheets, 500 cells/sheet, 200 formulas/workbook, 64 named
+  ranges, 8 charts.
+- CSV column-count mismatches, JSON-array key mismatches → hard error.
+- Nested values, > 100 rows, > 10 cols, currency/thousands in CSV,
+  mixed date formats → warnings.
 
 ### Renderer
 
@@ -515,36 +461,31 @@ Three accepted shapes:
 - spec → lazy `SpecWorkbookView` (`sheet-spec-view.tsx`)
 - csv/array → `CsvOrArrayView` (TanStack Table + Search)
 
-`SpecWorkbookView` provides Excel-feel chrome:
-- `SheetFormulaBar` at top (Name Box + ƒx + formula display).
+`SpecWorkbookView` (~324 LoC):
+- `SheetFormulaBar` at top.
 - Optional **Data/Charts toggle** rendered only when
-  `spec.charts.length > 0`. Resets to `"data"` on content change.
-- Sticky corner cell, A/B/C column letters with active-column blue
-  highlight, sticky row gutter, frozen borders.
-- Cells: click → `selectedRef`; selected cell `outline outline-2
+  `spec.charts.length > 0`. **Resets to `"data"` on content change AND
+  on tab switch** (D-20 closed).
+- Sticky corner cell, A/B/C column letters, sticky row gutter, frozen
+  borders.
+- Cells: click → `selectedRef`; selected outline `outline outline-2
   outline-blue-600`; `highlight` style `bg-yellow-200/80`; error
   `text-red-600` + `#ERR!`.
-- Bottom sheet tabs reset `selectedRef` on switch but **share `view`
-  state across sheets** (D-20).
 
 `SheetChartView` dispatches to Recharts: `BarChart` (with `stackId`),
 `LineChart` (`type="monotone"`, `strokeWidth={2}`), `AreaChart`
-(`fillOpacity={0.4}`), `PieChart`. Pie has `fillOpacity={1 - i * 0.1}`
-which floors at 0 (D-19 — bug at 11+ slices). Empty rows render
-empty-state card.
+(`fillOpacity={0.4}`), `PieChart`. Pie has
+`fillOpacity={Math.max(0.25, 1 - i * 0.1)}` — **slice opacity floored
+at 0.25** so 11+ slices stay visible (D-19 closed).
 
-XLSX download is in the panel header only — no in-sheet button (commit
-4d3d199). XLSX export does **not** emit chart objects (D-64) — charts
-exist only in the browser preview.
+XLSX download is in the panel header. XLSX export does **not** emit
+chart objects (D-64 by-design).
 
-**Theming.** `note` cell color is now fully themable end-to-end (post
-`b3e6cdf`): `SpreadsheetTheme.noteColor?` (`spreadsheet/types.ts:58`)
-with default `"#666666"` (L67). HTML preview reads it via
-`styles.ts:54` (`fontColor: t.noteColor`); XLSX export reads it via
-`generate-xlsx.ts:138` (`hexToArgb(theme.noteColor)`). **D-65 closed.**
-The `formatCellValue` helper that previously lived in `styles.ts` was
-also dropped by the same commit; the live grid uses
-`format.ts.formatNumber` (`numfmt` wrapper) exclusively.
+**Theming.** `note` cell color is fully themable end-to-end via
+`SpreadsheetTheme.noteColor?` (`spreadsheet/types.ts:58`,
+`DEFAULT_THEME.noteColor = "#666666"`). HTML preview reads it via
+`styles.ts:54`; XLSX export reads it via `generate-xlsx.ts:138`
+(D-65 closed).
 
 ---
 
@@ -555,18 +496,8 @@ formula reference cards.
 
 ### Capabilities
 
-Subset of LaTeX rendered by KaTeX:
-
-- Math: `$...$` inline, `$$...$$` / `\[...\]` display.
-- Math envs: equation/*, align/*, gather/*, multline/*, cases,
-  eqnarray/* (starred + unstarred).
-- Inside math: matrix, pmatrix, bmatrix, vmatrix, Vmatrix, Bmatrix,
-  array, cases, aligned, gathered, split.
-- `\newcommand`, `\renewcommand`, `\def`.
-- Document structure: `\section`, `\subsection`, `\subsubsection`,
-  `\paragraph`, itemize, enumerate, quote, abstract.
-- Text: `\textbf`, `\textit`/`\emph`, `\underline`, `\texttt`.
-- `\href` / `\url` (KaTeX trust callback restricts to `https?://`).
+Subset of LaTeX rendered by KaTeX (math envs, document structure,
+inline emphasis, `\href` / `\url` restricted to `https?://`).
 
 ### Boundaries
 
@@ -576,18 +507,13 @@ Hard errors: `\documentclass`, `\usepackage`, `\begin{document}`,
 `\begin{tabular}`.
 
 Warnings: `\begin{verbatim}`, `\verb`, `\label{}`, `\ref{}`, `\eqref{}`,
-no math delimiter (use markdown instead).
-
-`\maketitle` is forbidden by the prompt but not checked by the validator
-— renders as nothing silently.
+no math delimiter.
 
 ### Renderer
 
-`latex-renderer.tsx`. KaTeX with `trust` callback
-(`isKatexCommandAllowed`) restricting `\href`/`\url` to `https?://` URLs
-only. Balanced-brace scanner (`readBracedArg`) handles nested `{}` and
-`\{`/`\}` escaping. `dangerouslySetInnerHTML` into a `prose
-dark:prose-invert` container.
+`latex-renderer.tsx` (~536 LoC). KaTeX with `trust` callback restricting
+`\href`/`\url` to `https?://` URLs. Balanced-brace scanner handles
+nested `{}` and `\{`/`\}`.
 
 ---
 
@@ -598,16 +524,13 @@ presentations.
 
 ### Capabilities
 
-**18 layouts** in `SLIDE_LAYOUTS` Set (verified verbatim): `title`,
-`content`, `two-column`, `section`, `quote`, `image-text` (deprecated),
-`closing`, `diagram`, `image`, `chart`, `diagram-content`,
-`image-content`, `chart-content`, `hero`, `stats`, `gallery`,
-`comparison`, `features`. The deprecated `image-text` is in the set —
-it errors on `isNew`, warns otherwise.
+**18 layouts** in `SLIDE_LAYOUTS` Set: `title`, `content`,
+`two-column`, `section`, `quote`, `image-text` (deprecated), `closing`,
+`diagram`, `image`, `chart`, `diagram-content`, `image-content`,
+`chart-content`, `hero`, `stats`, `gallery`, `comparison`, `features`.
 
 Chart types: `bar`, `bar-horizontal`, `line`, `pie`, `donut`. (Note:
-`area` is allowed in spreadsheet charts but NOT in slides charts —
-cross-validator inconsistency worth noting.)
+`area` is allowed in spreadsheet charts but NOT in slides.)
 
 `unsplash:keyword` allowed in `imageUrl`, `backgroundImage`,
 `quoteImage`. `{icon:name}` inline syntax for Lucide icons in text
@@ -615,113 +538,146 @@ fields.
 
 ### Boundaries
 
-#### Hard errors (per-layout required fields)
+- All per-layout required-field rules are hard errors (per
+  `939d277` — D-14 partially closed; the prompt language still uses
+  "validator convention" for first/last slide rules).
+- **Color whitelist** (post `939d277`): primaryColor must be one of 6
+  approved hexes; secondaryColor must be one of 6 approved hexes.
+  Hard error on `ctx.isNew`, warning otherwise (D-40 closed). Error
+  message echoes the normalized (uppercase) form (NEW-D-91 closed).
+- `image-text` layout deprecated: hard error on `isNew`, warning
+  otherwise.
+- > 6 bullets per slide → warning; bullets > 10 words → warning.
+- Markdown syntax in text fields → warning.
+- Deck size 7-12 slides → warning outside.
 
-- `title` / `hero` → `title`.
-- `quote` → `quote`.
-- `two-column` → `leftColumn`, `rightColumn`.
-- `diagram` / `diagram-content` → `diagram`.
-- `image` / `image-content` → `imageUrl`.
-- `chart` / `chart-content` → `chart` with valid type.
-- `hero` → `backgroundImage`.
-- `stats` → `stats[]` with `value`, `label`.
-- `gallery` → `gallery[]` with `imageUrl`.
-- `comparison` → `comparisonHeaders`, `comparisonRows`.
-- `features` → `features[]` with `icon`, `title`.
+### Renderer
 
-#### Warnings (D-14 — prompt presents as MUSTs but validator only warns)
+`slides-renderer.tsx`. Iframe with `sandbox="allow-scripts"` only.
+postMessage source-checked. Keyboard navigation scope-guarded against
+text entry. Navigation bar with chevron + counter; dot strip when
+`1 < totalSlides ≤ 20`.
 
-- First slide ≠ `title`.
-- Last slide ≠ `closing`.
-- < 7 or > 12 slides.
-- < 3 distinct layouts in ≥ 5-slide deck.
-- Bright primaryColor (prompt forbids; validator does not enforce).
-- > 6 bullets per slide; bullets > 10 words.
-- Markdown syntax in text fields (validator checks `title, subtitle,
-  content, quote, attribution, note` — NOT `bullets[]`).
+### Export
 
-### Schema
+PPTX export via the slides export pipeline. Charts are rendered through
+`chart-to-svg.ts` with a derived theme (`inferChartTheme(theme.primaryColor)`)
+so dark-themed decks get the dark chart palette (NEW-R-4 closed).
+
+---
+
+## 11. `application/python` — Python Notebook (REDESIGNED)
+
+**Default for:** runnable data-science notebooks, plotting,
+math demonstrations, simulations, multi-cell exploration.
+
+The legacy flat-script Python artifact is **gone**. Content is now a
+**Jupyter-style notebook JSON** executed cell-by-cell in a Pyodide Web
+Worker.
+
+### LLM wire format
 
 ```json
 {
-  "theme": { "primaryColor": "#hex", "secondaryColor": "#hex", "fontFamily": "..." },
-  "slides": [
-    { "layout": "title", "title": "..." },
-    { "layout": "content", "title": "...", "bullets": ["...", "..."] },
+  "cells": [
+    { "type": "code" | "markdown", "source": "..." },
     ...
   ]
 }
 ```
 
-6 approved primaryColor hexes + 6 approved secondaryColor hexes (per
-prompt).
-
-### Renderer
-
-`slides-renderer.tsx`. Iframe with `sandbox="allow-scripts"` only
-(post-tightening). postMessage source-checked. Keyboard navigation
-scope-guarded against text entry. Navigation bar with chevron + counter;
-dot strip when `1 < totalSlides ≤ 20`.
-
----
-
-## 11. `application/python` — Python Script
-
-**Default for:** runnable data-science snippets, plotting, math
-demonstrations, simulation.
+The model must NOT emit `id`, `outputs`, or `executionCount` —
+those are runtime fields populated by the kernel.
 
 ### Capabilities
 
-Pyodide v0.27.x (Python 3.12). Auto-loaded packages: numpy, matplotlib,
-pandas, scipy, sympy, networkx, scikit-learn (sklearn), pillow (PIL),
-pytz, dateutil, regex, bs4, lxml, yaml.
-
-Stdlib whitelist: math, statistics, random, itertools, functools,
-collections, heapq, bisect, json, re, datetime, decimal, fractions,
-hashlib, textwrap, string, typing, dataclasses, enum.
-
-Output via `print()` and `plt.show()`. PNG output via matplotlib is
-captured to `__plot_images__` (worker monkey-patches `plt.show` once at
-init).
+- **Pyodide v0.28.0** (Python 3.12), persistent kernel — globals carry
+  across cells.
+- **Pre-loaded packages**: `numpy`, `micropip`, `matplotlib`,
+  `scikit-learn`.
+- **Auto-loaded on import**: pandas, scipy, sympy, networkx, pillow,
+  bs4, lxml, yaml, etc., via `pyodide.loadPackagesFromImports`.
+- **Markdown cells** rendered via Streamdown (click to edit).
+- **Plot capture**: `plt.show()` is monkey-patched at init to write
+  base64 PNG into `__display_buffer__`; the worker drains the buffer
+  after `runPythonAsync` and posts `display` messages at DPI 150.
+- **Last-expression display**: bare final-line expressions are
+  captured; DataFrames produce both `text/html` (table) and
+  `text/plain` (repr).
+- **Stream output**: `print()` and stderr land as `stream` messages.
+- **Pin-to-chat**: pin individual outputs (images by default) into a
+  pinned-outputs bar above the chat composer; `collectAutoAttachments`
+  sends them with the next message.
 
 ### Boundaries
 
-#### Hard errors
+#### Validator hard errors (`validatePython`,
+`_validate-artifact.ts:2065-L2174`):
 
-Forbidden imports in `PYTHON_UNAVAILABLE_PACKAGES` (15 entries,
-verified): requests, httpx, urllib3, flask, django, fastapi, sqlalchemy,
-selenium, tensorflow, torch, keras, transformers, cv2, pyarrow, polars.
+- Empty content.
+- Bare script (not starting with `{`).
+- Invalid JSON.
+- Missing top-level `cells` array.
+- Empty `cells`.
+- Cell missing `type` / `source` / non-object cell.
+- (code cells) Imports of `PYTHON_UNAVAILABLE_PACKAGES`: 15 entries
+  with reason strings — `requests, httpx, urllib3, flask, django,
+  fastapi, sqlalchemy, selenium, tensorflow, torch, keras,
+  transformers, cv2, pyarrow, polars`.
+- (code cells) `input(` (no stdin), `open(` (no persistent fs).
 
-`input()`. `open()` in **write modes only** (`w`, `a`, `x`, `b+`).
-Markdown fences.
+#### Warnings:
 
-#### Warnings
+- `time.sleep(N)` with N > 2.
+- `while True` without `break`.
+- No cell produces visible output (heuristic).
 
-Missing `print()` / `plt.show()`. `time.sleep` > 2 s. `while True`
-without break.
+#### Runtime:
 
-#### Prompt-only (NOT validator-enforced)
-
-- All `open()` (including read mode — D-16).
-- threading, multiprocessing, subprocess.
-- File system reads.
-- Runtime > 10 s.
+- Per-cell `timeoutMs` default 30 s (`python-worker.ts:87`); kernel
+  terminated past that.
+- `IMAGE_BUDGET_BYTES = 100 KiB` per image; oversize images flagged
+  but still rendered.
+- Single worker, sequential queue (kernel concurrency = 1).
 
 ### Schema
 
-Standard Python with structure imports → constants → helpers → `main()`
-→ `if __name__ == "__main__": main()`. Type hints + docstrings expected.
+Standard Python source per cell, expected to follow the
+imports → constants → helpers → main pattern across cells. Markdown
+cells between code cells to explain phases.
 
 ### Renderer
 
-`python-renderer.tsx`. **No iframe** — Pyodide runs in an inline Web
-Worker. Worker source is an embedded string; Blob URL revoked
-immediately after `new Worker(url)`. Pre-loaded packages: numpy,
-micropip, matplotlib, scikit-learn. `plt.show` monkey-patched at init.
-Output panel with responsive `max-h`. "Fix with AI" error banner when
-`onFixWithAI` prop is wired. Code display uses **hardcoded triple-
-backtick fence** (D-27 — content with nested triple-backticks would
-break Streamdown rendering).
+Notebook subsystem under `renderers/notebook/` (see
+[architecture-reference §13](./architecture-reference.md#13-notebook-subsystem-new--applicationpython)
+for the full file map).
+
+- `NotebookRenderer` parses content with `parseNotebookContentStreaming`
+  (works for both streaming + complete content), maintains kernel via
+  `useKernel`, dispatches per-cell render to `cell.tsx`.
+- `NotebookToolbar` exposes Run-all (with hero pulse), Interrupt, Restart.
+- `useKernel` lazy-creates the worker on first run; `interrupt` calls
+  `worker.terminate()`.
+- `usePinToChat` stores pin state in `sessionStorage` under
+  `"notebook-pins:<artifactId>"`. Pins survive page refresh within
+  the same tab session; runtime outputs do not (kernel is ephemeral).
+
+### Download
+
+Three-item split-button in the panel header
+(`artifact-panel.tsx:610-L641`):
+
+- `.ipynb` — round-trip nbformat 4 (`lib/notebook/ipynb.ts`).
+- `.py` — percent-format script (`lib/notebook/percent.ts`).
+- `.html` — self-contained static HTML export
+  (`lib/notebook/html-export.ts`).
+
+### Wiring drift
+
+The registry exports `label = "Python Script"` while the prompt module
+exports `label = "Python Notebook"`. The prompt label is what surfaces
+in canvas headers; the registry label surfaces in panel chrome and
+pills. Same root issue as `application/3d`'s D-68 label drift.
 
 ---
 
@@ -732,15 +688,20 @@ viewers.
 
 ### Capabilities
 
-React 18.3.1 hooks (same set as React prompt). THREE namespace 0.170.0.
-`useFrame` / `useThree` (fiber 8.17.10). 19 drei helpers: useGLTF,
-useAnimations, Clone, Float, Sparkles, Stars, Text, Center, Billboard,
-Grid, Html, Line, Trail, Sphere, RoundedBox, MeshDistortMaterial,
-MeshWobbleMaterial, MeshTransmissionMaterial, GradientTexture.
+React 18.3.1 hooks. THREE namespace 0.170.0. `useFrame` / `useThree`
+(fiber 8.17.10). 19 drei helpers: useGLTF, useAnimations, Clone,
+Float, Sparkles, Stars, Text, Center, Billboard, Grid, Html, Line,
+Trail, Sphere, RoundedBox, MeshDistortMaterial, MeshWobbleMaterial,
+MeshTransmissionMaterial, GradientTexture. **Prompt header now says
+"19 helpers"** (D-78 closed).
 
 **Wrapper provides** (do NOT include in your code): `<Canvas>`,
 `<ambientLight>`, `<directionalLight>`, `<Environment>`,
 `<OrbitControls>`, `<Suspense>`.
+
+`<color attach="background" args={["#hex"]} />` is **explicitly
+preserved** by `sanitizeSceneCode` (D-29 closed end-to-end). Other
+`<color>` variants (fog, environment) are silently stripped (NEW-D-98).
 
 Verified glTF model URLs: KhronosGroup glTF samples (20 models),
 three.js examples via jsDelivr (6 models).
@@ -755,200 +716,122 @@ three.js examples via jsDelivr (6 models).
 
 #### Warnings
 
-Imports from non-whitelisted packages or non-whitelisted symbols from
-react / three / fiber / drei.
-
-#### Prompt-only
-
-Model URLs not from verified CDN lists. Allocating `new THREE.*` inside
-`useFrame` (perf). Building real-world objects from primitives.
-
-### Schema
-
-```jsx
-export default function Scene() {
-  return (
-    <group>
-      ...
-    </group>
-  )
-}
-```
-
-No `<Canvas>` in return. Imports stripped by sanitizer; deps injected
-as function arguments.
+Imports from non-whitelisted packages (`R3F_ALLOWED_DEPS`, 34 entries)
+or non-whitelisted symbols.
 
 ### Renderer
 
-`r3f-renderer.tsx` (633 LoC). Iframe **without** `sandbox` attribute
-(WebGL needs GPU access — comment at L580-L581). postMessage
-source-checked at L544 (`event.source !== iframeRef.current?.contentWindow`).
-`didReadyRef` (`useRef(false)`, L525) replaces prior closure-local
-`let`, reset on content change (L529-L533) so rapid swaps don't
-trigger false-positive 20 s timeouts (L562-L566). Bundle delivered via
-importmap (esm.sh) inside srcdoc; Babel standalone via unpkg. Scene
-code passed as JSON inside
-`<script id="scene-data" type="application/json">` to avoid
-HTML-escaping issues. WebGL errors detected via `isWebGLError()`
-keyword sniff and routed to a `WebGLHelpOverlay` instead of generic
-error UI (L437-L507).
-
-**`<color attach="background">` is now explicitly preserved** by
-`sanitizeSceneCode` (L118-L123 with explanatory comment): "User-
-specified `<color attach="background">` is kept by the renderer." The
-prior silent stripping is gone. **D-29 is closed at the renderer**;
-the prompt still does not document this — silent pass on the LLM side.
+`r3f-renderer.tsx` (~641 LoC). Iframe **without** `sandbox` (WebGL
+needs GPU). postMessage source-checked. `didReadyRef` reset on
+content change. Bundle delivered via importmap (esm.sh) inside
+srcdoc; Babel standalone via unpkg. WebGL errors detected via
+keyword sniff and routed to a `WebGLHelpOverlay`.
 
 **Label drift (D-68).** Registry exports `label = "3D Scene"` and
-`shortLabel = "R3F Scene"` (`registry.ts:177`). The prompt module
-exports `label = "R3F 3D Scene"` (`prompts/artifacts/r3f.ts:4`).
-Three different strings for the same type across three surfaces.
-`CANVAS_TYPE_LABELS` and the panel chrome surface different copy
-depending on which source they read. Cosmetic; no functional break.
+`shortLabel = "R3F Scene"`. The prompt module also exports
+`label = "3D Scene"` (canonicalized in `10ad714`). The remaining
+`shortLabel` divergence is cosmetic.
 
 ---
 
 ## Sandbox + render pipeline depth
 
 The `text/document` script and the server-side chart rendering paths
-share an isolation model worth calling out explicitly:
+share an isolation model worth calling out:
 
-- **Script execution** is in an OS child process via `spawn(process.execPath, ...)`.
-  Caps are heap (`--max-old-space-size=256`), wall-clock SIGKILL,
-  and 100 MiB stdout. **No cgroup/seccomp/namespace** — child
-  inherits full `process.env` including DB credentials. `Function`
-  and `eval` are deliberately unblocked because `docx` transitively
-  uses `function-bind`. The threat model in code: trusted-but-fallible
-  LLM, not malicious adversary.
+- **Script execution** is in an OS child process via
+  `spawn(process.execPath, ...)`. Caps: heap
+  (`--max-old-space-size=256`), wall-clock SIGKILL, 100 MiB stdout.
+  No cgroup/seccomp/namespace; child inherits full `process.env`.
+  `Function`/`eval` deliberately unblocked because `docx` transitively
+  uses `function-bind`. Threat model: trusted-but-fallible LLM, not
+  adversary. `http2` and `node:http2` are now blocked symmetrically by
+  the loader and the wrapper (D-76).
 - **Render pipeline** is sandbox → `soffice --headless --convert-to pdf`
-  (30 s timeout, **cold-start every call**, no daemon mode) →
-  `pdftoppm -png -r 120 -l 50` (30 s, max 50 pages). Concurrency
-  capped at 3 by a process-local counting semaphore (no TTL, no
-  single-flight per `(artifactId, hash)`).
+  (30 s timeout, cold-start every call, D-37 deferred) →
+  `pdftoppm -png -r 120 -l 50` (max 50 pages, **numeric page sort**
+  per D-84). Concurrency capped at 3 by `withRenderSlot` (process-local
+  counting semaphore). **Single-flight per `(artifactId, hash)`**
+  enforced inside `docx-preview-pipeline.ts` (D-89 closed). The
+  download path also uses the same semaphore + a 16-entry FIFO DOCX
+  cache (NEW-D-96).
 - **Cache layout** is S3-only at `artifact-preview/{artifactId}/{hash}/`:
-  `manifest.json` plus `page-N.png`. `hash = sha256[:16 hex]` of
-  the script source. **Cache reads are sequential** — a 50-page
-  document = 51 sequential S3 GETs. The `/render-pages/...` route
-  returns 404 if not cached; it never triggers a re-render. Client
-  must call `/render-status` first.
-- **RAG embedding** for script documents extracts text via `pandoc -f
-  docx -t plain` on the rendered DOCX (not the script source) — adds
-  another sandbox spawn per index/re-index (D-47).
-- **Server-side mermaid SVG path was removed** with `a81c343` (the
-  prior `lib/rendering/server/mermaid-to-svg.ts` is gone). DOCX
-  exports built via the script path emit mermaid through whatever the
-  script writes; no dedicated server-side mermaid renderer is wired in
-  any longer.
-- **`chart-to-svg.ts` is hardcoded light theme** for both DOCX and
-  PPTX exports — charts in dark documents render with light palettes
-  (D-51).
+  `manifest.json` plus `page-N.png`. `hash = sha256[:16 hex]` of the
+  script source. **Cache reads are parallel** via `Promise.all`
+  (D-36 closed). `/render-pages/...` route returns 404 if not cached;
+  it never triggers a re-render (D-35 by-design two-step protocol).
+  **Session-ownership is enforced** before serving cached PNGs
+  (D-72 closed).
+- **RAG embedding** for script documents extracts text via
+  `pandoc -f docx -t plain` on the rendered DOCX, with a 128-entry
+  process-local FIFO cache keyed on SHA-256[:16] of content
+  (D-47 closed).
+- **`chart-to-svg.ts` accepts a theme parameter** (light or dark);
+  slides exporters now pass `inferChartTheme(theme.primaryColor)`
+  so dark decks get the dark chart palette (D-51 closed end-to-end).
 
 ## Spreadsheet engine depth
 
 `lib/spreadsheet/` is an 8-file pure-TS library:
 
-- **`evaluateWorkbook` is pure** — no input mutation. Safe to call
-  concurrently for the same spec.
-- **Topological sort** is Kahn's O(V+E) (batch-7 rewrite of the
-  earlier O(n²) scan). Cells in cycles get `{ value: null, error:
-  "CIRCULAR" }`.
-- **Function set** is whatever `fast-formula-parser` ships (~150+
-  native Excel functions). No application-level whitelist.
-- **No array spillover** — `SORT`, `FILTER`, `UNIQUE` returning
-  multi-cell ranges are not implemented; results assign only to the
-  formula's own cell.
-- **Range-type named ranges silently `null`** at evaluation. No user
-  warning.
-- **Error propagation preserves upstream type** (DIV0 source → DIV0
-  in dependents, not REF).
-- **CSV tokenizer is duplicated across three files** (not in
-  `parse.ts` despite the name). Same drift for the JSON-array-of-objects
-  parser.
-- **Two parallel number formatters** (`format.ts` numfmt wrapper,
-  `styles.ts` handwritten) with different capabilities at different
-  call sites.
-- **XLSX export emits no chart objects** — ExcelJS lacks a stable
-  chart API. Charts exist only in the browser preview.
+- **`evaluateWorkbook` is pure** — safe concurrent calls.
+- **Topological sort** is Kahn's O(V+E). Cells in cycles get
+  `{ value: null, error: "CIRCULAR" }`.
+- **Function set** is whatever `fast-formula-parser` ships
+  (~150+ native Excel functions). No application-level whitelist.
+- **No array spillover** — `SORT`, `FILTER`, `UNIQUE` results assign
+  only to the formula's own cell.
+- **Range-type named ranges silently `null`** (D-59 by-design).
+- **Error propagation preserves upstream type** (DIV0 → DIV0 in
+  dependents, not REF).
+- **CSV tokenizer is shared** (D-60 closed).
+- **`numfmt` is the single number formatter** post `formatCellValue`
+  removal.
+- **XLSX export emits no chart objects** (D-64 by-design).
 - **`SpecWorkbookView` is a two-pass render**: synchronous `parseSpec`
-  in `useMemo`, async `evaluateWorkbook` in `useEffect`. No loading
-  spinner during evaluation.
+  in `useMemo`, async `evaluateWorkbook` in `useEffect`, "Calculating
+  formulas…" footer fires on every re-eval (NEW-D-92 closed).
+- **`$`-absolute refs are stripped** before range matching
+  (D-79 closed).
 
-## Cross-cutting capability gaps
+## Notebook subsystem depth
 
-Documented in [`artifacts-deepscan.md`](./artifacts-deepscan.md) §12
-as numbered findings (D-N). User-facing gaps still open on HEAD
-(`68b9d66`):
+The Python notebook is a separate library/runtime layered on top of
+the artifact system:
 
-- ~~**D-3**: PDF download~~ — closed in `b886805`; route accepts `?format=pdf` and pipes through `getOrComputeDocx` + `docxToPdf` post-`9aeb8b7`.
-- **D-11**: `DocumentScriptRenderer` has no retry button on render
-  error.
-- **D-13**: Mermaid prompt lists 19 types; validator accepts 25 via
-  the shared `lib/rendering/mermaid-types.ts` (incl. `graph`,
-  `stateDiagram`, `packet-beta`, `C4Container`, `C4Component`,
-  `C4Deployment`). The validator's user-facing error message at
-  `_validate-artifact.ts:1384` still hardcodes the stale 19-type
-  list (D-77).
-- **D-14**: Slides MUST-rules (first=title, last=closing, deck size
-  7-12, dark primaryColor) only warn or are absent in validator.
-- **D-15**: Markdown 128 KiB new-creates cap not surfaced in prompt;
-  LLM cannot self-check.
-- **D-16**: Python read-mode `open()` allowed by validator, forbidden
-  by prompt.
-- **D-17**: SVG decimal-place mismatch (prompt 1 dp, validator 3+ dp).
-- **D-18**: Code `language` parameter unvalidated.
-- **D-19**: Pie chart `fillOpacity={1 - i * 0.1}` floors at 0 — slices
-  invisible past 11.
-- **D-20**: Sheet Data/Charts `view` state shared across sheet tabs —
-  switching from a charts-having sheet to one without leaves the user
-  on the empty-state screen with no toggle to escape.
-- **D-25**: Streamdown's internal mermaid pipeline is a separate config
-  source-of-truth from `mermaid-config.ts`.
-- **D-26**: HTML `allow-modals` widens sandbox vs React's
-  `allow-scripts` only.
-- **D-27**: Python renderer hardcodes triple-backtick fence (no
-  adaptive length like `application/code`).
-- **D-28** (relocated): the remaining direct `lucide-react` import
-  lives in `artifact-panel.tsx:18` (`Maximize`, `Minimize`).
-  `document-script-renderer.tsx` no longer holds this gap.
-- **D-29** (residual prompt-side): R3F renderer now explicitly
-  preserves `<color attach="background">`, but the prompt does not
-  document that `<color>` is permitted.
-- **D-46** (changed shape): `validateDocument` no longer accepts a
-  `ctx` parameter at all — the only `VALIDATORS` entry that does not
-  match the `(content, ctx?)` shape; cannot be given `isNew`-only
-  rules without a signature change.
-- **D-68**: `application/3d` has three different label strings across
-  registry / shortLabel / prompt.
-- **D-69**: `S3Paths.artifact` lacks an `"orphan"` fallback for
-  null/undefined `sessionId`.
-- **D-70**: Concurrent-write error messages diverge between the LLM
-  tool path and the HTTP path.
-- **D-71**: `edit-document/route.ts` skips Zod schema validation on
-  params.
-- **D-72**: `render-pages` route bypasses session-ownership check —
-  IDOR by design (`contentHash` is the unguessable token).
-- **D-73**: `addOrUpdateArtifact` always calls `setActiveArtifactId`,
-  including for streaming placeholders — minor flicker.
-- **D-74**: `getDashboardChatSessionArtifact` coerces null
-  `artifactType` to `""`.
-- **D-75**: `repository.ts deleteArtifactsBySessionId` is dead code.
-- **D-76**: Sandbox `http2` block asymmetry — loader blocks both
-  `http2` and `node:http2`; wrapper blocks neither.
-- **D-77**: Mermaid validator error message hardcodes 19 types
-  (shared array has 25).
-- **D-78**: `r3f.ts:44` claims "20 helpers"; table has 19 rows.
-- **D-79**: Sheet chart `RANGE_RE` does not handle `$`-absolute
-  refs — silent empty chart.
-- **D-80**: `s3.uploadStream` always presigns (inconsistent with
-  `uploadFile` opt-in).
-- **D-81**: Two divergent SurrealDB chunk-write paths
-  (`storeChunks` vs legacy `storeDocument`).
-- **D-82**: Embedding `BATCH_SIZE` / `EMBED_CONCURRENCY` are
-  compile-time constants — no env override.
+- **`lib/notebook/`** is the engine: types (Zod), serializer with
+  streaming-tolerant parser, percent/ipynb/html exporters, chat
+  attachment helper.
+- **`lib/workers/python-worker.ts`** is the kernel: Pyodide v0.28.0,
+  pre-loaded `numpy`/`micropip`/`matplotlib`/`scikit-learn`,
+  `loadPackagesFromImports` autoload, `plt.show` capture,
+  `__format_last__` for last-expression display, per-cell timeout.
+- **`renderers/notebook/`** is the React UI: toolbar, cell shell,
+  CodeMirror editor, markdown editor, output renderer, pin overlay,
+  `useKernel` (worker lifecycle + run queue), `usePinToChat`
+  (sessionStorage-backed).
+- **Kernel is ephemeral** — runtime outputs are not persisted to the
+  artifact's `content` in DB. Cells must be re-run on page refresh.
+- **Pin state survives** within a tab session via
+  `sessionStorage["notebook-pins:<artifactId>"]`.
 
-**Findings closed since the prior `8b6e69b`/`a81c343` cuts:** D-1,
-D-6, D-7 (mostly), D-10, D-12, D-13 (at type-system level), D-21,
-D-22, D-23, D-29 (at renderer level), D-31, D-44, D-45, D-49, D-50,
-D-60, D-65, D-68 (legacy mermaid-svg), D-69 (legacy mermaid-svg),
-D-70 (legacy mermaid AST footnote bug), D-67 (mermaid-types
-relocation). See deepscan §12 for resolution notes.
+## Open gaps after the cleanup pass
+
+The latest cleanup branch closed every actionable D-101 through
+D-111 finding plus all the residuals from prior cuts. What remains:
+
+- **D-105 (residual UX).** Notebook pin state is still sessionStorage-
+  scoped; pins survive within a tab session but vanish on tab close
+  alongside the ephemeral kernel outputs they reference. Stale pins
+  are now swept whenever the cell list changes, but the UI does not
+  surface the session-scope to the user.
+- **D-68 (cosmetic, by-design).** `application/3d` shortLabel
+  `"R3F Scene"` differs from label `"3D Scene"` to fit the panel
+  pill's glyph budget. Documenting rather than reconciling.
+
+**Deferred (open, separate plan):**
+
+- **D-37.** `soffice` cold-start every render call.
+- **D-64.** XLSX export emits no chart objects (ExcelJS upstream).
+- **D-81.** `vector-store.ts` `storeDocument` vs `storeChunks`
+  divergence between knowledge upload and the artifact indexer.

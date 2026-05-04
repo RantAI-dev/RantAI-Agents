@@ -23,13 +23,21 @@ export const OutputSchema = z.discriminatedUnion("type", [
 // runtime state that the renderer fills in. Defaulting these here means the
 // parser accepts the same minimal shape the validator does, instead of
 // rejecting it and rendering an empty notebook.
-export const CellSchema = z.object({
-  id: z.string().default(() => nanoid(8)),
-  type: z.enum(["code", "markdown"]),
-  source: z.string(),
-  outputs: z.array(OutputSchema).default([]),
-  executionCount: z.number().nullable().default(null),
-})
+//
+// Markdown cells never produce outputs — the refinement below normalises
+// any incoming runtime fields on markdown cells back to defaults so the
+// schema and prompt agree.
+export const CellSchema = z
+  .object({
+    id: z.string().default(() => nanoid(8)),
+    type: z.enum(["code", "markdown"]),
+    source: z.string(),
+    outputs: z.array(OutputSchema).default([]),
+    executionCount: z.number().nullable().default(null),
+  })
+  .transform((cell) =>
+    cell.type === "markdown" ? { ...cell, outputs: [], executionCount: null } : cell,
+  )
 
 const DEFAULT_METADATA = {
   kernelspec: { name: "python3" as const, display_name: "Python 3 (Pyodide)" },

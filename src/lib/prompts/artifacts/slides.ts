@@ -360,9 +360,9 @@ When using \`diagram\` or \`diagram-content\`:
 
 ## Deck Structure Rules
 
-- **Total slide count: 7–12.** Fewer feels thin; more loses the audience.
-- **First slide MUST be \`layout: "title"\`.** Validator convention.
-- **Last slide MUST be \`layout: "closing"\`.** Validator convention.
+- **Total slide count: 7–12.** Fewer feels thin; more loses the audience. **Hard error on new decks**, warning on edits to legacy decks.
+- **First slide MUST be \`layout: "title"\`.** **Hard error on new decks**, warning on edits.
+- **Last slide MUST be \`layout: "closing"\`.** **Hard error on new decks**, warning on edits.
 - **Use at least 3 different layouts** across the deck. A deck of 10 \`content\` slides is boring and the audit penalizes it.
 - **Narrative arc:** opening → context/problem → core content → evidence (data or quote) → closing. Don't dump bullets in arbitrary order.
 - For decks ≥ 9 slides, insert 1–2 \`section\` slides as act breaks.

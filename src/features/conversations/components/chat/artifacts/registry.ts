@@ -162,7 +162,7 @@ export const ARTIFACT_REGISTRY = [
   },
   {
     type: "application/python",
-    label: "Python Script",
+    label: "Python Notebook",
     shortLabel: "Python",
     icon: Terminal,
     colorClasses: "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",

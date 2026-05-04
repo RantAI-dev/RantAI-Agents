@@ -185,13 +185,13 @@ export async function validateArtifactContent(
 
 async function validateDocument(
   content: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _ctx?: ValidationContext,
+  ctx?: ValidationContext,
 ): Promise<ArtifactValidationResult> {
-  // _ctx accepted for shape consistency with the rest of VALIDATORS;
-  // delegated validator currently has no isNew-only rules.
+  // The script validator now honours isNew so create_artifact can enforce
+  // stricter rules (minimum body length today, room for more later) while
+  // updates remain forgiving for legacy rows.
   const { validateScriptArtifact } = await import("@/lib/document-script/validator")
-  const r = await validateScriptArtifact(content)
+  const r = await validateScriptArtifact(content, { isNew: ctx?.isNew })
   return { ok: r.ok, errors: r.errors, warnings: [] }
 }
 
@@ -981,19 +981,22 @@ function validateSheet(content: string): ArtifactValidationResult {
         "Some JSON values are nested objects or arrays — these stringify as `[object Object]` in the table. Flatten them before emitting."
       )
     }
-    // All-identical column check
+    // All-identical column check — surface every offending column in one
+    // warning so multi-column constant sheets get a single actionable message.
+    const constantColumns: string[] = []
     for (const k of headerKeys) {
       const vals = new Set<string>()
       for (const row of parsed as Record<string, unknown>[]) {
         vals.add(String(row[k] ?? ""))
         if (vals.size > 1) break
       }
-      if (vals.size === 1 && parsed.length > 1) {
-        warnings.push(
-          `Column "${k}" has the same value in every row — adds no sort/filter value, consider removing it.`
-        )
-        break
-      }
+      if (vals.size === 1 && parsed.length > 1) constantColumns.push(k)
+    }
+    if (constantColumns.length > 0) {
+      const list = constantColumns.map((k) => `"${k}"`).join(", ")
+      warnings.push(
+        `${constantColumns.length === 1 ? "Column" : "Columns"} ${list} ${constantColumns.length === 1 ? "has" : "have"} the same value in every row — adds no sort/filter value, consider removing.`
+      )
     }
 
     return { ok: errors.length === 0, errors, warnings }
@@ -1397,17 +1400,6 @@ function validateCode(content: string, ctx?: ValidationContext): ArtifactValidat
     )
   }
 
-  // Use byte length (not char length) so multibyte UTF-8 content is sized
-  // consistently with the 512KB cap enforced by create-artifact.ts. The old
-  // char-based check could let a CJK / emoji-heavy snippet pass this warning
-  // and then fail the byte cap upstream.
-  const bytes = Buffer.byteLength(content, "utf-8")
-  if (bytes > 512 * 1024) {
-    warnings.push(
-      `Code content is ${Math.round(bytes / 1024)}KB — consider splitting into multiple files or trimming.`
-    )
-  }
-
   return { ok: errors.length === 0, errors, warnings }
 }
 
@@ -1504,11 +1496,18 @@ function validateMermaid(content: string): ArtifactValidationResult {
     firstLine != null &&
     (firstLine.startsWith("flowchart") || firstLine.startsWith("graph"))
   if (isFlowish) {
-    const nodeDefRegex = /^\s*[A-Za-z_][A-Za-z0-9_-]*\s*[[({]/gm
-    const nodeMatches = content.match(nodeDefRegex)
-    if (nodeMatches && nodeMatches.length > 15) {
+    // Count node definitions across the whole flowchart but only once per
+    // unique identifier. Nested `subgraph` blocks repeat the same node ids
+    // when they're referenced inside the subgraph; counting raw matches
+    // double-counts those nodes against the 15-node readability budget.
+    const nodeDefRegex = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*[[({]/gm
+    const uniqueNodes = new Set<string>()
+    for (const match of content.matchAll(nodeDefRegex)) {
+      uniqueNodes.add(match[1])
+    }
+    if (uniqueNodes.size > 15) {
       warnings.push(
-        `Detected ${nodeMatches.length} node definitions — flowcharts with more than 15 nodes become unreadable. Consider splitting into multiple diagrams.`
+        `Detected ${uniqueNodes.size} node definitions — flowcharts with more than 15 nodes become unreadable. Consider splitting into multiple diagrams.`
       )
     }
   }
@@ -1921,6 +1920,15 @@ function validateReact(content: string): ArtifactValidationResult {
     } else {
       warnings.push(message)
     }
+    // When the aesthetic direction is unknown the @fonts line on line 2
+    // is still positionally stripped, so the LLM's font choices vanish
+    // silently. Surface the same orphan warning we emit when @aesthetic
+    // is absent entirely.
+    if (directives.rawFontsLine) {
+      warnings.push(
+        "@fonts directive on line 2 will be stripped because @aesthetic on line 1 is invalid. Fix the @aesthetic direction first to keep your fonts.",
+      )
+    }
   }
   if (directives.fonts) {
     if (directives.fonts.length > MAX_FONT_FAMILIES) {
@@ -2153,8 +2161,12 @@ function validatePython(content: string): ArtifactValidationResult {
     const hasPrint = /(^|[^.\w])print\s*\(/m.test(codeNoComments)
     const hasShow = /\bplt\.show\s*\(/m.test(codeNoComments)
     const lines = codeNoComments.split("\n").map((l) => l.trimEnd()).filter((l) => l.trim() !== "")
-    const lastLine = lines[lines.length - 1] ?? ""
-    const hasFinalExpression = /^[a-zA-Z_][\w.()[\]"'\s,+\-*/<>=]*$/.test(lastLine) && !lastLine.includes("=")
+    const lastLine = lines[lines.length - 1]?.trim() ?? ""
+    const isStatement =
+      lastLine === "" ||
+      lastLine.includes("=") && !/[=!<>]=/.test(lastLine) ||
+      /^(?:def|class|return|raise|pass|continue|break|import|from|with|while|for|if|elif|else|try|except|finally|async|await|del|global|nonlocal|assert|yield|@)\b/.test(lastLine)
+    const hasFinalExpression = lastLine !== "" && !isStatement
     if (hasPrint || hasShow || hasFinalExpression) anyVisibleOutput = true
 
     const sleepMatch = codeNoComments.match(/\btime\.sleep\s*\(\s*([\d.]+)\s*\)/)
