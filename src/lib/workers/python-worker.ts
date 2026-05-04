@@ -174,8 +174,6 @@ self.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     case "run":
       await runCell(req)
       break
-    case "interrupt":
-      break
     case "reset":
       pyodide = null
       await initPyodide()

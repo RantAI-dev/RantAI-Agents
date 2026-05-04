@@ -1,7 +1,6 @@
 export type WorkerRequest =
   | { type: "init" }
-  | { type: "run"; cellId: string; source: string; executionCount: number; timeoutMs?: number }
-  | { type: "interrupt" }
+  | { type: "run"; cellId: string; source: string; timeoutMs?: number }
   | { type: "reset" }
 
 export type WorkerResponse =
