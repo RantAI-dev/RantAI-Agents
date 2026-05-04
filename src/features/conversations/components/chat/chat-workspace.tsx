@@ -1796,19 +1796,26 @@ export function ChatWorkspace({
   // Track if we should auto-scroll (only when user sends a message or during streaming)
   const shouldAutoScroll = useRef(false)
 
-  // Auto-scroll only when user sends a message (not on every message change)
+  // Auto-scroll while a streaming exchange is in progress, but only when
+  // the user is already pinned to the bottom. If they've scrolled up to
+  // re-read context, the previous unconditional scrollToIndex would yank
+  // them back on every chunk — the so-called "scroll jail". Honouring
+  // atBottom here preserves their reading position; the floating
+  // scroll-to-bottom button gives them a one-click way to catch up when
+  // they want to.
   useEffect(() => {
-    if (shouldAutoScroll.current && virtuosoRef.current) {
+    if (!shouldAutoScroll.current) return
+    if (!virtuosoRef.current) return
+    if (atBottom) {
       virtuosoRef.current.scrollToIndex({
         index: "LAST",
         behavior: "smooth",
       })
-      // Reset after scrolling, but keep scrolling during streaming
-      if (!isStreaming) {
-        shouldAutoScroll.current = false
-      }
     }
-  }, [chat.messages, isStreaming])
+    if (!isStreaming) {
+      shouldAutoScroll.current = false
+    }
+  }, [chat.messages, isStreaming, atBottom])
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
