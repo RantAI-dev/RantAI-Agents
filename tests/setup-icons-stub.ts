@@ -29,6 +29,8 @@ const ICON_NAMES = [
   "FilePenLine", "AngleDoubleRight",
   // sheet-spec-view.tsx
   "FunctionSquare", "Download",
+  // latex-toolbar.tsx
+  "Copy",
 ] as const
 
 const stubModule: Record<string, unknown> = {}
