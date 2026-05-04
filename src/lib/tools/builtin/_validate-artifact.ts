@@ -1496,11 +1496,18 @@ function validateMermaid(content: string): ArtifactValidationResult {
     firstLine != null &&
     (firstLine.startsWith("flowchart") || firstLine.startsWith("graph"))
   if (isFlowish) {
-    const nodeDefRegex = /^\s*[A-Za-z_][A-Za-z0-9_-]*\s*[[({]/gm
-    const nodeMatches = content.match(nodeDefRegex)
-    if (nodeMatches && nodeMatches.length > 15) {
+    // Count node definitions across the whole flowchart but only once per
+    // unique identifier. Nested `subgraph` blocks repeat the same node ids
+    // when they're referenced inside the subgraph; counting raw matches
+    // double-counts those nodes against the 15-node readability budget.
+    const nodeDefRegex = /^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*[[({]/gm
+    const uniqueNodes = new Set<string>()
+    for (const match of content.matchAll(nodeDefRegex)) {
+      uniqueNodes.add(match[1])
+    }
+    if (uniqueNodes.size > 15) {
       warnings.push(
-        `Detected ${nodeMatches.length} node definitions — flowcharts with more than 15 nodes become unreadable. Consider splitting into multiple diagrams.`
+        `Detected ${uniqueNodes.size} node definitions — flowcharts with more than 15 nodes become unreadable. Consider splitting into multiple diagrams.`
       )
     }
   }
