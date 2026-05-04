@@ -1,5 +1,6 @@
 "use client"
 
+import { useRef } from "react"
 import { Copy, Check, RotateCcw } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
@@ -25,18 +26,36 @@ export function LatexToolbar({
   error,
   onRetry,
 }: LatexToolbarProps) {
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
+
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
+    e.preventDefault()
+    const dir = e.key === "ArrowRight" ? 1 : -1
+    const next = (idx + dir + TABS.length) % TABS.length
+    tabRefs.current[next]?.focus()
+    onTabChange(TABS[next].value)
+  }
+
   return (
     <div className="flex items-center justify-between gap-2 px-4 py-2 border-b border-border bg-background">
-      {/* Tab group — hand-rolled so fireEvent.click works in tests (Radix Tabs fires on mousedown). */}
+      {/* Tab group is hand-rolled (instead of shadcn Tabs / Radix) so fireEvent.click
+          works in jsdom tests; Radix Tabs fires on mousedown. ArrowLeft/Right keyboard
+          navigation is implemented manually below to keep parity with the Radix a11y
+          contract. */}
       <div role="tablist" className="inline-flex h-9 items-center justify-center rounded-lg bg-muted p-[3px]">
-        {TABS.map(({ value, label }) => (
+        {TABS.map(({ value, label }, idx) => (
           <button
             key={value}
+            ref={(el) => {
+              tabRefs.current[idx] = el
+            }}
             type="button"
             role="tab"
             aria-selected={activeTab === value}
             data-state={activeTab === value ? "active" : "inactive"}
             onClick={() => onTabChange(value)}
+            onKeyDown={(e) => onTabKeyDown(e, idx)}
             className={cn(
               "inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center rounded-md border border-transparent px-3 py-1 text-sm font-medium whitespace-nowrap transition-[color,box-shadow]",
               activeTab === value

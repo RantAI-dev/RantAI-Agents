@@ -45,6 +45,36 @@ describe("LatexToolbar", () => {
     expect(onCopy).toHaveBeenCalled()
   })
 
+  it("ArrowRight on the active tab moves to the next tab and triggers onTabChange", () => {
+    const onTabChange = vi.fn()
+    const { getByRole } = render(
+      <LatexToolbar
+        activeTab="preview"
+        onTabChange={onTabChange}
+        onCopy={() => {}}
+        copied={false}
+      />,
+    )
+    const previewTab = getByRole("tab", { name: /preview/i })
+    fireEvent.keyDown(previewTab, { key: "ArrowRight" })
+    expect(onTabChange).toHaveBeenCalledWith("source")
+  })
+
+  it("ArrowLeft wraps from preview to source", () => {
+    const onTabChange = vi.fn()
+    const { getByRole } = render(
+      <LatexToolbar
+        activeTab="preview"
+        onTabChange={onTabChange}
+        onCopy={() => {}}
+        copied={false}
+      />,
+    )
+    const previewTab = getByRole("tab", { name: /preview/i })
+    fireEvent.keyDown(previewTab, { key: "ArrowLeft" })
+    expect(onTabChange).toHaveBeenCalledWith("source")
+  })
+
   it("renders Retry button only in error state", () => {
     const onRetry = vi.fn()
     const { rerender, queryByRole, getByRole } = render(
