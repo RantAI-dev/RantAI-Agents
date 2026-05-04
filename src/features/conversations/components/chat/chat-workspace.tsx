@@ -2783,20 +2783,28 @@ export function ChatWorkspace({
     [chat.messages, sendMessage]
   )
 
-  // Delete handler
+  // Delete handler — truncates both the live useChat state and the
+  // persisted session.messages from the deleted message onward. Each
+  // layer is sliced by its own findIndex on `messageId` because
+  // session.messages can drift out of sync with chat.messages (debounced
+  // syncMessages in flight, partial lazy load, etc.). Sharing one index
+  // across both layers used to delete the wrong rows whenever they
+  // diverged.
   const handleDeleteMessage = useCallback(
     (messageId: string) => {
-      const messageIndex = chat.messages.findIndex((m) => m.id === messageId)
-      if (messageIndex === -1) return
+      const liveIndex = chat.messages.findIndex((m) => m.id === messageId)
+      if (liveIndex === -1) return
 
-      // Remove message and all after it
-      const truncatedMessages = chat.messages.slice(0, messageIndex)
-      chat.setMessages(truncatedMessages as any)
+      const truncatedLive = chat.messages.slice(0, liveIndex)
+      chat.setMessages(truncatedLive as any)
 
       if (session && onUpdateSession) {
-        onUpdateSession(session.id, {
-          messages: session.messages.slice(0, messageIndex),
-        })
+        const sessionIndex = session.messages.findIndex((m) => m.id === messageId)
+        if (sessionIndex !== -1) {
+          onUpdateSession(session.id, {
+            messages: session.messages.slice(0, sessionIndex),
+          })
+        }
       }
     },
     [chat, session, onUpdateSession]
