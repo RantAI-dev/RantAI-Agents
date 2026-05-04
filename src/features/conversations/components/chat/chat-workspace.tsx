@@ -29,7 +29,6 @@ import { SendHorizontal } from "lucide-react"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { cn } from "@/lib/utils"
-import { EmptyState } from "./empty-state"
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
 import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
@@ -3197,7 +3196,20 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
   }
 
   if (!session) {
-    return <EmptyState />
+    // Render a clean loading spinner instead of the EmptyState welcome
+    // panel. The parent (ChatSessionPageClient) only mounts this
+    // component when activeSession is expected, so a missing session
+    // here is always a transient "still resolving" state — flashing
+    // "Welcome to Chat / Start New Chat" reads as a dummy splash to
+    // the user. The genuine no-session entrypoint is /dashboard/chat,
+    // which renders ChatHome.
+    return (
+      <div className="flex flex-col h-full bg-background">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      </div>
+    )
   }
 
   const allMessages = [...chat.messages]
