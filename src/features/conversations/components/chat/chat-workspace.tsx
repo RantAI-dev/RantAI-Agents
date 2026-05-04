@@ -1774,7 +1774,12 @@ export function ChatWorkspace({
         loadFromPersisted(dedupedFallbackArtifacts)
       }
     }
-  }, [session?.messages?.length, session?.artifacts, artifacts.size, loadFromPersisted])
+    // Note: artifacts.size is intentionally excluded — it's read inside
+    // the effect as a one-time guard, not as a reactive trigger. Listing
+    // it forces this effect to re-run on every streamed artifact, which
+    // is wasteful and was a footgun for stale-closure bugs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.messages?.length, session?.artifacts, loadFromPersisted])
 
   // Seed assistant tools, skills, and knowledge groups when hydrated by the server.
   useEffect(() => {
@@ -2598,7 +2603,7 @@ export function ChatWorkspace({
         abortControllerRef.current = null
       }
     },
-    [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, effectiveToolNames, effectiveSkillsEnabled, effectiveSkillIds, canvasMode, activeArtifactId, apiSessionId]
+    [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveCodeInterpreter, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, effectiveToolNames, effectiveSkillsEnabled, effectiveSkillIds, canvasMode, activeArtifactId, apiSessionId]
   )
 
   const queueInitialMessageSend = useCallback(async () => {
