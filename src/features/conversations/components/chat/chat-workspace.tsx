@@ -357,7 +357,6 @@ function MessagesArea({
   viewingVersions,
   copiedId,
   error,
-  showScrollButton,
   atBottom,
   handoffState,
   handoffTriggeredMsgId,
@@ -394,7 +393,6 @@ function MessagesArea({
   viewingVersions: Record<string, number>
   copiedId: string | null
   error: { message: string; retry: () => void } | null
-  showScrollButton: boolean
   atBottom: boolean
   handoffState: HandoffState
   handoffTriggeredMsgId: string | null
@@ -926,8 +924,10 @@ function MessagesArea({
         )}
       </AnimatePresence>
 
-      {/* Scroll to bottom button */}
-      {showScrollButton && !atBottom && (
+      {/* Scroll to bottom button — appears whenever the user has scrolled
+          away from the tail. Drives directly off Virtuoso's atBottom flag
+          so the button can never get stuck hidden by a stale guard. */}
+      {!atBottom && (
         <Button
           variant="secondary"
           size="icon"
@@ -969,7 +969,6 @@ export function ChatWorkspace({
   const [input, setInput] = useState("")
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [atBottom, setAtBottom] = useState(true)
-  const [showScrollButton, setShowScrollButton] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [messageSources, setMessageSources] = useState<
@@ -3303,7 +3302,6 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     viewingVersions={viewingVersions}
                     copiedId={copiedId}
                     error={error}
-                    showScrollButton={showScrollButton}
                     atBottom={atBottom}
                     handoffState={handoffState}
                     handoffTriggeredMsgId={handoffTriggeredMsgId}
@@ -3523,7 +3521,6 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               viewingVersions={viewingVersions}
               copiedId={copiedId}
               error={error}
-              showScrollButton={showScrollButton}
               atBottom={atBottom}
               handoffState={handoffState}
               handoffTriggeredMsgId={handoffTriggeredMsgId}
