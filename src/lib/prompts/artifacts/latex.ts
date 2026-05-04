@@ -69,13 +69,66 @@ Inside math mode, KaTeX additionally supports:
 - **Calligraphic / fraktur:** \`\\mathcal{L} \\mathscr{F} \\mathfrak{g}\`
 - **Roots / fractions:** \`\\sqrt{x} \\sqrt[n]{x} \\frac{a}{b} \\dfrac{a}{b} \\binom{n}{k}\`
 
+## Theorem Environments
+
+Use these for formal mathematical statements. Each renders as a colored
+vertical-bar accent block in the preview:
+
+| Environment              | Counter pool   | Color         |
+|--------------------------|----------------|---------------|
+| \`\\begin{theorem}\`      | theorem-family | blue          |
+| \`\\begin{lemma}\`        | theorem-family | indigo        |
+| \`\\begin{corollary}\`    | theorem-family | teal          |
+| \`\\begin{proposition}\`  | theorem-family | sky           |
+| \`\\begin{definition}\`   | own            | purple        |
+| \`\\begin{example}\`      | own            | amber         |
+| \`\\begin{remark}\`       | (unnumbered)   | gray (italic) |
+| \`\\begin{proof}\`        | (unnumbered)   | gray; ∎ auto  |
+
+Optional bracketed name:
+\`\`\`
+\\begin{theorem}[Mean Value Theorem]
+Let f be continuous on [a,b]...
+\\end{theorem}
+\`\`\`
+
+Theorem-family envs share one counter pool (amsthm convention): theorem,
+lemma, corollary, proposition all increment together. Definition and example
+each have their own pool. Remark and proof are unnumbered.
+
+Numbering is flat (Theorem 1, Theorem 2). Section-prefixed numbering
+(Theorem 1.2) is not supported.
+
+## Cross-references
+
+Mark any numbered env with \`\\label{kind:key}\` (recommended prefixes:
+thm:, def:, ex:, eq:). Refer to it with:
+- \`\\eqref{eq:key}\` for equations — renders as "(N)" clickable link
+- \`\\ref{thm:key}\` for theorems — renders as bare "N" clickable link
+
+Example:
+\`\`\`
+\\begin{theorem}[Mean Value Theorem]
+\\label{thm:mvt}
+Let f be continuous on [a,b]. Then there exists c such that
+\\begin{equation}
+\\label{eq:mvt}
+f(c) = \\frac{1}{b-a} \\int_a^b f(x)\\,dx.
+\\end{equation}
+\\end{theorem}
+
+By \\ref{thm:mvt}, applying \\eqref{eq:mvt}...
+\`\`\`
+
+Unresolved references render as red [?]. The validator warns at create-time
+when a \`\\ref\`/\`\\eqref\` points at a missing \`\\label\`.
+
 ## Anti-Patterns (Do NOT do these)
 - ❌ \`\\documentclass{...}\` — silently stripped by the renderer; pure wasted tokens.
 - ❌ \`\\usepackage{...}\` — same; KaTeX has no package system.
 - ❌ \`\\begin{document}\` / \`\\end{document}\` — same.
 - ❌ \`\\maketitle\` — only works if \`\\title{}\` was given; better to write \`\\section{}\` directly.
 - ❌ \`\\input{...}\` / \`\\include{...}\` — no file system.
-- ❌ \`\\label{...}\` / \`\\ref{...}\` / \`\\eqref{...}\` — cross-references are not resolved by this renderer.
 - ❌ \`\\bibliography{...}\` / \`\\cite{...}\` — no bibliography pipeline.
 - ❌ \`\\includegraphics{...}\` — no image inclusion.
 - ❌ \`\\begin{tikzpicture}\`, \`\\begin{figure}\`, \`\\begin{table}\`, \`\\begin{tabular}\` — not supported. Use \`pmatrix\`/\`array\` for tabular math; switch to \`text/markdown\` for non-math tables.
@@ -206,6 +259,28 @@ If $a_n \\to L$ and $b_n \\to M$, then:
 \\end{itemize}
 
 \\paragraph{Next time.} We will use this definition to prove the squeeze theorem and to characterize continuous functions in terms of sequential limits.
+`,
+    },
+    {
+      label: "Theorem with proof and cross-references",
+      code: `\\section{Mean Value Theorem}
+
+\\begin{theorem}[Mean Value Theorem]
+\\label{thm:mvt}
+Let $f$ be continuous on $[a,b]$ and differentiable on $(a,b)$. Then there exists $c \\in (a,b)$ such that
+\\begin{equation}
+\\label{eq:mvt}
+f'(c) = \\frac{f(b) - f(a)}{b - a}.
+\\end{equation}
+\\end{theorem}
+
+\\begin{proof}
+Define $g(x) = f(x) - L(x)$ where $L$ is the secant line through $(a, f(a))$ and $(b, f(b))$. Then $g(a) = g(b) = 0$, and by Rolle's Theorem there exists $c \\in (a,b)$ with $g'(c) = 0$. Substituting back yields \\eqref{eq:mvt}.
+\\end{proof}
+
+\\begin{remark}
+The hypothesis of differentiability on the open interval $(a,b)$ — not the closed $[a,b]$ — is essential. By \\ref{thm:mvt}, we can derive Taylor's theorem and the fundamental theorem of calculus.
+\\end{remark}
 `,
     },
   ] as { label: string; code: string }[],
