@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { parseNotebookContentStreaming } from "@/lib/notebook/serialize"
 import { makeCodeCell, makeMarkdownCell, type Cell, type NotebookContent } from "@/lib/notebook/types"
 import { useKernel, type CellRuntimeState } from "./use-kernel"
@@ -24,7 +24,15 @@ export function NotebookRenderer({ artifactId, content, onFixWithAI }: Props) {
   }, [])
 
   const { kernelStatus, runningCellId, runCell, runAll, interrupt, restart } = useKernel(onCellUpdate)
-  const { togglePin, isPinned } = usePinToChat(artifactId)
+  const { togglePin, isPinned, sweepStale } = usePinToChat(artifactId)
+
+  // Pins live in sessionStorage but cell ids are regenerated when the
+  // notebook is re-parsed (e.g. after a kernel restart or LLM rewrite).
+  // Drop pins whose cellId no longer exists so the pinned-outputs bar
+  // doesn't carry references to ghosts.
+  useEffect(() => {
+    sweepStale(new Set(nb.cells.map((c) => c.id)))
+  }, [nb.cells, sweepStale])
 
   const updateCell = useCallback((id: string, patch: Partial<Cell>) => {
     setNb((prev) => ({ ...prev, cells: prev.cells.map((c) => (c.id === id ? { ...c, ...patch } : c)) }))
