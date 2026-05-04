@@ -117,7 +117,6 @@ interface ChatSessionsContextType {
   activeSession: ChatSession | undefined
   setActiveSessionId: (id: string | null) => void
   hydrateSessions: (sessions: SerializedChatSession[]) => void
-  createSession: (assistantId: string) => ChatSession
   createPersistedSession: (assistantId: string) => Promise<ChatSession>
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => void
   deleteSession: (sessionId: string) => void
@@ -299,46 +298,6 @@ export function ChatSessionsProvider({
       return mergeHydratedSessions(prev, nextSessions)
     })
     setIsLoaded(true)
-  }, [])
-
-  // Create a new session — returns immediately with a temp session.
-  // DB persistence happens in the background; `dbId` is set once resolved.
-  const createSession = useCallback((assistantId: string): ChatSession => {
-    const tempId = crypto.randomUUID()
-    const newSession: ChatSession = {
-      id: tempId,
-      title: "New Chat",
-      assistantId,
-      createdAt: new Date(),
-      messages: [],
-    }
-
-    setSessions((prev) => [newSession, ...prev])
-    setActiveSessionId(tempId)
-    loadedSessionsRef.current.add(tempId) // Mark as loaded (empty is valid)
-
-    // Persist to DB in background
-    fetch("/api/dashboard/chat/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assistantId }),
-    })
-      .then(async (response) => {
-        if (response.ok) {
-          const data = await response.json()
-          loadedSessionsRef.current.add(data.id)
-          setSessions((prev) =>
-            prev.map((s) =>
-              s.id === tempId ? { ...s, dbId: data.id, title: data.title } : s
-            )
-          )
-        }
-      })
-      .catch((error) => {
-        console.error("[ChatSessions] Failed to create session in database:", error)
-      })
-
-    return newSession
   }, [])
 
   // Persisted variant — awaits the DB POST before resolving so callers
@@ -525,7 +484,6 @@ export function ChatSessionsProvider({
         activeSession,
         setActiveSessionId,
         hydrateSessions,
-        createSession,
         createPersistedSession,
         updateSession,
         deleteSession,
