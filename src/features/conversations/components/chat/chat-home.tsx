@@ -77,8 +77,14 @@ export interface ChatHomeProps {
   selectedAssistantId?: string | null
   getAssistantById: (id: string) => { emoji: string; name: string } | undefined
   onSelectSession: (id: string) => void
-  onCreateSession: (assistantId: string, initialMessage?: string, settings?: InitialChatSettings) => void
+  onCreateSession: (
+    assistantId: string,
+    initialMessage?: string,
+    settings?: InitialChatSettings,
+  ) => void | Promise<void>
   initialToolbarData?: ChatToolbarHydrationData | null
+  /** When true, the input + create buttons disable so the user knows the session is being persisted before navigation. */
+  creatingSession?: boolean
 }
 
 // ─── Rotating phrases ────────────────────────────────────────────────────────
@@ -202,6 +208,7 @@ export function ChatHome({
   onSelectSession,
   onCreateSession,
   initialToolbarData,
+  creatingSession = false,
 }: ChatHomeProps) {
   const orgFetch = useOrgFetch()
   const { activeOrganization } = useOrganization()
@@ -219,6 +226,16 @@ export function ChatHome({
   // Input state
   const [input, setInput] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Soft-autofocus the input on mount so users can start typing without
+  // clicking. Skip if another element is already focused (e.g. the user
+  // tabbed into the toolbar before the effect fired) so we don't steal
+  // focus from intentional keyboard navigation.
+  useEffect(() => {
+    if (typeof document !== "undefined" && document.activeElement === document.body) {
+      textareaRef.current?.focus()
+    }
+  }, [])
 
   // File attachment state
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
@@ -326,6 +343,13 @@ export function ChatHome({
   }, [activeOrganization?.id])
 
   const loadToolbarData = useCallback(async () => {
+    // Snapshot the active assistant id at the start so all subsequent
+    // setState calls can short-circuit if the user switched assistants
+    // before our fetches resolved. Without this guard, slow network
+    // would race with assistant-switching and apply tool/skill state
+    // from the previous assistant to the new one.
+    const requestedAssistantId = activeAssistant?.id ?? null
+
     let visibleToolNames = new Set(assistantTools.map((tool) => tool.name))
     let toolNameById = new Map(
       assistantTools
@@ -440,6 +464,11 @@ export function ChatHome({
           fetch(`/api/assistants/${activeAssistant.id}/tools`),
           fetch(`/api/assistants/${activeAssistant.id}/skills`),
         ])
+
+        // Bail out if the user switched assistants while these fetches
+        // were in flight. Applying the previous assistant's defaults to
+        // the new one would silently corrupt the toolbar state.
+        if (activeAssistant.id !== requestedAssistantId) return
 
         const boundTools = boundToolsRes.ok ? await boundToolsRes.json() : []
         if (Array.isArray(boundTools)) {
@@ -601,17 +630,26 @@ export function ChatHome({
                   onChange={(e) => setInput(e.target.value)}
                   onFocus={() => void loadToolbarData()}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
-                  className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none"
+                  placeholder={
+                    creatingSession
+                      ? "Creating chat..."
+                      : "Ask, create, or start a task. Press Shift+Enter for a new line..."
+                  }
+                  disabled={creatingSession}
+                  className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none disabled:opacity-60 disabled:cursor-wait"
                   rows={1}
                 />
                 <Button
                   type="submit"
                   size="icon"
                   className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
-                  disabled={!input.trim()}
+                  disabled={!input.trim() || creatingSession}
                 >
-                  <SendHorizontal className="h-4 w-4" />
+                  {creatingSession ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <SendHorizontal className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
 

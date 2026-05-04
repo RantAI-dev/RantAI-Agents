@@ -1,10 +1,11 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
+import { useToast } from "@/hooks/use-toast"
 import { ChatHome } from "@/features/conversations/components/chat/chat-home"
 import type { ChatToolbarHydrationData } from "./chat-hydration-data"
 import { normalizeSerializedChatSession, type SerializedChatSession } from "./chat-session-data"
@@ -29,7 +30,19 @@ export default function ChatPageClient({
     initialAssistants,
   })
 
-  const { sessions, createSession, hydrateSessions } = useChatSessions()
+  const { sessions, createPersistedSession, hydrateSessions } = useChatSessions()
+  const { toast } = useToast()
+  const [creatingSession, setCreatingSession] = useState(false)
+  const createAbortRef = useRef<AbortController | null>(null)
+
+  // Abort any in-flight create-session POST when the page unmounts so we
+  // don't leave orphan empty sessions in the database when the user
+  // navigates away mid-create.
+  useEffect(() => {
+    return () => {
+      createAbortRef.current?.abort()
+    }
+  }, [])
 
   // Track whether provider has been hydrated with server data yet.
   // Until then, use initialSessions directly to avoid hydration mismatch:
@@ -49,11 +62,15 @@ export default function ChatPageClient({
   }, [hydrateSessions, initialSessions])
 
   // For the first render (before useEffect fires), use initialSessions
-  // directly so server and client agree on the same session list.
-  const displaySessions: ChatSession[] =
-    !isHydrated && initialSessions
-      ? (initialSessions.map((s) => normalizeSerializedChatSession(s)) as ChatSession[])
-      : sessions
+  // directly so server and client agree on the same session list. Memoise
+  // the normalised list so downstream components don't re-render every
+  // tick on fresh Date instances pre-hydration.
+  const displaySessions = useMemo<ChatSession[]>(() => {
+    if (!isHydrated && initialSessions) {
+      return initialSessions.map((s) => normalizeSerializedChatSession(s)) as ChatSession[]
+    }
+    return sessions
+  }, [isHydrated, initialSessions, sessions])
 
   if (assistantsLoading) {
     return (
@@ -78,12 +95,39 @@ export default function ChatPageClient({
           const urlId = session?.dbId || id
           router.push(`/dashboard/chat/${urlId}`)
         }}
-        onCreateSession={(assistantId, initialMessage, settings) => {
+        creatingSession={creatingSession}
+        onCreateSession={async (assistantId, initialMessage, settings) => {
           const targetAssistantId = initialMessage
             ? (selectedAssistantId ?? assistantId)
             : assistantId
 
-          const newSession = createSession(targetAssistantId)
+          // Persist the session in the DB before navigating so the URL
+          // carries the real dbId from the start. The previous tempId-
+          // then-router.replace flow caused a mid-typing "refresh" that
+          // killed focus and felt like a reload.
+          createAbortRef.current?.abort()
+          const controller = new AbortController()
+          createAbortRef.current = controller
+          setCreatingSession(true)
+          let newSession
+          try {
+            newSession = await createPersistedSession(targetAssistantId, controller.signal)
+          } catch (error) {
+            if ((error as { name?: string })?.name === "AbortError") return
+            console.error("[ChatHome] Failed to create chat session:", error)
+            toast({
+              title: "Couldn't start chat",
+              description:
+                error instanceof Error ? error.message : "Network error — check your connection and try again.",
+              variant: "destructive",
+            })
+            setCreatingSession(false)
+            return
+          } finally {
+            if (createAbortRef.current === controller) {
+              createAbortRef.current = null
+            }
+          }
           if (settings) {
             const toolbarSnapshot = {
               selectedKBGroupIds: settings.knowledgeBaseGroupIds ?? null,
@@ -113,7 +157,7 @@ export default function ChatPageClient({
               message: initialMessage,
               settings: settings ?? null,
               sessionId: newSession.id,
-              sessionDbId: null,
+              sessionDbId: newSession.dbId ?? newSession.id,
               assistantId: targetAssistantId,
               createdAt: Date.now(),
             }

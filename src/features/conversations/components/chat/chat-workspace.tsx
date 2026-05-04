@@ -29,14 +29,13 @@ import { SendHorizontal } from "lucide-react"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { cn } from "@/lib/utils"
-import { EmptyState } from "./empty-state"
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
 import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { useProfileStore } from "@/hooks/use-profile"
 import { ToastAction } from "@/components/ui/toast"
 import { MarkdownContent } from "./markdown-content"
-import { TypingIndicator, ButtonLoadingIndicator } from "./typing-indicator"
+import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
 import { ConversationExport } from "./conversation-export"
@@ -358,7 +357,6 @@ function MessagesArea({
   viewingVersions,
   copiedId,
   error,
-  showScrollButton,
   atBottom,
   handoffState,
   handoffTriggeredMsgId,
@@ -395,7 +393,6 @@ function MessagesArea({
   viewingVersions: Record<string, number>
   copiedId: string | null
   error: { message: string; retry: () => void } | null
-  showScrollButton: boolean
   atBottom: boolean
   handoffState: HandoffState
   handoffTriggeredMsgId: string | null
@@ -927,8 +924,10 @@ function MessagesArea({
         )}
       </AnimatePresence>
 
-      {/* Scroll to bottom button */}
-      {showScrollButton && !atBottom && (
+      {/* Scroll to bottom button — appears whenever the user has scrolled
+          away from the tail. Drives directly off Virtuoso's atBottom flag
+          so the button can never get stuck hidden by a stale guard. */}
+      {!atBottom && (
         <Button
           variant="secondary"
           size="icon"
@@ -970,7 +969,6 @@ export function ChatWorkspace({
   const [input, setInput] = useState("")
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [atBottom, setAtBottom] = useState(true)
-  const [showScrollButton, setShowScrollButton] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [messageSources, setMessageSources] = useState<
@@ -1006,6 +1004,15 @@ export function ChatWorkspace({
 
   // Handoff state
   const [handoffState, setHandoffState] = useState<HandoffState>("idle")
+  // Mirror handoffState in a ref so the long-lived poll setInterval in
+  // startPolling can read the current value without us having to clear
+  // and recreate the interval every time the state changes — the
+  // previous closure would see stale "waiting" forever and re-emit the
+  // "agent joined" banner on every 3-second tick.
+  const handoffStateRef = useRef<HandoffState>("idle")
+  useEffect(() => {
+    handoffStateRef.current = handoffState
+  }, [handoffState])
   const [handoffConversationId, setHandoffConversationId] = useState<string | null>(null)
   const [handoffTriggeredMsgId, setHandoffTriggeredMsgId] = useState<string | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -1767,7 +1774,12 @@ export function ChatWorkspace({
         loadFromPersisted(dedupedFallbackArtifacts)
       }
     }
-  }, [session?.messages?.length, session?.artifacts, artifacts.size, loadFromPersisted])
+    // Note: artifacts.size is intentionally excluded — it's read inside
+    // the effect as a one-time guard, not as a reactive trigger. Listing
+    // it forces this effect to re-run on every streamed artifact, which
+    // is wasteful and was a footgun for stale-closure bugs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.messages?.length, session?.artifacts, loadFromPersisted])
 
   // Seed assistant tools, skills, and knowledge groups when hydrated by the server.
   useEffect(() => {
@@ -1798,19 +1810,26 @@ export function ChatWorkspace({
   // Track if we should auto-scroll (only when user sends a message or during streaming)
   const shouldAutoScroll = useRef(false)
 
-  // Auto-scroll only when user sends a message (not on every message change)
+  // Auto-scroll while a streaming exchange is in progress, but only when
+  // the user is already pinned to the bottom. If they've scrolled up to
+  // re-read context, the previous unconditional scrollToIndex would yank
+  // them back on every chunk — the so-called "scroll jail". Honouring
+  // atBottom here preserves their reading position; the floating
+  // scroll-to-bottom button gives them a one-click way to catch up when
+  // they want to.
   useEffect(() => {
-    if (shouldAutoScroll.current && virtuosoRef.current) {
+    if (!shouldAutoScroll.current) return
+    if (!virtuosoRef.current) return
+    if (atBottom) {
       virtuosoRef.current.scrollToIndex({
         index: "LAST",
         behavior: "smooth",
       })
-      // Reset after scrolling, but keep scrolling during streaming
-      if (!isStreaming) {
-        shouldAutoScroll.current = false
-      }
     }
-  }, [chat.messages, isStreaming])
+    if (!isStreaming) {
+      shouldAutoScroll.current = false
+    }
+  }, [chat.messages, isStreaming, atBottom])
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -2528,9 +2547,19 @@ export function ChatWorkspace({
         createdStreamingIds.clear()
         preStreamSnapshots.clear()
 
-        // Handle user-initiated abort — keep partial content
+        // Handle user-initiated abort — keep partial content if any.
+        // When the abort fires before the first byte (no content yet),
+        // drop the empty assistant placeholder so the user isn't left
+        // staring at a blank bubble.
         if (err instanceof DOMException && err.name === "AbortError") {
           setIsStreaming(false)
+          chat.setMessages((prev) => {
+            const lastMsg = prev[prev.length - 1]
+            if (lastMsg?.role === "assistant" && !getMessageContent(lastMsg)) {
+              return prev.slice(0, -1) as any
+            }
+            return prev
+          })
           return
         }
 
@@ -2545,6 +2574,29 @@ export function ChatWorkspace({
           }
           return prev
         })
+
+        // Roll back the persisted session so the empty assistant placeholder
+        // pushed pre-stream doesn't survive into the next page load. Without
+        // this, on reload the user sees a stale empty assistant bubble at
+        // the end of the history.
+        if (session && onUpdateSession) {
+          onUpdateSession(session.id, {
+            messages: [
+              ...baseMessages.map((m) => {
+                const ext = m as unknown as MessageWithExtras
+                return {
+                  id: m.id,
+                  role: toChatMessageRole(m.role),
+                  content: getMessageContent(m),
+                  createdAt: new Date(),
+                  ...(ext.replyTo != null && { replyTo: ext.replyTo }),
+                  ...(ext.editHistory != null && { editHistory: ext.editHistory }),
+                }
+              }),
+              { ...userMessage, createdAt: new Date() },
+            ],
+          })
+        }
 
         // Set error state
         const retryFn = () => {
@@ -2574,7 +2626,7 @@ export function ChatWorkspace({
         abortControllerRef.current = null
       }
     },
-    [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, effectiveToolNames, effectiveSkillsEnabled, effectiveSkillIds, canvasMode, activeArtifactId, apiSessionId]
+    [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveCodeInterpreter, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, effectiveToolNames, effectiveSkillsEnabled, effectiveSkillIds, canvasMode, activeArtifactId, apiSessionId]
   )
 
   const queueInitialMessageSend = useCallback(async () => {
@@ -2759,20 +2811,28 @@ export function ChatWorkspace({
     [chat.messages, sendMessage]
   )
 
-  // Delete handler
+  // Delete handler — truncates both the live useChat state and the
+  // persisted session.messages from the deleted message onward. Each
+  // layer is sliced by its own findIndex on `messageId` because
+  // session.messages can drift out of sync with chat.messages (debounced
+  // syncMessages in flight, partial lazy load, etc.). Sharing one index
+  // across both layers used to delete the wrong rows whenever they
+  // diverged.
   const handleDeleteMessage = useCallback(
     (messageId: string) => {
-      const messageIndex = chat.messages.findIndex((m) => m.id === messageId)
-      if (messageIndex === -1) return
+      const liveIndex = chat.messages.findIndex((m) => m.id === messageId)
+      if (liveIndex === -1) return
 
-      // Remove message and all after it
-      const truncatedMessages = chat.messages.slice(0, messageIndex)
-      chat.setMessages(truncatedMessages as any)
+      const truncatedLive = chat.messages.slice(0, liveIndex)
+      chat.setMessages(truncatedLive as any)
 
       if (session && onUpdateSession) {
-        onUpdateSession(session.id, {
-          messages: session.messages.slice(0, messageIndex),
-        })
+        const sessionIndex = session.messages.findIndex((m) => m.id === messageId)
+        if (sessionIndex !== -1) {
+          onUpdateSession(session.id, {
+            messages: session.messages.slice(0, sessionIndex),
+          })
+        }
       }
     },
     [chat, session, onUpdateSession]
@@ -2904,8 +2964,10 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
 
         const data = await response.json()
 
-        // Update handoff state based on conversation status
-        if (data.status === "AGENT_CONNECTED" && handoffState !== "connected") {
+        // Update handoff state based on conversation status — read the
+        // ref so this branch only fires the first time we see CONNECTED,
+        // not on every subsequent 3-second poll tick.
+        if (data.status === "AGENT_CONNECTED" && handoffStateRef.current !== "connected") {
           setHandoffState("connected")
           // Add agent joined banner
           const bannerMsg = {
@@ -2961,7 +3023,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
     // Poll immediately, then every 3 seconds
     poll()
     pollIntervalRef.current = setInterval(poll, 3000)
-  }, [chat, handoffState])
+  }, [chat])
 
   // Handoff: send message to agent
   const sendHandoffMessage = useCallback(async (content: string) => {
@@ -3030,12 +3092,30 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
     URL.revokeObjectURL(url)
   }, [session])
 
+  // Synchronous double-submit guard. isLoading is set inside sendMessage
+  // after an await, which leaves a window where two rapid Enter presses
+  // can both pass the predicate before either flips the flag. The ref
+  // closes that window because it's set the moment the first submit
+  // begins and cleared in finally.
+  const submittingRef = useRef(false)
+
   // Submit handler
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading || isUploading) return
+    if (submittingRef.current) return
+    submittingRef.current = true
+    try {
+      await runSubmit(input.trim())
+    } finally {
+      submittingRef.current = false
+    }
+  }
 
-    const userInput = input.trim()
+  // The actual submit body. Split out so the synchronous double-submit
+  // guard above can wrap every code path (handoff, file upload, regular
+  // chat) without sprinkling try/finally everywhere.
+  const runSubmit = async (userInput: string) => {
     setInput("")
 
     // If connected to agent, send via handoff API instead of AI
@@ -3177,7 +3257,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
       }
     }
 
-    // Send the message using shared logic
+    // Send the message using shared logic.
     await sendMessage(userInput, chat.messages, replyContext?.id, undefined, fileCtx, uploadAttachments.length > 0 ? uploadAttachments : undefined)
   }
 
@@ -3197,7 +3277,20 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
   }
 
   if (!session) {
-    return <EmptyState />
+    // Render a clean loading spinner instead of the EmptyState welcome
+    // panel. The parent (ChatSessionPageClient) only mounts this
+    // component when activeSession is expected, so a missing session
+    // here is always a transient "still resolving" state — flashing
+    // "Welcome to Chat / Start New Chat" reads as a dummy splash to
+    // the user. The genuine no-session entrypoint is /dashboard/chat,
+    // which renders ChatHome.
+    return (
+      <div className="flex flex-col h-full bg-background">
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        </div>
+      </div>
+    )
   }
 
   const allMessages = [...chat.messages]
@@ -3291,7 +3384,6 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     viewingVersions={viewingVersions}
                     copiedId={copiedId}
                     error={error}
-                    showScrollButton={showScrollButton}
                     atBottom={atBottom}
                     handoffState={handoffState}
                     handoffTriggeredMsgId={handoffTriggeredMsgId}
@@ -3382,27 +3474,23 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                               ? "Type a message to the agent..."
                               : handoffState === "resolved"
                                 ? "Conversation resolved"
-                                : "Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
+                                : "Ask, create, or start a task. Press Shift+Enter for a new line..."
                           }
                           className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none"
                           disabled={isLoading || isUploading || handoffState === "waiting" || handoffState === "requesting" || handoffState === "resolved"}
                           rows={1}
                         />
                         <Button
-                          type={isStreaming ? "button" : "submit"}
+                          type={isLoading ? "button" : "submit"}
                           size="icon"
                           className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
-                          disabled={isStreaming ? false : (!input.trim() || isLoading || isUploading)}
-                          onClick={isStreaming ? handleStop : undefined}
+                          disabled={isUploading ? true : (isLoading ? false : !input.trim())}
+                          onClick={isLoading ? handleStop : undefined}
                         >
                           {isUploading ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : isLoading ? (
-                            isStreaming ? (
-                              <Square className="h-3.5 w-3.5 fill-current" />
-                            ) : (
-                              <ButtonLoadingIndicator />
-                            )
+                            <Square className="h-3.5 w-3.5 fill-current" />
                           ) : (
                             <SendHorizontal className="h-4 w-4" />
                           )}
@@ -3511,7 +3599,6 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               viewingVersions={viewingVersions}
               copiedId={copiedId}
               error={error}
-              showScrollButton={showScrollButton}
               atBottom={atBottom}
               handoffState={handoffState}
               handoffTriggeredMsgId={handoffTriggeredMsgId}
@@ -3585,27 +3672,23 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     ? "Type a message to the agent..."
                     : handoffState === "resolved"
                       ? "Conversation resolved"
-                      : "Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
+                      : "Ask, create, or start a task. Press Shift+Enter for a new line..."
                 }
                 className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none"
                 disabled={isLoading || isUploading || handoffState === "waiting" || handoffState === "requesting" || handoffState === "resolved"}
                 rows={1}
               />
               <Button
-                type={isStreaming ? "button" : "submit"}
+                type={isLoading ? "button" : "submit"}
                 size="icon"
                 className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
-                disabled={isStreaming ? false : (!input.trim() || isLoading || isUploading)}
-                onClick={isStreaming ? handleStop : undefined}
+                disabled={isUploading ? true : (isLoading ? false : !input.trim())}
+                onClick={isLoading ? handleStop : undefined}
               >
                 {isUploading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : isLoading ? (
-                  isStreaming ? (
-                    <Square className="h-3.5 w-3.5 fill-current" />
-                  ) : (
-                    <ButtonLoadingIndicator />
-                  )
+                  <Square className="h-3.5 w-3.5 fill-current" />
                 ) : (
                   <SendHorizontal className="h-4 w-4" />
                 )}

@@ -5,6 +5,7 @@ import {
   normalizeSerializedChatSession,
   type SerializedChatSession,
 } from "@/features/conversations/components/chat/pages/chat-session-data"
+import { toast } from "@/hooks/use-toast"
 
 // Edit history entry for versioning
 interface EditHistoryEntry {
@@ -117,7 +118,7 @@ interface ChatSessionsContextType {
   activeSession: ChatSession | undefined
   setActiveSessionId: (id: string | null) => void
   hydrateSessions: (sessions: SerializedChatSession[]) => void
-  createSession: (assistantId: string) => ChatSession
+  createPersistedSession: (assistantId: string, signal?: AbortSignal) => Promise<ChatSession>
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => void
   deleteSession: (sessionId: string) => void
   syncMessages: (sessionId: string, messages: ChatMessage[]) => void
@@ -157,6 +158,10 @@ function mergeHydratedSessions(
   for (const rawSession of incomingSessions) {
     const normalized = normalizeSerializedChatSession(rawSession)
 
+    // The list-summary endpoint returns sessions with messages: [] and
+    // artifacts: []. Falling back to the existing values when the
+    // hydration payload looks like a summary keeps in-memory message
+    // history and artifact references from being wiped on every merge.
     const exactMatchIndex = remaining.findIndex((session) => session.id === normalized.id)
     if (exactMatchIndex >= 0) {
       const existing = remaining.splice(exactMatchIndex, 1)[0]
@@ -166,7 +171,10 @@ function mergeHydratedSessions(
         id: existing.id,
         dbId: existing.dbId ?? normalized.dbId,
         messages: normalized.messages.length > 0 ? normalized.messages : existing.messages,
-        artifacts: normalized.artifacts ?? existing.artifacts,
+        artifacts:
+          normalized.artifacts && normalized.artifacts.length > 0
+            ? normalized.artifacts
+            : existing.artifacts,
       })
       continue
     }
@@ -180,7 +188,10 @@ function mergeHydratedSessions(
         assistantId: normalized.assistantId,
         createdAt: normalized.createdAt,
         messages: normalized.messages.length > 0 ? normalized.messages : existing.messages,
-        artifacts: normalized.artifacts ?? existing.artifacts,
+        artifacts:
+          normalized.artifacts && normalized.artifacts.length > 0
+            ? normalized.artifacts
+            : existing.artifacts,
         dbId: normalized.id,
       })
       continue
@@ -300,45 +311,43 @@ export function ChatSessionsProvider({
     setIsLoaded(true)
   }, [])
 
-  // Create a new session — returns immediately with a temp session.
-  // DB persistence happens in the background; `dbId` is set once resolved.
-  const createSession = useCallback((assistantId: string): ChatSession => {
-    const tempId = crypto.randomUUID()
-    const newSession: ChatSession = {
-      id: tempId,
-      title: "New Chat",
-      assistantId,
-      createdAt: new Date(),
-      messages: [],
-    }
-
-    setSessions((prev) => [newSession, ...prev])
-    setActiveSessionId(tempId)
-    loadedSessionsRef.current.add(tempId) // Mark as loaded (empty is valid)
-
-    // Persist to DB in background
-    fetch("/api/dashboard/chat/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assistantId }),
-    })
-      .then(async (response) => {
-        if (response.ok) {
-          const data = await response.json()
-          loadedSessionsRef.current.add(data.id)
-          setSessions((prev) =>
-            prev.map((s) =>
-              s.id === tempId ? { ...s, dbId: data.id, title: data.title } : s
-            )
-          )
-        }
+  // Persisted variant — awaits the DB POST before resolving so callers
+  // can navigate straight to /dashboard/chat/[realDbId]. This avoids the
+  // mid-typing URL swap that the older tempId-then-replace flow caused
+  // (router.replace would fire when dbId resolved, kicking the user
+  // out of focus while they were composing their first message).
+  //
+  // Accepts an optional AbortSignal so callers can cancel the in-flight
+  // POST if the user navigates away before it resolves — without a
+  // cancel path the server ends up with an orphan empty session that
+  // the user never sees.
+  const createPersistedSession = useCallback(
+    async (assistantId: string, signal?: AbortSignal): Promise<ChatSession> => {
+      const response = await fetch("/api/dashboard/chat/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assistantId }),
+        signal,
       })
-      .catch((error) => {
-        console.error("[ChatSessions] Failed to create session in database:", error)
-      })
-
-    return newSession
-  }, [])
+      if (!response.ok) {
+        throw new Error(`Failed to create chat session: ${response.status}`)
+      }
+      const data = await response.json()
+      const session: ChatSession = {
+        id: data.id,
+        dbId: data.id,
+        title: data.title ?? "New Chat",
+        assistantId,
+        createdAt: new Date(data.createdAt ?? Date.now()),
+        messages: [],
+      }
+      loadedSessionsRef.current.add(session.id)
+      setSessions((prev) => [session, ...prev])
+      setActiveSessionId(session.id)
+      return session
+    },
+    [],
+  )
 
   // Resolve the DB-persisted ID for a session (handles tempId → dbId mapping)
   // Uses sessionsRef to always get the latest state (important for debounced callbacks)
@@ -348,6 +357,12 @@ export function ChatSessionsProvider({
 
   // Update a session (title, messages, etc.)
   const updateSession = useCallback((sessionId: string, updates: Partial<ChatSession>) => {
+    // Capture the previous title so we can roll back the optimistic update
+    // if the PATCH fails — without rollback, the sidebar shows the new
+    // title while the server keeps the old one and silently restores it
+    // on next refresh, confusing the user.
+    const previousTitle = sessionsRef.current.find((s) => s.id === sessionId)?.title
+
     setSessions((prev) =>
       prev.map((s) => (s.id === sessionId ? { ...s, ...updates } : s))
     )
@@ -359,9 +374,25 @@ export function ChatSessionsProvider({
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: updates.title }),
-        }).catch((error) => {
-          console.error("[ChatSessions] Failed to update session title:", error)
         })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`PATCH failed with ${response.status}`)
+            }
+          })
+          .catch((error) => {
+            console.error("[ChatSessions] Failed to update session title:", error)
+            if (previousTitle !== undefined) {
+              setSessions((prev) =>
+                prev.map((s) => (s.id === sessionId ? { ...s, title: previousTitle } : s))
+              )
+            }
+            toast({
+              title: "Couldn't rename chat",
+              description: "We couldn't save the new title. The previous title has been restored.",
+              variant: "destructive",
+            })
+          })
       }
     }
   }, [resolveDbId])
@@ -458,21 +489,62 @@ export function ChatSessionsProvider({
   // Delete a session — caller is responsible for navigation after deletion
   const deleteSession = useCallback((sessionId: string) => {
     const apiId = resolveDbId(sessionId)
+    // Snapshot the previous state so we can resurrect the session if the
+    // DELETE call fails. Without rollback, a server-side error leaves the
+    // sidebar empty while the row stays in the DB; the session reappears
+    // as a "ghost" on next refresh, which reads as a serious bug.
+    const previousSession = sessionsRef.current.find((s) => s.id === sessionId)
+    let previousActiveId: string | null = null
 
     setSessions((prev) => prev.filter((s) => s.id !== sessionId))
 
     // Clear active session if it was the deleted one
-    setActiveSessionId((current) =>
-      current === sessionId ? null : current
-    )
+    setActiveSessionId((current) => {
+      previousActiveId = current
+      return current === sessionId ? null : current
+    })
 
     loadedSessionsRef.current.delete(sessionId)
 
+    // Drop the per-session toolbar snapshot from sessionStorage. Without
+    // this, ChatHome's toolbar state piles up under chat-toolbar-state:*
+    // keys forever and eventually trips the 5MB sessionStorage quota.
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.removeItem(`chat-toolbar-state:${sessionId}`)
+        if (apiId !== sessionId) {
+          window.sessionStorage.removeItem(`chat-toolbar-state:${apiId}`)
+        }
+      } catch {
+        // sessionStorage unavailable — best-effort cleanup, ignore
+      }
+    }
+
     fetch(`/api/dashboard/chat/sessions/${apiId}`, {
       method: "DELETE",
-    }).catch((error) => {
-      console.error("[ChatSessions] Failed to delete session:", error)
     })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`DELETE failed with ${response.status}`)
+        }
+      })
+      .catch((error) => {
+        console.error("[ChatSessions] Failed to delete session:", error)
+        if (previousSession) {
+          setSessions((prev) => {
+            if (prev.some((s) => s.id === sessionId)) return prev
+            return [previousSession, ...prev]
+          })
+          if (previousActiveId === sessionId) {
+            setActiveSessionId(sessionId)
+          }
+        }
+        toast({
+          title: "Couldn't delete chat",
+          description: "We couldn't remove this chat from the server. It has been restored.",
+          variant: "destructive",
+        })
+      })
   }, [resolveDbId])
 
   // Cleanup debounce timeout on unmount
@@ -492,7 +564,7 @@ export function ChatSessionsProvider({
         activeSession,
         setActiveSessionId,
         hydrateSessions,
-        createSession,
+        createPersistedSession,
         updateSession,
         deleteSession,
         syncMessages,

@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useChatSessions, type ChatSession, type ChatMessage } from "@/hooks/use-chat-sessions"
+import { useToast } from "@/hooks/use-toast"
 import { ChatWorkspace } from "@/features/conversations/components/chat/chat-workspace"
 import type { InitialChatSettings } from "@/features/conversations/components/chat/chat-home"
 import type {
@@ -49,8 +50,9 @@ export default function ChatSessionPageClient({
     setActiveSessionId,
     updateSession,
     syncMessages,
-    createSession,
+    createPersistedSession,
     hydrateSessions,
+    isLoaded: sessionsLoaded,
   } = useChatSessions()
 
   const [pendingMessage, setPendingMessage] = useState<string | null>(null)
@@ -104,14 +106,6 @@ export default function ChatSessionPageClient({
     }
   }, [id, sessions, setActiveSessionId])
 
-  // Once dbId resolves, replace tempId in URL with real dbId
-  useEffect(() => {
-    if (!activeSession?.dbId) return
-    if (activeSession.id === id) {
-      router.replace(`/dashboard/chat/${activeSession.dbId}`)
-    }
-  }, [activeSession?.dbId, activeSession?.id, id, router])
-
   useEffect(() => {
     if (!activeSession?.assistantId) return
     if (getAssistantById(activeSession.assistantId)) return
@@ -131,23 +125,111 @@ export default function ChatSessionPageClient({
     }
   }, [updateSession, syncMessages])
 
-  const handleNewChat = useCallback(() => {
-    if (selectedAssistant) {
-      const newSession = createSession(selectedAssistant.id)
-      router.push(`/dashboard/chat/${newSession.id}`)
+  const { toast } = useToast()
+  const newChatAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    return () => {
+      newChatAbortRef.current?.abort()
     }
-  }, [selectedAssistant, createSession, router])
+  }, [])
+
+  const handleNewChat = useCallback(async () => {
+    if (!selectedAssistant) return
+    newChatAbortRef.current?.abort()
+    const controller = new AbortController()
+    newChatAbortRef.current = controller
+    try {
+      const newSession = await createPersistedSession(selectedAssistant.id, controller.signal)
+      router.push(`/dashboard/chat/${newSession.id}`)
+    } catch (error) {
+      if ((error as { name?: string })?.name === "AbortError") return
+      console.error("[ChatSession] Failed to create new chat:", error)
+      toast({
+        title: "Couldn't start chat",
+        description:
+          error instanceof Error ? error.message : "Network error — try again in a moment.",
+        variant: "destructive",
+      })
+    } finally {
+      if (newChatAbortRef.current === controller) {
+        newChatAbortRef.current = null
+      }
+    }
+  }, [selectedAssistant, createPersistedSession, router, toast])
 
   // Session not found (possibly deleted) - redirect to chat home.
   // MUST run before any early return so hook order stays stable across
   // renders (React Rules of Hooks: all hooks run unconditionally in the
-  // same order). Only redirect if sessions have loaded (length > 0) to
-  // avoid redirecting during initial load.
+  // same order). Only redirect if sessions have loaded AND no entry in
+  // the list matches the URL id. Reading the array directly avoids the
+  // race where `activeSession` is one render behind `activeSessionId`
+  // — the previous predicate `!activeSession` fired the redirect on
+  // every refresh because L99-105's setActiveSessionId hadn't applied
+  // yet when this effect ran in the same pass.
   useEffect(() => {
-    if (sessions.length > 0 && !activeSession) {
+    // Wait until the sessions provider has finished its initial load
+    // before deciding the URL is invalid. The early-return on empty
+    // sessions is split: if the provider says "still loading", do
+    // nothing; if it's loaded but the list is genuinely empty, redirect
+    // immediately so users with zero sessions on a stale URL don't get
+    // stuck on the spinner waiting for sessions.length to grow.
+    if (!sessionsLoaded) return
+    if (sessions.length === 0) {
+      router.replace("/dashboard/chat")
+      return
+    }
+    const exists = sessions.some((s) => s.dbId === id || s.id === id)
+    if (!exists) {
       router.replace("/dashboard/chat")
     }
-  }, [sessions.length, activeSession, router])
+  }, [sessions, id, router, sessionsLoaded])
+
+  // If the loading guards stay true past LOAD_TIMEOUT_MS, surface an
+  // error instead of an infinite spinner. Without this, an upstream
+  // failure (slow assistants endpoint, broken session detail) leaves
+  // the user staring at a spinner with no recovery path.
+  const LOAD_TIMEOUT_MS = 10_000
+  const [loadTimedOut, setLoadTimedOut] = useState(false)
+  const stillLoading =
+    assistantsLoading || !pendingRead || !activeSession || !activeSessionAssistant
+  useEffect(() => {
+    if (!stillLoading) {
+      setLoadTimedOut(false)
+      return
+    }
+    const handle = window.setTimeout(() => setLoadTimedOut(true), LOAD_TIMEOUT_MS)
+    return () => window.clearTimeout(handle)
+  }, [stillLoading])
+
+  if (stillLoading && loadTimedOut) {
+    return (
+      <div className="flex flex-col h-full bg-background">
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+          <p className="text-sm font-medium text-foreground">Couldn&apos;t load this conversation</p>
+          <p className="max-w-md text-xs text-muted-foreground">
+            We waited 10 seconds and the chat data didn&apos;t arrive. Reload to try again, or go back to your chat list.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+            >
+              Reload
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/chat")}
+              className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+            >
+              Back to chats
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (assistantsLoading || !pendingRead) {
     return (
