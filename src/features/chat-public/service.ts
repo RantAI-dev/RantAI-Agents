@@ -1,6 +1,6 @@
 import { streamText, convertToModelMessages, tool, zodSchema, stepCountIs } from "ai"
 import { z } from "zod"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import {
   smartRetrieve,
   formatContextForPrompt,
@@ -60,11 +60,6 @@ import {
 const debug = process.env.NODE_ENV !== "production"
   ? (...args: unknown[]) => console.log("[Chat API]", ...args)
   : () => {}
-
-// Tool argument interfaces
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
-})
 
 // Memory queue for tool calls (threadId -> queued items)
 const memoryQueue = new Map<
@@ -953,7 +948,7 @@ export async function runChat(params: {
     }
 
     const result = streamText({
-      model: openrouter(modelId),
+      model: getChatProvider()(resolveModelId(modelId)),
       system: systemPrompt,
       messages,
       tools: allTools,

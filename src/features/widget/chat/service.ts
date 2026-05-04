@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { streamText, convertToModelMessages, tool, zodSchema } from "ai"
 import { z } from "zod"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import {
   validateDomain,
   extractOrigin,
@@ -38,10 +38,6 @@ import {
   setWidgetUserMemoryExpiry,
 } from "./repository"
 import { WidgetChatBodySchema } from "./schema"
-
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
-})
 
 // Widget memory queue for tool calls (threadId -> queued items)
 const widgetMemoryQueue = new Map<
@@ -525,7 +521,7 @@ export async function handleWidgetChat(req: NextRequest) {
 
     // Stream response
     const result = streamText({
-      model: openrouter(assistant.model || DEFAULT_MODEL_ID),
+      model: getChatProvider()(resolveModelId(assistant.model || DEFAULT_MODEL_ID)),
       system: systemPrompt,
       messages,
       tools: {

@@ -1,6 +1,6 @@
 import "server-only"
 import { generateText } from "ai"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 
 const SCRIPT_REWRITE_MODEL = "anthropic/claude-sonnet-4-6"
 
@@ -17,10 +17,7 @@ export async function generateScriptRewrite(args: {
   currentScript: string
   editPrompt: string
 }): Promise<string> {
-  const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY || "",
-  })
-  const model = openrouter(SCRIPT_REWRITE_MODEL)
+  const model = getChatProvider()(resolveModelId(SCRIPT_REWRITE_MODEL))
 
   const system = `You are rewriting a docx-js JavaScript script that produces a .docx file.
 Apply the user's edit to the script. Return ONLY the new full script as JavaScript code.

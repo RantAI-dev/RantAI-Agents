@@ -8,11 +8,7 @@ import { nanoid } from 'nanoid';
 import { UserProfile, Fact, Preference, DEFAULT_MEMORY_CONFIG } from './types';
 // import { extractFactsWithLLM } from './fact-extractor';
 import { generateText } from 'ai';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider';
-
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY!,
-});
+import { getChatProvider, resolveModelId } from '@/lib/llm/provider';
 
 /**
  * Generate LLM-based interaction summary from user profile
@@ -27,7 +23,7 @@ async function generateInteractionSummary(profile: UserProfile): Promise<string>
 
   try {
     const { text } = await generateText({
-      model: openrouter('openai/gpt-4o-mini'),
+      model: getChatProvider()(resolveModelId('openai/gpt-4o-mini')),
       prompt: `Summarize this user in 2-3 concise sentences based on their profile:
 Facts: ${factsStr || 'None'}
 Preferences: ${prefsStr || 'None'}
