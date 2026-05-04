@@ -1920,6 +1920,15 @@ function validateReact(content: string): ArtifactValidationResult {
     } else {
       warnings.push(message)
     }
+    // When the aesthetic direction is unknown the @fonts line on line 2
+    // is still positionally stripped, so the LLM's font choices vanish
+    // silently. Surface the same orphan warning we emit when @aesthetic
+    // is absent entirely.
+    if (directives.rawFontsLine) {
+      warnings.push(
+        "@fonts directive on line 2 will be stripped because @aesthetic on line 1 is invalid. Fix the @aesthetic direction first to keep your fonts.",
+      )
+    }
   }
   if (directives.fonts) {
     if (directives.fonts.length > MAX_FONT_FAMILIES) {
