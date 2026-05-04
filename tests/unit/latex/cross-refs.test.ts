@@ -32,6 +32,47 @@ describe("scanLabels — single env", () => {
   })
 })
 
+describe("scanLabels — nested envs", () => {
+  it("does not bleed an inner equation label up to the outer theorem", () => {
+    const reg = scanLabels(
+      [
+        "\\begin{theorem}",
+        "  body without outer label",
+        "  \\begin{equation}\\label{eq:inner}\\end{equation}",
+        "\\end{theorem}",
+      ].join("\n"),
+    )
+    const eq = reg.get("eq:inner")
+    expect(eq?.kind).toBe("equation")
+    expect(eq?.number).toBe("1")
+    expect(eq?.anchorId).toBe("eq-inner")
+  })
+
+  it("registers outer label when it appears before the nested env", () => {
+    const reg = scanLabels(
+      [
+        "\\begin{theorem}",
+        "\\label{thm:outer}",
+        "  body",
+        "  \\begin{equation}\\label{eq:inner}\\end{equation}",
+        "\\end{theorem}",
+      ].join("\n"),
+    )
+    expect(reg.get("thm:outer")?.kind).toBe("theorem")
+    expect(reg.get("thm:outer")?.number).toBe("1")
+    expect(reg.get("eq:inner")?.kind).toBe("equation")
+    expect(reg.get("eq:inner")?.number).toBe("1")
+  })
+
+  it("registers a labeled multline equation", () => {
+    const reg = scanLabels(
+      "\\begin{multline}\\label{eq:long}\\end{multline}",
+    )
+    expect(reg.get("eq:long")?.kind).toBe("equation")
+    expect(reg.get("eq:long")?.number).toBe("1")
+  })
+})
+
 describe("scanLabels — counter pools", () => {
   it("theorem family shares one counter pool (amsthm convention)", () => {
     const reg = scanLabels(

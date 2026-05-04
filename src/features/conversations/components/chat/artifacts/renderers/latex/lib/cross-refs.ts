@@ -1,7 +1,7 @@
 import type { LabelEntry, LabelRegistry } from "./transpiler"
 
 const THEOREM_FAMILY = new Set(["theorem", "lemma", "corollary", "proposition"])
-const EQUATION_FAMILY = new Set(["equation", "align", "gather"])  // numbered envs only
+const EQUATION_FAMILY = new Set(["equation", "align", "gather", "multline"])  // numbered envs only
 
 const BEGIN_RE = /\\begin\{([a-z]+)(\*?)\}/g
 
@@ -54,9 +54,13 @@ export function scanLabels(source: string): LabelRegistry {
     if (blockEnd === -1) continue   // malformed; skip
     const block = source.slice(blockStart, blockEnd)
 
-    // Take the FIRST \label{} inside the block (LaTeX behavior: subsequent ones are ignored
-    // for ref-target purposes; the validator can warn separately if multiple appear)
-    const labelMatch = block.match(/\\label\{([^}]+)\}/)
+    // Restrict the label search to the prefix BEFORE any nested \begin{} so a
+    // labeled equation inside a theorem body does not bleed up to the theorem.
+    // Outer envs that intentionally label after a nested env are uncommon
+    // enough to accept as a known limitation.
+    const firstNestedBegin = block.indexOf("\\begin{")
+    const searchScope = firstNestedBegin === -1 ? block : block.slice(0, firstNestedBegin)
+    const labelMatch = searchScope.match(/\\label\{([^}]+)\}/)
     if (!labelMatch) continue
 
     const key = labelMatch[1]
