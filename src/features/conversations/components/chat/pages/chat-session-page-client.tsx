@@ -174,6 +174,52 @@ export default function ChatSessionPageClient({
     }
   }, [sessions, id, router])
 
+  // If the loading guards stay true past LOAD_TIMEOUT_MS, surface an
+  // error instead of an infinite spinner. Without this, an upstream
+  // failure (slow assistants endpoint, broken session detail) leaves
+  // the user staring at a spinner with no recovery path.
+  const LOAD_TIMEOUT_MS = 10_000
+  const [loadTimedOut, setLoadTimedOut] = useState(false)
+  const stillLoading =
+    assistantsLoading || !pendingRead || !activeSession || !activeSessionAssistant
+  useEffect(() => {
+    if (!stillLoading) {
+      setLoadTimedOut(false)
+      return
+    }
+    const handle = window.setTimeout(() => setLoadTimedOut(true), LOAD_TIMEOUT_MS)
+    return () => window.clearTimeout(handle)
+  }, [stillLoading])
+
+  if (stillLoading && loadTimedOut) {
+    return (
+      <div className="flex flex-col h-full bg-background">
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+          <p className="text-sm font-medium text-foreground">Couldn&apos;t load this conversation</p>
+          <p className="max-w-md text-xs text-muted-foreground">
+            We waited 10 seconds and the chat data didn&apos;t arrive. Reload to try again, or go back to your chat list.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+            >
+              Reload
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard/chat")}
+              className="rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium hover:bg-muted"
+            >
+              Back to chats
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (assistantsLoading || !pendingRead) {
     return (
       <div className="flex flex-col h-full">
