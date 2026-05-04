@@ -365,6 +365,7 @@ function latexToHtml(source: string): string {
       let mathContent = line.replace("\\[", "")
       if (mathContent.includes("\\]")) {
         mathContent = mathContent.replace("\\]", "")
+        i++
       } else {
         i++
         while (i < lines.length && !lines[i].includes("\\]")) {
@@ -388,6 +389,7 @@ function latexToHtml(source: string): string {
       let mathContent = line.slice(2)
       if (mathContent.endsWith("$$")) {
         mathContent = mathContent.slice(0, -2)
+        i++
       } else {
         i++
         while (i < lines.length && !lines[i].includes("$$")) {
