@@ -185,13 +185,13 @@ export async function validateArtifactContent(
 
 async function validateDocument(
   content: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _ctx?: ValidationContext,
+  ctx?: ValidationContext,
 ): Promise<ArtifactValidationResult> {
-  // _ctx accepted for shape consistency with the rest of VALIDATORS;
-  // delegated validator currently has no isNew-only rules.
+  // The script validator now honours isNew so create_artifact can enforce
+  // stricter rules (minimum body length today, room for more later) while
+  // updates remain forgiving for legacy rows.
   const { validateScriptArtifact } = await import("@/lib/document-script/validator")
-  const r = await validateScriptArtifact(content)
+  const r = await validateScriptArtifact(content, { isNew: ctx?.isNew })
   return { ok: r.ok, errors: r.errors, warnings: [] }
 }
 
