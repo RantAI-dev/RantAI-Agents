@@ -256,13 +256,19 @@ export const updateArtifactTool: ToolDefinition = {
       persisted = false
     }
 
+    // Title fallback chain — prefer the caller's new title, then the
+    // stored title from `findUnique`, then the artifact id. The id branch
+    // matters when `findUnique` itself threw before existingForReturn was
+    // populated; without it the response would carry `title: undefined`.
+    const resolvedTitle = newTitle ?? existingForReturn?.title ?? id
+
     // When persistence threw, `updated: true` would be misleading — the
     // LLM (and the chat-workspace's `out.updated` gate) would believe the
     // in-memory state is now backed by storage. Reflect reality instead.
     if (!persisted) {
       return {
         id,
-        title: newTitle ?? existingForReturn?.title,
+        title: resolvedTitle,
         content: finalContent,
         updated: false,
         persisted: false,
@@ -274,7 +280,7 @@ export const updateArtifactTool: ToolDefinition = {
       id,
       // When no title change was requested, surface the stored title so
       // downstream code (LLM memory, chat-workspace) can recall it.
-      title: newTitle ?? existingForReturn?.title,
+      title: resolvedTitle,
       content: finalContent,
       updated: true,
       persisted,
