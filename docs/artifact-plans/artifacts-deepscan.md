@@ -508,20 +508,22 @@ that lives outside that branch's scope (deferred infra work, cosmetic
 type-label drift, and an ephemeral-state UX gap that is partially
 mitigated but not eliminated).
 
-### Mostly-closed by the cleanup pass
+### Closed by the cleanup pass
 
 The five-agent rescan turned up D-101 through D-111. The cleanup
-branch addressed each of them — see commit history on the branch
-for one atomic fix per finding. What remains is a single residual:
+branch resolved every actionable finding — see commit history for one
+atomic fix per item. Two items closed without a code change:
 
-- **D-105 (residual UX).** Notebook pin state still lives only in
-  `sessionStorage` under `"notebook-pins:<artifactId>"`. Stale pins
-  are now swept whenever the parsed cell list changes
-  (`usePinToChat.sweepStale`), so dangling references no longer
-  carry across LLM rewrites or kernel restarts. The cross-tab and
-  cross-session ephemerality is unchanged — pins reset on tab close
-  by design, and the kernel's outputs are also ephemeral. The UI
-  does not surface this to the user.
+- **D-105.** Stale pins are now swept whenever the parsed cell list
+  changes (`usePinToChat.sweepStale`), and the pin button tooltip
+  spells out the session-scope: "Pins reset when the tab closes."
+  The cross-tab ephemerality is by design — the kernel itself is
+  per-page-load — and the user is now told.
+- **D-106.** The slides markdown-leakage regex matches `**`/`##`/
+  backticks anywhere in a text field. This is correct behaviour:
+  slide text renders plain, so a string like `"price: **$10**"`
+  would surface the literal asterisks. The warning helps the LLM
+  strip the markdown rather than ship visually broken slides.
 
 ### Residual gaps from prior cuts
 
