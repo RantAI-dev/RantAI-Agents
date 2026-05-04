@@ -141,13 +141,19 @@ export default function ChatSessionPageClient({
   // Session not found (possibly deleted) - redirect to chat home.
   // MUST run before any early return so hook order stays stable across
   // renders (React Rules of Hooks: all hooks run unconditionally in the
-  // same order). Only redirect if sessions have loaded (length > 0) to
-  // avoid redirecting during initial load.
+  // same order). Only redirect if sessions have loaded AND no entry in
+  // the list matches the URL id. Reading the array directly avoids the
+  // race where `activeSession` is one render behind `activeSessionId`
+  // — the previous predicate `!activeSession` fired the redirect on
+  // every refresh because L99-105's setActiveSessionId hadn't applied
+  // yet when this effect ran in the same pass.
   useEffect(() => {
-    if (sessions.length > 0 && !activeSession) {
+    if (sessions.length === 0) return
+    const exists = sessions.some((s) => s.dbId === id || s.id === id)
+    if (!exists) {
       router.replace("/dashboard/chat")
     }
-  }, [sessions.length, activeSession, router])
+  }, [sessions, id, router])
 
   if (assistantsLoading || !pendingRead) {
     return (
