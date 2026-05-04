@@ -27,14 +27,26 @@ function FilePreviewItem({ file, onRemove }: { file: File; onRemove: () => void 
   const isImage = file.type.startsWith("image/")
 
   useEffect(() => {
-    if (isImage) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setPreview(e.target?.result as string)
-      }
-      reader.readAsDataURL(file)
+    if (!isImage) return
+    let cancelled = false
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      if (cancelled) return
+      setPreview(e.target?.result as string)
     }
-    return () => setPreview(null)
+    reader.readAsDataURL(file)
+    return () => {
+      // Abort the reader and gate the onload setState so we don't update
+      // a removed item's state when the user removes the file before the
+      // FileReader completes.
+      cancelled = true
+      try {
+        reader.abort()
+      } catch {
+        // Aborting an already-finished reader throws on some browsers
+      }
+      setPreview(null)
+    }
   }, [file, isImage])
 
   return (
