@@ -3474,7 +3474,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                               ? "Type a message to the agent..."
                               : handoffState === "resolved"
                                 ? "Conversation resolved"
-                                : "Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
+                                : "Ask, create, or start a task. Press Shift+Enter for a new line..."
                           }
                           className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none"
                           disabled={isLoading || isUploading || handoffState === "waiting" || handoffState === "requesting" || handoffState === "resolved"}
@@ -3672,7 +3672,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     ? "Type a message to the agent..."
                     : handoffState === "resolved"
                       ? "Conversation resolved"
-                      : "Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
+                      : "Ask, create, or start a task. Press Shift+Enter for a new line..."
                 }
                 className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none"
                 disabled={isLoading || isUploading || handoffState === "waiting" || handoffState === "requesting" || handoffState === "resolved"}

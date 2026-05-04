@@ -52,6 +52,7 @@ export default function ChatSessionPageClient({
     syncMessages,
     createPersistedSession,
     hydrateSessions,
+    isLoaded: sessionsLoaded,
   } = useChatSessions()
 
   const [pendingMessage, setPendingMessage] = useState<string | null>(null)
@@ -167,12 +168,22 @@ export default function ChatSessionPageClient({
   // every refresh because L99-105's setActiveSessionId hadn't applied
   // yet when this effect ran in the same pass.
   useEffect(() => {
-    if (sessions.length === 0) return
+    // Wait until the sessions provider has finished its initial load
+    // before deciding the URL is invalid. The early-return on empty
+    // sessions is split: if the provider says "still loading", do
+    // nothing; if it's loaded but the list is genuinely empty, redirect
+    // immediately so users with zero sessions on a stale URL don't get
+    // stuck on the spinner waiting for sessions.length to grow.
+    if (!sessionsLoaded) return
+    if (sessions.length === 0) {
+      router.replace("/dashboard/chat")
+      return
+    }
     const exists = sessions.some((s) => s.dbId === id || s.id === id)
     if (!exists) {
       router.replace("/dashboard/chat")
     }
-  }, [sessions, id, router])
+  }, [sessions, id, router, sessionsLoaded])
 
   // If the loading guards stay true past LOAD_TIMEOUT_MS, surface an
   // error instead of an infinite spinner. Without this, an upstream

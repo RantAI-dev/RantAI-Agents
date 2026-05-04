@@ -621,7 +621,7 @@ export function ChatHome({
                   placeholder={
                     creatingSession
                       ? "Creating chat..."
-                      : "Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
+                      : "Ask, create, or start a task. Press Shift+Enter for a new line..."
                   }
                   disabled={creatingSession}
                   className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none disabled:opacity-60 disabled:cursor-wait"
