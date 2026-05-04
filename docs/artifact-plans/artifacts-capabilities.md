@@ -815,52 +815,23 @@ the artifact system:
 - **Pin state survives** within a tab session via
   `sessionStorage["notebook-pins:<artifactId>"]`.
 
-## Open gaps at HEAD `78e2b0a`
+## Open gaps after the cleanup pass
 
-Closed / by-design / dead-code findings have been pruned. Full
-descriptions and file:line citations live in
-[`artifacts-deepscan.md`](./artifacts-deepscan.md) §12.
+The latest cleanup branch closed every actionable D-101 through
+D-111 finding plus all the residuals from prior cuts. What remains:
 
-**New gaps surfaced by this rescan:**
-
-- **D-101.** `validatePython` visible-output heuristic misses
-  literal-only final lines.
-- **D-102.** Worker-side `case "interrupt"` is a dead branch.
-- **D-103.** `executionCount` declared on `WorkerRequest.run`,
-  ignored by the worker.
-- **D-104.** `CellSchema` accepts `outputs`/`executionCount` on
-  markdown cells; prompt forbids them.
-- **D-105.** Notebook pin state is sessionStorage-only and points
-  at ephemeral kernel outputs.
-- **D-106.** `validateSlides` markdown-leakage regex false-positives
-  on legitimate `**$10**` strings.
-- **D-107.** `validateSheet` constant-column check breaks after first
-  match.
-- **D-108.** `validateCode` 512 KiB byte-size warning is unreachable.
-- **D-109.** `validateMermaid` node-count heuristic double-counts
-  `subgraph`-internal nodes.
-- **D-110.** `validateReact` `@fonts` orphan warning misses the
-  invalid-`@aesthetic` case.
-- **D-111.** `update-artifact.ts:264` leaks `title: undefined` when
-  `findUnique` throws before reaching the not-found path.
-
-**Residual gaps from prior cuts (still open):**
-
-- **D-13.** Mermaid prompt summary lists fewer diagram types than
-  validator accepts.
-- **D-14.** Slides MUST-rules validator-enforced; prompt copy still
-  uses "convention" wording.
-- **D-16 (inverted).** `validatePython` bans all `open(`; prompt
-  doesn't distinguish modes — validator stricter than prompt.
-- **D-17.** SVG decimal-place mismatch (prompt 1 dp, validator 2+ dp).
-- **D-46.** `validateDocument` accepts `_ctx` but doesn't plumb it
-  to `validateScriptArtifact`.
-- **D-68.** Type-label drift across registry / shortLabel / prompt:
-  `application/python` ("Python Script" vs "Python Notebook"),
-  `application/3d` (`shortLabel "R3F Scene"`).
+- **D-105 (residual UX).** Notebook pin state is still sessionStorage-
+  scoped; pins survive within a tab session but vanish on tab close
+  alongside the ephemeral kernel outputs they reference. Stale pins
+  are now swept whenever the cell list changes, but the UI does not
+  surface the session-scope to the user.
+- **D-68 (cosmetic, by-design).** `application/3d` shortLabel
+  `"R3F Scene"` differs from label `"3D Scene"` to fit the panel
+  pill's glyph budget. Documenting rather than reconciling.
 
 **Deferred (open, separate plan):**
 
-- **D-37.** `soffice` cold-start.
-- **D-64.** XLSX export emits no chart objects.
-- **D-81.** `vector-store.ts` storeDocument vs storeChunks divergence.
+- **D-37.** `soffice` cold-start every render call.
+- **D-64.** XLSX export emits no chart objects (ExcelJS upstream).
+- **D-81.** `vector-store.ts` `storeDocument` vs `storeChunks`
+  divergence between knowledge upload and the artifact indexer.

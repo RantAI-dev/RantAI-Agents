@@ -500,110 +500,51 @@ used by artifact indexer) are still divergent (D-81 deferred).
 
 ---
 
-## 12. Findings — open gaps at HEAD `78e2b0a`
+## 12. Findings — open gaps after the cleanup pass
 
-Resolved findings (closed, dead-code-deleted, by-design, and deferred-
-with-separate-plan items D-2 through D-100) have been pruned from
-this list — every D-N below is **live and needs work**. For the full
-historical catalogue see git history of this file.
+The `fix/artifact-system-cleanup` branch closed every actionable item
+the rescan turned up. What remains below is the **residual surface**
+that lives outside that branch's scope (deferred infra work, cosmetic
+type-label drift, and an ephemeral-state UX gap that is partially
+mitigated but not eliminated).
 
-### Newly surfaced by this rescan (D-101 — D-111)
+### Mostly-closed by the cleanup pass
 
-These are gaps the latest five-agent verification turned up that did
-not exist in the prior `68b9d66` cut's findings list.
+The five-agent rescan turned up D-101 through D-111. The cleanup
+branch addressed each of them — see commit history on the branch
+for one atomic fix per finding. What remains is a single residual:
 
-- **D-101 (notebook visible-output heuristic).** `validatePython`
-  visible-output detection (`_validate-artifact.ts:2153-L2158`) uses
-  a bare-expression regex that does not match cells whose final line
-  is a numeric literal (`42`), list/dict display
-  (`[x for x in data]`), or any non-identifier-prefixed expression.
-  A common notebook idiom (`df.head()` qualifies, but `df` followed
-  by `42` does not). LLM gets a spurious "no visible output" warning.
-- **D-102 (notebook interrupt dead branch).** Worker-side
-  `case "interrupt"` (`python-worker.ts:178`) is a no-op. The host
-  terminates the worker via `useKernel` (`use-kernel.ts:185-L191`)
-  before the worker sees the message, so the case is unreachable in
-  practice. Misleading code; either delete the case or wire it to a
-  cooperative-cancel via `pyodide.checkInterrupt()`.
-- **D-103 (notebook executionCount unused in worker).**
-  `WorkerRequest.run` (`python-worker-types.ts:2`) declares
-  `executionCount`, and `use-kernel.ts:77` sends it. The worker
-  destructures `{ cellId, source, timeoutMs }` only — the field is
-  silently ignored. Counter is maintained client-side in
-  `execCounterRef`. Either drop from the contract or honour it in
-  the worker.
-- **D-104 (notebook schema laxer than prompt for markdown cells).**
-  `CellSchema` accepts `outputs: []` and `executionCount: null` for
-  markdown cells (`lib/notebook/types.ts:30-L31`). Prompt forbids
-  emitting them. Schema-level laxity is not enforced by validator
-  either. Sub-bug only — the LLM can technically slip these through
-  but the worker ignores them.
-- **D-105 (notebook pin state ephemeral).** Pin state lives only in
-  `sessionStorage` under `"notebook-pins:<artifactId>"`
-  (`use-pin-to-chat.ts:6, L15`). Lost on tab close, not persisted
-  to DB, not cross-tab. Cell outputs themselves are also ephemeral
-  (kernel is per-page-load), so on reload all pinned references
-  point to outputs that no longer exist. Wired-by-design but worth
-  surfacing — the UI doesn't tell the user.
-- **D-106 (validateSlides markdown-leakage regex false-positive).**
-  Regex at `_validate-artifact.ts` ~L624 matches `**` anywhere as a
-  markdown indicator. Legitimate strings like `"price: **$10**"`
-  trip the warning. Low severity.
-- **D-107 (validateSheet constant-column loop early-break).** JSON
-  array all-identical-column check (`L985-L997`) breaks after the
-  first offending column. Multi-column constant sheets get a single
-  warning that doesn't enumerate the rest.
-- **D-108 (validateCode byte-size warning unreachable).** `validateCode`
-  warns at `> 512 * 1024` bytes (L1404-L1408). Same threshold as
-  `MAX_ARTIFACT_CONTENT_BYTES` in `create-artifact.ts:16` and
-  `update-artifact.ts:16`. By the time `validateCode` runs, both
-  outer guards have already rejected. Warning is dead code.
-- **D-109 (validateMermaid node-count heuristic over-counts).** Node-
-  count regex at `_validate-artifact.ts:1507` matches identifier-
-  followed-by-bracket. `subgraph` blocks inside flowcharts contain
-  nodes that match the same pattern from inside the subgraph, double-
-  counting. The 15-node warning may fire on legitimate decompositions.
-- **D-110 (validateReact @fonts orphan-warning miss).**
-  `_validate-artifact.ts:1905-L1909` only emits the orphan-`@fonts`
-  warning when `rawAestheticLine` is falsy. If `@aesthetic` is
-  present but invalid (unknown direction → error path), the parse
-  result has `rawAestheticLine` truthy, so the orphan check never
-  fires. `stripDirectiveLines` still strips both lines, so the LLM
-  silently loses its `@fonts` along with the bad `@aesthetic`.
-- **D-111 (update-artifact title leak on findUnique throw).**
-  `update-artifact.ts:264` returns `newTitle ?? existingForReturn?.title`
-  on persistence failure. `existingForReturn` is `null` if
-  `findUnique` threw before L88, so the user sees `title: undefined`
-  in the tool result. Asymmetric with the explicit not-found path
-  (Fix #23) which handles the same surface correctly.
+- **D-105 (residual UX).** Notebook pin state still lives only in
+  `sessionStorage` under `"notebook-pins:<artifactId>"`. Stale pins
+  are now swept whenever the parsed cell list changes
+  (`usePinToChat.sweepStale`), so dangling references no longer
+  carry across LLM rewrites or kernel restarts. The cross-tab and
+  cross-session ephemerality is unchanged — pins reset on tab close
+  by design, and the kernel's outputs are also ephemeral. The UI
+  does not surface this to the user.
 
-### Residual gaps from prior cuts (still open at HEAD)
+### Residual gaps from prior cuts
 
-- **D-13 (residual prose drift).** Mermaid prompt summary lists fewer
-  diagram types than the validator accepts. Validator error message
-  now generates from the shared array (so authors discover the full
-  set via the error path), but the prompt-side summary is still stale.
-- **D-14 (partial).** Slides MUST-rules (first=title, last=closing,
-  deck size 7-12) are validator-enforced behaviour, but prompt copy
-  still uses "validator convention" wording rather than "hard-error".
-  Behaviour correct; prompt copy could be tightened.
-- **D-16 (inverted).** `validatePython` now bans **all** `open(` calls,
-  including read mode. The prompt only documents `open` under
-  "absolutely not" without distinguishing mode. The validator is now
-  stricter than the prompt — opposite direction of the original
-  finding.
-- **D-17 (narrowed).** SVG decimal-place mismatch — prompt says "1 dp
-  max"; validator warns at 2+ dp (`\d{2,}` regex). A path with exactly
-  2 dp passes the validator but violates the prompt rule.
-- **D-46 (partial).** `validateDocument` accepts `_ctx` for shape
-  consistency but does not pass it to `validateScriptArtifact`. Cannot
-  apply `isNew`-only rules without a downstream signature change.
-- **D-68 (residual, two variants).** Type-label drift across registry
-  / shortLabel / prompt:
-  - `application/python`: registry `"Python Script"` vs prompt
-    `"Python Notebook"` — newly introduced by the notebook redesign.
-  - `application/3d`: shortLabel `"R3F Scene"` while registry and
-    prompt are both `"3D Scene"`.
+- **D-13 (closed by alignment).** The mermaid prompt's primary table
+  plus the "Also available" line plus the legacy aliases now total
+  the same 25-entry set the validator accepts. No drift.
+- **D-14 (closed).** Slides prompt copy now states "Hard error on new
+  decks, warning on edits" for first slide / last slide / deck size,
+  matching `ctx.isNew` enforcement in the validator.
+- **D-16 (closed).** Both prompt and `validatePython` now ban `open(`
+  unconditionally — read and write modes alike.
+- **D-17 (closed).** SVG validator warns at 2+ dp via `\d\.\d{2,}`,
+  i.e. anything with strictly more than 1 dp; prompt rule "round to
+  1 dp max" matches.
+- **D-46 (closed).** `validateDocument` now plumbs `ctx.isNew`
+  through to `validateScriptArtifact` via a typed options bag, and a
+  minimum-length rule on new submissions exercises it.
+- **D-68 (residual, cosmetic).**
+  - `application/python` — registry now says "Python Notebook",
+    matching the prompt. Closed.
+  - `application/3d` — shortLabel `"R3F Scene"` is intentionally
+    distinct from the longer label `"3D Scene"` so the panel pill
+    has a tighter glyph budget. Documenting as cosmetic-by-design.
 
 ### Deferred (open, tracked outside the D-N close-out)
 
