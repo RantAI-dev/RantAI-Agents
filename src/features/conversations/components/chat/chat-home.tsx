@@ -220,6 +220,16 @@ export function ChatHome({
   const [input, setInput] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Soft-autofocus the input on mount so users can start typing without
+  // clicking. Skip if another element is already focused (e.g. the user
+  // tabbed into the toolbar before the effect fired) so we don't steal
+  // focus from intentional keyboard navigation.
+  useEffect(() => {
+    if (typeof document !== "undefined" && document.activeElement === document.body) {
+      textareaRef.current?.focus()
+    }
+  }, [])
+
   // File attachment state
   const [attachedFiles, setAttachedFiles] = useState<File[]>([])
 
