@@ -16,22 +16,37 @@ export function LatexRenderer({ content }: LatexRendererProps) {
   const [activeTab, setActiveTab] = useState<"preview" | "source">("preview")
   const [retryCount, setRetryCount] = useState(0)
   const [copied, setCopied] = useState(false)
+  // showSource drives the inline <pre> on the error-state amber callout. It is
+  // deliberately separate from the tab-based LatexSourceView (active when
+  // activeTab === "source") because the error path renders a minimal raw view
+  // that does not re-parse the broken content through the highlighter.
   const [showSource, setShowSource] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const { html, error } = useMemo(() => {
+  const { html, warnings, error } = useMemo(() => {
     try {
       const registry = scanLabels(content)
-      const { html } = latexToHtml(content, registry)
-      return { html, error: null as string | null }
+      const { html, warnings } = latexToHtml(content, registry)
+      return { html, warnings, error: null as string | null }
     } catch (err) {
       return {
         html: null,
+        warnings: [] as string[],
         error: err instanceof Error ? err.message : "Failed to render LaTeX",
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, retryCount])
+
+  // Surface unresolved-reference warnings to the dev console only — the inline
+  // red [?] already tells the end user; logging the full list helps the LLM
+  // self-correct during iteration. Production builds stay silent.
+  if (process.env.NODE_ENV !== "production" && warnings.length > 0) {
+    for (const w of warnings) {
+      // eslint-disable-next-line no-console
+      console.warn(`[latex-renderer] ${w}`)
+    }
+  }
 
   const handleRetry = useCallback(() => setRetryCount((c) => c + 1), [])
 
