@@ -1,5 +1,5 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { prisma } from "@/lib/prisma"
 import { AVAILABLE_MODELS } from "@/lib/models"
 import { buildWizardTools, filterKnownIds, type WizardDeps } from "./tools"
@@ -8,8 +8,6 @@ import {
   type WizardDraft,
   type ProposeAgentInput,
 } from "./schema"
-
-const openrouter = createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY })
 
 const WIZARD_MODEL_ID = "anthropic/claude-sonnet-4.6"
 const MAX_STEPS = 8
@@ -182,7 +180,7 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
   const modelMessages = await convertToModelMessages(uiMessages)
 
   return streamText({
-    model: openrouter(WIZARD_MODEL_ID),
+    model: getChatProvider()(resolveModelId(WIZARD_MODEL_ID)),
     system,
     messages: modelMessages,
     tools: wizardTools,

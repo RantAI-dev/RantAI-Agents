@@ -1,5 +1,5 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models"
 import { resolveToolsForAssistant } from "@/lib/tools"
 import { buildToolInstruction, LANGUAGE_INSTRUCTION } from "@/lib/prompts/instructions"
@@ -15,10 +15,6 @@ import { authenticateAgentApiKey } from "@/features/agent-api-keys/service"
 import { incrementAgentApiKeyUsage } from "@/features/agent-api-keys/repository"
 import { prisma } from "@/lib/prisma"
 import type { V1ChatCompletionInput } from "./schema"
-
-const openrouter = createOpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
-})
 
 interface AuthResult {
   apiKey: { id: string; assistantId: string; scopes: string[]; ipWhitelist: string[] }
@@ -197,7 +193,7 @@ export async function runV1ChatCompletion(
   const requestId = `chatcmpl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
   const result = streamText({
-    model: openrouter(modelId),
+    model: getChatProvider()(resolveModelId(modelId)),
     system: systemPrompt,
     messages,
     tools: resolvedTools,

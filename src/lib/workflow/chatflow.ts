@@ -1,5 +1,5 @@
 import { streamText } from "ai"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
 import type { Node, Edge } from "@xyflow/react"
 import type { Workflow } from "@prisma/client"
@@ -213,10 +213,7 @@ export async function executeChatflow(
     resolvedSystemPrompt = (resolvedSystemPrompt || "") + followUpInstruction
   }
 
-  const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY || "",
-  })
-  const model = openrouter(streamNodeData.model || DEFAULT_MODEL_ID)
+  const model = getChatProvider()(resolveModelId(streamNodeData.model || DEFAULT_MODEL_ID))
 
   // Capture RAG sources from any RAG_SEARCH node outputs
   const ragSources: Array<{ title: string; section: string | null }> = []

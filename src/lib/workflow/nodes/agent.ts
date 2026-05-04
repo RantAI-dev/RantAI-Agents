@@ -1,5 +1,5 @@
 import { generateText, stepCountIs } from "ai"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { prisma } from "@/lib/prisma"
 import { resolveToolsForAssistant } from "@/lib/tools/registry"
 import { resolveSkillsForAssistant } from "@/lib/skills/resolver"
@@ -35,11 +35,7 @@ export async function executeAgent(
     throw new Error(`Agent node: assistant ${nodeData.assistantId} not found`)
   }
 
-  const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY || "",
-  })
-
-  const model = openrouter(assistant.model || "openai/gpt-4o-mini")
+  const model = getChatProvider()(resolveModelId(assistant.model || "openai/gpt-4o-mini"))
 
   const prompt = nodeData.promptTemplate
     ? resolveTemplate(nodeData.promptTemplate, tctx)

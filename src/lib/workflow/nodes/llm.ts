@@ -1,5 +1,5 @@
 import { generateText } from "ai"
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import type { WorkflowNodeData, LlmNodeData } from "../types"
 import type { ExecutionContext } from "../engine"
 import { buildTemplateContext } from "../engine"
@@ -16,11 +16,7 @@ export async function executeLlm(
   const nodeData = data as LlmNodeData
   const tctx = buildTemplateContext(data.label, data.nodeType, input, context)
 
-  const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY || "",
-  })
-
-  const model = openrouter(nodeData.model || "openai/gpt-4o-mini")
+  const model = getChatProvider()(resolveModelId(nodeData.model || "openai/gpt-4o-mini"))
 
   // Resolve system prompt and input through template engine
   const systemPrompt = nodeData.systemPrompt

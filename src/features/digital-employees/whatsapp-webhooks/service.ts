@@ -59,14 +59,10 @@ type ServiceDeps = typeof repository & {
 
 async function defaultGenerateAiResponse(system: string, messages: AiMessage[]): Promise<string> {
   const { streamText } = await import("ai")
-  const { createOpenRouter } = await import("@openrouter/ai-sdk-provider")
-
-  const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY,
-  })
+  const { getChatProvider, resolveModelId } = await import("@/lib/llm/provider")
 
   const result = streamText({
-    model: openrouter("openai/gpt-4o-mini"),
+    model: getChatProvider()(resolveModelId("openai/gpt-4o-mini")),
     system,
     messages,
   })

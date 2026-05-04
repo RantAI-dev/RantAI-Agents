@@ -75,6 +75,7 @@
     "docs:install": "cd docs-site && bun install"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.45",
     "@ai-sdk/react": "3.0.41",
     "@aws-sdk/client-s3": "^3.982.0",
     "@aws-sdk/s3-request-presigner": "^3.982.0",
