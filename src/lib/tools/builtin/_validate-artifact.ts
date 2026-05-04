@@ -2153,8 +2153,12 @@ function validatePython(content: string): ArtifactValidationResult {
     const hasPrint = /(^|[^.\w])print\s*\(/m.test(codeNoComments)
     const hasShow = /\bplt\.show\s*\(/m.test(codeNoComments)
     const lines = codeNoComments.split("\n").map((l) => l.trimEnd()).filter((l) => l.trim() !== "")
-    const lastLine = lines[lines.length - 1] ?? ""
-    const hasFinalExpression = /^[a-zA-Z_][\w.()[\]"'\s,+\-*/<>=]*$/.test(lastLine) && !lastLine.includes("=")
+    const lastLine = lines[lines.length - 1]?.trim() ?? ""
+    const isStatement =
+      lastLine === "" ||
+      lastLine.includes("=") && !/[=!<>]=/.test(lastLine) ||
+      /^(?:def|class|return|raise|pass|continue|break|import|from|with|while|for|if|elif|else|try|except|finally|async|await|del|global|nonlocal|assert|yield|@)\b/.test(lastLine)
+    const hasFinalExpression = lastLine !== "" && !isStatement
     if (hasPrint || hasShow || hasFinalExpression) anyVisibleOutput = true
 
     const sleepMatch = codeNoComments.match(/\btime\.sleep\s*\(\s*([\d.]+)\s*\)/)
