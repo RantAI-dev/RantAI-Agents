@@ -1400,17 +1400,6 @@ function validateCode(content: string, ctx?: ValidationContext): ArtifactValidat
     )
   }
 
-  // Use byte length (not char length) so multibyte UTF-8 content is sized
-  // consistently with the 512KB cap enforced by create-artifact.ts. The old
-  // char-based check could let a CJK / emoji-heavy snippet pass this warning
-  // and then fail the byte cap upstream.
-  const bytes = Buffer.byteLength(content, "utf-8")
-  if (bytes > 512 * 1024) {
-    warnings.push(
-      `Code content is ${Math.round(bytes / 1024)}KB — consider splitting into multiple files or trimming.`
-    )
-  }
-
   return { ok: errors.length === 0, errors, warnings }
 }
 
