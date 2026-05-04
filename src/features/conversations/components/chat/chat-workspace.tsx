@@ -2575,6 +2575,29 @@ export function ChatWorkspace({
           return prev
         })
 
+        // Roll back the persisted session so the empty assistant placeholder
+        // pushed pre-stream doesn't survive into the next page load. Without
+        // this, on reload the user sees a stale empty assistant bubble at
+        // the end of the history.
+        if (session && onUpdateSession) {
+          onUpdateSession(session.id, {
+            messages: [
+              ...baseMessages.map((m) => {
+                const ext = m as unknown as MessageWithExtras
+                return {
+                  id: m.id,
+                  role: toChatMessageRole(m.role),
+                  content: getMessageContent(m),
+                  createdAt: new Date(),
+                  ...(ext.replyTo != null && { replyTo: ext.replyTo }),
+                  ...(ext.editHistory != null && { editHistory: ext.editHistory }),
+                }
+              }),
+              { ...userMessage, createdAt: new Date() },
+            ],
+          })
+        }
+
         // Set error state
         const retryFn = () => {
           setInput(userInput)
