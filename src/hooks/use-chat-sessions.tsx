@@ -460,6 +460,20 @@ export function ChatSessionsProvider({
 
     loadedSessionsRef.current.delete(sessionId)
 
+    // Drop the per-session toolbar snapshot from sessionStorage. Without
+    // this, ChatHome's toolbar state piles up under chat-toolbar-state:*
+    // keys forever and eventually trips the 5MB sessionStorage quota.
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.removeItem(`chat-toolbar-state:${sessionId}`)
+        if (apiId !== sessionId) {
+          window.sessionStorage.removeItem(`chat-toolbar-state:${apiId}`)
+        }
+      } catch {
+        // sessionStorage unavailable — best-effort cleanup, ignore
+      }
+    }
+
     fetch(`/api/dashboard/chat/sessions/${apiId}`, {
       method: "DELETE",
     }).catch((error) => {
