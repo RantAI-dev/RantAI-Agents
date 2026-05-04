@@ -21,12 +21,13 @@ describe("LatexSourceView", () => {
     expect(pre?.textContent).toContain("\\end{theorem}")
   })
 
-  it("fills the panel and uses a centered max-width container (matches preview convention)", () => {
+  it("fills the panel and uses the same paper-card surface as the preview tab", () => {
     const { container } = render(<LatexSourceView source="x" />)
     const wrapper = container.firstChild as HTMLElement
     expect(wrapper.className).toMatch(/flex-1/)
     expect(wrapper.className).toMatch(/overflow-auto/)
-    // No floating-card chrome (no dark canvas background, no shadow card)
+    expect(wrapper.className).toMatch(/bg-muted\/40/)
+    // No stark dark-canvas chrome — the paper-card is theme-aware now
     expect(wrapper.className).not.toMatch(/dark:bg-zinc-900/)
   })
 })

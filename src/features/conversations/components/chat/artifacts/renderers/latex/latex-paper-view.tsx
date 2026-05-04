@@ -25,13 +25,17 @@ export function LatexPaperView({ html }: LatexPaperViewProps) {
   }, [])
 
   return (
-    <div className="flex-1 overflow-auto">
+    <div className="flex-1 overflow-auto bg-muted/40 px-4 py-6 sm:px-8 sm:py-10">
       <article
         ref={articleRef}
         onClick={onClick}
         className={[
           "mx-auto max-w-3xl",
-          "px-6 py-6",
+          "bg-background",
+          "border border-border/60",
+          "shadow-sm",
+          "rounded-md",
+          "px-8 py-10 sm:px-14 sm:py-14",
           "font-serif text-[15px] leading-[1.7]",
           "text-foreground",
           // theorem block utilities

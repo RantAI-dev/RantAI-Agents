@@ -13,20 +13,18 @@ export function LatexSourceView({ source }: LatexSourceViewProps) {
   const style = resolvedTheme === "dark" ? oneDark : oneLight
 
   return (
-    <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-3xl px-6 py-6">
+    <div className="flex-1 overflow-auto bg-muted/40 px-4 py-6 sm:px-8 sm:py-10">
+      <div className="mx-auto max-w-3xl bg-background border border-border/60 shadow-sm rounded-md overflow-hidden">
         <SyntaxHighlighter
           language="latex"
           style={style}
           showLineNumbers
           customStyle={{
             margin: 0,
-            padding: "1rem",
+            padding: "1.25rem",
             background: "transparent",
             fontSize: "0.8125rem",
             lineHeight: "1.6",
-            border: "1px solid hsl(var(--border))",
-            borderRadius: "0.5rem",
           }}
         >
           {source}

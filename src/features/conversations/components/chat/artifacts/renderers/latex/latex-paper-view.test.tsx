@@ -13,13 +13,18 @@ describe("LatexPaperView", () => {
     expect(article?.innerHTML).toContain("<strong>world</strong>")
   })
 
-  it("uses a centered max-width article that fills the panel (matches notebook/sheet convention)", () => {
+  it("uses a centered max-width article with a subtle paper-card surface", () => {
     const { container } = render(<LatexPaperView html="<p>x</p>" />)
     const article = container.querySelector("article")
-    // Constrained reading width with mx-auto, but no floating-card chrome
+    // Constrained reading width with mx-auto and serif typography for the paper feel
     expect(article?.className).toMatch(/max-w-3xl/)
     expect(article?.className).toMatch(/mx-auto/)
     expect(article?.className).toMatch(/font-serif/)
+    // Subtle elevation via theme tokens — bg-background card on bg-muted/40 outer
+    expect(article?.className).toMatch(/bg-background/)
+    expect(article?.className).toMatch(/border/)
+    expect(article?.className).toMatch(/shadow-sm/)
+    // No stark white-on-dark contrast that would break theme parity
     expect(article?.className).not.toMatch(/bg-white/)
     expect(article?.className).not.toMatch(/shadow-lg/)
   })
