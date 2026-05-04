@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest"
 
-// We import via dynamic require to avoid pulling React component code into a node-env test.
-// The transpiler logic in latex-renderer.tsx exports nothing today, so we test through a
-// thin re-export that we will add when extracting the transpiler in Task 2. For now,
-// these tests target the future location.
+// Tests target the future module path created in Task 2 by extracting latexToHtml
+// out of latex-renderer.tsx. After Task 2 lands, the import below resolves and
+// the suite locks in the existing transpiler behavior plus the i++ fix for
+// single-line display math from commit 4b72c66.
 import { latexToHtml } from "@/features/conversations/components/chat/artifacts/renderers/latex/lib/transpiler"
 
 describe("latexToHtml — regression", () => {
@@ -49,6 +49,7 @@ describe("latexToHtml — regression", () => {
     )
     expect(out.html).toMatch(/<ol>/)
     expect(out.html).toMatch(/<li>one<\/li>/)
+    expect(out.html).toMatch(/<li>two<\/li>/)
   })
 
   it("renders \\textbf as <strong>", () => {
@@ -78,5 +79,11 @@ describe("latexToHtml — regression", () => {
     )
     const matches = out.html.match(/math-block/g) ?? []
     expect(matches.length).toBe(1)
+  })
+
+  it("returns empty warnings array when no \\eqref references are unresolvable", () => {
+    const out = latexToHtml("\\section{Title}", new Map())
+    expect(Array.isArray(out.warnings)).toBe(true)
+    expect(out.warnings).toHaveLength(0)
   })
 })
