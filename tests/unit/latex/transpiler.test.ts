@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest"
 // the suite locks in the existing transpiler behavior plus the i++ fix for
 // single-line display math from commit 4b72c66.
 import { latexToHtml } from "@/features/conversations/components/chat/artifacts/renderers/latex/lib/transpiler"
+import { scanLabels } from "@/features/conversations/components/chat/artifacts/renderers/latex/lib/cross-refs"
 
 describe("latexToHtml — regression", () => {
   it("renders single-line $$x = y$$ without hanging (regression for 4b72c66)", () => {
@@ -85,5 +86,57 @@ describe("latexToHtml — regression", () => {
     const out = latexToHtml("\\section{Title}", new Map())
     expect(Array.isArray(out.warnings)).toBe(true)
     expect(out.warnings).toHaveLength(0)
+  })
+})
+
+describe("latexToHtml — theorem envs", () => {
+  it("renders \\begin{theorem} as <aside class='latex-theorem-blue'>", () => {
+    const src = "\\begin{theorem}\nLet f be continuous.\n\\end{theorem}"
+    const out = latexToHtml(src, scanLabels(src))
+    expect(out.html).toMatch(/latex-theorem-blue/)
+    expect(out.html).toMatch(/Theorem/)
+    expect(out.html).toContain("Let f be continuous.")
+  })
+
+  it("renders proof env with QED mark", () => {
+    const src = "\\begin{proof}\nSteps go here.\n\\end{proof}"
+    const out = latexToHtml(src, scanLabels(src))
+    expect(out.html).toMatch(/latex-qed/)
+    expect(out.html).toMatch(/Proof\./)
+  })
+
+  it("numbers labeled theorems and exposes anchor id", () => {
+    const src =
+      "\\begin{theorem}\n\\label{thm:mvt}\nBody\n\\end{theorem}"
+    const reg = scanLabels(src)
+    const out = latexToHtml(src, reg)
+    expect(out.html).toMatch(/id="thm-mvt"/)
+    expect(out.html).toMatch(/Theorem 1\./)
+  })
+})
+
+describe("latexToHtml — cross references", () => {
+  it("\\eqref{eq:foo} renders as a clickable link with parenthesized number", () => {
+    const src =
+      "\\begin{equation}\\label{eq:foo}\nx = y\n\\end{equation}\n\nBy \\eqref{eq:foo} we have...."
+    const reg = scanLabels(src)
+    const out = latexToHtml(src, reg)
+    expect(out.html).toMatch(/<a href="#eq-foo"[^>]*data-eqref[^>]*>\(1\)<\/a>/)
+  })
+
+  it("\\ref{thm:mvt} renders as bare number link", () => {
+    const src =
+      "\\begin{theorem}\\label{thm:mvt}\nbody\n\\end{theorem}\n\nBy \\ref{thm:mvt}..."
+    const reg = scanLabels(src)
+    const out = latexToHtml(src, reg)
+    expect(out.html).toMatch(/<a href="#thm-mvt"[^>]*>1<\/a>/)
+  })
+
+  it("unresolved \\eqref renders as red [?] and emits a warning", () => {
+    const src = "Reference to nothing: \\eqref{eq:missing}."
+    const out = latexToHtml(src, new Map())
+    expect(out.html).toMatch(/latex-eqref-unknown/)
+    expect(out.html).toContain("[?]")
+    expect(out.warnings).toContain("Unresolved reference: eq:missing")
   })
 })

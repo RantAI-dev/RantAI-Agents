@@ -1,4 +1,6 @@
 import katex from "katex"
+import { isTheoremBegin, renderTheoremBlock } from "./theorem-envs"
+import { resolveRef } from "./cross-refs"
 
 export type LabelEntry = {
   kind: "theorem" | "lemma" | "corollary" | "proposition"
@@ -178,45 +180,72 @@ function parseParagraphHead(
   return { title: arg.content, rest: line.slice(arg.endIndex + 1) }
 }
 
-/** Process inline LaTeX commands within a text line and return HTML */
-function processInlineLatex(text: string): string {
-  let result = text
+/**
+ * Closure constructor for the inline LaTeX processor.
+ * Captures registry and warnings so \eqref{} and \ref{} can resolve labels
+ * and emit warnings without threading extra params through recursive calls.
+ */
+function makeProcessInline(registry: LabelRegistry, warnings: string[]) {
+  function processInlineLatex(text: string): string {
+    let result = text
 
-  // Inline math: $...$ (non-greedy, not $$)
-  result = result.replace(/\$([^$]+?)\$/g, (_, math) => renderMath(math, false))
+    // Inline math: $...$ (non-greedy, not $$)
+    result = result.replace(/\$([^$]+?)\$/g, (_, math) => renderMath(math, false))
 
-  // Balanced-brace text commands (no longer regex `[^}]*`).
-  result = replaceBracedCommand(result, "textbf", (inner) => `<strong>${processInlineLatex(inner)}</strong>`)
-  result = replaceBracedCommand(result, "textit", (inner) => `<em>${processInlineLatex(inner)}</em>`)
-  result = replaceBracedCommand(result, "emph", (inner) => `<em>${processInlineLatex(inner)}</em>`)
-  result = replaceBracedCommand(result, "underline", (inner) => `<u>${processInlineLatex(inner)}</u>`)
-  result = replaceBracedCommand(result, "texttt", (inner) => `<code>${processInlineLatex(inner)}</code>`)
-  result = replaceTwoArgBracedCommand(
-    result,
-    "href",
-    (url, txt) => `<a href="${escapeHtml(url)}">${processInlineLatex(txt)}</a>`,
-  )
-  // \text{...} (used inside math sometimes, just unwrap)
-  result = replaceBracedCommand(result, "text", (inner) => inner)
+    // Balanced-brace text commands (no longer regex `[^}]*`).
+    result = replaceBracedCommand(result, "textbf", (inner) => `<strong>${processInlineLatex(inner)}</strong>`)
+    result = replaceBracedCommand(result, "textit", (inner) => `<em>${processInlineLatex(inner)}</em>`)
+    result = replaceBracedCommand(result, "emph", (inner) => `<em>${processInlineLatex(inner)}</em>`)
+    result = replaceBracedCommand(result, "underline", (inner) => `<u>${processInlineLatex(inner)}</u>`)
+    result = replaceBracedCommand(result, "texttt", (inner) => `<code>${processInlineLatex(inner)}</code>`)
+    result = replaceTwoArgBracedCommand(
+      result,
+      "href",
+      (url, txt) => `<a href="${escapeHtml(url)}">${processInlineLatex(txt)}</a>`,
+    )
+    // \text{...} (used inside math sometimes, just unwrap)
+    result = replaceBracedCommand(result, "text", (inner) => inner)
 
-  // Clean up remaining simple commands
-  result = result.replace(/\\noindent\s*/g, "")
-  result = result.replace(/\\\\(\s*)/g, "<br>")
-  result = result.replace(/\\newline\s*/g, "<br>")
-  result = result.replace(/~/g, "&nbsp;")
-  result = result.replace(/\\,/g, "&thinsp;")
-  result = result.replace(/\\;/g, "&ensp;")
-  result = result.replace(/\\quad/g, "&emsp;")
-  result = result.replace(/\\qquad/g, "&emsp;&emsp;")
-  result = result.replace(/---/g, "&mdash;")
-  result = result.replace(/--/g, "&ndash;")
+    // Cross-references — registered labels resolve to clickable anchor links;
+    // unknown keys render as a red [?] and push a warning.
+    result = result.replace(/\\eqref\{([^}]+)\}/g, (_, key: string) => {
+      const r = resolveRef(registry, key, "eqref")
+      if (!r) {
+        warnings.push(`Unresolved reference: ${key}`)
+        return `<span class="latex-eqref-unknown">[?]</span>`
+      }
+      return `<a href="#${r.anchorId}" data-eqref class="latex-eqref">${r.displayText}</a>`
+    })
+    result = result.replace(/\\ref\{([^}]+)\}/g, (_, key: string) => {
+      const r = resolveRef(registry, key, "ref")
+      if (!r) {
+        warnings.push(`Unresolved reference: ${key}`)
+        return `<span class="latex-eqref-unknown">[?]</span>`
+      }
+      return `<a href="#${r.anchorId}" data-eqref class="latex-eqref">${r.displayText}</a>`
+    })
 
-  return result
+    // Clean up remaining simple commands
+    result = result.replace(/\\noindent\s*/g, "")
+    result = result.replace(/\\\\(\s*)/g, "<br>")
+    result = result.replace(/\\newline\s*/g, "<br>")
+    result = result.replace(/~/g, "&nbsp;")
+    result = result.replace(/\\,/g, "&thinsp;")
+    result = result.replace(/\\;/g, "&ensp;")
+    result = result.replace(/\\quad/g, "&emsp;")
+    result = result.replace(/\\qquad/g, "&emsp;&emsp;")
+    result = result.replace(/---/g, "&mdash;")
+    result = result.replace(/--/g, "&ndash;")
+
+    return result
+  }
+  return processInlineLatex
 }
 
 /** Convert a full LaTeX document to HTML, using KaTeX for math */
-export function latexToHtml(source: string, _registry: LabelRegistry): TranspileResult {
+export function latexToHtml(source: string, registry: LabelRegistry): TranspileResult {
   const warnings: string[] = []
+  const processInlineLatex = makeProcessInline(registry, warnings)
   const parts: string[] = []
 
   // Extract body from \begin{document}...\end{document} if present
@@ -248,6 +277,27 @@ export function latexToHtml(source: string, _registry: LabelRegistry): Transpile
       )
     }
     parts.push("<hr>")
+  }
+
+  // Helper: wrap display math with anchor + equation number when labeled.
+  // Strips \label{...} from the math content before passing to KaTeX since
+  // KaTeX doesn't recognize the command and would render it as an error.
+  function wrapDisplayMath(mathSource: string): string {
+    const labelMatch = mathSource.match(/\\label\{([^}]+)\}/)
+    const cleanedMath = mathSource.replace(/\\label\{[^}]+\}\s*/g, "")
+    const rendered = renderMath(cleanedMath, true)
+    if (!labelMatch) return `<div class="math-block">${rendered}</div>`
+    const key = labelMatch[1]
+    const entry = registry.get(key)
+    if (!entry || entry.kind !== "equation") {
+      return `<div class="math-block">${rendered}</div>`
+    }
+    return (
+      `<div class="latex-equation math-block" id="${entry.anchorId}">` +
+        rendered +
+        `<span class="latex-equation-number">(${entry.number})</span>` +
+      `</div>`
+    )
   }
 
   // Process line by line / block by block
@@ -344,6 +394,34 @@ export function latexToHtml(source: string, _registry: LabelRegistry): Transpile
       continue
     }
 
+    // Theorem-family environments — BEFORE the generic \begin{} skip
+    const theoremHead = isTheoremBegin(line)
+    if (theoremHead) {
+      if (inList) { parts.push(`</${listType}>`); inList = false }
+      const endTag = `\\end{${theoremHead.kind}}`
+      let inner = ""
+      i++
+      while (i < lines.length && !lines[i].includes(endTag)) {
+        inner += lines[i] + "\n"
+        i++
+      }
+      if (i < lines.length) i++   // consume the end tag line
+
+      // Pull a label from the block body if present (already registered by scanLabels)
+      const labelMatch = inner.match(/\\label\{([^}]+)\}/)
+      const labelKey = labelMatch?.[1]
+      const registryEntry = labelKey ? registry.get(labelKey) : undefined
+      const anchorId = registryEntry?.anchorId ?? null
+      const number = registryEntry?.number ?? null
+
+      // Strip the \label{} from inner before processing
+      const cleanedInner = inner.replace(/\\label\{[^}]+\}\s*\n?/g, "").trim()
+      const innerHtml = processInlineLatex(cleanedInner)
+
+      parts.push(renderTheoremBlock(theoremHead.kind, number, theoremHead.optionalName, innerHtml, anchorId))
+      continue
+    }
+
     // Display math blocks: \begin{equation}, \begin{align}, \begin{gather}, etc.
     const mathEnvMatch = line.match(
       /\\begin\{(equation|align|gather|multline|cases|eqnarray)\*?\}/
@@ -362,7 +440,7 @@ export function latexToHtml(source: string, _registry: LabelRegistry): Transpile
         mathContent += "\n" + lines[i]
         i++
       }
-      parts.push(`<div class="math-block">${renderMath(mathContent, true)}</div>`)
+      parts.push(wrapDisplayMath(mathContent))
       continue
     }
 
@@ -384,9 +462,7 @@ export function latexToHtml(source: string, _registry: LabelRegistry): Transpile
           i++
         }
       }
-      parts.push(
-        `<div class="math-block">${renderMath(mathContent.trim(), true)}</div>`
-      )
+      parts.push(wrapDisplayMath(mathContent.trim()))
       continue
     }
 
@@ -408,9 +484,7 @@ export function latexToHtml(source: string, _registry: LabelRegistry): Transpile
           i++
         }
       }
-      parts.push(
-        `<div class="math-block">${renderMath(mathContent.trim(), true)}</div>`
-      )
+      parts.push(wrapDisplayMath(mathContent.trim()))
       continue
     }
 
