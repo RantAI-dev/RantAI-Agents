@@ -21,7 +21,7 @@ export type TranspileResult = {
  *  live javascript: link in the panel. Other trust-gated KaTeX commands
  *  (\includegraphics, \htmlClass, \htmlData, \htmlId, \htmlStyle) stay
  *  rejected by returning false. */
-export function isKatexCommandAllowed(context: { command: string; url?: string }): boolean {
+function isKatexCommandAllowed(context: { command: string; url?: string }): boolean {
   if (context.command === "\\href" || context.command === "\\url") {
     return typeof context.url === "string" && /^https?:\/\//i.test(context.url)
   }
@@ -29,7 +29,7 @@ export function isKatexCommandAllowed(context: { command: string; url?: string }
 }
 
 /** Render a math string via KaTeX, returning HTML */
-export function renderMath(tex: string, displayMode: boolean): string {
+function renderMath(tex: string, displayMode: boolean): string {
   try {
     return katex.renderToString(tex, {
       displayMode,
@@ -41,7 +41,7 @@ export function renderMath(tex: string, displayMode: boolean): string {
   }
 }
 
-export function escapeHtml(text: string): string {
+function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -57,7 +57,7 @@ export function escapeHtml(text: string): string {
  *
  * Returns `null` if no matching brace is found.
  */
-export function readBracedArg(
+function readBracedArg(
   source: string,
   openIndex: number,
 ): { content: string; endIndex: number } | null {
@@ -88,7 +88,7 @@ export function readBracedArg(
  * The transformer receives the inner text. Used for `\textbf`, `\section`,
  * `\href`, etc. — replaces the previous regex which broke on nested braces.
  */
-export function replaceBracedCommand(
+function replaceBracedCommand(
   source: string,
   command: string,
   transform: (inner: string) => string,
@@ -115,7 +115,7 @@ export function replaceBracedCommand(
 /**
  * Two-arg variant for commands like `\href{url}{text}`.
  */
-export function replaceTwoArgBracedCommand(
+function replaceTwoArgBracedCommand(
   source: string,
   command: string,
   transform: (a: string, b: string) => string,
@@ -148,7 +148,7 @@ export function replaceTwoArgBracedCommand(
  * remainder of the line, and which level it was. Returns `null` if the line
  * doesn't open with one of these commands.
  */
-export function parseSectioningHead(
+function parseSectioningHead(
   line: string,
 ): { kind: "section" | "subsection" | "subsubsection"; title: string; rest: string } | null {
   const m = line.match(/^\s*\\(subsubsection|subsection|section)\*?\s*\{/)
@@ -167,7 +167,7 @@ export function parseSectioningHead(
 /**
  * Parse a `\paragraph{Title}rest...` line, balanced-brace aware.
  */
-export function parseParagraphHead(
+function parseParagraphHead(
   line: string,
 ): { title: string; rest: string } | null {
   const m = line.match(/^\s*\\paragraph\*?\s*\{/)
@@ -179,7 +179,7 @@ export function parseParagraphHead(
 }
 
 /** Process inline LaTeX commands within a text line and return HTML */
-export function processInlineLatex(text: string): string {
+function processInlineLatex(text: string): string {
   let result = text
 
   // Inline math: $...$ (non-greedy, not $$)
