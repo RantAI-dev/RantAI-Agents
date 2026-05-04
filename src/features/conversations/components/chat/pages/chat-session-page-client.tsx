@@ -1,10 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useChatSessions, type ChatSession, type ChatMessage } from "@/hooks/use-chat-sessions"
+import { useToast } from "@/hooks/use-toast"
 import { ChatWorkspace } from "@/features/conversations/components/chat/chat-workspace"
 import type { InitialChatSettings } from "@/features/conversations/components/chat/chat-home"
 import type {
@@ -123,15 +124,38 @@ export default function ChatSessionPageClient({
     }
   }, [updateSession, syncMessages])
 
+  const { toast } = useToast()
+  const newChatAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    return () => {
+      newChatAbortRef.current?.abort()
+    }
+  }, [])
+
   const handleNewChat = useCallback(async () => {
     if (!selectedAssistant) return
+    newChatAbortRef.current?.abort()
+    const controller = new AbortController()
+    newChatAbortRef.current = controller
     try {
-      const newSession = await createPersistedSession(selectedAssistant.id)
+      const newSession = await createPersistedSession(selectedAssistant.id, controller.signal)
       router.push(`/dashboard/chat/${newSession.id}`)
     } catch (error) {
+      if ((error as { name?: string })?.name === "AbortError") return
       console.error("[ChatSession] Failed to create new chat:", error)
+      toast({
+        title: "Couldn't start chat",
+        description:
+          error instanceof Error ? error.message : "Network error — try again in a moment.",
+        variant: "destructive",
+      })
+    } finally {
+      if (newChatAbortRef.current === controller) {
+        newChatAbortRef.current = null
+      }
     }
-  }, [selectedAssistant, createPersistedSession, router])
+  }, [selectedAssistant, createPersistedSession, router, toast])
 
   // Session not found (possibly deleted) - redirect to chat home.
   // MUST run before any early return so hook order stays stable across

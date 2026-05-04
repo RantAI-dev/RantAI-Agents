@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { useToast } from "@/hooks/use-toast"
 import React from "react"
 import { useSession, signOut } from "next-auth/react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -245,17 +246,38 @@ function ChatSectionContent({
   const pathname = usePathname()
   const router = useRouter()
   const { sessions, createPersistedSession, deleteSession } = useChatSessions()
+  const { toast } = useToast()
   const [creatingNewChat, setCreatingNewChat] = useState(false)
+  const newChatAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    return () => {
+      newChatAbortRef.current?.abort()
+    }
+  }, [])
 
   const handleNewChat = async () => {
     if (!selectedAssistant || creatingNewChat) return
+    newChatAbortRef.current?.abort()
+    const controller = new AbortController()
+    newChatAbortRef.current = controller
     setCreatingNewChat(true)
     try {
-      const newSession = await createPersistedSession(selectedAssistant.id)
+      const newSession = await createPersistedSession(selectedAssistant.id, controller.signal)
       router.push(`/dashboard/chat/${newSession.id}`)
     } catch (error) {
+      if ((error as { name?: string })?.name === "AbortError") return
       console.error("[AppSidebar] Failed to create new chat:", error)
+      toast({
+        title: "Couldn't start chat",
+        description:
+          error instanceof Error ? error.message : "Network error — try again in a moment.",
+        variant: "destructive",
+      })
     } finally {
+      if (newChatAbortRef.current === controller) {
+        newChatAbortRef.current = null
+      }
       setCreatingNewChat(false)
     }
   }

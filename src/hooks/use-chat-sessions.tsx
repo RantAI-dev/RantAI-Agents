@@ -117,7 +117,7 @@ interface ChatSessionsContextType {
   activeSession: ChatSession | undefined
   setActiveSessionId: (id: string | null) => void
   hydrateSessions: (sessions: SerializedChatSession[]) => void
-  createPersistedSession: (assistantId: string) => Promise<ChatSession>
+  createPersistedSession: (assistantId: string, signal?: AbortSignal) => Promise<ChatSession>
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => void
   deleteSession: (sessionId: string) => void
   syncMessages: (sessionId: string, messages: ChatMessage[]) => void
@@ -315,12 +315,18 @@ export function ChatSessionsProvider({
   // mid-typing URL swap that the older tempId-then-replace flow caused
   // (router.replace would fire when dbId resolved, kicking the user
   // out of focus while they were composing their first message).
+  //
+  // Accepts an optional AbortSignal so callers can cancel the in-flight
+  // POST if the user navigates away before it resolves — without a
+  // cancel path the server ends up with an orphan empty session that
+  // the user never sees.
   const createPersistedSession = useCallback(
-    async (assistantId: string): Promise<ChatSession> => {
+    async (assistantId: string, signal?: AbortSignal): Promise<ChatSession> => {
       const response = await fetch("/api/dashboard/chat/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assistantId }),
+        signal,
       })
       if (!response.ok) {
         throw new Error(`Failed to create chat session: ${response.status}`)
