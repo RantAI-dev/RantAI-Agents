@@ -118,6 +118,7 @@ interface ChatSessionsContextType {
   setActiveSessionId: (id: string | null) => void
   hydrateSessions: (sessions: SerializedChatSession[]) => void
   createSession: (assistantId: string) => ChatSession
+  createPersistedSession: (assistantId: string) => Promise<ChatSession>
   updateSession: (sessionId: string, updates: Partial<ChatSession>) => void
   deleteSession: (sessionId: string) => void
   syncMessages: (sessionId: string, messages: ChatMessage[]) => void
@@ -340,6 +341,38 @@ export function ChatSessionsProvider({
     return newSession
   }, [])
 
+  // Persisted variant — awaits the DB POST before resolving so callers
+  // can navigate straight to /dashboard/chat/[realDbId]. This avoids the
+  // mid-typing URL swap that the older tempId-then-replace flow caused
+  // (router.replace would fire when dbId resolved, kicking the user
+  // out of focus while they were composing their first message).
+  const createPersistedSession = useCallback(
+    async (assistantId: string): Promise<ChatSession> => {
+      const response = await fetch("/api/dashboard/chat/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assistantId }),
+      })
+      if (!response.ok) {
+        throw new Error(`Failed to create chat session: ${response.status}`)
+      }
+      const data = await response.json()
+      const session: ChatSession = {
+        id: data.id,
+        dbId: data.id,
+        title: data.title ?? "New Chat",
+        assistantId,
+        createdAt: new Date(data.createdAt ?? Date.now()),
+        messages: [],
+      }
+      loadedSessionsRef.current.add(session.id)
+      setSessions((prev) => [session, ...prev])
+      setActiveSessionId(session.id)
+      return session
+    },
+    [],
+  )
+
   // Resolve the DB-persisted ID for a session (handles tempId → dbId mapping)
   // Uses sessionsRef to always get the latest state (important for debounced callbacks)
   const resolveDbId = useCallback((sessionId: string): string => {
@@ -493,6 +526,7 @@ export function ChatSessionsProvider({
         setActiveSessionId,
         hydrateSessions,
         createSession,
+        createPersistedSession,
         updateSession,
         deleteSession,
         syncMessages,

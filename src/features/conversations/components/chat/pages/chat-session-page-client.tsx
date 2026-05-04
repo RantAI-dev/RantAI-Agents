@@ -49,7 +49,7 @@ export default function ChatSessionPageClient({
     setActiveSessionId,
     updateSession,
     syncMessages,
-    createSession,
+    createPersistedSession,
     hydrateSessions,
   } = useChatSessions()
 
@@ -104,14 +104,6 @@ export default function ChatSessionPageClient({
     }
   }, [id, sessions, setActiveSessionId])
 
-  // Once dbId resolves, replace tempId in URL with real dbId
-  useEffect(() => {
-    if (!activeSession?.dbId) return
-    if (activeSession.id === id) {
-      router.replace(`/dashboard/chat/${activeSession.dbId}`)
-    }
-  }, [activeSession?.dbId, activeSession?.id, id, router])
-
   useEffect(() => {
     if (!activeSession?.assistantId) return
     if (getAssistantById(activeSession.assistantId)) return
@@ -131,12 +123,15 @@ export default function ChatSessionPageClient({
     }
   }, [updateSession, syncMessages])
 
-  const handleNewChat = useCallback(() => {
-    if (selectedAssistant) {
-      const newSession = createSession(selectedAssistant.id)
+  const handleNewChat = useCallback(async () => {
+    if (!selectedAssistant) return
+    try {
+      const newSession = await createPersistedSession(selectedAssistant.id)
       router.push(`/dashboard/chat/${newSession.id}`)
+    } catch (error) {
+      console.error("[ChatSession] Failed to create new chat:", error)
     }
-  }, [selectedAssistant, createSession, router])
+  }, [selectedAssistant, createPersistedSession, router])
 
   // Session not found (possibly deleted) - redirect to chat home.
   // MUST run before any early return so hook order stays stable across

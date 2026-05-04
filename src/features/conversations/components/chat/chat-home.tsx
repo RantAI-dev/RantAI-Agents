@@ -77,8 +77,14 @@ export interface ChatHomeProps {
   selectedAssistantId?: string | null
   getAssistantById: (id: string) => { emoji: string; name: string } | undefined
   onSelectSession: (id: string) => void
-  onCreateSession: (assistantId: string, initialMessage?: string, settings?: InitialChatSettings) => void
+  onCreateSession: (
+    assistantId: string,
+    initialMessage?: string,
+    settings?: InitialChatSettings,
+  ) => void | Promise<void>
   initialToolbarData?: ChatToolbarHydrationData | null
+  /** When true, the input + create buttons disable so the user knows the session is being persisted before navigation. */
+  creatingSession?: boolean
 }
 
 // ─── Rotating phrases ────────────────────────────────────────────────────────
@@ -202,6 +208,7 @@ export function ChatHome({
   onSelectSession,
   onCreateSession,
   initialToolbarData,
+  creatingSession = false,
 }: ChatHomeProps) {
   const orgFetch = useOrgFetch()
   const { activeOrganization } = useOrganization()
@@ -611,17 +618,26 @@ export function ChatHome({
                   onChange={(e) => setInput(e.target.value)}
                   onFocus={() => void loadToolbarData()}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
-                  className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none"
+                  placeholder={
+                    creatingSession
+                      ? "Creating chat..."
+                      : "Ask, create, or start a task. Press Ctrl Enter to insert a line break..."
+                  }
+                  disabled={creatingSession}
+                  className="min-h-[52px] max-h-[200px] pr-12 resize-none !border-none !shadow-none bg-transparent dark:bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 rounded-2xl rounded-b-none disabled:opacity-60 disabled:cursor-wait"
                   rows={1}
                 />
                 <Button
                   type="submit"
                   size="icon"
                   className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
-                  disabled={!input.trim()}
+                  disabled={!input.trim() || creatingSession}
                 >
-                  <SendHorizontal className="h-4 w-4" />
+                  {creatingSession ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <SendHorizontal className="h-4 w-4" />
+                  )}
                 </Button>
               </div>
 

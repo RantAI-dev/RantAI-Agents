@@ -29,7 +29,8 @@ export default function ChatPageClient({
     initialAssistants,
   })
 
-  const { sessions, createSession, hydrateSessions } = useChatSessions()
+  const { sessions, createPersistedSession, hydrateSessions } = useChatSessions()
+  const [creatingSession, setCreatingSession] = useState(false)
 
   // Track whether provider has been hydrated with server data yet.
   // Until then, use initialSessions directly to avoid hydration mismatch:
@@ -78,12 +79,25 @@ export default function ChatPageClient({
           const urlId = session?.dbId || id
           router.push(`/dashboard/chat/${urlId}`)
         }}
-        onCreateSession={(assistantId, initialMessage, settings) => {
+        creatingSession={creatingSession}
+        onCreateSession={async (assistantId, initialMessage, settings) => {
           const targetAssistantId = initialMessage
             ? (selectedAssistantId ?? assistantId)
             : assistantId
 
-          const newSession = createSession(targetAssistantId)
+          // Persist the session in the DB before navigating so the URL
+          // carries the real dbId from the start. The previous tempId-
+          // then-router.replace flow caused a mid-typing "refresh" that
+          // killed focus and felt like a reload.
+          setCreatingSession(true)
+          let newSession
+          try {
+            newSession = await createPersistedSession(targetAssistantId)
+          } catch (error) {
+            console.error("[ChatHome] Failed to create chat session:", error)
+            setCreatingSession(false)
+            return
+          }
           if (settings) {
             const toolbarSnapshot = {
               selectedKBGroupIds: settings.knowledgeBaseGroupIds ?? null,
@@ -113,7 +127,7 @@ export default function ChatPageClient({
               message: initialMessage,
               settings: settings ?? null,
               sessionId: newSession.id,
-              sessionDbId: null,
+              sessionDbId: newSession.dbId ?? newSession.id,
               assistantId: targetAssistantId,
               createdAt: Date.now(),
             }
