@@ -16,22 +16,24 @@ export function LatexPaperView({ html }: LatexPaperViewProps) {
     const href = target.getAttribute("href")
     if (!href || !href.startsWith("#")) return
     const id = href.slice(1)
-    const escaped = typeof CSS !== "undefined" && CSS.escape ? CSS.escape(id) : id.replace(/[^\w-]/g, "\\$&")
+    const escaped =
+      typeof CSS !== "undefined" && CSS.escape
+        ? CSS.escape(id)
+        : id.replace(/[^\w-]/g, "\\$&")
     const el = articleRef.current?.querySelector(`#${escaped}`)
     el?.scrollIntoView({ behavior: "smooth", block: "center" })
   }, [])
 
   return (
-    <div className="bg-muted/30 dark:bg-zinc-900 min-h-full p-8 overflow-auto">
+    <div className="flex-1 overflow-auto">
       <article
         ref={articleRef}
         onClick={onClick}
         className={[
-          "mx-auto max-w-[720px]",
-          "bg-white text-neutral-900",
-          "px-[60px] py-[72px]",
-          "shadow-lg rounded-sm",
+          "mx-auto max-w-3xl",
+          "px-6 py-6",
           "font-serif text-[15px] leading-[1.7]",
+          "text-foreground",
           // theorem block utilities
           "[&_.latex-theorem]:border-l-4",
           "[&_.latex-theorem]:pl-4",
@@ -40,26 +42,34 @@ export function LatexPaperView({ html }: LatexPaperViewProps) {
           "[&_.latex-theorem-header]:font-semibold",
           "[&_.latex-theorem-header]:mb-1",
           "[&_.latex-theorem-blue]:border-blue-500",
-          "[&_.latex-theorem-blue]:bg-blue-50/50",
-          "[&_.latex-theorem-blue_.latex-theorem-header]:text-blue-900",
+          "[&_.latex-theorem-blue]:bg-blue-500/5",
+          "[&_.latex-theorem-blue_.latex-theorem-header]:text-blue-700",
+          "dark:[&_.latex-theorem-blue_.latex-theorem-header]:text-blue-300",
           "[&_.latex-theorem-indigo]:border-indigo-500",
-          "[&_.latex-theorem-indigo]:bg-indigo-50/50",
-          "[&_.latex-theorem-indigo_.latex-theorem-header]:text-indigo-900",
+          "[&_.latex-theorem-indigo]:bg-indigo-500/5",
+          "[&_.latex-theorem-indigo_.latex-theorem-header]:text-indigo-700",
+          "dark:[&_.latex-theorem-indigo_.latex-theorem-header]:text-indigo-300",
           "[&_.latex-theorem-teal]:border-teal-500",
-          "[&_.latex-theorem-teal]:bg-teal-50/50",
-          "[&_.latex-theorem-teal_.latex-theorem-header]:text-teal-900",
+          "[&_.latex-theorem-teal]:bg-teal-500/5",
+          "[&_.latex-theorem-teal_.latex-theorem-header]:text-teal-700",
+          "dark:[&_.latex-theorem-teal_.latex-theorem-header]:text-teal-300",
           "[&_.latex-theorem-sky]:border-sky-500",
-          "[&_.latex-theorem-sky]:bg-sky-50/50",
-          "[&_.latex-theorem-sky_.latex-theorem-header]:text-sky-900",
+          "[&_.latex-theorem-sky]:bg-sky-500/5",
+          "[&_.latex-theorem-sky_.latex-theorem-header]:text-sky-700",
+          "dark:[&_.latex-theorem-sky_.latex-theorem-header]:text-sky-300",
           "[&_.latex-theorem-purple]:border-purple-500",
-          "[&_.latex-theorem-purple]:bg-purple-50/50",
-          "[&_.latex-theorem-purple_.latex-theorem-header]:text-purple-900",
+          "[&_.latex-theorem-purple]:bg-purple-500/5",
+          "[&_.latex-theorem-purple_.latex-theorem-header]:text-purple-700",
+          "dark:[&_.latex-theorem-purple_.latex-theorem-header]:text-purple-300",
           "[&_.latex-theorem-amber]:border-amber-500",
-          "[&_.latex-theorem-amber]:bg-amber-50/50",
-          "[&_.latex-theorem-amber_.latex-theorem-header]:text-amber-900",
-          "[&_.latex-theorem-gray]:border-gray-400",
-          "[&_.latex-theorem-gray]:bg-gray-50/50",
-          "[&_.latex-theorem-gray_.latex-theorem-header]:text-gray-700",
+          "[&_.latex-theorem-amber]:bg-amber-500/5",
+          "[&_.latex-theorem-amber_.latex-theorem-header]:text-amber-700",
+          "dark:[&_.latex-theorem-amber_.latex-theorem-header]:text-amber-300",
+          "[&_.latex-theorem-gray]:border-muted-foreground/40",
+          "[&_.latex-theorem-gray]:bg-muted/40",
+          "[&_.latex-theorem-gray_.latex-theorem-header]:text-muted-foreground",
+          // theorem body subtle de-emphasis
+          "[&_.latex-theorem-body]:text-foreground/90",
           // proof QED
           "[&_.latex-qed]:float-right",
           "[&_.latex-qed]:ml-2",
@@ -71,13 +81,13 @@ export function LatexPaperView({ html }: LatexPaperViewProps) {
           "[&_.latex-equation-number]:top-1/2",
           "[&_.latex-equation-number]:-translate-y-1/2",
           "[&_.latex-equation-number]:text-sm",
-          "[&_.latex-equation-number]:text-gray-500",
+          "[&_.latex-equation-number]:text-muted-foreground",
           "[&_.latex-equation-number]:font-mono",
           // refs
-          "[&_.latex-eqref]:text-blue-600",
+          "[&_.latex-eqref]:text-primary",
           "[&_.latex-eqref]:hover:underline",
           "[&_.latex-eqref]:cursor-pointer",
-          "[&_.latex-eqref-unknown]:text-red-600",
+          "[&_.latex-eqref-unknown]:text-destructive",
           "[&_.latex-eqref-unknown]:font-medium",
           // KaTeX scroll
           "[&_.katex-display]:overflow-x-auto",
@@ -88,7 +98,7 @@ export function LatexPaperView({ html }: LatexPaperViewProps) {
           "[&_.doc-title]:font-bold",
           "[&_.doc-title]:mb-2",
           // KaTeX inline error
-          "[&_.latex-error]:text-red-500",
+          "[&_.latex-error]:text-destructive",
           "[&_.latex-error]:text-xs",
         ].join(" ")}
         dangerouslySetInnerHTML={{ __html: html }}

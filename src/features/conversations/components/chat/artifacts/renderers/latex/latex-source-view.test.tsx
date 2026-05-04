@@ -21,10 +21,12 @@ describe("LatexSourceView", () => {
     expect(pre?.textContent).toContain("\\end{theorem}")
   })
 
-  it("renders inside the same paper-floating wrapper as preview", () => {
+  it("fills the panel and uses a centered max-width container (matches preview convention)", () => {
     const { container } = render(<LatexSourceView source="x" />)
     const wrapper = container.firstChild as HTMLElement
-    expect(wrapper.className).toMatch(/bg-muted\/30/)
-    expect(wrapper.className).toMatch(/dark:bg-zinc-900/)
+    expect(wrapper.className).toMatch(/flex-1/)
+    expect(wrapper.className).toMatch(/overflow-auto/)
+    // No floating-card chrome (no dark canvas background, no shadow card)
+    expect(wrapper.className).not.toMatch(/dark:bg-zinc-900/)
   })
 })

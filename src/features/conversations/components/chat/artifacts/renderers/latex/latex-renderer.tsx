@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useCallback, useRef } from "react"
+import { useState, useMemo, useCallback } from "react"
 import { AlertTriangle, Code, RotateCcw } from "@/lib/icons"
 import { LatexPaperView } from "./latex-paper-view"
 import { LatexSourceView } from "./latex-source-view"
@@ -15,13 +15,11 @@ interface LatexRendererProps {
 export function LatexRenderer({ content }: LatexRendererProps) {
   const [activeTab, setActiveTab] = useState<"preview" | "source">("preview")
   const [retryCount, setRetryCount] = useState(0)
-  const [copied, setCopied] = useState(false)
   // showSource drives the inline <pre> on the error-state amber callout. It is
   // deliberately separate from the tab-based LatexSourceView (active when
   // activeTab === "source") because the error path renders a minimal raw view
   // that does not re-parse the broken content through the highlighter.
   const [showSource, setShowSource] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
 
   const { html, warnings, error } = useMemo(() => {
     try {
@@ -49,20 +47,6 @@ export function LatexRenderer({ content }: LatexRendererProps) {
   }
 
   const handleRetry = useCallback(() => setRetryCount((c) => c + 1), [])
-
-  const handleCopy = useCallback(async () => {
-    const text =
-      activeTab === "preview"
-        ? containerRef.current?.querySelector("article")?.textContent ?? ""
-        : content
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // Clipboard write can fail in restrictive contexts; swallow silently.
-    }
-  }, [activeTab, content])
 
   if (error) {
     return (
@@ -106,20 +90,13 @@ export function LatexRenderer({ content }: LatexRendererProps) {
   }
 
   return (
-    <div ref={containerRef} className="flex flex-col h-full">
-      <LatexToolbar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onCopy={handleCopy}
-        copied={copied}
-      />
-      <div className="flex-1 min-h-0">
-        {activeTab === "preview" ? (
-          <LatexPaperView html={html ?? ""} />
-        ) : (
-          <LatexSourceView source={content} />
-        )}
-      </div>
+    <div className="flex flex-col h-full">
+      <LatexToolbar activeTab={activeTab} onTabChange={setActiveTab} />
+      {activeTab === "preview" ? (
+        <LatexPaperView html={html ?? ""} />
+      ) : (
+        <LatexSourceView source={content} />
+      )}
     </div>
   )
 }

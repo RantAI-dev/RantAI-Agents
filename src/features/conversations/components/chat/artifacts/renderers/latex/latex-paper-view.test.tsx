@@ -13,11 +13,15 @@ describe("LatexPaperView", () => {
     expect(article?.innerHTML).toContain("<strong>world</strong>")
   })
 
-  it("renders inside a centered paper-styled article", () => {
+  it("uses a centered max-width article that fills the panel (matches notebook/sheet convention)", () => {
     const { container } = render(<LatexPaperView html="<p>x</p>" />)
     const article = container.querySelector("article")
-    expect(article?.className).toMatch(/bg-white/)
-    expect(article?.className).toMatch(/max-w-\[720px\]/)
+    // Constrained reading width with mx-auto, but no floating-card chrome
+    expect(article?.className).toMatch(/max-w-3xl/)
+    expect(article?.className).toMatch(/mx-auto/)
+    expect(article?.className).toMatch(/font-serif/)
+    expect(article?.className).not.toMatch(/bg-white/)
+    expect(article?.className).not.toMatch(/shadow-lg/)
   })
 
   it("smooth-scrolls when an eqref link is clicked", () => {
