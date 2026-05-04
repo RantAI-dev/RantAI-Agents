@@ -3069,12 +3069,30 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
     URL.revokeObjectURL(url)
   }, [session])
 
+  // Synchronous double-submit guard. isLoading is set inside sendMessage
+  // after an await, which leaves a window where two rapid Enter presses
+  // can both pass the predicate before either flips the flag. The ref
+  // closes that window because it's set the moment the first submit
+  // begins and cleared in finally.
+  const submittingRef = useRef(false)
+
   // Submit handler
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading || isUploading) return
+    if (submittingRef.current) return
+    submittingRef.current = true
+    try {
+      await runSubmit(input.trim())
+    } finally {
+      submittingRef.current = false
+    }
+  }
 
-    const userInput = input.trim()
+  // The actual submit body. Split out so the synchronous double-submit
+  // guard above can wrap every code path (handoff, file upload, regular
+  // chat) without sprinkling try/finally everywhere.
+  const runSubmit = async (userInput: string) => {
     setInput("")
 
     // If connected to agent, send via handoff API instead of AI
@@ -3216,7 +3234,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
       }
     }
 
-    // Send the message using shared logic
+    // Send the message using shared logic.
     await sendMessage(userInput, chat.messages, replyContext?.id, undefined, fileCtx, uploadAttachments.length > 0 ? uploadAttachments : undefined)
   }
 
