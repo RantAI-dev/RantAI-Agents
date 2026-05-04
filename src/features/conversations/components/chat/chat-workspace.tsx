@@ -1004,6 +1004,15 @@ export function ChatWorkspace({
 
   // Handoff state
   const [handoffState, setHandoffState] = useState<HandoffState>("idle")
+  // Mirror handoffState in a ref so the long-lived poll setInterval in
+  // startPolling can read the current value without us having to clear
+  // and recreate the interval every time the state changes — the
+  // previous closure would see stale "waiting" forever and re-emit the
+  // "agent joined" banner on every 3-second tick.
+  const handoffStateRef = useRef<HandoffState>("idle")
+  useEffect(() => {
+    handoffStateRef.current = handoffState
+  }, [handoffState])
   const [handoffConversationId, setHandoffConversationId] = useState<string | null>(null)
   const [handoffTriggeredMsgId, setHandoffTriggeredMsgId] = useState<string | null>(null)
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -2919,8 +2928,10 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
 
         const data = await response.json()
 
-        // Update handoff state based on conversation status
-        if (data.status === "AGENT_CONNECTED" && handoffState !== "connected") {
+        // Update handoff state based on conversation status — read the
+        // ref so this branch only fires the first time we see CONNECTED,
+        // not on every subsequent 3-second poll tick.
+        if (data.status === "AGENT_CONNECTED" && handoffStateRef.current !== "connected") {
           setHandoffState("connected")
           // Add agent joined banner
           const bannerMsg = {
@@ -2976,7 +2987,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
     // Poll immediately, then every 3 seconds
     poll()
     pollIntervalRef.current = setInterval(poll, 3000)
-  }, [chat, handoffState])
+  }, [chat])
 
   // Handoff: send message to agent
   const sendHandoffMessage = useCallback(async (content: string) => {
