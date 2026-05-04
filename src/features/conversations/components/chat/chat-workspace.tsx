@@ -35,7 +35,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useProfileStore } from "@/hooks/use-profile"
 import { ToastAction } from "@/components/ui/toast"
 import { MarkdownContent } from "./markdown-content"
-import { TypingIndicator, ButtonLoadingIndicator } from "./typing-indicator"
+import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
 import { ConversationExport } from "./conversation-export"
@@ -2533,9 +2533,19 @@ export function ChatWorkspace({
         createdStreamingIds.clear()
         preStreamSnapshots.clear()
 
-        // Handle user-initiated abort — keep partial content
+        // Handle user-initiated abort — keep partial content if any.
+        // When the abort fires before the first byte (no content yet),
+        // drop the empty assistant placeholder so the user isn't left
+        // staring at a blank bubble.
         if (err instanceof DOMException && err.name === "AbortError") {
           setIsStreaming(false)
+          chat.setMessages((prev) => {
+            const lastMsg = prev[prev.length - 1]
+            if (lastMsg?.role === "assistant" && !getMessageContent(lastMsg)) {
+              return prev.slice(0, -1) as any
+            }
+            return prev
+          })
           return
         }
 
@@ -3406,20 +3416,16 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                           rows={1}
                         />
                         <Button
-                          type={isStreaming ? "button" : "submit"}
+                          type={isLoading ? "button" : "submit"}
                           size="icon"
                           className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
-                          disabled={isStreaming ? false : (!input.trim() || isLoading || isUploading)}
-                          onClick={isStreaming ? handleStop : undefined}
+                          disabled={isUploading ? true : (isLoading ? false : !input.trim())}
+                          onClick={isLoading ? handleStop : undefined}
                         >
                           {isUploading ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : isLoading ? (
-                            isStreaming ? (
-                              <Square className="h-3.5 w-3.5 fill-current" />
-                            ) : (
-                              <ButtonLoadingIndicator />
-                            )
+                            <Square className="h-3.5 w-3.5 fill-current" />
                           ) : (
                             <SendHorizontal className="h-4 w-4" />
                           )}
@@ -3608,20 +3614,16 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                 rows={1}
               />
               <Button
-                type={isStreaming ? "button" : "submit"}
+                type={isLoading ? "button" : "submit"}
                 size="icon"
                 className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
-                disabled={isStreaming ? false : (!input.trim() || isLoading || isUploading)}
-                onClick={isStreaming ? handleStop : undefined}
+                disabled={isUploading ? true : (isLoading ? false : !input.trim())}
+                onClick={isLoading ? handleStop : undefined}
               >
                 {isUploading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : isLoading ? (
-                  isStreaming ? (
-                    <Square className="h-3.5 w-3.5 fill-current" />
-                  ) : (
-                    <ButtonLoadingIndicator />
-                  )
+                  <Square className="h-3.5 w-3.5 fill-current" />
                 ) : (
                   <SendHorizontal className="h-4 w-4" />
                 )}
