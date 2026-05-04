@@ -43,13 +43,17 @@ const KIND_LABEL: Record<TheoremKind, string> = {
 
 const BEGIN_RE = /^\s*\\begin\{([a-z]+)\}(?:\[([^\]]+)\])?\s*$/
 
+function isTheoremKind(s: string): s is TheoremKind {
+  return THEOREM_KINDS.has(s as TheoremKind)
+}
+
 export function isTheoremBegin(
   line: string,
 ): { kind: TheoremKind; optionalName?: string } | null {
   const m = line.match(BEGIN_RE)
   if (!m) return null
-  const kind = m[1] as TheoremKind
-  if (!THEOREM_KINDS.has(kind)) return null
+  if (!isTheoremKind(m[1])) return null
+  const kind = m[1]
   const optionalName = m[2]
   return optionalName ? { kind, optionalName } : { kind }
 }
