@@ -244,12 +244,19 @@ function ChatSectionContent({
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { sessions, createSession, deleteSession } = useChatSessions()
+  const { sessions, createPersistedSession, deleteSession } = useChatSessions()
+  const [creatingNewChat, setCreatingNewChat] = useState(false)
 
-  const handleNewChat = () => {
-    if (selectedAssistant) {
-      const newSession = createSession(selectedAssistant.id)
+  const handleNewChat = async () => {
+    if (!selectedAssistant || creatingNewChat) return
+    setCreatingNewChat(true)
+    try {
+      const newSession = await createPersistedSession(selectedAssistant.id)
       router.push(`/dashboard/chat/${newSession.id}`)
+    } catch (error) {
+      console.error("[AppSidebar] Failed to create new chat:", error)
+    } finally {
+      setCreatingNewChat(false)
     }
   }
 
