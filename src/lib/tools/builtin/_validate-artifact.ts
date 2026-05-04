@@ -981,19 +981,22 @@ function validateSheet(content: string): ArtifactValidationResult {
         "Some JSON values are nested objects or arrays — these stringify as `[object Object]` in the table. Flatten them before emitting."
       )
     }
-    // All-identical column check
+    // All-identical column check — surface every offending column in one
+    // warning so multi-column constant sheets get a single actionable message.
+    const constantColumns: string[] = []
     for (const k of headerKeys) {
       const vals = new Set<string>()
       for (const row of parsed as Record<string, unknown>[]) {
         vals.add(String(row[k] ?? ""))
         if (vals.size > 1) break
       }
-      if (vals.size === 1 && parsed.length > 1) {
-        warnings.push(
-          `Column "${k}" has the same value in every row — adds no sort/filter value, consider removing it.`
-        )
-        break
-      }
+      if (vals.size === 1 && parsed.length > 1) constantColumns.push(k)
+    }
+    if (constantColumns.length > 0) {
+      const list = constantColumns.map((k) => `"${k}"`).join(", ")
+      warnings.push(
+        `${constantColumns.length === 1 ? "Column" : "Columns"} ${list} ${constantColumns.length === 1 ? "has" : "have"} the same value in every row — adds no sort/filter value, consider removing.`
+      )
     }
 
     return { ok: errors.length === 0, errors, warnings }
