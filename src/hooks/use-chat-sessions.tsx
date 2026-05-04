@@ -5,6 +5,7 @@ import {
   normalizeSerializedChatSession,
   type SerializedChatSession,
 } from "@/features/conversations/components/chat/pages/chat-session-data"
+import { toast } from "@/hooks/use-toast"
 
 // Edit history entry for versioning
 interface EditHistoryEntry {
@@ -356,6 +357,12 @@ export function ChatSessionsProvider({
 
   // Update a session (title, messages, etc.)
   const updateSession = useCallback((sessionId: string, updates: Partial<ChatSession>) => {
+    // Capture the previous title so we can roll back the optimistic update
+    // if the PATCH fails — without rollback, the sidebar shows the new
+    // title while the server keeps the old one and silently restores it
+    // on next refresh, confusing the user.
+    const previousTitle = sessionsRef.current.find((s) => s.id === sessionId)?.title
+
     setSessions((prev) =>
       prev.map((s) => (s.id === sessionId ? { ...s, ...updates } : s))
     )
@@ -367,9 +374,25 @@ export function ChatSessionsProvider({
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: updates.title }),
-        }).catch((error) => {
-          console.error("[ChatSessions] Failed to update session title:", error)
         })
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error(`PATCH failed with ${response.status}`)
+            }
+          })
+          .catch((error) => {
+            console.error("[ChatSessions] Failed to update session title:", error)
+            if (previousTitle !== undefined) {
+              setSessions((prev) =>
+                prev.map((s) => (s.id === sessionId ? { ...s, title: previousTitle } : s))
+              )
+            }
+            toast({
+              title: "Couldn't rename chat",
+              description: "We couldn't save the new title. The previous title has been restored.",
+              variant: "destructive",
+            })
+          })
       }
     }
   }, [resolveDbId])
@@ -466,13 +489,20 @@ export function ChatSessionsProvider({
   // Delete a session — caller is responsible for navigation after deletion
   const deleteSession = useCallback((sessionId: string) => {
     const apiId = resolveDbId(sessionId)
+    // Snapshot the previous state so we can resurrect the session if the
+    // DELETE call fails. Without rollback, a server-side error leaves the
+    // sidebar empty while the row stays in the DB; the session reappears
+    // as a "ghost" on next refresh, which reads as a serious bug.
+    const previousSession = sessionsRef.current.find((s) => s.id === sessionId)
+    let previousActiveId: string | null = null
 
     setSessions((prev) => prev.filter((s) => s.id !== sessionId))
 
     // Clear active session if it was the deleted one
-    setActiveSessionId((current) =>
-      current === sessionId ? null : current
-    )
+    setActiveSessionId((current) => {
+      previousActiveId = current
+      return current === sessionId ? null : current
+    })
 
     loadedSessionsRef.current.delete(sessionId)
 
@@ -492,9 +522,29 @@ export function ChatSessionsProvider({
 
     fetch(`/api/dashboard/chat/sessions/${apiId}`, {
       method: "DELETE",
-    }).catch((error) => {
-      console.error("[ChatSessions] Failed to delete session:", error)
     })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`DELETE failed with ${response.status}`)
+        }
+      })
+      .catch((error) => {
+        console.error("[ChatSessions] Failed to delete session:", error)
+        if (previousSession) {
+          setSessions((prev) => {
+            if (prev.some((s) => s.id === sessionId)) return prev
+            return [previousSession, ...prev]
+          })
+          if (previousActiveId === sessionId) {
+            setActiveSessionId(sessionId)
+          }
+        }
+        toast({
+          title: "Couldn't delete chat",
+          description: "We couldn't remove this chat from the server. It has been restored.",
+          variant: "destructive",
+        })
+      })
   }, [resolveDbId])
 
   // Cleanup debounce timeout on unmount
