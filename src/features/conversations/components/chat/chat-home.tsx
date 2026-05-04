@@ -343,6 +343,13 @@ export function ChatHome({
   }, [activeOrganization?.id])
 
   const loadToolbarData = useCallback(async () => {
+    // Snapshot the active assistant id at the start so all subsequent
+    // setState calls can short-circuit if the user switched assistants
+    // before our fetches resolved. Without this guard, slow network
+    // would race with assistant-switching and apply tool/skill state
+    // from the previous assistant to the new one.
+    const requestedAssistantId = activeAssistant?.id ?? null
+
     let visibleToolNames = new Set(assistantTools.map((tool) => tool.name))
     let toolNameById = new Map(
       assistantTools
@@ -457,6 +464,11 @@ export function ChatHome({
           fetch(`/api/assistants/${activeAssistant.id}/tools`),
           fetch(`/api/assistants/${activeAssistant.id}/skills`),
         ])
+
+        // Bail out if the user switched assistants while these fetches
+        // were in flight. Applying the previous assistant's defaults to
+        // the new one would silently corrupt the toolbar state.
+        if (activeAssistant.id !== requestedAssistantId) return
 
         const boundTools = boundToolsRes.ok ? await boundToolsRes.json() : []
         if (Array.isArray(boundTools)) {
