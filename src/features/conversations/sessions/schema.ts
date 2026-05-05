@@ -68,6 +68,7 @@ export const DashboardChatSessionMessageUpdateBodySchema = z.object({
         similarity: z.number().optional(),
       })
     )
+    .nullable()
     .optional(),
   metadata: z.record(z.unknown()).optional(),
 })
