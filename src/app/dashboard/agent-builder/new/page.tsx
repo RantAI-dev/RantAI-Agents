@@ -49,7 +49,7 @@ export default async function Page() {
       select: { id: true, name: true, description: true },
     }),
     prisma.knowledgeBaseGroup.findMany({
-      where: { organizationId },
+      where: { OR: [{ organizationId }, { organizationId: null }] },
       select: { id: true, name: true },
     }),
   ])

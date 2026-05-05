@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   KnowledgeGroupIdParamsSchema,
   KnowledgeGroupUpdateSchema,
@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
     const group = await getKnowledgeGroupForDashboard({
       groupId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
@@ -55,7 +55,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
     const parsedBody = KnowledgeGroupUpdateSchema.safeParse(await request.json())
     if (!parsedBody.success) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
@@ -92,7 +92,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
     const group = await deleteKnowledgeGroupForDashboard({
       groupId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
