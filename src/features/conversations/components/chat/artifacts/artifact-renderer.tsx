@@ -42,7 +42,7 @@ const SheetRenderer = dynamic(
 )
 
 const LatexRenderer = dynamic(
-  () => import("./renderers/latex-renderer").then((m) => ({ default: m.LatexRenderer })),
+  () => import("./renderers/latex").then((m) => ({ default: m.LatexRenderer })),
   {
     loading: () => <RendererLoading />,
   }

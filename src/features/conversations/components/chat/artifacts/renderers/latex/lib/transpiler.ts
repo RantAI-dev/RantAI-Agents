@@ -1,12 +1,20 @@
-"use client"
-
-import { useState, useMemo, useCallback } from "react"
-import { AlertTriangle, RotateCcw, Code } from "@/lib/icons"
 import katex from "katex"
-import "katex/dist/katex.min.css"
+import { isTheoremBegin, renderTheoremBlock } from "./theorem-envs"
+import { resolveRef } from "./cross-refs"
 
-interface LatexRendererProps {
-  content: string
+export type LabelEntry = {
+  kind: "theorem" | "lemma" | "corollary" | "proposition"
+       | "definition" | "example" | "equation"
+  number: string
+  displayLabel: string
+  anchorId: string
+}
+
+export type LabelRegistry = Map<string, LabelEntry>
+
+export type TranspileResult = {
+  html: string
+  warnings: string[]
 }
 
 /** KaTeX trust callback — only allow `\href` URLs that resolve to http(s).
@@ -172,44 +180,72 @@ function parseParagraphHead(
   return { title: arg.content, rest: line.slice(arg.endIndex + 1) }
 }
 
-/** Process inline LaTeX commands within a text line and return HTML */
-function processInlineLatex(text: string): string {
-  let result = text
+/**
+ * Closure constructor for the inline LaTeX processor.
+ * Captures registry and warnings so \eqref{} and \ref{} can resolve labels
+ * and emit warnings without threading extra params through recursive calls.
+ */
+function makeProcessInline(registry: LabelRegistry, warnings: string[]) {
+  function processInlineLatex(text: string): string {
+    let result = text
 
-  // Inline math: $...$ (non-greedy, not $$)
-  result = result.replace(/\$([^$]+?)\$/g, (_, math) => renderMath(math, false))
+    // Inline math: $...$ (non-greedy, not $$)
+    result = result.replace(/\$([^$]+?)\$/g, (_, math) => renderMath(math, false))
 
-  // Balanced-brace text commands (no longer regex `[^}]*`).
-  result = replaceBracedCommand(result, "textbf", (inner) => `<strong>${processInlineLatex(inner)}</strong>`)
-  result = replaceBracedCommand(result, "textit", (inner) => `<em>${processInlineLatex(inner)}</em>`)
-  result = replaceBracedCommand(result, "emph", (inner) => `<em>${processInlineLatex(inner)}</em>`)
-  result = replaceBracedCommand(result, "underline", (inner) => `<u>${processInlineLatex(inner)}</u>`)
-  result = replaceBracedCommand(result, "texttt", (inner) => `<code>${processInlineLatex(inner)}</code>`)
-  result = replaceTwoArgBracedCommand(
-    result,
-    "href",
-    (url, txt) => `<a href="${escapeHtml(url)}">${processInlineLatex(txt)}</a>`,
-  )
-  // \text{...} (used inside math sometimes, just unwrap)
-  result = replaceBracedCommand(result, "text", (inner) => inner)
+    // Balanced-brace text commands (no longer regex `[^}]*`).
+    result = replaceBracedCommand(result, "textbf", (inner) => `<strong>${processInlineLatex(inner)}</strong>`)
+    result = replaceBracedCommand(result, "textit", (inner) => `<em>${processInlineLatex(inner)}</em>`)
+    result = replaceBracedCommand(result, "emph", (inner) => `<em>${processInlineLatex(inner)}</em>`)
+    result = replaceBracedCommand(result, "underline", (inner) => `<u>${processInlineLatex(inner)}</u>`)
+    result = replaceBracedCommand(result, "texttt", (inner) => `<code>${processInlineLatex(inner)}</code>`)
+    result = replaceTwoArgBracedCommand(
+      result,
+      "href",
+      (url, txt) => `<a href="${escapeHtml(url)}">${processInlineLatex(txt)}</a>`,
+    )
+    // \text{...} (used inside math sometimes, just unwrap)
+    result = replaceBracedCommand(result, "text", (inner) => inner)
 
-  // Clean up remaining simple commands
-  result = result.replace(/\\noindent\s*/g, "")
-  result = result.replace(/\\\\(\s*)/g, "<br>")
-  result = result.replace(/\\newline\s*/g, "<br>")
-  result = result.replace(/~/g, "&nbsp;")
-  result = result.replace(/\\,/g, "&thinsp;")
-  result = result.replace(/\\;/g, "&ensp;")
-  result = result.replace(/\\quad/g, "&emsp;")
-  result = result.replace(/\\qquad/g, "&emsp;&emsp;")
-  result = result.replace(/---/g, "&mdash;")
-  result = result.replace(/--/g, "&ndash;")
+    // Cross-references — registered labels resolve to clickable anchor links;
+    // unknown keys render as a red [?] and push a warning.
+    result = result.replace(/\\eqref\{([^}]+)\}/g, (_, key: string) => {
+      const r = resolveRef(registry, key, "eqref")
+      if (!r) {
+        warnings.push(`Unresolved reference: ${key}`)
+        return `<span class="latex-eqref-unknown">[?]</span>`
+      }
+      return `<a href="#${r.anchorId}" data-eqref class="latex-eqref">${r.displayText}</a>`
+    })
+    result = result.replace(/\\ref\{([^}]+)\}/g, (_, key: string) => {
+      const r = resolveRef(registry, key, "ref")
+      if (!r) {
+        warnings.push(`Unresolved reference: ${key}`)
+        return `<span class="latex-eqref-unknown">[?]</span>`
+      }
+      return `<a href="#${r.anchorId}" data-eqref class="latex-eqref">${r.displayText}</a>`
+    })
 
-  return result
+    // Clean up remaining simple commands
+    result = result.replace(/\\noindent\s*/g, "")
+    result = result.replace(/\\\\(\s*)/g, "<br>")
+    result = result.replace(/\\newline\s*/g, "<br>")
+    result = result.replace(/~/g, "&nbsp;")
+    result = result.replace(/\\,/g, "&thinsp;")
+    result = result.replace(/\\;/g, "&ensp;")
+    result = result.replace(/\\quad/g, "&emsp;")
+    result = result.replace(/\\qquad/g, "&emsp;&emsp;")
+    result = result.replace(/---/g, "&mdash;")
+    result = result.replace(/--/g, "&ndash;")
+
+    return result
+  }
+  return processInlineLatex
 }
 
 /** Convert a full LaTeX document to HTML, using KaTeX for math */
-function latexToHtml(source: string): string {
+export function latexToHtml(source: string, registry: LabelRegistry): TranspileResult {
+  const warnings: string[] = []
+  const processInlineLatex = makeProcessInline(registry, warnings)
   const parts: string[] = []
 
   // Extract body from \begin{document}...\end{document} if present
@@ -241,6 +277,27 @@ function latexToHtml(source: string): string {
       )
     }
     parts.push("<hr>")
+  }
+
+  // Helper: wrap display math with anchor + equation number when labeled.
+  // Strips \label{...} from the math content before passing to KaTeX since
+  // KaTeX doesn't recognize the command and would render it as an error.
+  function wrapDisplayMath(mathSource: string): string {
+    const labelMatch = mathSource.match(/\\label\{([^}]+)\}/)
+    const cleanedMath = mathSource.replace(/\\label\{[^}]+\}\s*/g, "")
+    const rendered = renderMath(cleanedMath, true)
+    if (!labelMatch) return `<div class="math-block">${rendered}</div>`
+    const key = labelMatch[1]
+    const entry = registry.get(key)
+    if (!entry || entry.kind !== "equation") {
+      return `<div class="math-block">${rendered}</div>`
+    }
+    return (
+      `<div class="latex-equation math-block" id="${entry.anchorId}">` +
+        rendered +
+        `<span class="latex-equation-number">(${entry.number})</span>` +
+      `</div>`
+    )
   }
 
   // Process line by line / block by block
@@ -337,6 +394,37 @@ function latexToHtml(source: string): string {
       continue
     }
 
+    // Theorem-family environments — BEFORE the generic \begin{} skip
+    const theoremHead = isTheoremBegin(line)
+    if (theoremHead) {
+      if (inList) { parts.push(`</${listType}>`); inList = false }
+      const endTag = `\\end{${theoremHead.kind}}`
+      let inner = ""
+      i++
+      while (i < lines.length && !lines[i].includes(endTag)) {
+        inner += lines[i] + "\n"
+        i++
+      }
+      if (i < lines.length) i++   // consume the end tag line
+
+      // Pull a label from either the begin line itself (e.g. \begin{theorem}\label{thm:foo}
+      // on a single line — common in LLM output) or the block body. The begin-line label
+      // wins if both are present, matching scanLabels' first-match behavior.
+      const beginLineLabel = line.match(/\\label\{([^}]+)\}/)?.[1]
+      const innerLabel = inner.match(/\\label\{([^}]+)\}/)?.[1]
+      const labelKey = beginLineLabel ?? innerLabel
+      const registryEntry = labelKey ? registry.get(labelKey) : undefined
+      const anchorId = registryEntry?.anchorId ?? null
+      const number = registryEntry?.number ?? null
+
+      // Strip the \label{} from inner before processing
+      const cleanedInner = inner.replace(/\\label\{[^}]+\}\s*\n?/g, "").trim()
+      const innerHtml = processInlineLatex(cleanedInner)
+
+      parts.push(renderTheoremBlock(theoremHead.kind, number, theoremHead.optionalName, innerHtml, anchorId))
+      continue
+    }
+
     // Display math blocks: \begin{equation}, \begin{align}, \begin{gather}, etc.
     const mathEnvMatch = line.match(
       /\\begin\{(equation|align|gather|multline|cases|eqnarray)\*?\}/
@@ -355,7 +443,7 @@ function latexToHtml(source: string): string {
         mathContent += "\n" + lines[i]
         i++
       }
-      parts.push(`<div class="math-block">${renderMath(mathContent, true)}</div>`)
+      parts.push(wrapDisplayMath(mathContent))
       continue
     }
 
@@ -377,9 +465,7 @@ function latexToHtml(source: string): string {
           i++
         }
       }
-      parts.push(
-        `<div class="math-block">${renderMath(mathContent.trim(), true)}</div>`
-      )
+      parts.push(wrapDisplayMath(mathContent.trim()))
       continue
     }
 
@@ -401,9 +487,7 @@ function latexToHtml(source: string): string {
           i++
         }
       }
-      parts.push(
-        `<div class="math-block">${renderMath(mathContent.trim(), true)}</div>`
-      )
+      parts.push(wrapDisplayMath(mathContent.trim()))
       continue
     }
 
@@ -465,73 +549,5 @@ function latexToHtml(source: string): string {
 
   if (inList) parts.push(`</${listType}>`)
 
-  return parts.join("\n")
-}
-
-export function LatexRenderer({ content }: LatexRendererProps) {
-  const [showSource, setShowSource] = useState(false)
-  const [retryCount, setRetryCount] = useState(0)
-
-  const { html, error } = useMemo(() => {
-    try {
-      const rendered = latexToHtml(content)
-      return { html: rendered, error: null }
-    } catch (err) {
-      return {
-        html: null,
-        error: err instanceof Error ? err.message : "Failed to render LaTeX",
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, retryCount])
-
-  const handleRetry = useCallback(() => setRetryCount((c) => c + 1), [])
-
-  if (error) {
-    return (
-      <div className="p-4">
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 overflow-hidden">
-          <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-            <div className="flex items-center gap-2 text-amber-500 min-w-0">
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              <span className="text-sm font-medium">LaTeX render error</span>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={handleRetry}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 transition-colors"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Retry
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowSource((v) => !v)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
-              >
-                <Code className="h-3.5 w-3.5" />
-                {showSource ? "Hide source" : "View source"}
-              </button>
-            </div>
-          </div>
-          <div className="px-3 py-2 border-t border-amber-500/20 text-xs text-amber-500/80">
-            {error}
-          </div>
-          {showSource && (
-            <pre className="px-3 py-3 border-t border-amber-500/20 text-xs text-muted-foreground overflow-auto max-h-64 whitespace-pre-wrap font-mono bg-muted/30">
-              {content}
-            </pre>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div
-      className="p-6 prose dark:prose-invert max-w-none overflow-auto [&_.katex-display]:overflow-x-auto [&_.katex-display]:py-2 [&_.math-block]:my-4 [&_.doc-title]:text-2xl [&_.doc-title]:font-bold [&_.doc-title]:mb-2 [&_.doc-author]:text-muted-foreground [&_.doc-author]:mb-1 [&_.doc-date]:text-muted-foreground [&_.doc-date]:text-sm [&_.doc-date]:mb-4 [&_.latex-error]:text-red-500 [&_.latex-error]:text-xs"
-      dangerouslySetInnerHTML={{ __html: html || "" }}
-    />
-  )
+  return { html: parts.join("\n"), warnings }
 }

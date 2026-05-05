@@ -1237,9 +1237,6 @@ const LATEX_UNSUPPORTED_COMMANDS: ReadonlyArray<{
   { pattern: /\\begin\{tabular\}/, label: "\\begin{tabular}", severity: "error" },
   { pattern: /\\begin\{verbatim\}/, label: "\\begin{verbatim}", severity: "warning" },
   { pattern: /\\verb\b/, label: "\\verb", severity: "warning" },
-  { pattern: /\\label\{/, label: "\\label{}", severity: "warning" },
-  { pattern: /\\ref\{/, label: "\\ref{}", severity: "warning" },
-  { pattern: /\\eqref\{/, label: "\\eqref{}", severity: "warning" },
 ]
 
 function validateLatex(content: string): ArtifactValidationResult {
@@ -1306,6 +1303,19 @@ function validateLatex(content: string): ArtifactValidationResult {
         .map((h) => `"${h}"`)
         .join(", ")}. They will be silently dropped or render as red error fragments.`
     )
+  }
+
+  // Unresolved \eqref / \ref soft warnings — surface at create-time so the
+  // LLM can self-correct before persistence. The renderer also flags these
+  // at runtime as red [?], but catching it earlier is better.
+  const labels = new Set<string>()
+  for (const m of content.matchAll(/\\label\{([^}]+)\}/g)) labels.add(m[1])
+  for (const m of content.matchAll(/\\(?:eqref|ref)\{([^}]+)\}/g)) {
+    if (!labels.has(m[1])) {
+      warnings.push(
+        `Unresolved cross-reference \\eqref/\\ref{${m[1]}} — no matching \\label found in this content.`,
+      )
+    }
   }
 
   return { ok: errors.length === 0, errors, warnings }
