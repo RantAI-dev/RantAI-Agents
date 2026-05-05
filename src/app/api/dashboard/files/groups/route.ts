@@ -19,8 +19,8 @@ export async function GET(request: Request) {
 
   try {
     const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
-    const groups = await listKnowledgeGroupsForDashboard(orgContext?.organizationId ?? null)
-
+    const orgId = orgContext?.organizationId ?? null
+    const groups = await listKnowledgeGroupsForDashboard(orgId)
     return NextResponse.json({ groups })
   } catch (error) {
     console.error("Failed to list groups:", error)

@@ -9,7 +9,7 @@ export async function listKnowledgeDocumentsByScope(params: {
     where: {
       ...(params.groupId ? { groups: { some: { groupId: params.groupId } } } : {}),
       ...(params.organizationId !== null
-        ? { organizationId: params.organizationId }
+        ? { OR: [{ organizationId: params.organizationId }, { organizationId: null }] }
         : { organizationId: null }),
     },
     orderBy: { createdAt: "desc" },
