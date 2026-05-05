@@ -1,6 +1,6 @@
 import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import { listAssistantsForUser, type AssistantListItem } from "@/features/assistants/core/service"
 import { listKnowledgeGroupsForDashboard, type KnowledgeGroupListItem } from "@/features/knowledge/groups/service"
 import type { DbAssistant } from "@/hooks/use-assistants"
@@ -57,7 +57,7 @@ export async function loadInitialAssistantsForBuilder(): Promise<DbAssistant[]> 
   const request = new Request("http://localhost", {
     headers: new Headers(requestHeaders),
   })
-  const orgContext = await getOrganizationContext(request, session.user.id)
+  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
 
   const assistants = await listAssistantsForUser({
     organizationId: orgContext?.organizationId ?? null,
@@ -77,7 +77,7 @@ export async function loadInitialKnowledgeGroupsForBuilder(): Promise<BuilderKno
   const request = new Request("http://localhost", {
     headers: new Headers(requestHeaders),
   })
-  const orgContext = await getOrganizationContext(request, session.user.id)
+  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
 
   const groups = await listKnowledgeGroupsForDashboard(orgContext?.organizationId ?? null)
   return groups.map(mapKnowledgeGroupToBuilderGroup)
