@@ -2104,6 +2104,25 @@ function validateReact(content: string): ArtifactValidationResult {
     )
   }
 
+  // <motion.X> JSX with no `motion` binding — common LLM reflex from
+  // framer-motion docs. The available global is `Motion`, so motion-namespace
+  // JSX must either use `<Motion.motion.div>` directly or destructure first
+  // (`const { motion } = Motion`). Without one of those, the iframe crashes
+  // with "motion is not defined" before the error boundary can catch it.
+  const motionTag = /<motion\.[a-zA-Z]+\b/.test(content)
+  if (motionTag) {
+    const motionDestructured =
+      /\bconst\s*\{\s*[^}]*\bmotion\b[^}]*\}\s*=\s*Motion\b/.test(content) ||
+      /\bimport\s*\{[^}]*\bmotion\b[^}]*\}\s*from\s*['"]framer-motion['"]/.test(
+        content,
+      )
+    if (!motionDestructured) {
+      errors.push(
+        "Found <motion.X> JSX without `motion` in scope. The framer-motion global is `Motion` (capital M), not `motion`. Use <Motion.motion.div> directly, or destructure first with `const { motion } = Motion`.",
+      )
+    }
+  }
+
   // Report results
   if (!hasDefaultExport) {
     errors.push(
