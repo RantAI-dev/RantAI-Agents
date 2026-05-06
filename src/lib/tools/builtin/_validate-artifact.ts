@@ -29,6 +29,7 @@ import {
   type AestheticDirection,
 } from "@/features/conversations/components/chat/artifacts/renderers/_react-directives"
 import { MERMAID_DIAGRAM_TYPES as MERMAID_DIAGRAM_TYPES_SHARED } from "@/lib/rendering/mermaid-types"
+import { LUCIDE_NAMES, RECHARTS_NAMES } from "./_react-allowlists"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -1870,6 +1871,58 @@ function appendAestheticWarnings(
   }
 }
 
+/**
+ * Recursively walk a Babel AST node, collecting names from any
+ * `const { name1, name2 } = <globalIdent>` destructure into `out`.
+ *
+ * Only tracks the shorthand form (`{ name }`) and the `{ name: alias }` form
+ * (where the *original* name is what reaches the runtime global). Skips rest
+ * elements (`...rest`), computed keys, and nested patterns.
+ *
+ * Used by validateReact to validate names against allowlists for
+ * `LucideReact` and `Recharts` globals.
+ */
+type AnyAstNode = { type: string; [key: string]: unknown }
+
+function collectGlobalDestructures(
+  node: unknown,
+  globalIdent: string,
+  out: Set<string>,
+): void {
+  if (!node || typeof node !== "object") return
+  const n = node as AnyAstNode
+  if (typeof n.type !== "string") return
+
+  if (n.type === "VariableDeclarator") {
+    const init = n.init as AnyAstNode | null | undefined
+    const id = n.id as AnyAstNode | null | undefined
+    if (
+      init?.type === "Identifier" &&
+      (init as { name?: string }).name === globalIdent &&
+      id?.type === "ObjectPattern"
+    ) {
+      const props = (id as { properties?: AnyAstNode[] }).properties ?? []
+      for (const prop of props) {
+        if (prop.type !== "ObjectProperty" && prop.type !== "Property") continue
+        const key = prop.key as AnyAstNode | undefined
+        if (key?.type === "Identifier") {
+          out.add(key.name as string)
+        }
+      }
+    }
+  }
+
+  for (const key of Object.keys(n)) {
+    if (key === "type" || key === "loc" || key === "range") continue
+    const child = n[key]
+    if (Array.isArray(child)) {
+      for (const c of child) collectGlobalDestructures(c, globalIdent, out)
+    } else if (child && typeof child === "object") {
+      collectGlobalDestructures(child, globalIdent, out)
+    }
+  }
+}
+
 function stripDirectiveLines(
   content: string,
   directives: { rawAestheticLine: string | null; rawFontsLine: string | null }
@@ -1982,6 +2035,8 @@ function validateReact(content: string): ArtifactValidationResult {
   let hasDefaultExport = false
   let hasClassComponent = false
   const badImports: string[] = []
+  const lucideUsed = new Set<string>()
+  const rechartsUsed = new Set<string>()
 
   for (const node of ast.program.body) {
     if (
@@ -1997,6 +2052,17 @@ function validateReact(content: string): ArtifactValidationResult {
       if (!REACT_IMPORT_WHITELIST.has(source) && !source.startsWith(".")) {
         badImports.push(source)
       }
+      if (source === "lucide-react" || source === "recharts") {
+        const target = source === "lucide-react" ? lucideUsed : rechartsUsed
+        for (const spec of node.specifiers) {
+          if (
+            spec.type === "ImportSpecifier" &&
+            spec.imported.type === "Identifier"
+          ) {
+            target.add(spec.imported.name)
+          }
+        }
+      }
     }
 
     // class Foo extends React.Component | extends Component
@@ -2011,6 +2077,19 @@ function validateReact(content: string): ArtifactValidationResult {
       if (isReactClass) hasClassComponent = true
     }
   }
+
+  // Walk the full tree to collect names destructured from the LucideReact /
+  // Recharts globals at ANY depth (typically inside the component body, e.g.
+  // `function App() { const { Bell } = LucideReact; ... }`). The prompt
+  // promotes both this destructure pattern and direct `LucideReact.Bell`
+  // member access; this catches the destructure pattern.
+  collectGlobalDestructures(ast.program, "LucideReact", lucideUsed)
+  collectGlobalDestructures(ast.program, "Recharts", rechartsUsed)
+
+  const unknownLucide = [...lucideUsed].filter((n) => !LUCIDE_NAMES.has(n))
+  const unknownRecharts = [...rechartsUsed].filter(
+    (n) => !RECHARTS_NAMES.has(n),
+  )
 
   // 3. String-level checks for things that aren't worth a full AST walk
   if (/document\.(getElementById|querySelector|querySelectorAll)\s*\(/.test(content)) {
@@ -2041,6 +2120,20 @@ function validateReact(content: string): ArtifactValidationResult {
       `Imports from non-whitelisted libraries: ${badImports
         .map((s) => `"${s}"`)
         .join(", ")}. Only react, react-dom, recharts, lucide-react, and framer-motion are available (as window globals: React, Recharts, LucideReact, Motion). Remove the imports and use the globals instead.`
+    )
+  }
+  if (unknownLucide.length > 0) {
+    errors.push(
+      `Unknown lucide-react icon name(s): ${unknownLucide
+        .map((n) => `"${n}"`)
+        .join(", ")}. These names are not exported by lucide-react@0.454 — destructuring them yields \`undefined\` and the JSX render throws "Element type is invalid". Use exact PascalCase names from the v0.454 icon set (e.g. \`Search\` not \`MagnifyingGlass\`, \`Wrench\` not \`Tools\`).`,
+    )
+  }
+  if (unknownRecharts.length > 0) {
+    errors.push(
+      `Unknown Recharts component name(s): ${unknownRecharts
+        .map((n) => `"${n}"`)
+        .join(", ")}. These names are not exported by recharts@2 — destructuring them yields \`undefined\` and the JSX render throws "Element type is invalid". Common confusions: \`Sankey\` (not \`SankeyChart\`), \`FunnelChart\` is the wrapper while \`Funnel\` is the inner shape.`,
     )
   }
 
