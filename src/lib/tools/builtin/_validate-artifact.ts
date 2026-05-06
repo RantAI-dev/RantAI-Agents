@@ -2104,6 +2104,19 @@ function validateReact(content: string): ArtifactValidationResult {
     )
   }
 
+  // Real-network APIs — sandboxed iframes with `srcdoc` have no origin so
+  // `fetch` always rejects, and the `unhandledrejection` handler then surfaces
+  // a misleading "Render error" overlay even though the component visually
+  // mounted. Mock all data via useState/useEffect+setTimeout instead.
+  const networkApi = content.match(
+    /\b(fetch\s*\(|new\s+XMLHttpRequest\b|new\s+WebSocket\b|new\s+EventSource\b)/,
+  )
+  if (networkApi) {
+    errors.push(
+      `Found ${networkApi[1].trim()} — the iframe sandbox blocks real network calls and the rejected promise surfaces as a fake "Render error" overlay. Mock all data inline (e.g. \`const [data] = useState(MOCK_DATA)\`) — never call fetch/XMLHttpRequest/WebSocket/EventSource.`,
+    )
+  }
+
   // <motion.X> JSX with no `motion` binding — common LLM reflex from
   // framer-motion docs. The available global is `Motion`, so motion-namespace
   // JSX must either use `<Motion.motion.div>` directly or destructure first
