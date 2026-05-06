@@ -29,6 +29,7 @@ import {
   type AestheticDirection,
 } from "@/features/conversations/components/chat/artifacts/renderers/_react-directives"
 import { MERMAID_DIAGRAM_TYPES as MERMAID_DIAGRAM_TYPES_SHARED } from "@/lib/rendering/mermaid-types"
+import { LUCIDE_NAMES, RECHARTS_NAMES } from "./_react-allowlists"
 
 export interface ArtifactValidationResult {
   ok: boolean
@@ -1870,6 +1871,306 @@ function appendAestheticWarnings(
   }
 }
 
+/**
+ * Recursively walk a Babel AST node, collecting names from any
+ * `const { name1, name2 } = <globalIdent>` destructure into `out`.
+ *
+ * Only tracks the shorthand form (`{ name }`) and the `{ name: alias }` form
+ * (where the *original* name is what reaches the runtime global). Skips rest
+ * elements (`...rest`), computed keys, and nested patterns.
+ *
+ * Used by validateReact to validate names against allowlists for
+ * `LucideReact` and `Recharts` globals.
+ */
+// AST nodes have widely varying shapes per `node.type`; using `any` here is
+// pragmatic for hand-written walkers — the alternative is dozens of cast-
+// through-unknown lines per visitor.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyAstNode = { type: string; [key: string]: any }
+
+function collectGlobalDestructures(
+  node: unknown,
+  globalIdent: string,
+  out: Set<string>,
+): void {
+  if (!node || typeof node !== "object") return
+  const n = node as AnyAstNode
+  if (typeof n.type !== "string") return
+
+  if (n.type === "VariableDeclarator") {
+    const init = n.init as AnyAstNode | null | undefined
+    const id = n.id as AnyAstNode | null | undefined
+    if (
+      init?.type === "Identifier" &&
+      (init as { name?: string }).name === globalIdent &&
+      id?.type === "ObjectPattern"
+    ) {
+      const props = (id as { properties?: AnyAstNode[] }).properties ?? []
+      for (const prop of props) {
+        if (prop.type !== "ObjectProperty" && prop.type !== "Property") continue
+        const key = prop.key as AnyAstNode | undefined
+        if (key?.type === "Identifier") {
+          out.add(key.name as string)
+        }
+      }
+    }
+  }
+
+  for (const key of Object.keys(n)) {
+    if (key === "type" || key === "loc" || key === "range") continue
+    const child = n[key]
+    if (Array.isArray(child)) {
+      for (const c of child) collectGlobalDestructures(c, globalIdent, out)
+    } else if (child && typeof child === "object") {
+      collectGlobalDestructures(child, globalIdent, out)
+    }
+  }
+}
+
+/**
+ * Count `useEffect(async () => ...)` and `useEffect(async function() {})`
+ * call sites anywhere in the AST. The first arg of useEffect must be a
+ * sync function returning either nothing or a cleanup fn — passing an
+ * async function returns a Promise that React ignores while any rejection
+ * inside surfaces as an unhandledrejection event.
+ */
+function countAsyncEffectCallbacks(node: unknown): number {
+  const EFFECT_HOOKS = ["useEffect", "useLayoutEffect", "useInsertionEffect"]
+  let count = 0
+  function visit(n: unknown): void {
+    if (!n || typeof n !== "object") return
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return
+
+    if (node.type === "CallExpression") {
+      const callee = node.callee
+      // useEffect / useLayoutEffect / useInsertionEffect — also catches
+      // `React.useEffect(...)` member-expression form.
+      const calleeName =
+        callee?.type === "Identifier"
+          ? callee.name
+          : callee?.type === "MemberExpression" &&
+            callee.property?.type === "Identifier"
+          ? callee.property.name
+          : null
+      if (calleeName && EFFECT_HOOKS.includes(calleeName)) {
+        const first = node.arguments?.[0]
+        if (
+          first &&
+          (first.type === "ArrowFunctionExpression" ||
+            first.type === "FunctionExpression") &&
+          first.async === true
+        ) {
+          count++
+        }
+      }
+    }
+
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) visit(c)
+      } else if (child && typeof child === "object") {
+        visit(child)
+      }
+    }
+  }
+  visit(node)
+  return count
+}
+
+/**
+ * Find `useEffect(() => { setX(...) }, [x])` patterns where the same state
+ * variable both gets re-set and appears in the dep array — guaranteed
+ * infinite render loop. Heuristic, scoped per useState pair to keep false
+ * positives low.
+ *
+ * Algorithm:
+ *  1. Walk the AST collecting every `const [x, setX] = useState(...)` pair.
+ *  2. For each useEffect call, look at args[0] (callback) body and args[1]
+ *     (deps array). If args[1] mentions `x` AND args[0] body contains a
+ *     `setX(...)` call (where `setX` is the matching setter), flag.
+ */
+function findInfiniteEffectLoops(
+  node: unknown,
+): { state: string; setter: string }[] {
+  const pairs = new Map<string, string>() // state -> setter
+  function collectPairs(n: unknown): void {
+    if (!n || typeof n !== "object") return
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return
+    if (node.type === "VariableDeclarator") {
+      const id = node.id
+      const init = node.init
+      const initCalleeName =
+        init?.type === "CallExpression"
+          ? init.callee?.type === "Identifier"
+            ? init.callee.name
+            : init.callee?.type === "MemberExpression" &&
+              init.callee.property?.type === "Identifier"
+            ? init.callee.property.name
+            : null
+          : null
+      if (
+        id?.type === "ArrayPattern" &&
+        initCalleeName === "useState"
+      ) {
+        const elems = id.elements ?? []
+        const stateName =
+          elems[0]?.type === "Identifier" ? elems[0].name : null
+        const setterName =
+          elems[1]?.type === "Identifier" ? elems[1].name : null
+        if (stateName && setterName) pairs.set(stateName, setterName)
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) collectPairs(c)
+      } else if (child && typeof child === "object") {
+        collectPairs(child)
+      }
+    }
+  }
+  collectPairs(node)
+
+  const found: { state: string; setter: string }[] = []
+  function nodeContainsCallTo(n: unknown, callee: string): boolean {
+    if (!n || typeof n !== "object") return false
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return false
+    if (
+      node.type === "CallExpression" &&
+      node.callee?.type === "Identifier" &&
+      node.callee.name === callee
+    ) {
+      return true
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) if (nodeContainsCallTo(c, callee)) return true
+      } else if (child && typeof child === "object") {
+        if (nodeContainsCallTo(child, callee)) return true
+      }
+    }
+    return false
+  }
+
+  function visitEffects(n: unknown): void {
+    if (!n || typeof n !== "object") return
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return
+    if (node.type === "CallExpression") {
+      const callee = node.callee
+      const calleeName =
+        callee?.type === "Identifier"
+          ? callee.name
+          : callee?.type === "MemberExpression" &&
+            callee.property?.type === "Identifier"
+          ? callee.property.name
+          : null
+      if (calleeName === "useEffect" || calleeName === "useLayoutEffect") {
+        const fn = node.arguments?.[0]
+        const deps = node.arguments?.[1]
+        if (
+          fn &&
+          (fn.type === "ArrowFunctionExpression" ||
+            fn.type === "FunctionExpression") &&
+          deps?.type === "ArrayExpression"
+        ) {
+          const depNames = new Set<string>()
+          for (const el of deps.elements ?? []) {
+            if (el?.type === "Identifier") depNames.add(el.name)
+          }
+          for (const [state, setter] of pairs) {
+            if (depNames.has(state) && nodeContainsCallTo(fn, setter)) {
+              found.push({ state, setter })
+            }
+          }
+        }
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) visitEffects(c)
+      } else if (child && typeof child === "object") {
+        visitEffects(child)
+      }
+    }
+  }
+  visitEffects(node)
+  return found
+}
+
+/**
+ * Find `const [x] = useState(0)` (single-element destructure) where a
+ * conventional setter `setX` is referenced anywhere in the source. The
+ * LLM forgot to destructure the setter; any reference to it is undefined
+ * and the click handler that uses it crashes on first interaction.
+ *
+ * Implementation note: we do an AST scan to enumerate single-element
+ * useState destructures, then a string-level word-boundary regex on the
+ * source to detect setter references. AST scope analysis would be more
+ * precise but Babel's AST doesn't carry scope info without traverse, and
+ * a false positive here (e.g. an unrelated `setLoading` declared elsewhere
+ * happening to share the conventional shape) is acceptable cost for the
+ * common case.
+ */
+function findOrphanSetterReferences(
+  programNode: unknown,
+  source: string,
+): { state: string; setter: string }[] {
+  const singletonStates: { state: string; setter: string }[] = []
+  function visit(n: unknown): void {
+    if (!n || typeof n !== "object") return
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return
+    if (node.type === "VariableDeclarator") {
+      const id = node.id
+      const init = node.init
+      const initCalleeName =
+        init?.type === "CallExpression"
+          ? init.callee?.type === "Identifier"
+            ? init.callee.name
+            : init.callee?.type === "MemberExpression" &&
+              init.callee.property?.type === "Identifier"
+            ? init.callee.property.name
+            : null
+          : null
+      if (
+        id?.type === "ArrayPattern" &&
+        initCalleeName === "useState" &&
+        (id.elements ?? []).length === 1 &&
+        id.elements?.[0]?.type === "Identifier"
+      ) {
+        const stateName = id.elements[0].name
+        const setterName = "set" + stateName[0].toUpperCase() + stateName.slice(1)
+        singletonStates.push({ state: stateName, setter: setterName })
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) visit(c)
+      } else if (child && typeof child === "object") {
+        visit(child)
+      }
+    }
+  }
+  visit(programNode)
+
+  return singletonStates.filter(({ setter }) =>
+    new RegExp(`\\b${setter}\\b`).test(source),
+  )
+}
+
 function stripDirectiveLines(
   content: string,
   directives: { rawAestheticLine: string | null; rawFontsLine: string | null }
@@ -1982,6 +2283,8 @@ function validateReact(content: string): ArtifactValidationResult {
   let hasDefaultExport = false
   let hasClassComponent = false
   const badImports: string[] = []
+  const lucideUsed = new Set<string>()
+  const rechartsUsed = new Set<string>()
 
   for (const node of ast.program.body) {
     if (
@@ -1996,6 +2299,17 @@ function validateReact(content: string): ArtifactValidationResult {
       // Allow bare imports from the whitelist plus relative side-effect strips
       if (!REACT_IMPORT_WHITELIST.has(source) && !source.startsWith(".")) {
         badImports.push(source)
+      }
+      if (source === "lucide-react" || source === "recharts") {
+        const target = source === "lucide-react" ? lucideUsed : rechartsUsed
+        for (const spec of node.specifiers) {
+          if (
+            spec.type === "ImportSpecifier" &&
+            spec.imported.type === "Identifier"
+          ) {
+            target.add(spec.imported.name)
+          }
+        }
       }
     }
 
@@ -2012,6 +2326,37 @@ function validateReact(content: string): ArtifactValidationResult {
     }
   }
 
+  // Walk the full tree to collect names destructured from the LucideReact /
+  // Recharts globals at ANY depth (typically inside the component body, e.g.
+  // `function App() { const { Bell } = LucideReact; ... }`). The prompt
+  // promotes both this destructure pattern and direct `LucideReact.Bell`
+  // member access; this catches the destructure pattern.
+  collectGlobalDestructures(ast.program, "LucideReact", lucideUsed)
+  collectGlobalDestructures(ast.program, "Recharts", rechartsUsed)
+
+  const unknownLucide = [...lucideUsed].filter((n) => !LUCIDE_NAMES.has(n))
+  const unknownRecharts = [...rechartsUsed].filter(
+    (n) => !RECHARTS_NAMES.has(n),
+  )
+
+  // useEffect(async () => ...) — common LLM mistake: the callback returns a
+  // Promise instead of a cleanup fn, React ignores it, and any async error
+  // becomes an unhandledrejection that surfaces as a top-banner "Render
+  // error" overlay even though the component visually rendered fine.
+  const asyncEffectCount = countAsyncEffectCallbacks(ast.program)
+
+  // useEffect(() => setX(...), [x]) — calling a state setter unconditionally
+  // inside an effect that depends on the same state always re-fires the
+  // effect, looping until React (production build) freezes the iframe with
+  // no recoverable error.
+  const infiniteLoopPairs = findInfiniteEffectLoops(ast.program)
+
+  // const [x] = useState(0); ... setX(...) — the LLM forgot to destructure
+  // the setter, so any reference to `setX` is undefined and crashes the
+  // first time it's invoked (often a click handler), giving the user a
+  // working-looking UI that breaks on interaction.
+  const orphanSetters = findOrphanSetterReferences(ast.program, content)
+
   // 3. String-level checks for things that aren't worth a full AST walk
   if (/document\.(getElementById|querySelector|querySelectorAll)\s*\(/.test(content)) {
     errors.push(
@@ -2023,6 +2368,61 @@ function validateReact(content: string): ArtifactValidationResult {
     errors.push(
       "Found a CSS import — CSS imports are silently dropped by the renderer. Remove it; Tailwind is already loaded."
     )
+  }
+
+  // window.open / location.{href,assign,replace} / history.{push,replace}State
+  // are intercepted by the iframe nav blocker and silently no-op, so any
+  // navigation-style interaction looks broken to the user with no console
+  // signal. Forbid them at validate-time so the LLM picks an in-component
+  // alternative (e.g. controlled state for "page" switching).
+  const navApi = content.match(
+    /\b(window\.open\s*\(|location\.(?:href|assign|replace)\b|history\.(?:pushState|replaceState)\b)/,
+  )
+  if (navApi) {
+    errors.push(
+      `Found ${navApi[1].trim()} — the iframe nav blocker silently intercepts navigation calls, so the click looks broken to the user. Use in-component state to switch views instead of routing the browser.`,
+    )
+  }
+
+  // <form action="..."> — the iframe nav blocker silently `preventDefault`s
+  // submit events, so a Send button looks broken to the user with no error.
+  // Mirror the equivalent rule in validateHtml.
+  if (/<form[^>]+action\s*=\s*['"]/.test(content)) {
+    errors.push(
+      'Found <form action="..."> — submit events are silently blocked by the iframe nav blocker, leaving the form button visibly broken with no error. Drop the `action` attribute and use `onSubmit={(e) => { e.preventDefault(); ... }}` instead.',
+    )
+  }
+
+  // Real-network APIs — sandboxed iframes with `srcdoc` have no origin so
+  // `fetch` always rejects, and the `unhandledrejection` handler then surfaces
+  // a misleading "Render error" overlay even though the component visually
+  // mounted. Mock all data via useState/useEffect+setTimeout instead.
+  const networkApi = content.match(
+    /\b(fetch\s*\(|new\s+XMLHttpRequest\b|new\s+WebSocket\b|new\s+EventSource\b)/,
+  )
+  if (networkApi) {
+    errors.push(
+      `Found ${networkApi[1].trim()} — the iframe sandbox blocks real network calls and the rejected promise surfaces as a fake "Render error" overlay. Mock all data inline (e.g. \`const [data] = useState(MOCK_DATA)\`) — never call fetch/XMLHttpRequest/WebSocket/EventSource.`,
+    )
+  }
+
+  // <motion.X> JSX with no `motion` binding — common LLM reflex from
+  // framer-motion docs. The available global is `Motion`, so motion-namespace
+  // JSX must either use `<Motion.motion.div>` directly or destructure first
+  // (`const { motion } = Motion`). Without one of those, the iframe crashes
+  // with "motion is not defined" before the error boundary can catch it.
+  const motionTag = /<motion\.[a-zA-Z]+\b/.test(content)
+  if (motionTag) {
+    const motionDestructured =
+      /\bconst\s*\{\s*[^}]*\bmotion\b[^}]*\}\s*=\s*Motion\b/.test(content) ||
+      /\bimport\s*\{[^}]*\bmotion\b[^}]*\}\s*from\s*['"]framer-motion['"]/.test(
+        content,
+      )
+    if (!motionDestructured) {
+      errors.push(
+        "Found <motion.X> JSX without `motion` in scope. The framer-motion global is `Motion` (capital M), not `motion`. Use <Motion.motion.div> directly, or destructure first with `const { motion } = Motion`.",
+      )
+    }
   }
 
   // Report results
@@ -2041,6 +2441,39 @@ function validateReact(content: string): ArtifactValidationResult {
       `Imports from non-whitelisted libraries: ${badImports
         .map((s) => `"${s}"`)
         .join(", ")}. Only react, react-dom, recharts, lucide-react, and framer-motion are available (as window globals: React, Recharts, LucideReact, Motion). Remove the imports and use the globals instead.`
+    )
+  }
+  if (unknownLucide.length > 0) {
+    errors.push(
+      `Unknown lucide-react icon name(s): ${unknownLucide
+        .map((n) => `"${n}"`)
+        .join(", ")}. These names are not exported by lucide-react@0.454 — destructuring them yields \`undefined\` and the JSX render throws "Element type is invalid". Use exact PascalCase names from the v0.454 icon set (e.g. \`Search\` not \`MagnifyingGlass\`, \`Wrench\` not \`Tools\`).`,
+    )
+  }
+  if (unknownRecharts.length > 0) {
+    errors.push(
+      `Unknown Recharts component name(s): ${unknownRecharts
+        .map((n) => `"${n}"`)
+        .join(", ")}. These names are not exported by recharts@2 — destructuring them yields \`undefined\` and the JSX render throws "Element type is invalid". Common confusions: \`Sankey\` (not \`SankeyChart\`), \`FunnelChart\` is the wrapper while \`Funnel\` is the inner shape.`,
+    )
+  }
+  if (asyncEffectCount > 0) {
+    errors.push(
+      `Found ${asyncEffectCount} \`useEffect(async () => ...)\` callback${asyncEffectCount === 1 ? "" : "s"}. An async useEffect returns a Promise instead of a cleanup function; any rejection inside surfaces as a misleading top-banner "Render error" overlay. Wrap the async logic in an inner function instead: \`useEffect(() => { (async () => { ... })() }, [])\`.`,
+    )
+  }
+  if (infiniteLoopPairs.length > 0) {
+    errors.push(
+      `Found useEffect that calls a state setter while depending on the same state — infinite render loop. Affected pair${infiniteLoopPairs.length === 1 ? "" : "s"}: ${infiniteLoopPairs
+        .map(({ state, setter }) => `\`${setter}(...)\` inside \`useEffect(..., [${state}])\``)
+        .join("; ")}. Drop the dependency, guard the setter with a condition, or compute the value during render with useMemo.`,
+    )
+  }
+  if (orphanSetters.length > 0) {
+    errors.push(
+      `Found state setter${orphanSetters.length === 1 ? "" : "s"} referenced but never destructured: ${orphanSetters
+        .map(({ state, setter }) => `\`${setter}\` (you wrote \`const [${state}] = useState(...)\` — destructure as \`const [${state}, ${setter}] = useState(...)\`)`)
+        .join("; ")}. The single-element destructure leaves the setter undefined and the click handler crashes on first interaction.`,
     )
   }
 

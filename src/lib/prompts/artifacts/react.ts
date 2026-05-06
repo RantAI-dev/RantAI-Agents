@@ -148,7 +148,26 @@ Valid family spec shapes:
 - \`useCallback\`/\`useMemo\` only when there is an actual perf reason.
 - List keys must be stable IDs, never array indexes (unless the list is truly static).
 
-## Anti-Patterns
+## Things That Crash the Iframe (validator hard-errors)
+
+These patterns are caught at \`create_artifact\` time and bounce back as a tool error. Avoid them on the first attempt — every retry costs a round trip.
+
+- ❌ \`<MagnifyingGlass />\` / \`<Tools />\` / any Lucide icon name that isn't actually exported by \`lucide-react@0.454\`. The destructure yields \`undefined\` and React crashes with "Element type is invalid". Use exact PascalCase names: \`<Search />\` (not \`MagnifyingGlass\`), \`<Wrench />\` (not \`Tools\`).
+- ❌ \`const { SankeyChart } = Recharts\` — \`SankeyChart\` doesn't exist in recharts@2; the wrapper is just \`Sankey\`. Same for any other hallucinated chart name. The 54 valid components are: Area, AreaChart, Bar, BarChart, Brush, CartesianAxis, CartesianGrid, Cell, ComposedChart, Cross, Curve, Customized, DefaultLegendContent, DefaultTooltipContent, Dot, ErrorBar, Funnel, FunnelChart, Global, Label, LabelList, Layer, Legend, Line, LineChart, Pie, PieChart, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Polygon, Radar, RadarChart, RadialBar, RadialBarChart, Rectangle, ReferenceArea, ReferenceDot, ReferenceLine, ResponsiveContainer, Sankey, Scatter, ScatterChart, Sector, SunburstChart, Surface, Symbols, Text, Tooltip, Trapezoid, Treemap, XAxis, YAxis, ZAxis.
+- ❌ \`<motion.div>\` without first writing \`const { motion } = Motion\` or \`import { motion } from 'framer-motion'\`. The framer-motion global is \`Motion\` (capital M). Easiest fix: \`<Motion.motion.div>\`.
+- ❌ \`useEffect(async () => { await … })\` — the callback returns a Promise instead of a cleanup fn, any rejection inside surfaces as a misleading "Render error" overlay. Wrap in an inner IIFE: \`useEffect(() => { (async () => { … })() }, [])\`.
+- ❌ \`useEffect(() => setX(x + 1), [x])\` — infinite render loop. Drop the dependency, guard the setter with a condition, or move the derivation to \`useMemo\`.
+- ❌ \`const [count] = useState(0)\` then \`setCount(...)\` somewhere else — single-element destructure leaves the setter undefined; the click handler crashes on first interaction. Always destructure both: \`const [count, setCount] = useState(0)\`.
+- ❌ Real \`fetch()\` / \`new XMLHttpRequest()\` / \`new WebSocket()\` / \`new EventSource()\` — sandboxed iframe has no origin, the rejected promise surfaces as a fake "Render error". Mock all data inline: \`const [users] = useState(MOCK_USERS)\`.
+- ❌ \`<form action="/contact">\` — silently \`preventDefault\`-ed, the Send button looks broken. Use \`<form onSubmit={(e) => { e.preventDefault(); … }}>\` and drop \`action\` entirely.
+- ❌ \`window.open(...)\` / \`location.href = ...\` / \`history.pushState(...)\` — silently intercepted; navigation does nothing. Use in-component state to switch views instead of routing the browser.
+- ❌ \`document.getElementById('foo')\` — DOM doesn't work reliably in the sandbox. Use \`useRef\` instead.
+- ❌ \`import { Card } from 'shadcn/ui'\` — shadcn is NOT available, build with raw Tailwind.
+- ❌ \`import './styles.css'\` — silently dropped, Tailwind is already loaded.
+- ❌ \`class MyComponent extends React.Component\` — class components are not supported, use a function component.
+
+## Aesthetic Anti-Patterns
+
 - ❌ Missing \`// @aesthetic:\` directive on line 1 (hard-error at validation)
 - ❌ Unknown aesthetic direction name (hard-error)
 - ❌ Malformed \`@fonts\` spec (hard-error)
@@ -157,13 +176,7 @@ Valid family spec shapes:
 - ❌ Silently defaulting to slate-900 + indigo-600 without \`@aesthetic: industrial\` (palette-mismatch warn)
 - ❌ Motion library under \`@aesthetic: industrial\` (warn — industrial wants stillness)
 - ❌ Editorial/luxury without a serif in \`@fonts\` (font-mismatch warn)
-- ❌ \`import { Card } from 'shadcn/ui'\` — shadcn is NOT available, build with raw Tailwind
-- ❌ \`import './styles.css'\` — silently dropped
-- ❌ \`class MyComponent extends React.Component\`
-- ❌ \`document.getElementById('foo')\`
 - ❌ Emoji as functional icons (use \`LucideReact.X\`)
-- ❌ Real \`fetch()\` calls
-- ❌ \`<form action="/submit">\` — use \`onSubmit\` with \`e.preventDefault()\`
 - ❌ More than 5 distinct hues per artifact (status colors in industrial — emerald/rose/amber — count as functional not decorative, and don't count toward the 5)
 - ❌ Truncating "for brevity"`,
   examples: [
