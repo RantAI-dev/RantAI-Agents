@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import { ChevronLeft, ChevronRight, Search } from "@/lib/icons"
+import { ChevronLeft, ChevronRight, Search, X } from "@/lib/icons"
 
 interface CodeSearchBarProps {
   query: string
@@ -32,7 +32,12 @@ export function CodeSearchBar({
   const showCount = query.length > 0 && matchCount > 0
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border/50 bg-muted/30">
+    <div
+      role="dialog"
+      aria-label="Search in code"
+      data-code-search-popup="true"
+      className="absolute top-3 right-3 z-10 flex items-center gap-1 px-2 py-1.5 min-w-[260px] max-w-[320px] bg-background border border-border rounded-md shadow-md backdrop-blur-md"
+    >
       <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
       <input
         ref={inputRef}
@@ -77,6 +82,14 @@ export function CodeSearchBar({
         className="p-1 rounded hover:bg-muted disabled:opacity-30 disabled:hover:bg-transparent"
       >
         <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        aria-label="Close search"
+        onClick={onClose}
+        className="p-1 rounded hover:bg-muted"
+      >
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   )

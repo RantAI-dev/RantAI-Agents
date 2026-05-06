@@ -124,4 +124,23 @@ describe("CodeSearchBar", () => {
     expect(onNext).toHaveBeenCalledOnce()
     expect(onPrev).toHaveBeenCalledOnce()
   })
+
+  it("is positioned as a floating popup with absolute positioning", () => {
+    const { getByRole } = render(
+      <CodeSearchBar
+        query=""
+        onQueryChange={() => {}}
+        matchCount={0}
+        matchIndex={0}
+        onPrev={() => {}}
+        onNext={() => {}}
+        onClose={() => {}}
+      />,
+    )
+    const popup = getByRole("dialog", { name: /search in code/i })
+    expect(popup).not.toBeNull()
+    expect(popup.className).toMatch(/absolute/)
+    expect(popup.className).toMatch(/top-3/)
+    expect(popup.className).toMatch(/right-3/)
+  })
 })
