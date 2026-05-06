@@ -61,6 +61,7 @@ import {
   Bulb2Solid,
   Hierarchy1Solid,
   ArrowBothDirectionHorizontal1Solid,
+  TextParagraphSolid,
   RefreshCircle1ClockwiseSolid,
   VectorNodes6Solid,
   VectorNodes7Solid,
@@ -438,6 +439,8 @@ export const Settings2 = createIcon(Gear1Solid, "Settings2")
 export const Undo2 = createIcon(PreviousStep2Solid, "Undo2")
 export const Redo2 = createIcon(NextStep2Solid, "Redo2")
 export const Grid3x3 = createIcon(Layout9Solid, "Grid3x3")
+export const WrapText = createIcon(TextParagraphSolid, "WrapText")
+export const GitCompareArrows = createIcon(ArrowBothDirectionHorizontal1Solid, "GitCompareArrows")
 
 // ─── Workflow Node Icons ─────────────────────────────────────────────
 // Dedicated icons for workflow node palette — each visually distinct
@@ -505,4 +508,6 @@ export const ICON_MAP: Record<string, IconComponent> = {
   Bot,
   Plug,
   KeyRound,
+  WrapText,
+  GitCompareArrows,
 }

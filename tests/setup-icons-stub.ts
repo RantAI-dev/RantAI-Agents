@@ -31,6 +31,8 @@ const ICON_NAMES = [
   "FunctionSquare", "Download",
   // latex-toolbar.tsx
   "Copy",
+  // code-toolbar.tsx
+  "WrapText", "GitCompareArrows",
 ] as const
 
 const stubModule: Record<string, unknown> = {}
