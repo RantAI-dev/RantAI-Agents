@@ -9,6 +9,7 @@ import {
   listKnowledgeGroupsForDashboard,
 } from "@/features/knowledge/groups/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
+import { prisma } from "@/lib/prisma"
 
 // GET - List all groups
 export async function GET(request: Request) {
@@ -21,7 +22,16 @@ export async function GET(request: Request) {
     const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
     const orgId = orgContext?.organizationId ?? null
     const groups = await listKnowledgeGroupsForDashboard(orgId)
-    return NextResponse.json({ groups })
+
+    const totalDocumentCount = await prisma.document.count({
+      where: orgId
+        ? {
+            OR: [{ organizationId: orgId }, { organizationId: null }],
+          }
+        : {},
+    })
+
+    return NextResponse.json({ groups, totalDocumentCount })
   } catch (error) {
     console.error("Failed to list groups:", error)
     return NextResponse.json({ error: "Failed to list groups" }, { status: 500 })

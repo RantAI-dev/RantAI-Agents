@@ -392,6 +392,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
   // Knowledge Base state
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
   const [selectedKBId, setSelectedKBId] = useState<string | null>(null)
+  const [totalDocumentCount, setTotalDocumentCount] = useState<number>(0)
 
   const fetchKnowledgeBases = useCallback(async () => {
     try {
@@ -399,6 +400,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
       if (response.ok) {
         const data = await response.json()
         setKnowledgeBases(data.groups)
+        setTotalDocumentCount(data.totalDocumentCount ?? 0)
       }
     } catch (error) {
       console.error("Failed to fetch knowledge bases:", error)
@@ -761,7 +763,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
                 <Database className="h-4 w-4" />
                 <span className="flex-1">All Documents</span>
                 <span className="text-xs text-sidebar-muted">
-                  {knowledgeBases.reduce((sum, kb) => sum + kb.documentCount, 0)}
+                  {totalDocumentCount}
                 </span>
               </div>
 

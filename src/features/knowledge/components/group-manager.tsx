@@ -47,6 +47,7 @@ interface GroupManagerProps {
   selectedGroupId: string | null
   onSelectGroup: (groupId: string | null) => void
   onGroupsChange: () => void
+  totalDocumentCount?: number
 }
 
 const PRESET_COLORS = [
@@ -65,6 +66,7 @@ export function GroupManager({
   selectedGroupId,
   onSelectGroup,
   onGroupsChange,
+  totalDocumentCount,
 }: GroupManagerProps) {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<KnowledgeGroup | null>(null)
@@ -165,7 +167,7 @@ export function GroupManager({
         />
         <Folder className="h-5 w-5 shrink-0" />
         <span className="flex-1 text-left truncate">All Documents</span>
-        <span className="text-xs text-sidebar-muted tabular-nums">{totalDocuments}</span>
+        <span className="text-xs text-sidebar-muted tabular-nums">{totalDocumentCount ?? totalDocuments}</span>
         {selectedGroupId === null && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
       </button>
 
