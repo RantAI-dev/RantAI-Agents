@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic"
 import { Loader2 } from "@/lib/icons"
 import type { Artifact } from "./types"
+import type { PrevVersionFetchResult } from "./renderers/code/code-diff-view"
 import { StreamdownContent } from "../streamdown-content"
 
 // Lazy-load heavy renderers
@@ -48,6 +49,13 @@ const LatexRenderer = dynamic(
   }
 )
 
+const CodeRenderer = dynamic(
+  () => import("./renderers/code").then((m) => ({ default: m.CodeRenderer })),
+  {
+    loading: () => <RendererLoading />,
+  }
+)
+
 const SlidesRenderer = dynamic(
   () => import("./renderers/slides-renderer").then((m) => ({ default: m.SlidesRenderer })),
   {
@@ -83,9 +91,24 @@ interface ArtifactRendererProps {
   artifact: Artifact
   /** Callback to send an artifact error to the LLM for automated repair. */
   onFixWithAI?: (error: string) => void
+  /** True when the artifact has at least one previous version (drives diff toggle). */
+  hasPreviousVersion?: boolean
+  /** Version number of the previous version (1-indexed). */
+  previousVersionNum?: number
+  /** Lazy fetcher for previous-version content (used by application/code's diff view). */
+  fetchPreviousVersion?: () => Promise<PrevVersionFetchResult>
+  /** Wired to the panel's handleRestoreVersion. */
+  onRestoreVersion?: (versionNum: number) => void
 }
 
-export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProps) {
+export function ArtifactRenderer({
+  artifact,
+  onFixWithAI,
+  hasPreviousVersion,
+  previousVersionNum,
+  fetchPreviousVersion,
+  onRestoreVersion,
+}: ArtifactRendererProps) {
   switch (artifact.type) {
     case "text/html":
       return <HtmlRenderer content={artifact.content} />
@@ -111,20 +134,16 @@ export function ArtifactRenderer({ artifact, onFixWithAI }: ArtifactRendererProp
       )
     case "application/3d":
       return <R3FRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
-    case "application/code": {
-      // Pick a fence length one longer than the longest backtick run
-      // already inside the content, so code that itself contains ``` blocks
-      // doesn't break syntax highlighting.
-      const longestRun = (artifact.content.match(/`+/g) ?? [])
-        .reduce((max, run) => Math.max(max, run.length), 0)
-      const fence = "`".repeat(Math.max(3, longestRun + 1))
+    case "application/code":
       return (
-        <StreamdownContent
-          content={`${fence}${artifact.language || ""}\n${artifact.content}\n${fence}`}
-          className="p-4"
+        <CodeRenderer
+          artifact={artifact}
+          hasPreviousVersion={hasPreviousVersion ?? false}
+          previousVersionNum={previousVersionNum}
+          fetchPreviousVersion={fetchPreviousVersion}
+          onRestoreVersion={onRestoreVersion}
         />
       )
-    }
     case "text/markdown":
       return <StreamdownContent content={artifact.content} className="p-4" />
     default:
