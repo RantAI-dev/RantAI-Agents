@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useEffect, useState, useCallback, useRef } from "react"
-import { AlertTriangle, RotateCcw, Code, Loader2, Wand2 } from "@/lib/icons"
+import { AlertTriangle, RotateCcw, Code, Loader2 } from "@/lib/icons"
 import { IFRAME_NAV_BLOCKER_SCRIPT } from "./_iframe-nav-blocker"
 import {
   parseDirectives,
@@ -12,7 +12,6 @@ import {
 
 interface ReactRendererProps {
   content: string
-  onFixWithAI?: (error: string) => void
 }
 
 /* ── Import/export mapping ──────────────────────────────────── */
@@ -378,7 +377,7 @@ window.addEventListener('unhandledrejection', function(e) {
 
 /* ── Component ──────────────────────────────────────────────── */
 
-export function ReactRenderer({ content, onFixWithAI }: ReactRendererProps) {
+export function ReactRenderer({ content }: ReactRendererProps) {
   const [error, setError] = useState<string | null>(null)
   const [showSource, setShowSource] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
@@ -486,16 +485,6 @@ export function ReactRenderer({ content, onFixWithAI }: ReactRendererProps) {
               <span className="text-sm font-medium">React render error</span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              {onFixWithAI && error && (
-                <button
-                  type="button"
-                  onClick={() => onFixWithAI(error)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  <Wand2 className="h-3.5 w-3.5" />
-                  Fix with AI
-                </button>
-              )}
               <button
                 type="button"
                 onClick={handleRetry}
@@ -548,16 +537,6 @@ export function ReactRenderer({ content, onFixWithAI }: ReactRendererProps) {
                 </span>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                {onFixWithAI && !isWarning && (
-                  <button
-                    type="button"
-                    onClick={() => onFixWithAI(error)}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                  >
-                    <Wand2 className="h-3 w-3" />
-                    Fix with AI
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={handleRetry}

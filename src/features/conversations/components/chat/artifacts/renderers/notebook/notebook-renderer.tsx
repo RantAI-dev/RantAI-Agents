@@ -11,10 +11,9 @@ import { usePinToChat } from "./use-pin-to-chat"
 interface Props {
   artifactId: string
   content: string
-  onFixWithAI?: (err: string) => void
 }
 
-export function NotebookRenderer({ artifactId, content, onFixWithAI }: Props) {
+export function NotebookRenderer({ artifactId, content }: Props) {
   const initial = useMemo<NotebookContent>(() => parseNotebookContentStreaming(content), [content])
   const [nb, setNb] = useState<NotebookContent>(initial)
   const [runtime, setRuntime] = useState<Record<string, CellRuntimeState>>({})
@@ -91,7 +90,6 @@ export function NotebookRenderer({ artifactId, content, onFixWithAI }: Props) {
             onRun={() => runCell(cell.id, cell.source)}
             onDelete={() => deleteCell(cell.id)}
             onInsertBelow={(type) => insertBelow(cell.id, type)}
-            onFixWithAI={onFixWithAI}
             isPinned={(idx) => isPinned(cell.id, idx)}
             onTogglePin={(idx) => togglePin(cell.id, idx)}
           />

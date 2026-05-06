@@ -1,14 +1,12 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
-import { Loader2, AlertTriangle, RotateCcw, Code, Wand2 } from "@/lib/icons"
+import { Loader2, AlertTriangle, RotateCcw, Code } from "@/lib/icons"
 import { useTheme } from "next-themes"
 import { getMermaidConfig } from "./mermaid-config"
 
 interface MermaidRendererProps {
   content: string
-  /** Callback to send a diagram error to the LLM for automated repair. */
-  onFixWithAI?: (error: string) => void
 }
 
 /**
@@ -33,7 +31,7 @@ async function getMermaid(theme: "dark" | "default"): Promise<MermaidModule> {
   return mermaid
 }
 
-export function MermaidRenderer({ content, onFixWithAI }: MermaidRendererProps) {
+export function MermaidRenderer({ content }: MermaidRendererProps) {
   const [svg, setSvg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -119,16 +117,6 @@ export function MermaidRenderer({ content, onFixWithAI }: MermaidRendererProps) 
               </span>
             </div>
             <div className="flex items-center gap-1.5 shrink-0">
-              {onFixWithAI && error && (
-                <button
-                  type="button"
-                  onClick={() => onFixWithAI(error)}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-                >
-                  <Wand2 className="h-3.5 w-3.5" />
-                  Fix with AI
-                </button>
-              )}
               <button
                 type="button"
                 onClick={handleRetry}

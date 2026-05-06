@@ -16,7 +16,6 @@ interface Props {
   onRunAndAdvance?: () => void
   onDelete: () => void
   onInsertBelow: (type: "code" | "markdown") => void
-  onFixWithAI?: (err: string) => void
   isPinned: (outputIdx: number) => boolean
   onTogglePin: (outputIdx: number) => void
   freshlyAuthored?: boolean
@@ -38,7 +37,6 @@ export function NotebookCellView({
   onRunAndAdvance,
   onDelete,
   onInsertBelow,
-  onFixWithAI,
   isPinned,
   onTogglePin,
   freshlyAuthored,
@@ -99,7 +97,6 @@ export function NotebookCellView({
             imageTruncated={runtime?.imageTruncated ?? false}
             isPinned={isPinned}
             onTogglePin={onTogglePin}
-            onFixWithAI={onFixWithAI}
           />
         </>
       )}

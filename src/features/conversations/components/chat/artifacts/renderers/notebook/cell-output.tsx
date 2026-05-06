@@ -12,7 +12,6 @@ interface Props {
   imageTruncated: boolean
   isPinned: (outputIdx: number) => boolean
   onTogglePin: (outputIdx: number) => void
-  onFixWithAI?: (err: string) => void
 }
 
 const COLLAPSE_LINE_THRESHOLD = 40
@@ -24,7 +23,6 @@ export function CellOutput({
   imageTruncated,
   isPinned,
   onTogglePin,
-  onFixWithAI,
 }: Props) {
   if (outputs.length === 0 && !imageTruncated) return null
 
@@ -38,7 +36,6 @@ export function CellOutput({
           output={o}
           pinned={isPinned(i)}
           onTogglePin={() => onTogglePin(i)}
-          onFixWithAI={onFixWithAI}
         />
       ))}
       {imageTruncated && (
@@ -56,14 +53,12 @@ function OutputItem({
   output,
   pinned,
   onTogglePin,
-  onFixWithAI,
 }: {
   idx: number
   cellId: string
   output: Output
   pinned: boolean
   onTogglePin: () => void
-  onFixWithAI?: (err: string) => void
 }) {
   const [copied, setCopied] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -105,15 +100,6 @@ function OutputItem({
               {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
               {copied ? "Copied" : "Copy"}
             </button>
-            {onFixWithAI && (
-              <button
-                type="button"
-                onClick={() => onFixWithAI(errStr)}
-                className="text-[10px] px-2 py-0.5 rounded bg-primary text-primary-foreground hover:bg-primary/90"
-              >
-                Fix with AI
-              </button>
-            )}
           </div>
         </div>
         <pre className="text-xs text-destructive/80 whitespace-pre-wrap font-mono">{errStr}</pre>

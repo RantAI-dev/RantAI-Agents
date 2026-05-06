@@ -119,11 +119,11 @@ export function ArtifactRenderer({
     case "text/html":
       return <HtmlRenderer content={artifact.content} />
     case "application/react":
-      return <ReactRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
+      return <ReactRenderer content={artifact.content} />
     case "image/svg+xml":
       return <SvgRenderer content={artifact.content} />
     case "application/mermaid":
-      return <MermaidRenderer content={artifact.content} onFixWithAI={onFixWithAI} />
+      return <MermaidRenderer content={artifact.content} />
     case "application/sheet":
       return <SheetRenderer content={artifact.content} title={artifact.title} />
     case "text/latex":
@@ -135,7 +135,6 @@ export function ArtifactRenderer({
         <NotebookRenderer
           artifactId={artifact.id}
           content={artifact.content}
-          onFixWithAI={onFixWithAI}
         />
       )
     case "application/3d":
