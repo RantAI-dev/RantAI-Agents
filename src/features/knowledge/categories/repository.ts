@@ -67,3 +67,13 @@ export async function deleteKnowledgeCategory(id: string) {
     where: { id },
   })
 }
+
+export async function countDocumentsByCategoryName(categoryName: string) {
+  return prisma.document.count({
+    where: {
+      categories: {
+        has: categoryName,
+      },
+    },
+  })
+}

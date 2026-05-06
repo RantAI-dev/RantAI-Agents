@@ -1,4 +1,5 @@
 import {
+  countDocumentsByCategoryName,
   countKnowledgeCategories,
   createKnowledgeCategory,
   deleteKnowledgeCategory,
@@ -131,6 +132,11 @@ export async function deleteKnowledgeCategoryForDashboard(id: string): Promise<{
 
   if (category.isSystem) {
     return { status: 400, error: "Cannot delete system categories" }
+  }
+
+  const count = await countDocumentsByCategoryName(category.name)
+  if (count > 0) {
+    return { status: 400, error: `Cannot delete category. ${count} document(s) assigned. Please unassign or reassign them first.` }
   }
 
   await deleteKnowledgeCategory(id)
