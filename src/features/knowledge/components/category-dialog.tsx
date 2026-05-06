@@ -27,6 +27,9 @@ interface CategoryDialogProps {
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
   editingCategory?: Category | null
+  deleteMode?: boolean
+  onDelete?: () => void
+  documentCount?: number
 }
 
 const PRESET_COLORS = [
@@ -39,10 +42,14 @@ export function CategoryDialog({
   onOpenChange,
   onSuccess,
   editingCategory,
+  deleteMode = false,
+  onDelete,
+  documentCount,
 }: CategoryDialogProps) {
   const [label, setLabel] = useState("")
   const [color, setColor] = useState(PRESET_COLORS[0])
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState("")
 
   useEffect(() => {
@@ -57,6 +64,33 @@ export function CategoryDialog({
       setError("")
     }
   }, [open, editingCategory])
+
+  const handleDelete = async () => {
+    if (!editingCategory) return
+
+    setDeleting(true)
+    setError("")
+
+    try {
+      const response = await fetch(`/api/dashboard/files/categories/${editingCategory.id}`, {
+        method: "DELETE",
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        setError(data.error || "Failed to delete category")
+        return
+      }
+
+      onOpenChange(false)
+      onSuccess()
+    } catch (err) {
+      console.error("Failed to delete category:", err)
+      setError("Failed to delete category")
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const handleSave = async () => {
     if (!label.trim()) {
@@ -102,65 +136,85 @@ export function CategoryDialog({
       <DialogContent className="gap-4 p-6">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">
-            {editingCategory ? "Edit Category" : "Create Category"}
+            {deleteMode ? "Delete Category" : editingCategory ? "Edit Category" : "Create Category"}
           </DialogTitle>
           <DialogDescription>
-            {editingCategory
+            {deleteMode
+              ? editingCategory && documentCount !== undefined && documentCount > 0
+                ? `This category has ${documentCount} document${documentCount === 1 ? "" : "s"} assigned. Deleting it will not delete the documents, but they will become uncategorized.`
+                : "Are you sure you want to delete this category? Documents assigned to it will become uncategorized."
+              : editingCategory
               ? "Update the category details."
               : "Create a new category to classify your documents."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="category-label">Label</Label>
-            <Input
-              id="category-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g., Product FAQ"
-              disabled={editingCategory?.isSystem}
-            />
-            {editingCategory?.isSystem && (
-              <p className="text-xs text-muted-foreground">
-                System category labels cannot be changed.
-              </p>
+        {!deleteMode && (
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="category-label">Label</Label>
+              <Input
+                id="category-label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g., Product FAQ"
+                disabled={editingCategory?.isSystem}
+              />
+              {editingCategory?.isSystem && (
+                <p className="text-xs text-muted-foreground">
+                  System category labels cannot be changed.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex gap-2 flex-wrap">
+                {PRESET_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setColor(c)}
+                    className={cn(
+                      "h-8 w-8 rounded-full transition-all",
+                      color === c ? "ring-2 ring-offset-2 ring-primary" : ""
+                    )}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
             )}
           </div>
+        )}
 
-          <div className="space-y-2">
-            <Label>Color</Label>
-            <div className="flex gap-2 flex-wrap">
-              {PRESET_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className={cn(
-                    "h-8 w-8 rounded-full transition-all",
-                    color === c ? "ring-2 ring-offset-2 ring-primary" : ""
-                  )}
-                  style={{ backgroundColor: c }}
-                />
-              ))}
-            </div>
-          </div>
-
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
-        </div>
+        {deleteMode && error && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
 
         <DialogFooter className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            onClick={handleSave}
-            disabled={!label.trim() || saving || editingCategory?.isSystem}
-          >
-            {saving ? "Saving..." : editingCategory ? "Save Changes" : "Create"}
-          </Button>
+          {deleteMode ? (
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSave}
+              disabled={!label.trim() || saving || editingCategory?.isSystem}
+            >
+              {saving ? "Saving..." : editingCategory ? "Save Changes" : "Create"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
