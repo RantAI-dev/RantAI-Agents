@@ -165,6 +165,7 @@ export function CodeRenderer({
             language={language}
             wrap={wrap}
             searchQuery={searchOpen ? searchQuery : ""}
+            currentMatchIndex={searchOpen && matches.length > 0 ? matchIndex : undefined}
           />
         ) : (
           <CodeDiffView

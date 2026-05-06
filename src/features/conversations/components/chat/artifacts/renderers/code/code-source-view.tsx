@@ -17,6 +17,9 @@ interface CodeSourceViewProps {
   wrap: boolean
   /** When non-empty, drives the search-highlight effect. */
   searchQuery: string
+  /** Index of the "current" match (the one the user is focused on, e.g. via prev/next nav).
+   *  The current match gets a brighter highlight class and is scrolled into view. */
+  currentMatchIndex?: number
 }
 
 function adaptiveFence(content: string): string {
@@ -32,6 +35,7 @@ export function CodeSourceView({
   language,
   wrap,
   searchQuery,
+  currentMatchIndex,
 }: CodeSourceViewProps) {
   const { resolvedTheme } = useTheme()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -43,7 +47,7 @@ export function CodeSourceView({
     return `${fence}${language ?? ""}\n${content}\n${fence}`
   }, [content, language])
 
-  // Apply / re-apply highlights whenever the search query or content changes.
+  // Apply / re-apply highlights whenever the search query, current-match, or content changes.
   useEffect(() => {
     const root = containerRef.current
     if (!root) return
@@ -56,14 +60,25 @@ export function CodeSourceView({
     // Defer one frame so Streamdown has finished painting.
     const id = window.requestAnimationFrame(() => {
       const matches = findMatches(content, searchQuery)
-      highlightModeRef.current = applyHighlights(root, matches, content)
+      const result = applyHighlights(root, matches, content, currentMatchIndex)
+      highlightModeRef.current = result?.mode ?? null
+
+      // Scroll the current match into view. The Range's startContainer is a
+      // text node; its parentElement is the inline span Shiki rendered for
+      // that token, which is what we can scrollIntoView.
+      if (result?.currentRange) {
+        const target = result.currentRange.startContainer.parentElement
+        if (target && typeof target.scrollIntoView === "function") {
+          target.scrollIntoView({ behavior: "smooth", block: "center" })
+        }
+      }
     })
     return () => {
       window.cancelAnimationFrame(id)
       if (root) clearHighlights(root, highlightModeRef.current)
       highlightModeRef.current = null
     }
-  }, [searchQuery, content])
+  }, [searchQuery, content, currentMatchIndex])
 
   if (!content) {
     return (

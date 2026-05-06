@@ -50,11 +50,11 @@ describe("applyHighlights / clearHighlights (DOM fallback)", () => {
     document.body.appendChild(host)
   })
 
-  it("returns 'dom' when CSS Custom Highlight API is unavailable", () => {
+  it("returns mode 'dom' when CSS Custom Highlight API is unavailable", () => {
     const matches = findMatches(host.textContent ?? "", "world")
-    const mode = applyHighlights(host, matches, host.textContent ?? "")
-    expect(mode).toBe("dom")
-    const marks = host.querySelectorAll("mark.code-search-match")
+    const result = applyHighlights(host, matches, host.textContent ?? "")
+    expect(result?.mode).toBe("dom")
+    const marks = host.querySelectorAll("mark.code-search-match, mark.code-search-match-current")
     expect(marks).toHaveLength(1)
     expect(marks[0].textContent).toBe("world")
   })
@@ -63,21 +63,40 @@ describe("applyHighlights / clearHighlights (DOM fallback)", () => {
     const matches = findMatches(host.textContent ?? "", "foo")
     applyHighlights(host, matches, host.textContent ?? "")
     expect(host.textContent).toBe("hello world\nbar foo")
-    const marks = host.querySelectorAll("mark.code-search-match")
+    const marks = host.querySelectorAll("mark.code-search-match, mark.code-search-match-current")
     expect(marks).toHaveLength(1)
+  })
+
+  it("uses the current-match class for the match at currentMatchIndex", () => {
+    host.textContent = "foo foo foo"
+    const matches = findMatches(host.textContent ?? "", "foo")
+    expect(matches).toHaveLength(3)
+    const result = applyHighlights(host, matches, host.textContent ?? "", 1)
+    expect(result?.mode).toBe("dom")
+    expect(host.querySelectorAll("mark.code-search-match-current")).toHaveLength(1)
+    expect(host.querySelectorAll("mark.code-search-match")).toHaveLength(2)
+    expect(result?.currentRange).not.toBeNull()
+  })
+
+  it("treats all matches the same when currentMatchIndex is out of range", () => {
+    host.textContent = "foo foo"
+    const matches = findMatches(host.textContent ?? "", "foo")
+    applyHighlights(host, matches, host.textContent ?? "", 99)
+    expect(host.querySelectorAll("mark.code-search-match-current")).toHaveLength(0)
+    expect(host.querySelectorAll("mark.code-search-match")).toHaveLength(2)
   })
 
   it("clearHighlights restores the host to its pre-highlight state", () => {
     const matches = findMatches(host.textContent ?? "", "world")
-    const mode = applyHighlights(host, matches, host.textContent ?? "")
-    clearHighlights(host, mode)
-    expect(host.querySelectorAll("mark.code-search-match")).toHaveLength(0)
+    const result = applyHighlights(host, matches, host.textContent ?? "")
+    clearHighlights(host, result?.mode ?? null)
+    expect(host.querySelectorAll("mark.code-search-match, mark.code-search-match-current")).toHaveLength(0)
     expect(host.textContent).toBe("hello world\nbar foo")
   })
 
   it("returns null and applies no marks when there are no matches", () => {
-    const mode = applyHighlights(host, [], host.textContent ?? "")
-    expect(mode).toBeNull()
-    expect(host.querySelectorAll("mark.code-search-match")).toHaveLength(0)
+    const result = applyHighlights(host, [], host.textContent ?? "")
+    expect(result).toBeNull()
+    expect(host.querySelectorAll("mark.code-search-match, mark.code-search-match-current")).toHaveLength(0)
   })
 })

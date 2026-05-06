@@ -191,6 +191,31 @@
   }
 }
 
+/* ── Code artifact search highlighting ──
+   Two paths: CSS Custom Highlight API (all modern browsers — non-DOM-mutating)
+   and a `<mark>` DOM fallback for older browsers. The "current" variant is the
+   match the user is focused on (matchIndex); the rest are background hits. */
+::highlight(code-search) {
+  background-color: rgb(255 200 0 / 0.35);
+  color: inherit;
+}
+::highlight(code-search-current) {
+  background-color: rgb(255 140 0 / 0.85);
+  color: rgb(0 0 0);
+}
+mark.code-search-match {
+  background-color: rgb(255 200 0 / 0.35);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0;
+}
+mark.code-search-match-current {
+  background-color: rgb(255 140 0 / 0.85);
+  color: rgb(0 0 0);
+  border-radius: 2px;
+  padding: 0;
+}
+
 /* ── Thin scrollbar utility (auto-hide) ── */
 .scrollbar-thin {
   scrollbar-width: thin;

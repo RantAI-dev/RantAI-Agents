@@ -27,7 +27,9 @@ export interface SearchMatch {
 export type HighlightMode = "css" | "dom"
 
 const HIGHLIGHT_NAME = "code-search"
+const HIGHLIGHT_NAME_CURRENT = "code-search-current"
 const MARK_CLASS = "code-search-match"
+const MARK_CLASS_CURRENT = "code-search-match-current"
 
 /**
  * Scan content for case-insensitive plain-text matches. Empty queries and
@@ -154,38 +156,76 @@ function getHighlightApi(): { CSS: CustomHighlightAPI; Highlight: HighlightCtor 
   return { CSS: cssApi, Highlight: HighlightCtor }
 }
 
+export interface ApplyHighlightsResult {
+  mode: HighlightMode
+  /** The DOM range corresponding to the current match (if any), so the caller can scroll it into view. */
+  currentRange: Range | null
+}
+
 /**
- * Apply highlights to `root` for the given `matches`. Returns the mode
- * used so the caller can pass the right value to `clearHighlights`. When
- * there are zero matches, returns `null` and does nothing.
+ * Apply highlights to `root` for the given `matches`. Returns the mode used
+ * so the caller can pass the right value to `clearHighlights`, plus the
+ * Range for the "current" match (the one at `currentMatchIndex`) so the
+ * caller can scroll it into view.
+ *
+ * Two highlight families are registered:
+ * - `code-search` covers all matches except the current one (background hits).
+ * - `code-search-current` covers just the match at `currentMatchIndex`
+ *   (visually distinct, e.g. a brighter orange).
+ *
+ * When `currentMatchIndex` is `undefined` or out of bounds, all matches go
+ * into the `code-search` family (no "current" treatment).
+ *
+ * Returns `null` if there's nothing to render.
  */
 export function applyHighlights(
   root: HTMLElement,
   matches: SearchMatch[],
   content: string,
-): HighlightMode | null {
+  currentMatchIndex?: number,
+): ApplyHighlightsResult | null {
   if (matches.length === 0) return null
 
   const ranges = buildRanges(root, matches, content)
   if (!ranges || ranges.length === 0) return null
 
+  const hasCurrent =
+    typeof currentMatchIndex === "number" &&
+    currentMatchIndex >= 0 &&
+    currentMatchIndex < ranges.length
+  const currentRange = hasCurrent ? ranges[currentMatchIndex!] : null
+  const otherRanges = hasCurrent
+    ? ranges.filter((_, i) => i !== currentMatchIndex)
+    : ranges
+
   const api = getHighlightApi()
   if (api) {
     try {
-      const highlight = new api.Highlight(...ranges) as unknown
-      api.CSS.highlights!.set(HIGHLIGHT_NAME, highlight)
-      return "css"
+      if (otherRanges.length > 0) {
+        const others = new api.Highlight(...otherRanges) as unknown
+        api.CSS.highlights!.set(HIGHLIGHT_NAME, others)
+      } else {
+        api.CSS.highlights!.delete(HIGHLIGHT_NAME)
+      }
+      if (currentRange) {
+        const current = new api.Highlight(currentRange) as unknown
+        api.CSS.highlights!.set(HIGHLIGHT_NAME_CURRENT, current)
+      } else {
+        api.CSS.highlights!.delete(HIGHLIGHT_NAME_CURRENT)
+      }
+      return { mode: "css", currentRange }
     } catch {
       // fall through to DOM mode
     }
   }
 
   // DOM fallback: wrap each range in a <mark>. Iterate from the end so
-  // earlier ranges keep their offsets after surgery.
+  // earlier ranges keep their offsets after surgery. Use the "current" class
+  // for the match at currentMatchIndex.
   for (let i = ranges.length - 1; i >= 0; i--) {
     const range = ranges[i]
     const mark = document.createElement("mark")
-    mark.className = MARK_CLASS
+    mark.className = i === currentMatchIndex ? MARK_CLASS_CURRENT : MARK_CLASS
     try {
       range.surroundContents(mark)
     } catch {
@@ -193,7 +233,7 @@ export function applyHighlights(
       // give up on this match rather than mutate broken DOM.
     }
   }
-  return "dom"
+  return { mode: "dom", currentRange }
 }
 
 /** Tear down highlights applied via `applyHighlights`. */
@@ -202,9 +242,10 @@ export function clearHighlights(root: HTMLElement, mode: HighlightMode | null): 
   if (mode === "css") {
     const api = getHighlightApi()
     api?.CSS.highlights?.delete(HIGHLIGHT_NAME)
+    api?.CSS.highlights?.delete(HIGHLIGHT_NAME_CURRENT)
     return
   }
-  const marks = root.querySelectorAll(`mark.${MARK_CLASS}`)
+  const marks = root.querySelectorAll(`mark.${MARK_CLASS}, mark.${MARK_CLASS_CURRENT}`)
   marks.forEach((mark) => {
     const parent = mark.parentNode
     if (!parent) return
