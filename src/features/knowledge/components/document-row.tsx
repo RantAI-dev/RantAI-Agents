@@ -120,6 +120,22 @@ export function DocumentRow({ document, onDelete, onView, onEdit, categoryMap }:
               {document.chunkCount}
             </Badge>
           ) : null}
+          {document.categories.length === 0 && (
+            <Badge
+              variant="outline"
+              className="text-[10px] h-5 px-1.5 shrink-0 gap-1 text-muted-foreground border-dashed"
+            >
+              Uncategorized
+            </Badge>
+          )}
+          {document.groups.length === 0 && (
+            <Badge
+              variant="outline"
+              className="text-[10px] h-5 px-1.5 shrink-0 gap-1 text-muted-foreground border-dashed"
+            >
+              No KB
+            </Badge>
+          )}
         </div>
 
         {/* Created date */}

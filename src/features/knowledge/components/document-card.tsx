@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -167,6 +168,26 @@ export function DocumentCard({ document, onDelete, onView, onEdit }: DocumentCar
             <p className="text-xs text-muted-foreground text-center mt-1">
               {formatFileSize(document.fileSize)}
             </p>
+          )}
+          {document.categories.length === 0 && (
+            <div className="flex justify-center mt-1.5">
+              <Badge
+                variant="outline"
+                className="text-[10px] h-5 px-1.5 gap-1 text-muted-foreground border-dashed"
+              >
+                Uncategorized
+              </Badge>
+            </div>
+          )}
+          {document.groups.length === 0 && (
+            <div className="flex justify-center mt-1">
+              <Badge
+                variant="outline"
+                className="text-[10px] h-5 px-1.5 gap-1 text-muted-foreground border-dashed"
+              >
+                No KB
+              </Badge>
+            </div>
           )}
         </div>
       </div>
