@@ -307,11 +307,6 @@ export function UploadDialog({
     e.preventDefault()
     setError("")
 
-    if (selectedCategories.length === 0) {
-      setError("At least one category is required")
-      return
-    }
-
     if (!selectedFile) {
       setError("Please select a file")
       return
@@ -462,7 +457,7 @@ export function UploadDialog({
 
           {/* Categories */}
           <div className="space-y-2">
-            <Label>Categories</Label>
+            <Label>Categories <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -662,7 +657,7 @@ export function UploadDialog({
           <Button
             form="upload-document-form"
             type="submit"
-            disabled={loading || !selectedFile || selectedCategories.length === 0}
+            disabled={loading || !selectedFile}
           >
             {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {loading ? "Uploading..." : "Upload"}
