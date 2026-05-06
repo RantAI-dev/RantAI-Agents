@@ -95,4 +95,11 @@ describe("deriveFilename", () => {
   it("uses .txt extension when language is missing and title is not filename-shaped", () => {
     expect(deriveFilename({ title: "Notes about thing", language: undefined })).toBe("notes-about-thing.txt")
   })
+
+  it("preserves dotfiles", () => {
+    expect(deriveFilename({ title: ".env", language: undefined })).toBe(".env")
+    expect(deriveFilename({ title: ".gitignore", language: undefined })).toBe(".gitignore")
+    expect(deriveFilename({ title: ".npmrc", language: undefined })).toBe(".npmrc")
+    expect(deriveFilename({ title: ".editorconfig", language: undefined })).toBe(".editorconfig")
+  })
 })

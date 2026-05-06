@@ -82,6 +82,9 @@ const FILENAME_SHAPED_RE = /^[\w\-./]+\.[A-Za-z0-9]+$/
 /** Real filenames without an extension that we want to preserve as-is. */
 const SPECIAL_FILENAMES_RE = /^(Dockerfile|Makefile|Procfile|Rakefile|Gemfile)$/i
 
+/** Dotfiles like .env, .gitignore, .npmrc, .editorconfig — preserve as-is. */
+const DOTFILE_RE = /^\.[A-Za-z0-9][\w\-.]*$/
+
 export interface FilenameInput {
   title: string
   language: string | undefined
@@ -96,7 +99,9 @@ export interface FilenameInput {
  *    return as-is.
  * 3. Special unextensioned filename (Dockerfile, Makefile, Procfile,
  *    Rakefile, Gemfile) → return as-is.
- * 4. Otherwise: slugify (replace non-word/dash/dot/slash characters with
+ * 4. Dotfile (matches `.env`, `.gitignore`, `.npmrc`, `.editorconfig`) →
+ *    return as-is.
+ * 5. Otherwise: slugify (replace non-word/dash/dot/slash characters with
  *    `-`, collapse runs, trim leading/trailing separators, lowercase) and
  *    append the language extension.
  */
@@ -105,6 +110,7 @@ export function deriveFilename({ title, language }: FilenameInput): string {
   if (!t) return `untitled${codeExtension(language)}`
   if (FILENAME_SHAPED_RE.test(t)) return t
   if (SPECIAL_FILENAMES_RE.test(t)) return t
+  if (DOTFILE_RE.test(t)) return t
   const slug = t
     .replace(/[^\w\-./]+/g, "-")
     .replace(/-+/g, "-")
