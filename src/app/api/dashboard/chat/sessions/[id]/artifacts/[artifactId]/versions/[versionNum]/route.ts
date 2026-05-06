@@ -61,7 +61,7 @@ export async function GET(
     if (record.s3Key) {
       try {
         const buf = await downloadFile(record.s3Key)
-        return new Response(buf, { status: 200, headers })
+        return new Response(buf.toString("utf-8"), { status: 200, headers })
       } catch (err) {
         console.error("[versions/GET] S3 download failed:", err)
         return NextResponse.json({ error: "fetch failed" }, { status: 502 })
