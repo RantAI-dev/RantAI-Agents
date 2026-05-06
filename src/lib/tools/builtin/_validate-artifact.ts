@@ -2104,6 +2104,20 @@ function validateReact(content: string): ArtifactValidationResult {
     )
   }
 
+  // window.open / location.{href,assign,replace} / history.{push,replace}State
+  // are intercepted by the iframe nav blocker and silently no-op, so any
+  // navigation-style interaction looks broken to the user with no console
+  // signal. Forbid them at validate-time so the LLM picks an in-component
+  // alternative (e.g. controlled state for "page" switching).
+  const navApi = content.match(
+    /\b(window\.open\s*\(|location\.(?:href|assign|replace)\b|history\.(?:pushState|replaceState)\b)/,
+  )
+  if (navApi) {
+    errors.push(
+      `Found ${navApi[1].trim()} — the iframe nav blocker silently intercepts navigation calls, so the click looks broken to the user. Use in-component state to switch views instead of routing the browser.`,
+    )
+  }
+
   // <form action="..."> — the iframe nav blocker silently `preventDefault`s
   // submit events, so a Send button looks broken to the user with no error.
   // Mirror the equivalent rule in validateHtml.
