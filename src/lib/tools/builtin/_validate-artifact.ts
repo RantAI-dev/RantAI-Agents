@@ -2104,6 +2104,15 @@ function validateReact(content: string): ArtifactValidationResult {
     )
   }
 
+  // <form action="..."> — the iframe nav blocker silently `preventDefault`s
+  // submit events, so a Send button looks broken to the user with no error.
+  // Mirror the equivalent rule in validateHtml.
+  if (/<form[^>]+action\s*=\s*['"]/.test(content)) {
+    errors.push(
+      'Found <form action="..."> — submit events are silently blocked by the iframe nav blocker, leaving the form button visibly broken with no error. Drop the `action` attribute and use `onSubmit={(e) => { e.preventDefault(); ... }}` instead.',
+    )
+  }
+
   // Real-network APIs — sandboxed iframes with `srcdoc` have no origin so
   // `fetch` always rejects, and the `unhandledrejection` handler then surfaces
   // a misleading "Render error" overlay even though the component visually
