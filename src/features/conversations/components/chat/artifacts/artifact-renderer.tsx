@@ -99,6 +99,10 @@ interface ArtifactRendererProps {
   fetchPreviousVersion?: () => Promise<PrevVersionFetchResult>
   /** Wired to the panel's handleRestoreVersion. */
   onRestoreVersion?: (versionNum: number) => void
+  /** Controlled mode for application/code's source-vs-diff view. Defaults to "source" if omitted. */
+  codeMode?: "source" | "diff"
+  /** Callback when application/code's mode changes. No-op if omitted. */
+  onCodeModeChange?: (mode: "source" | "diff") => void
 }
 
 export function ArtifactRenderer({
@@ -108,6 +112,8 @@ export function ArtifactRenderer({
   previousVersionNum,
   fetchPreviousVersion,
   onRestoreVersion,
+  codeMode,
+  onCodeModeChange,
 }: ArtifactRendererProps) {
   switch (artifact.type) {
     case "text/html":
@@ -142,6 +148,8 @@ export function ArtifactRenderer({
           previousVersionNum={previousVersionNum}
           fetchPreviousVersion={fetchPreviousVersion}
           onRestoreVersion={onRestoreVersion}
+          mode={codeMode ?? "source"}
+          onModeChange={onCodeModeChange ?? (() => {})}
         />
       )
     case "text/markdown":
