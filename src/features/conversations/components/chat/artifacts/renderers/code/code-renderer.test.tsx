@@ -39,31 +39,7 @@ describe("CodeRenderer", () => {
 
   it("renders the status bar with the line count", () => {
     const { getByText } = render(<CodeRenderer {...baseProps} />)
-    // baseArtifact.content has 3 lines (including trailing empty after final \n)
     expect(getByText(/\d+ lines?/)).not.toBeNull()
-  })
-
-  it("opens the search popup with role='dialog' when Ctrl+F is pressed", () => {
-    const { container, getByRole } = render(<CodeRenderer {...baseProps} />)
-    const root = container.firstChild as HTMLElement
-    fireEvent.keyDown(root, { key: "f", ctrlKey: true })
-    expect(getByRole("dialog", { name: /search in code/i })).not.toBeNull()
-  })
-
-  it("opens the search popup when the status-bar Ctrl+F hint is clicked", () => {
-    const { getByLabelText, getByRole } = render(<CodeRenderer {...baseProps} />)
-    fireEvent.click(getByLabelText(/open search/i))
-    expect(getByRole("dialog", { name: /search in code/i })).not.toBeNull()
-  })
-
-  it("closes the search popup on Escape inside the input", () => {
-    const { getByLabelText, queryByRole, getByPlaceholderText } = render(
-      <CodeRenderer {...baseProps} />,
-    )
-    fireEvent.click(getByLabelText(/open search/i))
-    expect(queryByRole("dialog")).not.toBeNull()
-    fireEvent.keyDown(getByPlaceholderText(/search/i), { key: "Escape" })
-    expect(queryByRole("dialog")).toBeNull()
   })
 
   it("renders the diff view when mode='diff' is passed in (controlled)", async () => {

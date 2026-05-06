@@ -8,7 +8,6 @@ describe("CodeStatusBar", () => {
     lineCount: 78,
     wrap: false,
     onWrapToggle: () => {},
-    onSearchOpen: () => {},
   }
 
   it("renders the line count with the right pluralization", () => {
@@ -22,13 +21,6 @@ describe("CodeStatusBar", () => {
     const { getByText } = render(<CodeStatusBar {...baseProps} />)
     expect(getByText(/UTF-8/)).not.toBeNull()
     expect(getByText(/LF/)).not.toBeNull()
-  })
-
-  it("renders the Ctrl+F hint as a clickable button", () => {
-    const onSearchOpen = vi.fn()
-    const { getByLabelText } = render(<CodeStatusBar {...baseProps} onSearchOpen={onSearchOpen} />)
-    fireEvent.click(getByLabelText(/open search/i))
-    expect(onSearchOpen).toHaveBeenCalledOnce()
   })
 
   it("flips the wrap label based on the prop", () => {
