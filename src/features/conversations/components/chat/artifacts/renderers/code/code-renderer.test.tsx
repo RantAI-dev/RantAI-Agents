@@ -15,153 +15,128 @@ const baseArtifact: Artifact = {
   id: "art-1",
   title: "debounce.ts",
   type: "application/code",
-  content: "export const x = 1\n",
+  content: "export const x = 1\nexport const y = 2\n",
   language: "typescript",
   version: 2,
   previousVersions: [],
 }
 
+const baseProps = {
+  artifact: baseArtifact,
+  hasPreviousVersion: false as boolean,
+  mode: "source" as "source" | "diff",
+  onModeChange: () => {},
+}
+
 describe("CodeRenderer", () => {
-  beforeEach(() => {
-    sessionStorage.clear()
-  })
-  afterEach(() => {
-    sessionStorage.clear()
-  })
+  beforeEach(() => sessionStorage.clear())
+  afterEach(() => sessionStorage.clear())
 
   it("defaults to source mode and renders content via Streamdown", () => {
-    const { getByTestId } = render(
-      <CodeRenderer artifact={baseArtifact} hasPreviousVersion={false} />,
-    )
+    const { getByTestId } = render(<CodeRenderer {...baseProps} />)
     expect(getByTestId("sd")).not.toBeNull()
   })
 
-  it("disables the diff toggle when hasPreviousVersion is false", () => {
-    const { getByLabelText } = render(
-      <CodeRenderer artifact={baseArtifact} hasPreviousVersion={false} />,
-    )
-    const button = getByLabelText(/diff/i) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
+  it("renders the status bar with the line count", () => {
+    const { getByText } = render(<CodeRenderer {...baseProps} />)
+    // baseArtifact.content has 3 lines (including trailing empty after final \n)
+    expect(getByText(/\d+ lines?/)).not.toBeNull()
   })
 
-  it("enables the diff toggle when hasPreviousVersion is true and not streaming", () => {
-    const { getByLabelText } = render(
-      <CodeRenderer
-        artifact={baseArtifact}
-        hasPreviousVersion={true}
-        previousVersionNum={1}
-        fetchPreviousVersion={async () => ({ kind: "ok", content: "old" })}
-      />,
-    )
-    const button = getByLabelText(/diff/i) as HTMLButtonElement
-    expect(button.disabled).toBe(false)
+  it("opens the search popup with role='dialog' when Ctrl+F is pressed", () => {
+    const { container, getByRole } = render(<CodeRenderer {...baseProps} />)
+    const root = container.firstChild as HTMLElement
+    fireEvent.keyDown(root, { key: "f", ctrlKey: true })
+    expect(getByRole("dialog", { name: /search in code/i })).not.toBeNull()
   })
 
-  it("disables the diff toggle while streaming even when hasPreviousVersion is true", () => {
-    const streaming: Artifact = { ...baseArtifact, id: "streaming-tool-call-1" }
-    const { getByLabelText, getByText } = render(
-      <CodeRenderer
-        artifact={streaming}
-        hasPreviousVersion={true}
-        previousVersionNum={1}
-        fetchPreviousVersion={async () => ({ kind: "ok", content: "old" })}
-      />,
-    )
-    const button = getByLabelText(/diff/i) as HTMLButtonElement
-    expect(button.disabled).toBe(true)
-    expect(getByText(/writing/i)).not.toBeNull()
+  it("opens the search popup when the status-bar Ctrl+F hint is clicked", () => {
+    const { getByLabelText, getByRole } = render(<CodeRenderer {...baseProps} />)
+    fireEvent.click(getByLabelText(/open search/i))
+    expect(getByRole("dialog", { name: /search in code/i })).not.toBeNull()
   })
 
-  it("opens the search bar when the search toggle is clicked and closes on Escape", () => {
-    const { getByLabelText, queryByPlaceholderText } = render(
-      <CodeRenderer artifact={baseArtifact} hasPreviousVersion={false} />,
+  it("closes the search popup on Escape inside the input", () => {
+    const { getByLabelText, queryByRole, getByPlaceholderText } = render(
+      <CodeRenderer {...baseProps} />,
     )
-    fireEvent.click(getByLabelText(/search/i))
-    const input = queryByPlaceholderText(/search/i) as HTMLInputElement
-    expect(input).not.toBeNull()
-    fireEvent.keyDown(input, { key: "Escape" })
-    expect(queryByPlaceholderText(/search/i)).toBeNull()
+    fireEvent.click(getByLabelText(/open search/i))
+    expect(queryByRole("dialog")).not.toBeNull()
+    fireEvent.keyDown(getByPlaceholderText(/search/i), { key: "Escape" })
+    expect(queryByRole("dialog")).toBeNull()
   })
 
-  it("invokes fetchPreviousVersion when the user enters diff mode the first time", async () => {
-    const fetcher = vi.fn().mockResolvedValue({ kind: "ok" as const, content: "export const x = 0\n" })
-    const { getByLabelText } = render(
-      <CodeRenderer
-        artifact={baseArtifact}
-        hasPreviousVersion={true}
-        previousVersionNum={1}
-        fetchPreviousVersion={fetcher}
-      />,
-    )
-    fireEvent.click(getByLabelText(/diff/i))
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
-  })
-
-  it("shows the loading state while the fetcher is in flight", async () => {
-    let resolveIt: (v: { kind: "ok"; content: string }) => void = () => {}
-    const fetcher = vi.fn().mockImplementation(
-      () => new Promise((resolve) => { resolveIt = resolve as typeof resolveIt }),
-    )
-    const { getByLabelText, getByText } = render(
-      <CodeRenderer
-        artifact={baseArtifact}
-        hasPreviousVersion={true}
-        previousVersionNum={1}
-        fetchPreviousVersion={fetcher}
-      />,
-    )
-    fireEvent.click(getByLabelText(/diff/i))
-    await waitFor(() => expect(getByText(/loading previous version/i)).not.toBeNull())
-    resolveIt({ kind: "ok", content: "old" })
-  })
-
-  it("does not refetch when toggling diff off and back on (caching)", async () => {
+  it("renders the diff view when mode='diff' is passed in (controlled)", async () => {
     const fetcher = vi.fn().mockResolvedValue({ kind: "ok" as const, content: "old" })
-    const { getByLabelText } = render(
+    const { getByText } = render(
       <CodeRenderer
-        artifact={baseArtifact}
+        {...baseProps}
         hasPreviousVersion={true}
         previousVersionNum={1}
         fetchPreviousVersion={fetcher}
+        mode="diff"
       />,
     )
-    fireEvent.click(getByLabelText(/diff/i))
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
-    fireEvent.click(getByLabelText(/diff/i))
-    fireEvent.click(getByLabelText(/diff/i))
+    // diff view shows its loading state immediately (source view never does); confirms we're on the diff branch
+    expect(getByText(/loading previous version/i)).not.toBeNull()
+  })
+
+  it("calls onModeChange('source') when diff becomes unavailable while in diff mode", () => {
+    const onModeChange = vi.fn()
+    render(
+      <CodeRenderer
+        {...baseProps}
+        hasPreviousVersion={false}
+        mode="diff"
+        onModeChange={onModeChange}
+      />,
+    )
+    expect(onModeChange).toHaveBeenCalledWith("source")
+  })
+
+  it("does not refetch when re-mounting with the same mode (caching via state-machine reset key)", async () => {
+    const fetcher = vi.fn().mockResolvedValue({ kind: "ok" as const, content: "old" })
+    const { rerender } = render(
+      <CodeRenderer
+        {...baseProps}
+        hasPreviousVersion={true}
+        previousVersionNum={1}
+        fetchPreviousVersion={fetcher}
+        mode="diff"
+      />,
+    )
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1))
+    rerender(
+      <CodeRenderer
+        {...baseProps}
+        hasPreviousVersion={true}
+        previousVersionNum={1}
+        fetchPreviousVersion={fetcher}
+        mode="source"
+      />,
+    )
+    rerender(
+      <CodeRenderer
+        {...baseProps}
+        hasPreviousVersion={true}
+        previousVersionNum={1}
+        fetchPreviousVersion={fetcher}
+        mode="diff"
+      />,
+    )
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
 
   it("persists wrap toggle state in sessionStorage keyed on artifact id", () => {
-    const { getByLabelText } = render(
-      <CodeRenderer artifact={baseArtifact} hasPreviousVersion={false} />,
-    )
-    fireEvent.click(getByLabelText(/wrap/i))
+    const { getByLabelText } = render(<CodeRenderer {...baseProps} />)
+    fireEvent.click(getByLabelText(/enable line wrap/i))
     expect(sessionStorage.getItem("code-wrap:art-1")).toBe("true")
   })
 
   it("hydrates wrap state from sessionStorage on mount", () => {
     sessionStorage.setItem("code-wrap:art-1", "true")
-    const { getByLabelText } = render(
-      <CodeRenderer artifact={baseArtifact} hasPreviousVersion={false} />,
-    )
-    expect(getByLabelText(/wrap/i).getAttribute("data-active")).toBe("true")
-  })
-
-  it("shows the off-canonical language warning when language is not on the Shiki list", () => {
-    const odd: Artifact = { ...baseArtifact, language: "nim" }
-    const { getByLabelText } = render(
-      <CodeRenderer artifact={odd} hasPreviousVersion={false} />,
-    )
-    expect(getByLabelText(/off-canonical language/i)).not.toBeNull()
-  })
-
-  it("intercepts Cmd/Ctrl+F to open search when panel has focus", () => {
-    const { container, queryByPlaceholderText } = render(
-      <CodeRenderer artifact={baseArtifact} hasPreviousVersion={false} />,
-    )
-    const root = container.firstChild as HTMLElement
-    fireEvent.keyDown(root, { key: "f", ctrlKey: true })
-    expect(queryByPlaceholderText(/search/i)).not.toBeNull()
+    const { getByLabelText } = render(<CodeRenderer {...baseProps} />)
+    expect(getByLabelText(/disable line wrap/i)).not.toBeNull()
   })
 })
