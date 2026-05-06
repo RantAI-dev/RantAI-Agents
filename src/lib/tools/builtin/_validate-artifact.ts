@@ -1882,7 +1882,11 @@ function appendAestheticWarnings(
  * Used by validateReact to validate names against allowlists for
  * `LucideReact` and `Recharts` globals.
  */
-type AnyAstNode = { type: string; [key: string]: unknown }
+// AST nodes have widely varying shapes per `node.type`; using `any` here is
+// pragmatic for hand-written walkers — the alternative is dozens of cast-
+// through-unknown lines per visitor.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyAstNode = { type: string; [key: string]: any }
 
 function collectGlobalDestructures(
   node: unknown,
@@ -1931,6 +1935,7 @@ function collectGlobalDestructures(
  * inside surfaces as an unhandledrejection event.
  */
 function countAsyncEffectCallbacks(node: unknown): number {
+  const EFFECT_HOOKS = ["useEffect", "useLayoutEffect", "useInsertionEffect"]
   let count = 0
   function visit(n: unknown): void {
     if (!n || typeof n !== "object") return
@@ -1938,28 +1943,23 @@ function countAsyncEffectCallbacks(node: unknown): number {
     if (typeof node.type !== "string") return
 
     if (node.type === "CallExpression") {
-      const callee = node.callee as AnyAstNode | undefined
+      const callee = node.callee
       // useEffect / useLayoutEffect / useInsertionEffect — also catches
       // `React.useEffect(...)` member-expression form.
-      const isEffectCall =
-        (callee?.type === "Identifier" &&
-          ["useEffect", "useLayoutEffect", "useInsertionEffect"].includes(
-            (callee as { name: string }).name,
-          )) ||
-        (callee?.type === "MemberExpression" &&
-          (callee as { property?: AnyAstNode }).property?.type ===
-            "Identifier" &&
-          ["useEffect", "useLayoutEffect", "useInsertionEffect"].includes(
-            ((callee as { property: { name: string } }).property).name,
-          ))
-      if (isEffectCall) {
-        const args = (node as { arguments?: AnyAstNode[] }).arguments ?? []
-        const first = args[0]
+      const calleeName =
+        callee?.type === "Identifier"
+          ? callee.name
+          : callee?.type === "MemberExpression" &&
+            callee.property?.type === "Identifier"
+          ? callee.property.name
+          : null
+      if (calleeName && EFFECT_HOOKS.includes(calleeName)) {
+        const first = node.arguments?.[0]
         if (
           first &&
           (first.type === "ArrowFunctionExpression" ||
             first.type === "FunctionExpression") &&
-          (first as { async?: boolean }).async === true
+          first.async === true
         ) {
           count++
         }
@@ -1978,6 +1978,134 @@ function countAsyncEffectCallbacks(node: unknown): number {
   }
   visit(node)
   return count
+}
+
+/**
+ * Find `useEffect(() => { setX(...) }, [x])` patterns where the same state
+ * variable both gets re-set and appears in the dep array — guaranteed
+ * infinite render loop. Heuristic, scoped per useState pair to keep false
+ * positives low.
+ *
+ * Algorithm:
+ *  1. Walk the AST collecting every `const [x, setX] = useState(...)` pair.
+ *  2. For each useEffect call, look at args[0] (callback) body and args[1]
+ *     (deps array). If args[1] mentions `x` AND args[0] body contains a
+ *     `setX(...)` call (where `setX` is the matching setter), flag.
+ */
+function findInfiniteEffectLoops(
+  node: unknown,
+): { state: string; setter: string }[] {
+  const pairs = new Map<string, string>() // state -> setter
+  function collectPairs(n: unknown): void {
+    if (!n || typeof n !== "object") return
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return
+    if (node.type === "VariableDeclarator") {
+      const id = node.id
+      const init = node.init
+      const initCalleeName =
+        init?.type === "CallExpression"
+          ? init.callee?.type === "Identifier"
+            ? init.callee.name
+            : init.callee?.type === "MemberExpression" &&
+              init.callee.property?.type === "Identifier"
+            ? init.callee.property.name
+            : null
+          : null
+      if (
+        id?.type === "ArrayPattern" &&
+        initCalleeName === "useState"
+      ) {
+        const elems = id.elements ?? []
+        const stateName =
+          elems[0]?.type === "Identifier" ? elems[0].name : null
+        const setterName =
+          elems[1]?.type === "Identifier" ? elems[1].name : null
+        if (stateName && setterName) pairs.set(stateName, setterName)
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) collectPairs(c)
+      } else if (child && typeof child === "object") {
+        collectPairs(child)
+      }
+    }
+  }
+  collectPairs(node)
+
+  const found: { state: string; setter: string }[] = []
+  function nodeContainsCallTo(n: unknown, callee: string): boolean {
+    if (!n || typeof n !== "object") return false
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return false
+    if (
+      node.type === "CallExpression" &&
+      node.callee?.type === "Identifier" &&
+      node.callee.name === callee
+    ) {
+      return true
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) if (nodeContainsCallTo(c, callee)) return true
+      } else if (child && typeof child === "object") {
+        if (nodeContainsCallTo(child, callee)) return true
+      }
+    }
+    return false
+  }
+
+  function visitEffects(n: unknown): void {
+    if (!n || typeof n !== "object") return
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return
+    if (node.type === "CallExpression") {
+      const callee = node.callee
+      const calleeName =
+        callee?.type === "Identifier"
+          ? callee.name
+          : callee?.type === "MemberExpression" &&
+            callee.property?.type === "Identifier"
+          ? callee.property.name
+          : null
+      if (calleeName === "useEffect" || calleeName === "useLayoutEffect") {
+        const fn = node.arguments?.[0]
+        const deps = node.arguments?.[1]
+        if (
+          fn &&
+          (fn.type === "ArrowFunctionExpression" ||
+            fn.type === "FunctionExpression") &&
+          deps?.type === "ArrayExpression"
+        ) {
+          const depNames = new Set<string>()
+          for (const el of deps.elements ?? []) {
+            if (el?.type === "Identifier") depNames.add(el.name)
+          }
+          for (const [state, setter] of pairs) {
+            if (depNames.has(state) && nodeContainsCallTo(fn, setter)) {
+              found.push({ state, setter })
+            }
+          }
+        }
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) visitEffects(c)
+      } else if (child && typeof child === "object") {
+        visitEffects(child)
+      }
+    }
+  }
+  visitEffects(node)
+  return found
 }
 
 function stripDirectiveLines(
@@ -2154,6 +2282,12 @@ function validateReact(content: string): ArtifactValidationResult {
   // error" overlay even though the component visually rendered fine.
   const asyncEffectCount = countAsyncEffectCallbacks(ast.program)
 
+  // useEffect(() => setX(...), [x]) — calling a state setter unconditionally
+  // inside an effect that depends on the same state always re-fires the
+  // effect, looping until React (production build) freezes the iframe with
+  // no recoverable error.
+  const infiniteLoopPairs = findInfiniteEffectLoops(ast.program)
+
   // 3. String-level checks for things that aren't worth a full AST walk
   if (/document\.(getElementById|querySelector|querySelectorAll)\s*\(/.test(content)) {
     errors.push(
@@ -2257,6 +2391,13 @@ function validateReact(content: string): ArtifactValidationResult {
   if (asyncEffectCount > 0) {
     errors.push(
       `Found ${asyncEffectCount} \`useEffect(async () => ...)\` callback${asyncEffectCount === 1 ? "" : "s"}. An async useEffect returns a Promise instead of a cleanup function; any rejection inside surfaces as a misleading top-banner "Render error" overlay. Wrap the async logic in an inner function instead: \`useEffect(() => { (async () => { ... })() }, [])\`.`,
+    )
+  }
+  if (infiniteLoopPairs.length > 0) {
+    errors.push(
+      `Found useEffect that calls a state setter while depending on the same state — infinite render loop. Affected pair${infiniteLoopPairs.length === 1 ? "" : "s"}: ${infiniteLoopPairs
+        .map(({ state, setter }) => `\`${setter}(...)\` inside \`useEffect(..., [${state}])\``)
+        .join("; ")}. Drop the dependency, guard the setter with a condition, or compute the value during render with useMemo.`,
     )
   }
 
