@@ -125,12 +125,27 @@ function preprocessCode(code: string): {
         const mixedReact = trimmedReact.match(/^(\w+)\s*,\s*\{([^}]+)\}$/)
         const namedSrc = namedOnly?.[1] ?? mixedReact?.[2] ?? null
         if (namedSrc) {
-          const missing = namedSrc
-            .split(",")
-            .map((n) => n.trim().split(/\s+as\s+/)[0].trim())
-            .filter((n) => n && !REACT_PRE_DESTRUCTURED.has(n))
-          if (missing.length > 0) {
-            preamble.push(`const { ${missing.join(", ")} } = React;`)
+          // Aliased imports (`import { useState as useLocalState }`) bind the
+          // alias, never the original. Pre-destructured names (useState etc.)
+          // are already in scope under their canonical name only — the alias
+          // still has to be wired up explicitly. Emit a `{ original: alias }`
+          // destructure for those, and the plain `{ name }` form for any
+          // non-aliased imports the template doesn't pre-expose.
+          const plainNames: string[] = []
+          const aliasParts: string[] = []
+          for (const raw of namedSrc.split(",")) {
+            const entry = raw.trim()
+            if (!entry) continue
+            const aliasMatch = entry.match(/^(\w+)\s+as\s+(\w+)$/)
+            if (aliasMatch) {
+              aliasParts.push(`${aliasMatch[1]}: ${aliasMatch[2]}`)
+            } else if (!REACT_PRE_DESTRUCTURED.has(entry)) {
+              plainNames.push(entry)
+            }
+          }
+          const parts = [...plainNames, ...aliasParts]
+          if (parts.length > 0) {
+            preamble.push(`const { ${parts.join(", ")} } = React;`)
           }
         }
         return ""
