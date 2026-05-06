@@ -1923,6 +1923,63 @@ function collectGlobalDestructures(
   }
 }
 
+/**
+ * Count `useEffect(async () => ...)` and `useEffect(async function() {})`
+ * call sites anywhere in the AST. The first arg of useEffect must be a
+ * sync function returning either nothing or a cleanup fn — passing an
+ * async function returns a Promise that React ignores while any rejection
+ * inside surfaces as an unhandledrejection event.
+ */
+function countAsyncEffectCallbacks(node: unknown): number {
+  let count = 0
+  function visit(n: unknown): void {
+    if (!n || typeof n !== "object") return
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return
+
+    if (node.type === "CallExpression") {
+      const callee = node.callee as AnyAstNode | undefined
+      // useEffect / useLayoutEffect / useInsertionEffect — also catches
+      // `React.useEffect(...)` member-expression form.
+      const isEffectCall =
+        (callee?.type === "Identifier" &&
+          ["useEffect", "useLayoutEffect", "useInsertionEffect"].includes(
+            (callee as { name: string }).name,
+          )) ||
+        (callee?.type === "MemberExpression" &&
+          (callee as { property?: AnyAstNode }).property?.type ===
+            "Identifier" &&
+          ["useEffect", "useLayoutEffect", "useInsertionEffect"].includes(
+            ((callee as { property: { name: string } }).property).name,
+          ))
+      if (isEffectCall) {
+        const args = (node as { arguments?: AnyAstNode[] }).arguments ?? []
+        const first = args[0]
+        if (
+          first &&
+          (first.type === "ArrowFunctionExpression" ||
+            first.type === "FunctionExpression") &&
+          (first as { async?: boolean }).async === true
+        ) {
+          count++
+        }
+      }
+    }
+
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) visit(c)
+      } else if (child && typeof child === "object") {
+        visit(child)
+      }
+    }
+  }
+  visit(node)
+  return count
+}
+
 function stripDirectiveLines(
   content: string,
   directives: { rawAestheticLine: string | null; rawFontsLine: string | null }
@@ -2091,6 +2148,12 @@ function validateReact(content: string): ArtifactValidationResult {
     (n) => !RECHARTS_NAMES.has(n),
   )
 
+  // useEffect(async () => ...) — common LLM mistake: the callback returns a
+  // Promise instead of a cleanup fn, React ignores it, and any async error
+  // becomes an unhandledrejection that surfaces as a top-banner "Render
+  // error" overlay even though the component visually rendered fine.
+  const asyncEffectCount = countAsyncEffectCallbacks(ast.program)
+
   // 3. String-level checks for things that aren't worth a full AST walk
   if (/document\.(getElementById|querySelector|querySelectorAll)\s*\(/.test(content)) {
     errors.push(
@@ -2189,6 +2252,11 @@ function validateReact(content: string): ArtifactValidationResult {
       `Unknown Recharts component name(s): ${unknownRecharts
         .map((n) => `"${n}"`)
         .join(", ")}. These names are not exported by recharts@2 — destructuring them yields \`undefined\` and the JSX render throws "Element type is invalid". Common confusions: \`Sankey\` (not \`SankeyChart\`), \`FunnelChart\` is the wrapper while \`Funnel\` is the inner shape.`,
+    )
+  }
+  if (asyncEffectCount > 0) {
+    errors.push(
+      `Found ${asyncEffectCount} \`useEffect(async () => ...)\` callback${asyncEffectCount === 1 ? "" : "s"}. An async useEffect returns a Promise instead of a cleanup function; any rejection inside surfaces as a misleading top-banner "Render error" overlay. Wrap the async logic in an inner function instead: \`useEffect(() => { (async () => { ... })() }, [])\`.`,
     )
   }
 
