@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Plus, MoreHorizontal, Pencil, Trash2, Folder, BookOpen, Database } from "@/lib/icons"
+import { Plus, MoreHorizontal, Pencil, Trash2, Folder, BookOpen, Database, Upload, FileText } from "@/lib/icons"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { CountUp } from "@/components/reactbits/count-up"
 
@@ -39,6 +39,7 @@ interface KnowledgeHeaderProps {
   documentCount: number
   knowledgeBaseCount: number
   onAddDocument?: () => void
+  onBulkUpload?: () => void
   onEditKB?: () => void
   onDeleteKB?: () => void
 }
@@ -48,6 +49,7 @@ export function KnowledgeHeader({
   documentCount,
   knowledgeBaseCount,
   onAddDocument,
+  onBulkUpload,
   onEditKB,
   onDeleteKB,
 }: KnowledgeHeaderProps) {
@@ -131,12 +133,26 @@ export function KnowledgeHeader({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {onAddDocument && (
-          <Button onClick={onAddDocument} size="sm">
-            <Plus className="h-4 w-4 mr-1.5" />
-            Add Document
-          </Button>
-        )}
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm">
+                <Plus className="h-4 w-4 mr-1.5" />
+                Add Document
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onAddDocument}>
+                <FileText className="h-4 w-4 mr-2" />
+                Single Upload
+              </DropdownMenuItem>
+              {onBulkUpload && (
+                <DropdownMenuItem onClick={onBulkUpload}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Bulk Upload
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
       </div>
     </div>
   )
