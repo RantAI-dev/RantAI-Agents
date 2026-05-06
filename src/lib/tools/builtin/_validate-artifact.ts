@@ -2108,6 +2108,69 @@ function findInfiniteEffectLoops(
   return found
 }
 
+/**
+ * Find `const [x] = useState(0)` (single-element destructure) where a
+ * conventional setter `setX` is referenced anywhere in the source. The
+ * LLM forgot to destructure the setter; any reference to it is undefined
+ * and the click handler that uses it crashes on first interaction.
+ *
+ * Implementation note: we do an AST scan to enumerate single-element
+ * useState destructures, then a string-level word-boundary regex on the
+ * source to detect setter references. AST scope analysis would be more
+ * precise but Babel's AST doesn't carry scope info without traverse, and
+ * a false positive here (e.g. an unrelated `setLoading` declared elsewhere
+ * happening to share the conventional shape) is acceptable cost for the
+ * common case.
+ */
+function findOrphanSetterReferences(
+  programNode: unknown,
+  source: string,
+): { state: string; setter: string }[] {
+  const singletonStates: { state: string; setter: string }[] = []
+  function visit(n: unknown): void {
+    if (!n || typeof n !== "object") return
+    const node = n as AnyAstNode
+    if (typeof node.type !== "string") return
+    if (node.type === "VariableDeclarator") {
+      const id = node.id
+      const init = node.init
+      const initCalleeName =
+        init?.type === "CallExpression"
+          ? init.callee?.type === "Identifier"
+            ? init.callee.name
+            : init.callee?.type === "MemberExpression" &&
+              init.callee.property?.type === "Identifier"
+            ? init.callee.property.name
+            : null
+          : null
+      if (
+        id?.type === "ArrayPattern" &&
+        initCalleeName === "useState" &&
+        (id.elements ?? []).length === 1 &&
+        id.elements?.[0]?.type === "Identifier"
+      ) {
+        const stateName = id.elements[0].name
+        const setterName = "set" + stateName[0].toUpperCase() + stateName.slice(1)
+        singletonStates.push({ state: stateName, setter: setterName })
+      }
+    }
+    for (const key of Object.keys(node)) {
+      if (key === "type" || key === "loc" || key === "range") continue
+      const child = node[key]
+      if (Array.isArray(child)) {
+        for (const c of child) visit(c)
+      } else if (child && typeof child === "object") {
+        visit(child)
+      }
+    }
+  }
+  visit(programNode)
+
+  return singletonStates.filter(({ setter }) =>
+    new RegExp(`\\b${setter}\\b`).test(source),
+  )
+}
+
 function stripDirectiveLines(
   content: string,
   directives: { rawAestheticLine: string | null; rawFontsLine: string | null }
@@ -2288,6 +2351,12 @@ function validateReact(content: string): ArtifactValidationResult {
   // no recoverable error.
   const infiniteLoopPairs = findInfiniteEffectLoops(ast.program)
 
+  // const [x] = useState(0); ... setX(...) — the LLM forgot to destructure
+  // the setter, so any reference to `setX` is undefined and crashes the
+  // first time it's invoked (often a click handler), giving the user a
+  // working-looking UI that breaks on interaction.
+  const orphanSetters = findOrphanSetterReferences(ast.program, content)
+
   // 3. String-level checks for things that aren't worth a full AST walk
   if (/document\.(getElementById|querySelector|querySelectorAll)\s*\(/.test(content)) {
     errors.push(
@@ -2398,6 +2467,13 @@ function validateReact(content: string): ArtifactValidationResult {
       `Found useEffect that calls a state setter while depending on the same state — infinite render loop. Affected pair${infiniteLoopPairs.length === 1 ? "" : "s"}: ${infiniteLoopPairs
         .map(({ state, setter }) => `\`${setter}(...)\` inside \`useEffect(..., [${state}])\``)
         .join("; ")}. Drop the dependency, guard the setter with a condition, or compute the value during render with useMemo.`,
+    )
+  }
+  if (orphanSetters.length > 0) {
+    errors.push(
+      `Found state setter${orphanSetters.length === 1 ? "" : "s"} referenced but never destructured: ${orphanSetters
+        .map(({ state, setter }) => `\`${setter}\` (you wrote \`const [${state}] = useState(...)\` — destructure as \`const [${state}, ${setter}] = useState(...)\`)`)
+        .join("; ")}. The single-element destructure leaves the setter undefined and the click handler crashes on first interaction.`,
     )
   }
 
