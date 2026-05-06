@@ -11,6 +11,9 @@ interface CategoryFilterRowProps {
   onToggleCategory: (name: string) => void
   onNewCategory: () => void
   onClearFilters: () => void
+  showUncategorized?: boolean
+  uncategorizedCount?: number
+  onToggleUncategorized?: () => void
 }
 
 export function CategoryFilterRow({
@@ -20,6 +23,9 @@ export function CategoryFilterRow({
   onToggleCategory,
   onNewCategory,
   onClearFilters,
+  showUncategorized = false,
+  uncategorizedCount = 0,
+  onToggleUncategorized,
 }: CategoryFilterRowProps) {
   const hasSelection = selectedCategories.length > 0
 
@@ -53,6 +59,25 @@ export function CategoryFilterRow({
             </Badge>
           )
         })}
+        {onToggleUncategorized && (
+          <Badge
+            variant={showUncategorized ? "default" : "outline"}
+            role="button"
+            tabIndex={0}
+            aria-label="Filter uncategorized"
+            className="cursor-pointer shrink-0 border-dashed"
+            style={showUncategorized ? {} : { color: "var(--muted-foreground)", borderColor: "var(--muted-foreground)" }}
+            onClick={onToggleUncategorized}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                onToggleUncategorized()
+              }
+            }}
+          >
+            Uncategorized ({uncategorizedCount})
+          </Badge>
+        )}
         <Badge
           variant="outline"
           role="button"

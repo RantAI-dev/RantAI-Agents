@@ -201,11 +201,6 @@ const DocumentEditDialogLoadedForm = memo<{
     }
 
     const handleSave = async () => {
-      if (selectedCategories.length === 0) {
-        setError("At least one category is required")
-        return
-      }
-
       setSaving(true)
       setError("")
 
@@ -249,7 +244,7 @@ const DocumentEditDialogLoadedForm = memo<{
 
         {/* Categories */}
         <div className="space-y-2">
-          <Label>Categories (select one or more)</Label>
+          <Label>Categories (optional)</Label>
           <Popover>
             <PopoverTrigger asChild>
               <Button
@@ -403,7 +398,7 @@ const DocumentEditDialogLoadedForm = memo<{
 
         <DialogActions
           saving={saving}
-          canSave={selectedCategories.length > 0}
+          canSave={true}
           onCancel={() => onOpenChange(false)}
           onSave={handleSave}
           saveLabel="Save Changes"

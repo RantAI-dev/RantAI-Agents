@@ -419,10 +419,10 @@ export async function createKnowledgeDocumentForDashboard(params: {
     }
   }
 
-  if (!title || !content || categories.length === 0) {
+  if (!title || !content) {
     return {
       status: 400,
-      error: "Title, content, and at least one category are required",
+      error: "Title and content are required",
     }
   }
 

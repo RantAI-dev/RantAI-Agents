@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog"
 import { DocumentList, type ViewMode } from "@/features/knowledge/components/document-list"
 import { UploadDialog } from "@/features/knowledge/components/upload-dialog"
+import { BulkUploadDialog } from "@/features/knowledge/components/bulk-upload-dialog"
 import { DocumentEditDialog } from "@/features/knowledge/components/document-edit-dialog"
 import { CategoryDialog, Category } from "@/features/knowledge/components/category-dialog"
 import { KnowledgeHeader } from "@/features/knowledge/components/knowledge-header"
@@ -96,16 +97,21 @@ export default function KnowledgePageClient({
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [bulkUploadDialogOpen, setBulkUploadDialogOpen] = useState(false)
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [sortOption, setSortOption] = useState<SortOption>("newest")
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [contentTab, setContentTab] = useState<"documents" | "artifacts">("documents")
+  const [showUncategorized, setShowUncategorized] = useState(false)
+  const [showNoKB, setShowNoKB] = useState(false)
 
   // Categories state
   const [categories, setCategories] = useState<Category[]>(initialCategories)
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
+  const [deleteCategory, setDeleteCategory] = useState<Category | null>(null)
+  const [deleteCategoryDialogOpen, setDeleteCategoryDialogOpen] = useState(false)
 
   // Knowledge Base CRUD dialog state
   const [kbDialogOpen, setKbDialogOpen] = useState(false)
@@ -234,6 +240,10 @@ export default function KnowledgePageClient({
   // Count artifacts for tab visibility
   const artifactCount = documents.filter((doc) => doc.artifactType != null).length
 
+  // Count uncategorized and no-KB documents
+  const uncategorizedCount = documents.filter((doc) => doc.categories.length === 0).length
+  const noKBCount = documents.filter((doc) => doc.groups.length === 0).length
+
   // Filter documents
   const filteredDocuments = documents.filter((doc) => {
     // Tab filter: documents vs artifacts
@@ -246,7 +256,9 @@ export default function KnowledgePageClient({
     const matchesCategory =
       selectedCategories.length === 0 ||
       doc.categories.some((c) => selectedCategories.includes(c))
-    return matchesTab && matchesSearch && matchesCategory
+    const matchesUncategorized = showUncategorized ? doc.categories.length === 0 : true
+    const matchesNoKB = showNoKB ? doc.groups.length === 0 : true
+    return matchesTab && matchesSearch && matchesCategory && matchesUncategorized && matchesNoKB
   })
 
   // Sort filtered documents
@@ -260,10 +272,12 @@ export default function KnowledgePageClient({
     return a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
   })
 
-  const hasActiveFilters = selectedCategories.length > 0 || searchQuery.trim().length > 0
+  const hasActiveFilters = selectedCategories.length > 0 || searchQuery.trim().length > 0 || showUncategorized || showNoKB
   const clearAllFilters = () => {
     setSelectedCategories([])
     setSearchQuery("")
+    setShowUncategorized(false)
+    setShowNoKB(false)
   }
 
   // Knowledge Base CRUD handlers
@@ -341,9 +355,21 @@ export default function KnowledgePageClient({
     setCategoryDialogOpen(true)
   }
 
+  const handleEditCategory = (category: Category) => {
+    setEditingCategory(category)
+    setCategoryDialogOpen(true)
+  }
+
+  const handleDeleteCategory = (category: Category) => {
+    setDeleteCategory(category)
+    setDeleteCategoryDialogOpen(true)
+  }
+
   const handleCategorySuccess = () => {
     setCategoryDialogOpen(false)
     setEditingCategory(null)
+    setDeleteCategoryDialogOpen(false)
+    setDeleteCategory(null)
     fetchCategories()
   }
 
@@ -356,7 +382,8 @@ export default function KnowledgePageClient({
         selectedKB={selectedKB ?? null}
         documentCount={documents.length}
         knowledgeBaseCount={knowledgeBases.length}
-        onAddDocument={contentTab === "documents" ? () => setUploadDialogOpen(true) : undefined}
+        onAddDocument={() => setUploadDialogOpen(true)}
+        onBulkUpload={() => setBulkUploadDialogOpen(true)}
         onEditKB={selectedKB ? handleEditKB : undefined}
         onDeleteKB={selectedKB ? () => setDeleteKBDialogOpen(true) : undefined}
       />
@@ -427,6 +454,14 @@ export default function KnowledgePageClient({
                   onToggleCategory={toggleCategory}
                   onNewCategory={handleCreateCategory}
                   onClearFilters={() => setSelectedCategories([])}
+                  showUncategorized={showUncategorized}
+                  onToggleUncategorized={() => setShowUncategorized((prev) => !prev)}
+                  uncategorizedCount={uncategorizedCount}
+                  onEditCategory={handleEditCategory}
+                  onDeleteCategory={handleDeleteCategory}
+                  showNoKB={showNoKB}
+                  onToggleNoKB={() => setShowNoKB((prev) => !prev)}
+                  noKBCount={noKBCount}
                 />
               </PopoverContent>
             </Popover>
@@ -459,6 +494,16 @@ export default function KnowledgePageClient({
         onCategoriesChange={fetchCategories}
       />
 
+      {/* Bulk Upload Dialog */}
+      <BulkUploadDialog
+        open={bulkUploadDialogOpen}
+        onOpenChange={setBulkUploadDialogOpen}
+        onSuccess={handleUploadSuccess}
+        knowledgeBases={knowledgeBases}
+        categories={categories}
+        onCategoriesChange={fetchCategories}
+      />
+
       {/* Document Edit Dialog */}
       <DocumentEditDialog
         documentId={editingDocumentId}
@@ -477,6 +522,45 @@ export default function KnowledgePageClient({
         onSuccess={handleCategorySuccess}
         editingCategory={editingCategory}
       />
+
+      {/* Category Delete Confirmation Dialog */}
+      <Dialog open={deleteCategoryDialogOpen} onOpenChange={setDeleteCategoryDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Category</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &quot;{deleteCategory?.label}&quot;? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteCategoryDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!deleteCategory) return
+                try {
+                  const response = await fetch(`/api/dashboard/files/categories/${deleteCategory.id}`, {
+                    method: "DELETE",
+                  })
+                  if (response.ok) {
+                    handleCategorySuccess()
+                  } else {
+                    const data = await response.json()
+                    alert(data.error || "Failed to delete category")
+                  }
+                } catch (error) {
+                  console.error("Failed to delete category:", error)
+                  alert("Failed to delete category")
+                }
+              }}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Knowledge Base Create/Edit Dialog */}
       <Dialog open={kbDialogOpen} onOpenChange={setKbDialogOpen}>
