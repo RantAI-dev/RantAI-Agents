@@ -31,6 +31,34 @@ const HIGHLIGHT_NAME_CURRENT = "code-search-current"
 const MARK_CLASS = "code-search-match"
 const MARK_CLASS_CURRENT = "code-search-match-current"
 
+const HIGHLIGHT_STYLE_ID = "code-search-highlight-styles"
+const HIGHLIGHT_CSS = `
+::highlight(${HIGHLIGHT_NAME}) {
+  background-color: rgb(255 200 0 / 0.35);
+  color: inherit;
+}
+::highlight(${HIGHLIGHT_NAME_CURRENT}) {
+  background-color: rgb(255 140 0 / 0.85);
+  color: rgb(0 0 0);
+}
+`
+
+/**
+ * Inject the `::highlight()` CSS rules at runtime. Lightning CSS (used by
+ * Turbopack as of Next 16) doesn't recognize `::highlight()` as a valid
+ * pseudo-element and rejects it at build time, so these rules can't live in
+ * `globals.css`. Browsers parse the runtime-injected stylesheet without
+ * complaint. Called once on first `applyHighlights` invocation.
+ */
+function ensureHighlightStyles(): void {
+  if (typeof document === "undefined") return
+  if (document.getElementById(HIGHLIGHT_STYLE_ID)) return
+  const style = document.createElement("style")
+  style.id = HIGHLIGHT_STYLE_ID
+  style.textContent = HIGHLIGHT_CSS
+  document.head.appendChild(style)
+}
+
 /**
  * Scan content for case-insensitive plain-text matches. Empty queries and
  * queries with no matches return an empty array. Overlapping matches are
@@ -201,6 +229,7 @@ export function applyHighlights(
   const api = getHighlightApi()
   if (api) {
     try {
+      ensureHighlightStyles()
       if (otherRanges.length > 0) {
         const others = new api.Highlight(...otherRanges) as unknown
         api.CSS.highlights!.set(HIGHLIGHT_NAME, others)

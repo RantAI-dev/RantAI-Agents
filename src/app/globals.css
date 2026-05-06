@@ -191,18 +191,12 @@
   }
 }
 
-/* ── Code artifact search highlighting ──
-   Two paths: CSS Custom Highlight API (all modern browsers — non-DOM-mutating)
-   and a `<mark>` DOM fallback for older browsers. The "current" variant is the
-   match the user is focused on (matchIndex); the rest are background hits. */
-::highlight(code-search) {
-  background-color: rgb(255 200 0 / 0.35);
-  color: inherit;
-}
-::highlight(code-search-current) {
-  background-color: rgb(255 140 0 / 0.85);
-  color: rgb(0 0 0);
-}
+/* ── Code artifact search highlighting (DOM-fallback path) ──
+   The `::highlight()` rules for the CSS Custom Highlight API path live in
+   `lib/search.ts:ensureHighlightStyles()` because Turbopack's CSS parser
+   (Lightning CSS) doesn't yet recognize `::highlight()` as a valid
+   pseudo-element. Keeping the `<mark>` rules here is safe — they're
+   standard CSS. */
 mark.code-search-match {
   background-color: rgb(255 200 0 / 0.35);
   color: inherit;
