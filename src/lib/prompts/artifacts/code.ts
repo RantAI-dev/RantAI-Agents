@@ -104,6 +104,7 @@ Separate sections with a blank line. Keep functions focused — aim for ≤ 30 l
 - **Public functions:** documented with the language's native format — JSDoc for TS/JS, docstrings for Python, \`///\` for Rust, Go doc comments starting with the name.
 - **Inline comments:** only for non-obvious logic. Explain *why*, not *what*. If the "what" isn't self-evident from the code, rename the variable or extract a helper instead of commenting.
 - **Usage example:** at the bottom of the file, show how to use the public API with realistic arguments. For libraries, a commented-out example is fine. For scripts, use the appropriate \`main\` entry point.
+- **Title is the filename.** Set the artifact's \`title\` to the filename you'd save this as in a real project — \`debounce.ts\`, \`migrations/0042_users.sql\`, \`Dockerfile\`. Path-style titles are okay (slashes preserved). Do NOT use descriptive sentence titles like "Debounce and throttle utilities" — the panel renders \`title\` directly and the download flow uses it as the filename, so a sentence title produces a download like \`debounce-and-throttle-utilities.ts\` which is awkward to use.
 
 ## Anti-Patterns
 - ❌ Missing \`language\` parameter on the tool call
@@ -119,6 +120,7 @@ Separate sections with a blank line. Keep functions focused — aim for ≤ 30 l
 - ❌ Placeholder values: \`example.com\`, \`your-api-key-here\`, \`foo\`/\`bar\`
 - ❌ Using \`application/code\` for runnable Python (use \`application/python\`), interactive HTML (use \`text/html\`), or React components (use \`application/react\`)
 - ❌ Wrapping output in markdown fences (\` \`\`\`ts ... \`\`\` \`) — the content itself is the code, not a markdown document
+- ❌ Sentence-style title for code artifacts (\`"Debounce and throttle utilities"\` → use \`"debounce.ts"\` instead)
 
 ## Self-Check Before Emitting
 Ask yourself:
@@ -127,6 +129,7 @@ Ask yourself:
 3. Is every function implemented — no stubs, no TODOs?
 4. Does the file have a header comment and a usage example at the bottom?
 5. Would a better artifact type serve the user (e.g. \`application/python\` for runnable Python)?
+6. Is \`title\` a filename (\`debounce.ts\`, \`Dockerfile\`) and not a sentence ("Debounce utilities")?
 
 If any answer is "no", fix it before emitting.`,
   examples: [

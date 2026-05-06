@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useMemo, useEffect } from "react"
+import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
 import {
   X,
@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Maximize2,
   Minimize2,
+  GitCompareArrows,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import {
@@ -38,6 +39,8 @@ import { parseNotebookContentStreaming } from "@/lib/notebook/serialize"
 import { toIpynb } from "@/lib/notebook/ipynb"
 import { toPercent } from "@/lib/notebook/percent"
 import { toHtml as notebookToHtml } from "@/lib/notebook/html-export"
+import { codeExtension } from "./renderers/code/lib/filename"
+import type { PrevVersionFetchResult } from "./renderers/code/code-diff-view"
 
 type ArtifactInput = Omit<Artifact, "version" | "previousVersions"> & {
   version?: number
@@ -98,6 +101,61 @@ export function ArtifactPanel({
   // we tracked the field) and we don't render anything for it. `false`
   // means indexing was attempted and failed/skipped.
   const ragIndexingFailed = artifact.ragIndexed === false
+
+  // Cheap derivation — drives the diff toggle's enabled state without fetching.
+  const hasPreviousVersion = currentViewVersion > 1
+  const previousVersionNum = currentViewVersion > 1 ? currentViewVersion - 1 : undefined
+
+  // Mode for application/code: source vs diff. Lifted up from CodeRenderer
+  // so the panel-header diff pill can drive it.
+  const [codeArtifactMode, setCodeArtifactMode] = useState<"source" | "diff">("source")
+
+  // Reset to source view when the active artifact changes or the user navigates
+  // to a different version — it would be confusing to land in diff mode after
+  // switching artifacts.
+  useEffect(() => {
+    setCodeArtifactMode("source")
+  }, [artifact.id, currentViewVersion])
+
+  // Process-local cache of fetched previous-version content keyed on
+  // `${artifactId}:${versionNum}`. Lives in a ref so writes don't trigger
+  // re-renders. Cleared when the active artifact id changes.
+  const prevVersionCacheRef = useRef<Map<string, PrevVersionFetchResult>>(new Map())
+  useEffect(() => {
+    prevVersionCacheRef.current.clear()
+  }, [artifact.id])
+
+  const fetchPreviousVersion = useCallback(async (): Promise<PrevVersionFetchResult> => {
+    if (previousVersionNum === undefined || !sessionId) {
+      return { kind: "error", message: "no session or version context" }
+    }
+    const key = `${artifact.id}:${previousVersionNum}`
+    const cached = prevVersionCacheRef.current.get(key)
+    if (cached) return cached
+
+    try {
+      const res = await fetch(
+        `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifact.id}/versions/${previousVersionNum}`,
+      )
+      let result: PrevVersionFetchResult
+      if (res.status === 410) {
+        result = { kind: "archived" }
+      } else if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string } | null
+        result = { kind: "error", message: body?.error ?? `HTTP ${res.status}` }
+      } else {
+        const text = await res.text()
+        result = { kind: "ok", content: text }
+      }
+      prevVersionCacheRef.current.set(key, result)
+      return result
+    } catch (err) {
+      return {
+        kind: "error",
+        message: err instanceof Error ? err.message : "network error",
+      }
+    }
+  }, [artifact.id, previousVersionNum, sessionId])
 
   const displayArtifact = useMemo<Artifact>(() => {
     if (viewingVersionIdx === null) return artifact
@@ -334,15 +392,41 @@ export function ArtifactPanel({
   }, [viewingVersionIdx, artifact.previousVersions.length])
 
   /**
-   * Restore the currently-viewed historical version as a brand-new edit.
-   * Goes through the same `onUpdateArtifact` + PUT path as a manual save so
-   * the restore itself is captured as a new entry in the version history.
+   * Restore a historical version as a brand-new edit. Goes through the same
+   * `onUpdateArtifact` + PUT path as a manual save so the restore itself is
+   * captured as a new entry in the version history.
+   *
+   * Accepts an optional explicit version number. When omitted (existing
+   * "Restore" button in the version-pill UI), falls back to the version
+   * indexed by `viewingVersionIdx`. When provided (diff-view restore from
+   * `CodeRenderer`), resolves the version from `previousVersions` directly,
+   * or falls back to a fetch via `fetchPreviousVersion` if it was evicted.
    */
-  const handleRestoreVersion = useCallback(async () => {
-    if (viewingVersionIdx === null) return
-    const ver = artifact.previousVersions[viewingVersionIdx]
-    if (!ver) return
+  const handleRestoreVersion = useCallback(async (versionNum?: number) => {
     if (isSaving) return
+    let content: string | undefined
+    let title: string | undefined
+    if (versionNum !== undefined) {
+      const idx = versionNum - 1
+      const ver = artifact.previousVersions[idx]
+      if (ver) {
+        content = ver.content
+        title = ver.title
+      } else {
+        const result = await fetchPreviousVersion()
+        if (result.kind !== "ok") return
+        content = result.content
+        title = artifact.title
+      }
+    } else {
+      if (viewingVersionIdx === null) return
+      const ver = artifact.previousVersions[viewingVersionIdx]
+      if (!ver) return
+      content = ver.content
+      title = ver.title
+    }
+    if (content === undefined) return
+    const finalTitle = title || artifact.title
     setIsSaving(true)
     setSaveError(null)
     try {
@@ -359,8 +443,8 @@ export function ArtifactPanel({
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              content: ver.content,
-              title: ver.title || artifact.title,
+              content,
+              title: finalTitle,
             }),
           }
         )
@@ -378,9 +462,9 @@ export function ArtifactPanel({
       }
       onUpdateArtifact?.({
         id: artifact.id,
-        title: ver.title || artifact.title,
+        title: finalTitle,
         type: artifact.type,
-        content: ver.content,
+        content,
         language: artifact.language,
       })
       setViewingVersionIdx(null)
@@ -396,6 +480,7 @@ export function ArtifactPanel({
     isSaving,
     onUpdateArtifact,
     sessionId,
+    fetchPreviousVersion,
   ])
 
   const handleDelete = useCallback(async () => {
@@ -457,14 +542,43 @@ export function ArtifactPanel({
           </div>
           <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 shrink-0">
             {TYPE_SHORT_LABELS[artifact.type] || artifact.type}
-            {/* Language suffix only carries information for application/code,
-                where TypeScript vs Python vs Rust is the actual differentiator.
-                For Spreadsheet / Slides / Mermaid / SVG / etc. the type label
-                already conveys the format, so appending "· json" is just noise. */}
-            {artifact.type === "application/code" && artifact.language
-              ? ` · ${artifact.language}`
-              : ""}
           </span>
+
+          {/* Language pill — only for application/code, since other types' format is conveyed by the type label. */}
+          {artifact.type === "application/code" && artifact.language && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground bg-muted rounded-md px-2 py-0.5 shrink-0">
+              {artifact.language}
+              {/* Streaming pulse — small animated dot. */}
+              {artifact.id.startsWith("streaming-") && (
+                <span
+                  aria-label="Artifact is being written"
+                  title="Artifact is being written"
+                  className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse ml-0.5"
+                />
+              )}
+            </span>
+          )}
+
+          {/* Diff pill — only for application/code; clickable when there's a previous version. */}
+          {artifact.type === "application/code" && (
+            <button
+              type="button"
+              onClick={() => setCodeArtifactMode((m) => (m === "diff" ? "source" : "diff"))}
+              disabled={!hasVersions || artifact.id.startsWith("streaming-")}
+              aria-pressed={codeArtifactMode === "diff"}
+              aria-label={codeArtifactMode === "diff" ? "Hide diff" : "Show diff vs previous version"}
+              className={
+                codeArtifactMode === "diff"
+                  ? "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-purple-500/25 text-purple-600 dark:text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  : hasVersions && !artifact.id.startsWith("streaming-")
+                  ? "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                  : "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-muted text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+              }
+            >
+              <GitCompareArrows className="h-3 w-3" />
+              diff
+            </button>
+          )}
 
           {/* Version pill (inline in header) */}
           {hasVersions && (
@@ -509,7 +623,7 @@ export function ArtifactPanel({
                   variant="ghost"
                   size="sm"
                   className="h-6 px-2 text-xs gap-1 shrink-0"
-                  onClick={handleRestoreVersion}
+                  onClick={() => handleRestoreVersion()}
                   disabled={isSaving}
                 >
                   <RotateCcw className="h-3 w-3" />
@@ -761,6 +875,12 @@ export function ArtifactPanel({
               <ArtifactRenderer
                 artifact={displayArtifact}
                 onFixWithAI={onFixWithAI ? (error: string) => onFixWithAI(displayArtifact.id, error) : undefined}
+                hasPreviousVersion={hasPreviousVersion}
+                previousVersionNum={previousVersionNum}
+                fetchPreviousVersion={fetchPreviousVersion}
+                onRestoreVersion={(n) => handleRestoreVersion(n)}
+                codeMode={codeArtifactMode}
+                onCodeModeChange={setCodeArtifactMode}
               />
             )}
           </div>
@@ -787,66 +907,6 @@ export function ArtifactPanel({
   }
 
   return panelContent
-}
-
-/**
- * Map a Shiki/canonical language identifier to a conventional file
- * extension. Without this, an `application/code` artifact tagged
- * `typescript` would download as `foo.typescript` instead of `foo.ts`.
- *
- * The keys here mirror the Shiki language list the prompts ask the LLM to
- * use; entries not in the table fall back to the language string itself
- * (so a niche/new language still produces a recognizable filename).
- */
-const CODE_LANGUAGE_EXTENSIONS: Record<string, string> = {
-  typescript: "ts",
-  javascript: "js",
-  tsx: "tsx",
-  jsx: "jsx",
-  python: "py",
-  ruby: "rb",
-  rust: "rs",
-  go: "go",
-  java: "java",
-  kotlin: "kt",
-  swift: "swift",
-  csharp: "cs",
-  cpp: "cpp",
-  c: "c",
-  php: "php",
-  shell: "sh",
-  bash: "sh",
-  zsh: "sh",
-  sql: "sql",
-  html: "html",
-  css: "css",
-  scss: "scss",
-  json: "json",
-  yaml: "yml",
-  yml: "yml",
-  toml: "toml",
-  xml: "xml",
-  markdown: "md",
-  dockerfile: "dockerfile",
-  makefile: "mk",
-  perl: "pl",
-  lua: "lua",
-  r: "r",
-  julia: "jl",
-  haskell: "hs",
-  elixir: "ex",
-  erlang: "erl",
-  scala: "scala",
-  dart: "dart",
-  graphql: "graphql",
-  prisma: "prisma",
-}
-
-function codeExtension(language: string | undefined): string {
-  if (!language) return ".txt"
-  const key = language.toLowerCase().trim()
-  const mapped = CODE_LANGUAGE_EXTENSIONS[key]
-  return mapped ? `.${mapped}` : `.${key}`
 }
 
 function getExtension(artifact: Artifact): string {
