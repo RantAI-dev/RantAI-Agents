@@ -16,6 +16,7 @@ import {
   AlertCircle,
   Maximize2,
   Minimize2,
+  GitCompareArrows,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import {
@@ -104,6 +105,17 @@ export function ArtifactPanel({
   // Cheap derivation — drives the diff toggle's enabled state without fetching.
   const hasPreviousVersion = currentViewVersion > 1
   const previousVersionNum = currentViewVersion > 1 ? currentViewVersion - 1 : undefined
+
+  // Mode for application/code: source vs diff. Lifted up from CodeRenderer
+  // so the panel-header diff pill can drive it.
+  const [codeArtifactMode, setCodeArtifactMode] = useState<"source" | "diff">("source")
+
+  // Reset to source view when the active artifact changes or the user navigates
+  // to a different version — it would be confusing to land in diff mode after
+  // switching artifacts.
+  useEffect(() => {
+    setCodeArtifactMode("source")
+  }, [artifact.id, currentViewVersion])
 
   // Process-local cache of fetched previous-version content keyed on
   // `${artifactId}:${versionNum}`. Lives in a ref so writes don't trigger
@@ -532,6 +544,42 @@ export function ArtifactPanel({
             {TYPE_SHORT_LABELS[artifact.type] || artifact.type}
           </span>
 
+          {/* Language pill — only for application/code, since other types' format is conveyed by the type label. */}
+          {artifact.type === "application/code" && artifact.language && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground bg-muted rounded-md px-2 py-0.5 shrink-0">
+              {artifact.language}
+              {/* Streaming pulse — small animated dot. */}
+              {artifact.id.startsWith("streaming-") && (
+                <span
+                  aria-label="Artifact is being written"
+                  title="Artifact is being written"
+                  className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse ml-0.5"
+                />
+              )}
+            </span>
+          )}
+
+          {/* Diff pill — only for application/code; clickable when there's a previous version. */}
+          {artifact.type === "application/code" && (
+            <button
+              type="button"
+              onClick={() => setCodeArtifactMode((m) => (m === "diff" ? "source" : "diff"))}
+              disabled={!hasVersions || artifact.id.startsWith("streaming-")}
+              aria-pressed={codeArtifactMode === "diff"}
+              aria-label={codeArtifactMode === "diff" ? "Hide diff" : "Show diff vs previous version"}
+              className={
+                codeArtifactMode === "diff"
+                  ? "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-purple-500/25 text-purple-600 dark:text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  : hasVersions && !artifact.id.startsWith("streaming-")
+                  ? "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                  : "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-muted text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+              }
+            >
+              <GitCompareArrows className="h-3 w-3" />
+              diff
+            </button>
+          )}
+
           {/* Version pill (inline in header) */}
           {hasVersions && (
             <Tooltip>
@@ -831,6 +879,8 @@ export function ArtifactPanel({
                 previousVersionNum={previousVersionNum}
                 fetchPreviousVersion={fetchPreviousVersion}
                 onRestoreVersion={(n) => handleRestoreVersion(n)}
+                codeMode={codeArtifactMode}
+                onCodeModeChange={setCodeArtifactMode}
               />
             )}
           </div>
