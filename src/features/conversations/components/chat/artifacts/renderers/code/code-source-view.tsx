@@ -1,8 +1,8 @@
 "use client"
 
-import { Component, useMemo, useState, type ReactNode } from "react"
-import { Streamdown } from "streamdown"
-import "streamdown/styles.css"
+import { Component, useState, type ReactNode } from "react"
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
+import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { useTheme } from "next-themes"
 
 interface CodeSourceViewProps {
@@ -11,12 +11,23 @@ interface CodeSourceViewProps {
   wrap: boolean
 }
 
-function adaptiveFence(content: string): string {
-  const longestRun = (content.match(/`+/g) ?? []).reduce(
-    (max, run) => Math.max(max, run.length),
-    0,
-  )
-  return "`".repeat(Math.max(3, longestRun + 1))
+/**
+ * Normalize the LLM-emitted Shiki canonical language name to whatever
+ * Prism (via react-syntax-highlighter) expects. Most names overlap; the
+ * handful that diverge are mapped here. Unrecognised names fall through to
+ * Prism, which renders plain text rather than throwing.
+ */
+const PRISM_LANGUAGE_ALIASES: Record<string, string> = {
+  shell: "bash",
+  dockerfile: "docker",
+  cs: "csharp",
+  yml: "yaml",
+}
+
+function resolveLanguage(input: string | undefined): string {
+  if (!input) return "text"
+  const lower = input.toLowerCase()
+  return PRISM_LANGUAGE_ALIASES[lower] ?? lower
 }
 
 export function CodeSourceView({
@@ -25,12 +36,8 @@ export function CodeSourceView({
   wrap,
 }: CodeSourceViewProps) {
   const { resolvedTheme } = useTheme()
+  const style = resolvedTheme === "dark" ? oneDark : oneLight
   const [renderError, setRenderError] = useState<string | null>(null)
-
-  const fenced = useMemo(() => {
-    const fence = adaptiveFence(content)
-    return `${fence}${language ?? ""}\n${content}\n${fence}`
-  }, [content, language])
 
   if (!content) {
     return (
@@ -51,23 +58,35 @@ export function CodeSourceView({
   return (
     <div
       data-code-source-wrap={wrap ? "true" : "false"}
-      className={
-        wrap
-          ? "[&_pre]:whitespace-pre-wrap [&_pre]:break-words"
-          : "[&_pre]:whitespace-pre [&_pre]:overflow-x-auto"
-      }
+      className="h-full overflow-auto"
     >
       <ErrorBoundary onError={(msg) => setRenderError(msg)}>
-        <Streamdown
-          shikiTheme={
-            resolvedTheme === "dark"
-              ? ["github-dark", "github-light"]
-              : ["github-light", "github-dark"]
-          }
-          controls={{ code: false }}
+        <SyntaxHighlighter
+          language={resolveLanguage(language)}
+          style={style}
+          showLineNumbers
+          wrapLongLines={wrap}
+          customStyle={{
+            margin: 0,
+            padding: "1rem",
+            background: "transparent",
+            fontSize: "0.8125rem",
+            lineHeight: "1.55",
+          }}
+          lineNumberStyle={{
+            minWidth: "2.25em",
+            paddingRight: "0.75em",
+            opacity: 0.4,
+            userSelect: "none",
+          }}
+          codeTagProps={{
+            style: {
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            },
+          }}
         >
-          {fenced}
-        </Streamdown>
+          {content}
+        </SyntaxHighlighter>
       </ErrorBoundary>
     </div>
   )

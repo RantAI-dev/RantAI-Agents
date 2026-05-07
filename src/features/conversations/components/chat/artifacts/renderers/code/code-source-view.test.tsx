@@ -2,13 +2,31 @@
 import { describe, it, expect, vi } from "vitest"
 import { render } from "@testing-library/react"
 
-// Mock Streamdown so tests stay deterministic — we just render <pre> with the children.
-vi.mock("streamdown", () => ({
-  Streamdown: ({ children }: { children: string }) => (
-    <pre data-testid="streamdown-mock">{children}</pre>
+// Mock react-syntax-highlighter so tests stay deterministic — we just render
+// a <pre data-language=... data-wrap-long-lines=...> with the children.
+vi.mock("react-syntax-highlighter", () => ({
+  Prism: ({
+    children,
+    language,
+    wrapLongLines,
+  }: {
+    children: string
+    language?: string
+    wrapLongLines?: boolean
+  }) => (
+    <pre
+      data-testid="syntax-highlighter-mock"
+      data-language={language}
+      data-wrap-long-lines={wrapLongLines ? "true" : "false"}
+    >
+      {children}
+    </pre>
   ),
 }))
-vi.mock("streamdown/styles.css", () => ({}))
+vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
+  oneDark: {},
+  oneLight: {},
+}))
 
 vi.mock("next-themes", () => ({
   useTheme: () => ({ resolvedTheme: "light" }),
@@ -17,31 +35,55 @@ vi.mock("next-themes", () => ({
 import { CodeSourceView } from "./code-source-view"
 
 describe("CodeSourceView", () => {
-  it("wraps content in a fence with the provided language", () => {
+  it("forwards content and the resolved language to the highlighter", () => {
     const { getByTestId } = render(
-      <CodeSourceView content={"export const x = 1\n"} language="typescript" wrap={false} />,
+      <CodeSourceView
+        content="export const x = 1\n"
+        language="typescript"
+        wrap={false}
+      />,
     )
-    const pre = getByTestId("streamdown-mock")
-    expect(pre.textContent).toContain("```typescript")
+    const pre = getByTestId("syntax-highlighter-mock")
+    expect(pre.getAttribute("data-language")).toBe("typescript")
     expect(pre.textContent).toContain("export const x = 1")
-    expect(pre.textContent).toMatch(/```\s*$/)
   })
 
-  it("uses an adaptive fence longer than any backtick run in the content", () => {
-    const tricky = "```ts\nconst y = 2\n```"
+  it("aliases LLM-style language names to Prism equivalents", () => {
     const { getByTestId } = render(
-      <CodeSourceView content={tricky} language="typescript" wrap={false} />,
+      <CodeSourceView content="echo hi" language="shell" wrap={false} />,
     )
-    const text = getByTestId("streamdown-mock").textContent ?? ""
-    expect(text.includes("````typescript")).toBe(true)
+    expect(
+      getByTestId("syntax-highlighter-mock").getAttribute("data-language"),
+    ).toBe("bash")
   })
 
-  it("applies wrap class when wrap is true", () => {
+  it("falls back to plain text when language is undefined", () => {
+    const { getByTestId } = render(
+      <CodeSourceView content="hello" language={undefined} wrap={false} />,
+    )
+    expect(
+      getByTestId("syntax-highlighter-mock").getAttribute("data-language"),
+    ).toBe("text")
+  })
+
+  it("forwards the wrap flag to the highlighter", () => {
+    const { getByTestId } = render(
+      <CodeSourceView content="long line" language="typescript" wrap={true} />,
+    )
+    expect(
+      getByTestId("syntax-highlighter-mock").getAttribute(
+        "data-wrap-long-lines",
+      ),
+    ).toBe("true")
+  })
+
+  it("sets the wrap data attribute on the outer container", () => {
     const { container } = render(
       <CodeSourceView content="long line" language="typescript" wrap={true} />,
     )
-    const wrapper = container.querySelector("[data-code-source-wrap='true']")
-    expect(wrapper).not.toBeNull()
+    expect(
+      container.querySelector("[data-code-source-wrap='true']"),
+    ).not.toBeNull()
   })
 
   it("renders an empty-state notice when content is empty", () => {
