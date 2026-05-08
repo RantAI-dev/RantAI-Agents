@@ -2,10 +2,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, fireEvent, waitFor } from "@testing-library/react"
 
-vi.mock("streamdown", () => ({
-  Streamdown: ({ children }: { children: string }) => <pre data-testid="sd">{children}</pre>,
+vi.mock("react-syntax-highlighter", () => ({
+  Prism: ({ children }: { children: string }) => (
+    <pre data-testid="sd">{children}</pre>
+  ),
 }))
-vi.mock("streamdown/styles.css", () => ({}))
+vi.mock("react-syntax-highlighter/dist/esm/styles/prism", () => ({
+  oneDark: {},
+  oneLight: {},
+}))
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }))
 
 import { CodeRenderer } from "./code-renderer"
@@ -32,7 +37,7 @@ describe("CodeRenderer", () => {
   beforeEach(() => sessionStorage.clear())
   afterEach(() => sessionStorage.clear())
 
-  it("defaults to source mode and renders content via Streamdown", () => {
+  it("defaults to source mode and renders content via the syntax highlighter", () => {
     const { getByTestId } = render(<CodeRenderer {...baseProps} />)
     expect(getByTestId("sd")).not.toBeNull()
   })
