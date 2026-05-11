@@ -46,6 +46,9 @@ interface DocumentListProps {
   onAddDocument?: () => void
   onClearFilters?: () => void
   viewMode?: ViewMode
+  selectionMode?: boolean
+  selectedIds?: Set<string>
+  onToggleSelection?: (id: string) => void
 }
 
 export function DocumentList({
@@ -58,6 +61,9 @@ export function DocumentList({
   onAddDocument,
   onClearFilters,
   viewMode = "grid",
+  selectionMode = false,
+  selectedIds,
+  onToggleSelection,
 }: DocumentListProps) {
   if (loading) {
     if (viewMode === "list") {
@@ -149,6 +155,9 @@ export function DocumentList({
             onView={onView}
             onEdit={onEdit}
             categoryMap={categoryMap}
+            selectionMode={selectionMode}
+            selected={selectedIds?.has(doc.id) ?? false}
+            onToggleSelection={onToggleSelection}
           />
         ))}
       </div>
@@ -165,6 +174,9 @@ export function DocumentList({
             onView={onView}
             onEdit={onEdit}
             categoryMap={categoryMap}
+            selectionMode={selectionMode}
+            selected={selectedIds?.has(doc.id) ?? false}
+            onToggleSelection={onToggleSelection}
           />
         </div>
       ))}

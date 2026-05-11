@@ -2,6 +2,7 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,15 +59,35 @@ interface DocumentRowProps {
   onView: (id: string) => void
   onEdit: (id: string) => void
   categoryMap: Map<string, Category>
+  selectionMode?: boolean
+  selected?: boolean
+  onToggleSelection?: (id: string) => void
 }
 
-export function DocumentRow({ document, onDelete, onView, onEdit, categoryMap }: DocumentRowProps) {
+export function DocumentRow({
+  document,
+  onDelete,
+  onView,
+  onEdit,
+  categoryMap,
+  selectionMode = false,
+  selected = false,
+  onToggleSelection,
+}: DocumentRowProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const { Icon: FileIcon, iconColor, bgColor } = getFileTypeIcon(document.fileType, document.artifactType)
 
   const handleDelete = () => {
     onDelete(document.id)
     setDeleteDialogOpen(false)
+  }
+
+  const handleRowClick = () => {
+    if (selectionMode) {
+      onToggleSelection?.(document.id)
+    } else {
+      onView(document.id)
+    }
   }
 
   const createdDate = new Date(document.createdAt)
@@ -78,16 +99,31 @@ export function DocumentRow({ document, onDelete, onView, onEdit, categoryMap }:
   return (
     <>
       <div
-        className="group flex items-center gap-3 px-4 py-3 border-b last:border-b-0 hover:bg-muted/50 cursor-pointer transition-colors"
-        onClick={() => onView(document.id)}
+        className={`group flex items-center gap-3 px-4 py-3 border-b last:border-b-0 cursor-pointer transition-colors ${
+          selected ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-muted/50"
+        }`}
+        onClick={handleRowClick}
       >
-        {/* File icon */}
-        <div
-          className={`rounded-lg p-1.5 shrink-0 ${bgColor}`}
-          aria-hidden
-        >
-          <FileIcon className={`h-4 w-4 ${iconColor}`} />
-        </div>
+        {selectionMode ? (
+          <div
+            className="shrink-0 flex items-center justify-center w-7 h-7"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => onToggleSelection?.(document.id)}
+              aria-label={`Select ${document.title}`}
+            />
+          </div>
+        ) : (
+          /* File icon */
+          <div
+            className={`rounded-lg p-1.5 shrink-0 ${bgColor}`}
+            aria-hidden
+          >
+            <FileIcon className={`h-4 w-4 ${iconColor}`} />
+          </div>
+        )}
 
         {/* Title */}
         <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -148,7 +184,10 @@ export function DocumentRow({ document, onDelete, onView, onEdit, categoryMap }:
           {formatFileSize(document.fileSize)}
         </span>
 
-        {/* Actions */}
+        {/* Actions — hidden in selection mode */}
+        {selectionMode ? (
+          <div className="w-7 shrink-0" />
+        ) : (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -179,6 +218,7 @@ export function DocumentRow({ document, onDelete, onView, onEdit, categoryMap }:
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        )}
       </div>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
