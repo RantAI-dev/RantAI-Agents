@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useCallback } from "react"
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Progress } from "@/components/ui/progress"
 import {
   Popover,
   PopoverContent,
@@ -28,8 +29,9 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Loader2, Upload, FileText, Folder, Check, Plus, Sparkles, ChevronsUpDown, X, FileCode, FileSpreadsheet, Box, AlertCircle } from "@/lib/icons"
+import { Loader2, Upload, FileText, Folder, Check, Plus, Sparkles, ChevronsUpDown, X, FileCode, FileSpreadsheet, Box, AlertCircle, RefreshCw } from "@/lib/icons"
 import { CategoryDialog, Category } from "./category-dialog"
+import { xhrUpload } from "./upload-xhr"
 import { cn } from "@/lib/utils"
 
 interface BulkUploadDialogProps {
@@ -41,10 +43,36 @@ interface BulkUploadDialogProps {
   onCategoriesChange?: () => void
 }
 
+type FileStatus = "idle" | "pending" | "uploading" | "processing" | "success" | "failed"
+
 interface FileEntry {
   id: string
   file: File
   title: string
+  status: FileStatus
+  uploadProgress: number
+  startedAt?: number
+  finishedAt?: number
+  error?: string
+  documentId?: string
+}
+
+const CONCURRENCY = 2
+
+function formatEta(seconds: number): string {
+  if (!isFinite(seconds) || seconds <= 0) return ""
+  const s = Math.max(1, Math.round(seconds))
+  if (s < 60) return `~${s}s left`
+  const m = Math.floor(s / 60)
+  const rem = s % 60
+  return rem === 0 ? `~${m}m left` : `~${m}m ${rem}s left`
+}
+
+const TITLE_PREVIEW_MAX = 40
+
+function truncateTitle(title: string): string {
+  if (title.length <= TITLE_PREVIEW_MAX) return title
+  return title.slice(0, TITLE_PREVIEW_MAX - 1).trimEnd() + "…"
 }
 
 const VALID_EXTENSIONS = [
@@ -54,6 +82,30 @@ const VALID_EXTENSIONS = [
   ".gltf", ".glb",
   ".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".php", ".pl", ".sh", ".bat", ".ps1",
 ]
+
+function FileStatusBadge({ status, error }: { status: FileStatus; error?: string }) {
+  switch (status) {
+    case "pending":
+      return <span className="text-xs text-muted-foreground shrink-0">Queued</span>
+    case "uploading":
+      return <span className="text-xs text-muted-foreground shrink-0">Uploading…</span>
+    case "processing":
+      return (
+        <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Processing…
+        </span>
+      )
+    case "success":
+      return <Check className="h-4 w-4 text-green-600 shrink-0" />
+    case "failed":
+      return (
+        <AlertCircle className="h-4 w-4 text-destructive shrink-0" aria-label={error || "Failed"} />
+      )
+    default:
+      return null
+  }
+}
 
 function getFileIcon(filename: string): { Icon: typeof FileText; color: string } {
   const ext = filename.toLowerCase().slice(filename.lastIndexOf("."))
@@ -82,9 +134,10 @@ export function BulkUploadDialog({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [showResults, setShowResults] = useState(false)
-  const [results, setResults] = useState<{ filename: string; success: boolean; error?: string }[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+  const filesRef = useRef<FileEntry[]>([])
+  filesRef.current = files
 
   const toggleCategory = (category: string) => {
     setSelectedCategories((prev) =>
@@ -118,6 +171,8 @@ export function BulkUploadDialog({
         id: crypto.randomUUID(),
         file,
         title: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+        status: "idle",
+        uploadProgress: 0,
       })
     }
 
@@ -149,6 +204,8 @@ export function BulkUploadDialog({
         id: crypto.randomUUID(),
         file,
         title: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+        status: "idle",
+        uploadProgress: 0,
       })
     }
     if (newEntries.length > 0) {
@@ -156,6 +213,79 @@ export function BulkUploadDialog({
       setError("")
     }
   }
+
+  const updateEntry = useCallback((id: string, patch: Partial<FileEntry>) => {
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)))
+  }, [])
+
+  const runWorkers = useCallback(async () => {
+    const queueIds: string[] = filesRef.current
+      .filter((f) => f.status === "pending")
+      .map((f) => f.id)
+
+    let cursor = 0
+    const claim = (): string | null => {
+      if (cursor >= queueIds.length) return null
+      return queueIds[cursor++]
+    }
+
+    const sharedCategoriesJson = JSON.stringify(selectedCategories)
+    const sharedGroupsJson = JSON.stringify(selectedKBIds)
+    const url = enableEnhanced
+      ? "/api/dashboard/files?enhanced=true"
+      : "/api/dashboard/files"
+
+    const worker = async () => {
+      while (true) {
+        const id = claim()
+        if (id === null) return
+        const entry = filesRef.current.find((f) => f.id === id)
+        if (!entry) continue
+
+        updateEntry(id, { status: "uploading", startedAt: Date.now(), uploadProgress: 0, error: undefined })
+
+        const formData = new FormData()
+        formData.append("file", entry.file)
+        if (entry.title) formData.append("title", entry.title)
+        if (selectedCategories.length > 0) formData.append("categories", sharedCategoriesJson)
+        if (subcategory) formData.append("subcategory", subcategory)
+        if (selectedKBIds.length > 0) formData.append("groupIds", sharedGroupsJson)
+
+        try {
+          const res = await xhrUpload(url, formData, (frac) => {
+            updateEntry(id, {
+              uploadProgress: frac,
+              status: frac >= 1 ? "processing" : "uploading",
+            })
+          })
+          if (res.ok) {
+            const body = res.body as { id?: string } | null
+            updateEntry(id, {
+              status: "success",
+              uploadProgress: 1,
+              finishedAt: Date.now(),
+              documentId: body?.id,
+            })
+          } else {
+            const body = res.body as { error?: string } | null
+            updateEntry(id, {
+              status: "failed",
+              finishedAt: Date.now(),
+              error: body?.error || `Upload failed (HTTP ${res.status})`,
+            })
+          }
+        } catch (err) {
+          updateEntry(id, {
+            status: "failed",
+            finishedAt: Date.now(),
+            error: err instanceof Error ? err.message : "Upload failed",
+          })
+        }
+      }
+    }
+
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()))
+  }, [selectedCategories, selectedKBIds, subcategory, enableEnhanced, updateEntry])
 
   const handleSubmit = async () => {
     if (files.length === 0) {
@@ -165,47 +295,51 @@ export function BulkUploadDialog({
 
     setLoading(true)
     setError("")
+    // Mark everything not-yet-uploaded as pending so workers pick them up.
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.status === "success" ? f : { ...f, status: "pending", uploadProgress: 0, error: undefined, startedAt: undefined, finishedAt: undefined }
+      )
+    )
 
-    const formData = new FormData()
-    files.forEach((entry) => {
-      formData.append("files", entry.file)
-      formData.append("titles", entry.title)
-    })
-    if (selectedCategories.length > 0) {
-      formData.append("categories", JSON.stringify(selectedCategories))
-    }
-    if (subcategory) formData.append("subcategory", subcategory)
-    if (selectedKBIds.length > 0) formData.append("groupIds", JSON.stringify(selectedKBIds))
-
-    const url = enableEnhanced
-      ? "/api/dashboard/files/bulk?enhanced=true"
-      : "/api/dashboard/files/bulk"
+    // Let React commit the pending state before workers read filesRef.
+    await new Promise((r) => setTimeout(r, 0))
 
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || "Upload failed")
-      }
-
-      const data = await response.json()
-      setResults(data.results)
-      setShowResults(true)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed")
+      await runWorkers()
     } finally {
       setLoading(false)
+      setShowResults(true)
+      onSuccess()
+    }
+  }
+
+  const retryFailed = async () => {
+    if (loading) return
+    if (!files.some((f) => f.status === "failed")) return
+    setShowResults(false)
+    setLoading(true)
+    setError("")
+    setFiles((prev) =>
+      prev.map((f) =>
+        f.status === "failed"
+          ? { ...f, status: "pending", uploadProgress: 0, error: undefined, startedAt: undefined, finishedAt: undefined }
+          : f
+      )
+    )
+    await new Promise((r) => setTimeout(r, 0))
+    try {
+      await runWorkers()
+    } finally {
+      setLoading(false)
+      setShowResults(true)
     }
   }
 
   const handleClose = () => {
+    if (loading) return // block close while uploads are in flight
     if (showResults) {
       setShowResults(false)
-      setResults([])
       setFiles([])
       setSelectedCategories([])
       setSubcategory("")
@@ -218,12 +352,48 @@ export function BulkUploadDialog({
     }
   }
 
-  const succeededCount = results.filter((r) => r.success).length
-  const failedCount = results.filter((r) => !r.success).length
+  const succeededCount = files.filter((f) => f.status === "success").length
+  const failedCount = files.filter((f) => f.status === "failed").length
+  const doneCount = succeededCount + failedCount
+  const aggregateValue =
+    files.length === 0
+      ? 0
+      : (files.reduce(
+          (sum, f) =>
+            sum +
+            (f.status === "success" || f.status === "failed"
+              ? 1
+              : f.status === "processing"
+                ? 1
+                : f.status === "uploading"
+                  ? f.uploadProgress
+                  : 0),
+          0
+        ) /
+          files.length) *
+        100
+  const finishedDurations = files
+    .filter((f) => (f.status === "success" || f.status === "failed") && f.startedAt && f.finishedAt)
+    .map((f) => (f.finishedAt as number) - (f.startedAt as number))
+  const avgDurationMs =
+    finishedDurations.length > 0
+      ? finishedDurations.reduce((a, b) => a + b, 0) / finishedDurations.length
+      : 0
+  const remainingCount = files.length - doneCount
+  const etaText =
+    avgDurationMs > 0 && remainingCount > 0
+      ? formatEta((avgDurationMs * remainingCount) / 1000 / CONCURRENCY)
+      : ""
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="gap-4 p-6 max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && loading) return // block Radix-driven close
+        if (!next) handleClose()
+      }}
+    >
+      <DialogContent className="gap-4 p-6 w-[calc(100vw-2rem)] max-w-[42rem] sm:max-w-[42rem] max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">Bulk Upload Documents</DialogTitle>
           <DialogDescription>
@@ -233,61 +403,99 @@ export function BulkUploadDialog({
 
         {!showResults ? (
           <>
-            <div
-              className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept={VALID_EXTENSIONS.join(",")}
-                className="hidden"
-                onChange={handleFileInputChange}
-              />
-              <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                Drag and drop files here, or click to browse
-              </p>
-            </div>
+            {loading && (
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">
+                    Uploading {doneCount} of {files.length}
+                  </span>
+                  {etaText && <span className="text-xs text-muted-foreground">{etaText}</span>}
+                </div>
+                <Progress value={aggregateValue} />
+              </div>
+            )}
+
+            {!loading && (
+              <div
+                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleDrop}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept={VALID_EXTENSIONS.join(",")}
+                  className="hidden"
+                  onChange={handleFileInputChange}
+                />
+                <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">
+                  Drag and drop files here, or click to browse
+                </p>
+              </div>
+            )}
 
             {files.length > 0 && (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>Files ({files.length})</Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setFiles([])}
-                    className="text-xs text-muted-foreground"
-                  >
-                    Clear all
-                  </Button>
+                  {!loading && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setFiles([])}
+                      className="text-xs text-muted-foreground"
+                    >
+                      Clear all
+                    </Button>
+                  )}
                 </div>
-                <div className="max-h-[200px] overflow-y-auto space-y-2">
+                <div className="max-h-[260px] overflow-y-auto space-y-2">
                   {files.map((entry) => {
                     const { Icon, color } = getFileIcon(entry.file.name)
                     return (
-                      <div key={entry.id} className="flex items-center gap-2 p-2 rounded-lg border bg-muted/30">
-                        <Icon className={cn("h-5 w-5 shrink-0", color)} />
-                        <Input
-                          value={entry.title}
-                          onChange={(e) => updateTitle(entry.id, e.target.value)}
-                          className="flex-1 h-7 text-sm"
-                          placeholder="Title"
-                        />
-                        <span className="text-xs text-muted-foreground shrink-0">
-                          {(entry.file.size / 1024).toFixed(1)} KB
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeFile(entry.id)}
-                          className="text-muted-foreground hover:text-destructive"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
+                      <div key={entry.id} className="flex flex-col gap-1 p-2 rounded-lg border bg-muted/30 min-w-0">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Icon className={cn("h-5 w-5 shrink-0", color)} />
+                          {loading ? (
+                            <span
+                              className="flex-1 min-w-0 text-sm truncate"
+                              title={entry.title || entry.file.name}
+                            >
+                              {truncateTitle(entry.title || entry.file.name)}
+                            </span>
+                          ) : (
+                            <Input
+                              value={entry.title}
+                              onChange={(e) => updateTitle(entry.id, e.target.value)}
+                              className="flex-1 min-w-0 h-7 text-sm"
+                              placeholder="Title"
+                            />
+                          )}
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            {(entry.file.size / 1024).toFixed(1)} KB
+                          </span>
+                          <FileStatusBadge status={entry.status} error={entry.error} />
+                          {!loading && entry.status !== "uploading" && entry.status !== "processing" && (
+                            <button
+                              type="button"
+                              onClick={() => removeFile(entry.id)}
+                              className="text-muted-foreground hover:text-destructive"
+                            >
+                              <X className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                        {entry.status === "uploading" && (
+                          <Progress value={entry.uploadProgress * 100} className="h-1" />
+                        )}
+                        {entry.status === "failed" && entry.error && (
+                          <p className="text-xs text-destructive pl-7 truncate" title={entry.error}>
+                            {entry.error}
+                          </p>
+                        )}
                       </div>
                     )
                   })}
@@ -295,7 +503,7 @@ export function BulkUploadDialog({
               </div>
             )}
 
-            {files.length > 0 && (
+            {files.length > 0 && !loading && (
               <>
                 <div className="space-y-2">
                   <Label>Categories (optional)</Label>
@@ -429,12 +637,16 @@ export function BulkUploadDialog({
               <div className="space-y-2">
                 <Label>Failed files:</Label>
                 <div className="max-h-[200px] overflow-y-auto space-y-1">
-                  {results.filter((r) => !r.success).map((r) => (
-                    <div key={r.filename} className="flex items-start gap-2 p-2 rounded border bg-destructive/10 text-sm">
+                  {files.filter((f) => f.status === "failed").map((f) => (
+                    <div key={f.id} className="flex items-start gap-2 p-2 rounded border bg-destructive/10 text-sm min-w-0">
                       <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-destructive" />
-                      <div>
-                        <span className="font-medium">{r.filename}</span>
-                        <p className="text-xs text-muted-foreground">{r.error}</p>
+                      <div className="min-w-0 flex-1">
+                        <span className="font-medium block truncate" title={f.file.name}>
+                          {truncateTitle(f.file.name)}
+                        </span>
+                        <p className="text-xs text-muted-foreground truncate" title={f.error}>
+                          {f.error}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -445,9 +657,15 @@ export function BulkUploadDialog({
         )}
 
         <DialogFooter className="flex justify-end gap-2">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={loading}>
             {showResults ? "Close" : "Cancel"}
           </Button>
+          {showResults && failedCount > 0 && (
+            <Button variant="secondary" onClick={retryFailed} disabled={loading}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry failed ({failedCount})
+            </Button>
+          )}
           {!showResults && (
             <Button onClick={handleSubmit} disabled={loading || files.length === 0}>
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
