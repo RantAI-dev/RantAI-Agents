@@ -7,6 +7,7 @@ import {
   detectFileType,
   storeChunks,
   getDocumentChunkCount,
+  getDocumentChunkCounts,
   type Chunk,
 } from "@/lib/rag"
 import { extractEntities, extractEntitiesAndRelations } from "@/lib/document-intelligence"
@@ -208,15 +209,20 @@ export async function listKnowledgeDocumentsForDashboard(params: {
 }): Promise<KnowledgeDocumentListItem[]> {
   const documents = await listKnowledgeDocumentsByScope(params)
 
+  // One SurrealDB query for all chunk counts instead of one-per-document (was N+1).
+  const chunkCounts = await getDocumentChunkCounts(documents.map((d) => d.id))
+
+  // Thumbnails still need per-image S3 presigning, but only for actual images;
+  // run those in parallel rather than awaiting sequentially per row.
   return Promise.all(
     documents.map(async (document) => {
       const fileType = mapFileType(document)
-      const thumbnailUrl = fileType === "image" ? await resolveImageThumbnail(document.s3Key) : undefined
-      const chunkCount = await getDocumentChunkCount(document.id)
+      const thumbnailUrl =
+        fileType === "image" ? await resolveImageThumbnail(document.s3Key) : undefined
 
       return {
         ...mapListItem(document),
-        chunkCount,
+        chunkCount: chunkCounts.get(document.id) ?? 0,
         thumbnailUrl,
       }
     })

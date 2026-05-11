@@ -337,6 +337,37 @@ export async function getDocumentChunkCount(documentId: string): Promise<number>
 }
 
 /**
+ * Get chunk counts for many documents in a single SurrealDB query.
+ * Returns a Map keyed by documentId. Missing ids resolve to 0.
+ */
+export async function getDocumentChunkCounts(
+  documentIds: string[]
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (documentIds.length === 0) return counts;
+
+  const surrealClient = await getSurrealClient();
+  const result = await surrealClient.query<{ document_id: string; count: number }>(
+    `SELECT document_id, count() AS count FROM document_chunk WHERE document_id IN $ids GROUP BY document_id`,
+    { ids: documentIds }
+  );
+
+  const rawResult = result[0];
+  const rows = (Array.isArray(rawResult)
+    ? rawResult
+    : (rawResult as { result?: Array<{ document_id: string; count: number }> })?.result ||
+      []) as Array<{ document_id: string; count: number }>;
+
+  for (const row of rows) {
+    if (row && typeof row.document_id === "string") {
+      counts.set(row.document_id, row.count ?? 0);
+    }
+  }
+
+  return counts;
+}
+
+/**
  * Search for similar chunks scoped to specific document IDs
  * Used for RAG retrieval on chat file attachments
  */

@@ -5,6 +5,8 @@ export async function listKnowledgeDocumentsByScope(params: {
   organizationId: string | null
   groupId: string | null
 }) {
+  // The list view doesn't render the extracted body — keep `content` out of the
+  // SELECT so we don't ship hundreds of KB of text per row across the SSR boundary.
   return prisma.document.findMany({
     where: {
       ...(params.groupId ? { groups: { some: { groupId: params.groupId } } } : {}),
@@ -13,9 +15,22 @@ export async function listKnowledgeDocumentsByScope(params: {
         : { organizationId: null }),
     },
     orderBy: { createdAt: "desc" },
-    include: {
+    select: {
+      id: true,
+      title: true,
+      categories: true,
+      subcategory: true,
+      fileType: true,
+      metadata: true,
+      artifactType: true,
+      fileSize: true,
+      mimeType: true,
+      s3Key: true,
+      organizationId: true,
+      createdAt: true,
+      updatedAt: true,
       groups: {
-        include: {
+        select: {
           group: {
             select: { id: true, name: true, color: true },
           },

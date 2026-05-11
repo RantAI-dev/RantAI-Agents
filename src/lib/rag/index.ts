@@ -42,6 +42,7 @@ export {
   listDocuments,
   clearAllDocuments,
   getDocumentChunkCount,
+  getDocumentChunkCounts,
 } from "./vector-store";
 export type { SearchResult } from "./vector-store";
 
