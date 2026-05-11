@@ -610,19 +610,20 @@ async function seedWorkflows(createdByUserId: string) {
 
 // All built-in assistants — single source of truth for seeding
 const BUILT_IN_ASSISTANTS = [
-  {
-    id: "horizon-life",
-    name: "Horizon Life Assistant",
-    description: "Insurance expert for HorizonLife",
-    emoji: "🏠",
-    systemPrompt: HORIZON_LIFE_SEED_PROMPT,
-    useKnowledgeBase: true,
-    knowledgeBaseGroupIds: ["horizon-life-kb"],
-    isSystemDefault: true,
-    isBuiltIn: true,
-    liveChatEnabled: true,
-    tags: ["Insurance", "Support", "RAG"],
-  },
+  // --- Horizon Life demo assistant — disabled ---
+  // {
+  //   id: "horizon-life",
+  //   name: "Horizon Life Assistant",
+  //   description: "Insurance expert for HorizonLife",
+  //   emoji: "🏠",
+  //   systemPrompt: HORIZON_LIFE_SEED_PROMPT,
+  //   useKnowledgeBase: true,
+  //   knowledgeBaseGroupIds: ["horizon-life-kb"],
+  //   isSystemDefault: true,
+  //   isBuiltIn: true,
+  //   liveChatEnabled: true,
+  //   tags: ["Insurance", "Support", "RAG"],
+  // },
   {
     id: "general",
     name: "Just Chat",
@@ -1029,8 +1030,9 @@ async function main() {
   // Seed Built-in Assistants
   await seedAssistants()
 
-  // Seed Knowledge Base
-  const kbGroupId = await seedKnowledgeBase()
+  // Seed Knowledge Base (Horizon Life insurance docs) — disabled
+  // const kbGroupId = await seedKnowledgeBase()
+  const kbGroupId = "(skipped)"
 
   // Seed Built-in Tools
   const { ensureBuiltinTools } = await import("../src/lib/tools/seed")
@@ -1043,11 +1045,11 @@ async function main() {
   // Seed Marketplace Catalog
   await seedCatalogItems()
 
-  // Seed Workflows
-  await seedWorkflows(user1.id)
+  // Seed Workflows (HorizonLife fraud-detection / fraud-investigation) — disabled
+  // await seedWorkflows(user1.id)
 
-  // Seed Embed Widget API Key (for HorizonLife-Demo)
-  await seedEmbedKey()
+  // Seed Embed Widget API Key (for HorizonLife-Demo) — disabled
+  // await seedEmbedKey()
 
   // Insurance data now managed by HorizonLife-Demo directly
 
@@ -1070,8 +1072,8 @@ async function main() {
   console.log(`  Assistants: ${BUILT_IN_ASSISTANTS.length} built-in`)
   console.log(`  Tools:      ${Object.keys(BUILTIN_TOOLS).length} built-in`)
   console.log(`  KB Group:   ${kbGroupId}`)
-  console.log(`  Workflows:  2 (Fraud Detection + Investigation)`)
-  console.log(`  Widget:     1 embed API key (HorizonLife)`)
+  // console.log(`  Workflows:  2 (Fraud Detection + Investigation)`)
+  // console.log(`  Widget:     1 embed API key (HorizonLife)`)
   console.log(`\n  Login: agent@rantai.com / password123`)
   console.log(`  Start: bun run dev → http://localhost:3000\n`)
 }
