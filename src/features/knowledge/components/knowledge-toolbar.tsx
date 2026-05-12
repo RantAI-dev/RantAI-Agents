@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Search, X, LayoutGrid, List } from "@/lib/icons"
+import { Search, X, LayoutGrid, List, Check } from "@/lib/icons"
 import type { ViewMode } from "./document-list"
 import {
   Select,
@@ -24,6 +24,8 @@ interface KnowledgeToolbarProps {
   filtersPopover?: React.ReactNode
   viewMode?: ViewMode
   onViewModeChange?: (mode: ViewMode) => void
+  selectionMode?: boolean
+  onToggleSelectionMode?: () => void
 }
 
 export function KnowledgeToolbar({
@@ -36,6 +38,8 @@ export function KnowledgeToolbar({
   filtersPopover,
   viewMode = "grid",
   onViewModeChange,
+  selectionMode = false,
+  onToggleSelectionMode,
 }: KnowledgeToolbarProps) {
   return (
     <div className="flex flex-col sm:flex-row gap-3 sm:items-center border-b px-4 py-3 bg-background">
@@ -51,6 +55,26 @@ export function KnowledgeToolbar({
         />
       </div>
       <div className="flex items-center gap-2 shrink-0">
+        {onToggleSelectionMode && (
+          <Button
+            variant={selectionMode ? "default" : "outline"}
+            size="sm"
+            onClick={onToggleSelectionMode}
+            aria-pressed={selectionMode}
+          >
+            {selectionMode ? (
+              <>
+                <X className="h-4 w-4 mr-1.5" />
+                Done
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4 mr-1.5" />
+                Select
+              </>
+            )}
+          </Button>
+        )}
         {filtersPopover}
         {hasActiveFilters && (
           <Button

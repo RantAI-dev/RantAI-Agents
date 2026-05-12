@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { SlidersHorizontal } from "@/lib/icons"
+import { SlidersHorizontal, Pencil, Trash2 } from "@/lib/icons"
 import {
   Popover,
   PopoverContent,
@@ -33,6 +33,7 @@ import {
 import { DocumentList, type ViewMode } from "@/features/knowledge/components/document-list"
 import { UploadDialog } from "@/features/knowledge/components/upload-dialog"
 import { BulkUploadDialog } from "@/features/knowledge/components/bulk-upload-dialog"
+import { BulkAssignDialog } from "@/features/knowledge/components/bulk-assign-dialog"
 import { DocumentEditDialog } from "@/features/knowledge/components/document-edit-dialog"
 import { CategoryDialog, Category } from "@/features/knowledge/components/category-dialog"
 import { KnowledgeHeader } from "@/features/knowledge/components/knowledge-header"
@@ -98,6 +99,12 @@ export default function KnowledgePageClient({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [bulkUploadDialogOpen, setBulkUploadDialogOpen] = useState(false)
+  const [bulkAssignDialogOpen, setBulkAssignDialogOpen] = useState(false)
+  // Selection mode (bulk edit / delete from the document list)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set())
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
   const [editingDocumentId, setEditingDocumentId] = useState<string | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [sortOption, setSortOption] = useState<SortOption>("newest")
@@ -434,6 +441,15 @@ export default function KnowledgePageClient({
           onSortChange={setSortOption}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          selectionMode={selectionMode}
+          onToggleSelectionMode={
+            documents.length > 0
+              ? () => {
+                  if (selectionMode) setSelectedDocIds(new Set())
+                  setSelectionMode((prev) => !prev)
+                }
+              : undefined
+          }
           filtersPopover={
             <Popover>
               <PopoverTrigger asChild>
@@ -468,6 +484,55 @@ export default function KnowledgePageClient({
           }
         />
 
+        {selectionMode && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-border/50 bg-muted/30 px-6 py-2">
+            <span className="text-sm font-medium">
+              {selectedDocIds.size} selected
+            </span>
+            <span className="text-xs text-muted-foreground">of {sortedDocuments.length} visible</span>
+            <div className="mx-2 h-4 w-px bg-border" aria-hidden />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                const visibleIds = sortedDocuments.map((d) => d.id)
+                const allVisibleSelected = visibleIds.every((id) => selectedDocIds.has(id))
+                if (allVisibleSelected) {
+                  setSelectedDocIds(new Set())
+                } else {
+                  setSelectedDocIds(new Set(visibleIds))
+                }
+              }}
+              disabled={sortedDocuments.length === 0}
+              className="text-xs"
+            >
+              {sortedDocuments.length > 0 &&
+              sortedDocuments.every((d) => selectedDocIds.has(d.id))
+                ? "Deselect all"
+                : "Select all visible"}
+            </Button>
+            <div className="flex-1" />
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={selectedDocIds.size === 0}
+              onClick={() => setBulkAssignDialogOpen(true)}
+            >
+              <Pencil className="h-4 w-4 mr-1.5" />
+              Edit ({selectedDocIds.size})
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={selectedDocIds.size === 0}
+              onClick={() => setBulkDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-1.5" />
+              Delete ({selectedDocIds.size})
+            </Button>
+          </div>
+        )}
+
         <div className="flex-1 overflow-auto p-6" role="region" aria-label="Documents">
           <DocumentList
             documents={sortedDocuments}
@@ -479,6 +544,16 @@ export default function KnowledgePageClient({
             onAddDocument={() => setUploadDialogOpen(true)}
             onClearFilters={hasActiveFilters ? clearAllFilters : undefined}
             viewMode={viewMode}
+            selectionMode={selectionMode}
+            selectedIds={selectedDocIds}
+            onToggleSelection={(id) => {
+              setSelectedDocIds((prev) => {
+                const next = new Set(prev)
+                if (next.has(id)) next.delete(id)
+                else next.add(id)
+                return next
+              })
+            }}
           />
         </div>
       </div>
@@ -503,6 +578,70 @@ export default function KnowledgePageClient({
         categories={categories}
         onCategoriesChange={fetchCategories}
       />
+
+      {/* Bulk Assign Dialog — opened from selection-mode action bar; targets selected docs */}
+      <BulkAssignDialog
+        open={bulkAssignDialogOpen}
+        onOpenChange={setBulkAssignDialogOpen}
+        documents={documents}
+        categories={categories}
+        knowledgeBases={knowledgeBases}
+        presetDocIds={selectionMode ? Array.from(selectedDocIds) : undefined}
+        onSuccess={() => {
+          fetchDocuments(initialSelectedKBId)
+          fetchKnowledgeBases()
+          setSelectedDocIds(new Set())
+          setSelectionMode(false)
+        }}
+      />
+
+      {/* Bulk Delete confirmation */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedDocIds.size} document{selectedDocIds.size !== 1 ? "s" : ""}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the selected files, their chunks from the vector store, and the underlying S3 objects. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkDeleting}
+              onClick={async (e) => {
+                e.preventDefault()
+                setBulkDeleting(true)
+                const ids = Array.from(selectedDocIds)
+                const CONCURRENCY = 5
+                let cursor = 0
+                const worker = async () => {
+                  while (true) {
+                    const idx = cursor++
+                    if (idx >= ids.length) return
+                    const id = ids[idx]
+                    try {
+                      await fetch(`/api/dashboard/files/${id}`, { method: "DELETE" })
+                    } catch {
+                      // best-effort — refresh below will reconcile
+                    }
+                  }
+                }
+                await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()))
+                setBulkDeleting(false)
+                setBulkDeleteDialogOpen(false)
+                setSelectedDocIds(new Set())
+                setSelectionMode(false)
+                fetchDocuments(initialSelectedKBId)
+                fetchKnowledgeBases()
+                window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleting ? "Deleting…" : `Delete ${selectedDocIds.size}`}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Document Edit Dialog */}
       <DocumentEditDialog

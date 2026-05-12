@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
+import { Progress } from "@/components/ui/progress"
 import {
   Popover,
   PopoverContent,
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/command"
 import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkles, ChevronsUpDown, X, FileCode, FileSpreadsheet, BookOpen, Info, Box } from "@/lib/icons"
 import { CategoryDialog, Category } from "./category-dialog"
+import { xhrUpload } from "./upload-xhr"
 import { cn } from "@/lib/utils"
 
 class UpgradeRequiredError extends Error {
@@ -234,6 +236,8 @@ export function UploadDialog({
   onCategoriesChange,
 }: UploadDialogProps) {
   const [loading, setLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [phase, setPhase] = useState<"idle" | "uploading" | "processing">("idle")
   const [title, setTitle] = useState("")
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [subcategory, setSubcategory] = useState("")
@@ -260,6 +264,8 @@ export function UploadDialog({
     setSelectedFile(null)
     setError("")
     setEnableEnhanced(true)
+    setUploadProgress(0)
+    setPhase("idle")
   }
 
   const toggleCategory = (category: string) => {
@@ -313,6 +319,8 @@ export function UploadDialog({
     }
 
     setLoading(true)
+    setUploadProgress(0)
+    setPhase("uploading")
     try {
       const formData = new FormData()
       formData.append("file", selectedFile)
@@ -325,13 +333,13 @@ export function UploadDialog({
         ? "/api/dashboard/files?enhanced=true"
         : "/api/dashboard/files"
 
-      const response = await fetch(url, {
-        method: "POST",
-        body: formData,
+      const res = await xhrUpload(url, formData, (frac) => {
+        setUploadProgress(frac)
+        if (frac >= 1) setPhase("processing")
       })
 
-      if (!response.ok) {
-        const data = await response.json()
+      if (!res.ok) {
+        const data = (res.body || {}) as { error?: string; upgradeRequired?: string }
 
         // Check for upgrade-related errors
         if (data.upgradeRequired) {
@@ -340,11 +348,11 @@ export function UploadDialog({
             credits: "You've run out of AI credits. Please upgrade to continue processing documents.",
             storage: "Storage limit reached. Please upgrade for more space.",
           }
-          const message = upgradeMessages[data.upgradeRequired] || data.error
+          const message = upgradeMessages[data.upgradeRequired] || data.error || "Upload failed"
           throw new UpgradeRequiredError(message, data.upgradeRequired)
         }
 
-        throw new Error(data.error || "Failed to upload document")
+        throw new Error(data.error || `Failed to upload document (HTTP ${res.status})`)
       }
 
       resetForm()
@@ -353,6 +361,8 @@ export function UploadDialog({
       setError(err instanceof Error ? err.message : "Failed to upload document")
     } finally {
       setLoading(false)
+      setPhase("idle")
+      setUploadProgress(0)
     }
   }
 
@@ -360,11 +370,12 @@ export function UploadDialog({
     <Dialog
       open={open}
       onOpenChange={(open) => {
+        if (!open && loading) return // block close while upload is in flight
         if (!open) resetForm()
         onOpenChange(open)
       }}
     >
-      <DialogContent className="flex max-h-[90vh] max-w-lg flex-col gap-4 overflow-hidden p-6">
+      <DialogContent className="flex max-h-[90vh] w-[calc(100vw-2rem)] max-w-[32rem] flex-col gap-4 overflow-hidden p-6">
         <DialogHeader>
           <DialogTitle className="text-lg font-semibold">Upload Document</DialogTitle>
           <DialogDescription>
@@ -374,6 +385,29 @@ export function UploadDialog({
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           <form id="upload-document-form" onSubmit={handleSubmit} className="space-y-4">
+          {loading && (
+            <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium">
+                  {phase === "uploading"
+                    ? `Uploading… ${Math.round(uploadProgress * 100)}%`
+                    : "Processing…"}
+                </span>
+                {phase === "processing" && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              <Progress
+                value={phase === "uploading" ? uploadProgress * 100 : 100}
+                className={cn(phase === "processing" && "animate-pulse")}
+              />
+              {phase === "processing" && (
+                <p className="text-xs text-muted-foreground">
+                  Extracting text, chunking, and indexing — this can take a moment for large or scanned files.
+                </p>
+              )}
+            </div>
+          )}
           {/* File Upload Area */}
           <div
             className={cn(
@@ -401,12 +435,14 @@ export function UploadDialog({
             />
 
             {selectedFile ? (
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 {(() => {
                   const { Icon, color } = getFileIcon(selectedFile.name)
                   return <Icon className={cn("h-10 w-10 mx-auto", color)} />
                 })()}
-                <p className="font-medium">{selectedFile.name}</p>
+                <p className="font-medium truncate" title={selectedFile.name}>
+                  {selectedFile.name}
+                </p>
                 <p className="text-sm text-muted-foreground">
                   {(selectedFile.size / 1024).toFixed(1)} KB
                 </p>

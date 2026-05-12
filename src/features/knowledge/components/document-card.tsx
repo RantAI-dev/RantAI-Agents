@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,9 +65,20 @@ interface DocumentCardProps {
   onView: (id: string) => void
   onEdit: (id: string) => void
   categoryMap: Map<string, Category>
+  selectionMode?: boolean
+  selected?: boolean
+  onToggleSelection?: (id: string) => void
 }
 
-export function DocumentCard({ document, onDelete, onView, onEdit }: DocumentCardProps) {
+export function DocumentCard({
+  document,
+  onDelete,
+  onView,
+  onEdit,
+  selectionMode = false,
+  selected = false,
+  onToggleSelection,
+}: DocumentCardProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [imgError, setImgError] = useState(false)
   const { Icon: FileIcon, iconColor, bgColor } = getFileTypeIcon(document.fileType, document.artifactType)
@@ -76,14 +88,38 @@ export function DocumentCard({ document, onDelete, onView, onEdit }: DocumentCar
     setDeleteDialogOpen(false)
   }
 
+  const handleCardClick = () => {
+    if (selectionMode) {
+      onToggleSelection?.(document.id)
+    } else {
+      onView(document.id)
+    }
+  }
+
   const hasThumbnail = document.thumbnailUrl && !imgError
 
   return (
     <>
       <div
-        className="group relative cursor-pointer rounded-lg border bg-card overflow-hidden transition-all duration-200 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/30 hover:-translate-y-0.5"
-        onClick={() => onView(document.id)}
+        className={`group relative cursor-pointer rounded-lg border bg-card overflow-hidden transition-all duration-200 ${
+          selected
+            ? "ring-2 ring-primary border-primary shadow-lg shadow-primary/10"
+            : "hover:shadow-lg hover:shadow-primary/5 hover:border-primary/30 hover:-translate-y-0.5"
+        }`}
+        onClick={handleCardClick}
       >
+        {selectionMode && (
+          <div
+            className="absolute top-2 left-2 z-20 flex items-center justify-center w-7 h-7 rounded-md bg-background/90 backdrop-blur-sm border shadow-sm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => onToggleSelection?.(document.id)}
+              aria-label={`Select ${document.title}`}
+            />
+          </div>
+        )}
         {/* Embedded indicator — top left */}
         {document.chunkCount > 0 && (
           <TooltipProvider delayDuration={0}>
@@ -100,7 +136,8 @@ export function DocumentCard({ document, onDelete, onView, onEdit }: DocumentCar
           </TooltipProvider>
         )}
 
-        {/* Actions dropdown - top right, appears on hover */}
+        {/* Actions dropdown - top right, appears on hover; hidden in selection mode */}
+        {!selectionMode && (
         <div className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -133,6 +170,7 @@ export function DocumentCard({ document, onDelete, onView, onEdit }: DocumentCar
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        )}
 
         {/* Preview area */}
         {hasThumbnail ? (
