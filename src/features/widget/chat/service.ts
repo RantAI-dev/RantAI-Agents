@@ -8,7 +8,12 @@ import {
   validateApiKeyFormat,
   checkRateLimit,
 } from "@/lib/embed"
-import { smartRetrieve, formatContextForPrompt } from "@/lib/rag"
+import {
+  smartRetrieve,
+  formatContextForPrompt,
+  smartHybridRetrieve,
+  formatHybridContextForPrompt,
+} from "@/lib/rag"
 import { searchByDocumentIds } from "@/lib/rag/vector-store"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
 import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow"
@@ -398,29 +403,54 @@ export async function handleWidgetChat(req: NextRequest) {
                 .map((part) => part.text)
                 .join(" ")
 
-          const retrievalResult = await smartRetrieve(userQuery, {
-            minSimilarity: 0.35,
-            maxChunks: 5,
+          // Match chat-public/service.ts: hybrid retrieval first, fall back to
+          // vector-only if hybrid returns no context. Previously widget chats
+          // ran vector-only — same query produced fewer/lower-quality results
+          // here than in the dashboard.
+          const hybridResult = await smartHybridRetrieve(userQuery, {
+            enableEntitySearch: true,
             groupIds: assistant.knowledgeBaseGroupIds,
           })
 
-          if (retrievalResult.context) {
-            const formattedContext = formatContextForPrompt(retrievalResult)
+          if (hybridResult.context) {
+            const formattedContext = formatHybridContextForPrompt(hybridResult)
             systemPrompt = `${systemPrompt}\n\n${formattedContext}`
 
-            ragSources = retrievalResult.sources.map((s) => ({
+            ragSources = hybridResult.sources.map((s) => ({
               title: s.documentTitle,
               section: s.section,
             }))
 
             console.log(
-              `[Widget RAG] Retrieved ${retrievalResult.chunks.length} chunks for query: "${userQuery.substring(0, 50)}..."`
+              `[Widget RAG] Hybrid retrieved ${hybridResult.results.length} chunks (vector=${hybridResult.stats.vectorResults}, graph=${hybridResult.stats.graphResults}) for "${userQuery.substring(0, 50)}..."`
             )
             console.log(
-              `[Widget RAG] Sources: ${retrievalResult.sources.map((s) => s.documentTitle).join(", ")}`
+              `[Widget RAG] Sources: ${hybridResult.sources.map((s) => s.documentTitle).join(", ")}`
             )
           } else {
-            console.log(`[Widget RAG] No results for query: "${userQuery.substring(0, 50)}..." (groupIds: ${JSON.stringify(assistant.knowledgeBaseGroupIds)})`)
+            const retrievalResult = await smartRetrieve(userQuery, {
+              minSimilarity: 0.35,
+              groupIds: assistant.knowledgeBaseGroupIds,
+            })
+
+            if (retrievalResult.context) {
+              const formattedContext = formatContextForPrompt(retrievalResult)
+              systemPrompt = `${systemPrompt}\n\n${formattedContext}`
+
+              ragSources = retrievalResult.sources.map((s) => ({
+                title: s.documentTitle,
+                section: s.section,
+              }))
+
+              console.log(
+                `[Widget RAG] Vector-fallback retrieved ${retrievalResult.chunks.length} chunks for query: "${userQuery.substring(0, 50)}..."`
+              )
+              console.log(
+                `[Widget RAG] Sources: ${retrievalResult.sources.map((s) => s.documentTitle).join(", ")}`
+              )
+            } else {
+              console.log(`[Widget RAG] No results for query: "${userQuery.substring(0, 50)}..." (groupIds: ${JSON.stringify(assistant.knowledgeBaseGroupIds)})`)
+            }
           }
         } catch (error) {
           console.error("[Widget Chat] RAG error:", error)
