@@ -38,7 +38,7 @@ export async function POST(req: Request) {
       )
     }
 
-    return await runV1ChatCompletion(authResult, parsed.data)
+    return await runV1ChatCompletion(authResult, parsed.data, req.signal)
   } catch (error) {
     console.error("[V1 Chat Completions] Error:", error)
     return new Response(

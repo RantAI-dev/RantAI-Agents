@@ -64,7 +64,8 @@ export async function authenticateV1Request(
 
 export async function runV1ChatCompletion(
   auth: AuthResult,
-  input: V1ChatCompletionInput
+  input: V1ChatCompletionInput,
+  abortSignal?: AbortSignal
 ): Promise<Response> {
   // Rate limit
   const rateResult = checkRateLimit(auth.apiKey.id)
@@ -104,6 +105,27 @@ export async function runV1ChatCompletion(
     )
   }
 
+  // Chatflow-bound assistants need the full chatflow runtime (state, branching,
+  // tool nodes) which is not wired into the OpenAI-compatible response shape.
+  // Refuse upfront rather than fall through silently to single-turn streamText
+  // and produce broken behavior.
+  const activeChatflow = await prisma.workflow.findFirst({
+    where: { assistantId: assistant.id, mode: "CHATFLOW", status: "ACTIVE" },
+    select: { id: true },
+  })
+  if (activeChatflow) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          message:
+            "This assistant is bound to an active chatflow workflow. Chatflow execution is not supported via the OpenAI-compatible API yet — use the dashboard chat surface instead.",
+          type: "unsupported_assistant_error",
+        },
+      }),
+      { status: 422, headers: { "Content-Type": "application/json" } }
+    )
+  }
+
   let systemPrompt = assistant.systemPrompt || "You are a helpful AI assistant."
   systemPrompt += LANGUAGE_INSTRUCTION
   systemPrompt += OUTPUT_HYGIENE_INSTRUCTION
@@ -123,17 +145,45 @@ export async function runV1ChatCompletion(
   // ===== KNOWLEDGE BASE (RAG) =====
   // Extract user query from the last user message for RAG retrieval
   const lastUserMsg = [...input.messages].reverse().find((m) => m.role === "user")
-  const userQuery = lastUserMsg?.content || ""
+  const rawUserQuery = lastUserMsg?.content || ""
 
-  if (assistant.useKnowledgeBase && userQuery) {
+  if (assistant.useKnowledgeBase && rawUserQuery) {
     try {
       const groupIds = assistant.knowledgeBaseGroupIds.length > 0
         ? assistant.knowledgeBaseGroupIds
         : undefined
 
-      // Try hybrid retrieval first, fall back to vector-only
+      // Directory listing — same as chat-public; gives the model the full doc
+      // inventory for enumerate-style queries without burning chunks on it.
+      if (groupIds && groupIds.length > 0) {
+        try {
+          const { findDocumentsByGroups } = await import("@/features/knowledge/groups/repository")
+          const directory = await findDocumentsByGroups(groupIds, 200)
+          if (directory.length > 0 && directory.length < 200) {
+            const lines = directory.map((d) => {
+              const cats = d.categories?.length ? ` [${d.categories.join(", ")}]` : ""
+              const sub = d.subcategory ? ` — ${d.subcategory}` : ""
+              return `- ${d.title}${sub}${cats}`
+            }).join("\n")
+            systemPrompt += `\n\n## Available Documents in Knowledge Base\nThis assistant has access to ${directory.length} documents. Use the list when the user asks to enumerate, list, or count available documents; for specific questions, rely on the retrieved excerpts below.\n\n${lines}`
+          }
+        } catch (err) {
+          console.warn("[V1 API] Directory injection failed:", err)
+        }
+      }
+
+      // Standalone-query rewrite for multi-turn refs ("tell me more") — same
+      // env gate (KB_STANDALONE_QUERY_ENABLED) as chat-public.
+      const messagesAsAny = input.messages.map((m) => ({ role: m.role, content: m.content }))
+      const { rewriteStandaloneQuery } = await import("@/lib/rag/standalone-query")
+      const userQuery = await rewriteStandaloneQuery(messagesAsAny)
+      if (userQuery !== rawUserQuery) {
+        console.log(`[V1 API] standalone-query rewrite: "${rawUserQuery.slice(0, 60)}" -> "${userQuery.slice(0, 80)}"`)
+      }
+
+      // Try hybrid retrieval first, fall back to vector-only.
+      // maxResults / maxChunks unset → picks up KB_DEFAULT_MAX_CHUNKS from config.
       const hybridResult = await smartHybridRetrieve(userQuery, {
-        maxResults: 5,
         enableEntitySearch: true,
         groupIds,
       })
@@ -145,7 +195,6 @@ export async function runV1ChatCompletion(
       } else {
         const retrievalResult = await smartRetrieve(userQuery, {
           minSimilarity: 0.30,
-          maxChunks: 5,
           groupIds,
         })
         if (retrievalResult.context) {
@@ -199,6 +248,7 @@ export async function runV1ChatCompletion(
     messages,
     tools: resolvedTools,
     stopWhen: Object.keys(resolvedTools).length > 0 ? stepCountIs(5) : stepCountIs(2),
+    ...(abortSignal && { abortSignal }),
     ...(input.temperature != null && { temperature: input.temperature }),
     ...(input.top_p != null && { topP: input.top_p }),
     ...(input.max_tokens != null && { maxTokens: input.max_tokens }),
