@@ -9,6 +9,7 @@ import {
   seedKnowledgeCategories,
   updateKnowledgeCategory,
 } from "./repository"
+import { recordKnowledgeAudit } from "@/lib/audit/knowledge"
 import type { KnowledgeCategoryCreateInput, KnowledgeCategoryUpdateInput } from "./schema"
 
 export interface ServiceError {
@@ -97,6 +98,15 @@ export async function createKnowledgeCategoryForDashboard(params: {
     organizationId: params.organizationId,
   })
 
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: null,
+    action: "category.create",
+    entityType: "category",
+    entityId: category.id,
+    detail: { name: category.name, label: category.label, color: category.color },
+  })
+
   return mapCategory(category)
 }
 
@@ -138,6 +148,15 @@ export async function updateKnowledgeCategoryForDashboard(params: {
     ...(params.input.color && { color: params.input.color }),
   })
 
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: null,
+    action: "category.update",
+    entityType: "category",
+    entityId: params.id,
+    detail: { label: params.input.label, color: params.input.color },
+  })
+
   return mapCategory(updated)
 }
 
@@ -169,5 +188,14 @@ export async function deleteKnowledgeCategoryForDashboard(
   }
 
   await deleteKnowledgeCategory(id)
+  recordKnowledgeAudit({
+    organizationId,
+    userId: null,
+    action: "category.delete",
+    entityType: "category",
+    entityId: id,
+    detail: { name: category.name },
+    riskLevel: "medium",
+  })
   return { success: true }
 }

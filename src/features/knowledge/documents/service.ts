@@ -25,6 +25,7 @@ import {
   softDeleteKnowledgeDocument,
   updateKnowledgeDocumentWithGroups,
 } from "./repository"
+import { recordKnowledgeAudit } from "@/lib/audit/knowledge"
 import type { KnowledgeDocumentCreateInput, KnowledgeDocumentUpdateInput } from "./schema"
 
 export interface ServiceError {
@@ -663,6 +664,15 @@ export async function createKnowledgeDocumentForDashboard(params: {
     }
   }
 
+  recordKnowledgeAudit({
+    organizationId: params.context.organizationId,
+    userId: params.context.userId,
+    action: "document.create",
+    entityType: "document",
+    entityId: document.id,
+    detail: { title: document.title, fileType, fileSize, chunkCount: chunks.length, entityCount },
+  })
+
   return {
     id: document.id,
     title: document.title,
@@ -719,6 +729,20 @@ export async function updateKnowledgeDocumentForDashboard(params: {
     return { status: 404, error: "Document not found" }
   }
 
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: null,
+    action: "document.update",
+    entityType: "document",
+    entityId: params.documentId,
+    detail: {
+      title: params.input.title,
+      categories: params.input.categories,
+      subcategory: params.input.subcategory,
+      groupIds,
+    },
+  })
+
   return {
     id: document.id,
     title: document.title,
@@ -757,6 +781,14 @@ export async function deleteKnowledgeDocumentForDashboard(params: {
     // Chunks in SurrealDB stay until the retention sweep — retrieval skips
     // them because the Postgres join filters deletedAt: null.
     await softDeleteKnowledgeDocument(params.documentId)
+    recordKnowledgeAudit({
+      organizationId: params.organizationId,
+      userId: null,
+      action: "document.delete",
+      entityType: "document",
+      entityId: params.documentId,
+      detail: { mode: "soft" },
+    })
     console.log(`Soft-deleted document ${params.documentId}`)
     return { success: true, mode: "soft" }
   }
@@ -773,6 +805,20 @@ export async function deleteKnowledgeDocumentForDashboard(params: {
   }
 
   await deleteKnowledgeDocument(params.documentId)
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: null,
+    action: "document.hard_delete",
+    entityType: "document",
+    entityId: params.documentId,
+    detail: {
+      mode: "hard",
+      relationTablesCleaned: cleanupStats.deletedRelationTables,
+      entitiesDeleted: cleanupStats.entitiesDeleted,
+      chunksDeleted: cleanupStats.chunksDeleted,
+    },
+    riskLevel: "high",
+  })
   console.log(
     `Hard-deleted document ${params.documentId}: cleaned up relations from ${cleanupStats.deletedRelationTables} tables, entities: ${cleanupStats.entitiesDeleted}, chunks: ${cleanupStats.chunksDeleted}`
   )
@@ -802,6 +848,13 @@ export async function restoreKnowledgeDocumentForDashboard(params: {
   }
 
   await restoreKnowledgeDocument(params.documentId)
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: null,
+    action: "document.restore",
+    entityType: "document",
+    entityId: params.documentId,
+  })
   console.log(`Restored document ${params.documentId}`)
   return { success: true }
 }
