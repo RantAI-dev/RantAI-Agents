@@ -546,6 +546,8 @@ export async function runChat(params: {
       scoreMin: number | null
       scoreMax: number | null
       scoreMean: number | null
+      intent?: string
+      intentReason?: string
       hybridStats?: HybridSearchStats
     } = {
       path: "skipped",
@@ -610,6 +612,17 @@ export async function runChat(params: {
             console.log(
               `[RAG] standalone-query rewrite: "${rawUserQuery.slice(0, 60)}" -> "${userQuery.slice(0, 80)}"`
             )
+          }
+
+          // Intent classification (observability-first; env-gated). The intent
+          // is just emitted in RAG_TRACE today — actually routing per intent
+          // (enumerate→directory-only, compare→raise maxChunks) comes after
+          // the eval harness has a baseline to measure against.
+          const { classifyIntent } = await import("@/lib/rag/intent-classifier")
+          const intent = classifyIntent(userQuery, messages.length)
+          if (!intent.disabled) {
+            ragTraceData.intent = intent.intent
+            ragTraceData.intentReason = intent.reason
           }
 
           // Retrieve context using hybrid search (vector + entity/graph), then
@@ -1092,6 +1105,8 @@ export async function runChat(params: {
           hasTools: hasAssistantTools,
           kbGroupIds: knowledgeBaseGroupIds ?? null,
           queryLen: userQuery?.length ?? 0,
+          intent: ragTraceData.intent ?? null,
+          intentReason: ragTraceData.intentReason ?? null,
           chunks: {
             count: ragTraceData.chunkCount,
             scoreMin: ragTraceData.scoreMin,
