@@ -197,127 +197,6 @@ export async function retrieveContext(
 }
 
 /**
- * Detect the likely category based on query keywords
- * Returns undefined if no clear category is detected (searches all)
- */
-export function detectQueryCategory(
-  query: string
-): string | undefined {
-  const queryLower = query.toLowerCase();
-
-  // Life insurance keywords (EN + ID)
-  const lifeKeywords = [
-    "life insurance",
-    "term life",
-    "whole life",
-    "universal life",
-    "death benefit",
-    "beneficiary",
-    "cash value",
-    "life coverage",
-    "life policy",
-    "iul",
-    "indexed universal",
-    "asuransi jiwa",
-    "jiwa",
-    "santunan kematian",
-  ];
-
-  // Health insurance keywords (EN + ID)
-  const healthKeywords = [
-    "health insurance",
-    "medical",
-    "doctor",
-    "hospital",
-    "prescription",
-    "copay",
-    "deductible",
-    "health coverage",
-    "health plan",
-    "telehealth",
-    "mental health",
-    "preventive",
-    "bronze",
-    "silver",
-    "gold",
-    "platinum",
-    "out-of-pocket",
-    "in-network",
-    "asuransi kesehatan",
-    "kesehatan",
-    "dokter",
-    "rumah sakit",
-    "resep",
-    "rawat inap",
-    "rawat jalan",
-  ];
-
-  // Home insurance keywords (EN + ID)
-  const homeKeywords = [
-    "home insurance",
-    "homeowner",
-    "house",
-    "dwelling",
-    "property",
-    "liability",
-    "flood",
-    "earthquake",
-    "home coverage",
-    "renters",
-    "condo",
-    "umbrella",
-    "personal property",
-    "asuransi rumah",
-    "rumah",
-    "properti",
-    "banjir",
-    "gempa",
-  ];
-
-  // Vehicle/Auto insurance keywords (EN + ID)
-  const vehicleKeywords = [
-    "auto insurance",
-    "car insurance",
-    "vehicle insurance",
-    "auto coverage",
-    "vehicle coverage",
-    "roadside assistance",
-    "collision",
-    "comprehensive",
-    "liability only",
-    "accident forgiveness",
-    "asuransi kendaraan",
-    "asuransi mobil",
-    "asuransi motor",
-    "kendaraan",
-    "mobil",
-    "motor",
-  ];
-
-  // Check for matches
-  const lifeScore = lifeKeywords.filter((kw) => queryLower.includes(kw)).length;
-  const healthScore = healthKeywords.filter((kw) =>
-    queryLower.includes(kw)
-  ).length;
-  const homeScore = homeKeywords.filter((kw) => queryLower.includes(kw)).length;
-  const vehicleScore = vehicleKeywords.filter((kw) => queryLower.includes(kw)).length;
-
-  // Return category with highest score (if any)
-  const maxScore = Math.max(lifeScore, healthScore, homeScore, vehicleScore);
-
-  if (maxScore === 0) {
-    return undefined; // Search all categories
-  }
-
-  if (lifeScore === maxScore) return "LIFE_INSURANCE";
-  if (healthScore === maxScore) return "HEALTH_INSURANCE";
-  if (homeScore === maxScore) return "HOME_INSURANCE";
-  if (vehicleScore === maxScore) return "VEHICLE_INSURANCE";
-
-  return undefined;
-}
-
-/**
  * Smart retrieval that auto-detects category
  */
 export async function smartRetrieve(
@@ -328,11 +207,8 @@ export async function smartRetrieve(
     groupIds?: string[];
   }
 ): Promise<RetrievalResult> {
-  const category = detectQueryCategory(query);
-
   return retrieveContext(query, {
     ...options,
-    categoryFilter: category,
     groupIds: options?.groupIds,
   });
 }
@@ -471,11 +347,8 @@ export async function smartHybridRetrieve(
     groupIds?: string[];
   }
 ): Promise<HybridRetrievalResult> {
-  const category = detectQueryCategory(query);
-
   return hybridRetrieve(query, {
     ...options,
-    categoryFilter: category,
   });
 }
 

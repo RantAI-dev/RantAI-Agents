@@ -51,7 +51,6 @@ export {
   retrieveContext,
   smartRetrieve,
   formatContextForPrompt,
-  detectQueryCategory,
   hybridRetrieve,
   smartHybridRetrieve,
   formatHybridContextForPrompt,
