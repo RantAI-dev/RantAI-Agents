@@ -570,8 +570,8 @@ export async function runChat(params: {
 
           // Retrieve context using hybrid search (vector + entity/graph), then
           // safely fall back to vector-only retrieval if needed.
+          // maxResults is left unset so it picks up KB_DEFAULT_MAX_CHUNKS via config.
           const hybridResult = await smartHybridRetrieve(userQuery, {
-            maxResults: 5,
             enableEntitySearch: true,
             groupIds: knowledgeBaseGroupIds,
           })
@@ -609,7 +609,6 @@ export async function runChat(params: {
           } else {
             const retrievalResult = await smartRetrieve(userQuery, {
               minSimilarity: 0.30,
-              maxChunks: 5,
               groupIds: knowledgeBaseGroupIds,
             })
 

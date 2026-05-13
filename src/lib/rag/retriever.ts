@@ -54,14 +54,14 @@ export async function retrieveContext(
     groupIds?: string[];
   }
 ): Promise<RetrievalResult> {
+  const cfg = getRagConfig();
   const {
     minSimilarity = 0.30,
-    maxChunks = 5,
+    maxChunks = cfg.defaultMaxChunks,
     categoryFilter,
     groupIds,
   } = options || {};
 
-  const cfg = getRagConfig();
   const reranker = getDefaultReranker();
   const fetchLimit = reranker ? Math.max(cfg.rerankInitialK, maxChunks) : maxChunks;
 
@@ -387,7 +387,7 @@ export async function hybridRetrieve(
   }
 ): Promise<HybridRetrievalResult> {
   const {
-    maxResults = 5,
+    maxResults = getRagConfig().defaultMaxChunks,
     enableEntitySearch = true,
     vectorWeight = 0.7,
     entityWeight = 0.3,
