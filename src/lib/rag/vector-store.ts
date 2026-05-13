@@ -548,6 +548,24 @@ export async function storeChunks(
   chunks: Chunk[],
   embeddings: number[][]
 ): Promise<void> {
+  // Hard contract: every chunk must have a matching embedding vector. If an
+  // embed batch failed (generateEmbeddings degrades to empty result rather
+  // than throwing), the arrays diverge and we used to silently write `undefined`
+  // into SurrealDB → vector::similarity::cosine() panics at query time. Fail
+  // fast here so the caller can roll the document back instead.
+  if (chunks.length !== embeddings.length) {
+    throw new Error(
+      `[VectorStore] chunks/embeddings length mismatch for document ${documentId}: ${chunks.length} chunks vs ${embeddings.length} embeddings`
+    );
+  }
+  for (let i = 0; i < embeddings.length; i++) {
+    if (!Array.isArray(embeddings[i]) || embeddings[i].length === 0) {
+      throw new Error(
+        `[VectorStore] empty embedding at index ${i} for document ${documentId}`
+      );
+    }
+  }
+
   const surrealClient = await getSurrealClient();
 
   // Process chunks in bounded-concurrency batches. Order doesn't matter
