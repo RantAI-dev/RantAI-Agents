@@ -21,6 +21,8 @@ import {
   findKnowledgeDocumentAccessById,
   findKnowledgeDocumentById,
   listKnowledgeDocumentsByScope,
+  restoreKnowledgeDocument,
+  softDeleteKnowledgeDocument,
   updateKnowledgeDocumentWithGroups,
 } from "./repository"
 import type { KnowledgeDocumentCreateInput, KnowledgeDocumentUpdateInput } from "./schema"
@@ -727,9 +729,61 @@ export async function updateKnowledgeDocumentForDashboard(params: {
 }
 
 /**
- * Deletes a dashboard knowledge document and its external assets.
+ * Soft-deletes a knowledge document by default (recoverable for `retentionDays`
+ * before the retention sweep hard-deletes). Pass `hard: true` for the legacy
+ * permanent-delete path that also cleans up S3 + SurrealDB chunks immediately.
  */
 export async function deleteKnowledgeDocumentForDashboard(params: {
+  documentId: string
+  organizationId: string | null
+  role: string | null | undefined
+  hard?: boolean
+}): Promise<{ success: true; mode: "soft" | "hard" } | ServiceError> {
+  const existing = await findKnowledgeDocumentAccessById(params.documentId)
+  if (!existing) {
+    return { status: 404, error: "Document not found" }
+  }
+
+  if (!hasDocumentAccess(existing.organizationId, params.organizationId)) {
+    return { status: 404, error: "Document not found" }
+  }
+
+  if (existing.organizationId && params.role && !canManage(params.role)) {
+    return { status: 403, error: "Insufficient permissions" }
+  }
+
+  if (!params.hard) {
+    // Soft delete: row stays, deletedAt timestamp filters it out everywhere.
+    // Chunks in SurrealDB stay until the retention sweep — retrieval skips
+    // them because the Postgres join filters deletedAt: null.
+    await softDeleteKnowledgeDocument(params.documentId)
+    console.log(`Soft-deleted document ${params.documentId}`)
+    return { success: true, mode: "soft" }
+  }
+
+  const surrealClient = await getSurrealClient()
+  const cleanupStats = await surrealClient.cleanupDocumentIntelligence(params.documentId)
+
+  if (existing.s3Key) {
+    try {
+      await deleteFile(existing.s3Key)
+    } catch (error) {
+      console.error(`[Knowledge API] Failed to delete S3 file ${existing.s3Key}:`, error)
+    }
+  }
+
+  await deleteKnowledgeDocument(params.documentId)
+  console.log(
+    `Hard-deleted document ${params.documentId}: cleaned up relations from ${cleanupStats.deletedRelationTables} tables, entities: ${cleanupStats.entitiesDeleted}, chunks: ${cleanupStats.chunksDeleted}`
+  )
+
+  return { success: true, mode: "hard" }
+}
+
+/**
+ * Restore a previously soft-deleted document.
+ */
+export async function restoreKnowledgeDocumentForDashboard(params: {
   documentId: string
   organizationId: string | null
   role: string | null | undefined
@@ -747,22 +801,8 @@ export async function deleteKnowledgeDocumentForDashboard(params: {
     return { status: 403, error: "Insufficient permissions" }
   }
 
-  const surrealClient = await getSurrealClient()
-  const cleanupStats = await surrealClient.cleanupDocumentIntelligence(params.documentId)
-
-  if (existing.s3Key) {
-    try {
-      await deleteFile(existing.s3Key)
-    } catch (error) {
-      console.error(`[Knowledge API] Failed to delete S3 file ${existing.s3Key}:`, error)
-    }
-  }
-
-  await deleteKnowledgeDocument(params.documentId)
-  console.log(
-    `Deleted document ${params.documentId}: cleaned up relations from ${cleanupStats.deletedRelationTables} tables, entities: ${cleanupStats.entitiesDeleted}, chunks: ${cleanupStats.chunksDeleted}`
-  )
-
+  await restoreKnowledgeDocument(params.documentId)
+  console.log(`Restored document ${params.documentId}`)
   return { success: true }
 }
 

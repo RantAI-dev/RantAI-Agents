@@ -81,6 +81,7 @@ export async function findDocumentsByGroups(groupIds: string[], cap = 200) {
   return prisma.document.findMany({
     where: {
       groups: { some: { groupId: { in: groupIds } } },
+      deletedAt: null,
     },
     select: {
       id: true,

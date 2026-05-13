@@ -141,7 +141,7 @@ export async function searchSimilar(
     }
 
     const filteredDocs = await prisma.document.findMany({
-      where: whereClause,
+      where: { ...whereClause, deletedAt: null },
       select: { id: true },
     });
 
@@ -200,9 +200,11 @@ export async function searchSimilar(
   // Get unique document IDs from results
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
 
-  // Fetch document metadata from PostgreSQL
+  // Fetch document metadata from PostgreSQL — skip soft-deleted so their
+  // chunks effectively drop out of retrieval until the retention sweep cleans
+  // SurrealDB rows.
   const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds } },
+    where: { id: { in: resultDocIds }, deletedAt: null },
     select: {
       id: true,
       title: true,
@@ -214,21 +216,25 @@ export async function searchSimilar(
   // Create a map for quick lookup
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
-  // Join chunk results with document metadata
-  const results: SearchResult[] = chunks.map((chunk) => {
-    const doc = docMap.get(chunk.document_id);
-    return {
-      id: chunk.id,
-      content: chunk.content,
-      documentId: chunk.document_id,
-      documentTitle: doc?.title || "Unknown",
-      categories: doc?.categories || [],
-      subcategory: doc?.subcategory || null,
-      section: (chunk.metadata as { section?: string } | null)?.section || null,
-      similarity: chunk.similarity,
-      contextualPrefix: chunk.contextual_prefix,
-    };
-  });
+  // Join chunk results with document metadata. Drop chunks whose parent doc
+  // is missing from docMap — that means the doc was soft-deleted (filtered
+  // upstream) and the chunk is effectively retired until the retention sweep.
+  const results: SearchResult[] = chunks
+    .filter((chunk) => docMap.has(chunk.document_id))
+    .map((chunk) => {
+      const doc = docMap.get(chunk.document_id)!;
+      return {
+        id: chunk.id,
+        content: chunk.content,
+        documentId: chunk.document_id,
+        documentTitle: doc.title,
+        categories: doc.categories,
+        subcategory: doc.subcategory,
+        section: (chunk.metadata as { section?: string } | null)?.section || null,
+        similarity: chunk.similarity,
+        contextualPrefix: chunk.contextual_prefix,
+      };
+    });
 
   return results;
 }
@@ -414,22 +420,22 @@ export async function searchByDocumentIds(
   // Fetch document metadata from PostgreSQL
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
   const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds } },
+    where: { id: { in: resultDocIds }, deletedAt: null },
     select: { id: true, title: true, categories: true, subcategory: true },
   });
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
   return chunks
-    .filter((chunk) => chunk.similarity >= minSimilarity)
+    .filter((chunk) => chunk.similarity >= minSimilarity && docMap.has(chunk.document_id))
     .map((chunk) => {
-      const doc = docMap.get(chunk.document_id);
+      const doc = docMap.get(chunk.document_id)!;
       return {
         id: chunk.id,
         content: chunk.content,
         documentId: chunk.document_id,
-        documentTitle: doc?.title || "Unknown",
-        categories: doc?.categories || [],
-        subcategory: doc?.subcategory || null,
+        documentTitle: doc.title,
+        categories: doc.categories,
+        subcategory: doc.subcategory,
         section: (chunk.metadata as { section?: string } | null)?.section || null,
         similarity: chunk.similarity,
         contextualPrefix: chunk.contextual_prefix,
@@ -460,7 +466,7 @@ export async function searchByVector(
       whereClause.groups = { some: { groupId: { in: groupIds } } };
     }
     const filteredDocs = await prisma.document.findMany({
-      where: whereClause,
+      where: { ...whereClause, deletedAt: null },
       select: { id: true },
     });
     documentIds = filteredDocs.map((d) => d.id);
@@ -498,21 +504,23 @@ export async function searchByVector(
 
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
   const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds } },
+    where: { id: { in: resultDocIds }, deletedAt: null },
     select: { id: true, title: true, categories: true, subcategory: true },
   });
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
-  return chunks.map((chunk) => {
-    const doc = docMap.get(chunk.document_id);
+  return chunks
+    .filter((chunk) => docMap.has(chunk.document_id))
+    .map((chunk) => {
+    const doc = docMap.get(chunk.document_id)!;
     const md = (chunk.metadata as Record<string, unknown> | null) ?? {};
     return {
       id: chunk.id,
       content: chunk.content,
       documentId: chunk.document_id,
-      documentTitle: doc?.title || "Unknown",
-      categories: doc?.categories || [],
-      subcategory: doc?.subcategory || null,
+      documentTitle: doc.title,
+      categories: doc.categories,
+      subcategory: doc.subcategory,
       section: (md.section as string | undefined) ?? null,
       similarity: chunk.similarity,
       contextualPrefix: chunk.contextual_prefix,

@@ -344,7 +344,7 @@ export class HybridSearch {
     }
 
     const documents = await prisma.document.findMany({
-      where,
+      where: { ...where, deletedAt: null },
       select: { id: true },
     });
 

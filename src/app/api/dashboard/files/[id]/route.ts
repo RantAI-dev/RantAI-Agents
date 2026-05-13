@@ -83,7 +83,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 }
 
-// DELETE - Delete a document, its chunks, entities, and relations
+// DELETE - Soft-delete by default (recoverable). Pass ?hard=true for permanent
+// removal (S3 + SurrealDB chunks + Postgres row).
 export async function DELETE(request: Request, { params }: RouteParams) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -96,11 +97,15 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid document id" }, { status: 400 })
     }
 
+    const url = new URL(request.url)
+    const hard = url.searchParams.get("hard") === "true"
+
     const orgContext = await getOrganizationContext(request, session.user.id)
     const result = await deleteKnowledgeDocumentForDashboard({
       documentId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
       role: orgContext?.membership.role ?? null,
+      hard,
     })
 
     if (isHttpServiceError(result)) {

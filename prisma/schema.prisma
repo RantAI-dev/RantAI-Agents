@@ -324,9 +324,20 @@ model Document {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Soft delete: rows with deletedAt != null are hidden from listings + RAG
+  // retrieval but stay in DB until a retention sweep (cron) hard-deletes them.
+  // retentionDays is the optional per-doc TTL override (null = use org default).
+  deletedAt    DateTime?
+  retentionDays Int?
+
+  // Coverage analytics — incremented on each retrieval hit, populated lazily.
+  retrievalCount   Int       @default(0)
+  lastRetrievedAt  DateTime?
+
   @@index([organizationId])
   @@index([s3Key])
   @@index([sessionId])
+  @@index([deletedAt])
 }
 
 // API Key for embeddable chat widget

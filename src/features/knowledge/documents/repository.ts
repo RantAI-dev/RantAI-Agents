@@ -4,11 +4,14 @@ import type { Prisma } from "@prisma/client"
 export async function listKnowledgeDocumentsByScope(params: {
   organizationId: string | null
   groupId: string | null
+  /** Include soft-deleted (trash) rows. Default false. */
+  includeDeleted?: boolean
 }) {
   // The list view doesn't render the extracted body — keep `content` out of the
   // SELECT so we don't ship hundreds of KB of text per row across the SSR boundary.
   return prisma.document.findMany({
     where: {
+      ...(params.includeDeleted ? {} : { deletedAt: null }),
       ...(params.groupId ? { groups: { some: { groupId: params.groupId } } } : {}),
       ...(params.organizationId !== null
         ? { OR: [{ organizationId: params.organizationId }, { organizationId: null }] }
@@ -125,5 +128,25 @@ export async function updateKnowledgeDocumentWithGroups(
 export async function deleteKnowledgeDocument(id: string) {
   return prisma.document.delete({
     where: { id },
+  })
+}
+
+/**
+ * Soft delete: set deletedAt instead of removing the row. Chunks in SurrealDB
+ * are NOT cleaned up here — they're filtered out at retrieval via document_id
+ * → Postgres lookup. The retention sweep is what eventually hard-deletes.
+ */
+export async function softDeleteKnowledgeDocument(id: string) {
+  return prisma.document.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  })
+}
+
+/** Restore a soft-deleted document. */
+export async function restoreKnowledgeDocument(id: string) {
+  return prisma.document.update({
+    where: { id },
+    data: { deletedAt: null },
   })
 }
