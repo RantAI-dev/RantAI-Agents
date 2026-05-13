@@ -38,10 +38,30 @@ async function runOne(
 ): Promise<QueryResult> {
   const start = Date.now()
   const groupIds = entry.knowledgeBaseGroupIds ?? defaultGroups
+
+  // Mirror chat-public/service.ts: when priorTurns are present, fold them
+  // into a multi-message thread and run the standalone-query rewrite so the
+  // retrieval query reflects what the chat flow would actually search for.
+  // Without this, followup entries get "tell me more" sent raw — which is
+  // exactly what the rewrite was added to fix.
+  let queryForRetrieval = entry.query
+  if (entry.priorTurns?.length) {
+    try {
+      const { rewriteStandaloneQuery } = await import("../../src/lib/rag/standalone-query")
+      const messages = [
+        ...entry.priorTurns,
+        { role: "user", content: entry.query },
+      ]
+      queryForRetrieval = await rewriteStandaloneQuery(messages as Array<{ role: string; content: unknown }>)
+    } catch {
+      // Fall back to raw query; rewrite is best-effort.
+    }
+  }
+
   try {
     // Try hybrid first (matches the chat-public + widget surfaces); fall back
     // to vector-only if hybrid returns empty context (rare but possible).
-    const hybrid = await smartHybridRetrieve(entry.query, {
+    const hybrid = await smartHybridRetrieve(queryForRetrieval, {
       enableEntitySearch: true,
       groupIds,
     })
@@ -77,7 +97,7 @@ async function runOne(
         content: r.content,
       }))
     } else {
-      const fallback = await smartRetrieve(entry.query, {
+      const fallback = await smartRetrieve(queryForRetrieval, {
         minSimilarity: 0.3,
         groupIds,
       })
