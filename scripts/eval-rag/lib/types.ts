@@ -60,6 +60,17 @@ export interface QueryResult {
   scoreMean: number | null
   /** Total wallclock for the retrieval phase only (not full chat). */
   retrieveMs: number
+  /** Generated answer text — only populated when --with-llm-judge passed. */
+  answerText?: string
+  /** ms wallclock for the answer-generation phase, when run. */
+  generateMs?: number
+  /**
+   * LLM-as-judge faithfulness score (0..1) — only populated when --with-llm-judge passed.
+   * 1.0 = every claim in the answer is supported by the retrieved chunks.
+   */
+  faithfulness?: number
+  /** Optional one-line reasoning from the judge — debugging aid. */
+  faithfulnessReason?: string
   /** True when retrieval threw (network down, SurrealDB unavailable). */
   errored: boolean
   errorMessage?: string
@@ -80,5 +91,9 @@ export interface RunReport {
     expectedDocsTotal: number
     latencyP50Ms: number
     latencyP95Ms: number
+    /** Average faithfulness across queries that produced an answer (--with-llm-judge runs only). */
+    faithfulnessAvg?: number
+    /** Count of queries scored — denominator for faithfulnessAvg. */
+    faithfulnessCount?: number
   }
 }

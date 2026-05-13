@@ -67,6 +67,15 @@ export function summarize(
     .filter((r) => !r.errored)
     .map((r) => r.retrieveMs)
 
+  // Faithfulness aggregate — only populated when --with-llm-judge produced scores.
+  const faithfulnessValues = results
+    .map((r) => r.faithfulness)
+    .filter((v): v is number => typeof v === "number")
+  const faithfulnessAvg = faithfulnessValues.length
+    ? faithfulnessValues.reduce((a, b) => a + b, 0) / faithfulnessValues.length
+    : undefined
+  const faithfulnessCount = faithfulnessValues.length || undefined
+
   return {
     queryCount: results.length,
     erroredCount: results.filter((r) => r.errored).length,
@@ -77,5 +86,7 @@ export function summarize(
     expectedDocsTotal,
     latencyP50Ms: percentile(latencies, 50),
     latencyP95Ms: percentile(latencies, 95),
+    ...(faithfulnessAvg !== undefined && { faithfulnessAvg }),
+    ...(faithfulnessCount !== undefined && { faithfulnessCount }),
   }
 }

@@ -11,12 +11,22 @@ Phase 1 of the SOTA roadmap. Measures retrieval quality across a curated golden 
 
 ## What it does not do yet
 
-- LLM-as-a-judge for answer faithfulness — runs retrieval only, doesn't generate or score answers
-- Citation grounding check
 - A/B compare tool (just `diff` two `eval-runs/*.json` for now)
 - CI integration
 
-These are all additive on top of the current scaffold. The shape is settled.
+These are additive on top of the current scaffold. The shape is settled.
+
+## LLM-as-judge faithfulness
+
+`bun scripts/eval-rag/run.ts --with-llm-judge` flips into the expensive mode:
+
+1. Retrieval same as the base run
+2. For each query with non-zero chunks: generate an answer using only the retrieved chunks (small fast model — `KB_EVAL_JUDGE_MODEL` env, defaults to `openai/gpt-4.1-nano`)
+3. Pass `(question, answer, context)` to the same judge model and ask for a 0..1 faithfulness score with a one-line reason
+
+The summary line gains a `faithfulness (avg): X%` row. Per-query `answerText` + `faithfulness` + `faithfulnessReason` land in `eval-runs/<runId>.json`.
+
+**Cost note**: each judged query is ~2 LLM calls (generate + judge). A 50-entry golden set ≈ 100 model invocations of a cheap small model. Budget accordingly.
 
 ## Workflow
 
