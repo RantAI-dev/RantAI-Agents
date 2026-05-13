@@ -1,5 +1,6 @@
 import path from "path"
 import { Prisma } from "@prisma/client"
+import { prisma } from "@/lib/prisma"
 import {
   chunkDocument,
   smartChunkDocument,
@@ -21,6 +22,7 @@ import {
   findKnowledgeDocumentAccessById,
   findKnowledgeDocumentById,
   listKnowledgeDocumentsByScope,
+  replaceKnowledgeDocumentContent,
   restoreKnowledgeDocument,
   softDeleteKnowledgeDocument,
   updateKnowledgeDocumentWithGroups,
@@ -868,6 +870,117 @@ export async function restoreKnowledgeDocumentForDashboard(params: {
   })
   console.log(`Restored document ${params.documentId}`)
   return { success: true }
+}
+
+/**
+ * Replace a document's content in place — keeps the same Document.id (so
+ * groups, sessions, assistant bindings, audit history stay attached), cleans
+ * old chunks + entities + S3 file, then re-ingests with the new file or text.
+ *
+ * Used when a doc gets a revised version (e.g. PSAK 113 amendment) without
+ * losing the doc identity. Soft-delete + re-upload would orphan everything
+ * keyed off the old id.
+ */
+export async function replaceKnowledgeDocumentContentForDashboard(params: {
+  context: KnowledgeDocumentContext
+  documentId: string
+  input: KnowledgeDocumentCreateInput
+}): Promise<Record<string, unknown> | ServiceError> {
+  const existing = await findKnowledgeDocumentAccessById(params.documentId)
+  if (!existing) return { status: 404, error: "Document not found" }
+  if (!hasDocumentAccess(existing.organizationId, params.context.organizationId)) {
+    return { status: 404, error: "Document not found" }
+  }
+  if (existing.organizationId && params.context.role && !canManage(params.context.role)) {
+    return { status: 403, error: "Insufficient permissions" }
+  }
+
+  // Extract the new content using the same path the create flow uses. The
+  // simplest implementation: call createKnowledgeDocumentForDashboard to do
+  // a fresh ingest, then atomically swap the new content/s3Key onto the
+  // existing row and hard-delete the duplicate id. Less wasteful: factor
+  // out the extraction, but that's a bigger refactor — keep the duplication
+  // local for now. createKnowledgeDocumentForDashboard already handles quota,
+  // OCR, smart router, embeddings, chunks, entities — re-running it here is
+  // correct, just slightly wasteful.
+  const created = await createKnowledgeDocumentForDashboard({
+    context: params.context,
+    input: params.input,
+  })
+  if ("status" in created) return created as ServiceError
+
+  const newDocId = (created as { id: string }).id
+  if (newDocId === params.documentId) {
+    // Edge case: createKnowledgeDocumentForDashboard generated the same id (extremely unlikely with cuid).
+    return created
+  }
+
+  // Move the new content/s3Key onto the existing row, then nuke the freshly-
+  // created duplicate. This keeps the original Document.id stable.
+  const surrealClient = await getSurrealClient()
+  // 1) wipe the OLD document's chunks + entities + S3 file so retrieval stops
+  //    returning the stale content while we swap.
+  const cleanupStats = await surrealClient.cleanupDocumentIntelligence(params.documentId)
+  if (existing.s3Key) {
+    try { await deleteFile(existing.s3Key) } catch (err) {
+      console.warn(`[Knowledge API] Replace: old S3 delete failed for ${existing.s3Key}:`, err)
+    }
+  }
+
+  // 2) Re-key the NEW doc's chunks under the existing documentId.
+  await surrealClient.query(
+    `UPDATE document_chunk SET document_id = $oldId WHERE document_id = $newId`,
+    { oldId: params.documentId, newId: newDocId }
+  )
+  await surrealClient.query(
+    `UPDATE entity SET document_id = $oldId WHERE document_id = $newId`,
+    { oldId: params.documentId, newId: newDocId }
+  )
+
+  // 3) Copy new content + s3Key fields onto the existing Document row.
+  const newRow = (created as {
+    title: string; chunkCount: number; fileType?: string | null; fileSize?: number | null; s3Key?: string | null;
+  })
+  const newDocFull = await prisma.document.findUnique({
+    where: { id: newDocId },
+    select: { content: true, s3Key: true, fileType: true, fileSize: true, mimeType: true },
+  })
+  if (newDocFull) {
+    await replaceKnowledgeDocumentContent(params.documentId, {
+      content: newDocFull.content,
+      s3Key: newDocFull.s3Key,
+      fileType: newDocFull.fileType,
+      fileSize: newDocFull.fileSize,
+      mimeType: newDocFull.mimeType,
+    })
+  }
+
+  // 4) Delete the duplicate Document row (its chunks/entities now point at
+  //    the original id, so deleting the row is safe — chunks survive).
+  await prisma.document.delete({ where: { id: newDocId } })
+
+  recordKnowledgeAudit({
+    organizationId: params.context.organizationId,
+    userId: params.context.userId,
+    action: "document.reembed",
+    entityType: "document",
+    entityId: params.documentId,
+    detail: {
+      newTitle: newRow.title,
+      newChunkCount: newRow.chunkCount,
+      oldChunkCount: cleanupStats.chunksDeleted,
+    },
+    riskLevel: "medium",
+  })
+
+  return {
+    id: params.documentId,
+    title: newRow.title,
+    fileType: newRow.fileType,
+    fileSize: newRow.fileSize,
+    s3Key: newRow.s3Key,
+    chunkCount: newRow.chunkCount,
+  }
 }
 
 /**

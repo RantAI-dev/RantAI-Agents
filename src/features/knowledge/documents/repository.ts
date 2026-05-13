@@ -152,6 +152,25 @@ export async function restoreKnowledgeDocument(id: string) {
 }
 
 /**
+ * Replace a document's content + S3 key in place. Used by the replace-content
+ * endpoint after the chunk pipeline has finished re-ingesting. Keeps the
+ * document id stable so existing references (groups, sessions, assistant
+ * bindings) survive the swap.
+ */
+export async function replaceKnowledgeDocumentContent(id: string, data: {
+  content: string
+  s3Key?: string | null
+  fileType?: string | null
+  fileSize?: number | null
+  mimeType?: string | null
+}) {
+  return prisma.document.update({
+    where: { id },
+    data,
+  })
+}
+
+/**
  * Coverage analytics: bump retrievalCount + lastRetrievedAt for every doc
  * that surfaced in a chat retrieval. Fire-and-forget — never blocks the chat
  * path, errors are logged and swallowed.
