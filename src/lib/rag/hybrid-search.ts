@@ -283,6 +283,12 @@ export class HybridSearch {
 
       const whereClause = conditions.length > 0 ? conditions.join(" AND ") : "true";
 
+      // NOTE: this is a full-scan cosine over `document_chunk`. The MTREE
+      // index (schema.surql:29) is defined, but the KNN operator
+      // `<|N,COSINE|>` measured WORSE on this 4096-dim corpus, likely because
+      // MTREE degenerates in high dimensions. The structural fix is a smaller
+      // embedding model (e.g. 768-1024 dim) — see PROBABLE LATENCY ROOT CAUSE
+      // discussion. Until then, full scan is the lesser evil here.
       const sql = `
         SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity
         FROM document_chunk
@@ -671,15 +677,22 @@ export class HybridSearch {
         this.config.entityWeight * entityRRF +
         graphWeight * graphRRF;
 
+      // metadata is written at ingest as { documentTitle, category, subcategory,
+      // section, chunkIndex, contextualPrefix } (see chunker.ts:8-16). Earlier
+      // code read `.title` which is not the field name → "[Document]" placeholder
+      // leaked into every citation.
+      const meta = data.chunk.metadata as
+        | { documentTitle?: string; section?: string; category?: string; title?: string }
+        | undefined
       results.push({
         chunkId: data.chunk.id,
         documentId: data.chunk.document_id,
         fileId: data.chunk.file_id,
         content: data.chunk.content,
         chunkIndex: data.chunk.chunk_index,
-        documentTitle: data.chunk.metadata?.title,
-        section: data.chunk.metadata?.section,
-        category: data.chunk.metadata?.category,
+        documentTitle: meta?.documentTitle ?? meta?.title,
+        section: meta?.section,
+        category: meta?.category,
         vectorScore: data.vectorScore,
         entityScore: data.entityScore,
         graphScore: data.graphScore,
