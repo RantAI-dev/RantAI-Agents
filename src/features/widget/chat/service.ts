@@ -19,6 +19,7 @@ import { DEFAULT_MODEL_ID } from "@/lib/models"
 import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chatflow"
 import {
   LANGUAGE_INSTRUCTION,
+  OUTPUT_HYGIENE_INSTRUCTION,
   CORRECTION_INSTRUCTION_WITH_TOOL,
   LIVE_CHAT_HANDOFF_INSTRUCTION,
 } from "@/lib/prompts/instructions"
@@ -510,6 +511,7 @@ export async function handleWidgetChat(req: NextRequest) {
 
       // Enforce language consistency
       systemPrompt += LANGUAGE_INSTRUCTION;
+      systemPrompt += OUTPUT_HYGIENE_INSTRUCTION;
       // Ensure corrections/updates are saved so "ganti X jadi Y" works
       systemPrompt += CORRECTION_INSTRUCTION_WITH_TOOL;
 

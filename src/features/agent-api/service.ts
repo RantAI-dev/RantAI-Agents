@@ -2,7 +2,7 @@ import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models"
 import { resolveToolsForAssistant } from "@/lib/tools"
-import { buildToolInstruction, LANGUAGE_INSTRUCTION } from "@/lib/prompts/instructions"
+import { buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
 import {
   smartRetrieve,
   formatContextForPrompt,
@@ -106,6 +106,7 @@ export async function runV1ChatCompletion(
 
   let systemPrompt = assistant.systemPrompt || "You are a helpful AI assistant."
   systemPrompt += LANGUAGE_INSTRUCTION
+  systemPrompt += OUTPUT_HYGIENE_INSTRUCTION
 
   const modelId = isValidModel(assistant.model) ? assistant.model : DEFAULT_MODEL_ID
   const modelConfig = (assistant.modelConfig && typeof assistant.modelConfig === "object")

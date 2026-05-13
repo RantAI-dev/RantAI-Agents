@@ -16,6 +16,7 @@ import {
   LANGUAGE_INSTRUCTION,
   LIVE_CHAT_HANDOFF_INSTRUCTION,
   CORRECTION_INSTRUCTION_WITH_TOOL,
+  OUTPUT_HYGIENE_INSTRUCTION,
   buildToolInstruction,
 } from "@/lib/prompts/instructions"
 import {
@@ -331,6 +332,7 @@ export async function runChat(params: {
         } else {
           systemPrompt = BASE_SYSTEM_PROMPT
           systemPrompt += LANGUAGE_INSTRUCTION
+          systemPrompt += OUTPUT_HYGIENE_INSTRUCTION
           useKnowledgeBase = true
           debug("Assistant not found in DB, fallback to generic prompt")
         }
@@ -349,6 +351,7 @@ export async function runChat(params: {
       // Fallback to generic prompt
       systemPrompt = BASE_SYSTEM_PROMPT;
       systemPrompt += LANGUAGE_INSTRUCTION;
+      systemPrompt += OUTPUT_HYGIENE_INSTRUCTION;
       useKnowledgeBase = true;
       debug("Fallback to generic prompt");
     }

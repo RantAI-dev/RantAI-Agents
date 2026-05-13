@@ -11,7 +11,7 @@ import { buildTemplateContext, emitWorkflowEvent, extractTokenUsage, type Execut
 import { resolveTemplate } from "./template-engine"
 import { buildPromptWithMemory } from "@/lib/memory"
 import type { WorkingMemory, SemanticRecallResult, UserProfile } from "@/lib/memory"
-import { LANGUAGE_INSTRUCTION, CORRECTION_INSTRUCTION_SOFT } from "@/lib/prompts/instructions"
+import { LANGUAGE_INSTRUCTION, CORRECTION_INSTRUCTION_SOFT, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
 
 /** Memory context passed from chat/widget routes into chatflow execution */
 export interface ChatflowMemoryContext {
@@ -204,6 +204,7 @@ export async function executeChatflow(
   if (resolvedSystemPrompt) {
     resolvedSystemPrompt += LANGUAGE_INSTRUCTION
     resolvedSystemPrompt += CORRECTION_INSTRUCTION_SOFT
+    resolvedSystemPrompt += OUTPUT_HYGIENE_INSTRUCTION
   }
 
   // Follow-up prompts: instruct LLM to append suggestions
