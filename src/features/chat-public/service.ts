@@ -7,6 +7,7 @@ import {
   smartHybridRetrieve,
   formatHybridContextForPrompt,
 } from "@/lib/rag"
+import type { HybridSearchStats } from "@/lib/rag/hybrid-search"
 import { retrieveR3FContext } from "@/lib/rag/r3f-retriever"
 import { searchByDocumentIds } from "@/lib/rag/vector-store"
 import { DEFAULT_MODEL_ID, isValidModel, getModelById } from "@/lib/models"
@@ -61,6 +62,29 @@ const debug = process.env.NODE_ENV !== "production"
   ? (...args: unknown[]) => console.log("[Chat API]", ...args)
   : () => {}
 
+// RAG_TRACE=1 emits a single structured trace per request for end-to-end timing
+// + chunk-score stats. Off by default. Read once at module load.
+const RAG_TRACE_ENABLED = process.env.RAG_TRACE === "1"
+
+interface RagTrace {
+  traceId: string
+  t0: number
+  marks: Record<string, number>
+  mark(name: string): void
+}
+
+function createRagTrace(): RagTrace {
+  const traceId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const t0 = Date.now()
+  const marks: Record<string, number> = {}
+  return {
+    traceId,
+    t0,
+    marks,
+    mark(name: string) { marks[name] = Date.now() - t0 },
+  }
+}
+
 // Memory queue for tool calls (threadId -> queued items)
 const memoryQueue = new Map<
   string,
@@ -88,13 +112,26 @@ export function isChatPublicServiceError(
 
 function appendSourcesEventToUiStreamResponse(
   response: Response,
-  ragSources: Array<{ title: string; section: string | null }>
+  ragSources: Array<{ title: string; section: string | null }>,
+  traceId: string | null = null
 ) {
-  if (ragSources.length === 0 || !response.body) {
+  const needsSources = ragSources.length > 0 && response.body
+  if (!needsSources && !traceId) {
     return response
   }
 
-  const reader = response.body.getReader()
+  const headers = new Headers(response.headers)
+  if (traceId) headers.set("X-RAG-Trace", traceId)
+
+  if (!needsSources) {
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    })
+  }
+
+  const reader = response.body!.getReader()
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
@@ -115,7 +152,7 @@ function appendSourcesEventToUiStreamResponse(
   return new Response(stream, {
     status: response.status,
     statusText: response.statusText,
-    headers: new Headers(response.headers),
+    headers,
   })
 }
 
@@ -129,6 +166,7 @@ export async function runChat(params: {
     useKnowledgeBase: string | null
   }
 }) {
+  const ragTrace: RagTrace | null = RAG_TRACE_ENABLED ? createRagTrace() : null
   try {
     const session = {
       user: {
@@ -495,8 +533,25 @@ export async function runChat(params: {
     // Store RAG sources to send with response
     let ragSources: Array<{ title: string; section: string | null }> = [];
 
+    // Trace data captured during RAG retrieval, emitted later in the structured log.
+    let ragTraceData: {
+      path: "hybrid" | "vector-fallback" | "empty" | "skipped"
+      chunkCount: number
+      scoreMin: number | null
+      scoreMax: number | null
+      scoreMean: number | null
+      hybridStats?: HybridSearchStats
+    } = {
+      path: "skipped",
+      chunkCount: 0,
+      scoreMin: null,
+      scoreMax: null,
+      scoreMean: null,
+    }
+
     // Only perform RAG retrieval if knowledge base is enabled
     if (useKnowledgeBase) {
+      ragTrace?.mark("ragStart")
       // Get the latest user message for RAG retrieval
       const lastUserMessage = [...messages]
         .reverse()
@@ -536,6 +591,21 @@ export async function runChat(params: {
             console.log(
               `[RAG] Sources: ${hybridResult.sources.map((s) => s.documentTitle).join(", ")}`
             )
+
+            if (ragTrace) {
+              // vectorScore = raw cosine similarity (the diagnostic signal we
+              // actually want). combinedScore is RRF on rank position which is
+              // identical across queries by construction and tells us nothing.
+              const scores = hybridResult.results.map((r) => r.vectorScore).filter((s) => s > 0)
+              ragTraceData = {
+                path: "hybrid",
+                chunkCount: hybridResult.results.length,
+                scoreMin: scores.length ? Math.min(...scores) : null,
+                scoreMax: scores.length ? Math.max(...scores) : null,
+                scoreMean: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+                hybridStats: hybridResult.stats,
+              }
+            }
           } else {
             const retrievalResult = await smartRetrieve(userQuery, {
               minSimilarity: 0.30,
@@ -558,7 +628,19 @@ export async function runChat(params: {
               console.log(
                 `[RAG] Sources: ${retrievalResult.sources.map((s) => s.documentTitle).join(", ")}`
               )
+
+              if (ragTrace) {
+                const scores = retrievalResult.chunks.map((c) => c.similarity)
+                ragTraceData = {
+                  path: "vector-fallback",
+                  chunkCount: scores.length,
+                  scoreMin: scores.length ? Math.min(...scores) : null,
+                  scoreMax: scores.length ? Math.max(...scores) : null,
+                  scoreMean: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+                }
+              }
             } else {
+              if (ragTrace) ragTraceData = { ...ragTraceData, path: "empty" }
               console.log(`[RAG] No results for query: "${userQuery.substring(0, 50)}..." (groupIds: ${JSON.stringify(knowledgeBaseGroupIds)})`)
             }
           }
@@ -567,6 +649,7 @@ export async function runChat(params: {
           console.error("[RAG] Error during retrieval:", error);
         }
       }
+      ragTrace?.mark("ragEnd")
     }
 
     // ===== SKILL RESOLUTION =====
@@ -605,6 +688,7 @@ export async function runChat(params: {
           .join(" ")
       : "";
 
+    ragTrace?.mark("memoryStart")
     try {
       if (!assistantMemoryConfig.enabled) {
         console.log("[Memory] Memory disabled for this assistant, skipping all memory operations");
@@ -671,10 +755,12 @@ export async function runChat(params: {
       console.error("[Memory] Error loading memories:", error);
       // Continue without memory - graceful degradation
     }
+    ragTrace?.mark("memoryEnd")
 
     debug("Using model:", modelId);
 
     // ===== TOOL RESOLUTION =====
+    ragTrace?.mark("toolsStart")
     const selectedSkillIds =
       body.enableSkills !== false && Array.isArray(body.enabledSkillIds)
         ? body.enabledSkillIds
@@ -947,6 +1033,45 @@ export async function runChat(params: {
       if (formatInstruction) systemPrompt += formatInstruction;
     }
 
+    ragTrace?.mark("toolsEnd")
+
+    if (ragTrace) {
+      const m = ragTrace.marks
+      const between = (a: string, b: string) =>
+        m[a] != null && m[b] != null ? m[b] - m[a] : null
+      console.log(
+        "[RAG_TRACE]",
+        JSON.stringify({
+          traceId: ragTrace.traceId,
+          path: ragTraceData.path,
+          assistantId,
+          model: modelId,
+          hasTools: hasAssistantTools,
+          kbGroupIds: knowledgeBaseGroupIds ?? null,
+          queryLen: userQuery?.length ?? 0,
+          chunks: {
+            count: ragTraceData.chunkCount,
+            scoreMin: ragTraceData.scoreMin,
+            scoreMax: ragTraceData.scoreMax,
+            scoreMean: ragTraceData.scoreMean,
+          },
+          timingMs: {
+            preStreamTotal: Date.now() - ragTrace.t0,
+            retrieveTotal: between("ragStart", "ragEnd"),
+            memoryTotal: between("memoryStart", "memoryEnd"),
+            toolsTotal: between("toolsStart", "toolsEnd"),
+            // Sub-stage retrieval timings come from the hybrid search itself.
+            embed: ragTraceData.hybridStats?.embeddingTimeMs ?? null,
+            vector: ragTraceData.hybridStats?.vectorSearchTimeMs ?? null,
+            entity: ragTraceData.hybridStats?.entitySearchTimeMs ?? null,
+            graph: ragTraceData.hybridStats?.graphSearchTimeMs ?? null,
+            fusion: ragTraceData.hybridStats?.fusionTimeMs ?? null,
+            hybridTotal: ragTraceData.hybridStats?.totalTimeMs ?? null,
+          },
+        })
+      )
+    }
+
     const result = streamText({
       model: getChatProvider()(resolveModelId(modelId)),
       system: systemPrompt,
@@ -1108,7 +1233,7 @@ export async function runChat(params: {
     // Canonical stream mode for chat: always UI message SSE
     // (tools and non-tools share the same protocol).
     const uiResponse = result.toUIMessageStreamResponse()
-    return appendSourcesEventToUiStreamResponse(uiResponse, ragSources)
+    return appendSourcesEventToUiStreamResponse(uiResponse, ragSources, ragTrace?.traceId ?? null)
   } catch (error) {
     console.error("[Chat API] Error:", error)
     return {
