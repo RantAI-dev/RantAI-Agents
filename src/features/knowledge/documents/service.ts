@@ -611,9 +611,34 @@ export async function createKnowledgeDocumentForDashboard(params: {
     })
   }
 
+  // Embed + store atomically: if either step fails, the Document row in
+  // Postgres is already created (above) but has zero chunks in SurrealDB →
+  // user sees the doc in the file list but RAG returns nothing for it.
+  // Roll back the half-ingested document (Prisma + S3) and re-throw so the
+  // API route surfaces a real failure to the caller.
   const chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)
-  const embeddings = await generateEmbeddings(chunkTexts)
-  await storeChunks(document.id, chunks, embeddings)
+  try {
+    const embeddings = await generateEmbeddings(chunkTexts)
+    await storeChunks(document.id, chunks, embeddings)
+  } catch (err) {
+    console.error(
+      `[Knowledge API] Ingest failed for document ${document.id} (${chunks.length} chunks); rolling back:`,
+      err
+    )
+    try {
+      await deleteKnowledgeDocument(document.id)
+    } catch (rbErr) {
+      console.error(`[Knowledge API] Rollback: Document.delete failed for ${document.id}:`, rbErr)
+    }
+    if (s3Key) {
+      try {
+        await deleteFile(s3Key)
+      } catch (rbErr) {
+        console.error(`[Knowledge API] Rollback: S3 delete failed for ${s3Key}:`, rbErr)
+      }
+    }
+    throw err
+  }
 
   let fileUrl: string | undefined
   if (s3Key) {
