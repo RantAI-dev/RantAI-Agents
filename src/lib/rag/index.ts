@@ -87,14 +87,6 @@ export type {
 // Artifact indexing
 export { indexArtifactContent } from "./artifact-indexer";
 
-// Ingestion
-export {
-  ingestKnowledgeBase,
-  ingestSingleDocument,
-  ingestFile,
-  ingestDirectory,
-} from "./ingest";
-
 // File processing
 export {
   processFile,

@@ -1,3 +1,17 @@
+/**
+ * scripts-only ingest utility — do not import from production code.
+ *
+ * Production ingest happens through `features/knowledge/documents/service.ts`
+ * (createKnowledgeDocumentForDashboard, etc.) and goes through the same
+ * extractor + chunker + embedder + storeChunks pipeline plus the lifecycle
+ * concerns (DB row, S3 upload, permissions, rollback). The functions below
+ * are kept only so `scripts/ingest-knowledge-base.ts` and `scripts/ingest-r3f-docs.ts`
+ * keep working for one-off bulk loads from a filesystem directory.
+ *
+ * Not re-exported from `lib/rag/index.ts` since 2026-05-13 audit to prevent
+ * accidental adoption in API routes.
+ */
+
 import * as fs from "fs";
 import * as path from "path";
 import { chunkDocument, ChunkOptions, Chunk } from "./chunker";
