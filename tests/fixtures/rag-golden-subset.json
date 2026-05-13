@@ -1,0 +1,117 @@
+{
+  "name": "rag-golden-psak-subset-for-llm-judge",
+  "version": "2026-05-13",
+  "updatedAt": "2026-05-13T09:40:00.000Z",
+  "defaultGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+  "entries": [
+    {
+      "id": "lookup-en-psak-113",
+      "query": "What is PSAK 113 about?",
+      "kind": "lookup",
+      "expectedDocs": ["PSAK 113"],
+      "expectedAnswerSubstrings": ["nilai wajar", "fair value"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "notes": "borderline scoreMax 0.68 — judge will reveal if grounded answer is possible"
+    },
+    {
+      "id": "lookup-id-psak-216",
+      "query": "Jelaskan model biaya dan model revaluasi pada PSAK 216",
+      "kind": "lookup",
+      "expectedDocs": ["PSAK 216"],
+      "expectedAnswerSubstrings": ["model biaya", "revaluasi"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "notes": "scoreMax 0.70 — specific concept query"
+    },
+    {
+      "id": "lookup-id-isak-117",
+      "query": "Jelaskan distribusi aset nonkas kepada pemilik menurut ISAK 117",
+      "kind": "lookup",
+      "expectedDocs": ["ISAK 117"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "notes": "scoreMax 0.88 — high-confidence retrieval, expect high faithfulness"
+    },
+    {
+      "id": "lookup-en-isak-332",
+      "query": "What is ISAK 332 about?",
+      "kind": "lookup",
+      "expectedDocs": ["ISAK 332"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "notes": "scoreMax 0.58 — borderline. Tests whether low-confidence retrieval can still produce grounded answers."
+    },
+    {
+      "id": "compare-psak-116-vs-216",
+      "query": "Perbedaan antara PSAK 116 (Sewa) dan PSAK 216 (Aset Tetap)",
+      "kind": "compare",
+      "expectedDocs": ["PSAK 116", "PSAK 216"],
+      "expectedAnswerSubstrings": ["sewa", "aset tetap"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "notes": "compare where both docs retrieved — judge tests cross-doc synthesis"
+    },
+    {
+      "id": "compare-psak-113-vs-201",
+      "query": "Bandingkan PSAK 113 dengan PSAK 201",
+      "kind": "compare",
+      "expectedDocs": ["PSAK 113", "PSAK 201"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "notes": "PSAK 201 missed in retrieval — judge will show if answer still claims to compare both (hallucination signal)"
+    },
+    {
+      "id": "followup-psak-113-exclusions",
+      "query": "tell me more about its exclusions",
+      "kind": "followup",
+      "expectedDocs": ["PSAK 113"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "priorTurns": [
+        { "role": "user", "content": "What is PSAK 113 about?" },
+        { "role": "assistant", "content": "PSAK 113 covers fair value measurement..." }
+      ],
+      "notes": "rewrite path test — should retrieve PSAK 113 + answer about exclusions specifically"
+    },
+    {
+      "id": "followup-isak-119-application",
+      "query": "kasus penerapannya seperti apa",
+      "kind": "followup",
+      "expectedDocs": ["ISAK 119"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "priorTurns": [
+        { "role": "user", "content": "Jelaskan ISAK 119" },
+        { "role": "assistant", "content": "ISAK 119 mengatur pengharian liabilitas keuangan dengan instrumen ekuitas..." }
+      ],
+      "notes": "highest-confidence followup (scoreMax 0.83 post-rewrite)"
+    },
+    {
+      "id": "enumerate-all-isak",
+      "query": "Sebutkan semua ISAK yang tersedia",
+      "kind": "enumerate",
+      "expectedDocs": ["ISAK 117", "ISAK 119", "ISAK 332"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "notes": "directory injection won't fire in this eval harness — answer will be based on retrieved chunks only; tests whether model invents docs it didn't see"
+    },
+    {
+      "id": "oos-cuaca",
+      "query": "Bagaimana cuaca di Jakarta besok?",
+      "kind": "oos",
+      "expectedDocs": [],
+      "expectedRefusal": true,
+      "expectedAnswerSubstrings": ["tidak", "knowledge base"],
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"],
+      "notes": "must refuse cleanly; judge will catch hallucination"
+    },
+    {
+      "id": "oos-recipe",
+      "query": "Resep nasi goreng yang enak?",
+      "kind": "oos",
+      "expectedDocs": [],
+      "expectedRefusal": true,
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"]
+    },
+    {
+      "id": "oos-celebrity",
+      "query": "Siapa pacar BTS Jungkook?",
+      "kind": "oos",
+      "expectedDocs": [],
+      "expectedRefusal": true,
+      "knowledgeBaseGroupIds": ["cmos4a93p0001x6rkga3w3zck"]
+    }
+  ]
+}
