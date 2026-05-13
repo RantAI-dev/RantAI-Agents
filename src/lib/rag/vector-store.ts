@@ -563,7 +563,8 @@ const STORE_CHUNKS_CONCURRENCY = 8
 export async function storeChunks(
   documentId: string,
   chunks: Chunk[],
-  embeddings: number[][]
+  embeddings: number[][],
+  embeddingModel?: string,
 ): Promise<void> {
   // Hard contract: every chunk must have a matching embedding vector. If an
   // embed batch failed (generateEmbeddings degrades to empty result rather
@@ -606,6 +607,7 @@ export async function storeChunks(
             embedding = $embedding,
             metadata = $metadata,
             contextual_prefix = $contextual_prefix,
+            embedding_model = $embedding_model,
             created_at = time::now()`,
           {
             id: chunkId,
@@ -615,6 +617,7 @@ export async function storeChunks(
             embedding: embedding,
             metadata: chunk.metadata,
             contextual_prefix: chunk.metadata.contextualPrefix ?? null,
+            embedding_model: embeddingModel ?? null,
           }
         )
       }),

@@ -643,7 +643,9 @@ export async function createKnowledgeDocumentForDashboard(params: {
   const chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)
   try {
     const embeddings = await generateEmbeddings(chunkTexts)
-    await storeChunks(document.id, chunks, embeddings)
+    const { getRagConfig } = await import("@/lib/rag/config")
+    const embeddingModel = getRagConfig().embeddingModel
+    await storeChunks(document.id, chunks, embeddings, embeddingModel)
   } catch (err) {
     console.error(
       `[Knowledge API] Ingest failed for document ${document.id} (${chunks.length} chunks); rolling back:`,

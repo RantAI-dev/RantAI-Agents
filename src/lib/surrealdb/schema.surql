@@ -20,6 +20,10 @@ DEFINE FIELD embedding ON document_chunk TYPE array<float>;
 DEFINE FIELD metadata ON document_chunk TYPE option<object>;
 -- Phase 7c: contextual prefix generated at ingest. Prepended to `content` during embedding prep.
 DEFINE FIELD IF NOT EXISTS contextual_prefix ON document_chunk TYPE option<string>;
+-- Drift detection: identifier of the embedding model that produced this chunk's
+-- vector (e.g. "qwen/qwen3-embedding-8b"). null = pre-tracking row. When the
+-- current KB_EMBEDDING_MODEL differs, chunks with a stale model need re-embed.
+DEFINE FIELD IF NOT EXISTS embedding_model ON document_chunk TYPE option<string>;
 DEFINE FIELD created_at ON document_chunk TYPE datetime DEFAULT time::now();
 
 -- Vector index for similarity search.
