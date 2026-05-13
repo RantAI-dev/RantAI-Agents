@@ -399,6 +399,12 @@ export async function hybridRetrieve(
     vectorWeight,
     entityWeight,
     enableEntitySearch,
+    // Graph traversal is opt-in: the SQL pattern in HybridSearch.graphSearch
+    // is rejected by SurrealDB v2 (graph traversal in the SELECT clause
+    // instead of FROM), and most deployments don't have a populated entity
+    // relation table anyway. Set KB_HYBRID_GRAPH_ENABLED=true to opt in once
+    // the SQL is fixed and relations exist.
+    enableGraphTraversal: process.env.KB_HYBRID_GRAPH_ENABLED === "true",
     finalTopK: maxResults,
     groupIds,
     categoryFilter,
