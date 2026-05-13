@@ -109,6 +109,7 @@ export async function retrieveContext(
       subcategory: null,
       section: null,
       similarity: 0,
+      contextualPrefix: null,
     });
   }
 
@@ -159,7 +160,10 @@ export async function retrieveContext(
     };
   }
 
-  // Format context for LLM
+  // Format context for LLM. When a contextual_prefix was generated at ingest
+  // (KB_CONTEXTUAL_RETRIEVAL_ENABLED=true; ~1 sentence per chunk locating it
+  // in the document), prepend it before the chunk body so the model sees the
+  // chunk's position in the source. Drops cleanly when the prefix is null.
   const contextParts: string[] = [];
 
   for (const chunk of chunks) {
@@ -167,7 +171,8 @@ export async function retrieveContext(
       ? `[${chunk.documentTitle} - ${chunk.section}]`
       : `[${chunk.documentTitle}]`;
 
-    contextParts.push(`${source}\n${chunk.content}`);
+    const prefix = chunk.contextualPrefix ? `${chunk.contextualPrefix}\n\n` : "";
+    contextParts.push(`${source}\n${prefix}${chunk.content}`);
   }
 
   const context = contextParts.join("\n\n---\n\n");
@@ -298,7 +303,8 @@ export async function hybridRetrieve(
     };
   }
 
-  // Format context for LLM
+  // Format context for LLM; mirror formatContextForPrompt's contextual-prefix
+  // handling — drop in null cleanly when no prefix was generated at ingest.
   const contextParts: string[] = [];
 
   for (const result of results) {
@@ -306,7 +312,8 @@ export async function hybridRetrieve(
       ? `[${result.documentTitle || "Document"} - ${result.section}]`
       : `[${result.documentTitle || "Document"}]`;
 
-    contextParts.push(`${source}\n${result.content}`);
+    const prefix = result.contextualPrefix ? `${result.contextualPrefix}\n\n` : "";
+    contextParts.push(`${source}\n${prefix}${result.content}`);
   }
 
   const context = contextParts.join("\n\n---\n\n");

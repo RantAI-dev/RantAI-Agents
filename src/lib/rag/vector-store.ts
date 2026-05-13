@@ -17,6 +17,8 @@ export interface SearchResult {
   subcategory: string | null;
   section: string | null;
   similarity: number;
+  /** Optional context prefix populated when KB_CONTEXTUAL_RETRIEVAL_ENABLED ran at ingest. */
+  contextualPrefix: string | null;
 }
 
 interface SurrealChunk {
@@ -25,6 +27,7 @@ interface SurrealChunk {
   content: string;
   chunk_index: number;
   metadata: Record<string, unknown> | null;
+  contextual_prefix: string | null;
   similarity: number;
 }
 
@@ -164,6 +167,7 @@ export async function searchSimilar(
         document_id,
         content,
         metadata,
+        contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       WHERE document_id IN $document_ids
@@ -178,6 +182,7 @@ export async function searchSimilar(
         document_id,
         content,
         metadata,
+        contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       ORDER BY similarity DESC
@@ -221,6 +226,7 @@ export async function searchSimilar(
       subcategory: doc?.subcategory || null,
       section: (chunk.metadata as { section?: string } | null)?.section || null,
       similarity: chunk.similarity,
+      contextualPrefix: chunk.contextual_prefix,
     };
   });
 
@@ -388,6 +394,7 @@ export async function searchByDocumentIds(
       document_id,
       content,
       metadata,
+      contextual_prefix,
       vector::similarity::cosine(embedding, $embedding) AS similarity
     FROM document_chunk
     WHERE document_id IN $document_ids
@@ -425,6 +432,7 @@ export async function searchByDocumentIds(
         subcategory: doc?.subcategory || null,
         section: (chunk.metadata as { section?: string } | null)?.section || null,
         similarity: chunk.similarity,
+        contextualPrefix: chunk.contextual_prefix,
       };
     });
 }
@@ -466,7 +474,7 @@ export async function searchByVector(
   };
   if (documentIds) {
     sql = `
-      SELECT id, document_id, content, metadata,
+      SELECT id, document_id, content, metadata, contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       WHERE document_id IN $document_ids
@@ -476,7 +484,7 @@ export async function searchByVector(
     vars.document_ids = documentIds;
   } else {
     sql = `
-      SELECT id, document_id, content, metadata,
+      SELECT id, document_id, content, metadata, contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       ORDER BY similarity DESC
@@ -507,6 +515,7 @@ export async function searchByVector(
       subcategory: doc?.subcategory || null,
       section: (md.section as string | undefined) ?? null,
       similarity: chunk.similarity,
+      contextualPrefix: chunk.contextual_prefix,
     };
   });
 }

@@ -93,6 +93,8 @@ export interface HybridSearchResult {
   combinedScore: number;
   /** Final ranking position */
   rank: number;
+  /** Optional context prefix from ingest-time contextual retrieval. */
+  contextualPrefix?: string | null;
   /** Related entities found */
   relatedEntities: Entity[];
   /** Graph context (relation paths) */
@@ -684,6 +686,9 @@ export class HybridSearch {
       const meta = data.chunk.metadata as
         | { documentTitle?: string; section?: string; category?: string; title?: string }
         | undefined
+      // contextual_prefix is a top-level SurrealDB column (see schema.surql:22),
+      // not in `metadata`. Surface it via a separate cast.
+      const chunkRecord = data.chunk as unknown as { contextual_prefix?: string | null }
       results.push({
         chunkId: data.chunk.id,
         documentId: data.chunk.document_id,
@@ -698,6 +703,7 @@ export class HybridSearch {
         graphScore: data.graphScore,
         combinedScore,
         rank: 0, // Will be set after sorting
+        contextualPrefix: chunkRecord.contextual_prefix ?? null,
         relatedEntities: [], // Will be enriched later
         graphContext: data.graphContext,
         debug: {
