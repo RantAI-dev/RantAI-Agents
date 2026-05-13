@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   KnowledgeCategoryIdParamsSchema,
   KnowledgeCategoryUpdateSchema,
@@ -10,7 +11,7 @@ import {
 } from "@/features/knowledge/categories/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
 
-// PUT - Update category
+// PUT - Update category (org-scoped)
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) {
@@ -28,9 +29,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
+    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
     const category = await updateKnowledgeCategoryForDashboard({
       id: parsedParams.data.id,
       input: parsedBody.data,
+      organizationId: orgContext?.organizationId ?? null,
     })
 
     if (isHttpServiceError(category)) {
@@ -44,7 +47,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-// DELETE - Delete a category
+// DELETE - Delete a category (org-scoped)
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user) {
@@ -57,7 +60,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Invalid category id" }, { status: 400 })
     }
 
-    const category = await deleteKnowledgeCategoryForDashboard(parsedParams.data.id)
+    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const category = await deleteKnowledgeCategoryForDashboard(
+      parsedParams.data.id,
+      orgContext?.organizationId ?? null
+    )
 
     if (isHttpServiceError(category)) {
       return NextResponse.json({ error: category.error }, { status: category.status })

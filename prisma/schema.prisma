@@ -115,6 +115,7 @@ model Organization {
   memberships         OrganizationMember[]
   assistants          Assistant[]
   documents           Document[]
+  categories          Category[]
   groups              KnowledgeBaseGroup[]
   embedKeys           EmbedApiKey[]
   dashboardSessions   DashboardSession[]
@@ -239,14 +240,25 @@ model UserPreference {
 }
 
 // Category model for document classification
+// Org-scoped: organizationId=null means a system / globally-shared category
+// (the seedKnowledgeCategories defaults). Custom categories created by an
+// organization are scoped to that org. The unique key is composite on
+// (organizationId, name) so two orgs can each have a "POLICY" category;
+// Postgres treats NULL != NULL so multiple null-org rows with the same name
+// are technically allowed but seedKnowledgeCategories guards against that.
 model Category {
-  id        String   @id @default(cuid())
-  name      String   @unique // Internal name: "LIFE_INSURANCE", "CUSTOM_CAT"
-  label     String // Display label: "Life Insurance"
-  color     String // Hex color: "#3b82f6"
-  isSystem  Boolean  @default(false) // True for default categories (prevent deletion)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String        @id @default(cuid())
+  name           String // Internal name: "LIFE_INSURANCE", "CUSTOM_CAT"
+  label          String // Display label: "Life Insurance"
+  color          String // Hex color: "#3b82f6"
+  isSystem       Boolean       @default(false) // True for default categories (prevent deletion)
+  organizationId String? // null = system/global category
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
 }
 
 // Knowledge base groups/folders for organizing documents
