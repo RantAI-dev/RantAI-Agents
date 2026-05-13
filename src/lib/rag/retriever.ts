@@ -338,7 +338,11 @@ export async function smartRetrieve(
 }
 
 /**
- * Format retrieved context for inclusion in LLM prompt
+ * Format retrieved context for inclusion in LLM prompt.
+ *
+ * The instruction block is deliberate: a generic "you are helpful" system
+ * prompt biases models toward terseness, so for RAG turns we restate the rules
+ * locally — be thorough, cite, and refuse cleanly when the context falls short.
  */
 export function formatContextForPrompt(result: RetrievalResult): string {
   if (!result.context) {
@@ -350,13 +354,18 @@ export function formatContextForPrompt(result: RetrievalResult): string {
     .join("\n");
 
   return `
-## Relevant Product Information
+## Knowledge Base Context
 
-The following information was retrieved from our knowledge base to help answer this question:
+The excerpts below were retrieved from the knowledge base for the user's question. Use them as your primary source.
 
+When answering:
+- Be thorough. Cover every aspect of the user's question, drawing on multiple excerpts when they apply, and prefer completeness over brevity.
+- Cite the source for each substantive claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
+- If the excerpts do not contain enough information to answer, say so explicitly — do not invent details that are not supported.
+
+Excerpts:
 ${result.context}
 
----
 Sources:
 ${sourceList}
 `.trim();
@@ -465,7 +474,8 @@ export async function smartHybridRetrieve(
 }
 
 /**
- * Format hybrid retrieval result for inclusion in LLM prompt
+ * Format hybrid retrieval result for inclusion in LLM prompt.
+ * See formatContextForPrompt for the rationale behind the instruction block.
  */
 export function formatHybridContextForPrompt(
   result: HybridRetrievalResult
@@ -490,13 +500,18 @@ export function formatHybridContextForPrompt(
       : "";
 
   return `
-## Relevant Product Information
+## Knowledge Base Context
 
-The following information was retrieved from our knowledge base to help answer this question:
+The excerpts below were retrieved from the knowledge base for the user's question. Use them as your primary source.
 
+When answering:
+- Be thorough. Cover every aspect of the user's question, drawing on multiple excerpts when they apply, and prefer completeness over brevity.
+- Cite the source for each substantive claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
+- If the excerpts do not contain enough information to answer, say so explicitly — do not invent details that are not supported.
+
+Excerpts:
 ${result.context}
 
----
 Sources:
 ${sourceList}${entityInfo}
 `.trim();
