@@ -165,6 +165,9 @@ export async function runChat(params: {
     systemPromptB64: string | null
     useKnowledgeBase: string | null
   }
+  /** Forwarded from the HTTP request — used to bail out of background memory
+   * work when the client disconnects. Optional so non-HTTP callers still work. */
+  abortSignal?: AbortSignal
 }) {
   const ragTrace: RagTrace | null = RAG_TRACE_ENABLED ? createRagTrace() : null
   try {
@@ -1116,6 +1119,10 @@ export async function runChat(params: {
       messages,
       tools: allTools,
       stopWhen: stepCountIs(resolveMaxSteps(assistantModelConfig, hasAssistantTools)),
+      // Forward the request abort signal — when the client disconnects mid-
+      // stream, streamText cancels its in-flight LLM call and result.text
+      // rejects, which the background memory IIFE then catches and skips.
+      ...(params.abortSignal && { abortSignal: params.abortSignal }),
       // Per-assistant model parameters
       ...(assistantModelConfig?.temperature != null && { temperature: Number(assistantModelConfig.temperature) }),
       ...(assistantModelConfig?.topP != null && { topP: Number(assistantModelConfig.topP) }),
@@ -1135,6 +1142,15 @@ export async function runChat(params: {
 
           // Wait for generation to complete
           const fullResponse = await result.text;
+
+          // If the client disconnected mid-stream, streamText was aborted and
+          // result.text rejects above; the catch below handles it. Belt-and-
+          // suspenders: short-circuit if the signal aborted for any other reason
+          // before we start touching the DB.
+          if (params.abortSignal?.aborted) {
+            console.log(`[Memory] Skipping background update — request aborted for thread ${threadId}`);
+            return;
+          }
           const toolCalls = await result.toolCalls as any[];
 
           console.log(`[Memory] Response finished. Text len: ${fullResponse.length}. Tool calls: ${toolCalls.length}`);

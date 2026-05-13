@@ -52,6 +52,7 @@ export async function POST(req: Request) {
     userId: session.user.id,
     userName: session.user.name,
     headers: parsedHeaders.data,
+    abortSignal: req.signal,
   })
 
   if (isChatPublicServiceError(result)) {
