@@ -336,6 +336,15 @@ export async function createKnowledgeDocumentForDashboard(params: {
       return { status: 400, error: validation.error }
     }
 
+    // Per-org quota check. Both maxDocuments and maxStorageBytes are nullable
+    // on Organization → checkKnowledgeQuota returns allowed=true when no limits
+    // are set, so this is a no-op for unbounded orgs.
+    const { checkKnowledgeQuota } = await import("@/lib/quota/knowledge")
+    const quota = await checkKnowledgeQuota(params.context.organizationId, file.size)
+    if (!quota.allowed) {
+      return { status: 413, error: quota.reason ?? "Knowledge base quota exceeded" }
+    }
+
     originalFilename = file.name
     mimeType = file.type
     const detectedType = detectFileType(file.name)

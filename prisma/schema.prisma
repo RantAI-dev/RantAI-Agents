@@ -111,6 +111,11 @@ model Organization {
   logoUrl   String? // External URL for logo (backward compat)
   logoS3Key String? // S3 key for uploaded logo
 
+  // Per-org knowledge-base quotas. null = unlimited (default).
+  // Enforced on upload via lib/quota/knowledge.ts.
+  maxDocuments     Int?
+  maxStorageBytes  BigInt?
+
   // Relationships
   memberships         OrganizationMember[]
   assistants          Assistant[]
