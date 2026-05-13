@@ -243,12 +243,14 @@ export function formatContextForPrompt(result: RetrievalResult): string {
   return `
 ## Knowledge Base Context
 
-The excerpts below were retrieved from the knowledge base for the user's question. Use them as your primary source.
+The excerpts below are your primary source for this question.
 
 When answering:
-- Be thorough. Cover every aspect of the user's question, drawing on multiple excerpts when they apply, and prefer completeness over brevity.
-- Cite the source for each substantive claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
-- If the excerpts do not contain enough information to answer, say so explicitly — do not invent details that are not supported.
+- Treat the excerpts as the source of truth for specific facts. Every concrete claim (definitions, paragraph numbers, effective dates, scope rules, exclusions, numerical thresholds) MUST come from the excerpts and be cited.
+- You MAY add brief background context (1-2 sentences) to frame an answer when essential for understanding — but mark it as framing, not fact. Never substitute general knowledge for an absent specific detail.
+- Cite each factual claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
+- Be thorough within the excerpts. Cover every aspect the excerpts support; do not invent aspects they do not mention.
+- If a specific detail the user asked for is not in the excerpts, say so explicitly ("not specified in the available excerpts") rather than guessing.
 
 Excerpts:
 ${result.context}
@@ -393,12 +395,14 @@ export function formatHybridContextForPrompt(
   return `
 ## Knowledge Base Context
 
-The excerpts below were retrieved from the knowledge base for the user's question. Use them as your primary source.
+The excerpts below are your primary source for this question.
 
 When answering:
-- Be thorough. Cover every aspect of the user's question, drawing on multiple excerpts when they apply, and prefer completeness over brevity.
-- Cite the source for each substantive claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
-- If the excerpts do not contain enough information to answer, say so explicitly — do not invent details that are not supported.
+- Treat the excerpts as the source of truth for specific facts. Every concrete claim (definitions, paragraph numbers, effective dates, scope rules, exclusions, numerical thresholds) MUST come from the excerpts and be cited.
+- You MAY add brief background context (1-2 sentences) to frame an answer when essential for understanding — but mark it as framing, not fact. Never substitute general knowledge for an absent specific detail.
+- Cite each factual claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
+- Be thorough within the excerpts. Cover every aspect the excerpts support; do not invent aspects they do not mention.
+- If a specific detail the user asked for is not in the excerpts, say so explicitly ("not specified in the available excerpts") rather than guessing.
 
 Excerpts:
 ${result.context}

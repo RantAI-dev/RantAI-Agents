@@ -67,11 +67,22 @@ export async function judgeFaithfulness(
   const sources = contextChunks
     .map((c) => `[${c.documentTitle}]\n${c.content}`)
     .join("\n\n---\n\n")
-  const prompt = `Score whether the ANSWER is faithfully grounded in the CONTEXT excerpts below.
+  const prompt = `Score whether the ANSWER appropriately uses the CONTEXT.
 
-Score 1.0 = every substantive claim in the answer is directly supported by the context.
-Score 0.5 = some claims supported, others appear to be inferences or general knowledge.
-Score 0.0 = the answer contradicts the context, fabricates facts, or is unrelated.
+Score 1.0 when EITHER:
+  (a) every substantive claim in the answer is supported by the context, OR
+  (b) the answer correctly refuses / states the information is not in the context, AND the context genuinely does not contain the requested information (out-of-scope queries, or in-scope queries where the specific detail asked is absent).
+
+Score 0.7 when most claims are supported but the answer adds brief background context (definitions, general framing) that goes slightly beyond the literal excerpts. This is acceptable composition; reserve 0.5 / 0.0 for cases where the addition matters factually.
+
+Score 0.5 when some claims are supported but others are clear inferences or general knowledge that materially extend the answer beyond what the context says.
+
+Score 0.0 when the answer:
+  - contradicts the context, OR
+  - fabricates specific facts not in the context, OR
+  - refuses to answer even though the context DID contain the requested information (under-answers).
+
+IMPORTANT: a refusal answer like "the information is not available in the excerpts" is FAITHFUL (1.0) when the context truly lacks it, and a FAILURE (0.0) when the context did contain it. Do not penalize correct refusals.
 
 Output ONLY a JSON object: {"score": <0-1 float>, "reason": "<one short sentence>"}
 
