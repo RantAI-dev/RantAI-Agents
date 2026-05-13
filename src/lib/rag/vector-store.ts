@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSurrealClient } from "@/lib/surrealdb";
 import { generateEmbedding, generateEmbeddings } from "./embeddings";
-import { Chunk, prepareChunkForEmbedding } from "./chunker";
+import { Chunk } from "./chunker";
 
 /**
  * Vector store operations using SurrealDB for vector storage
@@ -29,78 +29,6 @@ interface SurrealChunk {
   metadata: Record<string, unknown> | null;
   contextual_prefix: string | null;
   similarity: number;
-}
-
-/**
- * Store a document and its chunks with embeddings in the database
- * - Document metadata stored in PostgreSQL (Prisma)
- * - Chunks with embeddings stored in SurrealDB
- */
-export async function storeDocument(
-  title: string,
-  content: string,
-  categories: string[],
-  subcategory: string | null,
-  chunks: Chunk[],
-  groupIds?: string[]
-): Promise<string> {
-  // Create the document in PostgreSQL with optional group associations
-  const document = await prisma.document.create({
-    data: {
-      title,
-      content,
-      categories,
-      subcategory,
-      groups:
-        groupIds && groupIds.length > 0
-          ? {
-              create: groupIds.map((groupId) => ({
-                groupId,
-              })),
-            }
-          : undefined,
-    },
-  });
-
-  // Generate embeddings for all chunks in batch
-  const textsForEmbedding = chunks.map(prepareChunkForEmbedding);
-  const embeddings = await generateEmbeddings(textsForEmbedding);
-
-  // Store chunks with embeddings in SurrealDB
-  const surrealClient = await getSurrealClient();
-
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const embedding = embeddings[i];
-    const chunkId = `${document.id}_${i}`;
-
-    await surrealClient.query(
-      `CREATE document_chunk SET
-        id = $id,
-        document_id = $document_id,
-        content = $content,
-        chunk_index = $chunk_index,
-        embedding = $embedding,
-        metadata = $metadata,
-        contextual_prefix = $contextual_prefix,
-        created_at = time::now()`,
-      {
-        id: chunkId,
-        document_id: document.id,
-        content: chunk.content,
-        chunk_index: chunk.metadata.chunkIndex,
-        embedding: embedding,
-        metadata: chunk.metadata,
-        contextual_prefix: chunk.metadata.contextualPrefix ?? null,
-      }
-    );
-  }
-
-  console.log(
-    `[VectorStore] Stored document "${title}" with ${chunks.length} chunks`
-  );
-
-  return document.id;
 }
 
 /**

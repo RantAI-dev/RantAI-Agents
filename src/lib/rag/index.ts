@@ -33,7 +33,6 @@ export type {
 
 // Vector store operations
 export {
-  storeDocument,
   storeChunks,
   searchSimilar,
   searchWithThreshold,
