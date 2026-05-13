@@ -71,19 +71,6 @@ export type {
   ChunkResult,
 } from "./hybrid-search";
 
-// Re-ranking
-export {
-  Reranker,
-  createReranker,
-  rerank,
-  rerankResults,
-} from "./reranker";
-export type {
-  RerankerConfig,
-  RerankResult,
-  RerankResponse,
-} from "./reranker";
-
 // Artifact indexing
 export { indexArtifactContent } from "./artifact-indexer";
 
