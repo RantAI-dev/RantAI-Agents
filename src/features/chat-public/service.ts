@@ -1173,6 +1173,29 @@ export async function runChat(params: {
 
           console.log(`[Memory] Response finished. Text len: ${fullResponse.length}. Tool calls: ${toolCalls.length}`);
 
+          // Citation grounding pass — observability only, gated.
+          if (process.env.KB_CITATION_GROUNDING_ENABLED === "true") {
+            try {
+              const { checkGrounding } = await import("@/lib/rag/citation-grounding")
+              const retrievedTitles = ragSources.map((s) => s.title)
+              const report = checkGrounding(fullResponse, retrievedTitles)
+              if (!report.disabled) {
+                console.log(
+                  "[RAG_GROUND]",
+                  JSON.stringify({
+                    traceId: ragTrace?.traceId ?? null,
+                    citationCount: report.citations.length,
+                    unsupportedCount: report.unsupported.length,
+                    groundedRatio: Number(report.groundedRatio.toFixed(3)),
+                    unsupported: report.unsupported.slice(0, 10).map((u) => u.title),
+                  })
+                )
+              }
+            } catch (err) {
+              console.warn("[RAG_GROUND] grounding check failed:", err)
+            }
+          }
+
           // Retrieve and process queued memories from tool calls
           const queuedMemories = memoryQueue.get(threadId) || [];
           memoryQueue.delete(threadId);
