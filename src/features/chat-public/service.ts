@@ -552,6 +552,32 @@ export async function runChat(params: {
     // Only perform RAG retrieval if knowledge base is enabled
     if (useKnowledgeBase) {
       ragTrace?.mark("ragStart")
+
+      // Directory injection: give the model the full list of documents it has
+      // access to so enumerate-style queries ("list semua PSAK") don't depend
+      // on whether semantic retrieval surfaced one chunk per doc. Capped at
+      // 200 documents; beyond that we skip — the listing would dominate the
+      // prompt and the model would ignore it anyway.
+      if (knowledgeBaseGroupIds && knowledgeBaseGroupIds.length > 0) {
+        try {
+          const { findDocumentsByGroups } = await import("@/features/knowledge/groups/repository")
+          const directory = await findDocumentsByGroups(knowledgeBaseGroupIds, 200)
+          if (directory.length > 0 && directory.length < 200) {
+            const lines = directory.map((d) => {
+              const cats = d.categories?.length ? ` [${d.categories.join(", ")}]` : ""
+              const sub = d.subcategory ? ` — ${d.subcategory}` : ""
+              return `- ${d.title}${sub}${cats}`
+            }).join("\n")
+            systemPrompt += `\n\n## Available Documents in Knowledge Base\nThis assistant has access to ${directory.length} documents. Use the list when the user asks to enumerate, list, or count available documents; for specific questions, rely on the retrieved excerpts below.\n\n${lines}`
+            console.log(`[RAG] Directory injected: ${directory.length} documents`)
+          } else if (directory.length >= 200) {
+            console.log(`[RAG] Directory skipped: ${directory.length}+ documents exceed cap`)
+          }
+        } catch (err) {
+          console.warn("[RAG] Directory injection failed:", err)
+        }
+      }
+
       // Get the latest user message for RAG retrieval
       const lastUserMessage = [...messages]
         .reverse()

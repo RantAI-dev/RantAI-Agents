@@ -67,3 +67,28 @@ export async function deleteKnowledgeGroup(id: string) {
     where: { id },
   })
 }
+
+/**
+ * Lightweight listing of every document linked to any of the given groups.
+ * Used to inject a "## Available Documents" directory into the chat system
+ * prompt so the LLM can answer enumerate-style queries ("list semua PSAK")
+ * without depending on whether semantic retrieval happened to surface one
+ * chunk per doc. Returns at most `cap` rows; the chat path treats a full cap
+ * as "directory too large, skip injection".
+ */
+export async function findDocumentsByGroups(groupIds: string[], cap = 200) {
+  if (!groupIds.length) return []
+  return prisma.document.findMany({
+    where: {
+      groups: { some: { groupId: { in: groupIds } } },
+    },
+    select: {
+      id: true,
+      title: true,
+      categories: true,
+      subcategory: true,
+    },
+    orderBy: { title: "asc" },
+    take: cap,
+  })
+}
