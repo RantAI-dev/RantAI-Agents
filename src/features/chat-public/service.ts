@@ -560,13 +560,25 @@ export async function runChat(params: {
       if (lastUserMessage) {
         try {
           // Extract text content from the user message
-          const userQuery =
+          const rawUserQuery =
             typeof lastUserMessage.content === "string"
               ? lastUserMessage.content
               : lastUserMessage.content
                 .filter((part): part is { type: "text"; text: string } => part.type === "text")
                 .map((part) => part.text)
                 .join(" ");
+
+          // Rewrite short follow-ups into self-contained queries before retrieval.
+          // No-ops on first turn / long messages / disabled flag — see standalone-query.ts.
+          ragTrace?.mark("rewriteStart")
+          const { rewriteStandaloneQuery } = await import("@/lib/rag/standalone-query")
+          const userQuery = await rewriteStandaloneQuery(messages as Array<{ role: string; content: unknown }>)
+          ragTrace?.mark("rewriteEnd")
+          if (userQuery !== rawUserQuery) {
+            console.log(
+              `[RAG] standalone-query rewrite: "${rawUserQuery.slice(0, 60)}" -> "${userQuery.slice(0, 80)}"`
+            )
+          }
 
           // Retrieve context using hybrid search (vector + entity/graph), then
           // safely fall back to vector-only retrieval if needed.
@@ -1057,6 +1069,7 @@ export async function runChat(params: {
           timingMs: {
             preStreamTotal: Date.now() - ragTrace.t0,
             retrieveTotal: between("ragStart", "ragEnd"),
+            rewrite: between("rewriteStart", "rewriteEnd"),
             memoryTotal: between("memoryStart", "memoryEnd"),
             toolsTotal: between("toolsStart", "toolsEnd"),
             // Sub-stage retrieval timings come from the hybrid search itself.
