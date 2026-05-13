@@ -338,6 +338,14 @@ export async function createKnowledgeDocumentForDashboard(params: {
     const detectedType = detectFileType(file.name)
     fileBuffer = Buffer.from(await file.arrayBuffer())
 
+    // Extraction failures used to fall back to a literal placeholder string
+    // ("Failed to OCR PDF.") which then got chunked + embedded + indexed. RAG
+    // hits would surface those placeholder strings as "results". Now: any
+    // extraction failure aborts ingest with a 422; the caller can retry with
+    // different settings (forceOCR, different documentType) instead of silently
+    // poisoning the knowledge base.
+    let extractionError: string | null = null
+
     if (detectedType === "pdf") {
       fileType = "pdf"
       const isScanned = params.input.forceOCR || (await isPDFScanned(fileBuffer))
@@ -359,7 +367,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
           usedOCR = true
         } catch (error) {
           console.error("OCR processing error:", error)
-          content = `[PDF Document: ${title || file.name}]\n\nFailed to OCR PDF.`
+          extractionError = `OCR failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
         }
       } else {
         try {
@@ -369,7 +377,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
           content = text
         } catch (error) {
           console.error("PDF parsing error:", error)
-          content = `[PDF Document: ${title || file.name}]\n\nFailed to extract text from PDF.`
+          extractionError = `PDF parse failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
         }
       }
     } else if (detectedType === "image") {
@@ -402,7 +410,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
         usedOCR = true
       } catch (error) {
         console.error("OCR processing error:", error)
-        content = `[Image: ${file.name}]\n\nFailed to process image with OCR.`
+        extractionError = `Image OCR failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
       }
     } else if (detectedType === "document" || detectedType === "text") {
       fileType = "markdown"
@@ -413,11 +421,15 @@ export async function createKnowledgeDocumentForDashboard(params: {
         content = await extractTextFromBuffer(fileBuffer, detectedMime, file.name)
       } catch (error) {
         console.error("File extraction error:", error)
-        content = `[${file.name}]\n\nFailed to extract text from file.`
+        extractionError = `Text extraction failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
       }
     } else {
       fileType = "markdown"
       content = fileBuffer.toString("utf-8")
+    }
+
+    if (extractionError) {
+      return { status: 422, error: extractionError }
     }
 
     if (!title) {
