@@ -220,14 +220,12 @@ export class HybridSearch {
       stats.entitySearchTimeMs = Date.now() - entityStart;
     }
 
-    // 4. Knowledge Graph traversal search (if enabled)
-    let graphResults: Array<{ chunk: ChunkResult; score: number; graphContext?: { relationType: string; pathLength: number } }> = [];
-    if (this.config.enableGraphTraversal && vectorResults.length > 0) {
-      const graphStart = Date.now();
-      graphResults = await this.graphSearch(query, vectorResults);
-      stats.graphResults = graphResults.length;
-      stats.graphSearchTimeMs = Date.now() - graphStart;
-    }
+    // 4. Knowledge graph traversal removed 2026-05-13 — the implementation
+    // issued `SELECT ->*->entity` which SurrealDB v2 rejects (graph traversal
+    // must live in FROM, not SELECT). Add back only if entity relations are
+    // actually populated by ingest; refer to surrealdb/client.ts:663 for the
+    // working FROM-clause pattern.
+    const graphResults: Array<{ chunk: ChunkResult; score: number; graphContext?: { relationType: string; pathLength: number } }> = [];
 
     // 5. Reciprocal Rank Fusion
     const fusionStart = Date.now();
@@ -433,145 +431,6 @@ export class HybridSearch {
         .sort((a, b) => b.score - a.score);
     } catch (error) {
       console.error("[HybridSearch] Entity search failed:", error);
-      return [];
-    }
-  }
-
-  /**
-   * Knowledge Graph traversal search
-   * Find chunks connected through entity relations
-   */
-  private async graphSearch(
-    query: string,
-    vectorResults: Array<{ chunk: ChunkResult; score: number }>
-  ): Promise<Array<{ chunk: ChunkResult; score: number; graphContext?: { relationType: string; pathLength: number } }>> {
-    try {
-      const client = await this.getClient();
-
-      // Get file IDs from top vector results
-      const topFileIds = vectorResults
-        .slice(0, 5)
-        .map((r) => r.chunk.file_id || r.chunk.document_id)
-        .filter((id, index, arr) => arr.indexOf(id) === index);
-
-      if (topFileIds.length === 0) return [];
-
-      // Find entities in these files
-      const entitySql = `
-        SELECT *
-        FROM entity
-        WHERE document_id IN $fileIds OR file_id IN $fileIds
-        ORDER BY confidence DESC
-        LIMIT 20;
-      `;
-
-      const entityResult = await client.query<Entity & { id: string }>(entitySql, {
-        fileIds: topFileIds,
-      });
-
-      const entities = entityResult[0]?.result || [];
-
-      if (entities.length === 0) return [];
-
-      // Traverse graph to find related entities (up to graphDepth hops)
-      const relatedEntityIds = new Set<string>();
-      const relationContexts = new Map<string, { relationType: string; pathLength: number }>();
-
-      for (const entity of entities) {
-        if (!entity.id) continue;
-
-        // Outgoing relations
-        const outgoingSql = `
-          SELECT ->*->entity AS related, relation_type
-          FROM ${entity.id}
-          LIMIT ${this.config.graphDepth * 10};
-        `;
-
-        try {
-          const outResult = await client.query<{ related: unknown[]; relation_type: string }>(outgoingSql);
-          const outRelations = outResult[0]?.result || [];
-
-          for (const rel of outRelations) {
-            if (rel.related) {
-              const relatedArray = Array.isArray(rel.related) ? rel.related : [rel.related];
-              for (const r of relatedArray) {
-                const relatedEntity = r as { id?: string; file_id?: string };
-                if (relatedEntity.id) {
-                  relatedEntityIds.add(relatedEntity.id);
-                  relationContexts.set(relatedEntity.id, {
-                    relationType: rel.relation_type || "RELATED_TO",
-                    pathLength: 1,
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // Graph traversal may fail if relations don't exist yet
-        }
-
-        // Incoming relations
-        const incomingSql = `
-          SELECT <-*<-entity AS related, relation_type
-          FROM ${entity.id}
-          LIMIT ${this.config.graphDepth * 10};
-        `;
-
-        try {
-          const inResult = await client.query<{ related: unknown[]; relation_type: string }>(incomingSql);
-          const inRelations = inResult[0]?.result || [];
-
-          for (const rel of inRelations) {
-            if (rel.related) {
-              const relatedArray = Array.isArray(rel.related) ? rel.related : [rel.related];
-              for (const r of relatedArray) {
-                const relatedEntity = r as { id?: string; file_id?: string };
-                if (relatedEntity.id && !relatedEntityIds.has(relatedEntity.id)) {
-                  relatedEntityIds.add(relatedEntity.id);
-                  relationContexts.set(relatedEntity.id, {
-                    relationType: rel.relation_type || "RELATED_TO",
-                    pathLength: 1,
-                  });
-                }
-              }
-            }
-          }
-        } catch {
-          // Graph traversal may fail if relations don't exist yet
-        }
-      }
-
-      if (relatedEntityIds.size === 0) return [];
-
-      // Find chunks associated with related entities
-      const entityIdsArray = Array.from(relatedEntityIds);
-      const chunkSql = `
-        SELECT DISTINCT document_chunk.*
-        FROM document_chunk, entity
-        WHERE entity.id IN $entityIds
-          AND (document_chunk.file_id = entity.file_id OR document_chunk.document_id = entity.document_id)
-        LIMIT ${this.config.vectorTopK};
-      `;
-
-      const chunkResult = await client.query<ChunkResult>(chunkSql, {
-        entityIds: entityIdsArray,
-      });
-
-      const chunks = chunkResult[0]?.result || [];
-
-      // Score based on entity confidence and graph distance
-      return chunks.map((chunk, index) => {
-        // Find the relation context for this chunk (simplified)
-        const context = relationContexts.values().next().value;
-
-        return {
-          chunk,
-          score: 1 / (index + 1), // Inverse rank scoring
-          graphContext: context,
-        };
-      });
-    } catch (error) {
-      console.error("[HybridSearch] Graph search failed:", error);
       return [];
     }
   }
