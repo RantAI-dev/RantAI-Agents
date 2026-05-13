@@ -266,6 +266,32 @@ model Category {
   @@index([organizationId])
 }
 
+// IngestJob — dead-letter row per upload attempt. Created PENDING, flipped to
+// SUCCESS or FAILED in createKnowledgeDocumentForDashboard. On failure the
+// S3 object is intentionally NOT deleted so an operator can retry from the
+// admin endpoint. Success rows are useful for audit / cost attribution.
+model IngestJob {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  filename       String
+  fileSize       Int?
+  mimeType       String?
+  // S3 key of the uploaded file. Stays on failure so the retry path can
+  // re-download and replay; cleared on hard-delete cleanup.
+  s3Key          String?
+  // Linked Document.id on SUCCESS, null otherwise.
+  documentId     String?
+  status         String // "pending" | "processing" | "success" | "failed"
+  error          String?
+  attempt        Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, status, createdAt])
+  @@index([documentId])
+}
+
 // Knowledge base groups/folders for organizing documents
 model KnowledgeBaseGroup {
   id          String          @id @default(cuid())

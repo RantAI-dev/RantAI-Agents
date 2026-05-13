@@ -315,6 +315,9 @@ export async function createKnowledgeDocumentForDashboard(params: {
   context: KnowledgeDocumentContext
   input: KnowledgeDocumentCreateInput
 }): Promise<Record<string, unknown> | ServiceError> {
+  const { recordIngestJobStart, recordIngestJobSuccess, recordIngestJobFailure } = await import("@/lib/ingest/job")
+  let ingestJobId: string | null = null
+
   if (params.context.organizationId && params.context.role && !canEdit(params.context.role)) {
     return { status: 403, error: "Insufficient permissions" }
   }
@@ -479,6 +482,19 @@ export async function createKnowledgeDocumentForDashboard(params: {
       console.error("[Knowledge API] S3 upload failed:", error)
       s3Key = undefined
     }
+  }
+
+  // Open the IngestJob row now that we know s3Key + fileSize. We don't track
+  // text-only / JSON-mode submissions (no file = no DLQ value).
+  if (fileBuffer && originalFilename) {
+    ingestJobId = await recordIngestJobStart({
+      organizationId: params.context.organizationId,
+      userId: params.context.userId,
+      filename: originalFilename,
+      fileSize: fileSize ?? null,
+      mimeType: mimeType ?? null,
+      s3Key: s3Key ?? null,
+    })
   }
 
   // Strip null bytes — PostgreSQL UTF-8 columns reject 0x00
@@ -658,13 +674,12 @@ export async function createKnowledgeDocumentForDashboard(params: {
     } catch (rbErr) {
       console.error(`[Knowledge API] Rollback: Document.delete failed for ${document.id}:`, rbErr)
     }
-    if (s3Key) {
-      try {
-        await deleteFile(s3Key)
-      } catch (rbErr) {
-        console.error(`[Knowledge API] Rollback: S3 delete failed for ${s3Key}:`, rbErr)
-      }
-    }
+    // NOTE: S3 key intentionally preserved so the DLQ retry endpoint can
+    // replay this upload without re-asking the user for the file. The
+    // IngestJob row carries the s3Key for that replay; orphaned S3 objects
+    // for never-retried jobs are reaped by a separate sweep keyed on
+    // IngestJob.status = "failed" + age.
+    recordIngestJobFailure(ingestJobId, (err as Error).message ?? "ingest failed")
     throw err
   }
 
@@ -685,6 +700,8 @@ export async function createKnowledgeDocumentForDashboard(params: {
     entityId: document.id,
     detail: { title: document.title, fileType, fileSize, chunkCount: chunks.length, entityCount },
   })
+
+  recordIngestJobSuccess(ingestJobId, document.id)
 
   return {
     id: document.id,
