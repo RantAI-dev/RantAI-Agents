@@ -242,12 +242,14 @@ export async function runV1ChatCompletion(
   // Request ID for the response
   const requestId = `chatcmpl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
+  const { createStripThinkTransform } = await import("@/lib/llm/strip-think")
   const result = streamText({
     model: getChatProvider()(resolveModelId(modelId)),
     system: systemPrompt,
     messages,
     tools: resolvedTools,
     stopWhen: Object.keys(resolvedTools).length > 0 ? stepCountIs(5) : stepCountIs(2),
+    experimental_transform: createStripThinkTransform(),
     ...(abortSignal && { abortSignal }),
     ...(input.temperature != null && { temperature: input.temperature }),
     ...(input.top_p != null && { topP: input.top_p }),

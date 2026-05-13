@@ -230,11 +230,13 @@ export async function executeChatflow(
     }
   }
 
+  const { createStripThinkTransform } = await import("@/lib/llm/strip-think")
   const result = streamText({
     model,
     system: resolvedSystemPrompt,
     prompt,
     temperature: streamNodeData.temperature,
+    experimental_transform: createStripThinkTransform(),
   })
 
   // Emit step:start for the STREAM_OUTPUT node (streaming begins)

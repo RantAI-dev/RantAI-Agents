@@ -1131,12 +1131,17 @@ export async function runChat(params: {
       )
     }
 
+    const { createStripThinkTransform } = await import("@/lib/llm/strip-think")
     const result = streamText({
       model: getChatProvider()(resolveModelId(modelId)),
       system: systemPrompt,
       messages,
       tools: allTools,
       stopWhen: stepCountIs(resolveMaxSteps(assistantModelConfig, hasAssistantTools)),
+      // Strip <think>...</think> blocks emitted by reasoning models
+      // (MiniMax-M2.7, etc.) before they reach the client — they're internal
+      // CoT, not user-facing content.
+      experimental_transform: createStripThinkTransform(),
       // Forward the request abort signal — when the client disconnects mid-
       // stream, streamText cancels its in-flight LLM call and result.text
       // rejects, which the background memory IIFE then catches and skips.

@@ -551,11 +551,13 @@ export async function handleWidgetChat(req: NextRequest) {
       })).optional(),
     });
 
-    // Stream response
+    // Stream response — strip reasoning-model <think> blocks from the user-facing stream.
+    const { createStripThinkTransform } = await import("@/lib/llm/strip-think")
     const result = streamText({
       model: getChatProvider()(resolveModelId(assistant.model || DEFAULT_MODEL_ID)),
       system: systemPrompt,
       messages,
+      experimental_transform: createStripThinkTransform(),
       tools: {
         saveMemory: tool({
           description: "Save important facts, preferences, and entities about the user from the conversation.",
