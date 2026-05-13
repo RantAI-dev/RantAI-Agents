@@ -160,6 +160,12 @@ export async function retrieveContext(
     };
   }
 
+  // Coverage analytics: fire-and-forget bump retrievalCount + lastRetrievedAt
+  // on every doc that surfaced. Async, never blocks the chat path.
+  void import("@/features/knowledge/documents/repository").then(({ recordRetrievalHits }) => {
+    recordRetrievalHits(chunks.map((c) => c.documentId));
+  }).catch(() => {});
+
   // Format context for LLM. When a contextual_prefix was generated at ingest
   // (KB_CONTEXTUAL_RETRIEVAL_ENABLED=true; ~1 sentence per chunk locating it
   // in the document), prepend it before the chunk body so the model sees the
@@ -296,6 +302,11 @@ export async function hybridRetrieve(
       stats,
     };
   }
+
+  // Coverage analytics: fire-and-forget bump on every doc surfaced.
+  void import("@/features/knowledge/documents/repository").then(({ recordRetrievalHits }) => {
+    recordRetrievalHits(results.map((r) => r.documentId));
+  }).catch(() => {});
 
   // Format context for LLM; mirror formatContextForPrompt's contextual-prefix
   // handling — drop in null cleanly when no prefix was generated at ingest.

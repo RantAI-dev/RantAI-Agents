@@ -150,3 +150,58 @@ export async function restoreKnowledgeDocument(id: string) {
     data: { deletedAt: null },
   })
 }
+
+/**
+ * Coverage analytics: bump retrievalCount + lastRetrievedAt for every doc
+ * that surfaced in a chat retrieval. Fire-and-forget — never blocks the chat
+ * path, errors are logged and swallowed.
+ */
+export function recordRetrievalHits(documentIds: string[]): void {
+  if (!documentIds.length) return
+  void prisma.document
+    .updateMany({
+      where: { id: { in: [...new Set(documentIds)] } },
+      data: {
+        retrievalCount: { increment: 1 },
+        lastRetrievedAt: new Date(),
+      },
+    })
+    .catch((err) => console.warn("[knowledge] recordRetrievalHits failed:", err))
+}
+
+/**
+ * Docs that never surfaced in retrieval (or haven't recently). Org-scoped.
+ * Pass `staleAfterDays` to also include docs whose lastRetrievedAt is older
+ * than that threshold.
+ */
+export async function listColdDocuments(params: {
+  organizationId: string | null
+  staleAfterDays?: number
+  limit?: number
+}) {
+  const { organizationId, staleAfterDays, limit = 100 } = params
+  const cutoff = staleAfterDays
+    ? new Date(Date.now() - staleAfterDays * 24 * 60 * 60 * 1000)
+    : null
+  return prisma.document.findMany({
+    where: {
+      deletedAt: null,
+      ...(organizationId !== null
+        ? { OR: [{ organizationId }, { organizationId: null }] }
+        : { organizationId: null }),
+      OR: [
+        { retrievalCount: 0 },
+        ...(cutoff ? [{ lastRetrievedAt: { lt: cutoff } }] : []),
+      ],
+    },
+    orderBy: [{ retrievalCount: "asc" }, { lastRetrievedAt: "asc" }],
+    take: limit,
+    select: {
+      id: true,
+      title: true,
+      retrievalCount: true,
+      lastRetrievedAt: true,
+      createdAt: true,
+    },
+  })
+}
