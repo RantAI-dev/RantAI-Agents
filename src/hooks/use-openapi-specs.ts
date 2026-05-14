@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect } from "react"
 
 export interface OpenApiSpecItem {
@@ -13,13 +15,15 @@ export interface OpenApiSpecItem {
 }
 
 export function useOpenApiSpecs() {
+
+  const orgFetch = useOrgFetch()
   const [specs, setSpecs] = useState<OpenApiSpecItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchSpecs = useCallback(async () => {
     try {
       setIsLoading(true)
-      const res = await fetch("/api/dashboard/openapi-specs")
+      const res = await orgFetch("/api/dashboard/openapi-specs")
       if (!res.ok) throw new Error("Failed to fetch")
       const data = await res.json()
       setSpecs(data)
@@ -38,7 +42,7 @@ export function useOpenApiSpecs() {
       authConfig?: object
       selectedOperationIds?: string[]
     }) => {
-      const res = await fetch("/api/dashboard/openapi-specs", {
+      const res = await orgFetch("/api/dashboard/openapi-specs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -57,7 +61,7 @@ export function useOpenApiSpecs() {
   )
 
   const deleteSpec = useCallback(async (id: string) => {
-    const res = await fetch(`/api/dashboard/openapi-specs/${id}`, {
+    const res = await orgFetch(`/api/dashboard/openapi-specs/${id}`, {
       method: "DELETE",
     })
     if (!res.ok) throw new Error("Failed to delete")

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   deleteDashboardTemplateForDashboard,
   updateDashboardTemplateForDashboard,
@@ -29,7 +29,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
@@ -72,7 +72,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }

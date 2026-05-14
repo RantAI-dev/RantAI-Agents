@@ -1,19 +1,17 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import { WizardPageClient } from "@/features/assistants/wizard/components/wizard-page-client"
 
 export default async function Page() {
   const session = await auth()
   if (!session?.user?.id) redirect("/login")
 
-  const membership = await prisma.organizationMember.findFirst({
-    where: { userId: session.user.id, acceptedAt: { not: null } },
-    select: { organizationId: true },
-  })
-  if (!membership) redirect("/")
+  const orgContext = await resolveActiveOrgServer(session.user.id)
+  if (!orgContext) redirect("/")
 
-  const organizationId = membership.organizationId
+  const organizationId = orgContext.organizationId
 
   const [assistants, tools, skills, mcp, kbs] = await Promise.all([
     prisma.assistant.findMany({

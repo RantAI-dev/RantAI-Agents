@@ -33,6 +33,8 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
 
     set({ loading: true, error: null })
     try {
+      // /api/admin/profile is user-scoped; cookie auth + session is enough.
+      // No useOrgFetch here because zustand store actions can't use hooks.
       const response = await fetch("/api/admin/profile")
       if (response.ok) {
         const data = await response.json()

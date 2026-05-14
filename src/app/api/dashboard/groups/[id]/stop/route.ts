@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { DashboardGroupIdParamsSchema } from "@/features/digital-employees/groups/schema"
 import { stopGroupForDashboard } from "@/features/digital-employees/groups/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "No organization" }, { status: 403 })
     }

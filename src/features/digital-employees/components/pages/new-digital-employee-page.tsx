@@ -1,6 +1,5 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import { listAssistantsForUser } from "@/features/assistants/core/service"
 import { listGroupsForDashboard } from "@/features/digital-employees/groups/service"
 import { listDashboardTemplates } from "@/features/templates/service"
@@ -91,16 +90,12 @@ export default async function NewDigitalEmployeePage({
     )
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
 
   const [assistants, groups, templates] = await Promise.all([
     listAssistantsForUser({
       organizationId: orgContext?.organizationId ?? null,
-      role: orgContext?.membership.role ?? null,
+      role: orgContext?.role ?? null,
     }),
     orgContext?.organizationId ? listGroupsForDashboard(orgContext.organizationId) : Promise.resolve([]),
     orgContext?.organizationId

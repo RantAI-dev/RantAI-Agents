@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { prisma } from "@/lib/prisma"
 
 export interface SearchResult {
@@ -34,7 +34,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ results: [], query: query || "" })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const orgId = orgContext?.organizationId ?? null
 
     // For resources with optional orgId, match both the org's items AND unscoped items

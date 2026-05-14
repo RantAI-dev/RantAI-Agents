@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { PresignedUploadBodySchema } from "@/features/platform-routes/upload/schema"
 import { createPresignedUpload } from "@/features/platform-routes/upload/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const result = await createPresignedUpload({
       userId: session.user.id,
       input: parsedBody.data,

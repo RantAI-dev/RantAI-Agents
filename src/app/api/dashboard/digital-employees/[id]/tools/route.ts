@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   isServiceError,
   listDigitalEmployeeTools,
@@ -18,7 +18,7 @@ export async function GET(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await listDigitalEmployeeTools({
       id,
       organizationId: orgContext?.organizationId ?? null,

@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect } from "react"
 
 export interface MemoryItem {
@@ -26,6 +28,7 @@ export function useMemory(options?: {
   initialStats?: MemoryStats
   initialFilter?: string | null
 }) {
+  const orgFetch = useOrgFetch()
   const initialMemories = options?.initialMemories
   const initialStats = options?.initialStats
   const initialFilter = options?.initialFilter ?? null
@@ -48,7 +51,7 @@ export function useMemory(options?: {
       setIsLoading(true)
       setError(null)
       const params = type ? `?type=${type}` : ""
-      const res = await fetch(`/api/dashboard/memory${params}`)
+      const res = await orgFetch(`/api/dashboard/memory${params}`)
       if (!res.ok) throw new Error("Failed to fetch memories")
       const data = await res.json()
       setMemories(data.memories)
@@ -62,7 +65,7 @@ export function useMemory(options?: {
 
   const deleteMemory = useCallback(
     async (id: string) => {
-      const res = await fetch(`/api/dashboard/memory/${id}`, {
+      const res = await orgFetch(`/api/dashboard/memory/${id}`, {
         method: "DELETE",
       })
       if (!res.ok) throw new Error("Failed to delete memory")
@@ -73,7 +76,7 @@ export function useMemory(options?: {
 
   const clearByType = useCallback(
     async (type: "WORKING" | "SEMANTIC" | "LONG_TERM") => {
-      const res = await fetch("/api/dashboard/memory", {
+      const res = await orgFetch("/api/dashboard/memory", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type }),

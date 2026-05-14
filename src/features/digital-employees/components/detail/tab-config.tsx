@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback } from "react"
 import { Loader2, Save, Trash2 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -29,6 +31,7 @@ interface TabConfigProps {
 }
 
 export function TabConfig({ employee, fetchEmployee, onArchiveOpen, onDeleteOpen }: TabConfigProps) {
+  const orgFetch = useOrgFetch()
   const [settingsName, setSettingsName] = useState(employee.name)
   const [settingsDesc, setSettingsDesc] = useState(employee.description || "")
   const [settingsAvatar, setSettingsAvatar] = useState(employee.avatar || "")
@@ -38,7 +41,7 @@ export function TabConfig({ employee, fetchEmployee, onArchiveOpen, onDeleteOpen
   const handleSaveSettings = useCallback(async () => {
     setIsSavingSettings(true)
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employee.id}`, {
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employee.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useMemo } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 
 interface AssistantMcpServerBinding {
   id: string
@@ -12,6 +13,7 @@ interface AssistantMcpServerBinding {
 }
 
 export function useAssistantMcpServers(assistantId: string | null) {
+  const orgFetch = useOrgFetch()
   const [bindings, setBindings] = useState<AssistantMcpServerBinding[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
@@ -22,7 +24,7 @@ export function useAssistantMcpServers(assistantId: string | null) {
     }
     try {
       setIsLoading(true)
-      const res = await fetch(`/api/assistants/${assistantId}/mcp-servers`)
+      const res = await orgFetch(`/api/assistants/${assistantId}/mcp-servers`)
       if (!res.ok) throw new Error("Failed to fetch")
       const data = await res.json()
       setBindings(data)
@@ -31,12 +33,12 @@ export function useAssistantMcpServers(assistantId: string | null) {
     } finally {
       setIsLoading(false)
     }
-  }, [assistantId])
+  }, [orgFetch, assistantId])
 
   const updateAssistantMcpServers = useCallback(
     async (mcpServerIds: string[]) => {
       if (!assistantId) return
-      const res = await fetch(`/api/assistants/${assistantId}/mcp-servers`, {
+      const res = await orgFetch(`/api/assistants/${assistantId}/mcp-servers`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mcpServerIds }),
@@ -45,7 +47,7 @@ export function useAssistantMcpServers(assistantId: string | null) {
       const data = await res.json()
       setBindings(data)
     },
-    [assistantId]
+    [orgFetch, assistantId]
   )
 
   useEffect(() => {

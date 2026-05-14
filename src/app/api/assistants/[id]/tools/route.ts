@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   AssistantIdParamsSchema,
   AssistantToolIdsSchema,
@@ -12,7 +13,7 @@ import {
 
 // GET /api/assistants/[id]/tools - Get assistant's enabled tools
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -26,7 +27,10 @@ export async function GET(
       return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
 
-    const result = await listAssistantTools(parsedParams.data.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
+    const result = await listAssistantTools(parsedParams.data.id, {
+      organizationId: orgContext?.organizationId ?? null,
+    })
     if (isServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
@@ -65,9 +69,11 @@ export async function PUT(
       )
     }
 
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await setAssistantTools(
       parsedParams.data.id,
-      parsedBody.data.toolIds
+      parsedBody.data.toolIds,
+      { organizationId: orgContext?.organizationId ?? null }
     )
     if (isServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })

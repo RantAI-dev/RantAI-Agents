@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect } from "react"
 
 export interface EmployeeGroupMember {
@@ -23,6 +25,8 @@ export interface EmployeeGroupItem {
 }
 
 export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[] }) {
+
+  const orgFetch = useOrgFetch()
   const initialGroups = options?.initialGroups
   const [groups, setGroups] = useState<EmployeeGroupItem[]>(initialGroups ?? [])
   const [isLoading, setIsLoading] = useState(initialGroups ? false : true)
@@ -31,7 +35,7 @@ export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[
   const fetchGroups = useCallback(async () => {
     try {
       setIsLoading(true)
-      const res = await fetch("/api/dashboard/groups")
+      const res = await orgFetch("/api/dashboard/groups")
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
         setError(data.error || "Failed to fetch groups")
@@ -56,7 +60,7 @@ export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[
 
   const createGroup = useCallback(
     async (data: { name: string; description?: string }): Promise<EmployeeGroupItem> => {
-      const res = await fetch("/api/dashboard/groups", {
+      const res = await orgFetch("/api/dashboard/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -74,7 +78,7 @@ export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[
 
   const updateGroup = useCallback(
     async (groupId: string, data: { name?: string; description?: string; isImplicit?: boolean }): Promise<void> => {
-      const res = await fetch(`/api/dashboard/groups/${groupId}`, {
+      const res = await orgFetch(`/api/dashboard/groups/${groupId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -90,7 +94,7 @@ export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[
 
   const addMembers = useCallback(
     async (groupId: string, employeeIds: string[]): Promise<void> => {
-      const res = await fetch(`/api/dashboard/groups/${groupId}/members`, {
+      const res = await orgFetch(`/api/dashboard/groups/${groupId}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ employeeIds }),
@@ -106,7 +110,7 @@ export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[
 
   const removeMembers = useCallback(
     async (groupId: string, employeeIds: string[]): Promise<void> => {
-      const res = await fetch(`/api/dashboard/groups/${groupId}/members`, {
+      const res = await orgFetch(`/api/dashboard/groups/${groupId}/members`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ employeeIds }),
@@ -123,7 +127,7 @@ export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[
   const startGroup = useCallback(
     async (groupId: string): Promise<void> => {
       try {
-        const res = await fetch(`/api/dashboard/groups/${groupId}/start`, { method: "POST" })
+        const res = await orgFetch(`/api/dashboard/groups/${groupId}/start`, { method: "POST" })
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
           throw new Error(err.error || "Failed to start team")
@@ -138,7 +142,7 @@ export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[
   const stopGroup = useCallback(
     async (groupId: string): Promise<void> => {
       try {
-        const res = await fetch(`/api/dashboard/groups/${groupId}/stop`, { method: "POST" })
+        const res = await orgFetch(`/api/dashboard/groups/${groupId}/stop`, { method: "POST" })
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
           throw new Error(err.error || "Failed to stop team")
@@ -152,7 +156,7 @@ export function useEmployeeGroups(options?: { initialGroups?: EmployeeGroupItem[
 
   const deleteGroup = useCallback(
     async (groupId: string): Promise<void> => {
-      const res = await fetch(`/api/dashboard/groups/${groupId}`, { method: "DELETE" })
+      const res = await orgFetch(`/api/dashboard/groups/${groupId}`, { method: "DELETE" })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || "Failed to delete team")

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DashboardGroupIdParamsSchema,
   DashboardGroupMembersBodySchema,
@@ -23,7 +23,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }
@@ -65,7 +65,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ error: "Invalid group id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (!orgContext) {
       return NextResponse.json({ error: "Organization required" }, { status: 400 })
     }

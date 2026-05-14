@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   ToolIdSchema,
   UpdateToolSchema,
@@ -28,7 +28,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid tool id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const tool = await getDashboardToolById({
       id: idParsed.data.id,
       organizationId: orgContext?.organizationId ?? null,
@@ -71,7 +71,7 @@ export async function PUT(
       )
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const tool = await updateDashboardTool({
       id: idParsed.data.id,
       organizationId: orgContext?.organizationId ?? null,
@@ -107,7 +107,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid tool id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await deleteDashboardTool({
       id: idParsed.data.id,
       organizationId: orgContext?.organizationId ?? null,

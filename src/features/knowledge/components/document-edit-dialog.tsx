@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { memo, Suspense, use, useMemo, useState } from "react"
 import {
   Dialog,
@@ -167,6 +169,7 @@ const DocumentEditDialogLoadedForm = memo<{
     availableCategories,
     onCategoriesChange,
   }) => {
+    const orgFetch = useOrgFetch()
     const [saving, setSaving] = useState(false)
     const [title, setTitle] = useState(document.title)
     const [selectedCategories, setSelectedCategories] = useState<string[]>(
@@ -205,7 +208,7 @@ const DocumentEditDialogLoadedForm = memo<{
       setError("")
 
       try {
-        const response = await fetch(`/api/dashboard/files/${document.id}`, {
+        const response = await orgFetch(`/api/dashboard/files/${document.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -469,6 +472,7 @@ export function DocumentEditDialog({
   onCategoriesChange,
   initialDocument,
 }: DocumentEditDialogProps) {
+  const orgFetch = useOrgFetch()
   const documentResource = useMemo<Promise<DocumentLoadResult>>(() => {
     if (initialDocument !== undefined) {
       return Promise.resolve(
@@ -482,7 +486,7 @@ export function DocumentEditDialog({
       return Promise.resolve({ data: null, error: "No document selected" })
     }
 
-    return fetch(`/api/dashboard/files/${documentId}`)
+    return orgFetch(`/api/dashboard/files/${documentId}`)
       .then(async (response) => {
         if (!response.ok) {
           const data = await response.json().catch(() => null)

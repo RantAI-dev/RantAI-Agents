@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DigitalEmployeeIdParamsSchema,
   WorkspaceFileWriteBodySchema,
@@ -25,7 +25,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "path and content are required" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await writeWorkspaceFile({
       employeeId: parsedParams.data.id,
       context: {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useMemo } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 
 interface AssistantWorkflowItem {
   id: string
@@ -12,6 +13,7 @@ interface AssistantWorkflowItem {
 }
 
 export function useAssistantWorkflows(assistantId: string | null) {
+  const orgFetch = useOrgFetch()
   const [enabledWorkflows, setEnabledWorkflows] = useState<AssistantWorkflowItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
@@ -22,7 +24,7 @@ export function useAssistantWorkflows(assistantId: string | null) {
     }
     try {
       setIsLoading(true)
-      const res = await fetch(`/api/assistants/${assistantId}/workflows`)
+      const res = await orgFetch(`/api/assistants/${assistantId}/workflows`)
       if (!res.ok) throw new Error("Failed to fetch")
       const data = await res.json()
       setEnabledWorkflows(data)
@@ -31,12 +33,12 @@ export function useAssistantWorkflows(assistantId: string | null) {
     } finally {
       setIsLoading(false)
     }
-  }, [assistantId])
+  }, [orgFetch, assistantId])
 
   const updateAssistantWorkflows = useCallback(
     async (workflowIds: string[]) => {
       if (!assistantId) return
-      const res = await fetch(`/api/assistants/${assistantId}/workflows`, {
+      const res = await orgFetch(`/api/assistants/${assistantId}/workflows`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workflowIds }),
@@ -45,7 +47,7 @@ export function useAssistantWorkflows(assistantId: string | null) {
       const data = await res.json()
       setEnabledWorkflows(data)
     },
-    [assistantId]
+    [orgFetch, assistantId]
   )
 
   useEffect(() => {

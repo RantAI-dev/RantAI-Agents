@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DashboardDigitalEmployeeIdParamsSchema,
   DashboardDigitalEmployeeUpdateBodySchema,
@@ -24,7 +24,7 @@ export async function GET(req: Request, { params }: RouteParams) {
     }
 
     const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await getDashboardDigitalEmployee({
       id,
       organizationId: orgContext?.organizationId ?? null,
@@ -48,7 +48,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
     }
 
     const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsed = DashboardDigitalEmployeeUpdateBodySchema.safeParse(await req.json())
     if (!parsed.success) {
       return NextResponse.json(
@@ -61,7 +61,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
       id,
       context: {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
         userId: session.user.id,
       },
       input: parsed.data,
@@ -85,12 +85,12 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     }
 
     const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await deleteDashboardDigitalEmployee({
       id,
       context: {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
         userId: session.user.id,
       },
     })

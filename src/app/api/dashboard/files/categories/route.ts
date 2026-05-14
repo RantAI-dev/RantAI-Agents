@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   KnowledgeCategoryCreateSchema,
 } from "@/features/knowledge/categories/schema"
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const categories = await listKnowledgeCategoriesForDashboard(orgContext?.organizationId ?? null)
     return NextResponse.json({ categories })
   } catch (error) {
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const category = await createKnowledgeCategoryForDashboard({
       input: parsedBody.data,
       organizationId: orgContext?.organizationId ?? null,

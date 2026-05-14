@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useEffect, useState } from "react"
 import type { StoreAsset } from "@/features/media/store"
 
@@ -20,6 +22,7 @@ export interface UseLibraryAssetsResult {
 }
 
 export function useLibraryAssets(filters: LibraryFilters): UseLibraryAssetsResult {
+  const orgFetch = useOrgFetch()
   const [items, setItems] = useState<LibraryAsset[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -31,7 +34,7 @@ export function useLibraryAssets(filters: LibraryFilters): UseLibraryAssetsResul
     params.set("limit", "60")
 
     setLoading(true)
-    fetch(`/api/dashboard/media/assets?${params.toString()}`)
+    orgFetch(`/api/dashboard/media/assets?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => setItems((data as { items?: LibraryAsset[] }).items ?? []))
       .finally(() => setLoading(false))

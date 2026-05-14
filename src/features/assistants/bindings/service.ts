@@ -16,19 +16,42 @@ export interface ServiceError {
   error: string
 }
 
-function notFoundOrVoid(assistant: unknown): ServiceError | null {
-  return assistant ? null : { status: 404, error: "Assistant not found" }
+export interface AssistantAccessContext {
+  organizationId: string | null
+}
+
+/**
+ * Resolves and authorizes assistant access for binding sub-routes.
+ *
+ *   - 404 if the assistant doesn't exist.
+ *   - Built-in assistants (organizationId = null, isBuiltIn = true) are global
+ *     and always readable/writable from any org context.
+ *   - Org-scoped assistants only allow access when assistant.organizationId
+ *     matches the caller's active org. Cross-org access returns 404 (not 403)
+ *     to avoid leaking existence.
+ */
+async function requireAssistantAccess(
+  assistantId: string,
+  context: AssistantAccessContext
+): Promise<{ ok: true } | ServiceError> {
+  const assistant = await findAssistantById(assistantId)
+  if (!assistant) return { status: 404, error: "Assistant not found" }
+  if (assistant.isBuiltIn) return { ok: true }
+  if (assistant.organizationId && assistant.organizationId !== context.organizationId) {
+    return { status: 404, error: "Assistant not found" }
+  }
+  return { ok: true }
 }
 
 /**
  * Lists assistant tools with binding flags.
  */
 export async function listAssistantTools(
-  assistantId: string
+  assistantId: string,
+  context: AssistantAccessContext
 ): Promise<Array<Record<string, unknown>> | ServiceError> {
-  const assistant = await findAssistantById(assistantId)
-  const missing = notFoundOrVoid(assistant)
-  if (missing) return missing
+  const guard = await requireAssistantAccess(assistantId, context)
+  if ("status" in guard) return guard
 
   const rows = await findAssistantToolBindings(assistantId)
   return rows.map((row) => ({
@@ -42,11 +65,11 @@ export async function listAssistantTools(
  */
 export async function setAssistantTools(
   assistantId: string,
-  toolIds: string[]
+  toolIds: string[],
+  context: AssistantAccessContext
 ): Promise<Array<Record<string, unknown>> | ServiceError> {
-  const assistant = await findAssistantById(assistantId)
-  const missing = notFoundOrVoid(assistant)
-  if (missing) return missing
+  const guard = await requireAssistantAccess(assistantId, context)
+  if ("status" in guard) return guard
 
   const hiddenBoundToolIds = await findHiddenAssistantToolIds(assistantId)
   const mergedToolIds = Array.from(
@@ -71,11 +94,11 @@ export async function setAssistantTools(
  * Lists assistant skills with binding flags.
  */
 export async function listAssistantSkills(
-  assistantId: string
+  assistantId: string,
+  context: AssistantAccessContext
 ): Promise<Array<Record<string, unknown>> | ServiceError> {
-  const assistant = await findAssistantById(assistantId)
-  const missing = notFoundOrVoid(assistant)
-  if (missing) return missing
+  const guard = await requireAssistantAccess(assistantId, context)
+  if ("status" in guard) return guard
 
   const rows = await findAssistantSkillBindings(assistantId)
   return rows.map((row) => ({
@@ -92,11 +115,11 @@ export async function listAssistantSkills(
  */
 export async function setAssistantSkills(
   assistantId: string,
-  skillIds: string[]
+  skillIds: string[],
+  context: AssistantAccessContext
 ): Promise<Array<Record<string, unknown>> | ServiceError> {
-  const assistant = await findAssistantById(assistantId)
-  const missing = notFoundOrVoid(assistant)
-  if (missing) return missing
+  const guard = await requireAssistantAccess(assistantId, context)
+  if ("status" in guard) return guard
 
   const validSkillIds = skillIds.filter((id) => typeof id === "string" && id.length > 0)
   await replaceAssistantSkillBindings(assistantId, validSkillIds)
@@ -114,11 +137,11 @@ export async function setAssistantSkills(
  * Lists assistant MCP server bindings.
  */
 export async function listAssistantMcpServers(
-  assistantId: string
+  assistantId: string,
+  context: AssistantAccessContext
 ): Promise<Array<Record<string, unknown>> | ServiceError> {
-  const assistant = await findAssistantById(assistantId)
-  const missing = notFoundOrVoid(assistant)
-  if (missing) return missing
+  const guard = await requireAssistantAccess(assistantId, context)
+  if ("status" in guard) return guard
 
   const rows = await findAssistantMcpServerBindings(assistantId)
   return rows.map((row) => ({
@@ -139,11 +162,11 @@ export async function listAssistantMcpServers(
  */
 export async function setAssistantMcpServers(
   assistantId: string,
-  mcpServerIds: string[]
+  mcpServerIds: string[],
+  context: AssistantAccessContext
 ): Promise<Array<Record<string, unknown>> | ServiceError> {
-  const assistant = await findAssistantById(assistantId)
-  const missing = notFoundOrVoid(assistant)
-  if (missing) return missing
+  const guard = await requireAssistantAccess(assistantId, context)
+  if ("status" in guard) return guard
 
   await replaceAssistantMcpServerBindings(assistantId, mcpServerIds)
 
@@ -162,11 +185,11 @@ export async function setAssistantMcpServers(
  * Lists assistant workflow bindings.
  */
 export async function listAssistantWorkflows(
-  assistantId: string
+  assistantId: string,
+  context: AssistantAccessContext
 ): Promise<Array<Record<string, unknown>> | ServiceError> {
-  const assistant = await findAssistantById(assistantId)
-  const missing = notFoundOrVoid(assistant)
-  if (missing) return missing
+  const guard = await requireAssistantAccess(assistantId, context)
+  if ("status" in guard) return guard
 
   const rows = await findAssistantWorkflowBindings(assistantId)
   return rows.map((row) => ({
@@ -180,11 +203,11 @@ export async function listAssistantWorkflows(
  */
 export async function setAssistantWorkflows(
   assistantId: string,
-  workflowIds: string[]
+  workflowIds: string[],
+  context: AssistantAccessContext
 ): Promise<Array<Record<string, unknown>> | ServiceError> {
-  const assistant = await findAssistantById(assistantId)
-  const missing = notFoundOrVoid(assistant)
-  if (missing) return missing
+  const guard = await requireAssistantAccess(assistantId, context)
+  if ("status" in guard) return guard
 
   await replaceAssistantWorkflowBindings(assistantId, workflowIds)
 

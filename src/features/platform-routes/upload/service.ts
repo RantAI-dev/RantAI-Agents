@@ -1,4 +1,5 @@
-import { canEdit, canManage, type OrganizationContext } from "@/lib/organization"
+import { canEdit, canManage } from "@/lib/organization"
+import type { ActiveOrgContext } from "@/lib/org-context"
 import {
   S3Paths,
   getPresignedUploadUrl,
@@ -37,7 +38,7 @@ async function resolveUploadKey(params: {
   type: UploadType
   filename: string
   targetId?: string
-  organizationContext: OrganizationContext | null
+  organizationContext: ActiveOrgContext | null
   generatedId: string
 }): Promise<string | ServiceError> {
   const { userId, type, filename, targetId, organizationContext, generatedId } = params
@@ -94,7 +95,7 @@ export async function uploadMultipartFile(params: {
   file: UploadFileLike
   type: string
   targetId?: string
-  organizationContext: OrganizationContext | null
+  organizationContext: ActiveOrgContext | null
 }) {
   if (!isAllowedUploadType(params.type)) {
     return {
@@ -172,7 +173,7 @@ export async function uploadMultipartFile(params: {
 export async function createPresignedUpload(params: {
   userId: string
   input: PresignedUploadBody
-  organizationContext: OrganizationContext | null
+  organizationContext: ActiveOrgContext | null
 }) {
   const validation = validateUpload(params.input.type, params.input.size, params.input.contentType)
   if (!validation.valid) {

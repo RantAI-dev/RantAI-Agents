@@ -1,6 +1,5 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import { listGroupsForDashboard } from "@/features/digital-employees/groups/service"
 import GroupDetailPageClient from "./group-detail-page-client"
 import type { EmployeeGroupItem } from "@/hooks/use-employee-groups"
@@ -38,11 +37,7 @@ export default async function GroupDetailPage({
     return <GroupDetailPageClient groupId={resolvedParams.id} initialGroups={[]} />
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
 
   const groups = orgContext?.organizationId
     ? await listGroupsForDashboard(orgContext.organizationId)

@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 
 export interface AuditLogItem {
@@ -21,6 +23,8 @@ interface UseAuditLogsFilters {
 }
 
 export function useAuditLogs(filters?: UseAuditLogsFilters) {
+
+  const orgFetch = useOrgFetch()
   const [logs, setLogs] = useState<AuditLogItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [hasMore, setHasMore] = useState(false)
@@ -37,7 +41,7 @@ export function useAuditLogs(filters?: UseAuditLogsFilters) {
         if (nextCursor) params.set("cursor", nextCursor)
         params.set("limit", "50")
 
-        const res = await fetch(`/api/dashboard/audit?${params.toString()}`)
+        const res = await orgFetch(`/api/dashboard/audit?${params.toString()}`)
         if (!res.ok) throw new Error("Failed to fetch audit logs")
 
         const data = await res.json()

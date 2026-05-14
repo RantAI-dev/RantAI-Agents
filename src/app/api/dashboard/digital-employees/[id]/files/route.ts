@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DigitalEmployeeIdParamsSchema,
   EmployeeFilesSyncBodySchema,
@@ -23,7 +23,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await listEmployeeFiles({
       employeeId: parsedParams.data.id,
       context: {
@@ -59,7 +59,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: "files array required" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await syncEmployeeFilesForEmployee({
       employeeId: parsedParams.data.id,
       updatedBy: session.user.id,

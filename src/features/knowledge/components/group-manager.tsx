@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -68,6 +70,7 @@ export function GroupManager({
   onGroupsChange,
   totalDocumentCount,
 }: GroupManagerProps) {
+  const orgFetch = useOrgFetch()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<KnowledgeGroup | null>(null)
   const [name, setName] = useState("")
@@ -96,7 +99,7 @@ export function GroupManager({
     if (!deleteTarget) return
 
     try {
-      const response = await fetch(`/api/dashboard/files/groups/${deleteTarget.id}`, {
+      const response = await orgFetch(`/api/dashboard/files/groups/${deleteTarget.id}`, {
         method: "DELETE",
       })
       if (response.ok) {

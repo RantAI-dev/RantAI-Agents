@@ -1,6 +1,5 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import { listDashboardDigitalEmployees } from "@/features/digital-employees/employees/service"
 import { listDashboardTasks } from "@/features/digital-employees/tasks/service"
 import DigitalEmployeesPageClient from "./digital-employees-page-client"
@@ -26,11 +25,7 @@ export default async function DigitalEmployeesPage() {
     return <DigitalEmployeesPageClient initialEmployees={[]} initialTasks={[]} />
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
 
   const [employees, tasks] = await Promise.all([
     listDashboardDigitalEmployees({

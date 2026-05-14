@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   KnowledgeDocumentIdParamsSchema,
   KnowledgeDocumentUpdateSchema,
@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid document id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const result = await getKnowledgeDocumentForDashboard({
       documentId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
@@ -59,7 +59,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid document id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const parsedBody = KnowledgeDocumentUpdateSchema.safeParse(await request.json())
     if (!parsedBody.success) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
@@ -68,7 +68,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const result = await updateKnowledgeDocumentForDashboard({
       documentId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
-      role: orgContext?.membership.role ?? null,
+      role: orgContext?.role ?? null,
       userId: session.user.id,
       input: parsedBody.data,
     })
@@ -101,11 +101,11 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     const url = new URL(request.url)
     const hard = url.searchParams.get("hard") === "true"
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const result = await deleteKnowledgeDocumentForDashboard({
       documentId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
-      role: orgContext?.membership.role ?? null,
+      role: orgContext?.role ?? null,
       userId: session.user.id,
       hard,
     })

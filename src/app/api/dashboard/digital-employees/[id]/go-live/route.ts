@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { DigitalEmployeeIdParamsSchema } from "@/features/digital-employees/lifecycle/schema"
 import { goLiveDigitalEmployee } from "@/features/digital-employees/lifecycle/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
 
     const result = await goLiveDigitalEmployee({
       digitalEmployeeId: parsedParams.data.id,

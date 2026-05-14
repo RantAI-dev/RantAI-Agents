@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { streamAssistantWizard } from "@/features/assistants/wizard/service"
 import { WizardStreamRequestSchema } from "@/features/assistants/wizard/schema"
 
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrg(request, session.user.id)
   if (!orgContext) {
     return NextResponse.json({ error: "No organization" }, { status: 403 })
   }

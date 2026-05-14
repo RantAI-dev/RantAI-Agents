@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useEffect, useState } from "react"
 import { Building2, Save, AlertCircle, Loader2, CheckCircle } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -39,6 +41,7 @@ function OrganizationSettingsContent({
 }: {
   initialOrganizations: OrganizationSettingsOrganization[]
 }) {
+  const orgFetch = useOrgFetch()
   const [activeOrganization, setActiveOrganization] = useState<OrganizationSettingsOrganization | null>(
     initialOrganizations[0] ?? null
   )
@@ -90,7 +93,7 @@ function OrganizationSettingsContent({
     setError(null)
 
     try {
-      const response = await fetch(`/api/organizations/${activeOrganization.id}`, {
+      const response = await orgFetch(`/api/organizations/${activeOrganization.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: trimmedName }),

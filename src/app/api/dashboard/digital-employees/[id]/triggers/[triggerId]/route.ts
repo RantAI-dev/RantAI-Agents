@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DashboardDigitalEmployeeTriggerUpdateSchema,
 } from "@/features/digital-employees/interactions/schema"
@@ -22,7 +22,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
     }
 
     const { id, triggerId } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsed = DashboardDigitalEmployeeTriggerUpdateSchema.safeParse(await req.json())
     if (!parsed.success) {
       return NextResponse.json(
@@ -56,7 +56,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     }
 
     const { id, triggerId } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await deleteDigitalEmployeeTrigger({
       id,
       organizationId: orgContext?.organizationId ?? null,

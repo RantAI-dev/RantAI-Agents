@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useOrgFetch, useActiveOrgChange } from "@/hooks/use-organization"
 import type { Assistant, AssistantInput, MemoryConfig, ModelConfig, ChatConfig, GuardRailsConfig } from "@/lib/types/assistant"
 
 const SELECTED_KEY = "rantai-selected-assistant"
 const ASSISTANT_CHANGE_EVENT = "rantai-assistant-change"
+const ASSISTANTS_MUTATED_EVENT = "rantai-assistants-mutated"
 
 function resolveSelectedAssistantId(
   assistants: Assistant[],
@@ -81,6 +83,7 @@ function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
 
 export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
   const initialAssistants = options?.initialAssistants
+  const orgFetch = useOrgFetch()
   const [assistants, setAssistants] = useState<Assistant[]>(
     initialAssistants ? initialAssistants.map(mapDbAssistant) : []
   )
@@ -92,12 +95,20 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
   })
   const [isLoading, setIsLoading] = useState(initialAssistants ? false : true)
   const [error, setError] = useState<string | null>(null)
+  // Flag the case where the user's previously-selected assistant is no longer
+  // in the list (deleted, revoked, org switched). Consumers can show a banner
+  // and clear() once acknowledged; resolveSelectedAssistantId still snaps to a
+  // valid fallback so the UI never breaks.
+  const [missingSelection, setMissingSelection] = useState<{
+    id: string
+    fallbackId: string | null
+  } | null>(null)
 
   // Fetch assistants from API
   const fetchAssistants = useCallback(async () => {
     try {
       setError(null)
-      const response = await fetch("/api/assistants")
+      const response = await orgFetch("/api/assistants")
       if (!response.ok) {
         throw new Error("Failed to fetch assistants")
       }
@@ -113,6 +124,13 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         storedSelected
       )
       if (nextSelectedId !== selectedAssistantId) {
+        // If the user had a stored selection that is no longer present, flag
+        // it so the UI can surface "X was removed, switched to Y" instead of
+        // a silent snap. Skip if there was no prior selection (first load).
+        const prior = selectedAssistantId ?? storedSelected
+        if (prior && !mapped.some((a: Assistant) => a.id === prior)) {
+          setMissingSelection({ id: prior, fallbackId: nextSelectedId })
+        }
         setSelectedAssistantId(nextSelectedId)
       }
     } catch (err) {
@@ -121,7 +139,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedAssistantId])
+  }, [orgFetch, selectedAssistantId])
 
   // Initial fetch (unless server hydrated)
   useEffect(() => {
@@ -130,6 +148,14 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
     }
     fetchAssistants()
   }, [fetchAssistants, initialAssistants])
+
+  // Refetch on active-org change (user switched orgs via the sidebar).
+  // Replaces the stale list without a page reload; respects server-side
+  // hydration on the very first paint by routing through fetchAssistants
+  // which always hits /api/assistants for the new org context.
+  useActiveOrgChange(useCallback(() => {
+    void fetchAssistants()
+  }, [fetchAssistants]))
 
   // Initialize selected assistant from stored/default when assistants are already hydrated
   useEffect(() => {
@@ -161,16 +187,22 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
       }
     }
 
+    const handleMutated = () => {
+      void fetchAssistants()
+    }
+
     window.addEventListener(
       ASSISTANT_CHANGE_EVENT,
       handleAssistantChange as EventListener
     )
+    window.addEventListener(ASSISTANTS_MUTATED_EVENT, handleMutated)
 
     return () => {
       window.removeEventListener(
         ASSISTANT_CHANGE_EVENT,
         handleAssistantChange as EventListener
       )
+      window.removeEventListener(ASSISTANTS_MUTATED_EVENT, handleMutated)
     }
   }, [assistants, fetchAssistants])
 
@@ -197,7 +229,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
   const addAssistant = useCallback(
     async (input: AssistantInput): Promise<Assistant | null> => {
       try {
-        const response = await fetch("/api/assistants", {
+        const response = await orgFetch("/api/assistants", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),
@@ -210,6 +242,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         const data = await response.json()
         const newAssistant = mapDbAssistant(data)
         setAssistants((prev) => [...prev, newAssistant])
+        window.dispatchEvent(new CustomEvent(ASSISTANTS_MUTATED_EVENT))
         return newAssistant
       } catch (err) {
         console.error("Failed to create assistant:", err)
@@ -217,13 +250,13 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         return null
       }
     },
-    []
+    [orgFetch]
   )
 
   const updateAssistant = useCallback(
     async (id: string, updates: Partial<AssistantInput>): Promise<boolean> => {
       try {
-        const response = await fetch(`/api/assistants/${id}`, {
+        const response = await orgFetch(`/api/assistants/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updates),
@@ -240,6 +273,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         setAssistants((prev) =>
           prev.map((a) => (a.id === id ? updatedAssistant : a))
         )
+        window.dispatchEvent(new CustomEvent(ASSISTANTS_MUTATED_EVENT))
         return true
       } catch (err) {
         console.error("Failed to update assistant:", err)
@@ -247,13 +281,13 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         return false
       }
     },
-    []
+    [orgFetch]
   )
 
   const deleteAssistant = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        const response = await fetch(`/api/assistants/${id}`, {
+        const response = await orgFetch(`/api/assistants/${id}`, {
           method: "DELETE",
         })
 
@@ -273,6 +307,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
           }
         }
 
+        window.dispatchEvent(new CustomEvent(ASSISTANTS_MUTATED_EVENT))
         return true
       } catch (err) {
         console.error("Failed to delete assistant:", err)
@@ -280,7 +315,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         return false
       }
     },
-    [assistants, selectedAssistantId]
+    [orgFetch, assistants, selectedAssistantId]
   )
 
   const getAssistantById = useCallback(
@@ -295,12 +330,20 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
     fetchAssistants()
   }, [fetchAssistants])
 
+  // Consumer calls this after surfacing the "your assistant was removed"
+  // notice — keeps state clean so the banner doesn't re-appear on re-render.
+  const acknowledgeMissingSelection = useCallback(() => {
+    setMissingSelection(null)
+  }, [])
+
   return {
     assistants,
     selectedAssistant,
     selectedAssistantId,
     isLoading,
     error,
+    missingSelection,
+    acknowledgeMissingSelection,
     selectAssistant,
     addAssistant,
     updateAssistant,

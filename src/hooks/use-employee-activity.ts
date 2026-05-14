@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect, useRef } from "react"
 
 export interface ActivityEvent {
@@ -17,6 +19,8 @@ export interface DailySummary {
 }
 
 export function useEmployeeActivity(employeeId: string | null) {
+
+  const orgFetch = useOrgFetch()
   const [events, setEvents] = useState<ActivityEvent[]>([])
   const [dailySummary, setDailySummary] = useState<DailySummary>({
     totalRuns: 0, completed: 0, failed: 0, totalTokens: 0,
@@ -27,7 +31,7 @@ export function useEmployeeActivity(employeeId: string | null) {
   const refresh = useCallback(async () => {
     if (!employeeId) return
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/activity`)
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/activity`)
       if (res.ok) {
         const data = await res.json()
         setEvents(data.events || [])

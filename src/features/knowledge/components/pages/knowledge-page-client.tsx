@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -90,6 +92,7 @@ export default function KnowledgePageClient({
   initialSelectedKBId: string | null
   initialAction: string | null
 }) {
+  const orgFetch = useOrgFetch()
   const router = useRouter()
 
   const [documents, setDocuments] = useState<Document[]>(initialDocuments)
@@ -164,7 +167,7 @@ export default function KnowledgePageClient({
 
   const fetchKnowledgeBases = useCallback(async () => {
     try {
-      const response = await fetch("/api/dashboard/files/groups")
+      const response = await orgFetch("/api/dashboard/files/groups")
       if (response.ok) {
         const data = await response.json()
         setKnowledgeBases(data.groups)
@@ -176,7 +179,7 @@ export default function KnowledgePageClient({
 
   const fetchCategories = useCallback(async () => {
     try {
-      const response = await fetch("/api/dashboard/files/categories")
+      const response = await orgFetch("/api/dashboard/files/categories")
       if (response.ok) {
         const data = await response.json()
         setCategories(data.categories)
@@ -205,7 +208,7 @@ export default function KnowledgePageClient({
 
   const handleDelete = async (id: string) => {
     try {
-      const response = await fetch(`/api/dashboard/files/${id}`, {
+      const response = await orgFetch(`/api/dashboard/files/${id}`, {
         method: "DELETE",
       })
       if (response.ok) {
@@ -310,7 +313,7 @@ export default function KnowledgePageClient({
     if (!selectedKB) return
 
     try {
-      const response = await fetch(`/api/dashboard/files/groups/${selectedKB.id}`, {
+      const response = await orgFetch(`/api/dashboard/files/groups/${selectedKB.id}`, {
         method: "DELETE",
       })
       if (response.ok) {
@@ -620,7 +623,7 @@ export default function KnowledgePageClient({
                     if (idx >= ids.length) return
                     const id = ids[idx]
                     try {
-                      await fetch(`/api/dashboard/files/${id}`, { method: "DELETE" })
+                      await orgFetch(`/api/dashboard/files/${id}`, { method: "DELETE" })
                     } catch {
                       // best-effort — refresh below will reconcile
                     }
@@ -680,7 +683,7 @@ export default function KnowledgePageClient({
               onClick={async () => {
                 if (!deleteCategory) return
                 try {
-                  const response = await fetch(`/api/dashboard/files/categories/${deleteCategory.id}`, {
+                  const response = await orgFetch(`/api/dashboard/files/categories/${deleteCategory.id}`, {
                     method: "DELETE",
                   })
                   if (response.ok) {

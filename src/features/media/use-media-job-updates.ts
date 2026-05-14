@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useEffect } from "react"
 import { getClientSocket, useSocketEvent } from "@/hooks/use-socket"
 import { useMediaStudioStore } from "@/features/media/store"
@@ -10,6 +12,7 @@ import { useMediaStudioStore } from "@/features/media/store"
  * the media studio store. No data is fetched at mount time.
  */
 export function useMediaJobUpdates(organizationId: string) {
+  const orgFetch = useOrgFetch()
   // Join / leave the org room so we receive org-scoped events
   useEffect(() => {
     if (!organizationId) return
@@ -35,7 +38,7 @@ export function useMediaJobUpdates(organizationId: string) {
   // Subscribe to job update events — no mount-time fetch, only on event
   useSocketEvent("media:job:update", (payload) => {
     const event = payload as { jobId: string; status: string }
-    fetch(`/api/dashboard/media/jobs/${event.jobId}`)
+    orgFetch(`/api/dashboard/media/jobs/${event.jobId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((job) => {
         if (job) useMediaStudioStore.getState().upsertJob(job)

@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 import type { AgentApiKeyResponse } from "@/features/agent-api-keys/service"
 
@@ -12,6 +14,8 @@ export interface AgentApiKeyInput {
 }
 
 export function useAgentApiKeys(assistantId: string | null) {
+
+  const orgFetch = useOrgFetch()
   const [keys, setKeys] = useState<AgentApiKeyResponse[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -44,7 +48,7 @@ export function useAgentApiKeys(assistantId: string | null) {
   const createKey = useCallback(
     async (input: AgentApiKeyInput): Promise<AgentApiKeyResponse | null> => {
       try {
-        const response = await fetch("/api/dashboard/agent-api-keys", {
+        const response = await orgFetch("/api/dashboard/agent-api-keys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),
@@ -71,7 +75,7 @@ export function useAgentApiKeys(assistantId: string | null) {
       updates: Partial<Omit<AgentApiKeyInput, "assistantId">> & { enabled?: boolean }
     ): Promise<boolean> => {
       try {
-        const response = await fetch(`/api/dashboard/agent-api-keys/${id}`, {
+        const response = await orgFetch(`/api/dashboard/agent-api-keys/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updates),
@@ -91,7 +95,7 @@ export function useAgentApiKeys(assistantId: string | null) {
 
   const deleteKey = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/dashboard/agent-api-keys/${id}`, {
+      const response = await orgFetch(`/api/dashboard/agent-api-keys/${id}`, {
         method: "DELETE",
       })
       if (!response.ok) throw new Error("Failed to delete API key")

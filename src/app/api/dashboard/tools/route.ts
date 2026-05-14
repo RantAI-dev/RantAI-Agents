@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { CreateToolSchema } from "@/features/tools/schema"
 import {
   createDashboardTool,
@@ -15,7 +15,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const tools = await listToolsForDashboard(orgContext?.organizationId ?? null)
     return NextResponse.json(tools)
   } catch (error) {
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsed = CreateToolSchema.safeParse(await req.json())
     if (!parsed.success) {
       return NextResponse.json(

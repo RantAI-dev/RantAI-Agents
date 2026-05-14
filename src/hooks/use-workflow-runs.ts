@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect, useRef } from "react"
 import type { StepLogEntry } from "@/lib/workflow/types"
 
@@ -21,6 +23,7 @@ export function useWorkflowRuns(
   workflowId: string | null,
   options?: { initialRuns?: WorkflowRunItem[] }
 ) {
+  const orgFetch = useOrgFetch()
   const initialRuns = options?.initialRuns
   const [runs, setRuns] = useState<WorkflowRunItem[]>(initialRuns || [])
   const [isLoading, setIsLoading] = useState(false)
@@ -31,7 +34,7 @@ export function useWorkflowRuns(
     if (!workflowId) return
     try {
       setIsLoading(true)
-      const res = await fetch(`/api/dashboard/workflows/${workflowId}/runs`)
+      const res = await orgFetch(`/api/dashboard/workflows/${workflowId}/runs`)
       if (!res.ok) throw new Error("Failed to fetch runs")
       const data = await res.json()
       setRuns(data)
@@ -46,7 +49,7 @@ export function useWorkflowRuns(
     async (runId: string) => {
       if (!workflowId) return
       try {
-        const res = await fetch(`/api/dashboard/workflows/${workflowId}/runs/${runId}`)
+        const res = await orgFetch(`/api/dashboard/workflows/${workflowId}/runs/${runId}`)
         if (!res.ok) throw new Error("Failed to fetch run")
         const data = await res.json()
         setActiveRun(data)
@@ -61,7 +64,7 @@ export function useWorkflowRuns(
   const executeWorkflow = useCallback(
     async (input: unknown = {}) => {
       if (!workflowId) return null
-      const res = await fetch(`/api/dashboard/workflows/${workflowId}/execute`, {
+      const res = await orgFetch(`/api/dashboard/workflows/${workflowId}/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ input }),

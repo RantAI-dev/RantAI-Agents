@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback } from "react"
 import { ArrowUpRight, ArrowDown, Loader2, TrendingUp, TrendingDown, Shield } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -41,13 +43,14 @@ const LEVEL_COLORS: Record<string, string> = {
 }
 
 export function TrustScoreCard({ employeeId, onLevelChange, initialData }: TrustScoreCardProps) {
+  const orgFetch = useOrgFetch()
   const [data, setData] = useState<TrustSummaryData | null>(initialData ?? null)
   const [isPromoting, setIsPromoting] = useState(false)
   const [isDemoting, setIsDemoting] = useState(false)
 
   const fetchTrust = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/trust`)
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/trust`)
       if (res.ok) setData(await res.json())
     } catch {
       // ignore
@@ -57,7 +60,7 @@ export function TrustScoreCard({ employeeId, onLevelChange, initialData }: Trust
   const handlePromote = async () => {
     setIsPromoting(true)
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/trust/promote`, { method: "POST" })
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/trust/promote`, { method: "POST" })
       if (!res.ok) throw new Error((await res.json()).error)
       const result = await res.json()
       toast.success(`Promoted to ${result.label}`)
@@ -73,7 +76,7 @@ export function TrustScoreCard({ employeeId, onLevelChange, initialData }: Trust
   const handleDemote = async () => {
     setIsDemoting(true)
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/trust/demote`, { method: "POST" })
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/trust/demote`, { method: "POST" })
       if (!res.ok) throw new Error((await res.json()).error)
       const result = await res.json()
       toast.success(`Demoted to ${result.label}`)

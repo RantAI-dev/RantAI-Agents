@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useMemo } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 
 interface AssistantSkillBinding {
   id: string
@@ -10,6 +11,7 @@ interface AssistantSkillBinding {
 }
 
 export function useAssistantSkills(assistantId: string | null) {
+  const orgFetch = useOrgFetch()
   const [bindings, setBindings] = useState<AssistantSkillBinding[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
@@ -20,7 +22,7 @@ export function useAssistantSkills(assistantId: string | null) {
     }
     try {
       setIsLoading(true)
-      const res = await fetch(`/api/assistants/${assistantId}/skills`)
+      const res = await orgFetch(`/api/assistants/${assistantId}/skills`)
       if (!res.ok) throw new Error("Failed to fetch")
       const data = await res.json()
       setBindings(data)
@@ -29,12 +31,12 @@ export function useAssistantSkills(assistantId: string | null) {
     } finally {
       setIsLoading(false)
     }
-  }, [assistantId])
+  }, [orgFetch, assistantId])
 
   const updateAssistantSkills = useCallback(
     async (skillIds: string[]) => {
       if (!assistantId) return
-      const res = await fetch(`/api/assistants/${assistantId}/skills`, {
+      const res = await orgFetch(`/api/assistants/${assistantId}/skills`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ skillIds }),
@@ -43,7 +45,7 @@ export function useAssistantSkills(assistantId: string | null) {
       const data = await res.json()
       setBindings(data)
     },
-    [assistantId]
+    [orgFetch, assistantId]
   )
 
   useEffect(() => {

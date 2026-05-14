@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { listPendingDigitalEmployeeApprovals } from "@/features/digital-employees/employees/service"
 
 // GET /api/dashboard/digital-employees/pending-approvals
@@ -11,7 +11,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await listPendingDigitalEmployeeApprovals({
       organizationId: orgContext?.organizationId ?? null,
     })

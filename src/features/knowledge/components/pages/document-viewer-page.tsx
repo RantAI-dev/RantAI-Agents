@@ -1,6 +1,5 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import {
   getKnowledgeDocumentForDashboard,
   type KnowledgeDocumentDetail,
@@ -46,11 +45,7 @@ export default async function DocumentViewerPage({
     return <DocumentViewerClient id={id} initialDocument={null} />
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-  const orgContext = await getOrganizationContext(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
 
   const result = await getKnowledgeDocumentForDashboard({
     documentId: id,

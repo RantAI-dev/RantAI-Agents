@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef, use } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 import { useRouter } from "next/navigation"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useDefaultAssistant } from "@/hooks/use-default-assistant"
@@ -120,6 +121,7 @@ export default function AgentEditorPageClient({
   const { id } = use(params)
   const isNew = id === "new"
   const router = useRouter()
+  const orgFetch = useOrgFetch()
 
   const {
     assistants,
@@ -168,6 +170,7 @@ export default function AgentEditorPageClient({
   const [form, setForm] = useState<FormState>(getInitialState())
   const [isSaving, setIsSaving] = useState(false)
   const [isDirty, setIsDirty] = useState(isNew)
+  const [hydrationMissed, setHydrationMissed] = useState(false)
   const initializedRef = useRef(false)
 
   // Defensive redirect: /dashboard/agent-builder/new should use the dedicated wizard route
@@ -177,15 +180,76 @@ export default function AgentEditorPageClient({
     }
   }, [id, router])
 
-  // Load existing agent data
+  // Load existing agent data. Re-runs whenever `assistants` updates so a late
+  // cross-instance refresh (e.g. agent just created elsewhere) can still
+  // initialize the form. Once user is dirty, we stop overwriting their edits.
   useEffect(() => {
-    if (isNew || isLoading || initializedRef.current) return
+    if (isNew || isLoading) return
+    if (initializedRef.current) return
     const agent = assistants.find((a) => a.id === id)
     if (agent) {
       setForm(getInitialState(agent))
       initializedRef.current = true
+      setHydrationMissed(false)
+    } else {
+      setHydrationMissed(true)
     }
   }, [isNew, isLoading, assistants, id])
+
+  // If hydration missed the target agent, force a client refetch — works
+  // whether the agent exists in another org context or was just created.
+  useEffect(() => {
+    if (hydrationMissed && !initializedRef.current) {
+      refetch()
+    }
+  }, [hydrationMissed, refetch])
+
+  // Last-resort: if the list refetch still doesn't include the agent
+  // (e.g. cross-org link), fetch the single record directly. The server
+  // will 404 if the user truly has no access; that surfaces a real error
+  // instead of silently showing a blank "new agent" form.
+  useEffect(() => {
+    if (isNew || initializedRef.current || !hydrationMissed) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await orgFetch(`/api/assistants/${id}`)
+        if (!res.ok || cancelled) return
+        const dbAgent = await res.json()
+        const mapped: Assistant = {
+          id: dbAgent.id,
+          name: dbAgent.name,
+          description: dbAgent.description || "",
+          emoji: dbAgent.emoji,
+          systemPrompt: dbAgent.systemPrompt,
+          model: dbAgent.model || undefined,
+          useKnowledgeBase: dbAgent.useKnowledgeBase,
+          knowledgeBaseGroupIds: dbAgent.knowledgeBaseGroupIds,
+          memoryConfig: dbAgent.memoryConfig as MemoryConfig | undefined,
+          modelConfig: dbAgent.modelConfig as ModelConfig | undefined,
+          chatConfig: dbAgent.chatConfig as ChatConfig | undefined,
+          guardRails: dbAgent.guardRails as GuardRailsConfig | undefined,
+          avatarS3Key: dbAgent.avatarS3Key || undefined,
+          openingMessage: dbAgent.openingMessage || undefined,
+          openingQuestions: dbAgent.openingQuestions || undefined,
+          tags: dbAgent.tags || [],
+          isDefault: dbAgent.isSystemDefault,
+          isEditable: true,
+          liveChatEnabled: dbAgent.liveChatEnabled ?? false,
+          toolCount: dbAgent.toolCount ?? dbAgent._count?.tools ?? 0,
+          createdAt: new Date(dbAgent.createdAt),
+        }
+        if (cancelled) return
+        setForm(getInitialState(mapped))
+        initializedRef.current = true
+      } catch {
+        // ignore — refetch above will retry on next assistants update
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isNew, hydrationMissed, id, orgFetch])
 
   // Sync tool IDs from the server
   useEffect(() => {
@@ -332,7 +396,7 @@ export default function AgentEditorPageClient({
           const promises: Promise<unknown>[] = []
           if (form.selectedToolIds.length > 0) {
             promises.push(
-              fetch(`/api/assistants/${created.id}/tools`, {
+              orgFetch(`/api/assistants/${created.id}/tools`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ toolIds: form.selectedToolIds }),
@@ -341,7 +405,7 @@ export default function AgentEditorPageClient({
           }
           if (form.selectedSkillIds.length > 0) {
             promises.push(
-              fetch(`/api/assistants/${created.id}/skills`, {
+              orgFetch(`/api/assistants/${created.id}/skills`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ skillIds: form.selectedSkillIds }),
@@ -350,7 +414,7 @@ export default function AgentEditorPageClient({
           }
           if (form.selectedMcpServerIds.length > 0) {
             promises.push(
-              fetch(`/api/assistants/${created.id}/mcp-servers`, {
+              orgFetch(`/api/assistants/${created.id}/mcp-servers`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ mcpServerIds: form.selectedMcpServerIds }),
@@ -359,7 +423,7 @@ export default function AgentEditorPageClient({
           }
           if (form.selectedWorkflowIds.length > 0) {
             promises.push(
-              fetch(`/api/assistants/${created.id}/workflows`, {
+              orgFetch(`/api/assistants/${created.id}/workflows`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ workflowIds: form.selectedWorkflowIds }),

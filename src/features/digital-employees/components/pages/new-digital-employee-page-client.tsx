@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
@@ -102,6 +104,7 @@ export default function NewDigitalEmployeePageClient({
   initialGroups: EmployeeGroupItem[]
   initialTemplates: SharedTemplate[]
 }) {
+  const orgFetch = useOrgFetch()
   const router = useRouter()
   const { assistants, isLoading: assistantsLoading } = useAssistants({
     initialAssistants,
@@ -173,7 +176,7 @@ export default function NewDigitalEmployeePageClient({
       if (teamMode === "existing" && selectedGroupId) {
         groupId = selectedGroupId
       } else if (teamMode === "new" && newTeamName.trim()) {
-        const res = await fetch("/api/dashboard/groups", {
+        const res = await orgFetch("/api/dashboard/groups", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: newTeamName.trim(), description: newTeamDesc.trim() || undefined }),
@@ -183,7 +186,7 @@ export default function NewDigitalEmployeePageClient({
         groupId = team.id
       }
 
-      const res = await fetch("/api/dashboard/digital-employees", {
+      const res = await orgFetch("/api/dashboard/digital-employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

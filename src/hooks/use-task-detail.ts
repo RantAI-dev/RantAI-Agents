@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect, useRef } from "react"
 import type {
   Task,
@@ -20,6 +22,7 @@ export function useTaskDetail(
   taskId: string | null,
   options: UseTaskDetailOptions = {}
 ) {
+  const orgFetch = useOrgFetch()
   const { pollInterval = 15000 } = options
 
   const [task, setTask] = useState<Task | null>(null)
@@ -33,7 +36,7 @@ export function useTaskDetail(
     if (!taskId) return
     try {
       setIsLoading(true)
-      const res = await fetch(`/api/dashboard/tasks/${taskId}`)
+      const res = await orgFetch(`/api/dashboard/tasks/${taskId}`)
       if (!res.ok) {
         const data = await res.json()
         setError(data.error || "Failed to fetch task")
@@ -55,7 +58,7 @@ export function useTaskDetail(
   const updateTask = useCallback(
     async (input: UpdateTaskInput): Promise<Task> => {
       if (!taskId) throw new Error("No task selected")
-      const res = await fetch(`/api/dashboard/tasks/${taskId}`, {
+      const res = await orgFetch(`/api/dashboard/tasks/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -74,7 +77,7 @@ export function useTaskDetail(
   const submitReview = useCallback(
     async (input: ReviewInput): Promise<void> => {
       if (!taskId) throw new Error("No task selected")
-      const res = await fetch(`/api/dashboard/tasks/${taskId}/review`, {
+      const res = await orgFetch(`/api/dashboard/tasks/${taskId}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -91,7 +94,7 @@ export function useTaskDetail(
   const addComment = useCallback(
     async (input: AddCommentInput): Promise<TaskComment> => {
       if (!taskId) throw new Error("No task selected")
-      const res = await fetch(`/api/dashboard/tasks/${taskId}/comments`, {
+      const res = await orgFetch(`/api/dashboard/tasks/${taskId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -110,7 +113,7 @@ export function useTaskDetail(
   const addSubtask = useCallback(
     async (input: CreateTaskInput): Promise<Task> => {
       if (!taskId) throw new Error("No task selected")
-      const res = await fetch("/api/dashboard/tasks", {
+      const res = await orgFetch("/api/dashboard/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...input, parent_task_id: taskId }),
@@ -128,7 +131,7 @@ export function useTaskDetail(
 
   const submitSubtaskReview = useCallback(
     async (subtaskId: string, input: ReviewInput): Promise<void> => {
-      const res = await fetch(`/api/dashboard/tasks/${subtaskId}/review`, {
+      const res = await orgFetch(`/api/dashboard/tasks/${subtaskId}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),

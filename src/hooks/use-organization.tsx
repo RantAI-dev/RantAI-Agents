@@ -4,6 +4,7 @@ import {
   useState,
   useEffect,
   useCallback,
+  useRef,
   createContext,
   useContext,
   ReactNode,
@@ -99,15 +100,56 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     fetchOrganizations()
   }, [fetchOrganizations])
 
-  // Set active organization with persistence
+  // Set active organization. Persists to:
+  //   - localStorage (fast client read, no fetch needed for org selector UI)
+  //   - HTTP-only cookie via API (server reads this in resolveActiveOrg)
+  // The cookie is the source of truth server-side; localStorage is a mirror.
+  // Also broadcasts ACTIVE_ORG_CHANGED_EVENT so other hooks can refetch.
   const setActiveOrganization = useCallback((org: Organization | null) => {
     setActiveOrganizationState(org)
     if (org) {
       localStorage.setItem(STORAGE_KEY, org.id)
+      void fetch("/api/user/active-organization", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organizationId: org.id }),
+        credentials: "include",
+      })
+        .catch(() => {
+          // Cookie write failure is non-fatal — server may briefly resolve via
+          // the auto-pick branch until the next attempt.
+        })
+        .finally(() => {
+          window.dispatchEvent(new CustomEvent(ACTIVE_ORG_CHANGED_EVENT))
+        })
     } else {
       localStorage.removeItem(STORAGE_KEY)
+      void fetch("/api/user/active-organization", {
+        method: "DELETE",
+        credentials: "include",
+      })
+        .catch(() => {})
+        .finally(() => {
+          window.dispatchEvent(new CustomEvent(ACTIVE_ORG_CHANGED_EVENT))
+        })
     }
   }, [])
+
+  // Migration shim: on first mount, if localStorage has a value but the cookie
+  // hasn't been set yet (existing users from before this fix), POST to set it.
+  // Idempotent — backend just rewrites the cookie. Fires once per session.
+  const migratedRef = useRef(false)
+  useEffect(() => {
+    if (migratedRef.current) return
+    if (!activeOrganization?.id) return
+    migratedRef.current = true
+    void fetch("/api/user/active-organization", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ organizationId: activeOrganization.id }),
+      credentials: "include",
+    }).catch(() => {})
+  }, [activeOrganization?.id])
 
   // Create new organization
   const createOrganization = useCallback(async (name: string): Promise<Organization | null> => {
@@ -289,29 +331,45 @@ export function useOrganizationMembers(organizationId: string | null) {
 }
 
 /**
- * Hook that provides a fetch function with organization context header
+ * Hook that provides a fetch function with organization context header.
+ *
+ * The returned function has *stable identity* — it does not change when the
+ * active organization changes. This means callers can safely use it in
+ * useCallback / useEffect dependency arrays without re-creating their closures
+ * on every org switch.
+ *
+ * To auto-refresh data when the user switches orgs, listen for the
+ * `ACTIVE_ORG_CHANGED_EVENT` window event instead. See `useActiveOrgChange`.
  */
+export const ACTIVE_ORG_CHANGED_EVENT = "rantai-active-org-changed"
+
 export function useOrgFetch() {
   const { activeOrganization } = useOrganization()
+  const activeOrgIdRef = useRef<string | null>(activeOrganization?.id ?? null)
+  activeOrgIdRef.current = activeOrganization?.id ?? null
 
-  const orgFetch = useCallback(
+  return useCallback(
     async (url: string, options: RequestInit = {}): Promise<Response> => {
       const headers = new Headers(options.headers)
-
-      // Add organization context header if active organization exists
-      if (activeOrganization?.id) {
-        headers.set("x-organization-id", activeOrganization.id)
+      if (activeOrgIdRef.current) {
+        headers.set("x-organization-id", activeOrgIdRef.current)
       }
-
-      return fetch(url, {
-        ...options,
-        headers,
-      })
+      return fetch(url, { ...options, headers, credentials: "include" })
     },
-    [activeOrganization?.id]
+    []
   )
+}
 
-  return orgFetch
+/**
+ * Subscribe to active-organization changes. Hooks should call this and
+ * re-run their fetches when the event fires.
+ */
+export function useActiveOrgChange(handler: () => void) {
+  useEffect(() => {
+    const cb = () => handler()
+    window.addEventListener(ACTIVE_ORG_CHANGED_EVENT, cb)
+    return () => window.removeEventListener(ACTIVE_ORG_CHANGED_EVENT, cb)
+  }, [handler])
 }
 
 /**

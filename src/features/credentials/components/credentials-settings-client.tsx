@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -67,6 +69,7 @@ export default function CredentialsSettingsClient({
 }: {
   initialCredentials: Credential[]
 }) {
+  const orgFetch = useOrgFetch()
   const [credentials, setCredentials] = useState<Credential[]>(initialCredentials)
   const [searchQuery, setSearchQuery] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -87,7 +90,7 @@ export default function CredentialsSettingsClient({
 
   const fetchCredentials = async () => {
     try {
-      const res = await fetch("/api/dashboard/credentials")
+      const res = await orgFetch("/api/dashboard/credentials")
       const data = await res.json()
       if (Array.isArray(data)) setCredentials(data)
     } catch {
@@ -163,7 +166,7 @@ export default function CredentialsSettingsClient({
         // Update
         const body: Record<string, unknown> = { name: formName, type: formType }
         if (data && Object.keys(data).length > 0) body.data = data
-        await fetch(`/api/dashboard/credentials/${editingCredential.id}`, {
+        await orgFetch(`/api/dashboard/credentials/${editingCredential.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -171,7 +174,7 @@ export default function CredentialsSettingsClient({
       } else {
         // Create
         if (!data || Object.keys(data).length === 0) return
-        await fetch("/api/dashboard/credentials", {
+        await orgFetch("/api/dashboard/credentials", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: formName, type: formType, data }),
@@ -189,7 +192,7 @@ export default function CredentialsSettingsClient({
 
   const handleDelete = async () => {
     if (!deleteConfirm) return
-    await fetch(`/api/dashboard/credentials/${deleteConfirm.id}`, { method: "DELETE" })
+    await orgFetch(`/api/dashboard/credentials/${deleteConfirm.id}`, { method: "DELETE" })
     setDeleteConfirm(null)
     await fetchCredentials()
   }

@@ -18,7 +18,10 @@ export async function listAssistantsByScope(organizationId: string | null) {
     include: {
       _count: { select: { tools: true } },
     },
-    orderBy: [{ isBuiltIn: "desc" }, { createdAt: "asc" }],
+    // User-created agents first (isBuiltIn=false sorts before true under asc),
+    // then newest-first within each group so fresh creations land at the top
+    // of the list instead of being buried below built-ins + older items.
+    orderBy: [{ isBuiltIn: "asc" }, { createdAt: "desc" }],
   })
 }
 

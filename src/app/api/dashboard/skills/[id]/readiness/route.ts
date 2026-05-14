@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DashboardSkillIdParamsSchema,
   DashboardSkillReadinessQuerySchema,
@@ -34,7 +34,7 @@ export async function GET(
       )
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const readiness = await getDashboardSkillReadiness({
       skillId: parsedParams.data.id,
       assistantId: parsedQuery.data.assistantId,

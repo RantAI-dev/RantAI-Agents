@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useMemo } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 
 interface AssistantToolItem {
   id: string
@@ -13,6 +14,7 @@ interface AssistantToolItem {
 }
 
 export function useAssistantTools(assistantId: string | null) {
+  const orgFetch = useOrgFetch()
   const [enabledTools, setEnabledTools] = useState<AssistantToolItem[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
@@ -23,7 +25,7 @@ export function useAssistantTools(assistantId: string | null) {
     }
     try {
       setIsLoading(true)
-      const res = await fetch(`/api/assistants/${assistantId}/tools`)
+      const res = await orgFetch(`/api/assistants/${assistantId}/tools`)
       if (!res.ok) throw new Error("Failed to fetch")
       const data = await res.json()
       setEnabledTools(data)
@@ -32,12 +34,12 @@ export function useAssistantTools(assistantId: string | null) {
     } finally {
       setIsLoading(false)
     }
-  }, [assistantId])
+  }, [orgFetch, assistantId])
 
   const updateAssistantTools = useCallback(
     async (toolIds: string[]) => {
       if (!assistantId) return
-      const res = await fetch(`/api/assistants/${assistantId}/tools`, {
+      const res = await orgFetch(`/api/assistants/${assistantId}/tools`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ toolIds }),
@@ -46,7 +48,7 @@ export function useAssistantTools(assistantId: string | null) {
       const data = await res.json()
       setEnabledTools(data)
     },
-    [assistantId]
+    [orgFetch, assistantId]
   )
 
   const toggleTool = useCallback(

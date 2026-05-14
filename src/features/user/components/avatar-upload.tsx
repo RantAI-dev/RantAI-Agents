@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useRef, useState, useCallback } from "react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -37,6 +39,7 @@ export function AvatarUpload({
   onUploadComplete,
   onAvatarRemoved,
 }: AvatarUploadProps) {
+  const orgFetch = useOrgFetch()
   const inputRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
   const [removing, setRemoving] = useState(false)
@@ -74,7 +77,7 @@ export function AvatarUpload({
         formData.append("file", file)
         formData.append("type", "avatar")
 
-        const response = await fetch("/api/upload", {
+        const response = await orgFetch("/api/upload", {
           method: "POST",
           body: formData,
         })
@@ -138,7 +141,7 @@ export function AvatarUpload({
   const handleRemoveAvatar = useCallback(async () => {
     setRemoving(true)
     try {
-      const response = await fetch("/api/admin/profile/avatar", {
+      const response = await orgFetch("/api/admin/profile/avatar", {
         method: "DELETE",
       })
 

@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import {
@@ -43,6 +45,7 @@ function formatDate(iso: string): string {
 }
 
 export function LibraryTab() {
+  const orgFetch = useOrgFetch()
   const [modality, setModality] = useState<"ALL" | "IMAGE" | "AUDIO" | "VIDEO">(
     "ALL"
   )
@@ -59,7 +62,7 @@ export function LibraryTab() {
   })
 
   const remove = async (id: string) => {
-    await fetch(`/api/dashboard/media/assets/${id}`, { method: "DELETE" })
+    await orgFetch(`/api/dashboard/media/assets/${id}`, { method: "DELETE" })
     setItems((prev) => prev.filter((a) => a.id !== id))
     if (preview?.id === id) setPreview(null)
   }
@@ -72,7 +75,7 @@ export function LibraryTab() {
     if (preview?.id === asset.id) {
       setPreview({ ...asset, isFavorite: next })
     }
-    await fetch(`/api/dashboard/media/assets/${asset.id}`, {
+    await orgFetch(`/api/dashboard/media/assets/${asset.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ isFavorite: next }),

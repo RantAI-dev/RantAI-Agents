@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState } from "react"
 import {
   ChevronDown, Settings, Wrench, Sparkles, Calendar, Trash2, Plus, Plug, Webhook,
@@ -100,6 +102,7 @@ interface SectionConfig {
 }
 
 export function TabSettings(props: TabSettingsProps) {
+  const orgFetch = useOrgFetch()
   const [openSections, setOpenSections] = useState<Set<string>>(new Set(["identity"]))
 
   const toggleSection = (id: string) => {
@@ -186,7 +189,7 @@ export function TabSettings(props: TabSettingsProps) {
                         className="w-full"
                         onClick={async () => {
                           try {
-                            const res = await fetch("/api/dashboard/templates", {
+                            const res = await orgFetch("/api/dashboard/templates", {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({
@@ -308,6 +311,7 @@ function SettingsIdentity({
   employee: { id: string; name: string; description: string | null; avatar: string | null; autonomyLevel: string; sandboxMode?: boolean }
   fetchEmployee: () => Promise<void>
 }) {
+  const orgFetch = useOrgFetch()
   const [settingsName, setSettingsName] = useState(employee.name)
   const [settingsDesc, setSettingsDesc] = useState(employee.description || "")
   const [settingsAvatar, setSettingsAvatar] = useState(employee.avatar || "")
@@ -317,7 +321,7 @@ function SettingsIdentity({
   const handleSave = useCallback(async () => {
     setIsSaving(true)
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employee.id}`, {
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employee.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -374,7 +378,7 @@ function SettingsIdentity({
           checked={employee.sandboxMode ?? false}
           onCheckedChange={async (checked) => {
             try {
-              const res = await fetch(`/api/dashboard/digital-employees/${employee.id}`, {
+              const res = await orgFetch(`/api/dashboard/digital-employees/${employee.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ sandboxMode: checked }),

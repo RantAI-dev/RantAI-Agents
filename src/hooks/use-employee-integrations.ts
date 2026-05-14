@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 
 export interface EmployeeIntegrationItem {
@@ -26,12 +28,14 @@ export interface EmployeeIntegrationItem {
 }
 
 export function useEmployeeIntegrations(employeeId: string) {
+
+  const orgFetch = useOrgFetch()
   const [integrations, setIntegrations] = useState<EmployeeIntegrationItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchIntegrations = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/integrations`)
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/integrations`)
       if (!res.ok) throw new Error("Failed to fetch")
       const data = await res.json()
       setIntegrations(data)
@@ -47,7 +51,7 @@ export function useEmployeeIntegrations(employeeId: string) {
   }, [fetchIntegrations])
 
   const connectIntegration = useCallback(async (integrationId: string, credentials: Record<string, string>, metadata?: Record<string, unknown>) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/integrations`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/integrations`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ integrationId, credentials, metadata }),
@@ -57,7 +61,7 @@ export function useEmployeeIntegrations(employeeId: string) {
   }, [employeeId, fetchIntegrations])
 
   const disconnectIntegration = useCallback(async (integrationId: string) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/integrations/${integrationId}`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/integrations/${integrationId}`, {
       method: "DELETE",
     })
     if (!res.ok) throw new Error("Failed to disconnect")
@@ -65,7 +69,7 @@ export function useEmployeeIntegrations(employeeId: string) {
   }, [employeeId, fetchIntegrations])
 
   const testIntegration = useCallback(async (integrationId: string): Promise<{ success: boolean; error?: string }> => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/integrations/${integrationId}/test`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/integrations/${integrationId}/test`, {
       method: "POST",
     })
     const data = await res.json()
@@ -74,7 +78,7 @@ export function useEmployeeIntegrations(employeeId: string) {
   }, [employeeId, fetchIntegrations])
 
   const updateIntegration = useCallback(async (integrationId: string, credentials: Record<string, string>, metadata?: Record<string, unknown>) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/integrations/${integrationId}`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/integrations/${integrationId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ credentials, metadata }),

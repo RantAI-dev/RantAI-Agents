@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useEffect, useState, useCallback } from "react"
 import {
   Dialog,
@@ -73,6 +75,7 @@ export function BulkAssignDialog({
   onSuccess,
   presetDocIds,
 }: BulkAssignDialogProps) {
+  const orgFetch = useOrgFetch()
   const usingPreset = presetDocIds !== undefined
   const [filter, setFilter] = useState<OrphanFilter>("either")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -217,7 +220,7 @@ export function BulkAssignDialog({
           body.groupIds = Array.from(new Set([...keptIds, ...selectedKBIds]))
         }
         try {
-          const res = await fetch(`/api/dashboard/files/${doc.id}`, {
+          const res = await orgFetch(`/api/dashboard/files/${doc.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),

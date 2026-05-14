@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   AssistantIdParamsSchema,
   UpdateAssistantSchema,
@@ -28,12 +28,12 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const assistant = await getAssistantForUser({
       id: parsedParams.data.id,
       context: {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
       },
     })
     if (isHttpServiceError(assistant)) {
@@ -62,7 +62,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const bodyParse = UpdateAssistantSchema.safeParse(await request.json())
     if (!bodyParse.success) {
       return NextResponse.json(
@@ -76,7 +76,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       input: bodyParse.data,
       context: {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
       },
     })
     if (isHttpServiceError(assistant)) {
@@ -105,13 +105,13 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
 
     const result = await deleteAssistantForUser({
       id: parsedParams.data.id,
       context: {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
       },
     })
     if (isHttpServiceError(result)) {

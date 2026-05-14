@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     if (!orgContext?.organizationId) {
       return NextResponse.json({ events: [] })
     }

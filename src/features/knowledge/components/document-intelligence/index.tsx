@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { memo, Suspense, use, useMemo, useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Users, Link2, Network, Loader2 } from "@/lib/icons"
@@ -80,6 +82,7 @@ function DocumentIntelligenceContent({
 }: {
   intelligenceResource: Promise<IntelligenceLoadResult>
 }) {
+  const orgFetch = useOrgFetch()
   const [viewMode, setViewMode] = useState<ViewMode>("entities")
   const result = use(intelligenceResource)
 
@@ -136,6 +139,7 @@ function DocumentIntelligenceContent({
 }
 
 const DocumentIntelligence = memo<DocumentIntelligenceProps>(({ documentId, initialData }) => {
+  const orgFetch = useOrgFetch()
   const intelligenceResource = useMemo<Promise<IntelligenceLoadResult>>(() => {
     if (initialData !== undefined) {
       return Promise.resolve(
@@ -149,7 +153,7 @@ const DocumentIntelligence = memo<DocumentIntelligenceProps>(({ documentId, init
       return Promise.resolve({ data: null, error: "Failed to load data" })
     }
 
-    return fetch(`/api/dashboard/files/${documentId}/intelligence`)
+    return orgFetch(`/api/dashboard/files/${documentId}/intelligence`)
       .then(async (response) => {
         if (!response.ok) {
           return { data: null, error: "Failed to fetch document intelligence" }

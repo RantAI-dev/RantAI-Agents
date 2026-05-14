@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DashboardDigitalEmployeeMessageListQuerySchema,
 } from "@/features/digital-employees/interactions/schema"
@@ -21,7 +21,7 @@ export async function GET(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const { searchParams } = new URL(req.url)
     const parsed = DashboardDigitalEmployeeMessageListQuerySchema.safeParse({
       limit: searchParams.get("limit") ?? undefined,

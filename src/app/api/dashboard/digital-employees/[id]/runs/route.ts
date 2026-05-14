@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DigitalEmployeeIdParamsSchema,
   DigitalEmployeeRunsQuerySchema,
@@ -26,7 +26,7 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsedQuery = DigitalEmployeeRunsQuerySchema.safeParse(
       Object.fromEntries(new URL(req.url).searchParams.entries())
     )

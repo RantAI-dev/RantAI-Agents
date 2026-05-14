@@ -1,6 +1,5 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import {
   listAssistantsForUser,
   type AssistantListItem,
@@ -159,11 +158,7 @@ export async function loadChatSessionPageHydration(
     return {}
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
 
   let initialAssistants: ChatSessionPageHydration["initialAssistants"]
   let initialSessions: SerializedChatSession[] | undefined
@@ -171,7 +166,7 @@ export async function loadChatSessionPageHydration(
   try {
     const assistants = await listAssistantsForUser({
       organizationId: orgContext?.organizationId ?? null,
-      role: orgContext?.membership.role ?? null,
+      role: orgContext?.role ?? null,
     })
     initialAssistants = mapAssistantsForClient(assistants)
   } catch (error) {
@@ -215,9 +210,10 @@ export async function loadChatSessionPageHydration(
 
   if (assistantId) {
     try {
+      const accessCtx = { organizationId: orgContext?.organizationId ?? null }
       const [tools, skills, groups] = await Promise.all([
-        listAssistantTools(assistantId),
-        listAssistantSkills(assistantId),
+        listAssistantTools(assistantId, accessCtx),
+        listAssistantSkills(assistantId, accessCtx),
         listKnowledgeGroupsForDashboard(orgContext?.organizationId ?? null),
       ])
 

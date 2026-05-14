@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DigitalEmployeeToolParamsSchema,
   CustomToolUpdateBodySchema,
@@ -24,7 +24,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await getCustomToolForEmployee({
       employeeId: parsedParams.data.id,
       toolId: parsedParams.data.toolId,
@@ -61,7 +61,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: "Failed to update custom tool" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await updateCustomToolForEmployee({
       employeeId: parsedParams.data.id,
       toolId: parsedParams.data.toolId,
@@ -94,7 +94,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await deleteCustomToolForEmployee({
       employeeId: parsedParams.data.id,
       toolId: parsedParams.data.toolId,

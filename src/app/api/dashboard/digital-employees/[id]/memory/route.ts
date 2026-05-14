@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DashboardDigitalEmployeeIdParamsSchema,
   DashboardDigitalEmployeeMemoryQuerySchema,
@@ -22,7 +22,7 @@ export async function GET(req: Request, { params }: RouteParams) {
     }
 
     const { id } = DashboardDigitalEmployeeIdParamsSchema.parse(await params)
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsed = DashboardDigitalEmployeeMemoryQuerySchema.parse(
       Object.fromEntries(new URL(req.url).searchParams.entries())
     )

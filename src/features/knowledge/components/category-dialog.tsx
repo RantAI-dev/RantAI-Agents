@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect } from "react"
 import {
   Dialog,
@@ -46,6 +48,7 @@ export function CategoryDialog({
   onDelete,
   documentCount,
 }: CategoryDialogProps) {
+  const orgFetch = useOrgFetch()
   const [label, setLabel] = useState("")
   const [color, setColor] = useState(PRESET_COLORS[0])
   const [saving, setSaving] = useState(false)
@@ -72,7 +75,7 @@ export function CategoryDialog({
     setError("")
 
     try {
-      const response = await fetch(`/api/dashboard/files/categories/${editingCategory.id}`, {
+      const response = await orgFetch(`/api/dashboard/files/categories/${editingCategory.id}`, {
         method: "DELETE",
       })
 

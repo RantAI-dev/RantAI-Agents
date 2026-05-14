@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DigitalEmployeeGoalIdParamsSchema,
   UpdateDigitalEmployeeGoalSchema,
@@ -23,7 +23,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsedBody = UpdateDigitalEmployeeGoalSchema.safeParse(await req.json())
     if (!parsedBody.success) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
@@ -54,7 +54,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await deleteDigitalEmployeeGoalForEmployee({
       digitalEmployeeId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   deleteDashboardMcpServerForDashboard,
   getDashboardMcpServerForDashboard,
@@ -37,7 +37,7 @@ export async function GET(
       )
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const server = await getDashboardMcpServerForDashboard({
       id: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
@@ -75,7 +75,7 @@ export async function PUT(
       )
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsedBody = DashboardMcpServerUpdateBodySchema.safeParse(await req.json())
     if (!parsedBody.success) {
       return NextResponse.json(
@@ -122,7 +122,7 @@ export async function DELETE(
       )
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const server = await deleteDashboardMcpServerForDashboard({
       id: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,

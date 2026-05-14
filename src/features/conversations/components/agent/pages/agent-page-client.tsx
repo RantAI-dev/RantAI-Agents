@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react"
 import { QueuePanel } from "@/features/conversations/components/agent/queue-panel"
 import { AgentWorkspace } from "@/features/conversations/components/agent/agent-workspace"
@@ -54,18 +56,24 @@ function saveConversationState(id: string | null, data: QueueConversation | null
   }
 }
 
-async function fetchConversationStatus(conversationId: string): Promise<string | null> {
-  const response = await fetch(`/api/conversations/${conversationId}/status`)
+type OrgFetch = (url: string, options?: RequestInit) => Promise<Response>
+
+async function fetchConversationStatus(
+  orgFetch: OrgFetch,
+  conversationId: string
+): Promise<string | null> {
+  const response = await orgFetch(`/api/conversations/${conversationId}/status`)
   if (!response.ok) return null
   const data = (await response.json()) as { status?: string }
   return data.status ?? null
 }
 
 async function fetchConversationMessages(
+  orgFetch: OrgFetch,
   conversationId: string,
   signal?: AbortSignal
 ): Promise<Message[] | null> {
-  const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+  const response = await orgFetch(`/api/conversations/${conversationId}/messages`, {
     signal,
   })
   if (!response.ok) return null
@@ -73,7 +81,7 @@ async function fetchConversationMessages(
   return data.messages ?? []
 }
 
-function createConversationRestoreTask() {
+function createConversationRestoreTask(orgFetch: OrgFetch) {
   return async (
     setActiveConversationId: (value: string | null) => void,
     setAcceptedConversation: (value: QueueConversation | null) => void,
@@ -87,7 +95,7 @@ function createConversationRestoreTask() {
     }
 
     try {
-      const status = await fetchConversationStatus(stored.id)
+      const status = await fetchConversationStatus(orgFetch, stored.id)
       if (status !== "AGENT_CONNECTED") {
         saveConversationState(null, null)
         return
@@ -95,7 +103,7 @@ function createConversationRestoreTask() {
 
       setActiveConversationId(stored.id)
       setAcceptedConversation(stored.data)
-      const restoredMessages = await fetchConversationMessages(stored.id)
+      const restoredMessages = await fetchConversationMessages(orgFetch, stored.id)
       if (restoredMessages) {
         setMessages(restoredMessages)
       }
@@ -107,10 +115,10 @@ function createConversationRestoreTask() {
   }
 }
 
-function createConversationPollingTask(conversationId: string) {
+function createConversationPollingTask(orgFetch: OrgFetch, conversationId: string) {
   return async (setMessages: Dispatch<SetStateAction<Message[]>>, signal: AbortSignal) => {
     try {
-      const dbMessages = await fetchConversationMessages(conversationId, signal)
+      const dbMessages = await fetchConversationMessages(orgFetch, conversationId, signal)
       if (!dbMessages || dbMessages.length === 0) return
 
       setMessages((prev) => {
@@ -126,6 +134,7 @@ function createConversationPollingTask(conversationId: string) {
 }
 
 export default function AgentPage({ agentId }: { agentId: string }) {
+  const orgFetch = useOrgFetch()
   const isMobile = useIsMobile()
   const [queue, setQueue] = useState<QueueConversation[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
@@ -137,7 +146,7 @@ export default function AgentPage({ agentId }: { agentId: string }) {
   // Restore active conversation from sessionStorage on mount.
   // Validates the conversation is still AGENT_CONNECTED before restoring.
   useEffect(() => {
-    void createConversationRestoreTask()(setActiveConversationId, setAcceptedConversation, setMessages, setRestored)
+    void createConversationRestoreTask(orgFetch)(setActiveConversationId, setAcceptedConversation, setMessages, setRestored)
   }, [])
 
   // Persist active conversation state to sessionStorage whenever it changes
@@ -250,7 +259,7 @@ export default function AgentPage({ agentId }: { agentId: string }) {
 
     const controller = new AbortController()
     abortRef.current = controller
-    const runPoll = createConversationPollingTask(activeConversationId)
+    const runPoll = createConversationPollingTask(orgFetch, activeConversationId)
     const intervalId = setInterval(() => {
       void runPoll(setMessages, controller.signal)
     }, 3000)
@@ -278,7 +287,7 @@ export default function AgentPage({ agentId }: { agentId: string }) {
 
     // Fetch this conversation's messages
     try {
-      const res = await fetch(`/api/conversations/${conversationId}/messages`)
+      const res = await orgFetch(`/api/conversations/${conversationId}/messages`)
       if (res.ok) {
         const data = await res.json()
         setMessages(data.messages || [])

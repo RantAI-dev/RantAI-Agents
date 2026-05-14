@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { KnowledgeDocumentIdParamsSchema } from "@/features/knowledge/documents/schema"
 import { restoreKnowledgeDocumentForDashboard } from "@/features/knowledge/documents/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
@@ -22,11 +22,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid document id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const result = await restoreKnowledgeDocumentForDashboard({
       documentId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
-      role: orgContext?.membership.role ?? null,
+      role: orgContext?.role ?? null,
       userId: session.user.id,
     })
 
