@@ -23,27 +23,51 @@ export interface GroundingReport {
   disabled: boolean
 }
 
-const CITATION_REGEX = /\[([^\[\]\n]{2,200})\]/g
+// Models emit citations in inconsistent formats. We parse the three most
+// common we've seen in production logs:
+//   [Document Title — Section]   (our RAG preamble's prescribed style)
+//   [Document Title]              (no section)
+//   **Document Title**            (markdown bold — MiniMax-M2.7 + others
+//                                   default here even when prompted otherwise)
+// We deliberately do NOT parse plain text mentions ("PSAK 113 says...") —
+// those aren't unambiguous citation intent.
+const BRACKETED_RE = /\[([^\[\]\n]{2,200})\]/g
+const BOLD_RE = /\*\*([^*\n]{2,200})\*\*/g
 const EMDASH_SPLIT = /\s+[—–-]\s+/
 
 function parseCitations(text: string): Array<{ raw: string; title: string; section: string | null }> {
   const found = new Map<string, { raw: string; title: string; section: string | null }>()
-  let match: RegExpExecArray | null
-  while ((match = CITATION_REGEX.exec(text)) !== null) {
-    const inner = match[1].trim()
-    // Skip markdown link refs like [1] or [^note]
-    if (/^\d+$/.test(inner) || inner.startsWith("^")) continue
-    // Skip our own RAG-format placeholders / labels
-    if (/^(image|figure|table|chart|note):/i.test(inner)) continue
-    const parts = inner.split(EMDASH_SPLIT)
-    const title = parts[0].trim()
-    const section = parts.length > 1 ? parts.slice(1).join(" — ").trim() : null
-    if (!title || title.length < 2) continue
-    const key = `${title}::${section ?? ""}`
-    if (!found.has(key)) {
-      found.set(key, { raw: match[0], title, section })
+
+  const consume = (re: RegExp) => {
+    let match: RegExpExecArray | null
+    re.lastIndex = 0
+    while ((match = re.exec(text)) !== null) {
+      const inner = match[1].trim()
+      // Skip markdown link refs like [1] or [^note]
+      if (/^\d+$/.test(inner) || inner.startsWith("^")) continue
+      // Skip RAG-format placeholders
+      if (/^(image|figure|table|chart|note):/i.test(inner)) continue
+      // Skip bold runs that are obviously not citations (single common words,
+      // formatting markers). Citations have at least one digit OR are >= 6
+      // chars with at least one uppercase letter — heuristic but conservative.
+      if (re === BOLD_RE) {
+        const hasDigit = /\d/.test(inner)
+        const hasCap = /[A-Z]/.test(inner)
+        if (!hasDigit && (!hasCap || inner.length < 6)) continue
+      }
+      const parts = inner.split(EMDASH_SPLIT)
+      const title = parts[0].trim()
+      const section = parts.length > 1 ? parts.slice(1).join(" — ").trim() : null
+      if (!title || title.length < 2) continue
+      const key = `${title}::${section ?? ""}`
+      if (!found.has(key)) {
+        found.set(key, { raw: match[0], title, section })
+      }
     }
   }
+
+  consume(BRACKETED_RE)
+  consume(BOLD_RE)
   return [...found.values()]
 }
 
