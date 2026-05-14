@@ -548,6 +548,15 @@ export async function runChat(params: {
       scoreMean: number | null
       intent?: string
       intentReason?: string
+      /**
+       * Heuristic post-retrieval flag: true when retrieval ran but all chunks
+       * came back with low cosine similarity (scoreMax < 0.4). Doesn't change
+       * routing — the model still gets the chunks and decides whether to
+       * refuse. Purely observability for "this query looks out-of-scope vs
+       * the corpus." Detected here rather than in the intent classifier
+       * because confidence isn't known until embeddings are scored.
+       */
+      oosLikely?: boolean
       hybridStats?: HybridSearchStats
     } = {
       path: "skipped",
@@ -703,6 +712,16 @@ export async function runChat(params: {
         } catch (error) {
           // Log error but continue without RAG context
           console.error("[RAG] Error during retrieval:", error);
+        }
+
+        // Post-retrieval OOS signal: retrieval ran (chunks > 0) but max
+        // similarity is low → query likely doesn't have good coverage in
+        // the corpus. Threshold 0.4 picks up clear out-of-scope queries
+        // (the eval baseline OOS canaries sat at 0.27-0.34) without
+        // false-positiving on borderline-but-valid queries (those run
+        // 0.55+ even on the worst lookup).
+        if (ragTrace && ragTraceData.chunkCount > 0 && ragTraceData.scoreMax !== null) {
+          ragTraceData.oosLikely = ragTraceData.scoreMax < 0.4
         }
       }
       ragTrace?.mark("ragEnd")
@@ -1107,6 +1126,7 @@ export async function runChat(params: {
           queryLen: userQuery?.length ?? 0,
           intent: ragTraceData.intent ?? null,
           intentReason: ragTraceData.intentReason ?? null,
+          oosLikely: ragTraceData.oosLikely ?? null,
           chunks: {
             count: ragTraceData.chunkCount,
             scoreMin: ragTraceData.scoreMin,
