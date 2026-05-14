@@ -28,7 +28,26 @@
 import * as dotenv from "dotenv"
 dotenv.config()
 
+import { prisma } from "../../src/lib/prisma"
+
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/embeddings"
+
+/** Pull a representative chunk (~1000 chars from mid-body) from a Document
+ * matching the title substring. Skips the first 500 chars (often title +
+ * preamble + table of contents) to land in actual content. */
+async function fetchChunkContent(titleContains: string): Promise<{ title: string; chunk: string } | null> {
+  const doc = await prisma.document.findFirst({
+    where: { title: { contains: titleContains, mode: "insensitive" }, deletedAt: null },
+    select: { title: true, content: true },
+  })
+  if (!doc?.content) return null
+  const body = doc.content
+  // Skip the first 500 chars (boilerplate) and take up to 1000 from there.
+  const start = body.length > 1500 ? 500 : 0
+  const chunk = body.slice(start, start + 1000).replace(/\s+/g, " ").trim()
+  if (chunk.length < 100) return { title: doc.title, chunk: body.slice(0, 1000) }
+  return { title: doc.title, chunk }
+}
 
 // Candidate models to probe. Add new ones here as OpenRouter exposes them.
 // IDs follow OpenRouter naming (provider/model). The script silently skips
@@ -63,17 +82,29 @@ const CANDIDATES: Array<{ id: string; targetDim?: number; family: string }> = [
   { id: "mistralai/mistral-embed", family: "mistral" },
 ]
 
-// PSAK queries with their expected-most-relevant document title.
-// Picked to span 3 PSAK series + ISAK + Indonesian/English phrasing.
-const TEST_PAIRS: Array<{ query: string; expectedTitle: string }> = [
-  { query: "What is PSAK 113 about fair value measurement?", expectedTitle: "PSAK 113 Pengukuran Nilai Wajar" },
-  { query: "Jelaskan akuntansi sewa menurut PSAK 116", expectedTitle: "PSAK 116 Sewa" },
-  { query: "Bagaimana pengakuan kontrak asuransi menurut PSAK 117", expectedTitle: "PSAK 117 Kontrak Asuransi" },
-  { query: "What is PSAK 201 Penyajian Laporan Keuangan?", expectedTitle: "PSAK 201 Penyajian Laporan Keuangan" },
-  { query: "PSAK 216 model biaya dan revaluasi aset tetap", expectedTitle: "PSAK 216 Aset Tetap" },
-  { query: "ISAK 119 pengharian liabilitas keuangan dengan instrumen ekuitas", expectedTitle: "ISAK 119 Pengharian Liabilitas Keuangan Dengan Instrumen Ekuitas" },
-  { query: "PSAK 338 kombinasi bisnis entitas sepengendali", expectedTitle: "PSAK 338 Kombinasi Bisnis Entitas Sepengendali" },
-  { query: "kerangka konseptual pelaporan keuangan SAK", expectedTitle: "Kerangka Konsept Pelaporan Keuangan" },
+/**
+ * PSAK queries — paired with the document we expect to be most relevant.
+ * The probe loads the actual content of that doc from Postgres and uses
+ * a representative chunk (1000 chars from the middle of the body, skipping
+ * title boilerplate) as the "expected" embedding target. This tests
+ * retrieval-realistic conditions: query vs chunk content, not query vs
+ * title — which is what production retrieval actually does.
+ *
+ * Title-overlap probes (the previous version) over-credit lexically-biased
+ * models like ada-002, which happen to be weak on semantic / multilingual.
+ */
+const TEST_QUERIES: Array<{ query: string; expectedDocTitleContains: string }> = [
+  // Each `expectedDocTitleContains` is matched against Document.title as a
+  // case-insensitive substring; first match wins. Phrased so the doc title
+  // does NOT appear verbatim in the query (to avoid lexical leak).
+  { query: "Bagaimana cara mengukur nilai wajar aset dan liabilitas?", expectedDocTitleContains: "PSAK 113" },
+  { query: "Apa itu hak guna dan kewajiban penyewa dalam akuntansi sewa?", expectedDocTitleContains: "PSAK 116" },
+  { query: "Pendekatan pengukuran liabilitas kontrak polis asuransi", expectedDocTitleContains: "PSAK 117" },
+  { query: "Cara menyusun komponen laporan posisi keuangan tahunan", expectedDocTitleContains: "PSAK 201" },
+  { query: "Kapan entitas boleh melakukan revaluasi nilai aset tetap?", expectedDocTitleContains: "PSAK 216" },
+  { query: "Penyelesaian utang dengan menerbitkan saham", expectedDocTitleContains: "ISAK 119" },
+  { query: "Transaksi penggabungan usaha antar pihak yang dikontrol pihak yang sama", expectedDocTitleContains: "PSAK 338" },
+  { query: "Tujuan laporan keuangan dan karakteristik kualitatif informasi", expectedDocTitleContains: "Kerangka" },
 ]
 
 interface EmbedResult {
@@ -144,7 +175,8 @@ interface ModelReport {
 
 async function probeModel(
   apiKey: string,
-  cand: { id: string; targetDim?: number; family: string }
+  cand: { id: string; targetDim?: number; family: string },
+  resolvedPairs: Array<{ query: string; docTitle: string; chunk: string }>,
 ): Promise<ModelReport> {
   const label = cand.targetDim ? `${cand.id} (dim=${cand.targetDim})` : cand.id
   console.log(`\n[probe] ${label}`)
@@ -164,12 +196,14 @@ async function probeModel(
   const actualDim = dummy.embedding.length
   console.log(`  ✓ dim=${actualDim}, probe ${dummy.ms}ms`)
 
-  // Step 2: embed query + expected title for each pair, compute cosine.
+  // Step 2: embed query + expected chunk content for each pair, compute cosine.
+  // chunk content is far more representative of what production retrieval
+  // actually does than a title — avoids lexical-overlap bias.
   const queryMs: number[] = []
   const pairCosines: number[] = []
   let tokens = 0
 
-  for (const { query, expectedTitle } of TEST_PAIRS) {
+  for (const { query, chunk } of resolvedPairs) {
     const qRes = await embedOne(apiKey, cand.id, query, cand.targetDim)
     if ("error" in qRes) {
       console.log(`  ✗ query embed failed mid-run: ${qRes.error}`)
@@ -182,7 +216,7 @@ async function probeModel(
         errorSample: qRes.error,
       }
     }
-    const dRes = await embedOne(apiKey, cand.id, expectedTitle, cand.targetDim)
+    const dRes = await embedOne(apiKey, cand.id, chunk, cand.targetDim)
     if ("error" in dRes) {
       return {
         id: cand.id,
@@ -221,12 +255,28 @@ async function main() {
     console.error("[probe] OPENROUTER_API_KEY not set")
     process.exit(1)
   }
-  console.log(`[probe] testing ${CANDIDATES.length} candidate models on ${TEST_PAIRS.length} PSAK query/title pairs`)
+  console.log(`[probe] resolving chunk content from Postgres for ${TEST_QUERIES.length} test pairs...`)
+  const resolvedPairs: Array<{ query: string; docTitle: string; chunk: string }> = []
+  for (const tq of TEST_QUERIES) {
+    const doc = await fetchChunkContent(tq.expectedDocTitleContains)
+    if (!doc) {
+      console.warn(`  ✗ no doc found containing "${tq.expectedDocTitleContains}", skipping query: ${tq.query.slice(0, 60)}`)
+      continue
+    }
+    resolvedPairs.push({ query: tq.query, docTitle: doc.title, chunk: doc.chunk })
+    console.log(`  ✓ "${tq.expectedDocTitleContains}" → ${doc.title.slice(0, 50)} (chunk ${doc.chunk.length}ch)`)
+  }
+  if (resolvedPairs.length === 0) {
+    console.error("[probe] no test pairs resolved — DB empty or titles don't match")
+    process.exit(1)
+  }
+
+  console.log(`\n[probe] testing ${CANDIDATES.length} candidate models on ${resolvedPairs.length} query/chunk pairs`)
   console.log(`[probe] OpenRouter endpoint: ${OPENROUTER_URL}`)
 
   const reports: ModelReport[] = []
   for (const cand of CANDIDATES) {
-    reports.push(await probeModel(apiKey, cand))
+    reports.push(await probeModel(apiKey, cand, resolvedPairs))
   }
 
   // Summary table — sort by meanCosine desc, OKs first.
@@ -259,7 +309,7 @@ async function main() {
   const fs = await import("fs")
   const outPath = path.join(process.cwd(), "eval-runs", `embedding-probe-${new Date().toISOString().replace(/[:.]/g, "-")}.json`)
   fs.mkdirSync(path.dirname(outPath), { recursive: true })
-  fs.writeFileSync(outPath, JSON.stringify({ reports, testPairs: TEST_PAIRS }, null, 2))
+  fs.writeFileSync(outPath, JSON.stringify({ reports, testPairs: TEST_QUERIES, resolvedPairs: resolvedPairs.map(p => ({ query: p.query, docTitle: p.docTitle, chunkPreview: p.chunk.slice(0, 200) })) }, null, 2))
   console.log(`\n[probe] full report: ${outPath}`)
 
   // Recommendation
