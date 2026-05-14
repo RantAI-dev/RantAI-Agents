@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { useOrgFetch } from "@/hooks/use-organization"
+import { useOrgFetch, useActiveOrgChange } from "@/hooks/use-organization"
 
 export interface DigitalEmployeeItem {
   id: string
@@ -113,6 +113,11 @@ export function useDigitalEmployees(options?: { initialEmployees?: DigitalEmploy
     }
     fetchEmployees()
   }, [fetchEmployees, initialEmployees])
+
+  // Refetch on active-org switch.
+  useActiveOrgChange(useCallback(() => {
+    void fetchEmployees()
+  }, [fetchEmployees]))
 
   return {
     employees,

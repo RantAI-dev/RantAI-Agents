@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
-import { useOrgFetch } from "@/hooks/use-organization"
+import { useOrgFetch, useActiveOrgChange } from "@/hooks/use-organization"
 
 export interface WorkflowItem {
   id: string
@@ -99,6 +99,11 @@ export function useWorkflows(
     }
     fetchWorkflows()
   }, [fetchWorkflows, initialWorkflows])
+
+  // Refetch on active-org switch.
+  useActiveOrgChange(useCallback(() => {
+    void fetchWorkflows()
+  }, [fetchWorkflows]))
 
   const getWorkflowById = useCallback(async (id: string) => {
     const existing = workflows.find((workflow) => workflow.id === id)

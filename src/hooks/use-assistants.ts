@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useOrgFetch } from "@/hooks/use-organization"
+import { useOrgFetch, useActiveOrgChange } from "@/hooks/use-organization"
 import type { Assistant, AssistantInput, MemoryConfig, ModelConfig, ChatConfig, GuardRailsConfig } from "@/lib/types/assistant"
 
 const SELECTED_KEY = "rantai-selected-assistant"
@@ -133,6 +133,14 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
     }
     fetchAssistants()
   }, [fetchAssistants, initialAssistants])
+
+  // Refetch on active-org change (user switched orgs via the sidebar).
+  // Replaces the stale list without a page reload; respects server-side
+  // hydration on the very first paint by routing through fetchAssistants
+  // which always hits /api/assistants for the new org context.
+  useActiveOrgChange(useCallback(() => {
+    void fetchAssistants()
+  }, [fetchAssistants]))
 
   // Initialize selected assistant from stored/default when assistants are already hydrated
   useEffect(() => {

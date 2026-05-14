@@ -1,6 +1,6 @@
 "use client"
 
-import { useOrgFetch } from "@/hooks/use-organization"
+import { useOrgFetch, useActiveOrgChange } from "@/hooks/use-organization"
 
 import { useState, useEffect, useCallback } from "react"
 import type { Assistant } from "@/lib/types/assistant"
@@ -72,6 +72,11 @@ export function useDefaultAssistant() {
   useEffect(() => {
     fetchDefaultAssistant()
   }, [fetchDefaultAssistant])
+
+  // Refetch on active-org switch — the effective default may differ per org.
+  useActiveOrgChange(useCallback(() => {
+    void fetchDefaultAssistant()
+  }, [fetchDefaultAssistant]))
 
   // Set the current user's default assistant
   const setUserDefault = useCallback(async (assistantId: string): Promise<boolean> => {
