@@ -210,9 +210,10 @@ export async function loadChatSessionPageHydration(
 
   if (assistantId) {
     try {
+      const accessCtx = { organizationId: orgContext?.organizationId ?? null }
       const [tools, skills, groups] = await Promise.all([
-        listAssistantTools(assistantId),
-        listAssistantSkills(assistantId),
+        listAssistantTools(assistantId, accessCtx),
+        listAssistantSkills(assistantId, accessCtx),
         listKnowledgeGroupsForDashboard(orgContext?.organizationId ?? null),
       ])
 

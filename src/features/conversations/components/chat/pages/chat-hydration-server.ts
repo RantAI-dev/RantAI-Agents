@@ -176,9 +176,10 @@ export async function loadChatToolbarHydrationData(params: {
     return null
   }
 
+  const accessCtx = { organizationId: params.organizationId }
   const [toolsResult, skillsResult, groupsResult, availableTools, availableSkills] = await Promise.all([
-    listAssistantTools(params.assistantId).catch(() => []),
-    listAssistantSkills(params.assistantId).catch(() => []),
+    listAssistantTools(params.assistantId, accessCtx).catch(() => []),
+    listAssistantSkills(params.assistantId, accessCtx).catch(() => []),
     listKnowledgeGroupsForDashboard(params.organizationId).catch(() => []),
     listToolsForDashboard(params.organizationId).catch(() => []),
     listDashboardSkills({
@@ -222,7 +223,7 @@ export async function loadAssistantEditorHydrationData(params: {
   const [availableTools, knowledgeGroups, selectedToolsResult] = await Promise.all([
     listToolsForDashboard(params.organizationId).catch(() => []),
     listKnowledgeGroupsForDashboard(params.organizationId).catch(() => []),
-    listAssistantTools(params.assistantId).catch(() => []),
+    listAssistantTools(params.assistantId, { organizationId: params.organizationId }).catch(() => []),
   ])
 
   const selectedToolIds = isServiceError(selectedToolsResult)
