@@ -65,6 +65,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       groupId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
       role: orgContext?.membership.role ?? null,
+      userId: session.user.id,
       input: parsedBody.data,
     })
 
@@ -97,6 +98,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       groupId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
       role: orgContext?.membership.role ?? null,
+      userId: session.user.id,
     })
 
     if (isHttpServiceError(group)) {

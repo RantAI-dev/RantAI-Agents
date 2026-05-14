@@ -33,7 +33,6 @@ export type {
 
 // Vector store operations
 export {
-  storeDocument,
   storeChunks,
   searchSimilar,
   searchWithThreshold,
@@ -51,7 +50,6 @@ export {
   retrieveContext,
   smartRetrieve,
   formatContextForPrompt,
-  detectQueryCategory,
   hybridRetrieve,
   smartHybridRetrieve,
   formatHybridContextForPrompt,
@@ -71,29 +69,8 @@ export type {
   ChunkResult,
 } from "./hybrid-search";
 
-// Re-ranking
-export {
-  Reranker,
-  createReranker,
-  rerank,
-  rerankResults,
-} from "./reranker";
-export type {
-  RerankerConfig,
-  RerankResult,
-  RerankResponse,
-} from "./reranker";
-
 // Artifact indexing
 export { indexArtifactContent } from "./artifact-indexer";
-
-// Ingestion
-export {
-  ingestKnowledgeBase,
-  ingestSingleDocument,
-  ingestFile,
-  ingestDirectory,
-} from "./ingest";
 
 // File processing
 export {

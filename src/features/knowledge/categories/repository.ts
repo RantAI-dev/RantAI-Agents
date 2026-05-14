@@ -9,18 +9,29 @@ export const DEFAULT_KNOWLEDGE_CATEGORIES = [
   { name: "GENERAL", label: "General", color: "#6b7280", isSystem: true },
 ]
 
-export async function countKnowledgeCategories() {
-  return prisma.category.count()
+/** Scope helper: categories visible to a given org = its own + global (org=null). */
+function visibilityWhere(organizationId: string | null) {
+  if (!organizationId) return { organizationId: null }
+  return {
+    OR: [{ organizationId }, { organizationId: null }],
+  }
 }
 
+export async function countKnowledgeCategories(organizationId: string | null = null) {
+  return prisma.category.count({ where: visibilityWhere(organizationId) })
+}
+
+/** Seed only global / system categories. Idempotent: skips when any exist already. */
 export async function seedKnowledgeCategories() {
   return prisma.category.createMany({
-    data: DEFAULT_KNOWLEDGE_CATEGORIES,
+    data: DEFAULT_KNOWLEDGE_CATEGORIES.map((c) => ({ ...c, organizationId: null })),
+    skipDuplicates: true,
   })
 }
 
-export async function listKnowledgeCategories() {
+export async function listKnowledgeCategories(organizationId: string | null = null) {
   return prisma.category.findMany({
+    where: visibilityWhere(organizationId),
     orderBy: [{ isSystem: "desc" }, { name: "asc" }],
   })
 }
@@ -31,9 +42,14 @@ export async function findKnowledgeCategoryById(id: string) {
   })
 }
 
-export async function findKnowledgeCategoryByName(name: string) {
-  return prisma.category.findUnique({
-    where: { name },
+export async function findKnowledgeCategoryByName(
+  name: string,
+  organizationId: string | null = null
+) {
+  // findUnique with nullable compound key would mishandle the org=null case
+  // (Postgres NULL!=NULL), so use findFirst to honor "global" rows properly.
+  return prisma.category.findFirst({
+    where: { name, organizationId },
   })
 }
 
@@ -42,6 +58,7 @@ export async function createKnowledgeCategory(data: {
   label: string
   color: string
   isSystem: boolean
+  organizationId: string | null
 }) {
   return prisma.category.create({
     data,
@@ -68,12 +85,14 @@ export async function deleteKnowledgeCategory(id: string) {
   })
 }
 
-export async function countDocumentsByCategoryName(categoryName: string) {
+export async function countDocumentsByCategoryName(
+  categoryName: string,
+  organizationId: string | null = null
+) {
   return prisma.document.count({
     where: {
-      categories: {
-        has: categoryName,
-      },
+      categories: { has: categoryName },
+      ...(organizationId !== null && { organizationId }),
     },
   })
 }

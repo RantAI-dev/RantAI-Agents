@@ -54,14 +54,14 @@ export async function retrieveContext(
     groupIds?: string[];
   }
 ): Promise<RetrievalResult> {
+  const cfg = getRagConfig();
   const {
     minSimilarity = 0.30,
-    maxChunks = 5,
+    maxChunks = cfg.defaultMaxChunks,
     categoryFilter,
     groupIds,
   } = options || {};
 
-  const cfg = getRagConfig();
   const reranker = getDefaultReranker();
   const fetchLimit = reranker ? Math.max(cfg.rerankInitialK, maxChunks) : maxChunks;
 
@@ -109,6 +109,7 @@ export async function retrieveContext(
       subcategory: null,
       section: null,
       similarity: 0,
+      contextualPrefix: null,
     });
   }
 
@@ -159,7 +160,16 @@ export async function retrieveContext(
     };
   }
 
-  // Format context for LLM
+  // Coverage analytics: fire-and-forget bump retrievalCount + lastRetrievedAt
+  // on every doc that surfaced. Async, never blocks the chat path.
+  void import("@/features/knowledge/documents/repository").then(({ recordRetrievalHits }) => {
+    recordRetrievalHits(chunks.map((c) => c.documentId));
+  }).catch(() => {});
+
+  // Format context for LLM. When a contextual_prefix was generated at ingest
+  // (KB_CONTEXTUAL_RETRIEVAL_ENABLED=true; ~1 sentence per chunk locating it
+  // in the document), prepend it before the chunk body so the model sees the
+  // chunk's position in the source. Drops cleanly when the prefix is null.
   const contextParts: string[] = [];
 
   for (const chunk of chunks) {
@@ -167,7 +177,8 @@ export async function retrieveContext(
       ? `[${chunk.documentTitle} - ${chunk.section}]`
       : `[${chunk.documentTitle}]`;
 
-    contextParts.push(`${source}\n${chunk.content}`);
+    const prefix = chunk.contextualPrefix ? `${chunk.contextualPrefix}\n\n` : "";
+    contextParts.push(`${source}\n${prefix}${chunk.content}`);
   }
 
   const context = contextParts.join("\n\n---\n\n");
@@ -197,127 +208,6 @@ export async function retrieveContext(
 }
 
 /**
- * Detect the likely category based on query keywords
- * Returns undefined if no clear category is detected (searches all)
- */
-export function detectQueryCategory(
-  query: string
-): string | undefined {
-  const queryLower = query.toLowerCase();
-
-  // Life insurance keywords (EN + ID)
-  const lifeKeywords = [
-    "life insurance",
-    "term life",
-    "whole life",
-    "universal life",
-    "death benefit",
-    "beneficiary",
-    "cash value",
-    "life coverage",
-    "life policy",
-    "iul",
-    "indexed universal",
-    "asuransi jiwa",
-    "jiwa",
-    "santunan kematian",
-  ];
-
-  // Health insurance keywords (EN + ID)
-  const healthKeywords = [
-    "health insurance",
-    "medical",
-    "doctor",
-    "hospital",
-    "prescription",
-    "copay",
-    "deductible",
-    "health coverage",
-    "health plan",
-    "telehealth",
-    "mental health",
-    "preventive",
-    "bronze",
-    "silver",
-    "gold",
-    "platinum",
-    "out-of-pocket",
-    "in-network",
-    "asuransi kesehatan",
-    "kesehatan",
-    "dokter",
-    "rumah sakit",
-    "resep",
-    "rawat inap",
-    "rawat jalan",
-  ];
-
-  // Home insurance keywords (EN + ID)
-  const homeKeywords = [
-    "home insurance",
-    "homeowner",
-    "house",
-    "dwelling",
-    "property",
-    "liability",
-    "flood",
-    "earthquake",
-    "home coverage",
-    "renters",
-    "condo",
-    "umbrella",
-    "personal property",
-    "asuransi rumah",
-    "rumah",
-    "properti",
-    "banjir",
-    "gempa",
-  ];
-
-  // Vehicle/Auto insurance keywords (EN + ID)
-  const vehicleKeywords = [
-    "auto insurance",
-    "car insurance",
-    "vehicle insurance",
-    "auto coverage",
-    "vehicle coverage",
-    "roadside assistance",
-    "collision",
-    "comprehensive",
-    "liability only",
-    "accident forgiveness",
-    "asuransi kendaraan",
-    "asuransi mobil",
-    "asuransi motor",
-    "kendaraan",
-    "mobil",
-    "motor",
-  ];
-
-  // Check for matches
-  const lifeScore = lifeKeywords.filter((kw) => queryLower.includes(kw)).length;
-  const healthScore = healthKeywords.filter((kw) =>
-    queryLower.includes(kw)
-  ).length;
-  const homeScore = homeKeywords.filter((kw) => queryLower.includes(kw)).length;
-  const vehicleScore = vehicleKeywords.filter((kw) => queryLower.includes(kw)).length;
-
-  // Return category with highest score (if any)
-  const maxScore = Math.max(lifeScore, healthScore, homeScore, vehicleScore);
-
-  if (maxScore === 0) {
-    return undefined; // Search all categories
-  }
-
-  if (lifeScore === maxScore) return "LIFE_INSURANCE";
-  if (healthScore === maxScore) return "HEALTH_INSURANCE";
-  if (homeScore === maxScore) return "HOME_INSURANCE";
-  if (vehicleScore === maxScore) return "VEHICLE_INSURANCE";
-
-  return undefined;
-}
-
-/**
  * Smart retrieval that auto-detects category
  */
 export async function smartRetrieve(
@@ -328,17 +218,18 @@ export async function smartRetrieve(
     groupIds?: string[];
   }
 ): Promise<RetrievalResult> {
-  const category = detectQueryCategory(query);
-
   return retrieveContext(query, {
     ...options,
-    categoryFilter: category,
     groupIds: options?.groupIds,
   });
 }
 
 /**
- * Format retrieved context for inclusion in LLM prompt
+ * Format retrieved context for inclusion in LLM prompt.
+ *
+ * The instruction block is deliberate: a generic "you are helpful" system
+ * prompt biases models toward terseness, so for RAG turns we restate the rules
+ * locally — be thorough, cite, and refuse cleanly when the context falls short.
  */
 export function formatContextForPrompt(result: RetrievalResult): string {
   if (!result.context) {
@@ -350,13 +241,20 @@ export function formatContextForPrompt(result: RetrievalResult): string {
     .join("\n");
 
   return `
-## Relevant Product Information
+## Knowledge Base Context
 
-The following information was retrieved from our knowledge base to help answer this question:
+The excerpts below are your primary source for this question.
 
+When answering:
+- Treat the excerpts as the source of truth for specific facts. Every concrete claim (definitions, paragraph numbers, effective dates, scope rules, exclusions, numerical thresholds) MUST come from the excerpts and be cited.
+- You MAY add brief background context (1-2 sentences) to frame an answer when essential for understanding — but mark it as framing, not fact. Never substitute general knowledge for an absent specific detail.
+- Cite each factual claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
+- Be thorough within the excerpts. Cover every aspect the excerpts support; do not invent aspects they do not mention.
+- If a specific detail the user asked for is not in the excerpts, say so explicitly ("not specified in the available excerpts") rather than guessing.
+
+Excerpts:
 ${result.context}
 
----
 Sources:
 ${sourceList}
 `.trim();
@@ -378,7 +276,7 @@ export async function hybridRetrieve(
   }
 ): Promise<HybridRetrievalResult> {
   const {
-    maxResults = 5,
+    maxResults = getRagConfig().defaultMaxChunks,
     enableEntitySearch = true,
     vectorWeight = 0.7,
     entityWeight = 0.3,
@@ -407,7 +305,13 @@ export async function hybridRetrieve(
     };
   }
 
-  // Format context for LLM
+  // Coverage analytics: fire-and-forget bump on every doc surfaced.
+  void import("@/features/knowledge/documents/repository").then(({ recordRetrievalHits }) => {
+    recordRetrievalHits(results.map((r) => r.documentId));
+  }).catch(() => {});
+
+  // Format context for LLM; mirror formatContextForPrompt's contextual-prefix
+  // handling — drop in null cleanly when no prefix was generated at ingest.
   const contextParts: string[] = [];
 
   for (const result of results) {
@@ -415,7 +319,8 @@ export async function hybridRetrieve(
       ? `[${result.documentTitle || "Document"} - ${result.section}]`
       : `[${result.documentTitle || "Document"}]`;
 
-    contextParts.push(`${source}\n${result.content}`);
+    const prefix = result.contextualPrefix ? `${result.contextualPrefix}\n\n` : "";
+    contextParts.push(`${source}\n${prefix}${result.content}`);
   }
 
   const context = contextParts.join("\n\n---\n\n");
@@ -456,16 +361,14 @@ export async function smartHybridRetrieve(
     groupIds?: string[];
   }
 ): Promise<HybridRetrievalResult> {
-  const category = detectQueryCategory(query);
-
   return hybridRetrieve(query, {
     ...options,
-    categoryFilter: category,
   });
 }
 
 /**
- * Format hybrid retrieval result for inclusion in LLM prompt
+ * Format hybrid retrieval result for inclusion in LLM prompt.
+ * See formatContextForPrompt for the rationale behind the instruction block.
  */
 export function formatHybridContextForPrompt(
   result: HybridRetrievalResult
@@ -490,13 +393,20 @@ export function formatHybridContextForPrompt(
       : "";
 
   return `
-## Relevant Product Information
+## Knowledge Base Context
 
-The following information was retrieved from our knowledge base to help answer this question:
+The excerpts below are your primary source for this question.
 
+When answering:
+- Treat the excerpts as the source of truth for specific facts. Every concrete claim (definitions, paragraph numbers, effective dates, scope rules, exclusions, numerical thresholds) MUST come from the excerpts and be cited.
+- You MAY add brief background context (1-2 sentences) to frame an answer when essential for understanding — but mark it as framing, not fact. Never substitute general knowledge for an absent specific detail.
+- Cite each factual claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
+- Be thorough within the excerpts. Cover every aspect the excerpts support; do not invent aspects they do not mention.
+- If a specific detail the user asked for is not in the excerpts, say so explicitly ("not specified in the available excerpts") rather than guessing.
+
+Excerpts:
 ${result.context}
 
----
 Sources:
 ${sourceList}${entityInfo}
 `.trim();

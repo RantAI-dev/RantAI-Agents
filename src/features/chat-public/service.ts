@@ -7,6 +7,7 @@ import {
   smartHybridRetrieve,
   formatHybridContextForPrompt,
 } from "@/lib/rag"
+import type { HybridSearchStats } from "@/lib/rag/hybrid-search"
 import { retrieveR3FContext } from "@/lib/rag/r3f-retriever"
 import { searchByDocumentIds } from "@/lib/rag/vector-store"
 import { DEFAULT_MODEL_ID, isValidModel, getModelById } from "@/lib/models"
@@ -15,6 +16,7 @@ import {
   LANGUAGE_INSTRUCTION,
   LIVE_CHAT_HANDOFF_INSTRUCTION,
   CORRECTION_INSTRUCTION_WITH_TOOL,
+  OUTPUT_HYGIENE_INSTRUCTION,
   buildToolInstruction,
 } from "@/lib/prompts/instructions"
 import {
@@ -61,6 +63,29 @@ const debug = process.env.NODE_ENV !== "production"
   ? (...args: unknown[]) => console.log("[Chat API]", ...args)
   : () => {}
 
+// RAG_TRACE=1 emits a single structured trace per request for end-to-end timing
+// + chunk-score stats. Off by default. Read once at module load.
+const RAG_TRACE_ENABLED = process.env.RAG_TRACE === "1"
+
+interface RagTrace {
+  traceId: string
+  t0: number
+  marks: Record<string, number>
+  mark(name: string): void
+}
+
+function createRagTrace(): RagTrace {
+  const traceId = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  const t0 = Date.now()
+  const marks: Record<string, number> = {}
+  return {
+    traceId,
+    t0,
+    marks,
+    mark(name: string) { marks[name] = Date.now() - t0 },
+  }
+}
+
 // Memory queue for tool calls (threadId -> queued items)
 const memoryQueue = new Map<
   string,
@@ -88,13 +113,26 @@ export function isChatPublicServiceError(
 
 function appendSourcesEventToUiStreamResponse(
   response: Response,
-  ragSources: Array<{ title: string; section: string | null }>
+  ragSources: Array<{ title: string; section: string | null }>,
+  traceId: string | null = null
 ) {
-  if (ragSources.length === 0 || !response.body) {
+  const needsSources = ragSources.length > 0 && response.body
+  if (!needsSources && !traceId) {
     return response
   }
 
-  const reader = response.body.getReader()
+  const headers = new Headers(response.headers)
+  if (traceId) headers.set("X-RAG-Trace", traceId)
+
+  if (!needsSources) {
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    })
+  }
+
+  const reader = response.body!.getReader()
   const encoder = new TextEncoder()
   const stream = new ReadableStream({
     async start(controller) {
@@ -115,7 +153,7 @@ function appendSourcesEventToUiStreamResponse(
   return new Response(stream, {
     status: response.status,
     statusText: response.statusText,
-    headers: new Headers(response.headers),
+    headers,
   })
 }
 
@@ -128,7 +166,11 @@ export async function runChat(params: {
     systemPromptB64: string | null
     useKnowledgeBase: string | null
   }
+  /** Forwarded from the HTTP request — used to bail out of background memory
+   * work when the client disconnects. Optional so non-HTTP callers still work. */
+  abortSignal?: AbortSignal
 }) {
+  const ragTrace: RagTrace | null = RAG_TRACE_ENABLED ? createRagTrace() : null
   try {
     const session = {
       user: {
@@ -290,6 +332,7 @@ export async function runChat(params: {
         } else {
           systemPrompt = BASE_SYSTEM_PROMPT
           systemPrompt += LANGUAGE_INSTRUCTION
+          systemPrompt += OUTPUT_HYGIENE_INSTRUCTION
           useKnowledgeBase = true
           debug("Assistant not found in DB, fallback to generic prompt")
         }
@@ -308,6 +351,7 @@ export async function runChat(params: {
       // Fallback to generic prompt
       systemPrompt = BASE_SYSTEM_PROMPT;
       systemPrompt += LANGUAGE_INSTRUCTION;
+      systemPrompt += OUTPUT_HYGIENE_INSTRUCTION;
       useKnowledgeBase = true;
       debug("Fallback to generic prompt");
     }
@@ -495,8 +539,62 @@ export async function runChat(params: {
     // Store RAG sources to send with response
     let ragSources: Array<{ title: string; section: string | null }> = [];
 
+    // Trace data captured during RAG retrieval, emitted later in the structured log.
+    let ragTraceData: {
+      path: "hybrid" | "vector-fallback" | "empty" | "skipped"
+      chunkCount: number
+      scoreMin: number | null
+      scoreMax: number | null
+      scoreMean: number | null
+      intent?: string
+      intentReason?: string
+      /**
+       * Heuristic post-retrieval flag: true when retrieval ran but all chunks
+       * came back with low cosine similarity (scoreMax < 0.4). Doesn't change
+       * routing — the model still gets the chunks and decides whether to
+       * refuse. Purely observability for "this query looks out-of-scope vs
+       * the corpus." Detected here rather than in the intent classifier
+       * because confidence isn't known until embeddings are scored.
+       */
+      oosLikely?: boolean
+      hybridStats?: HybridSearchStats
+    } = {
+      path: "skipped",
+      chunkCount: 0,
+      scoreMin: null,
+      scoreMax: null,
+      scoreMean: null,
+    }
+
     // Only perform RAG retrieval if knowledge base is enabled
     if (useKnowledgeBase) {
+      ragTrace?.mark("ragStart")
+
+      // Directory injection: give the model the full list of documents it has
+      // access to so enumerate-style queries ("list semua PSAK") don't depend
+      // on whether semantic retrieval surfaced one chunk per doc. Capped at
+      // 200 documents; beyond that we skip — the listing would dominate the
+      // prompt and the model would ignore it anyway.
+      if (knowledgeBaseGroupIds && knowledgeBaseGroupIds.length > 0) {
+        try {
+          const { findDocumentsByGroups } = await import("@/features/knowledge/groups/repository")
+          const directory = await findDocumentsByGroups(knowledgeBaseGroupIds, 200)
+          if (directory.length > 0 && directory.length < 200) {
+            const lines = directory.map((d) => {
+              const cats = d.categories?.length ? ` [${d.categories.join(", ")}]` : ""
+              const sub = d.subcategory ? ` — ${d.subcategory}` : ""
+              return `- ${d.title}${sub}${cats}`
+            }).join("\n")
+            systemPrompt += `\n\n## Available Documents in Knowledge Base\nThis assistant has access to ${directory.length} documents. Use the list when the user asks to enumerate, list, or count available documents; for specific questions, rely on the retrieved excerpts below.\n\n${lines}`
+            console.log(`[RAG] Directory injected: ${directory.length} documents`)
+          } else if (directory.length >= 200) {
+            console.log(`[RAG] Directory skipped: ${directory.length}+ documents exceed cap`)
+          }
+        } catch (err) {
+          console.warn("[RAG] Directory injection failed:", err)
+        }
+      }
+
       // Get the latest user message for RAG retrieval
       const lastUserMessage = [...messages]
         .reverse()
@@ -505,7 +603,7 @@ export async function runChat(params: {
       if (lastUserMessage) {
         try {
           // Extract text content from the user message
-          const userQuery =
+          const rawUserQuery =
             typeof lastUserMessage.content === "string"
               ? lastUserMessage.content
               : lastUserMessage.content
@@ -513,10 +611,33 @@ export async function runChat(params: {
                 .map((part) => part.text)
                 .join(" ");
 
+          // Rewrite short follow-ups into self-contained queries before retrieval.
+          // No-ops on first turn / long messages / disabled flag — see standalone-query.ts.
+          ragTrace?.mark("rewriteStart")
+          const { rewriteStandaloneQuery } = await import("@/lib/rag/standalone-query")
+          const userQuery = await rewriteStandaloneQuery(messages as Array<{ role: string; content: unknown }>)
+          ragTrace?.mark("rewriteEnd")
+          if (userQuery !== rawUserQuery) {
+            console.log(
+              `[RAG] standalone-query rewrite: "${rawUserQuery.slice(0, 60)}" -> "${userQuery.slice(0, 80)}"`
+            )
+          }
+
+          // Intent classification (observability-first; env-gated). The intent
+          // is just emitted in RAG_TRACE today — actually routing per intent
+          // (enumerate→directory-only, compare→raise maxChunks) comes after
+          // the eval harness has a baseline to measure against.
+          const { classifyIntent } = await import("@/lib/rag/intent-classifier")
+          const intent = classifyIntent(userQuery, messages.length)
+          if (!intent.disabled) {
+            ragTraceData.intent = intent.intent
+            ragTraceData.intentReason = intent.reason
+          }
+
           // Retrieve context using hybrid search (vector + entity/graph), then
           // safely fall back to vector-only retrieval if needed.
+          // maxResults is left unset so it picks up KB_DEFAULT_MAX_CHUNKS via config.
           const hybridResult = await smartHybridRetrieve(userQuery, {
-            maxResults: 5,
             enableEntitySearch: true,
             groupIds: knowledgeBaseGroupIds,
           })
@@ -536,10 +657,24 @@ export async function runChat(params: {
             console.log(
               `[RAG] Sources: ${hybridResult.sources.map((s) => s.documentTitle).join(", ")}`
             )
+
+            if (ragTrace) {
+              // vectorScore = raw cosine similarity (the diagnostic signal we
+              // actually want). combinedScore is RRF on rank position which is
+              // identical across queries by construction and tells us nothing.
+              const scores = hybridResult.results.map((r) => r.vectorScore).filter((s) => s > 0)
+              ragTraceData = {
+                path: "hybrid",
+                chunkCount: hybridResult.results.length,
+                scoreMin: scores.length ? Math.min(...scores) : null,
+                scoreMax: scores.length ? Math.max(...scores) : null,
+                scoreMean: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+                hybridStats: hybridResult.stats,
+              }
+            }
           } else {
             const retrievalResult = await smartRetrieve(userQuery, {
               minSimilarity: 0.30,
-              maxChunks: 5,
               groupIds: knowledgeBaseGroupIds,
             })
 
@@ -558,7 +693,19 @@ export async function runChat(params: {
               console.log(
                 `[RAG] Sources: ${retrievalResult.sources.map((s) => s.documentTitle).join(", ")}`
               )
+
+              if (ragTrace) {
+                const scores = retrievalResult.chunks.map((c) => c.similarity)
+                ragTraceData = {
+                  path: "vector-fallback",
+                  chunkCount: scores.length,
+                  scoreMin: scores.length ? Math.min(...scores) : null,
+                  scoreMax: scores.length ? Math.max(...scores) : null,
+                  scoreMean: scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : null,
+                }
+              }
             } else {
+              if (ragTrace) ragTraceData = { ...ragTraceData, path: "empty" }
               console.log(`[RAG] No results for query: "${userQuery.substring(0, 50)}..." (groupIds: ${JSON.stringify(knowledgeBaseGroupIds)})`)
             }
           }
@@ -566,7 +713,18 @@ export async function runChat(params: {
           // Log error but continue without RAG context
           console.error("[RAG] Error during retrieval:", error);
         }
+
+        // Post-retrieval OOS signal: retrieval ran (chunks > 0) but max
+        // similarity is low → query likely doesn't have good coverage in
+        // the corpus. Threshold 0.4 picks up clear out-of-scope queries
+        // (the eval baseline OOS canaries sat at 0.27-0.34) without
+        // false-positiving on borderline-but-valid queries (those run
+        // 0.55+ even on the worst lookup).
+        if (ragTrace && ragTraceData.chunkCount > 0 && ragTraceData.scoreMax !== null) {
+          ragTraceData.oosLikely = ragTraceData.scoreMax < 0.4
+        }
       }
+      ragTrace?.mark("ragEnd")
     }
 
     // ===== SKILL RESOLUTION =====
@@ -605,6 +763,7 @@ export async function runChat(params: {
           .join(" ")
       : "";
 
+    ragTrace?.mark("memoryStart")
     try {
       if (!assistantMemoryConfig.enabled) {
         console.log("[Memory] Memory disabled for this assistant, skipping all memory operations");
@@ -671,10 +830,12 @@ export async function runChat(params: {
       console.error("[Memory] Error loading memories:", error);
       // Continue without memory - graceful degradation
     }
+    ragTrace?.mark("memoryEnd")
 
     debug("Using model:", modelId);
 
     // ===== TOOL RESOLUTION =====
+    ragTrace?.mark("toolsStart")
     const selectedSkillIds =
       body.enableSkills !== false && Array.isArray(body.enabledSkillIds)
         ? body.enabledSkillIds
@@ -947,12 +1108,64 @@ export async function runChat(params: {
       if (formatInstruction) systemPrompt += formatInstruction;
     }
 
+    ragTrace?.mark("toolsEnd")
+
+    if (ragTrace) {
+      const m = ragTrace.marks
+      const between = (a: string, b: string) =>
+        m[a] != null && m[b] != null ? m[b] - m[a] : null
+      console.log(
+        "[RAG_TRACE]",
+        JSON.stringify({
+          traceId: ragTrace.traceId,
+          path: ragTraceData.path,
+          assistantId,
+          model: modelId,
+          hasTools: hasAssistantTools,
+          kbGroupIds: knowledgeBaseGroupIds ?? null,
+          queryLen: userQuery?.length ?? 0,
+          intent: ragTraceData.intent ?? null,
+          intentReason: ragTraceData.intentReason ?? null,
+          oosLikely: ragTraceData.oosLikely ?? null,
+          chunks: {
+            count: ragTraceData.chunkCount,
+            scoreMin: ragTraceData.scoreMin,
+            scoreMax: ragTraceData.scoreMax,
+            scoreMean: ragTraceData.scoreMean,
+          },
+          timingMs: {
+            preStreamTotal: Date.now() - ragTrace.t0,
+            retrieveTotal: between("ragStart", "ragEnd"),
+            rewrite: between("rewriteStart", "rewriteEnd"),
+            memoryTotal: between("memoryStart", "memoryEnd"),
+            toolsTotal: between("toolsStart", "toolsEnd"),
+            // Sub-stage retrieval timings come from the hybrid search itself.
+            embed: ragTraceData.hybridStats?.embeddingTimeMs ?? null,
+            vector: ragTraceData.hybridStats?.vectorSearchTimeMs ?? null,
+            entity: ragTraceData.hybridStats?.entitySearchTimeMs ?? null,
+            graph: ragTraceData.hybridStats?.graphSearchTimeMs ?? null,
+            fusion: ragTraceData.hybridStats?.fusionTimeMs ?? null,
+            hybridTotal: ragTraceData.hybridStats?.totalTimeMs ?? null,
+          },
+        })
+      )
+    }
+
+    const { createStripThinkTransform } = await import("@/lib/llm/strip-think")
     const result = streamText({
       model: getChatProvider()(resolveModelId(modelId)),
       system: systemPrompt,
       messages,
       tools: allTools,
       stopWhen: stepCountIs(resolveMaxSteps(assistantModelConfig, hasAssistantTools)),
+      // Strip <think>...</think> blocks emitted by reasoning models
+      // (MiniMax-M2.7, etc.) before they reach the client — they're internal
+      // CoT, not user-facing content.
+      experimental_transform: createStripThinkTransform(),
+      // Forward the request abort signal — when the client disconnects mid-
+      // stream, streamText cancels its in-flight LLM call and result.text
+      // rejects, which the background memory IIFE then catches and skips.
+      ...(params.abortSignal && { abortSignal: params.abortSignal }),
       // Per-assistant model parameters
       ...(assistantModelConfig?.temperature != null && { temperature: Number(assistantModelConfig.temperature) }),
       ...(assistantModelConfig?.topP != null && { topP: Number(assistantModelConfig.topP) }),
@@ -972,9 +1185,41 @@ export async function runChat(params: {
 
           // Wait for generation to complete
           const fullResponse = await result.text;
+
+          // If the client disconnected mid-stream, streamText was aborted and
+          // result.text rejects above; the catch below handles it. Belt-and-
+          // suspenders: short-circuit if the signal aborted for any other reason
+          // before we start touching the DB.
+          if (params.abortSignal?.aborted) {
+            console.log(`[Memory] Skipping background update — request aborted for thread ${threadId}`);
+            return;
+          }
           const toolCalls = await result.toolCalls as any[];
 
           console.log(`[Memory] Response finished. Text len: ${fullResponse.length}. Tool calls: ${toolCalls.length}`);
+
+          // Citation grounding pass — observability only, gated.
+          if (process.env.KB_CITATION_GROUNDING_ENABLED === "true") {
+            try {
+              const { checkGrounding } = await import("@/lib/rag/citation-grounding")
+              const retrievedTitles = ragSources.map((s) => s.title)
+              const report = checkGrounding(fullResponse, retrievedTitles)
+              if (!report.disabled) {
+                console.log(
+                  "[RAG_GROUND]",
+                  JSON.stringify({
+                    traceId: ragTrace?.traceId ?? null,
+                    citationCount: report.citations.length,
+                    unsupportedCount: report.unsupported.length,
+                    groundedRatio: Number(report.groundedRatio.toFixed(3)),
+                    unsupported: report.unsupported.slice(0, 10).map((u) => u.title),
+                  })
+                )
+              }
+            } catch (err) {
+              console.warn("[RAG_GROUND] grounding check failed:", err)
+            }
+          }
 
           // Retrieve and process queued memories from tool calls
           const queuedMemories = memoryQueue.get(threadId) || [];
@@ -1108,7 +1353,7 @@ export async function runChat(params: {
     // Canonical stream mode for chat: always UI message SSE
     // (tools and non-tools share the same protocol).
     const uiResponse = result.toUIMessageStreamResponse()
-    return appendSourcesEventToUiStreamResponse(uiResponse, ragSources)
+    return appendSourcesEventToUiStreamResponse(uiResponse, ragSources, ragTrace?.traceId ?? null)
   } catch (error) {
     console.error("[Chat API] Error:", error)
     return {

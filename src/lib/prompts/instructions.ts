@@ -11,6 +11,20 @@ export { CANVAS_TYPE_LABELS } from "./artifacts"
 /** Language consistency — appended to ALL chat prompts */
 export const LANGUAGE_INSTRUCTION = `\n\nIMPORTANT: You must ALWAYS reply in the same language as the user's last message. If they speak Indonesian, reply in Indonesian. If they speak English, reply in English. Do not mix languages unless necessary for technical terms.`
 
+/**
+ * Output hygiene — strips chain-of-thought / planning text from the answer.
+ * Some reasoning models (MiniMax-M2.7 in our dev path, Gemini 3 thinking,
+ * o1-style) emit their planning as part of the text stream. Without this
+ * instruction the user sees "Let me look at the available documents...",
+ * "I'm continuing through the PSAK list...", etc. as visible content.
+ * Append to every chat surface (chat-public, widget, agent-api).
+ */
+export const OUTPUT_HYGIENE_INSTRUCTION = `\n\nOUTPUT RULES (critical — these override any model habit of "showing your work"):
+- NEVER write first-person planning, meta-commentary, or "thinking out loud" text. Phrases like "Let me look at...", "I'll continue...", "I'm now compiling...", "The user is asking me to...", "From the list, I can see...", "Saya melihat...", "Sekarang saya sedang menyusun..." MUST NEVER appear in your response.
+- Do not describe your own process. Produce only the final answer for the user.
+- Do not narrate what you are about to do or what you just did. No transitions like "Now I'll move on to..." or "Continuing with...".
+- Start your response with the answer itself, not with an introduction to the answer.`
+
 /** Correction rule WITH saveMemory tool — for routes that have the saveMemory tool */
 export const CORRECTION_INSTRUCTION_WITH_TOOL = `\n\nWhen the user corrects or updates previously shared information (e.g. name, age, preference), you MUST call saveMemory with the new value so the stored profile is updated. Do not only acknowledge verbally—always call the tool with the updated fact or preference.`
 

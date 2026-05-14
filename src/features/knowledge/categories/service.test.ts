@@ -54,7 +54,7 @@ describe("dashboard knowledge categories service", () => {
   })
 
   it("returns 400 when creating a category without a label", async () => {
-    const result = await createKnowledgeCategoryForDashboard({ input: { color: "#fff" } as never })
+    const result = await createKnowledgeCategoryForDashboard({ input: { color: "#fff" } as never, organizationId: null })
     expect(result).toEqual({ status: 400, error: "Label is required" })
   })
 
@@ -70,6 +70,7 @@ describe("dashboard knowledge categories service", () => {
 
     const result = await createKnowledgeCategoryForDashboard({
       input: { label: "Custom Label", color: "#fff" } as never,
+      organizationId: null,
     })
 
     expect(result).toEqual({
@@ -101,6 +102,7 @@ describe("dashboard knowledge categories service", () => {
     const result = await updateKnowledgeCategoryForDashboard({
       id: "cat_1",
       input: { label: "New Label", color: "#000" } as never,
+      organizationId: null,
     })
 
     expect(result).toEqual({
@@ -121,7 +123,7 @@ describe("dashboard knowledge categories service", () => {
       isSystem: true,
     } as never)
 
-    const result = await deleteKnowledgeCategoryForDashboard("cat_1")
+    const result = await deleteKnowledgeCategoryForDashboard("cat_1", null)
 
     expect(result).toEqual({ status: 400, error: "Cannot delete system categories" })
   })

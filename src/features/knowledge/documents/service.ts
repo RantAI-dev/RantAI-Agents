@@ -1,5 +1,6 @@
 import path from "path"
 import { Prisma } from "@prisma/client"
+import { prisma } from "@/lib/prisma"
 import {
   chunkDocument,
   smartChunkDocument,
@@ -21,8 +22,12 @@ import {
   findKnowledgeDocumentAccessById,
   findKnowledgeDocumentById,
   listKnowledgeDocumentsByScope,
+  replaceKnowledgeDocumentContent,
+  restoreKnowledgeDocument,
+  softDeleteKnowledgeDocument,
   updateKnowledgeDocumentWithGroups,
 } from "./repository"
+import { recordKnowledgeAudit } from "@/lib/audit/knowledge"
 import type { KnowledgeDocumentCreateInput, KnowledgeDocumentUpdateInput } from "./schema"
 
 export interface ServiceError {
@@ -310,6 +315,9 @@ export async function createKnowledgeDocumentForDashboard(params: {
   context: KnowledgeDocumentContext
   input: KnowledgeDocumentCreateInput
 }): Promise<Record<string, unknown> | ServiceError> {
+  const { recordIngestJobStart, recordIngestJobSuccess, recordIngestJobFailure } = await import("@/lib/ingest/job")
+  let ingestJobId: string | null = null
+
   if (params.context.organizationId && params.context.role && !canEdit(params.context.role)) {
     return { status: 403, error: "Insufficient permissions" }
   }
@@ -333,10 +341,27 @@ export async function createKnowledgeDocumentForDashboard(params: {
       return { status: 400, error: validation.error }
     }
 
+    // Per-org quota check. Both maxDocuments and maxStorageBytes are nullable
+    // on Organization → checkKnowledgeQuota returns allowed=true when no limits
+    // are set, so this is a no-op for unbounded orgs.
+    const { checkKnowledgeQuota } = await import("@/lib/quota/knowledge")
+    const quota = await checkKnowledgeQuota(params.context.organizationId, file.size)
+    if (!quota.allowed) {
+      return { status: 413, error: quota.reason ?? "Knowledge base quota exceeded" }
+    }
+
     originalFilename = file.name
     mimeType = file.type
     const detectedType = detectFileType(file.name)
     fileBuffer = Buffer.from(await file.arrayBuffer())
+
+    // Extraction failures used to fall back to a literal placeholder string
+    // ("Failed to OCR PDF.") which then got chunked + embedded + indexed. RAG
+    // hits would surface those placeholder strings as "results". Now: any
+    // extraction failure aborts ingest with a 422; the caller can retry with
+    // different settings (forceOCR, different documentType) instead of silently
+    // poisoning the knowledge base.
+    let extractionError: string | null = null
 
     if (detectedType === "pdf") {
       fileType = "pdf"
@@ -359,7 +384,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
           usedOCR = true
         } catch (error) {
           console.error("OCR processing error:", error)
-          content = `[PDF Document: ${title || file.name}]\n\nFailed to OCR PDF.`
+          extractionError = `OCR failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
         }
       } else {
         try {
@@ -369,7 +394,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
           content = text
         } catch (error) {
           console.error("PDF parsing error:", error)
-          content = `[PDF Document: ${title || file.name}]\n\nFailed to extract text from PDF.`
+          extractionError = `PDF parse failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
         }
       }
     } else if (detectedType === "image") {
@@ -402,7 +427,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
         usedOCR = true
       } catch (error) {
         console.error("OCR processing error:", error)
-        content = `[Image: ${file.name}]\n\nFailed to process image with OCR.`
+        extractionError = `Image OCR failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
       }
     } else if (detectedType === "document" || detectedType === "text") {
       fileType = "markdown"
@@ -413,11 +438,15 @@ export async function createKnowledgeDocumentForDashboard(params: {
         content = await extractTextFromBuffer(fileBuffer, detectedMime, file.name)
       } catch (error) {
         console.error("File extraction error:", error)
-        content = `[${file.name}]\n\nFailed to extract text from file.`
+        extractionError = `Text extraction failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
       }
     } else {
       fileType = "markdown"
       content = fileBuffer.toString("utf-8")
+    }
+
+    if (extractionError) {
+      return { status: 422, error: extractionError }
     }
 
     if (!title) {
@@ -453,6 +482,19 @@ export async function createKnowledgeDocumentForDashboard(params: {
       console.error("[Knowledge API] S3 upload failed:", error)
       s3Key = undefined
     }
+  }
+
+  // Open the IngestJob row now that we know s3Key + fileSize. We don't track
+  // text-only / JSON-mode submissions (no file = no DLQ value).
+  if (fileBuffer && originalFilename) {
+    ingestJobId = await recordIngestJobStart({
+      organizationId: params.context.organizationId,
+      userId: params.context.userId,
+      filename: originalFilename,
+      fileSize: fileSize ?? null,
+      mimeType: mimeType ?? null,
+      s3Key: s3Key ?? null,
+    })
   }
 
   // Strip null bytes — PostgreSQL UTF-8 columns reject 0x00
@@ -611,9 +653,35 @@ export async function createKnowledgeDocumentForDashboard(params: {
     })
   }
 
+  // Embed + store atomically: if either step fails, the Document row in
+  // Postgres is already created (above) but has zero chunks in SurrealDB →
+  // user sees the doc in the file list but RAG returns nothing for it.
+  // Roll back the half-ingested document (Prisma + S3) and re-throw so the
+  // API route surfaces a real failure to the caller.
   const chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)
-  const embeddings = await generateEmbeddings(chunkTexts)
-  await storeChunks(document.id, chunks, embeddings)
+  try {
+    const embeddings = await generateEmbeddings(chunkTexts)
+    const { getRagConfig } = await import("@/lib/rag/config")
+    const embeddingModel = getRagConfig().embeddingModel
+    await storeChunks(document.id, chunks, embeddings, embeddingModel)
+  } catch (err) {
+    console.error(
+      `[Knowledge API] Ingest failed for document ${document.id} (${chunks.length} chunks); rolling back:`,
+      err
+    )
+    try {
+      await deleteKnowledgeDocument(document.id)
+    } catch (rbErr) {
+      console.error(`[Knowledge API] Rollback: Document.delete failed for ${document.id}:`, rbErr)
+    }
+    // NOTE: S3 key intentionally preserved so the DLQ retry endpoint can
+    // replay this upload without re-asking the user for the file. The
+    // IngestJob row carries the s3Key for that replay; orphaned S3 objects
+    // for never-retried jobs are reaped by a separate sweep keyed on
+    // IngestJob.status = "failed" + age.
+    recordIngestJobFailure(ingestJobId, (err as Error).message ?? "ingest failed")
+    throw err
+  }
 
   let fileUrl: string | undefined
   if (s3Key) {
@@ -623,6 +691,17 @@ export async function createKnowledgeDocumentForDashboard(params: {
       console.error("[Knowledge API] Failed to generate presigned URL:", error)
     }
   }
+
+  recordKnowledgeAudit({
+    organizationId: params.context.organizationId,
+    userId: params.context.userId,
+    action: "document.create",
+    entityType: "document",
+    entityId: document.id,
+    detail: { title: document.title, fileType, fileSize, chunkCount: chunks.length, entityCount },
+  })
+
+  recordIngestJobSuccess(ingestJobId, document.id)
 
   return {
     id: document.id,
@@ -647,6 +726,8 @@ export async function updateKnowledgeDocumentForDashboard(params: {
   documentId: string
   organizationId: string | null
   role: string | null | undefined
+  /** Acting user id — written to AuditLog so we can answer "who did this?". */
+  userId: string | null
   input: KnowledgeDocumentUpdateInput
 }): Promise<Record<string, unknown> | ServiceError> {
   const existing = await findKnowledgeDocumentAccessById(params.documentId)
@@ -680,6 +761,20 @@ export async function updateKnowledgeDocumentForDashboard(params: {
     return { status: 404, error: "Document not found" }
   }
 
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    action: "document.update",
+    entityType: "document",
+    entityId: params.documentId,
+    detail: {
+      title: params.input.title,
+      categories: params.input.categories,
+      subcategory: params.input.subcategory,
+      groupIds,
+    },
+  })
+
   return {
     id: document.id,
     title: document.title,
@@ -690,12 +785,127 @@ export async function updateKnowledgeDocumentForDashboard(params: {
 }
 
 /**
- * Deletes a dashboard knowledge document and its external assets.
+ * Soft-deletes a knowledge document by default (recoverable for `retentionDays`
+ * before the retention sweep hard-deletes). Pass `hard: true` for the legacy
+ * permanent-delete path that also cleans up S3 + SurrealDB chunks immediately.
  */
 export async function deleteKnowledgeDocumentForDashboard(params: {
   documentId: string
   organizationId: string | null
   role: string | null | undefined
+  userId: string | null
+  hard?: boolean
+}): Promise<{ success: true; mode: "soft" | "hard" } | ServiceError> {
+  const existing = await findKnowledgeDocumentAccessById(params.documentId)
+  if (!existing) {
+    return { status: 404, error: "Document not found" }
+  }
+
+  if (!hasDocumentAccess(existing.organizationId, params.organizationId)) {
+    return { status: 404, error: "Document not found" }
+  }
+
+  if (existing.organizationId && params.role && !canManage(params.role)) {
+    return { status: 403, error: "Insufficient permissions" }
+  }
+
+  if (!params.hard) {
+    // Soft delete: row stays, deletedAt timestamp filters it out everywhere.
+    // Chunks in SurrealDB stay until the retention sweep — retrieval skips
+    // them because the Postgres join filters deletedAt: null.
+    await softDeleteKnowledgeDocument(params.documentId)
+    recordKnowledgeAudit({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      action: "document.delete",
+      entityType: "document",
+      entityId: params.documentId,
+      detail: { mode: "soft" },
+    })
+    console.log(`Soft-deleted document ${params.documentId}`)
+    return { success: true, mode: "soft" }
+  }
+
+  // Hard-delete order (postgres-first):
+  //   1. delete Document row in Postgres — this is the only step we can do
+  //      atomically. If it fails, nothing changes; user retries.
+  //   2. cleanup SurrealDB chunks + entities — best-effort. If it fails, the
+  //      chunks are now orphans (no parent Document.id in Postgres) and will
+  //      be filtered out at retrieval (vector-store.ts uses an inner join +
+  //      deletedAt:null filter, so missing doc → chunk dropped from results).
+  //      A retention sweep can hard-drop the orphan chunks later.
+  //   3. delete S3 file — best-effort, same logic; orphan S3 objects are
+  //      cheap and recoverable by a periodic scan of S3 vs Document.s3Key.
+  //
+  // Old order (surreal → s3 → postgres) had the failure mode: if Postgres
+  // delete failed AFTER surreal+s3 cleared, the doc stayed visible in the UI
+  // but RAG silently returned zero chunks. New order avoids that by leaving
+  // the doc fully present if its row delete fails.
+  let cleanupStats: { deletedRelationTables: number; entitiesDeleted: boolean; chunksDeleted: boolean } = {
+    deletedRelationTables: 0,
+    entitiesDeleted: false,
+    chunksDeleted: false,
+  }
+  try {
+    await deleteKnowledgeDocument(params.documentId)
+  } catch (err) {
+    console.error(`[Knowledge API] Hard delete: Postgres delete failed for ${params.documentId}:`, err)
+    return {
+      status: 500,
+      error: `Failed to delete document row: ${(err as Error).message?.slice(0, 200) ?? "unknown"}`,
+    }
+  }
+
+  try {
+    const surrealClient = await getSurrealClient()
+    cleanupStats = await surrealClient.cleanupDocumentIntelligence(params.documentId)
+  } catch (err) {
+    console.error(
+      `[Knowledge API] Hard delete: SurrealDB cleanup failed for ${params.documentId} (Postgres row already deleted; chunks orphan and will be filtered at retrieval). Manual sweep needed:`,
+      err
+    )
+  }
+
+  if (existing.s3Key) {
+    try {
+      await deleteFile(existing.s3Key)
+    } catch (error) {
+      console.error(
+        `[Knowledge API] Hard delete: S3 delete failed for ${existing.s3Key} (Postgres row already deleted; file orphan). Manual sweep needed:`,
+        error
+      )
+    }
+  }
+
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    action: "document.hard_delete",
+    entityType: "document",
+    entityId: params.documentId,
+    detail: {
+      mode: "hard",
+      relationTablesCleaned: cleanupStats.deletedRelationTables,
+      entitiesDeleted: cleanupStats.entitiesDeleted,
+      chunksDeleted: cleanupStats.chunksDeleted,
+    },
+    riskLevel: "high",
+  })
+  console.log(
+    `Hard-deleted document ${params.documentId}: cleaned up relations from ${cleanupStats.deletedRelationTables} tables, entities: ${cleanupStats.entitiesDeleted}, chunks: ${cleanupStats.chunksDeleted}`
+  )
+
+  return { success: true, mode: "hard" }
+}
+
+/**
+ * Restore a previously soft-deleted document.
+ */
+export async function restoreKnowledgeDocumentForDashboard(params: {
+  documentId: string
+  organizationId: string | null
+  role: string | null | undefined
+  userId: string | null
 }): Promise<{ success: true } | ServiceError> {
   const existing = await findKnowledgeDocumentAccessById(params.documentId)
   if (!existing) {
@@ -710,23 +920,127 @@ export async function deleteKnowledgeDocumentForDashboard(params: {
     return { status: 403, error: "Insufficient permissions" }
   }
 
-  const surrealClient = await getSurrealClient()
-  const cleanupStats = await surrealClient.cleanupDocumentIntelligence(params.documentId)
+  await restoreKnowledgeDocument(params.documentId)
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    action: "document.restore",
+    entityType: "document",
+    entityId: params.documentId,
+  })
+  console.log(`Restored document ${params.documentId}`)
+  return { success: true }
+}
 
+/**
+ * Replace a document's content in place — keeps the same Document.id (so
+ * groups, sessions, assistant bindings, audit history stay attached), cleans
+ * old chunks + entities + S3 file, then re-ingests with the new file or text.
+ *
+ * Used when a doc gets a revised version (e.g. PSAK 113 amendment) without
+ * losing the doc identity. Soft-delete + re-upload would orphan everything
+ * keyed off the old id.
+ */
+export async function replaceKnowledgeDocumentContentForDashboard(params: {
+  context: KnowledgeDocumentContext
+  documentId: string
+  input: KnowledgeDocumentCreateInput
+}): Promise<Record<string, unknown> | ServiceError> {
+  const existing = await findKnowledgeDocumentAccessById(params.documentId)
+  if (!existing) return { status: 404, error: "Document not found" }
+  if (!hasDocumentAccess(existing.organizationId, params.context.organizationId)) {
+    return { status: 404, error: "Document not found" }
+  }
+  if (existing.organizationId && params.context.role && !canManage(params.context.role)) {
+    return { status: 403, error: "Insufficient permissions" }
+  }
+
+  // Extract the new content using the same path the create flow uses. The
+  // simplest implementation: call createKnowledgeDocumentForDashboard to do
+  // a fresh ingest, then atomically swap the new content/s3Key onto the
+  // existing row and hard-delete the duplicate id. Less wasteful: factor
+  // out the extraction, but that's a bigger refactor — keep the duplication
+  // local for now. createKnowledgeDocumentForDashboard already handles quota,
+  // OCR, smart router, embeddings, chunks, entities — re-running it here is
+  // correct, just slightly wasteful.
+  const created = await createKnowledgeDocumentForDashboard({
+    context: params.context,
+    input: params.input,
+  })
+  if ("status" in created) return created as ServiceError
+
+  const newDocId = (created as { id: string }).id
+  if (newDocId === params.documentId) {
+    // Edge case: createKnowledgeDocumentForDashboard generated the same id (extremely unlikely with cuid).
+    return created
+  }
+
+  // Move the new content/s3Key onto the existing row, then nuke the freshly-
+  // created duplicate. This keeps the original Document.id stable.
+  const surrealClient = await getSurrealClient()
+  // 1) wipe the OLD document's chunks + entities + S3 file so retrieval stops
+  //    returning the stale content while we swap.
+  const cleanupStats = await surrealClient.cleanupDocumentIntelligence(params.documentId)
   if (existing.s3Key) {
-    try {
-      await deleteFile(existing.s3Key)
-    } catch (error) {
-      console.error(`[Knowledge API] Failed to delete S3 file ${existing.s3Key}:`, error)
+    try { await deleteFile(existing.s3Key) } catch (err) {
+      console.warn(`[Knowledge API] Replace: old S3 delete failed for ${existing.s3Key}:`, err)
     }
   }
 
-  await deleteKnowledgeDocument(params.documentId)
-  console.log(
-    `Deleted document ${params.documentId}: cleaned up relations from ${cleanupStats.deletedRelationTables} tables, entities: ${cleanupStats.entitiesDeleted}, chunks: ${cleanupStats.chunksDeleted}`
+  // 2) Re-key the NEW doc's chunks under the existing documentId.
+  await surrealClient.query(
+    `UPDATE document_chunk SET document_id = $oldId WHERE document_id = $newId`,
+    { oldId: params.documentId, newId: newDocId }
+  )
+  await surrealClient.query(
+    `UPDATE entity SET document_id = $oldId WHERE document_id = $newId`,
+    { oldId: params.documentId, newId: newDocId }
   )
 
-  return { success: true }
+  // 3) Copy new content + s3Key fields onto the existing Document row.
+  const newRow = (created as {
+    title: string; chunkCount: number; fileType?: string | null; fileSize?: number | null; s3Key?: string | null;
+  })
+  const newDocFull = await prisma.document.findUnique({
+    where: { id: newDocId },
+    select: { content: true, s3Key: true, fileType: true, fileSize: true, mimeType: true },
+  })
+  if (newDocFull) {
+    await replaceKnowledgeDocumentContent(params.documentId, {
+      content: newDocFull.content,
+      s3Key: newDocFull.s3Key,
+      fileType: newDocFull.fileType,
+      fileSize: newDocFull.fileSize,
+      mimeType: newDocFull.mimeType,
+    })
+  }
+
+  // 4) Delete the duplicate Document row (its chunks/entities now point at
+  //    the original id, so deleting the row is safe — chunks survive).
+  await prisma.document.delete({ where: { id: newDocId } })
+
+  recordKnowledgeAudit({
+    organizationId: params.context.organizationId,
+    userId: params.context.userId,
+    action: "document.reembed",
+    entityType: "document",
+    entityId: params.documentId,
+    detail: {
+      newTitle: newRow.title,
+      newChunkCount: newRow.chunkCount,
+      oldChunkCount: cleanupStats.chunksDeleted,
+    },
+    riskLevel: "medium",
+  })
+
+  return {
+    id: params.documentId,
+    title: newRow.title,
+    fileType: newRow.fileType,
+    fileSize: newRow.fileSize,
+    s3Key: newRow.s3Key,
+    chunkCount: newRow.chunkCount,
+  }
 }
 
 /**

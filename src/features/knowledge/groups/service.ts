@@ -7,6 +7,7 @@ import {
   listKnowledgeGroupsByOrganization,
   updateKnowledgeGroup,
 } from "./repository"
+import { recordKnowledgeAudit } from "@/lib/audit/knowledge"
 import type { KnowledgeGroupCreateInput, KnowledgeGroupUpdateInput } from "./schema"
 
 export interface ServiceError {
@@ -94,6 +95,15 @@ export async function createKnowledgeGroupForDashboard(params: {
     createdBy: params.userId,
   })
 
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: params.userId,
+    action: "knowledgeBaseGroup.create",
+    entityType: "knowledgeBaseGroup",
+    entityId: group.id,
+    detail: { name: group.name, description: group.description },
+  })
+
   return {
     id: group.id,
     name: group.name,
@@ -138,6 +148,7 @@ export async function updateKnowledgeGroupForDashboard(params: {
   groupId: string
   organizationId: string | null
   role: string | null | undefined
+  userId?: string | null
   input: KnowledgeGroupUpdateInput
 }): Promise<KnowledgeGroupWriteResponse | ServiceError> {
   const existing = await findKnowledgeGroupAccessById(params.groupId)
@@ -161,6 +172,15 @@ export async function updateKnowledgeGroupForDashboard(params: {
     ...(params.input.color !== undefined && { color: params.input.color || null }),
   })
 
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: params.userId ?? null,
+    action: "knowledgeBaseGroup.update",
+    entityType: "knowledgeBaseGroup",
+    entityId: params.groupId,
+    detail: { name: params.input.name, description: params.input.description },
+  })
+
   return {
     id: group.id,
     name: group.name,
@@ -176,6 +196,7 @@ export async function deleteKnowledgeGroupForDashboard(params: {
   groupId: string
   organizationId: string | null
   role: string | null | undefined
+  userId?: string | null
 }): Promise<{ success: true } | ServiceError> {
   const existing = await findKnowledgeGroupAccessById(params.groupId)
   if (!existing) {
@@ -193,5 +214,13 @@ export async function deleteKnowledgeGroupForDashboard(params: {
   }
 
   await deleteKnowledgeGroup(params.groupId)
+  recordKnowledgeAudit({
+    organizationId: params.organizationId,
+    userId: params.userId ?? null,
+    action: "knowledgeBaseGroup.delete",
+    entityType: "knowledgeBaseGroup",
+    entityId: params.groupId,
+    riskLevel: "medium",
+  })
   return { success: true }
 }

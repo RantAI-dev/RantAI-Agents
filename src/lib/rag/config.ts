@@ -3,6 +3,8 @@ export interface RagConfig {
   extractFallback: string;
   embeddingModel: string;
   embeddingDim: number;
+  /** Default number of chunks returned to the LLM. Env: KB_DEFAULT_MAX_CHUNKS. */
+  defaultMaxChunks: number;
   rerankEnabled: boolean;
   rerankModel: string;
   rerankInitialK: number;
@@ -55,6 +57,10 @@ const DEFAULTS: RagConfig = {
   extractFallback: "unpdf",
   embeddingModel: "qwen/qwen3-embedding-8b",
   embeddingDim: 4096,
+  // 8 chunks is the new default (was 5). For multi-faceted questions, 5 was
+  // too few — answers came back missing facets. 8 still fits comfortably in any
+  // modern context window given chunk size ~1000 chars.
+  defaultMaxChunks: 8,
   rerankEnabled: false,
   rerankModel: "openai/gpt-4.1-nano",
   rerankInitialK: 20,
@@ -96,6 +102,7 @@ export function getRagConfig(): RagConfig {
     extractFallback: process.env.KB_EXTRACT_FALLBACK || DEFAULTS.extractFallback,
     embeddingModel: process.env.KB_EMBEDDING_MODEL || DEFAULTS.embeddingModel,
     embeddingDim: parseIntEnv("KB_EMBEDDING_DIM", DEFAULTS.embeddingDim),
+    defaultMaxChunks: parseIntEnv("KB_DEFAULT_MAX_CHUNKS", DEFAULTS.defaultMaxChunks),
     rerankEnabled: process.env.KB_RERANK_ENABLED === "true",
     rerankModel: process.env.KB_RERANK_MODEL || DEFAULTS.rerankModel,
     rerankInitialK: parseIntEnv("KB_RERANK_INITIAL_K", DEFAULTS.rerankInitialK),

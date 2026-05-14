@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { getOrganizationContextWithFallback } from "@/lib/organization"
 import {
   KnowledgeCategoryCreateSchema,
 } from "@/features/knowledge/categories/schema"
@@ -9,15 +10,16 @@ import {
 } from "@/features/knowledge/categories/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
 
-// GET - List all categories (seeds defaults if empty)
-export async function GET() {
+// GET - List categories visible to the caller's org (own + global)
+export async function GET(request: Request) {
   const session = await auth()
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
-    const categories = await listKnowledgeCategoriesForDashboard()
+    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const categories = await listKnowledgeCategoriesForDashboard(orgContext?.organizationId ?? null)
     return NextResponse.json({ categories })
   } catch (error) {
     console.error("Failed to list categories:", error)
@@ -25,7 +27,7 @@ export async function GET() {
   }
 }
 
-// POST - Create a new category
+// POST - Create a category scoped to the caller's org
 export async function POST(request: Request) {
   const session = await auth()
   if (!session?.user) {
@@ -38,8 +40,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
+    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
     const category = await createKnowledgeCategoryForDashboard({
       input: parsedBody.data,
+      organizationId: orgContext?.organizationId ?? null,
+      userId: session.user.id,
     })
 
     if (isHttpServiceError(category)) {

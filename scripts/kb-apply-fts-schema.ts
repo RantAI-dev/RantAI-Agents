@@ -10,6 +10,9 @@ const STATEMENTS = [
   `DEFINE ANALYZER IF NOT EXISTS kb_en TOKENIZERS class FILTERS lowercase, snowball(english);`,
   `DEFINE INDEX IF NOT EXISTS content_search_idx ON document_chunk FIELDS content SEARCH ANALYZER kb_en BM25(1.2, 0.75) HIGHLIGHTS;`,
   `DEFINE FIELD IF NOT EXISTS contextual_prefix ON document_chunk TYPE option<string>;`,
+  // Drift detection: track which embedding model produced each chunk's vector.
+  // Null on rows ingested before this field existed; treated as "unknown / legacy".
+  `DEFINE FIELD IF NOT EXISTS embedding_model ON document_chunk TYPE option<string>;`,
 ];
 
 async function main() {

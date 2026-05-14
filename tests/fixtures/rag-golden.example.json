@@ -1,0 +1,57 @@
+{
+  "name": "rag-golden.example",
+  "version": "2026-05-13",
+  "updatedAt": "2026-05-13T00:00:00.000Z",
+  "defaultGroupIds": null,
+  "entries": [
+    {
+      "id": "lookup-en-psak-113",
+      "query": "What is PSAK 113 about?",
+      "kind": "lookup",
+      "expectedDocs": ["PSAK 113"],
+      "expectedAnswerSubstrings": ["nilai wajar"],
+      "knowledgeBaseGroupIds": ["<paste-PSAK-group-id-here>"],
+      "notes": "factual lookup — model should cite PSAK 113 inline"
+    },
+    {
+      "id": "enumerate-psak",
+      "query": "Sebutkan semua PSAK yang tersedia",
+      "kind": "enumerate",
+      "expectedDocs": [
+        "PSAK 113",
+        "PSAK 119",
+        "ISAK 119"
+      ],
+      "knowledgeBaseGroupIds": ["<paste-PSAK-group-id-here>"],
+      "notes": "tests the directory-injection fix; expectedDocs should be the full PSAK list"
+    },
+    {
+      "id": "followup-deductible",
+      "query": "tell me more about exclusions",
+      "kind": "followup",
+      "expectedDocs": ["PSAK 113"],
+      "priorTurns": [
+        { "role": "user", "content": "What is PSAK 113 about?" },
+        { "role": "assistant", "content": "PSAK 113 covers fair value measurement..." }
+      ],
+      "knowledgeBaseGroupIds": ["<paste-PSAK-group-id-here>"],
+      "notes": "tests standalone-query rewrite for pronoun resolution"
+    },
+    {
+      "id": "compare-113-119",
+      "query": "Compare PSAK 113 dan PSAK 119",
+      "kind": "compare",
+      "expectedDocs": ["PSAK 113", "PSAK 119"],
+      "knowledgeBaseGroupIds": ["<paste-PSAK-group-id-here>"],
+      "notes": "tests retrieval breadth — both docs must show up"
+    },
+    {
+      "id": "oos-cuaca",
+      "query": "Bagaimana cuaca di Jakarta besok?",
+      "kind": "oos",
+      "expectedDocs": [],
+      "expectedRefusal": true,
+      "notes": "model should say 'not in knowledge base' instead of hallucinating"
+    }
+  ]
+}

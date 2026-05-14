@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSurrealClient } from "@/lib/surrealdb";
 import { generateEmbedding, generateEmbeddings } from "./embeddings";
-import { Chunk, prepareChunkForEmbedding } from "./chunker";
+import { Chunk } from "./chunker";
 
 /**
  * Vector store operations using SurrealDB for vector storage
@@ -17,6 +17,8 @@ export interface SearchResult {
   subcategory: string | null;
   section: string | null;
   similarity: number;
+  /** Optional context prefix populated when KB_CONTEXTUAL_RETRIEVAL_ENABLED ran at ingest. */
+  contextualPrefix: string | null;
 }
 
 interface SurrealChunk {
@@ -25,79 +27,8 @@ interface SurrealChunk {
   content: string;
   chunk_index: number;
   metadata: Record<string, unknown> | null;
+  contextual_prefix: string | null;
   similarity: number;
-}
-
-/**
- * Store a document and its chunks with embeddings in the database
- * - Document metadata stored in PostgreSQL (Prisma)
- * - Chunks with embeddings stored in SurrealDB
- */
-export async function storeDocument(
-  title: string,
-  content: string,
-  categories: string[],
-  subcategory: string | null,
-  chunks: Chunk[],
-  groupIds?: string[]
-): Promise<string> {
-  // Create the document in PostgreSQL with optional group associations
-  const document = await prisma.document.create({
-    data: {
-      title,
-      content,
-      categories,
-      subcategory,
-      groups:
-        groupIds && groupIds.length > 0
-          ? {
-              create: groupIds.map((groupId) => ({
-                groupId,
-              })),
-            }
-          : undefined,
-    },
-  });
-
-  // Generate embeddings for all chunks in batch
-  const textsForEmbedding = chunks.map(prepareChunkForEmbedding);
-  const embeddings = await generateEmbeddings(textsForEmbedding);
-
-  // Store chunks with embeddings in SurrealDB
-  const surrealClient = await getSurrealClient();
-
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    const embedding = embeddings[i];
-    const chunkId = `${document.id}_${i}`;
-
-    await surrealClient.query(
-      `CREATE document_chunk SET
-        id = $id,
-        document_id = $document_id,
-        content = $content,
-        chunk_index = $chunk_index,
-        embedding = $embedding,
-        metadata = $metadata,
-        contextual_prefix = $contextual_prefix,
-        created_at = time::now()`,
-      {
-        id: chunkId,
-        document_id: document.id,
-        content: chunk.content,
-        chunk_index: chunk.metadata.chunkIndex,
-        embedding: embedding,
-        metadata: chunk.metadata,
-        contextual_prefix: chunk.metadata.contextualPrefix ?? null,
-      }
-    );
-  }
-
-  console.log(
-    `[VectorStore] Stored document "${title}" with ${chunks.length} chunks`
-  );
-
-  return document.id;
 }
 
 /**
@@ -138,7 +69,7 @@ export async function searchSimilar(
     }
 
     const filteredDocs = await prisma.document.findMany({
-      where: whereClause,
+      where: { ...whereClause, deletedAt: null },
       select: { id: true },
     });
 
@@ -164,6 +95,7 @@ export async function searchSimilar(
         document_id,
         content,
         metadata,
+        contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       WHERE document_id IN $document_ids
@@ -178,6 +110,7 @@ export async function searchSimilar(
         document_id,
         content,
         metadata,
+        contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       ORDER BY similarity DESC
@@ -195,9 +128,11 @@ export async function searchSimilar(
   // Get unique document IDs from results
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
 
-  // Fetch document metadata from PostgreSQL
+  // Fetch document metadata from PostgreSQL — skip soft-deleted so their
+  // chunks effectively drop out of retrieval until the retention sweep cleans
+  // SurrealDB rows.
   const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds } },
+    where: { id: { in: resultDocIds }, deletedAt: null },
     select: {
       id: true,
       title: true,
@@ -209,20 +144,25 @@ export async function searchSimilar(
   // Create a map for quick lookup
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
-  // Join chunk results with document metadata
-  const results: SearchResult[] = chunks.map((chunk) => {
-    const doc = docMap.get(chunk.document_id);
-    return {
-      id: chunk.id,
-      content: chunk.content,
-      documentId: chunk.document_id,
-      documentTitle: doc?.title || "Unknown",
-      categories: doc?.categories || [],
-      subcategory: doc?.subcategory || null,
-      section: (chunk.metadata as { section?: string } | null)?.section || null,
-      similarity: chunk.similarity,
-    };
-  });
+  // Join chunk results with document metadata. Drop chunks whose parent doc
+  // is missing from docMap — that means the doc was soft-deleted (filtered
+  // upstream) and the chunk is effectively retired until the retention sweep.
+  const results: SearchResult[] = chunks
+    .filter((chunk) => docMap.has(chunk.document_id))
+    .map((chunk) => {
+      const doc = docMap.get(chunk.document_id)!;
+      return {
+        id: chunk.id,
+        content: chunk.content,
+        documentId: chunk.document_id,
+        documentTitle: doc.title,
+        categories: doc.categories,
+        subcategory: doc.subcategory,
+        section: (chunk.metadata as { section?: string } | null)?.section || null,
+        similarity: chunk.similarity,
+        contextualPrefix: chunk.contextual_prefix,
+      };
+    });
 
   return results;
 }
@@ -388,6 +328,7 @@ export async function searchByDocumentIds(
       document_id,
       content,
       metadata,
+      contextual_prefix,
       vector::similarity::cosine(embedding, $embedding) AS similarity
     FROM document_chunk
     WHERE document_id IN $document_ids
@@ -407,24 +348,25 @@ export async function searchByDocumentIds(
   // Fetch document metadata from PostgreSQL
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
   const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds } },
+    where: { id: { in: resultDocIds }, deletedAt: null },
     select: { id: true, title: true, categories: true, subcategory: true },
   });
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
   return chunks
-    .filter((chunk) => chunk.similarity >= minSimilarity)
+    .filter((chunk) => chunk.similarity >= minSimilarity && docMap.has(chunk.document_id))
     .map((chunk) => {
-      const doc = docMap.get(chunk.document_id);
+      const doc = docMap.get(chunk.document_id)!;
       return {
         id: chunk.id,
         content: chunk.content,
         documentId: chunk.document_id,
-        documentTitle: doc?.title || "Unknown",
-        categories: doc?.categories || [],
-        subcategory: doc?.subcategory || null,
+        documentTitle: doc.title,
+        categories: doc.categories,
+        subcategory: doc.subcategory,
         section: (chunk.metadata as { section?: string } | null)?.section || null,
         similarity: chunk.similarity,
+        contextualPrefix: chunk.contextual_prefix,
       };
     });
 }
@@ -452,7 +394,7 @@ export async function searchByVector(
       whereClause.groups = { some: { groupId: { in: groupIds } } };
     }
     const filteredDocs = await prisma.document.findMany({
-      where: whereClause,
+      where: { ...whereClause, deletedAt: null },
       select: { id: true },
     });
     documentIds = filteredDocs.map((d) => d.id);
@@ -466,7 +408,7 @@ export async function searchByVector(
   };
   if (documentIds) {
     sql = `
-      SELECT id, document_id, content, metadata,
+      SELECT id, document_id, content, metadata, contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       WHERE document_id IN $document_ids
@@ -476,7 +418,7 @@ export async function searchByVector(
     vars.document_ids = documentIds;
   } else {
     sql = `
-      SELECT id, document_id, content, metadata,
+      SELECT id, document_id, content, metadata, contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       ORDER BY similarity DESC
@@ -490,23 +432,26 @@ export async function searchByVector(
 
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
   const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds } },
+    where: { id: { in: resultDocIds }, deletedAt: null },
     select: { id: true, title: true, categories: true, subcategory: true },
   });
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
-  return chunks.map((chunk) => {
-    const doc = docMap.get(chunk.document_id);
+  return chunks
+    .filter((chunk) => docMap.has(chunk.document_id))
+    .map((chunk) => {
+    const doc = docMap.get(chunk.document_id)!;
     const md = (chunk.metadata as Record<string, unknown> | null) ?? {};
     return {
       id: chunk.id,
       content: chunk.content,
       documentId: chunk.document_id,
-      documentTitle: doc?.title || "Unknown",
-      categories: doc?.categories || [],
-      subcategory: doc?.subcategory || null,
+      documentTitle: doc.title,
+      categories: doc.categories,
+      subcategory: doc.subcategory,
       section: (md.section as string | undefined) ?? null,
       similarity: chunk.similarity,
+      contextualPrefix: chunk.contextual_prefix,
     };
   });
 }
@@ -546,8 +491,48 @@ const STORE_CHUNKS_CONCURRENCY = 8
 export async function storeChunks(
   documentId: string,
   chunks: Chunk[],
-  embeddings: number[][]
+  embeddings: number[][],
+  embeddingModel?: string,
 ): Promise<void> {
+  // Hard contract: every chunk must have a matching embedding vector. If an
+  // embed batch failed (generateEmbeddings degrades to empty result rather
+  // than throwing), the arrays diverge and we used to silently write `undefined`
+  // into SurrealDB → vector::similarity::cosine() panics at query time. Fail
+  // fast here so the caller can roll the document back instead.
+  if (chunks.length !== embeddings.length) {
+    throw new Error(
+      `[VectorStore] chunks/embeddings length mismatch for document ${documentId}: ${chunks.length} chunks vs ${embeddings.length} embeddings`
+    );
+  }
+  if (embeddings.length === 0) return;
+
+  // Dimension contract: every embedding in this batch must have the same
+  // length AND match KB_EMBEDDING_DIM. Mid-batch drift (provider hiccup,
+  // partial model rollout) or config-vs-actual mismatch (operator forgot to
+  // update KB_EMBEDDING_DIM after swapping KB_EMBEDDING_MODEL) corrupts the
+  // MTREE index irreparably — the index is dimension-bound at DEFINE time.
+  const { getRagConfig } = await import("./config");
+  const expectedDim = getRagConfig().embeddingDim;
+  const firstDim = embeddings[0].length;
+  if (firstDim !== expectedDim) {
+    throw new Error(
+      `[VectorStore] embedding dim ${firstDim} differs from KB_EMBEDDING_DIM=${expectedDim} for document ${documentId}. ` +
+      `Either fix the env or swap the embedding model + re-define the MTREE index at dim=${firstDim}.`
+    );
+  }
+  for (let i = 0; i < embeddings.length; i++) {
+    if (!Array.isArray(embeddings[i]) || embeddings[i].length === 0) {
+      throw new Error(
+        `[VectorStore] empty embedding at index ${i} for document ${documentId}`
+      );
+    }
+    if (embeddings[i].length !== firstDim) {
+      throw new Error(
+        `[VectorStore] mid-batch dim drift at index ${i} for document ${documentId}: ${embeddings[i].length} vs first ${firstDim}`
+      );
+    }
+  }
+
   const surrealClient = await getSurrealClient();
 
   // Process chunks in bounded-concurrency batches. Order doesn't matter
@@ -571,6 +556,7 @@ export async function storeChunks(
             embedding = $embedding,
             metadata = $metadata,
             contextual_prefix = $contextual_prefix,
+            embedding_model = $embedding_model,
             created_at = time::now()`,
           {
             id: chunkId,
@@ -580,6 +566,7 @@ export async function storeChunks(
             embedding: embedding,
             metadata: chunk.metadata,
             contextual_prefix: chunk.metadata.contextualPrefix ?? null,
+            embedding_model: embeddingModel ?? null,
           }
         )
       }),

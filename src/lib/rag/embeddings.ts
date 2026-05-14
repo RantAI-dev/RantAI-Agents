@@ -10,6 +10,7 @@
  */
 
 import { getRagConfig, resolveApiKey } from "./config";
+import { LruCache } from "./lru-cache";
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 // D-82: BATCH_SIZE / EMBED_CONCURRENCY were compile-time constants —
@@ -22,6 +23,17 @@ const parsePositiveInt = (raw: string | undefined, fallback: number): number => 
 };
 const BATCH_SIZE = parsePositiveInt(process.env.KB_EMBED_BATCH_SIZE, 128);
 const EMBED_CONCURRENCY = parsePositiveInt(process.env.KB_EMBED_CONCURRENCY, 4);
+
+// Single-query embedding cache (hits common: same user retries the same Q,
+// follow-up rewrites converging on the same standalone query, etc). ~8 MB
+// of vector data at 4096-dim Float64 with 256 entries. Bypassed by the batch
+// path (generateEmbeddings) since ingest chunks are write-once.
+const QUERY_EMBED_CACHE_SIZE = parsePositiveInt(process.env.KB_QUERY_EMBED_CACHE_SIZE, 256);
+const QUERY_EMBED_CACHE_TTL_MS = parsePositiveInt(process.env.KB_QUERY_EMBED_CACHE_TTL_MS, 5 * 60 * 1000);
+const QUERY_EMBED_CACHE = new LruCache<string, number[]>({
+  maxSize: QUERY_EMBED_CACHE_SIZE,
+  ttlMs: QUERY_EMBED_CACHE_TTL_MS,
+});
 
 /**
  * Sleep for specified milliseconds
@@ -59,10 +71,17 @@ function validateEmbeddingResponse(data: unknown): data is { data: Array<{ embed
  * Includes retry logic for transient errors
  */
 export async function generateEmbedding(text: string): Promise<number[]> {
-  let lastError: Error | null = null;
   const cfg = getRagConfig();
   const apiKey = resolveApiKey(cfg.embeddingApiKey);
   if (!apiKey) throw new Error("No API key configured: set KB_EMBEDDING_API_KEY or OPENROUTER_API_KEY");
+
+  // Cache key includes the model so swapping KB_EMBEDDING_MODEL doesn't return
+  // stale vectors of the wrong dimension/space.
+  const cacheKey = `${cfg.embeddingModel}|${text.trim()}`;
+  const cached = QUERY_EMBED_CACHE.get(cacheKey);
+  if (cached) return cached;
+
+  let lastError: Error | null = null;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -110,6 +129,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         throw new Error(`Invalid embedding item structure: ${JSON.stringify(item).slice(0, 200)}`);
       }
 
+      QUERY_EMBED_CACHE.set(cacheKey, item.embedding);
       return item.embedding;
     } catch (error) {
       lastError = error as Error;

@@ -147,6 +147,7 @@ describe("dashboard knowledge documents service", () => {
       documentId: "doc_1",
       organizationId: null,
       role: null,
+      userId: null,
       input: {
         title: "Doc",
         categories: ["FAQ"],
@@ -180,9 +181,10 @@ describe("dashboard knowledge documents service", () => {
       documentId: "doc_1",
       organizationId: null,
       role: null,
+      userId: null,
     })
 
-    expect(result).toEqual({ success: true })
+    expect(result).toMatchObject({ success: true })
   })
 
   it("returns document intelligence data", async () => {

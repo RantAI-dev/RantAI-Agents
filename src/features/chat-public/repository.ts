@@ -34,6 +34,7 @@ export async function findAssistantById(assistantId: string) {
       guardRails: true,
       name: true,
       liveChatEnabled: true,
+      organizationId: true,
     },
   })
 }

@@ -111,10 +111,16 @@ model Organization {
   logoUrl   String? // External URL for logo (backward compat)
   logoS3Key String? // S3 key for uploaded logo
 
+  // Per-org knowledge-base quotas. null = unlimited (default).
+  // Enforced on upload via lib/quota/knowledge.ts.
+  maxDocuments     Int?
+  maxStorageBytes  BigInt?
+
   // Relationships
   memberships         OrganizationMember[]
   assistants          Assistant[]
   documents           Document[]
+  categories          Category[]
   groups              KnowledgeBaseGroup[]
   embedKeys           EmbedApiKey[]
   dashboardSessions   DashboardSession[]
@@ -239,14 +245,51 @@ model UserPreference {
 }
 
 // Category model for document classification
+// Org-scoped: organizationId=null means a system / globally-shared category
+// (the seedKnowledgeCategories defaults). Custom categories created by an
+// organization are scoped to that org. The unique key is composite on
+// (organizationId, name) so two orgs can each have a "POLICY" category;
+// Postgres treats NULL != NULL so multiple null-org rows with the same name
+// are technically allowed but seedKnowledgeCategories guards against that.
 model Category {
-  id        String   @id @default(cuid())
-  name      String   @unique // Internal name: "LIFE_INSURANCE", "CUSTOM_CAT"
-  label     String // Display label: "Life Insurance"
-  color     String // Hex color: "#3b82f6"
-  isSystem  Boolean  @default(false) // True for default categories (prevent deletion)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String        @id @default(cuid())
+  name           String // Internal name: "LIFE_INSURANCE", "CUSTOM_CAT"
+  label          String // Display label: "Life Insurance"
+  color          String // Hex color: "#3b82f6"
+  isSystem       Boolean       @default(false) // True for default categories (prevent deletion)
+  organizationId String? // null = system/global category
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+// IngestJob — dead-letter row per upload attempt. Created PENDING, flipped to
+// SUCCESS or FAILED in createKnowledgeDocumentForDashboard. On failure the
+// S3 object is intentionally NOT deleted so an operator can retry from the
+// admin endpoint. Success rows are useful for audit / cost attribution.
+model IngestJob {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  filename       String
+  fileSize       Int?
+  mimeType       String?
+  // S3 key of the uploaded file. Stays on failure so the retry path can
+  // re-download and replay; cleared on hard-delete cleanup.
+  s3Key          String?
+  // Linked Document.id on SUCCESS, null otherwise.
+  documentId     String?
+  status         String // "pending" | "processing" | "success" | "failed"
+  error          String?
+  attempt        Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, status, createdAt])
+  @@index([documentId])
 }
 
 // Knowledge base groups/folders for organizing documents
@@ -312,9 +355,20 @@ model Document {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Soft delete: rows with deletedAt != null are hidden from listings + RAG
+  // retrieval but stay in DB until a retention sweep (cron) hard-deletes them.
+  // retentionDays is the optional per-doc TTL override (null = use org default).
+  deletedAt    DateTime?
+  retentionDays Int?
+
+  // Coverage analytics — incremented on each retrieval hit, populated lazily.
+  retrievalCount   Int       @default(0)
+  lastRetrievedAt  DateTime?
+
   @@index([organizationId])
   @@index([s3Key])
   @@index([sessionId])
+  @@index([deletedAt])
 }
 
 // API Key for embeddable chat widget
