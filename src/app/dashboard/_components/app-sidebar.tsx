@@ -428,11 +428,32 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
     }
   }
 
+  const { toast: sidebarToast } = useToast()
+
   // Assistant management
   const {
     assistants, selectedAssistant, selectAssistant,
     addAssistant, updateAssistant, deleteAssistant, getAssistantById,
+    missingSelection, acknowledgeMissingSelection,
   } = useAssistants()
+
+  // Surface "your assistant disappeared" instead of silently snapping. Common
+  // causes: another teammate deleted the agent, org switch revoked access,
+  // local cache holds an id that no longer exists server-side.
+  useEffect(() => {
+    if (!missingSelection) return
+    const fallbackName = missingSelection.fallbackId
+      ? getAssistantById(missingSelection.fallbackId)?.name ?? null
+      : null
+    sidebarToast({
+      title: "Selected assistant unavailable",
+      description: fallbackName
+        ? `Switched to "${fallbackName}". The previous assistant may have been removed or moved out of this organization.`
+        : "The previous assistant may have been removed or moved out of this organization.",
+      variant: "default",
+    })
+    acknowledgeMissingSelection()
+  }, [missingSelection, getAssistantById, sidebarToast, acknowledgeMissingSelection])
 
   const { assistant: defaultAssistant } = useDefaultAssistant()
   const { workflows } = useWorkflows()

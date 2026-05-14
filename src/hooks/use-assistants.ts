@@ -95,6 +95,14 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
   })
   const [isLoading, setIsLoading] = useState(initialAssistants ? false : true)
   const [error, setError] = useState<string | null>(null)
+  // Flag the case where the user's previously-selected assistant is no longer
+  // in the list (deleted, revoked, org switched). Consumers can show a banner
+  // and clear() once acknowledged; resolveSelectedAssistantId still snaps to a
+  // valid fallback so the UI never breaks.
+  const [missingSelection, setMissingSelection] = useState<{
+    id: string
+    fallbackId: string | null
+  } | null>(null)
 
   // Fetch assistants from API
   const fetchAssistants = useCallback(async () => {
@@ -116,6 +124,13 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         storedSelected
       )
       if (nextSelectedId !== selectedAssistantId) {
+        // If the user had a stored selection that is no longer present, flag
+        // it so the UI can surface "X was removed, switched to Y" instead of
+        // a silent snap. Skip if there was no prior selection (first load).
+        const prior = selectedAssistantId ?? storedSelected
+        if (prior && !mapped.some((a: Assistant) => a.id === prior)) {
+          setMissingSelection({ id: prior, fallbackId: nextSelectedId })
+        }
         setSelectedAssistantId(nextSelectedId)
       }
     } catch (err) {
@@ -315,12 +330,20 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
     fetchAssistants()
   }, [fetchAssistants])
 
+  // Consumer calls this after surfacing the "your assistant was removed"
+  // notice — keeps state clean so the banner doesn't re-appear on re-render.
+  const acknowledgeMissingSelection = useCallback(() => {
+    setMissingSelection(null)
+  }, [])
+
   return {
     assistants,
     selectedAssistant,
     selectedAssistantId,
     isLoading,
     error,
+    missingSelection,
+    acknowledgeMissingSelection,
     selectAssistant,
     addAssistant,
     updateAssistant,
