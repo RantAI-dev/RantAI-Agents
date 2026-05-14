@@ -504,10 +504,31 @@ export async function storeChunks(
       `[VectorStore] chunks/embeddings length mismatch for document ${documentId}: ${chunks.length} chunks vs ${embeddings.length} embeddings`
     );
   }
+  if (embeddings.length === 0) return;
+
+  // Dimension contract: every embedding in this batch must have the same
+  // length AND match KB_EMBEDDING_DIM. Mid-batch drift (provider hiccup,
+  // partial model rollout) or config-vs-actual mismatch (operator forgot to
+  // update KB_EMBEDDING_DIM after swapping KB_EMBEDDING_MODEL) corrupts the
+  // MTREE index irreparably — the index is dimension-bound at DEFINE time.
+  const { getRagConfig } = await import("./config");
+  const expectedDim = getRagConfig().embeddingDim;
+  const firstDim = embeddings[0].length;
+  if (firstDim !== expectedDim) {
+    throw new Error(
+      `[VectorStore] embedding dim ${firstDim} differs from KB_EMBEDDING_DIM=${expectedDim} for document ${documentId}. ` +
+      `Either fix the env or swap the embedding model + re-define the MTREE index at dim=${firstDim}.`
+    );
+  }
   for (let i = 0; i < embeddings.length; i++) {
     if (!Array.isArray(embeddings[i]) || embeddings[i].length === 0) {
       throw new Error(
         `[VectorStore] empty embedding at index ${i} for document ${documentId}`
+      );
+    }
+    if (embeddings[i].length !== firstDim) {
+      throw new Error(
+        `[VectorStore] mid-batch dim drift at index ${i} for document ${documentId}: ${embeddings[i].length} vs first ${firstDim}`
       );
     }
   }
