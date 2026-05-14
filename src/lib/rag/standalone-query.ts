@@ -1,6 +1,13 @@
 import { getRagConfig } from "./config";
+import { LruCache } from "./lru-cache";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+
+// 5-min LRU keyed by (latestQuery + abbreviated prior history hash). Hits the
+// same way query-expansion.ts and the query-embedding cache hit: repeat
+// retries of identical follow-ups (eval re-runs, user reloads, double-fire
+// from UI) skip the LLM round-trip. Bounded so memory stays cheap.
+const REWRITE_CACHE = new LruCache<string, string>({ maxSize: 512, ttlMs: 5 * 60 * 1000 });
 
 type ContentPart = { type: "text"; text: string } | { type: string; [key: string]: unknown };
 type Msg = { role: string; content: string | ContentPart[] | unknown };
@@ -64,6 +71,14 @@ export async function rewriteStandaloneQuery(messages: Msg[]): Promise<string> {
 
   if (!history) return latestQuery;
 
+  // Cache key: latest query + a short fingerprint of the conversation context
+  // (history truncated to ~500 chars). Different conversations producing the
+  // same followup get different rewrites, but the same conversation re-played
+  // hits cache. We don't hash — direct string concat is fine at LRU size 512.
+  const cacheKey = `${latestQuery}::${history.slice(0, 500)}`;
+  const cached = REWRITE_CACHE.get(cacheKey);
+  if (cached) return cached;
+
   const cfg = getRagConfig();
   const prompt = `You rewrite multi-turn chat questions into self-contained search queries for a knowledge base.
 
@@ -98,6 +113,7 @@ Rewritten query:`;
     // Strip optional surrounding quotes the model may add.
     const cleaned = raw.replace(/^["'`]+|["'`]+$/g, "").trim();
     if (!cleaned) return latestQuery;
+    REWRITE_CACHE.set(cacheKey, cleaned);
     return cleaned;
   } catch (err) {
     console.warn(
