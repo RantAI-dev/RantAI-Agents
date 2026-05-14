@@ -27,6 +27,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       documentId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
       role: orgContext?.membership.role ?? null,
+      userId: session.user.id,
     })
 
     if (isHttpServiceError(result)) {

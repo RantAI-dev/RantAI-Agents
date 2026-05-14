@@ -148,6 +148,7 @@ export async function updateKnowledgeGroupForDashboard(params: {
   groupId: string
   organizationId: string | null
   role: string | null | undefined
+  userId?: string | null
   input: KnowledgeGroupUpdateInput
 }): Promise<KnowledgeGroupWriteResponse | ServiceError> {
   const existing = await findKnowledgeGroupAccessById(params.groupId)
@@ -173,7 +174,7 @@ export async function updateKnowledgeGroupForDashboard(params: {
 
   recordKnowledgeAudit({
     organizationId: params.organizationId,
-    userId: null,
+    userId: params.userId ?? null,
     action: "knowledgeBaseGroup.update",
     entityType: "knowledgeBaseGroup",
     entityId: params.groupId,
@@ -195,6 +196,7 @@ export async function deleteKnowledgeGroupForDashboard(params: {
   groupId: string
   organizationId: string | null
   role: string | null | undefined
+  userId?: string | null
 }): Promise<{ success: true } | ServiceError> {
   const existing = await findKnowledgeGroupAccessById(params.groupId)
   if (!existing) {
@@ -214,7 +216,7 @@ export async function deleteKnowledgeGroupForDashboard(params: {
   await deleteKnowledgeGroup(params.groupId)
   recordKnowledgeAudit({
     organizationId: params.organizationId,
-    userId: null,
+    userId: params.userId ?? null,
     action: "knowledgeBaseGroup.delete",
     entityType: "knowledgeBaseGroup",
     entityId: params.groupId,

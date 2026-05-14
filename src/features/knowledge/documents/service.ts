@@ -726,6 +726,8 @@ export async function updateKnowledgeDocumentForDashboard(params: {
   documentId: string
   organizationId: string | null
   role: string | null | undefined
+  /** Acting user id — written to AuditLog so we can answer "who did this?". */
+  userId: string | null
   input: KnowledgeDocumentUpdateInput
 }): Promise<Record<string, unknown> | ServiceError> {
   const existing = await findKnowledgeDocumentAccessById(params.documentId)
@@ -761,7 +763,7 @@ export async function updateKnowledgeDocumentForDashboard(params: {
 
   recordKnowledgeAudit({
     organizationId: params.organizationId,
-    userId: null,
+    userId: params.userId,
     action: "document.update",
     entityType: "document",
     entityId: params.documentId,
@@ -791,6 +793,7 @@ export async function deleteKnowledgeDocumentForDashboard(params: {
   documentId: string
   organizationId: string | null
   role: string | null | undefined
+  userId: string | null
   hard?: boolean
 }): Promise<{ success: true; mode: "soft" | "hard" } | ServiceError> {
   const existing = await findKnowledgeDocumentAccessById(params.documentId)
@@ -813,7 +816,7 @@ export async function deleteKnowledgeDocumentForDashboard(params: {
     await softDeleteKnowledgeDocument(params.documentId)
     recordKnowledgeAudit({
       organizationId: params.organizationId,
-      userId: null,
+      userId: params.userId,
       action: "document.delete",
       entityType: "document",
       entityId: params.documentId,
@@ -837,7 +840,7 @@ export async function deleteKnowledgeDocumentForDashboard(params: {
   await deleteKnowledgeDocument(params.documentId)
   recordKnowledgeAudit({
     organizationId: params.organizationId,
-    userId: null,
+    userId: params.userId,
     action: "document.hard_delete",
     entityType: "document",
     entityId: params.documentId,
@@ -863,6 +866,7 @@ export async function restoreKnowledgeDocumentForDashboard(params: {
   documentId: string
   organizationId: string | null
   role: string | null | undefined
+  userId: string | null
 }): Promise<{ success: true } | ServiceError> {
   const existing = await findKnowledgeDocumentAccessById(params.documentId)
   if (!existing) {
@@ -880,7 +884,7 @@ export async function restoreKnowledgeDocumentForDashboard(params: {
   await restoreKnowledgeDocument(params.documentId)
   recordKnowledgeAudit({
     organizationId: params.organizationId,
-    userId: null,
+    userId: params.userId,
     action: "document.restore",
     entityType: "document",
     entityId: params.documentId,

@@ -71,6 +71,7 @@ export async function listKnowledgeCategoriesForDashboard(organizationId: string
 export async function createKnowledgeCategoryForDashboard(params: {
   input: KnowledgeCategoryCreateInput
   organizationId: string | null
+  userId?: string | null
 }): Promise<KnowledgeCategoryResponse | ServiceError> {
   if (!params.input.label) {
     return { status: 400, error: "Label is required" }
@@ -100,7 +101,7 @@ export async function createKnowledgeCategoryForDashboard(params: {
 
   recordKnowledgeAudit({
     organizationId: params.organizationId,
-    userId: null,
+    userId: params.userId ?? null,
     action: "category.create",
     entityType: "category",
     entityId: category.id,
@@ -117,6 +118,7 @@ export async function updateKnowledgeCategoryForDashboard(params: {
   id: string
   input: KnowledgeCategoryUpdateInput
   organizationId: string | null
+  userId?: string | null
 }): Promise<KnowledgeCategoryResponse | ServiceError> {
   const category = await findKnowledgeCategoryById(params.id)
   if (!category) {
@@ -150,7 +152,7 @@ export async function updateKnowledgeCategoryForDashboard(params: {
 
   recordKnowledgeAudit({
     organizationId: params.organizationId,
-    userId: null,
+    userId: params.userId ?? null,
     action: "category.update",
     entityType: "category",
     entityId: params.id,
@@ -165,7 +167,8 @@ export async function updateKnowledgeCategoryForDashboard(params: {
  */
 export async function deleteKnowledgeCategoryForDashboard(
   id: string,
-  organizationId: string | null
+  organizationId: string | null,
+  userId: string | null = null
 ): Promise<{ success: true } | ServiceError> {
   const category = await findKnowledgeCategoryById(id)
   if (!category) {
@@ -190,7 +193,7 @@ export async function deleteKnowledgeCategoryForDashboard(
   await deleteKnowledgeCategory(id)
   recordKnowledgeAudit({
     organizationId,
-    userId: null,
+    userId,
     action: "category.delete",
     entityType: "category",
     entityId: id,

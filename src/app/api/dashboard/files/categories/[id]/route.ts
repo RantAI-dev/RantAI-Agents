@@ -34,6 +34,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       id: parsedParams.data.id,
       input: parsedBody.data,
       organizationId: orgContext?.organizationId ?? null,
+      userId: session.user.id,
     })
 
     if (isHttpServiceError(category)) {
@@ -63,7 +64,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
     const category = await deleteKnowledgeCategoryForDashboard(
       parsedParams.data.id,
-      orgContext?.organizationId ?? null
+      orgContext?.organizationId ?? null,
+      session.user.id
     )
 
     if (isHttpServiceError(category)) {

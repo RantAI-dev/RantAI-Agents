@@ -44,6 +44,7 @@ export async function POST(request: Request) {
     const category = await createKnowledgeCategoryForDashboard({
       input: parsedBody.data,
       organizationId: orgContext?.organizationId ?? null,
+      userId: session.user.id,
     })
 
     if (isHttpServiceError(category)) {
