@@ -32,9 +32,11 @@ export interface HybridSearchConfig {
   rrfK?: number;
   /** Enable entity-based search (default: true) */
   enableEntitySearch?: boolean;
-  /** Enable graph traversal for related entities (default: true) */
+  /** @deprecated Graph traversal was removed in 2026-05-13; this field is
+   *  inert and accepted only for backwards compat with callers that still
+   *  pass it. Will be deleted in a future cleanup. */
   enableGraphTraversal?: boolean;
-  /** Maximum graph traversal depth (default: 2) */
+  /** @deprecated see enableGraphTraversal */
   graphDepth?: number;
   /** Filter by specific group IDs */
   groupIds?: string[];
@@ -148,8 +150,8 @@ const DEFAULT_CONFIG: Required<HybridSearchConfig> = {
   finalTopK: 10,
   rrfK: 60,
   enableEntitySearch: true,
-  enableGraphTraversal: true,
-  graphDepth: 2,
+  enableGraphTraversal: false, // inert; see field comment
+  graphDepth: 0, // inert; see field comment
   groupIds: [],
   fileIds: [],
   categoryFilter: "",
