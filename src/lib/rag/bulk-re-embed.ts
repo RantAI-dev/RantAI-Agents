@@ -95,6 +95,33 @@ async function reEmbedOneDocument(documentId: string, embeddingModel: string): P
       errorMessage: `embed count mismatch: ${embeddings.length} vs ${chunks.length}`,
     }
   }
+  // Dim guard: writing a 1024-dim vector into a 4096-dim MTREE index (or vice
+  // versa) corrupts retrieval. Same logic as storeChunks — fail loud per-doc
+  // so the operator can fix env/schema before the bulk run does damage.
+  const expectedDim = getRagConfig().embeddingDim
+  const firstDim = embeddings[0]?.length ?? 0
+  if (firstDim !== expectedDim) {
+    return {
+      documentId,
+      documentTitle: doc.title,
+      chunkCount: chunks.length,
+      durationMs: Date.now() - start,
+      status: "error",
+      errorMessage: `dim ${firstDim} != KB_EMBEDDING_DIM=${expectedDim}; fix env or redefine MTREE index at dim=${firstDim}`,
+    }
+  }
+  for (let i = 0; i < embeddings.length; i++) {
+    if (embeddings[i].length !== firstDim) {
+      return {
+        documentId,
+        documentTitle: doc.title,
+        chunkCount: chunks.length,
+        durationMs: Date.now() - start,
+        status: "error",
+        errorMessage: `mid-batch dim drift at index ${i}: ${embeddings[i].length} vs first ${firstDim}`,
+      }
+    }
+  }
 
   try {
     // Update in place, two chunks at a time to keep load bounded.
