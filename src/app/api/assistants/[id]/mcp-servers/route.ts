@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   AssistantIdParamsSchema,
   AssistantMcpServerIdsSchema,
@@ -12,7 +13,7 @@ import {
 
 // GET /api/assistants/[id]/mcp-servers - Get assistant's bound MCP servers
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -26,7 +27,10 @@ export async function GET(
       return NextResponse.json({ error: "Invalid assistant id" }, { status: 400 })
     }
 
-    const result = await listAssistantMcpServers(parsedParams.data.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
+    const result = await listAssistantMcpServers(parsedParams.data.id, {
+      organizationId: orgContext?.organizationId ?? null,
+    })
     if (isServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
@@ -65,9 +69,11 @@ export async function PUT(
       )
     }
 
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await setAssistantMcpServers(
       parsedParams.data.id,
-      parsedBody.data.mcpServerIds
+      parsedBody.data.mcpServerIds,
+      { organizationId: orgContext?.organizationId ?? null }
     )
     if (isServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
