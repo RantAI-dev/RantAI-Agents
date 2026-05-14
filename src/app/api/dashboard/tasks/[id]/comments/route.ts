@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   CreateTaskCommentBodySchema,
   TaskIdParamsSchema,
@@ -20,7 +20,7 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const orgCtx = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgCtx = await resolveActiveOrg(request, session.user.id)
   if (!orgCtx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
@@ -47,7 +47,7 @@ export async function POST(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const orgCtx = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgCtx = await resolveActiveOrg(request, session.user.id)
   if (!orgCtx) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }

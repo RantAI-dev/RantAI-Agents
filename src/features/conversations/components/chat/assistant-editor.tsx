@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { Database, Trash2, Folder, Check, Wrench, AlertTriangle, Search, Package, Plug, ChevronDown, ChevronRight, Cpu } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -65,6 +67,7 @@ export function AssistantEditor({
 }: AssistantEditorProps) {
   const { models } = useModels()
 
+  const orgFetch = useOrgFetch()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [emoji, setEmoji] = useState("💬")
@@ -88,7 +91,7 @@ export function AssistantEditor({
   const fetchTools = useCallback(async () => {
     setLoadingTools(true)
     try {
-      const res = await fetch("/api/dashboard/tools")
+      const res = await orgFetch("/api/dashboard/tools")
       if (res.ok) {
         const data = await res.json()
         setAvailableTools(data.filter((t: { enabled: boolean }) => t.enabled))
@@ -102,7 +105,7 @@ export function AssistantEditor({
 
   const fetchAssistantTools = useCallback(async (assistantId: string) => {
     try {
-      const res = await fetch(`/api/assistants/${assistantId}/tools`)
+      const res = await orgFetch(`/api/assistants/${assistantId}/tools`)
       if (res.ok) {
         const data = await res.json()
         setSelectedToolIds(data.map((t: { id: string }) => t.id))
@@ -116,7 +119,7 @@ export function AssistantEditor({
   const fetchGroups = useCallback(async () => {
     setLoadingGroups(true)
     try {
-      const response = await fetch("/api/dashboard/files/groups")
+      const response = await orgFetch("/api/dashboard/files/groups")
       if (response.ok) {
         const data = await response.json()
         setGroups(data.groups)
@@ -211,7 +214,7 @@ export function AssistantEditor({
     // Save tool bindings if editing an existing assistant
     if (assistant?.id) {
       try {
-        await fetch(`/api/assistants/${assistant.id}/tools`, {
+        await orgFetch(`/api/assistants/${assistant.id}/tools`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ toolIds: selectedToolIds }),

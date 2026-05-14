@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
@@ -32,6 +34,7 @@ export function AgentTemplateGallery({
   addAssistant,
   refetch,
 }: AgentTemplateGalleryProps) {
+  const orgFetch = useOrgFetch()
   const router = useRouter()
   const [creatingId, setCreatingId] = useState<string | null>(null)
 
@@ -57,7 +60,7 @@ export function AgentTemplateGallery({
           try {
             const toolIds = await resolveToolNameToIds(template.suggestedToolNames)
             if (toolIds.length > 0) {
-              await fetch(`/api/assistants/${created.id}/tools`, {
+              await orgFetch(`/api/assistants/${created.id}/tools`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ toolIds }),

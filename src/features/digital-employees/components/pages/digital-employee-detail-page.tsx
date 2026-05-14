@@ -1,6 +1,5 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import {
   getDashboardDigitalEmployee,
   isServiceError,
@@ -68,11 +67,7 @@ export default async function DigitalEmployeeDetailPage({
     return <DigitalEmployeeDetailPageClient employeeId={resolvedParams.id} initialData={null} />
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
   const organizationId = orgContext?.organizationId ?? null
 
   const employeeResult = await getDashboardDigitalEmployee({

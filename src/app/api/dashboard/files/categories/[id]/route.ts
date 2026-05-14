@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   KnowledgeCategoryIdParamsSchema,
   KnowledgeCategoryUpdateSchema,
@@ -29,7 +29,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const category = await updateKnowledgeCategoryForDashboard({
       id: parsedParams.data.id,
       input: parsedBody.data,
@@ -61,7 +61,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: "Invalid category id" }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const category = await deleteKnowledgeCategoryForDashboard(
       parsedParams.data.id,
       orgContext?.organizationId ?? null,

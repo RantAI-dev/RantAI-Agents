@@ -1,6 +1,5 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import { listDashboardMcpServers } from "@/features/mcp/servers/service"
 import McpSettingsClient from "./mcp-settings-client"
 import type { McpServerItem } from "@/hooks/use-mcp-servers"
@@ -26,12 +25,7 @@ export default async function McpSettingsPage() {
     return <McpSettingsClient initialServers={[]} />
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
   const servers = await listDashboardMcpServers(orgContext?.organizationId ?? null)
 
   return <McpSettingsClient initialServers={servers.map(mapServer)} />

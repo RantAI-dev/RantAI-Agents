@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext, getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   createDashboardDigitalEmployee,
   isServiceError,
@@ -17,7 +17,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const employees = await listDashboardDigitalEmployees({
       organizationId: orgContext?.organizationId ?? null,
     })
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContextWithFallback(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsed = DashboardDigitalEmployeeCreateBodySchema.safeParse(await req.json())
     if (!parsed.success) {
       return NextResponse.json(
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const result = await createDashboardDigitalEmployee({
       context: {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
         userId: session.user.id,
         userEmail: session.user.email ?? null,
         userName: session.user.name ?? null,

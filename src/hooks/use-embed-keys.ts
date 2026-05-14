@@ -1,9 +1,13 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 import type { EmbedApiKeyResponse, EmbedApiKeyInput } from "@/lib/embed/types"
 
 export function useEmbedKeys(assistantId?: string | null) {
+
+  const orgFetch = useOrgFetch()
   const [keys, setKeys] = useState<EmbedApiKeyResponse[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -35,7 +39,7 @@ export function useEmbedKeys(assistantId?: string | null) {
   const createKey = useCallback(
     async (input: EmbedApiKeyInput): Promise<EmbedApiKeyResponse | null> => {
       try {
-        const response = await fetch("/api/dashboard/embed-keys", {
+        const response = await orgFetch("/api/dashboard/embed-keys", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),
@@ -64,7 +68,7 @@ export function useEmbedKeys(assistantId?: string | null) {
       updates: Partial<EmbedApiKeyInput> & { enabled?: boolean }
     ): Promise<boolean> => {
       try {
-        const response = await fetch(`/api/dashboard/embed-keys/${id}`, {
+        const response = await orgFetch(`/api/dashboard/embed-keys/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updates),
@@ -88,7 +92,7 @@ export function useEmbedKeys(assistantId?: string | null) {
 
   const deleteKey = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/dashboard/embed-keys/${id}`, {
+      const response = await orgFetch(`/api/dashboard/embed-keys/${id}`, {
         method: "DELETE",
       })
 

@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback, useRef } from "react"
 import { toast } from "sonner"
 
@@ -15,13 +17,15 @@ interface PendingApprovalsData {
 }
 
 export function usePendingApprovals() {
+
+  const orgFetch = useOrgFetch()
   const [data, setData] = useState<PendingApprovalsData>({ total: 0, byEmployee: [] })
   const [isLoading, setIsLoading] = useState(true)
   const prevTotalRef = useRef<number | null>(null)
 
   const refresh = useCallback(async () => {
     try {
-      const res = await fetch("/api/dashboard/digital-employees/pending-approvals")
+      const res = await orgFetch("/api/dashboard/digital-employees/pending-approvals")
       if (!res.ok) return
       const json: PendingApprovalsData = await res.json()
 

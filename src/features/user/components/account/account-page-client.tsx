@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -20,6 +22,7 @@ export default function AccountPageClient({
   }
 }) {
   const { avatarUrl, name: storedName, email: storedEmail, setAvatarUrl, setProfile } = useProfileStore()
+  const orgFetch = useOrgFetch()
   const [name, setName] = useState(initialProfile.name)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -44,7 +47,7 @@ export default function AccountPageClient({
     setError(null)
 
     try {
-      const response = await fetch("/api/admin/profile", {
+      const response = await orgFetch("/api/admin/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: trimmedName }),

@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { use, useCallback, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useDigitalEmployee } from "@/hooks/use-digital-employee"
@@ -29,6 +31,7 @@ export default function EmployeeChatPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const orgFetch = useOrgFetch()
   const router = useRouter()
   const { employee, isLoading } = useDigitalEmployee(id)
 
@@ -41,10 +44,10 @@ export default function EmployeeChatPage({
   const handleStart = useCallback(async () => {
     setStarting(true)
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${id}/resume`, { method: "POST" })
+      const res = await orgFetch(`/api/dashboard/digital-employees/${id}/resume`, { method: "POST" })
       if (!res.ok) throw new Error("Failed to start")
       setContainerStatus({ containerRunning: true })
-      const historyRes = await fetch(`/api/dashboard/digital-employees/${id}/chat`)
+      const historyRes = await orgFetch(`/api/dashboard/digital-employees/${id}/chat`)
       if (historyRes.ok) {
         const msgs: EmployeeChatMsg[] = await historyRes.json()
         setChatHistory(msgs)
@@ -59,7 +62,7 @@ export default function EmployeeChatPage({
 
   const handleLoadHistory = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${id}/chat`)
+      const res = await orgFetch(`/api/dashboard/digital-employees/${id}/chat`)
       if (!res.ok) return
       const msgs: EmployeeChatMsg[] = await res.json()
       setChatHistory(Array.isArray(msgs) ? msgs : [])

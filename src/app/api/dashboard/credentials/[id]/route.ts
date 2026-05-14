@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   UpdateCredentialSchema,
 } from "@/features/credentials/schema"
@@ -21,7 +21,7 @@ export async function GET(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
 
     const result = await getDashboardCredential({
       context: {
@@ -53,7 +53,7 @@ export async function PUT(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
 
     const parsed = UpdateCredentialSchema.safeParse(await req.json())
     if (!parsed.success) {
@@ -94,7 +94,7 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
 
     const result = await deleteDashboardCredentialRecord({
       context: {

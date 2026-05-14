@@ -264,7 +264,7 @@ export function ChatHome({
     }
     setGithubImporting(true)
     try {
-      const res = await fetch("/api/chat/github-import", {
+      const res = await orgFetch("/api/chat/github-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
@@ -360,8 +360,8 @@ export function ChatHome({
     if (!catalogLoaded) {
       try {
         const [allToolsRes, allSkillsRes] = await Promise.all([
-          fetch("/api/dashboard/tools"),
-          fetch("/api/dashboard/skills"),
+          orgFetch("/api/dashboard/tools"),
+          orgFetch("/api/dashboard/skills"),
         ])
 
         const allTools = allToolsRes.ok ? await allToolsRes.json() : []
@@ -461,8 +461,8 @@ export function ChatHome({
     if (activeAssistant?.id && toolbarLoadedForAssistantId !== activeAssistant.id) {
       try {
         const [boundToolsRes, boundSkillsRes] = await Promise.all([
-          fetch(`/api/assistants/${activeAssistant.id}/tools`),
-          fetch(`/api/assistants/${activeAssistant.id}/skills`),
+          orgFetch(`/api/assistants/${activeAssistant.id}/tools`),
+          orgFetch(`/api/assistants/${activeAssistant.id}/skills`),
         ])
 
         // Bail out if the user switched assistants while these fetches

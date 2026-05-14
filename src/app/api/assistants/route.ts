@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   CreateAssistantSchema,
 } from "@/features/assistants/core/schema"
@@ -19,10 +19,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const assistants = await listAssistantsForUser({
       organizationId: orgContext?.organizationId ?? null,
-      role: orgContext?.membership.role ?? null,
+      role: orgContext?.role ?? null,
     })
     return NextResponse.json(assistants)
   } catch (error) {
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const parsed = CreateAssistantSchema.safeParse(await request.json())
     if (!parsed.success) {
       return NextResponse.json(
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       userId: session.user.id,
       input: parsed.data,
       organizationId: orgContext?.organizationId ?? null,
-      role: orgContext?.membership.role ?? null,
+      role: orgContext?.role ?? null,
     })
     if (isHttpServiceError(assistant)) {
       return NextResponse.json({ error: assistant.error }, { status: assistant.status })

@@ -1,6 +1,5 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import { listAssistantsForUser, type AssistantListItem } from "@/features/assistants/core/service"
 import { listDashboardCredentials, type DashboardCredentialSummary } from "@/features/credentials/service"
 import { listKnowledgeGroupsForDashboard, type KnowledgeGroupListItem } from "@/features/knowledge/groups/service"
@@ -133,11 +132,7 @@ export async function loadWorkflowEditorPageHydration(workflowId: string): Promi
     return {}
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
 
   const [
     assistantsResult,
@@ -150,7 +145,7 @@ export async function loadWorkflowEditorPageHydration(workflowId: string): Promi
   ] = await Promise.all([
     listAssistantsForUser({
       organizationId: orgContext?.organizationId ?? null,
-      role: orgContext?.membership.role ?? null,
+      role: orgContext?.role ?? null,
     }).catch(() => [] as AssistantListItem[]),
     listDashboardWorkflows({
       organizationId: orgContext?.organizationId ?? null,

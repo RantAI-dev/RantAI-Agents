@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
@@ -1032,13 +1034,14 @@ function ApprovalCard({
   description?: string
   employeeId?: string
 }) {
+  const orgFetch = useOrgFetch()
   const [responded, setResponded] = useState<"approved" | "rejected" | null>(null)
 
   const handleResponse = (action: "approved" | "rejected") => {
     setResponded(action)
     // Send the response as a chat message
     if (employeeId) {
-      fetch(`/api/dashboard/digital-employees/${employeeId}/chat`, {
+      orgFetch(`/api/dashboard/digital-employees/${employeeId}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1093,6 +1096,7 @@ function BrowserCard({
   description?: string
   employeeId?: string
 }) {
+  const orgFetch = useOrgFetch()
   const [vncUrl, setVncUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1109,7 +1113,7 @@ function BrowserCard({
       return
     }
 
-    fetch(`/api/dashboard/digital-employees/${encodeURIComponent(resolvedEmployeeId)}/vnc`)
+    orgFetch(`/api/dashboard/digital-employees/${encodeURIComponent(resolvedEmployeeId)}/vnc`)
       .then((res) => res.json())
       .then((data) => {
         if (data.url) setVncUrl(data.url)
@@ -1253,6 +1257,7 @@ function ShowToUserIndicator({
 
 // ── Main export: routes to specialized or generic indicator ──
 export function ToolCallIndicator(props: ToolCallIndicatorProps) {
+  const orgFetch = useOrgFetch()
   if (props.toolName === "web_search") {
     return <WebSearchIndicator {...props} />
   }

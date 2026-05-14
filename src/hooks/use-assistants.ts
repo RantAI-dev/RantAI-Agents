@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 import type { Assistant, AssistantInput, MemoryConfig, ModelConfig, ChatConfig, GuardRailsConfig } from "@/lib/types/assistant"
 
 const SELECTED_KEY = "rantai-selected-assistant"
 const ASSISTANT_CHANGE_EVENT = "rantai-assistant-change"
+const ASSISTANTS_MUTATED_EVENT = "rantai-assistants-mutated"
 
 function resolveSelectedAssistantId(
   assistants: Assistant[],
@@ -81,6 +83,7 @@ function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
 
 export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
   const initialAssistants = options?.initialAssistants
+  const orgFetch = useOrgFetch()
   const [assistants, setAssistants] = useState<Assistant[]>(
     initialAssistants ? initialAssistants.map(mapDbAssistant) : []
   )
@@ -97,7 +100,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
   const fetchAssistants = useCallback(async () => {
     try {
       setError(null)
-      const response = await fetch("/api/assistants")
+      const response = await orgFetch("/api/assistants")
       if (!response.ok) {
         throw new Error("Failed to fetch assistants")
       }
@@ -121,7 +124,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
     } finally {
       setIsLoading(false)
     }
-  }, [selectedAssistantId])
+  }, [orgFetch, selectedAssistantId])
 
   // Initial fetch (unless server hydrated)
   useEffect(() => {
@@ -161,16 +164,22 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
       }
     }
 
+    const handleMutated = () => {
+      void fetchAssistants()
+    }
+
     window.addEventListener(
       ASSISTANT_CHANGE_EVENT,
       handleAssistantChange as EventListener
     )
+    window.addEventListener(ASSISTANTS_MUTATED_EVENT, handleMutated)
 
     return () => {
       window.removeEventListener(
         ASSISTANT_CHANGE_EVENT,
         handleAssistantChange as EventListener
       )
+      window.removeEventListener(ASSISTANTS_MUTATED_EVENT, handleMutated)
     }
   }, [assistants, fetchAssistants])
 
@@ -197,7 +206,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
   const addAssistant = useCallback(
     async (input: AssistantInput): Promise<Assistant | null> => {
       try {
-        const response = await fetch("/api/assistants", {
+        const response = await orgFetch("/api/assistants", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(input),
@@ -210,6 +219,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         const data = await response.json()
         const newAssistant = mapDbAssistant(data)
         setAssistants((prev) => [...prev, newAssistant])
+        window.dispatchEvent(new CustomEvent(ASSISTANTS_MUTATED_EVENT))
         return newAssistant
       } catch (err) {
         console.error("Failed to create assistant:", err)
@@ -217,13 +227,13 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         return null
       }
     },
-    []
+    [orgFetch]
   )
 
   const updateAssistant = useCallback(
     async (id: string, updates: Partial<AssistantInput>): Promise<boolean> => {
       try {
-        const response = await fetch(`/api/assistants/${id}`, {
+        const response = await orgFetch(`/api/assistants/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updates),
@@ -240,6 +250,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         setAssistants((prev) =>
           prev.map((a) => (a.id === id ? updatedAssistant : a))
         )
+        window.dispatchEvent(new CustomEvent(ASSISTANTS_MUTATED_EVENT))
         return true
       } catch (err) {
         console.error("Failed to update assistant:", err)
@@ -247,13 +258,13 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         return false
       }
     },
-    []
+    [orgFetch]
   )
 
   const deleteAssistant = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        const response = await fetch(`/api/assistants/${id}`, {
+        const response = await orgFetch(`/api/assistants/${id}`, {
           method: "DELETE",
         })
 
@@ -273,6 +284,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
           }
         }
 
+        window.dispatchEvent(new CustomEvent(ASSISTANTS_MUTATED_EVENT))
         return true
       } catch (err) {
         console.error("Failed to delete assistant:", err)
@@ -280,7 +292,7 @@ export function useAssistants(options?: { initialAssistants?: DbAssistant[] }) {
         return false
       }
     },
-    [assistants, selectedAssistantId]
+    [orgFetch, assistants, selectedAssistantId]
   )
 
   const getAssistantById = useCallback(

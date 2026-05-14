@@ -1,6 +1,5 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import { listToolsForDashboard } from "@/features/tools/service"
 import ToolsSettingsClient from "./tools-settings-client"
 import type { ToolItem } from "@/hooks/use-tools"
@@ -34,12 +33,7 @@ export default async function ToolsSettingsPage() {
     return <ToolsSettingsClient initialTools={[]} />
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
   const tools = await listToolsForDashboard(orgContext?.organizationId ?? null)
 
   return <ToolsSettingsClient initialTools={tools.map(mapTool)} />

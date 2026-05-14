@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { listColdDocuments } from "@/features/knowledge/documents/repository"
 
 /**
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const limit = limitParam ? parseInt(limitParam, 10) : 100
 
   try {
-    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const docs = await listColdDocuments({
       organizationId: orgContext?.organizationId ?? null,
       staleAfterDays: Number.isFinite(staleAfterDays) ? staleAfterDays : undefined,

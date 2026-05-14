@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect } from "react"
 import type { DigitalEmployeeItem } from "./use-digital-employees"
 
@@ -147,6 +149,7 @@ export function useDigitalEmployee(
   id: string | null,
   options?: { initialData?: DigitalEmployeeHydrationData | null }
 ) {
+  const orgFetch = useOrgFetch()
   const initialData = options?.initialData
   const [employee, setEmployee] = useState<DigitalEmployeeItem | null>(
     initialData?.employee ?? null
@@ -271,7 +274,7 @@ export function useDigitalEmployee(
       approvalId: string,
       response: { status: string; response?: string; responseData?: Record<string, unknown> }
     ) => {
-      const res = await fetch(`/api/dashboard/approvals/${approvalId}/respond`, {
+      const res = await orgFetch(`/api/dashboard/approvals/${approvalId}/respond`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(response),

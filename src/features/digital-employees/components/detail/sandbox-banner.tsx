@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState } from "react"
 import { AlertTriangle, Rocket, Loader2 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -11,12 +13,13 @@ interface SandboxBannerProps {
 }
 
 export function SandboxBanner({ employeeId, onGoLive }: SandboxBannerProps) {
+  const orgFetch = useOrgFetch()
   const [isGoingLive, setIsGoingLive] = useState(false)
 
   const handleGoLive = async () => {
     setIsGoingLive(true)
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/go-live`, {
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/go-live`, {
         method: "POST",
       })
       if (!res.ok) throw new Error("Failed to go live")

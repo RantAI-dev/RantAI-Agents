@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 import type { Assistant } from "@/lib/types/assistant"
 
@@ -37,6 +39,8 @@ function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
 }
 
 export function useDefaultAssistant() {
+
+  const orgFetch = useOrgFetch()
   const [assistant, setAssistant] = useState<Assistant | null>(null)
   const [source, setSource] = useState<"user" | "system" | "fallback" | "none">("none")
   const [isLoading, setIsLoading] = useState(true)
@@ -45,7 +49,7 @@ export function useDefaultAssistant() {
   const fetchDefaultAssistant = useCallback(async () => {
     try {
       setError(null)
-      const response = await fetch("/api/user/default-assistant")
+      const response = await orgFetch("/api/user/default-assistant")
       if (!response.ok) {
         throw new Error("Failed to fetch default assistant")
       }
@@ -72,7 +76,7 @@ export function useDefaultAssistant() {
   // Set the current user's default assistant
   const setUserDefault = useCallback(async (assistantId: string): Promise<boolean> => {
     try {
-      const response = await fetch("/api/user/preferences", {
+      const response = await orgFetch("/api/user/preferences", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ defaultAssistantId: assistantId }),
@@ -95,7 +99,7 @@ export function useDefaultAssistant() {
   // Clear the user's custom default (revert to system default)
   const clearUserDefault = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch("/api/user/preferences", {
+      const response = await orgFetch("/api/user/preferences", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ defaultAssistantId: null }),

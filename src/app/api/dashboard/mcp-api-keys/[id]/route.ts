@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { canManage, getOrganizationContext } from "@/lib/organization"
+import { canManage } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   UpdateDashboardMcpApiKeySchema,
 } from "@/features/mcp/api-keys/schema"
@@ -21,7 +22,7 @@ export async function GET(
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (orgContext && !canManage(orgContext.membership.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -32,7 +33,7 @@ export async function GET(
     const result = await getDashboardMcpApiKey(
       {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
         userId: session.user.id,
       },
       id
@@ -62,7 +63,7 @@ export async function PUT(
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (orgContext && !canManage(orgContext.membership.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -81,7 +82,7 @@ export async function PUT(
     const result = await updateDashboardMcpApiKeyRecord({
       context: {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
         userId: session.user.id,
       },
       id,
@@ -112,7 +113,7 @@ export async function DELETE(
     }
 
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (orgContext && !canManage(orgContext.membership.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -123,7 +124,7 @@ export async function DELETE(
     const result = await deleteDashboardMcpApiKeyRecord(
       {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
         userId: session.user.id,
       },
       id

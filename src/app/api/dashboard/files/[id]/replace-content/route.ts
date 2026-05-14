@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { KnowledgeDocumentIdParamsSchema, KnowledgeDocumentCreateSchema } from "@/features/knowledge/documents/schema"
 import { replaceKnowledgeDocumentContentForDashboard } from "@/features/knowledge/documents/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
@@ -54,12 +54,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     const useEnhanced = url.searchParams.get("enhanced") === "true"
     const useCombined = url.searchParams.get("combined") !== "false"
 
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const result = await replaceKnowledgeDocumentContentForDashboard({
       context: {
         userId: session.user.id,
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
       },
       documentId: parsedParams.data.id,
       input: {

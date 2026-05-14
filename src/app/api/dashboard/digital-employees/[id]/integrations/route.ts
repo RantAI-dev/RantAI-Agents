@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DashboardDigitalEmployeeIntegrationCreateSchema,
 } from "@/features/digital-employees/interactions/schema"
@@ -19,7 +19,7 @@ export async function GET(req: Request, { params }: RouteParams) {
     const session = await auth()
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const integrations = await listDigitalEmployeeIntegrations({
       id,
       organizationId: orgContext?.organizationId ?? null,
@@ -39,7 +39,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     const session = await auth()
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     const { id } = await params
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsed = DashboardDigitalEmployeeIntegrationCreateSchema.safeParse(await req.json())
     if (!parsed.success) {
       return NextResponse.json(

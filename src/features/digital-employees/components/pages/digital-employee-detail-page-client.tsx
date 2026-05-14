@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
@@ -98,6 +100,7 @@ export default function DigitalEmployeeDetailPage({
   initialOnboardingStatus,
   initialActivity,
 }: DigitalEmployeeDetailPageClientProps) {
+  const orgFetch = useOrgFetch()
   const router = useRouter()
   const id = employeeId
 
@@ -178,7 +181,7 @@ export default function DigitalEmployeeDetailPage({
         ? currentIds.filter((id) => id !== toolId)
         : [...currentIds, toolId]
       try {
-        const res = await fetch(`/api/assistants/${assistantId}/tools`, {
+        const res = await orgFetch(`/api/assistants/${assistantId}/tools`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ toolIds: newIds }),
@@ -204,7 +207,7 @@ export default function DigitalEmployeeDetailPage({
         ? currentIds.filter((id) => id !== skillId)
         : [...currentIds, skillId]
       try {
-        const res = await fetch(`/api/assistants/${assistantId}/skills`, {
+        const res = await orgFetch(`/api/assistants/${assistantId}/skills`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ skillIds: newIds }),
@@ -241,7 +244,7 @@ export default function DigitalEmployeeDetailPage({
 
             if (toolIdsToEnable.size > 0) {
               const updatedToolIds = [...currentToolIds, ...toolIdsToEnable]
-              await fetch(`/api/assistants/${assistantId}/tools`, {
+              await orgFetch(`/api/assistants/${assistantId}/tools`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ toolIds: updatedToolIds }),
@@ -272,7 +275,7 @@ export default function DigitalEmployeeDetailPage({
     async (heartbeat: import("@/lib/digital-employee/types").HeartbeatConfig) => {
       try {
         const config = (employee?.deploymentConfig as any) ?? {}
-        const res = await fetch(`/api/dashboard/digital-employees/${id}`, {
+        const res = await orgFetch(`/api/dashboard/digital-employees/${id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -292,7 +295,7 @@ export default function DigitalEmployeeDetailPage({
   const handleArchive = useCallback(async () => {
     if (!employee) return
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employee.id}`, {
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employee.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "ARCHIVED" }),
@@ -331,7 +334,7 @@ export default function DigitalEmployeeDetailPage({
         return
       }
       try {
-        const res = await fetch(`/api/dashboard/digital-employees/${id}/chat`)
+        const res = await orgFetch(`/api/dashboard/digital-employees/${id}/chat`)
         if (!res.ok) return
         const msgs: EmployeeChatMsg[] = await res.json()
         setChatHistory(Array.isArray(msgs) ? msgs : [])

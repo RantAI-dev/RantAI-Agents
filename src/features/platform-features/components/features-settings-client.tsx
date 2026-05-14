@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -129,6 +131,7 @@ export default function FeaturesSettingsClient({
   readOnly?: boolean
 }) {
   // Feature state
+  const orgFetch = useOrgFetch()
   const [features, setFeatures] = useState<FeatureConfig[]>(initialFeatures)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState<string | null>(null)
@@ -148,7 +151,7 @@ export default function FeaturesSettingsClient({
   async function fetchFeatures() {
     setLoading(true)
     try {
-      const response = await fetch("/api/admin/features")
+      const response = await orgFetch("/api/admin/features")
       if (response.ok) {
         const data = await response.json()
         setFeatures(data)
@@ -167,7 +170,7 @@ export default function FeaturesSettingsClient({
     setSaved(null)
 
     try {
-      const response = await fetch("/api/admin/features", {
+      const response = await orgFetch("/api/admin/features", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(feature),
@@ -202,7 +205,7 @@ export default function FeaturesSettingsClient({
   async function fetchChannels() {
     setChannelsLoading(true)
     try {
-      const response = await fetch("/api/admin/channels")
+      const response = await orgFetch("/api/admin/channels")
       if (response.ok) {
         const data = await response.json()
         setChannels(data)
@@ -221,7 +224,7 @@ export default function FeaturesSettingsClient({
     setChannelSaved(null)
 
     try {
-      const response = await fetch("/api/admin/channels", {
+      const response = await orgFetch("/api/admin/channels", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(channel),

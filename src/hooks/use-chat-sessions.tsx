@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode, useRef } from "react"
 import {
   normalizeSerializedChatSession,
@@ -210,6 +212,7 @@ export function ChatSessionsProvider({
   children: ReactNode
   initialSessions?: SerializedChatSession[]
 }) {
+  const orgFetch = useOrgFetch()
   const [seededSessions] = useState<SerializedChatSession[] | null>(() => {
     if (initialSessions) {
       return initialSessions
@@ -247,7 +250,7 @@ export function ChatSessionsProvider({
       setIsLoaded(true)
 
       try {
-        const response = await fetch("/api/dashboard/chat/sessions")
+        const response = await orgFetch("/api/dashboard/chat/sessions")
         if (response.ok) {
           const data = await response.json()
           const apiSessions = parseSessionMetadata(data)
@@ -276,7 +279,7 @@ export function ChatSessionsProvider({
 
     const loadMessages = async () => {
       try {
-        const response = await fetch(`/api/dashboard/chat/sessions/${apiId}`)
+        const response = await orgFetch(`/api/dashboard/chat/sessions/${apiId}`)
         if (response.ok) {
           const data = await response.json()
           const fullSession = parseFullSession(data)
@@ -323,7 +326,7 @@ export function ChatSessionsProvider({
   // the user never sees.
   const createPersistedSession = useCallback(
     async (assistantId: string, signal?: AbortSignal): Promise<ChatSession> => {
-      const response = await fetch("/api/dashboard/chat/sessions", {
+      const response = await orgFetch("/api/dashboard/chat/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assistantId }),
@@ -370,7 +373,7 @@ export function ChatSessionsProvider({
     if (updates.title) {
       const apiId = resolveDbId(sessionId)
       if (apiId) {
-        fetch(`/api/dashboard/chat/sessions/${apiId}`, {
+        orgFetch(`/api/dashboard/chat/sessions/${apiId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ title: updates.title }),
@@ -412,7 +415,7 @@ export function ChatSessionsProvider({
       // Resolve DB ID lazily (after debounce) so createSession has time to set dbId
       const apiId = resolveDbId(sessionId)
       try {
-        const response = await fetch(`/api/dashboard/chat/sessions/${apiId}`)
+        const response = await orgFetch(`/api/dashboard/chat/sessions/${apiId}`)
         if (!response.ok) {
           setIsSyncing(false)
           return
@@ -424,7 +427,7 @@ export function ChatSessionsProvider({
         const newMessages = messages.filter((m) => !existingMessageIds.has(m.id))
 
         if (newMessages.length > 0) {
-          await fetch(`/api/dashboard/chat/sessions/${apiId}/messages`, {
+          await orgFetch(`/api/dashboard/chat/sessions/${apiId}/messages`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -465,7 +468,7 @@ export function ChatSessionsProvider({
             hasSourcesDiff ||
             hasMetadataDiff
           )) {
-            await fetch(`/api/dashboard/chat/sessions/${apiId}/messages`, {
+            await orgFetch(`/api/dashboard/chat/sessions/${apiId}/messages`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -520,7 +523,7 @@ export function ChatSessionsProvider({
       }
     }
 
-    fetch(`/api/dashboard/chat/sessions/${apiId}`, {
+    orgFetch(`/api/dashboard/chat/sessions/${apiId}`, {
       method: "DELETE",
     })
       .then((response) => {
@@ -578,6 +581,8 @@ export function ChatSessionsProvider({
 }
 
 export function useChatSessions() {
+
+  const orgFetch = useOrgFetch()
   const context = useContext(ChatSessionsContext)
   if (!context) {
     throw new Error("useChatSessions must be used within a ChatSessionsProvider")

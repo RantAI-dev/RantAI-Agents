@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useRef, useCallback } from "react"
 import { Upload, X, Loader2 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -27,6 +29,7 @@ export function AvatarPicker({
   onAvatarUpload,
   onAvatarRemove,
 }: AvatarPickerProps) {
+  const orgFetch = useOrgFetch()
   const [open, setOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
@@ -46,7 +49,7 @@ export function AvatarPicker({
       formData.append("file", file)
       formData.append("type", "avatar")
 
-      const response = await fetch("/api/upload", {
+      const response = await orgFetch("/api/upload", {
         method: "POST",
         body: formData,
       })

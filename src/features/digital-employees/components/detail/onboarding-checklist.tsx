@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 import { Check, X, Loader2, Rocket } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -35,11 +37,12 @@ const DEFAULT_STEPS = [
 ]
 
 export function OnboardingChecklist({ employeeId, onGoLive, initialStatus }: OnboardingChecklistProps) {
+  const orgFetch = useOrgFetch()
   const [status, setStatus] = useState<OnboardingStatusData | null>(initialStatus ?? null)
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/files?filename=ONBOARDING_STATUS.json`)
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/files?filename=ONBOARDING_STATUS.json`)
       if (res.ok) {
         const data = await res.json()
         if (data.content) {

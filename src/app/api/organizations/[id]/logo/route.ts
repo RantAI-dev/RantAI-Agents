@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   OrganizationLogoParamsSchema,
   UploadOrganizationLogoFormSchema,
@@ -38,7 +38,7 @@ export async function POST(
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    const context = await getOrganizationContext(request, session.user.id)
+    const context = await resolveActiveOrg(request, session.user.id)
     const result = await uploadOrganizationLogo({
       organizationId: parsedParams.data.id,
       actorUserId: session.user.id,
@@ -80,7 +80,7 @@ export async function GET(
       return NextResponse.json({ error: "Invalid organization id" }, { status: 400 })
     }
 
-    const context = await getOrganizationContext(request, session.user.id)
+    const context = await resolveActiveOrg(request, session.user.id)
     const result = await getOrganizationLogo({
       organizationId: parsedParams.data.id,
       context: {
@@ -120,7 +120,7 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid organization id" }, { status: 400 })
     }
 
-    const context = await getOrganizationContext(request, session.user.id)
+    const context = await resolveActiveOrg(request, session.user.id)
     const result = await deleteOrganizationLogo({
       organizationId: parsedParams.data.id,
       context: {

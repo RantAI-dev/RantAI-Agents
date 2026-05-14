@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useMemo, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
@@ -79,6 +81,7 @@ export default function DigitalEmployeesPage({
   initialEmployees: DigitalEmployeeItem[]
   initialTasks: EnrichedTask[]
 }) {
+  const orgFetch = useOrgFetch()
   const router = useRouter()
   const searchParams = useSearchParams()
   const { employees, isLoading } = useDigitalEmployees({ initialEmployees })
@@ -137,7 +140,7 @@ export default function DigitalEmployeesPage({
   const handleQuickRun = useCallback(async (empId: string, e: React.MouseEvent) => {
     e.stopPropagation()
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${empId}/run`, {
+      const res = await orgFetch(`/api/dashboard/digital-employees/${empId}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ trigger: "manual" }),

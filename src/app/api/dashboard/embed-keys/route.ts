@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { canManage, getOrganizationContext } from "@/lib/organization"
+import { canManage } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   CreateDashboardEmbedKeySchema,
 } from "@/features/embed-keys/schema"
@@ -16,7 +17,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (orgContext && !canManage(orgContext.membership.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -30,7 +31,7 @@ export async function GET(req: Request) {
     const result = await listDashboardEmbedKeys(
       {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
         userId: session.user.id,
       },
       assistantId
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     if (orgContext && !canManage(orgContext.membership.role)) {
       return NextResponse.json(
         { error: "Insufficient permissions" },
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
     const result = await createDashboardEmbedKey({
       context: {
         organizationId: orgContext?.organizationId ?? null,
-        role: orgContext?.membership.role ?? null,
+        role: orgContext?.role ?? null,
         userId: session.user.id,
       },
       input: parsed.data,

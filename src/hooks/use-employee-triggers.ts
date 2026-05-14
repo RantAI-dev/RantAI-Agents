@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 
 export interface TriggerItem {
@@ -16,12 +18,14 @@ export interface TriggerItem {
 }
 
 export function useEmployeeTriggers(employeeId: string) {
+
+  const orgFetch = useOrgFetch()
   const [triggers, setTriggers] = useState<TriggerItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchTriggers = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/triggers`)
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/triggers`)
       if (!res.ok) throw new Error("Failed")
       setTriggers(await res.json())
     } catch {
@@ -34,7 +38,7 @@ export function useEmployeeTriggers(employeeId: string) {
   useEffect(() => { fetchTriggers() }, [fetchTriggers])
 
   const createTrigger = useCallback(async (input: { type: string; name: string; config?: Record<string, unknown>; filterRules?: unknown[] }) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/triggers`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/triggers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
@@ -45,7 +49,7 @@ export function useEmployeeTriggers(employeeId: string) {
   }, [employeeId, fetchTriggers])
 
   const updateTrigger = useCallback(async (triggerId: string, input: Partial<TriggerItem>) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/triggers/${triggerId}`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/triggers/${triggerId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
@@ -55,7 +59,7 @@ export function useEmployeeTriggers(employeeId: string) {
   }, [employeeId, fetchTriggers])
 
   const deleteTrigger = useCallback(async (triggerId: string) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/triggers/${triggerId}`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/triggers/${triggerId}`, {
       method: "DELETE",
     })
     if (!res.ok) throw new Error("Failed")
@@ -64,7 +68,7 @@ export function useEmployeeTriggers(employeeId: string) {
 
   const regenerateToken = useCallback(async (triggerId: string) => {
     // regenerate is done via PUT with a new token request
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/triggers/${triggerId}`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/triggers/${triggerId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ regenerateToken: true }),

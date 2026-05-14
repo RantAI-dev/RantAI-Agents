@@ -1,8 +1,7 @@
-import { headers } from "next/headers"
 import { auth } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrgServer } from "@/lib/org-context"
 import { listAssetsForOrg } from "@/features/media/repository"
 import MediaStudioClient from "./media-studio-client"
 
@@ -12,11 +11,7 @@ export default async function MediaStudioPage() {
     redirect("/login")
   }
 
-  const requestHeaders = await headers()
-  const request = new Request("http://localhost", {
-    headers: new Headers(requestHeaders),
-  })
-  const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+  const orgContext = await resolveActiveOrgServer(session.user.id)
 
   if (!orgContext) {
     redirect("/login")

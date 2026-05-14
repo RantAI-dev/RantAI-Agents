@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   CreateDigitalEmployeeGoalSchema,
   DigitalEmployeeIdParamsSchema,
@@ -23,7 +23,7 @@ export async function GET(req: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const goals = await listDigitalEmployeeGoals({
       digitalEmployeeId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
@@ -47,7 +47,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     if (!parsedParams.success) {
       return NextResponse.json({ error: "Invalid employee id" }, { status: 400 })
     }
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const parsedBody = CreateDigitalEmployeeGoalSchema.safeParse(await req.json())
     if (!parsedBody.success) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })

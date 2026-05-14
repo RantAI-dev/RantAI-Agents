@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 import {
   Zap, Check, X, Shield, Play, Loader2, ChevronDown,
@@ -76,6 +78,7 @@ export function TabActivity({
   initialOnboardingStatus,
   onRefresh,
 }: TabActivityProps) {
+  const orgFetch = useOrgFetch()
   const [events, setEvents] = useState<ActivityFeedItem[]>(initialActivity?.events ?? [])
   const [dailySummary, setDailySummary] = useState<ActivityDailySummary>(
     initialActivity?.dailySummary ?? { totalRuns: 0, completed: 0, failed: 0, totalTokens: 0 }
@@ -84,7 +87,7 @@ export function TabActivity({
 
   const fetchActivity = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employee.id}/activity`)
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employee.id}/activity`)
       if (res.ok) {
         const data = await res.json()
         setEvents(data.events || [])

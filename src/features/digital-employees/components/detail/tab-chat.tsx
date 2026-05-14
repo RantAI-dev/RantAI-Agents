@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback } from "react"
 import { Loader2, Clock, Send } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
@@ -38,6 +40,7 @@ export function TabChat({
   employeeAssistant,
   onUpdateSession,
 }: TabChatProps) {
+  const orgFetch = useOrgFetch()
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([])
   const [offlineInput, setOfflineInput] = useState("")
 
@@ -54,7 +57,7 @@ export function TabChat({
     if (!containerRunning || queuedMessages.length === 0) return
     for (const msg of queuedMessages) {
       try {
-        await fetch(`/api/dashboard/digital-employees/${employee.id}/chat`, {
+        await orgFetch(`/api/dashboard/digital-employees/${employee.id}/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

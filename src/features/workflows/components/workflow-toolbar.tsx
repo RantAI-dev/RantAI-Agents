@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import {
   Save,
   Play,
@@ -96,6 +98,7 @@ const MODE_COLORS: Record<string, string> = {
 }
 
 export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleStatus, showChatTest, onToggleChatTest, onAutoLayout, showGrid = true, onToggleGrid, showMinimap = true, onToggleMinimap, onShowTutorial, onOpenRunHistory, initialAssistants }: WorkflowToolbarProps) {
+  const orgFetch = useOrgFetch()
   const workflowName = useWorkflowEditor((s) => s.workflowName)
   const workflowStatus = useWorkflowEditor((s) => s.workflowStatus)
   const workflowMode = useWorkflowEditor((s) => s.workflowMode)
@@ -124,7 +127,7 @@ export function WorkflowToolbar({ onSave, onRun, onDelete, onImport, onToggleSta
     const wId = useWorkflowEditor.getState().workflowId
     if (!wId) return
     try {
-      const res = await fetch(`/api/dashboard/workflows/${wId}/export`)
+      const res = await orgFetch(`/api/dashboard/workflows/${wId}/export`)
       if (!res.ok) throw new Error("Export failed")
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

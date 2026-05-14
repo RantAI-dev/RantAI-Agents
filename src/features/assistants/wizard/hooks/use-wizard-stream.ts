@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useCallback, useRef, useState } from "react"
 import type {
   WizardDraft,
@@ -29,6 +31,7 @@ function nextId(): string {
 }
 
 export function useWizardStream({ onProposal, onRefinement }: StreamHandlers) {
+  const orgFetch = useOrgFetch()
   const [turns, setTurns] = useState<WizardTurn[]>([])
   const [streaming, setStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -59,7 +62,7 @@ export function useWizardStream({ onProposal, onRefinement }: StreamHandlers) {
       abortRef.current = controller
 
       try {
-        const res = await fetch("/api/assistants/wizard/stream", {
+        const res = await orgFetch("/api/assistants/wizard/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

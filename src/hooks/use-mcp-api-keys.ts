@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback, useEffect } from "react"
 
 export interface McpApiKeyItem {
@@ -14,6 +16,8 @@ export interface McpApiKeyItem {
 }
 
 export function useMcpApiKeys() {
+
+  const orgFetch = useOrgFetch()
   const [keys, setKeys] = useState<McpApiKeyItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -22,7 +26,7 @@ export function useMcpApiKeys() {
     try {
       setIsLoading(true)
       setError(null)
-      const res = await fetch("/api/dashboard/mcp-api-keys")
+      const res = await orgFetch("/api/dashboard/mcp-api-keys")
       if (!res.ok) throw new Error("Failed to fetch MCP API keys")
       const data = await res.json()
       setKeys(data)
@@ -35,7 +39,7 @@ export function useMcpApiKeys() {
 
   const createKey = useCallback(
     async (data: { name: string; exposedTools?: string[] }) => {
-      const res = await fetch("/api/dashboard/mcp-api-keys", {
+      const res = await orgFetch("/api/dashboard/mcp-api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -60,7 +64,7 @@ export function useMcpApiKeys() {
         enabled: boolean
       }>
     ) => {
-      const res = await fetch(`/api/dashboard/mcp-api-keys/${id}`, {
+      const res = await orgFetch(`/api/dashboard/mcp-api-keys/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
@@ -73,7 +77,7 @@ export function useMcpApiKeys() {
 
   const deleteKey = useCallback(
     async (id: string) => {
-      const res = await fetch(`/api/dashboard/mcp-api-keys/${id}`, {
+      const res = await orgFetch(`/api/dashboard/mcp-api-keys/${id}`, {
         method: "DELETE",
       })
       if (!res.ok) {

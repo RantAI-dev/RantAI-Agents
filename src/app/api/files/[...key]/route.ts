@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   FilesRouteParamsSchema,
   FilesRouteQuerySchema,
@@ -44,7 +44,7 @@ export async function GET(
     const forceDownload = parsedQuery.success
       ? parsedQuery.data.download === "true"
       : url.searchParams.get("download") === "true"
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
 
     const result = await accessFileByKey({
       s3Key,

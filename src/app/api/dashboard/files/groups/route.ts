@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContextWithFallback } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   KnowledgeGroupCreateSchema,
 } from "@/features/knowledge/groups/schema"
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const orgId = orgContext?.organizationId ?? null
     const groups = await listKnowledgeGroupsForDashboard(orgId)
 
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const orgContext = await getOrganizationContextWithFallback(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const parsedBody = KnowledgeGroupCreateSchema.safeParse(await request.json())
     if (!parsedBody.success) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
 
     const group = await createKnowledgeGroupForDashboard({
       organizationId: orgContext?.organizationId ?? null,
-      role: orgContext?.membership.role ?? null,
+      role: orgContext?.role ?? null,
       userId: session.user.id,
       input: parsedBody.data,
     })

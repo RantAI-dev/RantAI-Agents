@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 
 export interface GoalItem {
@@ -18,12 +20,14 @@ export interface GoalItem {
 }
 
 export function useEmployeeGoals(employeeId: string) {
+
+  const orgFetch = useOrgFetch()
   const [goals, setGoals] = useState<GoalItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchGoals = useCallback(async () => {
     try {
-      const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/goals`)
+      const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/goals`)
       if (!res.ok) throw new Error("Failed")
       setGoals(await res.json())
     } catch {
@@ -38,7 +42,7 @@ export function useEmployeeGoals(employeeId: string) {
   const createGoal = useCallback(async (input: {
     name: string; type: string; target: number; unit: string; period: string
   }) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/goals`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/goals`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
@@ -48,7 +52,7 @@ export function useEmployeeGoals(employeeId: string) {
   }, [employeeId, fetchGoals])
 
   const updateGoal = useCallback(async (goalId: string, input: Partial<GoalItem>) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/goals/${goalId}`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/goals/${goalId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
@@ -58,7 +62,7 @@ export function useEmployeeGoals(employeeId: string) {
   }, [employeeId, fetchGoals])
 
   const deleteGoal = useCallback(async (goalId: string) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${employeeId}/goals/${goalId}`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${employeeId}/goals/${goalId}`, {
       method: "DELETE",
     })
     if (!res.ok) throw new Error("Failed")

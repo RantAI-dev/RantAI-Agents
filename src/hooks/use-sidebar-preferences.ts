@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 
 interface SidebarConfig {
@@ -16,6 +18,8 @@ const DEFAULT_CONFIG: SidebarConfig = {
 const NON_HIDEABLE_ITEMS = ["Chat"]
 
 export function useSidebarPreferences() {
+
+  const orgFetch = useOrgFetch()
   const [config, setConfig] = useState<SidebarConfig>(DEFAULT_CONFIG)
   const [loading, setLoading] = useState(true)
 
@@ -23,7 +27,7 @@ export function useSidebarPreferences() {
   useEffect(() => {
     const fetchPrefs = async () => {
       try {
-        const res = await fetch("/api/user/preferences")
+        const res = await orgFetch("/api/user/preferences")
         if (res.ok) {
           const data = await res.json()
           if (data.sidebarConfig) {
@@ -43,7 +47,7 @@ export function useSidebarPreferences() {
   const saveConfig = useCallback(async (newConfig: SidebarConfig) => {
     setConfig(newConfig)
     try {
-      await fetch("/api/user/preferences", {
+      await orgFetch("/api/user/preferences", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sidebarConfig: newConfig }),
@@ -65,7 +69,7 @@ export function useSidebarPreferences() {
       }
       const newConfig = { ...prev, hiddenItems: Array.from(hidden) }
       // Fire and forget save
-      fetch("/api/user/preferences", {
+      orgFetch("/api/user/preferences", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sidebarConfig: newConfig }),

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { createKnowledgeDocumentForDashboard } from "@/features/knowledge/documents/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
 
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const orgContext = await getOrganizationContext(request, session.user.id)
+    const orgContext = await resolveActiveOrg(request, session.user.id)
     const searchParams = new URL(request.url).searchParams
     const useEnhanced = searchParams.get("enhanced") !== "false"
     const useCombined = searchParams.get("combined") !== "false"
@@ -71,7 +71,7 @@ export async function POST(request: Request) {
         context: {
           userId: session.user.id,
           organizationId: orgContext?.organizationId ?? null,
-          role: orgContext?.membership.role ?? null,
+          role: orgContext?.role ?? null,
         },
         input: {
           kind: "file",

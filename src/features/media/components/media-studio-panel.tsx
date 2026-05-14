@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -53,6 +55,7 @@ interface Props {
 }
 
 export function MediaStudioPanel({ modality, models }: Props) {
+  const orgFetch = useOrgFetch()
   const [prompt, setPrompt] = useState("")
   const [negativePrompt, setNegativePrompt] = useState("")
   const [showNegative, setShowNegative] = useState(false)
@@ -119,7 +122,7 @@ export function MediaStudioPanel({ modality, models }: Props) {
     try {
       const fd = new FormData()
       fd.append("file", file)
-      const res = await fetch("/api/dashboard/media/uploads", {
+      const res = await orgFetch("/api/dashboard/media/uploads", {
         method: "POST",
         body: fd,
       })
@@ -180,7 +183,7 @@ export function MediaStudioPanel({ modality, models }: Props) {
         styled += `\n\nAvoid: ${negativePrompt.trim()}`
       }
 
-      const res = await fetch("/api/dashboard/media/jobs", {
+      const res = await orgFetch("/api/dashboard/media/jobs", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -621,7 +624,7 @@ export function MediaStudioPanel({ modality, models }: Props) {
           const next = !a.isFavorite
           toggleFavorite(a.id, next)
           setPreview({ ...a, isFavorite: next })
-          fetch(`/api/dashboard/media/assets/${a.id}`, {
+          orgFetch(`/api/dashboard/media/assets/${a.id}`, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ isFavorite: next }),

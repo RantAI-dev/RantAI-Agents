@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useCallback } from "react"
 import {
   Loader2,
@@ -41,6 +43,7 @@ export function OpenApiImportDialog({
   onOpenChange,
   onImported,
 }: OpenApiImportDialogProps) {
+  const orgFetch = useOrgFetch()
   const [step, setStep] = useState<"input" | "preview" | "auth">("input")
   const [specUrl, setSpecUrl] = useState("")
   const [specContent, setSpecContent] = useState("")
@@ -79,7 +82,7 @@ export function OpenApiImportDialog({
     setIsParsing(true)
     setError("")
     try {
-      const res = await fetch("/api/dashboard/openapi-specs", {
+      const res = await orgFetch("/api/dashboard/openapi-specs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -114,7 +117,7 @@ export function OpenApiImportDialog({
           ? { type: authType, token: authToken, headerName: authHeaderName }
           : null
 
-      const res = await fetch("/api/dashboard/openapi-specs", {
+      const res = await orgFetch("/api/dashboard/openapi-specs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

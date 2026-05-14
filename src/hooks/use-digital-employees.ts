@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect } from "react"
+import { useOrgFetch } from "@/hooks/use-organization"
 
 export interface DigitalEmployeeItem {
   id: string
@@ -39,6 +40,7 @@ export interface DigitalEmployeeItem {
 
 export function useDigitalEmployees(options?: { initialEmployees?: DigitalEmployeeItem[] }) {
   const initialEmployees = options?.initialEmployees
+  const orgFetch = useOrgFetch()
   const [employees, setEmployees] = useState<DigitalEmployeeItem[]>(initialEmployees ?? [])
   const [isLoading, setIsLoading] = useState(initialEmployees ? false : true)
   const [error, setError] = useState<string | null>(null)
@@ -46,7 +48,7 @@ export function useDigitalEmployees(options?: { initialEmployees?: DigitalEmploy
   const fetchEmployees = useCallback(async () => {
     try {
       setIsLoading(true)
-      const res = await fetch("/api/dashboard/digital-employees")
+      const res = await orgFetch("/api/dashboard/digital-employees")
       if (!res.ok) throw new Error("Failed to fetch")
       const data = await res.json()
       setEmployees(data)
@@ -56,7 +58,7 @@ export function useDigitalEmployees(options?: { initialEmployees?: DigitalEmploy
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [orgFetch])
 
   const createEmployee = useCallback(
     async (input: {
@@ -66,7 +68,7 @@ export function useDigitalEmployees(options?: { initialEmployees?: DigitalEmploy
       assistantId: string
       autonomyLevel?: string
     }) => {
-      const res = await fetch("/api/dashboard/digital-employees", {
+      const res = await orgFetch("/api/dashboard/digital-employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -79,12 +81,12 @@ export function useDigitalEmployees(options?: { initialEmployees?: DigitalEmploy
       setEmployees((prev) => [employee, ...prev])
       return employee
     },
-    []
+    [orgFetch]
   )
 
   const updateEmployee = useCallback(
     async (id: string, input: Partial<DigitalEmployeeItem>) => {
-      const res = await fetch(`/api/dashboard/digital-employees/${id}`, {
+      const res = await orgFetch(`/api/dashboard/digital-employees/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -94,16 +96,16 @@ export function useDigitalEmployees(options?: { initialEmployees?: DigitalEmploy
       setEmployees((prev) => prev.map((e) => (e.id === id ? updated : e)))
       return updated
     },
-    []
+    [orgFetch]
   )
 
   const deleteEmployee = useCallback(async (id: string) => {
-    const res = await fetch(`/api/dashboard/digital-employees/${id}`, {
+    const res = await orgFetch(`/api/dashboard/digital-employees/${id}`, {
       method: "DELETE",
     })
     if (!res.ok) throw new Error("Failed to delete")
     setEmployees((prev) => prev.filter((e) => e.id !== id))
-  }, [])
+  }, [orgFetch])
 
   useEffect(() => {
     if (initialEmployees) {

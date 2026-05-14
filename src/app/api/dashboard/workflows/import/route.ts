@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { getOrganizationContext } from "@/lib/organization"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { WorkflowImportSchema } from "@/features/workflows/schema"
 import { importDashboardWorkflow } from "@/features/workflows/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
-    const orgContext = await getOrganizationContext(req, session.user.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const workflow = await importDashboardWorkflow({
       actorUserId: session.user.id,
       organizationId: orgContext?.organizationId ?? null,

@@ -1,5 +1,7 @@
 "use client"
 
+import { useOrgFetch } from "@/hooks/use-organization"
+
 import { useState, useEffect, useCallback } from "react"
 
 interface SharedTemplate {
@@ -17,13 +19,15 @@ interface SharedTemplate {
 }
 
 export function useSharedTemplates() {
+
+  const orgFetch = useOrgFetch()
   const [templates, setTemplates] = useState<SharedTemplate[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   const fetchTemplates = useCallback(async () => {
     try {
       setIsLoading(true)
-      const res = await fetch("/api/dashboard/templates")
+      const res = await orgFetch("/api/dashboard/templates")
       if (!res.ok) throw new Error("Failed to fetch templates")
       const data = await res.json()
       setTemplates(data)
@@ -45,7 +49,7 @@ export function useSharedTemplates() {
     templateData: Record<string, unknown>
     isPublic?: boolean
   }) => {
-    const res = await fetch("/api/dashboard/templates", {
+    const res = await orgFetch("/api/dashboard/templates", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -63,7 +67,7 @@ export function useSharedTemplates() {
     templateData: Record<string, unknown>
     isPublic: boolean
   }>) => {
-    const res = await fetch(`/api/dashboard/templates/${id}`, {
+    const res = await orgFetch(`/api/dashboard/templates/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
@@ -75,7 +79,7 @@ export function useSharedTemplates() {
   }, [])
 
   const deleteTemplate = useCallback(async (id: string) => {
-    const res = await fetch(`/api/dashboard/templates/${id}`, { method: "DELETE" })
+    const res = await orgFetch(`/api/dashboard/templates/${id}`, { method: "DELETE" })
     if (!res.ok) throw new Error("Failed to delete template")
     setTemplates((prev) => prev.filter((t) => t.id !== id))
   }, [])

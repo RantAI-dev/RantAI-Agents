@@ -1084,7 +1084,7 @@ export function ChatWorkspace({
 
     setGithubImporting(true)
     try {
-      const res = await fetch("/api/chat/github-import", {
+      const res = await orgFetch("/api/chat/github-import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url, sessionId: apiSessionId }),
@@ -1220,7 +1220,7 @@ export function ChatWorkspace({
       }
 
       try {
-        const response = await fetch(`/api/dashboard/chat/sessions/${apiSessionId}`, { signal })
+        const response = await orgFetch(`/api/dashboard/chat/sessions/${apiSessionId}`, { signal })
         const data = response.ok ? await response.json() : null
         if (data?.artifacts?.length > 0) {
           loadFromPersisted(data.artifacts)
@@ -1250,8 +1250,8 @@ export function ChatWorkspace({
       } = options ?? {}
       try {
         const [boundRes, allRes] = await Promise.all([
-          fetch(`/api/assistants/${assistantId}/tools`, { signal }),
-          fetch("/api/dashboard/tools", { signal }),
+          orgFetch(`/api/assistants/${assistantId}/tools`, { signal }),
+          orgFetch("/api/dashboard/tools", { signal }),
         ])
 
         const boundTools = (boundRes.ok ? await boundRes.json() : []) as Array<{
@@ -1326,9 +1326,9 @@ export function ChatWorkspace({
     } = options ?? {}
     try {
       const [boundRes, allRes, allToolsRes] = await Promise.all([
-        fetch(`/api/assistants/${assistantId}/skills`, { signal }),
-        fetch("/api/dashboard/skills", { signal }),
-        fetch("/api/dashboard/tools", { signal }),
+        orgFetch(`/api/assistants/${assistantId}/skills`, { signal }),
+        orgFetch("/api/dashboard/skills", { signal }),
+        orgFetch("/api/dashboard/tools", { signal }),
       ])
 
       const boundSkills = (boundRes.ok ? await boundRes.json() : []) as Array<{
@@ -1466,7 +1466,7 @@ export function ChatWorkspace({
           formData.append("file", file)
           if (apiSessionId) formData.append("sessionId", apiSessionId)
 
-          const uploadRes = await fetch("/api/chat/upload", {
+          const uploadRes = await orgFetch("/api/chat/upload", {
             method: "POST",
             body: formData,
           })
@@ -2906,7 +2906,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
         content: getMessageContent(m),
       }))
 
-      const response = await fetch("/api/dashboard/handoff", {
+      const response = await orgFetch("/api/dashboard/handoff", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2959,7 +2959,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
           params.set("after", lastPollTimestamp.current)
         }
 
-        const response = await fetch(`/api/dashboard/handoff?${params.toString()}`)
+        const response = await orgFetch(`/api/dashboard/handoff?${params.toString()}`)
         if (!response.ok) return
 
         const data = await response.json()
@@ -3030,7 +3030,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
     if (!handoffConversationId) return
 
     try {
-      const response = await fetch("/api/dashboard/handoff/message", {
+      const response = await orgFetch("/api/dashboard/handoff/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3152,7 +3152,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
             formData.append("file", file)
             if (apiSessionId) formData.append("sessionId", apiSessionId)
 
-            const uploadRes = await fetch("/api/chat/upload", {
+            const uploadRes = await orgFetch("/api/chat/upload", {
               method: "POST",
               body: formData,
             })
