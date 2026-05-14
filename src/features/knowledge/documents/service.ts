@@ -826,18 +826,57 @@ export async function deleteKnowledgeDocumentForDashboard(params: {
     return { success: true, mode: "soft" }
   }
 
-  const surrealClient = await getSurrealClient()
-  const cleanupStats = await surrealClient.cleanupDocumentIntelligence(params.documentId)
+  // Hard-delete order (postgres-first):
+  //   1. delete Document row in Postgres — this is the only step we can do
+  //      atomically. If it fails, nothing changes; user retries.
+  //   2. cleanup SurrealDB chunks + entities — best-effort. If it fails, the
+  //      chunks are now orphans (no parent Document.id in Postgres) and will
+  //      be filtered out at retrieval (vector-store.ts uses an inner join +
+  //      deletedAt:null filter, so missing doc → chunk dropped from results).
+  //      A retention sweep can hard-drop the orphan chunks later.
+  //   3. delete S3 file — best-effort, same logic; orphan S3 objects are
+  //      cheap and recoverable by a periodic scan of S3 vs Document.s3Key.
+  //
+  // Old order (surreal → s3 → postgres) had the failure mode: if Postgres
+  // delete failed AFTER surreal+s3 cleared, the doc stayed visible in the UI
+  // but RAG silently returned zero chunks. New order avoids that by leaving
+  // the doc fully present if its row delete fails.
+  let cleanupStats: { deletedRelationTables: number; entitiesDeleted: boolean; chunksDeleted: boolean } = {
+    deletedRelationTables: 0,
+    entitiesDeleted: false,
+    chunksDeleted: false,
+  }
+  try {
+    await deleteKnowledgeDocument(params.documentId)
+  } catch (err) {
+    console.error(`[Knowledge API] Hard delete: Postgres delete failed for ${params.documentId}:`, err)
+    return {
+      status: 500,
+      error: `Failed to delete document row: ${(err as Error).message?.slice(0, 200) ?? "unknown"}`,
+    }
+  }
+
+  try {
+    const surrealClient = await getSurrealClient()
+    cleanupStats = await surrealClient.cleanupDocumentIntelligence(params.documentId)
+  } catch (err) {
+    console.error(
+      `[Knowledge API] Hard delete: SurrealDB cleanup failed for ${params.documentId} (Postgres row already deleted; chunks orphan and will be filtered at retrieval). Manual sweep needed:`,
+      err
+    )
+  }
 
   if (existing.s3Key) {
     try {
       await deleteFile(existing.s3Key)
     } catch (error) {
-      console.error(`[Knowledge API] Failed to delete S3 file ${existing.s3Key}:`, error)
+      console.error(
+        `[Knowledge API] Hard delete: S3 delete failed for ${existing.s3Key} (Postgres row already deleted; file orphan). Manual sweep needed:`,
+        error
+      )
     }
   }
 
-  await deleteKnowledgeDocument(params.documentId)
   recordKnowledgeAudit({
     organizationId: params.organizationId,
     userId: params.userId,
