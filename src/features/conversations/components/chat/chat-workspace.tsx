@@ -361,6 +361,7 @@ function MessagesArea({
   handoffState,
   handoffTriggeredMsgId,
   virtuosoRef,
+  scrollerRef,
   setAtBottom,
   setEditContent,
   setViewingVersions,
@@ -397,6 +398,7 @@ function MessagesArea({
   handoffState: HandoffState
   handoffTriggeredMsgId: string | null
   virtuosoRef: React.RefObject<VirtuosoHandle | null>
+  scrollerRef: (ref: HTMLElement | Window | null) => void
   setAtBottom: (v: boolean) => void
   setEditContent: (v: string) => void
   setViewingVersions: React.Dispatch<React.SetStateAction<Record<string, number>>>
@@ -417,6 +419,17 @@ function MessagesArea({
   digitalEmployeeId?: string
 }) {
   const { avatarUrl: userAvatarUrl, name: userName } = useProfileStore()
+
+  // Viewport-relative atBottomThreshold so the "near bottom" zone (which
+  // gates the floating scroll-to-bottom button's visibility) feels the
+  // same on a phone and a large desktop monitor. Fixed 100px was too
+  // tight on tall screens (~1-2 lines) and too generous on short ones.
+  // Floor of 96px keeps a usable zone even on very short viewports.
+  const [atBottomThreshold] = useState(() =>
+    typeof window !== "undefined"
+      ? Math.max(96, Math.round(window.innerHeight * 0.05))
+      : 96,
+  )
 
   return (
     <div className="h-full w-full relative">
@@ -456,11 +469,12 @@ function MessagesArea({
       ) : (
         <Virtuoso
           ref={virtuosoRef}
+          scrollerRef={scrollerRef}
           data={allMessages}
           className="h-full"
-          initialTopMostItemIndex={allMessages.length - 1}
+          initialTopMostItemIndex={Math.max(0, allMessages.length - 1)}
           atBottomStateChange={setAtBottom}
-          atBottomThreshold={100}
+          atBottomThreshold={atBottomThreshold}
           overscan={200}
           itemContent={(index, message) => {
             const rawContent = getMessageContent(message)
@@ -960,6 +974,14 @@ export function ChatWorkspace({
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  // Abort any in-flight stream when the component unmounts (route change,
+  // session switch, tab close handled by browser) so the fetch doesn't
+  // linger as a zombie after the user has moved on.
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+    }
+  }, [])
   const { toast } = useToast()
 
   // Resolve DB-persisted session ID for API calls (handles temp → db ID mapping)
@@ -1809,27 +1831,93 @@ export function ChatWorkspace({
 
   // Track if we should auto-scroll (only when user sends a message or during streaming)
   const shouldAutoScroll = useRef(false)
+  // Stable ref to the latest isStreaming for use inside event-handler refs
+  // that mustn't re-bind on every render.
+  const isStreamingRef = useRef(isStreaming)
+  useEffect(() => {
+    isStreamingRef.current = isStreaming
+  }, [isStreaming])
 
-  // Auto-scroll while a streaming exchange is in progress, but only when
-  // the user is already pinned to the bottom. If they've scrolled up to
-  // re-read context, the previous unconditional scrollToIndex would yank
-  // them back on every chunk — the so-called "scroll jail". Honouring
-  // atBottom here preserves their reading position; the floating
-  // scroll-to-bottom button gives them a one-click way to catch up when
-  // they want to.
+  // Auto-scroll during streaming. shouldAutoScroll is the user-intent gate:
+  //   - set true when the user sends a message or clicks the floating
+  //     scroll-to-bottom button (explicit intent to follow)
+  //   - flipped false by wheel/touch listeners (below) when the user
+  //     manually scrolls up to re-read — this is the ONLY way to detach,
+  //     because reacting to atBottom transitions would also detach on big
+  //     chunks that briefly push the user out of the threshold, which is
+  //     exactly the "sometimes the stream stops following" bug
+  //   - re-engaged when atBottomStateChange fires `true` mid-stream
+  //     (user scrolled back to bottom or button-jumped there)
+  //   - reset on stream end
+  // align:"end" anchors the bottom of the (single growing) last item to
+  // the viewport bottom; behavior:"auto" avoids the smooth-scroll stall
+  // where each new chunk interrupts the previous animation.
   useEffect(() => {
     if (!shouldAutoScroll.current) return
     if (!virtuosoRef.current) return
-    if (atBottom) {
-      virtuosoRef.current.scrollToIndex({
-        index: "LAST",
-        behavior: "smooth",
-      })
-    }
+    virtuosoRef.current.scrollToIndex({
+      index: "LAST",
+      align: "end",
+      behavior: "auto",
+    })
     if (!isStreaming) {
       shouldAutoScroll.current = false
     }
-  }, [chat.messages, isStreaming, atBottom])
+  }, [chat.messages, isStreaming])
+
+  // Attach a single scroll listener to Virtuoso's scroller to manage the
+  // follow-stream gate. Using `scroll` (not wheel/touch) means we catch
+  // every scroll source: wheel, touch, scrollbar drag, keyboard, screen
+  // reader, etc. The key insight: our programmatic scrolls only ever
+  // move toward the bottom (scrollToIndex with index:"LAST"), so any
+  // event where scrollTop *decreased* is unambiguously a user scroll-up
+  // — no need to mark/ignore programmatic scrolls with timestamps. A
+  // small dead-zone (2px) absorbs sub-pixel jitter without missing real
+  // gestures.
+  const lastScrollTopRef = useRef(0)
+  const scrollerCleanupRef = useRef<(() => void) | null>(null)
+  const handleScrollerRef = useCallback(
+    (scroller: HTMLElement | Window | null) => {
+      scrollerCleanupRef.current?.()
+      scrollerCleanupRef.current = null
+      if (!scroller || scroller instanceof Window) return
+
+      lastScrollTopRef.current = scroller.scrollTop
+
+      const onScroll = () => {
+        const top = scroller.scrollTop
+        const prev = lastScrollTopRef.current
+        lastScrollTopRef.current = top
+        if (top < prev - 2) {
+          // scrollTop went up → user scrolled up. Detach.
+          shouldAutoScroll.current = false
+        } else if (
+          top > prev + 2 &&
+          isStreamingRef.current &&
+          scroller.scrollHeight - top - scroller.clientHeight < 60
+        ) {
+          // scrolled down and landed near bottom mid-stream → re-engage.
+          // Programmatic scrolls also enter here but shouldAutoScroll is
+          // already true at that point, so it's a no-op.
+          shouldAutoScroll.current = true
+        }
+      }
+
+      scroller.addEventListener("scroll", onScroll, { passive: true })
+      scrollerCleanupRef.current = () => {
+        scroller.removeEventListener("scroll", onScroll)
+      }
+    },
+    [],
+  )
+
+  // Belt-and-braces cleanup in case Virtuoso never invokes the ref with
+  // null on unmount.
+  useEffect(() => {
+    return () => {
+      scrollerCleanupRef.current?.()
+    }
+  }, [])
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -1852,9 +1940,16 @@ export function ChatWorkspace({
   }, [])
 
   const scrollToBottom = useCallback(() => {
+    // Re-arm follow-stream so subsequent chunks keep the view glued to
+    // bottom after the user clicks the floating jump button mid-stream.
+    // align:"end" lines the bottom of the last item up with the viewport
+    // bottom — without it, "LAST" defaults to top-align and the user
+    // gets dropped at the first word of a long streaming reply.
+    shouldAutoScroll.current = true
     virtuosoRef.current?.scrollToIndex({
       index: "LAST",
-      behavior: "smooth",
+      align: "end",
+      behavior: "auto",
     })
   }, [])
 
@@ -1989,6 +2084,12 @@ export function ChatWorkspace({
           content: getMessageContent(m) || (m as { content?: string }).content || "",
         }))
 
+        // If a previous send is still streaming, cancel it before starting
+        // a new one — otherwise the old fetch keeps running as a zombie
+        // request (memory leak + wasted server work). The previous send's
+        // catch sees AbortError and cleans up its own placeholder by id
+        // below, so this is safe to do unconditionally.
+        abortControllerRef.current?.abort()
         const abortController = new AbortController()
         abortControllerRef.current = abortController
 
@@ -2027,10 +2128,22 @@ export function ChatWorkspace({
 
           const { messageId } = await postRes.json()
           let nextSeq = 0
+          let pollCount = 0
+          // 300 polls × 1s = 5 min ceiling. Long enough for slow employees
+          // doing tool chains; short enough that a backend that forgets to
+          // set pollData.done eventually surfaces an error instead of
+          // spinning forever. The error propagates to the outer catch and
+          // is surfaced via the toast description (see catch below).
+          const MAX_POLLS = 300
 
           // Poll for events until done
           while (!abortController.signal.aborted) {
             await new Promise((r) => setTimeout(r, 1000)) // poll every 1s
+            if (++pollCount > MAX_POLLS) {
+              throw new Error(
+                "Digital employee response timed out after 5 minutes. The agent may still be working in the background — try again or check the task status.",
+              )
+            }
 
             const pollRes = await fetch(
               `${endpoint}?messageId=${messageId}&after=${nextSeq}`,
@@ -2549,14 +2662,20 @@ export function ChatWorkspace({
 
         // Handle user-initiated abort — keep partial content if any.
         // When the abort fires before the first byte (no content yet),
-        // drop the empty assistant placeholder so the user isn't left
-        // staring at a blank bubble.
+        // drop OUR specific empty assistant placeholder so the user isn't
+        // left staring at a blank bubble. Match by assistantMsgId rather
+        // than "last assistant" because rapid-fire sends now auto-abort
+        // the prior stream — when that catch runs, a newer send may have
+        // already appended its own placeholder which we must not touch.
         if (err instanceof DOMException && err.name === "AbortError") {
           setIsStreaming(false)
           chat.setMessages((prev) => {
-            const lastMsg = prev[prev.length - 1]
-            if (lastMsg?.role === "assistant" && !getMessageContent(lastMsg)) {
-              return prev.slice(0, -1) as any
+            const idx = prev.findIndex((m) => m.id === assistantMsgId)
+            if (idx >= 0 && !getMessageContent(prev[idx])) {
+              return [
+                ...prev.slice(0, idx),
+                ...prev.slice(idx + 1),
+              ] as typeof prev
             }
             return prev
           })
@@ -2605,16 +2724,26 @@ export function ChatWorkspace({
           textareaRef.current?.focus()
         }
 
+        // Surface the timeout reason specifically — the generic
+        // "Failed to get a response" leaves the user wondering whether
+        // they should wait more or retry. The polling-timeout error
+        // message in the digital-employee path explains both.
+        const isTimeout =
+          err instanceof Error && err.message.includes("timed out")
+        const errorDescription = isTimeout
+          ? err.message
+          : "Failed to get a response from the assistant."
+
         setError({
-          message: "Failed to get response. Please try again.",
+          message: isTimeout ? err.message : "Failed to get response. Please try again.",
           retry: retryFn,
         })
 
         // Show toast
         toast({
           variant: "destructive",
-          title: "Message failed",
-          description: "Failed to get a response from the assistant.",
+          title: isTimeout ? "Response timed out" : "Message failed",
+          description: errorDescription,
           action: (
             <ToastAction altText="Retry" onClick={retryFn}>
               Retry
@@ -3388,6 +3517,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     handoffState={handoffState}
                     handoffTriggeredMsgId={handoffTriggeredMsgId}
                     virtuosoRef={virtuosoRef}
+                    scrollerRef={handleScrollerRef}
                     setAtBottom={setAtBottom}
                     setEditContent={setEditContent}
                     setViewingVersions={setViewingVersions}
@@ -3603,6 +3733,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               handoffState={handoffState}
               handoffTriggeredMsgId={handoffTriggeredMsgId}
               virtuosoRef={virtuosoRef}
+              scrollerRef={handleScrollerRef}
               setAtBottom={setAtBottom}
               setEditContent={setEditContent}
               setViewingVersions={setViewingVersions}
