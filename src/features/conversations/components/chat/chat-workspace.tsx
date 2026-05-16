@@ -963,6 +963,14 @@ export function ChatWorkspace({
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  // Abort any in-flight stream when the component unmounts (route change,
+  // session switch, tab close handled by browser) so the fetch doesn't
+  // linger as a zombie after the user has moved on.
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+    }
+  }, [])
   const { toast } = useToast()
 
   // Resolve DB-persisted session ID for API calls (handles temp → db ID mapping)
@@ -2065,6 +2073,12 @@ export function ChatWorkspace({
           content: getMessageContent(m) || (m as { content?: string }).content || "",
         }))
 
+        // If a previous send is still streaming, cancel it before starting
+        // a new one — otherwise the old fetch keeps running as a zombie
+        // request (memory leak + wasted server work). The previous send's
+        // catch sees AbortError and cleans up its own placeholder by id
+        // below, so this is safe to do unconditionally.
+        abortControllerRef.current?.abort()
         const abortController = new AbortController()
         abortControllerRef.current = abortController
 
@@ -2625,14 +2639,20 @@ export function ChatWorkspace({
 
         // Handle user-initiated abort — keep partial content if any.
         // When the abort fires before the first byte (no content yet),
-        // drop the empty assistant placeholder so the user isn't left
-        // staring at a blank bubble.
+        // drop OUR specific empty assistant placeholder so the user isn't
+        // left staring at a blank bubble. Match by assistantMsgId rather
+        // than "last assistant" because rapid-fire sends now auto-abort
+        // the prior stream — when that catch runs, a newer send may have
+        // already appended its own placeholder which we must not touch.
         if (err instanceof DOMException && err.name === "AbortError") {
           setIsStreaming(false)
           chat.setMessages((prev) => {
-            const lastMsg = prev[prev.length - 1]
-            if (lastMsg?.role === "assistant" && !getMessageContent(lastMsg)) {
-              return prev.slice(0, -1) as any
+            const idx = prev.findIndex((m) => m.id === assistantMsgId)
+            if (idx >= 0 && !getMessageContent(prev[idx])) {
+              return [
+                ...prev.slice(0, idx),
+                ...prev.slice(idx + 1),
+              ] as typeof prev
             }
             return prev
           })
