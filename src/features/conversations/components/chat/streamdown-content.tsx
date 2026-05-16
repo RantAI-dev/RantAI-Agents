@@ -69,7 +69,7 @@ export function StreamdownContent({
   return (
     <div className={className ?? "chat-message max-w-none"}>
       <Streamdown
-        animated
+        animated={{ animation: "fadeIn", sep: "char", duration: 180 }}
         isAnimating={isStreaming}
         caret={isStreaming ? "block" : undefined}
         shikiTheme={
