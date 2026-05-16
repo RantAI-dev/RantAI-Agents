@@ -2128,10 +2128,22 @@ export function ChatWorkspace({
 
           const { messageId } = await postRes.json()
           let nextSeq = 0
+          let pollCount = 0
+          // 300 polls × 1s = 5 min ceiling. Long enough for slow employees
+          // doing tool chains; short enough that a backend that forgets to
+          // set pollData.done eventually surfaces an error instead of
+          // spinning forever. The error propagates to the outer catch and
+          // is surfaced via the toast description (see catch below).
+          const MAX_POLLS = 300
 
           // Poll for events until done
           while (!abortController.signal.aborted) {
             await new Promise((r) => setTimeout(r, 1000)) // poll every 1s
+            if (++pollCount > MAX_POLLS) {
+              throw new Error(
+                "Digital employee response timed out after 5 minutes. The agent may still be working in the background — try again or check the task status.",
+              )
+            }
 
             const pollRes = await fetch(
               `${endpoint}?messageId=${messageId}&after=${nextSeq}`,
@@ -2712,16 +2724,26 @@ export function ChatWorkspace({
           textareaRef.current?.focus()
         }
 
+        // Surface the timeout reason specifically — the generic
+        // "Failed to get a response" leaves the user wondering whether
+        // they should wait more or retry. The polling-timeout error
+        // message in the digital-employee path explains both.
+        const isTimeout =
+          err instanceof Error && err.message.includes("timed out")
+        const errorDescription = isTimeout
+          ? err.message
+          : "Failed to get a response from the assistant."
+
         setError({
-          message: "Failed to get response. Please try again.",
+          message: isTimeout ? err.message : "Failed to get response. Please try again.",
           retry: retryFn,
         })
 
         // Show toast
         toast({
           variant: "destructive",
-          title: "Message failed",
-          description: "Failed to get a response from the assistant.",
+          title: isTimeout ? "Response timed out" : "Message failed",
+          description: errorDescription,
           action: (
             <ToastAction altText="Retry" onClick={retryFn}>
               Retry
