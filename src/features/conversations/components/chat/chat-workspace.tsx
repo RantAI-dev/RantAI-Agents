@@ -420,6 +420,17 @@ function MessagesArea({
 }) {
   const { avatarUrl: userAvatarUrl, name: userName } = useProfileStore()
 
+  // Viewport-relative atBottomThreshold so the "near bottom" zone (which
+  // gates the floating scroll-to-bottom button's visibility) feels the
+  // same on a phone and a large desktop monitor. Fixed 100px was too
+  // tight on tall screens (~1-2 lines) and too generous on short ones.
+  // Floor of 96px keeps a usable zone even on very short viewports.
+  const [atBottomThreshold] = useState(() =>
+    typeof window !== "undefined"
+      ? Math.max(96, Math.round(window.innerHeight * 0.05))
+      : 96,
+  )
+
   return (
     <div className="h-full w-full relative">
       {chat.messages.length === 0 && !isLoading ? (
@@ -461,9 +472,9 @@ function MessagesArea({
           scrollerRef={scrollerRef}
           data={allMessages}
           className="h-full"
-          initialTopMostItemIndex={allMessages.length - 1}
+          initialTopMostItemIndex={Math.max(0, allMessages.length - 1)}
           atBottomStateChange={setAtBottom}
-          atBottomThreshold={100}
+          atBottomThreshold={atBottomThreshold}
           overscan={200}
           itemContent={(index, message) => {
             const rawContent = getMessageContent(message)
