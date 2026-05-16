@@ -361,6 +361,7 @@ function MessagesArea({
   handoffState,
   handoffTriggeredMsgId,
   virtuosoRef,
+  scrollerRef,
   setAtBottom,
   setEditContent,
   setViewingVersions,
@@ -397,6 +398,7 @@ function MessagesArea({
   handoffState: HandoffState
   handoffTriggeredMsgId: string | null
   virtuosoRef: React.RefObject<VirtuosoHandle | null>
+  scrollerRef: (ref: HTMLElement | Window | null) => void
   setAtBottom: (v: boolean) => void
   setEditContent: (v: string) => void
   setViewingVersions: React.Dispatch<React.SetStateAction<Record<string, number>>>
@@ -456,6 +458,7 @@ function MessagesArea({
       ) : (
         <Virtuoso
           ref={virtuosoRef}
+          scrollerRef={scrollerRef}
           data={allMessages}
           className="h-full"
           initialTopMostItemIndex={allMessages.length - 1}
@@ -1809,27 +1812,93 @@ export function ChatWorkspace({
 
   // Track if we should auto-scroll (only when user sends a message or during streaming)
   const shouldAutoScroll = useRef(false)
+  // Stable ref to the latest isStreaming for use inside event-handler refs
+  // that mustn't re-bind on every render.
+  const isStreamingRef = useRef(isStreaming)
+  useEffect(() => {
+    isStreamingRef.current = isStreaming
+  }, [isStreaming])
 
-  // Auto-scroll while a streaming exchange is in progress, but only when
-  // the user is already pinned to the bottom. If they've scrolled up to
-  // re-read context, the previous unconditional scrollToIndex would yank
-  // them back on every chunk — the so-called "scroll jail". Honouring
-  // atBottom here preserves their reading position; the floating
-  // scroll-to-bottom button gives them a one-click way to catch up when
-  // they want to.
+  // Auto-scroll during streaming. shouldAutoScroll is the user-intent gate:
+  //   - set true when the user sends a message or clicks the floating
+  //     scroll-to-bottom button (explicit intent to follow)
+  //   - flipped false by wheel/touch listeners (below) when the user
+  //     manually scrolls up to re-read — this is the ONLY way to detach,
+  //     because reacting to atBottom transitions would also detach on big
+  //     chunks that briefly push the user out of the threshold, which is
+  //     exactly the "sometimes the stream stops following" bug
+  //   - re-engaged when atBottomStateChange fires `true` mid-stream
+  //     (user scrolled back to bottom or button-jumped there)
+  //   - reset on stream end
+  // align:"end" anchors the bottom of the (single growing) last item to
+  // the viewport bottom; behavior:"auto" avoids the smooth-scroll stall
+  // where each new chunk interrupts the previous animation.
   useEffect(() => {
     if (!shouldAutoScroll.current) return
     if (!virtuosoRef.current) return
-    if (atBottom) {
-      virtuosoRef.current.scrollToIndex({
-        index: "LAST",
-        behavior: "smooth",
-      })
-    }
+    virtuosoRef.current.scrollToIndex({
+      index: "LAST",
+      align: "end",
+      behavior: "auto",
+    })
     if (!isStreaming) {
       shouldAutoScroll.current = false
     }
-  }, [chat.messages, isStreaming, atBottom])
+  }, [chat.messages, isStreaming])
+
+  // Attach a single scroll listener to Virtuoso's scroller to manage the
+  // follow-stream gate. Using `scroll` (not wheel/touch) means we catch
+  // every scroll source: wheel, touch, scrollbar drag, keyboard, screen
+  // reader, etc. The key insight: our programmatic scrolls only ever
+  // move toward the bottom (scrollToIndex with index:"LAST"), so any
+  // event where scrollTop *decreased* is unambiguously a user scroll-up
+  // — no need to mark/ignore programmatic scrolls with timestamps. A
+  // small dead-zone (2px) absorbs sub-pixel jitter without missing real
+  // gestures.
+  const lastScrollTopRef = useRef(0)
+  const scrollerCleanupRef = useRef<(() => void) | null>(null)
+  const handleScrollerRef = useCallback(
+    (scroller: HTMLElement | Window | null) => {
+      scrollerCleanupRef.current?.()
+      scrollerCleanupRef.current = null
+      if (!scroller || scroller instanceof Window) return
+
+      lastScrollTopRef.current = scroller.scrollTop
+
+      const onScroll = () => {
+        const top = scroller.scrollTop
+        const prev = lastScrollTopRef.current
+        lastScrollTopRef.current = top
+        if (top < prev - 2) {
+          // scrollTop went up → user scrolled up. Detach.
+          shouldAutoScroll.current = false
+        } else if (
+          top > prev + 2 &&
+          isStreamingRef.current &&
+          scroller.scrollHeight - top - scroller.clientHeight < 60
+        ) {
+          // scrolled down and landed near bottom mid-stream → re-engage.
+          // Programmatic scrolls also enter here but shouldAutoScroll is
+          // already true at that point, so it's a no-op.
+          shouldAutoScroll.current = true
+        }
+      }
+
+      scroller.addEventListener("scroll", onScroll, { passive: true })
+      scrollerCleanupRef.current = () => {
+        scroller.removeEventListener("scroll", onScroll)
+      }
+    },
+    [],
+  )
+
+  // Belt-and-braces cleanup in case Virtuoso never invokes the ref with
+  // null on unmount.
+  useEffect(() => {
+    return () => {
+      scrollerCleanupRef.current?.()
+    }
+  }, [])
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -1852,9 +1921,16 @@ export function ChatWorkspace({
   }, [])
 
   const scrollToBottom = useCallback(() => {
+    // Re-arm follow-stream so subsequent chunks keep the view glued to
+    // bottom after the user clicks the floating jump button mid-stream.
+    // align:"end" lines the bottom of the last item up with the viewport
+    // bottom — without it, "LAST" defaults to top-align and the user
+    // gets dropped at the first word of a long streaming reply.
+    shouldAutoScroll.current = true
     virtuosoRef.current?.scrollToIndex({
       index: "LAST",
-      behavior: "smooth",
+      align: "end",
+      behavior: "auto",
     })
   }, [])
 
@@ -3388,6 +3464,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     handoffState={handoffState}
                     handoffTriggeredMsgId={handoffTriggeredMsgId}
                     virtuosoRef={virtuosoRef}
+                    scrollerRef={handleScrollerRef}
                     setAtBottom={setAtBottom}
                     setEditContent={setEditContent}
                     setViewingVersions={setViewingVersions}
@@ -3603,6 +3680,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               handoffState={handoffState}
               handoffTriggeredMsgId={handoffTriggeredMsgId}
               virtuosoRef={virtuosoRef}
+              scrollerRef={handleScrollerRef}
               setAtBottom={setAtBottom}
               setEditContent={setEditContent}
               setViewingVersions={setViewingVersions}
