@@ -47,8 +47,9 @@ next-env.d.ts
 # rust build artifacts
 installer/target/
 
-# docs site
-docs-site/node_modules/
-docs-site/.next/
-docs-site/bun.lock
+# site (landing + docs)
+site/node_modules/
+site/.next/
+site/out/
+site/tsconfig.tsbuildinfo
 .superpowers/
