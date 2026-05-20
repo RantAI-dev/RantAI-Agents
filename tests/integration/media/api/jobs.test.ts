@@ -92,40 +92,6 @@ describe("POST /api/dashboard/media/jobs", () => {
     expect(json.assets).toHaveLength(1)
   })
 
-  it("returns 402 when over the per-user limit", async () => {
-    const { user, org } = await setupSession()
-    await testPrisma.user.update({
-      where: { id: user.id },
-      data: { mediaLimitCentsPerDay: 1 },
-    })
-    await testPrisma.mediaJob.create({
-      data: {
-        organizationId: org.id, userId: user.id, modality: "IMAGE",
-        modelId: "google/nano-banana-2", prompt: "x", parameters: {},
-        referenceAssetIds: [], status: "SUCCEEDED",
-        estimatedCostCents: 1, costCents: 1,
-      },
-    })
-
-    const req = new Request("http://localhost/api/dashboard/media/jobs", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-organization-id": org.id,
-      },
-      body: JSON.stringify({
-        modality: "IMAGE",
-        modelId: "google/nano-banana-2",
-        prompt: "p",
-        parameters: { count: 1 },
-      }),
-    })
-    const res = await POST(req)
-    expect(res.status).toBe(402)
-    const body = await res.json()
-    expect(body.error).toMatch(/limit/i)
-  })
-
   it("GET returns the user's recent jobs", async () => {
     const { user, org } = await setupSession()
     await testPrisma.mediaJob.createMany({

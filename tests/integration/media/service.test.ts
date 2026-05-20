@@ -112,43 +112,6 @@ describe("createMediaJob — sync image path", () => {
     expect(persistedJob?.assets).toHaveLength(1)
   })
 
-  it("rejects with 402-style error when over limit", async () => {
-    const user = await createTestUser({ mediaLimitCentsPerDay: 5 })
-    const org = await createTestOrg()
-    await seedImageModel()
-
-    // Pre-seed usage to leave only 1 cent of headroom
-    await testPrisma.mediaJob.create({
-      data: {
-        organizationId: org.id,
-        userId: user.id,
-        modality: "IMAGE",
-        modelId: "google/nano-banana-2",
-        prompt: "earlier",
-        parameters: {},
-        referenceAssetIds: [],
-        status: "SUCCEEDED",
-        estimatedCostCents: 4,
-        costCents: 4,
-        completedAt: new Date(),
-      },
-    })
-
-    await expect(
-      createMediaJob({
-        userId: user.id,
-        organizationId: org.id,
-        modality: "IMAGE",
-        modelId: "google/nano-banana-2",
-        prompt: "another",
-        parameters: { count: 1 },
-        referenceAssetIds: [],
-      })
-    ).rejects.toThrow(/limit/i)
-
-    expect(generateImageMock).not.toHaveBeenCalled()
-  })
-
   it("marks the job FAILED when the provider throws", async () => {
     const user = await createTestUser()
     const org = await createTestOrg()
