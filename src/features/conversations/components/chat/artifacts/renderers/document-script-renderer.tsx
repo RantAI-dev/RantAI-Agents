@@ -1,12 +1,7 @@
 "use client"
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, ChevronLeft, ChevronRight, RefreshCw } from "@/lib/icons"
-
-interface RenderStatus {
-  hash: string
-  pageCount: number
-  cached: boolean
-}
+import { useRenderStatus } from "./use-render-status"
 
 interface Props {
   sessionId: string
@@ -26,40 +21,21 @@ interface Props {
  *  - dot strip when pageCount ≤ 20
  */
 export function DocumentScriptRenderer({ sessionId, artifactId, content, isStreaming }: Props) {
-  const [status, setStatus] = useState<RenderStatus | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [pageIdx, setPageIdx] = useState(0)
   const [retryCount, setRetryCount] = useState(0)
 
-  // Trigger render-status fetch whenever the script changes (or streaming
-  // ends). Skip while the LLM is still typing the script.
+  const { status, error } = useRenderStatus({
+    sessionId,
+    artifactId,
+    contentKey: content,
+    isStreaming,
+    retryCount,
+  })
+
+  // Reset to first page whenever a fresh render-status arrives.
   useEffect(() => {
-    if (isStreaming) return
-    setStatus(null)
-    setError(null)
-    let cancelled = false
-    fetch(
-      `/api/dashboard/chat/sessions/${sessionId}/artifacts/${artifactId}/render-status`,
-      { method: "GET" },
-    )
-      .then(async (r) => {
-        if (cancelled) return
-        if (!r.ok) {
-          const j = await r.json().catch(() => ({}))
-          setError(j.error ?? `HTTP ${r.status}`)
-          return
-        }
-        const s = (await r.json()) as RenderStatus
-        setStatus(s)
-        setPageIdx(0)
-      })
-      .catch((e) => {
-        if (!cancelled) setError((e as Error).message)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [sessionId, artifactId, content, isStreaming, retryCount])
+    if (status) setPageIdx(0)
+  }, [status])
 
   const goPrev = useCallback(() => setPageIdx((i) => Math.max(0, i - 1)), [])
   const goNext = useCallback(
