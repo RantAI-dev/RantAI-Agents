@@ -226,6 +226,10 @@ export function ChatSessionsProvider({
   const [isLoaded, setIsLoaded] = useState(Boolean(seededSessions))
   const [isSyncing, setIsSyncing] = useState(false)
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Holds the latest pending sync function so unmount (e.g. Fast Refresh)
+  // can flush it instead of dropping in-flight writes. Without this, the
+  // 1s debounce window could swallow the user's last message on hot reload.
+  const pendingSyncFnRef = useRef<(() => Promise<void>) | null>(null)
   const loadedSessionsRef = useRef<Set<string>>(new Set())
   const hasSeededSessionsRef = useRef(Boolean(seededSessions))
   const sessionsRef = useRef(sessions)
@@ -411,7 +415,9 @@ export function ChatSessionsProvider({
     }
 
     setIsSyncing(true)
-    syncTimeoutRef.current = setTimeout(async () => {
+    const performSync = async () => {
+      syncTimeoutRef.current = null
+      pendingSyncFnRef.current = null
       // Resolve DB ID lazily (after debounce) so createSession has time to set dbId
       const apiId = resolveDbId(sessionId)
       try {
@@ -486,6 +492,10 @@ export function ChatSessionsProvider({
       } finally {
         setIsSyncing(false)
       }
+    }
+    pendingSyncFnRef.current = performSync
+    syncTimeoutRef.current = setTimeout(() => {
+      void performSync()
     }, 1000)
   }, [resolveDbId])
 
@@ -550,11 +560,23 @@ export function ChatSessionsProvider({
       })
   }, [resolveDbId])
 
-  // Cleanup debounce timeout on unmount
+  // Flush pending sync on unmount. Previously this just cleared the
+  // timeout, which dropped any messages still inside the 1s debounce
+  // window — on Next.js Fast Refresh that's the user's most recent turn,
+  // and they reported it disappearing on reload as Q,A,Q (last A missing)
+  // or just the assistant message vanishing. We now fire the pending
+  // sync immediately. The server-side upsert is keyed on message `id`,
+  // so a duplicate post from the remounted tree is a no-op.
   useEffect(() => {
     return () => {
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current)
+        syncTimeoutRef.current = null
+      }
+      const flush = pendingSyncFnRef.current
+      if (flush) {
+        pendingSyncFnRef.current = null
+        void flush()
       }
     }
   }, [])

@@ -35,6 +35,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useProfileStore } from "@/hooks/use-profile"
 import { ToastAction } from "@/components/ui/toast"
 import { MarkdownContent } from "./markdown-content"
+import { ReasoningBox } from "./reasoning-box"
 import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
@@ -578,8 +579,39 @@ function MessagesArea({
                         )
                       })()}
 
+                      {/* Reasoning box renders whenever metadata.reasoning is set,
+                          including BEFORE the first text-delta arrives. Without
+                          this, reasoning that streams ahead of the answer (the
+                          common MiniMax `<think>...</think>` pattern) would be
+                          hidden behind the TypingIndicator because content is
+                          still empty. Sits above the bubble body for both the
+                          loading state and the rendered-content state. */}
+                      {!isUser && (() => {
+                        const meta = (message as unknown as { metadata?: Record<string, unknown> }).metadata
+                        const reasoning = typeof meta?.reasoning === "string" ? meta.reasoning : ""
+                        if (!reasoning) return null
+                        const durationMs =
+                          typeof meta?.reasoningDurationMs === "number"
+                            ? meta.reasoningDurationMs
+                            : null
+                        return (
+                          <ReasoningBox
+                            content={reasoning}
+                            isStreaming={isStreamingMessage}
+                            durationMs={durationMs}
+                          />
+                        )
+                      })()}
+
                       {isLoadingMessage ? (
-                        <TypingIndicator />
+                        // Suppress the typing indicator once reasoning has
+                        // started — the ReasoningBox header is already pulsing
+                        // "Thinking…", showing both would be noisy.
+                        (() => {
+                          const meta = (message as unknown as { metadata?: Record<string, unknown> }).metadata
+                          if (typeof meta?.reasoning === "string" && meta.reasoning.length > 0) return null
+                          return <TypingIndicator />
+                        })()
                       ) : isEditing ? (
                         <div className="space-y-2">
                           <Textarea
@@ -974,12 +1006,31 @@ export function ChatWorkspace({
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-  // Abort any in-flight stream when the component unmounts (route change,
-  // session switch, tab close handled by browser) so the fetch doesn't
-  // linger as a zombie after the user has moved on.
+  // Tracks whether the component is *really* mounted. React 18 StrictMode
+  // double-invokes effects in dev (setup → cleanup → setup, synchronously),
+  // and an unconditional abort in the cleanup would tear down the
+  // AbortController that sendMessage just created during the first setup.
+  // That's exactly how the "send from ChatHome → no assistant bubble" bug
+  // manifested: queueInitialMessageSend fires sendMessage during mount,
+  // sendMessage sets abortControllerRef.current, then StrictMode's cleanup
+  // aborts it, then the fetch dies with AbortError before any bytes arrive.
+  const isMountedRef = useRef(true)
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
-      abortControllerRef.current?.abort()
+      isMountedRef.current = false
+      // Defer the abort to a macrotask. StrictMode's immediate re-setup
+      // (still synchronous in the same commit) flips isMountedRef back to
+      // true before this fires, so the abort is skipped. A real unmount
+      // leaves isMountedRef false and the in-flight stream is canceled
+      // exactly once when we're sure the user has actually moved on.
+      const controller = abortControllerRef.current
+      if (!controller || controller.signal.aborted) return
+      setTimeout(() => {
+        if (!isMountedRef.current && !controller.signal.aborted) {
+          controller.abort()
+        }
+      }, 0)
     }
   }, [])
   const { toast } = useToast()
@@ -2098,6 +2149,13 @@ export function ChatWorkspace({
         setIsStreaming(true)
 
         let assistantContent = ""
+        // Accumulates reasoning-delta chunks from the server. Surfaced to
+        // the user as a collapsible "Thinking" box above the answer, and
+        // persisted into the assistant message's metadata.reasoning so the
+        // box survives reload.
+        let reasoningContent = ""
+        let reasoningStartedAt: number | null = null
+        let reasoningDurationMs: number | null = null
         const toolCalls: TransportToolCallMap = new Map()
         // preStreamSnapshots / createdStreamingIds declared above the try
         // so the catch block can clean them up. preStreamSnapshots holds
@@ -2204,6 +2262,11 @@ export function ChatWorkspace({
                 messages: normalizedMessages,
                 assistantId: assistant.id,
                 sessionId: apiSessionId,
+                // Lets the server upsert this row at stream-end so a client
+                // disconnect (hot reload, tab close, network blip) doesn't
+                // lose the generated tokens. Client-side syncMessages keeps
+                // running in parallel for in-session UX.
+                assistantMessageId: assistantMsgId,
                 systemPrompt: assistant.systemPrompt,
                 useKnowledgeBase: toolOverrides?.useKnowledgeBase ?? effectiveKnowledgeBase,
                 knowledgeBaseGroupIds: toolOverrides?.knowledgeBaseGroupIds ?? effectiveKBGroupIds,
@@ -2257,13 +2320,39 @@ export function ChatWorkspace({
             for (const part of consumeResult.parts) {
               switch (part.type) {
                 case "thinking":
-                  // Thinking indicator is already shown via isLoading/TypingIndicator
+                case "reasoning-start":
+                  if (reasoningStartedAt === null) reasoningStartedAt = Date.now()
                   break
-                case "reasoning-delta":
-                  // Keep spinner active; no direct text append in bubble.
+                case "reasoning-delta": {
+                  if (reasoningStartedAt === null) reasoningStartedAt = Date.now()
+                  const delta =
+                    (part as { delta?: string; text?: string; textDelta?: string }).delta ??
+                    (part as { text?: string }).text ??
+                    (part as { textDelta?: string }).textDelta ??
+                    ""
+                  if (delta) {
+                    reasoningContent += delta
+                    chat.setMessages((prev) => {
+                      const updated = [...prev]
+                      const lastIdx = updated.length - 1
+                      if (updated[lastIdx]?.role === "assistant") {
+                        const prevMeta =
+                          ((updated[lastIdx] as { metadata?: Record<string, unknown> }).metadata) ?? {}
+                        updated[lastIdx] = {
+                          ...updated[lastIdx],
+                          metadata: { ...prevMeta, reasoning: reasoningContent },
+                        } as unknown as typeof updated[number]
+                      }
+                      return updated
+                    })
+                  }
                   break
+                }
+                case "reasoning-end":
                 case "thinking-done":
-                  // LLM finished thinking, tool calls or text will follow
+                  if (reasoningStartedAt !== null && reasoningDurationMs === null) {
+                    reasoningDurationMs = Date.now() - reasoningStartedAt
+                  }
                   break
                 case "text-delta":
                   assistantContent += (part.delta as string) || ""
@@ -2624,11 +2713,15 @@ export function ChatWorkspace({
                 content: finalContent,
                 createdAt: new Date(),
                 ...(sources.length > 0 && { sources }),
-                ...((artifactIds.length > 0 || persistedToolCalls.length > 0) && {
+                ...((artifactIds.length > 0 || persistedToolCalls.length > 0 || reasoningContent) && {
                   metadata: {
                     ...(artifactIds.length > 0 && { artifactIds }),
                     ...(artifactSnapshots.length > 0 && { artifacts: artifactSnapshots }),
                     ...(persistedToolCalls.length > 0 && { toolCalls: persistedToolCalls }),
+                    ...(reasoningContent && {
+                      reasoning: reasoningContent,
+                      ...(reasoningDurationMs !== null && { reasoningDurationMs }),
+                    }),
                   },
                 }),
               },

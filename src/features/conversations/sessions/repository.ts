@@ -32,7 +32,10 @@ export async function findDashboardSessionByIdAndUser(id: string, userId: string
     where: { id, userId },
     include: {
       messages: {
-        orderBy: { createdAt: "asc" },
+        // Sort by `seq` (monotonic bigserial), not `createdAt` — the latter
+        // is transaction-scoped in PG so batched inserts tie and the order
+        // becomes non-deterministic on reload.
+        orderBy: { seq: "asc" },
       },
       artifacts: {
         where: { artifactType: { not: null } },
