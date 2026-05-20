@@ -61,7 +61,7 @@ jobs:
       - name: Validate submodule compatibility and upstream checks
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REQUIRED_RANTAICLAW_CHECKS: CI Required Gate
+          REQUIRED_RANTAICLAW_CHECKS: Verify Artifact Set
         run: bun run check:release-compat --verify-rantaiclaw-checks
 
       - name: Run compliance checks
