@@ -1151,17 +1151,19 @@ export async function runChat(params: {
       )
     }
 
-    const { createStripThinkTransform } = await import("@/lib/llm/strip-think")
+    const { createExtractThinkTransform } = await import("@/lib/llm/strip-think")
     const result = streamText({
       model: getChatProvider()(resolveModelId(modelId)),
       system: systemPrompt,
       messages,
       tools: allTools,
       stopWhen: stepCountIs(resolveMaxSteps(assistantModelConfig, hasAssistantTools)),
-      // Strip <think>...</think> blocks emitted by reasoning models
-      // (MiniMax-M2.7, etc.) before they reach the client — they're internal
-      // CoT, not user-facing content.
-      experimental_transform: createStripThinkTransform(),
+      // Surface <think>...</think> blocks from reasoning models (MiniMax-M2.7,
+      // etc.) as AI SDK v6 reasoning parts so the dashboard chat can render
+      // a collapsible "Thinking" disclosure above the answer. Chatflow and
+      // the public v1 API still use the strip variant because their consumers
+      // don't render reasoning.
+      experimental_transform: createExtractThinkTransform(),
       // Forward the request abort signal — when the client disconnects mid-
       // stream, streamText cancels its in-flight LLM call and result.text
       // rejects, which the background memory IIFE then catches and skips.
