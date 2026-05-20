@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import { spawnSync } from "node:child_process"
 
 const { uploadFileMock, downloadFileMock } = vi.hoisted(() => ({
   uploadFileMock: vi.fn().mockResolvedValue({ key: "x", url: "", size: 0 }),
@@ -13,6 +14,12 @@ vi.mock("@/lib/s3", () => ({
 
 import { renderArtifactPreview } from "@/lib/rendering/server/docx-preview-pipeline"
 
+// Pipeline exercises docxToPdf (libreoffice) → pdfToPngs; ubuntu-latest CI
+// images don't ship libreoffice so we skip rather than fail.
+const HAS_LIBREOFFICE =
+  spawnSync("libreoffice", ["--version"], { stdio: "ignore" }).status === 0 ||
+  spawnSync("soffice", ["--version"], { stdio: "ignore" }).status === 0
+
 const VALID_SCRIPT = `
   import { Document, Paragraph, TextRun, Packer } from "docx"
   const doc = new Document({ sections: [{ children: [new Paragraph({ children: [new TextRun("hello")] })] }] })
@@ -25,7 +32,7 @@ beforeEach(() => {
 })
 
 describe("renderArtifactPreview", () => {
-  it("runs the full pipeline and caches the result", async () => {
+  it.skipIf(!HAS_LIBREOFFICE)("runs the full pipeline and caches the result", async () => {
     const r = await renderArtifactPreview("art-1", VALID_SCRIPT)
     expect(r.pages.length).toBeGreaterThanOrEqual(1)
     expect(r.pages[0].subarray(0, 4)).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47]))

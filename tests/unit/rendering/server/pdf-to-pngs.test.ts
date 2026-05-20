@@ -1,13 +1,20 @@
 import { describe, it, expect } from "vitest"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { spawnSync } from "node:child_process"
 import { docxToPdf } from "@/lib/rendering/server/docx-to-pdf"
 import { pdfToPngs } from "@/lib/rendering/server/pdf-to-pngs"
 
 const SAMPLE = readFileSync(join(__dirname, "..", "..", "..", "fixtures", "document-script", "sample-letter.docx"))
 
+// docxToPdf is the input producer here; without libreoffice we can't even
+// get a PDF to feed into pdfToPngs.
+const HAS_LIBREOFFICE =
+  spawnSync("libreoffice", ["--version"], { stdio: "ignore" }).status === 0 ||
+  spawnSync("soffice", ["--version"], { stdio: "ignore" }).status === 0
+
 describe("pdfToPngs", () => {
-  it("rasterizes each page to a PNG buffer", async () => {
+  it.skipIf(!HAS_LIBREOFFICE)("rasterizes each page to a PNG buffer", async () => {
     const pdf = await docxToPdf(SAMPLE)
     const pngs = await pdfToPngs(pdf)
     expect(pngs.length).toBeGreaterThanOrEqual(1)
