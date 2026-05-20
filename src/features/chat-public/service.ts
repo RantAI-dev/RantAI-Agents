@@ -1373,9 +1373,10 @@ export async function runChat(params: {
       void (async () => {
         try {
           const finalText = await result.text
-          if (!finalText && !params.abortSignal?.aborted) {
-            // Nothing to persist (model returned empty); skip rather than
-            // overwriting any prior content the client may have stored.
+          if (!finalText) {
+            // Nothing useful to write — model produced no text. Skip
+            // rather than overwriting whatever placeholder the client may
+            // have already persisted.
             return
           }
           let reasoningText: string | undefined

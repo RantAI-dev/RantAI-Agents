@@ -144,6 +144,26 @@ export function createExtractThinkTransform<TOOLS extends ToolSet>() {
 
     return new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
       transform(chunk, controller) {
+        // text-end signals the model has finished a text part. We need to
+        // flush any held-back buffer (up to OPEN_PEEK chars we were holding
+        // in case a `<think>` opener was forming) BEFORE the text-end
+        // propagates — otherwise those characters are dropped, which on
+        // short answers can mean the visible content is empty.
+        if (chunk.type === "text-end") {
+          if (!inThink && buffer.length > 0) {
+            const tail = buffer
+            buffer = ""
+            const endId = (chunk as unknown as { id: string }).id
+            controller.enqueue({
+              type: "text-delta",
+              id: endId,
+              text: tail,
+            } as unknown as TextStreamPart<TOOLS>)
+          }
+          controller.enqueue(chunk)
+          return
+        }
+
         if (chunk.type !== "text-delta") {
           controller.enqueue(chunk)
           return
