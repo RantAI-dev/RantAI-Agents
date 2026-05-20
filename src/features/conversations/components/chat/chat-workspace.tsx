@@ -2243,6 +2243,11 @@ export function ChatWorkspace({
                 messages: normalizedMessages,
                 assistantId: assistant.id,
                 sessionId: apiSessionId,
+                // Lets the server upsert this row at stream-end so a client
+                // disconnect (hot reload, tab close, network blip) doesn't
+                // lose the generated tokens. Client-side syncMessages keeps
+                // running in parallel for in-session UX.
+                assistantMessageId: assistantMsgId,
                 systemPrompt: assistant.systemPrompt,
                 useKnowledgeBase: toolOverrides?.useKnowledgeBase ?? effectiveKnowledgeBase,
                 knowledgeBaseGroupIds: toolOverrides?.knowledgeBaseGroupIds ?? effectiveKBGroupIds,

@@ -23,6 +23,12 @@ export const ChatRequestBodySchema = z
     fileDocumentIds: z.array(z.string()).optional(),
     threadId: z.string().optional(),
     sessionId: z.string().optional(),
+    // Client-generated id for the assistant response. The server upserts
+    // the row under this id at stream-end so a client that disconnects mid-
+    // stream (tab close, hot reload, network blip) still has the generated
+    // tokens persisted. Optional so non-dashboard callers (v1 API, etc.)
+    // don't have to supply one — they fall back to client-driven persistence.
+    assistantMessageId: z.string().optional(),
     assistantId: z.string().optional(),
     systemPrompt: z.string().optional(),
     useKnowledgeBase: z.boolean().optional(),

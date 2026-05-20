@@ -1352,6 +1352,71 @@ export async function runChat(params: {
       })();
     } // end assistantMemoryConfig.enabled
 
+    // Server-authoritative persistence of the assistant response. We can't
+    // rely on the client to write the row at stream end — the client may
+    // disconnect (tab close, mobile context switch, hot reload, network
+    // blip), and any tokens generated after that point are charged to us
+    // but lost to the user. Mirror them to the DB here, server-side, where
+    // we have ground truth regardless of client state.
+    //
+    // Upsert is idempotent: the client's own /messages POST still runs in
+    // parallel for in-session UX, and both paths key on the same id. If
+    // they race, last-writer-wins on content — and they're writing the
+    // same final value either way. Best-effort: log and swallow errors so
+    // a DB hiccup doesn't fail the streaming response that's already in
+    // flight on the wire.
+    const persistAssistantMessageId = params.body.assistantMessageId
+    if (persistAssistantMessageId && validatedSessionId) {
+      const lastUserMessage = [...rawMessages].reverse().find(
+        (m) => m.role === "user",
+      )
+      void (async () => {
+        try {
+          const finalText = await result.text
+          if (!finalText && !params.abortSignal?.aborted) {
+            // Nothing to persist (model returned empty); skip rather than
+            // overwriting any prior content the client may have stored.
+            return
+          }
+          let reasoningText: string | undefined
+          try {
+            const r = await result.reasoningText
+            if (typeof r === "string" && r.length > 0) reasoningText = r
+          } catch {
+            // result.reasoningText can reject on aborted streams; non-fatal.
+          }
+          const { createDashboardMessages } = await import(
+            "@/features/conversations/sessions/repository"
+          )
+          const rowsToPersist: Parameters<typeof createDashboardMessages>[0] = []
+          if (lastUserMessage?.id && lastUserMessage.content) {
+            // editHistory deliberately omitted — the row may already have
+            // edit history from a prior client-side PATCH and Prisma's
+            // update path leaves undefined fields untouched.
+            rowsToPersist.push({
+              id: lastUserMessage.id,
+              sessionId: validatedSessionId,
+              role: "user",
+              content: lastUserMessage.content,
+            })
+          }
+          rowsToPersist.push({
+            id: persistAssistantMessageId,
+            sessionId: validatedSessionId,
+            role: "assistant",
+            content: finalText,
+            ...(reasoningText && {
+              metadata: { reasoning: reasoningText },
+            }),
+          })
+          await createDashboardMessages(rowsToPersist)
+        } catch (err) {
+          // Swallow — client-side syncMessages is the fallback path.
+          console.error("[runChat] server-side persistence failed:", err)
+        }
+      })()
+    }
+
     // Canonical stream mode for chat: always UI message SSE
     // (tools and non-tools share the same protocol).
     const uiResponse = result.toUIMessageStreamResponse()
