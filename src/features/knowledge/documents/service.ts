@@ -17,6 +17,7 @@ import { uploadFile, S3Paths, validateUpload, getPresignedDownloadUrl, deleteFil
 import { processDocumentOCR, isPDFScanned } from "@/lib/ocr"
 import { canEdit, canManage } from "@/lib/organization"
 import {
+  countKnowledgeDocumentsForScope,
   createKnowledgeDocument,
   deleteKnowledgeDocument,
   findKnowledgeDocumentAccessById,
@@ -203,6 +204,16 @@ async function resolveImageThumbnail(s3Key: string | null | undefined) {
   } catch {
     return undefined
   }
+}
+
+/**
+ * Returns a total document count for the dashboard groups index sidebar.
+ * Org-scoped callers see org + global; orgless callers see everything.
+ */
+export async function countKnowledgeDocumentsForDashboard(
+  organizationId: string | null
+): Promise<number> {
+  return countKnowledgeDocumentsForScope(organizationId)
 }
 
 /**

@@ -8,8 +8,8 @@ import {
   createKnowledgeGroupForDashboard,
   listKnowledgeGroupsForDashboard,
 } from "@/features/knowledge/groups/service"
+import { countKnowledgeDocumentsForDashboard } from "@/features/knowledge/documents/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
-import { prisma } from "@/lib/prisma"
 
 // GET - List all groups
 export async function GET(request: Request) {
@@ -21,15 +21,10 @@ export async function GET(request: Request) {
   try {
     const orgContext = await resolveActiveOrg(request, session.user.id)
     const orgId = orgContext?.organizationId ?? null
-    const groups = await listKnowledgeGroupsForDashboard(orgId)
-
-    const totalDocumentCount = await prisma.document.count({
-      where: orgId
-        ? {
-            OR: [{ organizationId: orgId }, { organizationId: null }],
-          }
-        : {},
-    })
+    const [groups, totalDocumentCount] = await Promise.all([
+      listKnowledgeGroupsForDashboard(orgId),
+      countKnowledgeDocumentsForDashboard(orgId),
+    ])
 
     return NextResponse.json({ groups, totalDocumentCount })
   } catch (error) {

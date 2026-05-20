@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 import { canManage, resolveActiveOrg } from "@/lib/org-context"
 import { AssistantIdParamsSchema } from "@/features/assistants/default/schema"
 import {
+  loadAssistantForDefaultMutation,
   removeSystemDefaultAssistant,
   setSystemDefaultAssistant,
 } from "@/features/assistants/default/service"
@@ -42,19 +42,15 @@ async function guardDefaultMutation(
     )
   }
 
-  const assistant = await prisma.assistant.findUnique({
-    where: { id: rawId },
-    select: { id: true, isBuiltIn: true, organizationId: true },
+  const assistant = await loadAssistantForDefaultMutation({
+    assistantId: rawId,
+    organizationId: orgContext.organizationId,
   })
-  if (!assistant) {
-    return NextResponse.json({ error: "Assistant not found" }, { status: 404 })
-  }
-  if (!assistant.isBuiltIn && assistant.organizationId && assistant.organizationId !== orgContext.organizationId) {
-    // 404 not 403 to avoid leaking existence across orgs
-    return NextResponse.json({ error: "Assistant not found" }, { status: 404 })
+  if (isHttpServiceError(assistant)) {
+    return NextResponse.json({ error: assistant.error }, { status: assistant.status })
   }
 
-  return { id: rawId }
+  return { id: assistant.id }
 }
 
 // POST /api/assistants/[id]/default - Set as system default

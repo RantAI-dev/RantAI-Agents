@@ -4,6 +4,13 @@ export async function findAssistantById(id: string) {
   return prisma.assistant.findUnique({ where: { id } })
 }
 
+export async function findAssistantAccessById(id: string) {
+  return prisma.assistant.findUnique({
+    where: { id },
+    select: { id: true, isBuiltIn: true, organizationId: true },
+  })
+}
+
 export async function clearSystemDefaultAssistants() {
   await prisma.assistant.updateMany({
     where: { isSystemDefault: true },

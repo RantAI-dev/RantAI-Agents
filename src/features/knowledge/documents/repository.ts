@@ -43,6 +43,14 @@ export async function listKnowledgeDocumentsByScope(params: {
   })
 }
 
+export async function countKnowledgeDocumentsForScope(organizationId: string | null) {
+  return prisma.document.count({
+    where: organizationId
+      ? { OR: [{ organizationId }, { organizationId: null }] }
+      : {},
+  })
+}
+
 export async function findKnowledgeDocumentById(id: string) {
   return prisma.document.findUnique({
     where: { id },
