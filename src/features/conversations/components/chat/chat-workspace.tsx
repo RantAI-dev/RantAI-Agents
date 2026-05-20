@@ -1006,12 +1006,31 @@ export function ChatWorkspace({
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-  // Abort any in-flight stream when the component unmounts (route change,
-  // session switch, tab close handled by browser) so the fetch doesn't
-  // linger as a zombie after the user has moved on.
+  // Tracks whether the component is *really* mounted. React 18 StrictMode
+  // double-invokes effects in dev (setup → cleanup → setup, synchronously),
+  // and an unconditional abort in the cleanup would tear down the
+  // AbortController that sendMessage just created during the first setup.
+  // That's exactly how the "send from ChatHome → no assistant bubble" bug
+  // manifested: queueInitialMessageSend fires sendMessage during mount,
+  // sendMessage sets abortControllerRef.current, then StrictMode's cleanup
+  // aborts it, then the fetch dies with AbortError before any bytes arrive.
+  const isMountedRef = useRef(true)
   useEffect(() => {
+    isMountedRef.current = true
     return () => {
-      abortControllerRef.current?.abort()
+      isMountedRef.current = false
+      // Defer the abort to a macrotask. StrictMode's immediate re-setup
+      // (still synchronous in the same commit) flips isMountedRef back to
+      // true before this fires, so the abort is skipped. A real unmount
+      // leaves isMountedRef false and the in-flight stream is canceled
+      // exactly once when we're sure the user has actually moved on.
+      const controller = abortControllerRef.current
+      if (!controller || controller.signal.aborted) return
+      setTimeout(() => {
+        if (!isMountedRef.current && !controller.signal.aborted) {
+          controller.abort()
+        }
+      }, 0)
     }
   }, [])
   const { toast } = useToast()
