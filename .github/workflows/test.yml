@@ -29,6 +29,9 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install canvas build deps
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
       - run: bun install --frozen-lockfile
 
       - run: bun run test:unit
@@ -67,6 +70,9 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install canvas build deps
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
       - run: bun install --frozen-lockfile
 
       - name: Push schema to test database
@@ -98,6 +104,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Install canvas build deps
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
 
       - run: bun install --frozen-lockfile
 

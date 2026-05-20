@@ -55,6 +55,12 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install canvas build deps
+        # pdf-img-convert pulls canvas@2.11.2 transitively; its prebuilts 404
+        # for Node v127+ so node-pre-gyp falls back to source. Install cairo,
+        # pango, jpeg, gif, rsvg headers so the source build succeeds.
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
