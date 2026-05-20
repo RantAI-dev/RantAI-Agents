@@ -6,10 +6,12 @@
     "seed": "bun prisma/seed.ts"
   },
   "overrides": {
-    "@codemirror/state": "6.5.4"
+    "@codemirror/state": "6.5.4",
+    "canvas": "^3.2.3"
   },
   "resolutions": {
-    "@codemirror/state": "6.5.4"
+    "@codemirror/state": "6.5.4",
+    "canvas": "^3.2.3"
   },
   "scripts": {
     "test": "vitest run",
