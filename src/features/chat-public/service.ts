@@ -1412,8 +1412,20 @@ export async function runChat(params: {
           })
           await createDashboardMessages(rowsToPersist)
         } catch (err) {
-          // Swallow — client-side syncMessages is the fallback path.
-          console.error("[runChat] server-side persistence failed:", err)
+          // P2003 = the DashboardSession was deleted between request-boundary
+          // validation and this post-stream write. Expected race; client-side
+          // syncMessages is the fallback path, so don't spam a stack trace.
+          if (
+            err instanceof Error &&
+            (err as { code?: string }).code === "P2003"
+          ) {
+            debug(
+              "[runChat] skipping persist — session %s vanished mid-stream",
+              validatedSessionId,
+            )
+          } else {
+            console.error("[runChat] server-side persistence failed:", err)
+          }
         }
       })()
     }
