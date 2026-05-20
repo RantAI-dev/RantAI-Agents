@@ -16,10 +16,12 @@ interface MarkdownContentProps {
 // they all start at the same instant, defeating the typing feel.
 //
 // Adaptive rate keeps us from lagging far behind the server: baseline
-// ~60 chars/sec for natural typing pace, accelerating up to 300/sec
-// when we're more than 300 chars behind so a long reply still finishes
-// in reasonable time. When isStreaming flips false the loop tears down
-// and we snap to the final target.
+// ~25 chars/sec (~40ms per char) approximates a fast human typist and
+// matches the feel of ChatGPT / Claude.ai at default; we step up to
+// 60/sec when 100+ chars behind and 180/sec when 300+ chars behind so
+// long replies still finish in reasonable time without sacrificing the
+// natural pace on short ones. When isStreaming flips false the loop
+// tears down and we snap to the final target.
 function useTypewriter(target: string, isStreaming: boolean): string {
   const [displayed, setDisplayed] = useState(target)
   const targetRef = useRef(target)
@@ -48,9 +50,9 @@ function useTypewriter(target: string, isStreaming: boolean): string {
         if (prev.length === t.length) return prev
 
         const remaining = t.length - prev.length
-        let rate = 60
-        if (remaining > 300) rate = 300
-        else if (remaining > 100) rate = 120
+        let rate = 25
+        if (remaining > 300) rate = 180
+        else if (remaining > 100) rate = 60
         const charsToAdd = Math.max(1, Math.round((rate * dt) / 1000))
         return t.slice(0, Math.min(t.length, prev.length + charsToAdd))
       })
