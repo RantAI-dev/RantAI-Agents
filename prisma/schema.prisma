@@ -15,17 +15,17 @@ enum Role {
 
 // User model (platform users — renamed from Agent, keeps same DB table)
 model User {
-  id                    String         @id @default(cuid())
-  email                 String         @unique
-  name                  String
-  passwordHash          String
-  role                  Role           @default(USER)
-  status                String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE (for live chat)
-  avatarS3Key           String? // S3 key for avatar image
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
-  conversations         Conversation[]
-  mediaJobs             MediaJob[]
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String
+  passwordHash  String
+  role          Role           @default(USER)
+  status        String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE (for live chat)
+  avatarS3Key   String? // S3 key for avatar image
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  conversations Conversation[]
+  mediaJobs     MediaJob[]
 
   @@map("Agent")
 }
@@ -113,8 +113,8 @@ model Organization {
 
   // Per-org knowledge-base quotas. null = unlimited (default).
   // Enforced on upload via lib/quota/knowledge.ts.
-  maxDocuments     Int?
-  maxStorageBytes  BigInt?
+  maxDocuments    Int?
+  maxStorageBytes BigInt?
 
   // Relationships
   memberships         OrganizationMember[]
@@ -358,12 +358,12 @@ model Document {
   // Soft delete: rows with deletedAt != null are hidden from listings + RAG
   // retrieval but stay in DB until a retention sweep (cron) hard-deletes them.
   // retentionDays is the optional per-doc TTL override (null = use org default).
-  deletedAt    DateTime?
+  deletedAt     DateTime?
   retentionDays Int?
 
   // Coverage analytics — incremented on each retrieval hit, populated lazily.
-  retrievalCount   Int       @default(0)
-  lastRetrievedAt  DateTime?
+  retrievalCount  Int       @default(0)
+  lastRetrievedAt DateTime?
 
   @@index([organizationId])
   @@index([s3Key])
@@ -465,11 +465,18 @@ model DashboardMessage {
   replyTo     String? // ID of the message being replied to
   editHistory Json? // Array of { content, assistantResponse, editedAt }
   sources     Json? // Array of sources for assistant messages
-  metadata    Json? // Extra data e.g. { artifactIds: string[] }
+  metadata    Json? // Extra data e.g. { artifactIds: string[], reasoning?: string }
   attachments FileAttachment[] // File attachments for this message
+  // Monotonic per-row insert order. PG's `now()` is transaction-scoped so a
+  // single $transaction([userCreate, assistantCreate]) gives both rows the
+  // same `createdAt`; combined with random UUID ids the loader had no stable
+  // tiebreaker and reload produced Q,A,A,Q ordering. `BigInt @default(autoincrement())`
+  // is per-row monotonic and the loader sorts on it instead.
+  seq         BigInt           @default(autoincrement())
   createdAt   DateTime         @default(now())
 
   @@index([sessionId])
+  @@index([sessionId, seq])
 }
 
 // File attachments stored in S3
@@ -1468,8 +1475,8 @@ model MediaAsset {
 model ResolvedImage {
   id          String   @id @default(cuid())
   query       String   @unique // Normalized search query (lowercase, trimmed)
-  url         String   // Resolved Unsplash URL
-  attribution String   // "Photo by X on Unsplash"
+  url         String // Resolved Unsplash URL
+  attribution String // "Photo by X on Unsplash"
   createdAt   DateTime @default(now())
   expiresAt   DateTime // Cache expiry (30 days from creation)
 
