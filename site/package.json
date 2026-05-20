@@ -35,6 +35,7 @@
     "three": "^0.183.2"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.9",
     "@types/react": "^19",
     "@types/three": "^0.183.0",
     "autoprefixer": "^10",
