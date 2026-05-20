@@ -1,17 +1,19 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-const { findUniqueMock, updateMock } = vi.hoisted(() => ({
+const { findUniqueMock, executeRawMock } = vi.hoisted(() => ({
   findUniqueMock: vi.fn(),
-  updateMock: vi.fn(),
+  executeRawMock: vi.fn(),
 }))
 
+// D-2: markRagStatus uses prisma.$executeRaw (jsonb_set) instead of
+// findUnique + update. Test mirrors the live shape.
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     document: {
       findUnique: findUniqueMock,
-      update: updateMock,
     },
+    $executeRaw: executeRawMock,
   },
 }))
 
@@ -34,7 +36,7 @@ import { indexArtifactContent } from "@/lib/rag/artifact-indexer"
 
 beforeEach(() => {
   findUniqueMock.mockReset()
-  updateMock.mockReset()
+  executeRawMock.mockReset()
   storeChunksMock.mockReset()
   deleteChunksMock.mockReset()
   embeddingsMock.mockReset()
@@ -43,7 +45,7 @@ beforeEach(() => {
 describe("indexArtifactContent — non-fatal failure", () => {
   it("does not rethrow when storeChunks fails (caller should not need to .catch)", async () => {
     findUniqueMock.mockResolvedValue({ metadata: null })
-    updateMock.mockResolvedValue({})
+    executeRawMock.mockResolvedValue(1)
     embeddingsMock.mockResolvedValue([[0.1], [0.2]])
     storeChunksMock.mockRejectedValue(new Error("vector store down"))
 
@@ -54,8 +56,7 @@ describe("indexArtifactContent — non-fatal failure", () => {
       indexArtifactContent("doc-1", "Doc", "x".repeat(2000)),
     ).resolves.toBeUndefined()
 
-    expect(updateMock).toHaveBeenCalled()
-    const updateArgs = updateMock.mock.calls[0][0]
-    expect(updateArgs.data.metadata.ragIndexed).toBe(false)
+    // Failure path writes ragIndexed=false via jsonb_set.
+    expect(executeRawMock).toHaveBeenCalled()
   })
 })

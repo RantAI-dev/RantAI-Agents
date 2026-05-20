@@ -8,6 +8,27 @@ vi.mock("@/lib/unsplash/client", () => ({
   })),
 }))
 
+// createArtifactTool.execute hits S3 + Prisma on the persistence path. Tests
+// that intentionally exercise persistence (e.g. canvas-mode + language guards
+// that proceed past validation) would otherwise hang without a DB / S3.
+vi.mock("@/lib/s3", () => ({
+  uploadFile: vi.fn(async () => ({ key: "test", url: "", size: 0 })),
+  S3Paths: { artifact: () => "artifacts/test" },
+  getArtifactExtension: () => "txt",
+}))
+
+vi.mock("@/lib/prisma", () => ({
+  prisma: {
+    document: {
+      create: vi.fn(async () => ({ id: "test" })),
+    },
+  },
+}))
+
+vi.mock("@/lib/rag", () => ({
+  indexArtifactContent: vi.fn(async () => undefined),
+}))
+
 const VALID_HTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -279,7 +300,7 @@ describe("validateArtifactContent — image/svg+xml", () => {
       `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><title>x</title><path d="M12.456789 34.567890"/></svg>`
     )
     expect(r.ok).toBe(true)
-    expect(r.warnings.join(" ")).toMatch(/decimal places/)
+    expect(r.warnings.join(" ")).toMatch(/decimal place/)
   })
 
   it("accepts a valid illustration with title, desc, role, grouped", async () => {
@@ -999,7 +1020,7 @@ describe("validateArtifactContent — application/slides", () => {
         ],
       }),
     )
-    expect(r.warnings.join(" ")).toMatch(/convention is 7/)
+    expect(r.warnings.join(" ")).toMatch(/must be 7–12/)
   })
 
   it("warns when the deck is longer than the convention", async () => {
@@ -1009,7 +1030,7 @@ describe("validateArtifactContent — application/slides", () => {
     }
     slides.push({ layout: "closing", title: "Bye" } as never)
     const r = await v(JSON.stringify({ theme: {}, slides }))
-    expect(r.warnings.join(" ")).toMatch(/convention is 7/)
+    expect(r.warnings.join(" ")).toMatch(/must be 7–12/)
   })
 
   it("warns when fewer than 3 distinct layouts are used in a long deck", async () => {

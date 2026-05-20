@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { spawnSync } from "node:child_process"
 import { validateScriptArtifact } from "@/lib/document-script/validator"
 import { renderArtifactPreview } from "@/lib/rendering/server/docx-preview-pipeline"
 import { extractDocxText } from "@/lib/document-script/extract-text"
@@ -17,8 +18,15 @@ vi.mock("@/lib/s3", () => ({
   deleteFiles: vi.fn(),
 }))
 
+// End-to-end exercises pandoc (text extraction) + docx-preview-pipeline
+// (libreoffice). Both are optional dev/CI deps; skip when missing.
+const HAS_PANDOC = spawnSync("pandoc", ["--version"], { stdio: "ignore" }).status === 0
+const HAS_LIBREOFFICE =
+  spawnSync("libreoffice", ["--version"], { stdio: "ignore" }).status === 0 ||
+  spawnSync("soffice", ["--version"], { stdio: "ignore" }).status === 0
+
 describe("script-based text/document — end-to-end", () => {
-  it("validates → renders → extracts text", async () => {
+  it.skipIf(!HAS_PANDOC || !HAS_LIBREOFFICE)("validates → renders → extracts text", async () => {
     // Validate
     const v = await validateScriptArtifact(PROPOSAL)
     expect(v.ok).toBe(true)

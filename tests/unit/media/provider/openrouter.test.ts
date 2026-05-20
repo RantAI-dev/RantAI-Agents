@@ -181,18 +181,24 @@ describe("openrouter.generateAudio", () => {
 
   it("requests audio modalities and parses returned base64 audio", async () => {
     const audioB64 = "UklGRiQAAABXQVZFZm10IBAAAAA=" // "fake wav header"
+    // generateAudio reads response.body as an SSE stream — emit one event
+    // carrying the audio payload, plus a usage frame.
+    const encoder = new TextEncoder()
+    const sseChunks = [
+      `data: ${JSON.stringify({
+        choices: [{ delta: { audio: { data: audioB64, format: "wav" } } }],
+      })}\n\n`,
+      `data: ${JSON.stringify({ usage: { total_cost: 0.01 } })}\n\n`,
+      `data: [DONE]\n\n`,
+    ]
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              audio: { data: audioB64, format: "wav" },
-            },
-          },
-        ],
-        usage: { total_cost: 0.01 },
+      body: new ReadableStream({
+        start(controller) {
+          for (const chunk of sseChunks) controller.enqueue(encoder.encode(chunk))
+          controller.close()
+        },
       }),
     })
 
@@ -209,6 +215,7 @@ describe("openrouter.generateAudio", () => {
     const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)
     expect(body.modalities).toContain("audio")
     expect(body.audio).toEqual({ voice: "alloy", format: "wav" })
+    expect(body.stream).toBe(true)
   })
 })
 
@@ -272,6 +279,6 @@ describe("openrouter video flow", () => {
 
     const result = await pollVideoJob({ apiKey: "k", providerJobId: "vid" })
     expect(result.status).toBe("failed")
-    expect(result.errorMessage).toContain("content policy")
+    expect(result.errorMessage).toContain("safety filter")
   })
 })
