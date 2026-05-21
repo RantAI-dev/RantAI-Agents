@@ -8,6 +8,7 @@ import {
   validateArtifactContent,
   formatValidationError,
 } from "./_validate-artifact"
+import type { ArtifactFailureReason } from "./_artifact-failure"
 
 /** Maximum number of versions to keep in metadata */
 const MAX_VERSION_HISTORY = 20
@@ -60,6 +61,7 @@ export const updateArtifactTool: ToolDefinition = {
         content,
         updated: false,
         persisted: false,
+        failureReason: "size" satisfies ArtifactFailureReason,
         error: `Artifact content exceeds maximum size (${Math.round(contentBytes / 1024)}KB > ${MAX_ARTIFACT_CONTENT_BYTES / 1024}KB)`,
       }
     }
@@ -82,6 +84,7 @@ export const updateArtifactTool: ToolDefinition = {
           content,
           updated: false,
           persisted: false,
+          failureReason: "not-found" satisfies ArtifactFailureReason,
           error: `Artifact "${id}" not found. Call create_artifact instead to create a new artifact.`,
         }
       }
@@ -105,6 +108,7 @@ export const updateArtifactTool: ToolDefinition = {
           content,
           updated: false,
           persisted: false,
+          failureReason: "canvas-mode-mismatch" satisfies ArtifactFailureReason,
           error: `Canvas mode is locked to "${canvasMode}" but the artifact type is "${stored}". The user explicitly chose this type — do not switch. Keep updating with content valid for "${stored}".`,
           validationErrors: [
             `Wrong artifact type: expected "${canvasMode}", got "${stored}".`,
@@ -130,6 +134,7 @@ export const updateArtifactTool: ToolDefinition = {
             content,
             updated: false,
             persisted: false,
+            failureReason: "validation" satisfies ArtifactFailureReason,
             error: formatValidationError(existing.artifactType, validation),
             validationErrors: validation.errors,
           }
@@ -238,6 +243,7 @@ export const updateArtifactTool: ToolDefinition = {
             content,
             updated: false,
             persisted: false,
+            failureReason: "concurrent-update" satisfies ArtifactFailureReason,
             error:
               "Concurrent update detected: another writer modified this artifact between read and write. Re-fetch the artifact and retry the update.",
           }
@@ -272,6 +278,7 @@ export const updateArtifactTool: ToolDefinition = {
         content: finalContent,
         updated: false,
         persisted: false,
+        failureReason: "persistence" satisfies ArtifactFailureReason,
         error: "Persistence failed after validation passed. The artifact's in-memory state may have diverged from storage; re-fetch and retry.",
       }
     }

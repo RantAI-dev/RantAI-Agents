@@ -42,6 +42,14 @@ export function getS3Client(): S3Client {
         accessKeyId: S3_CONFIG.accessKeyId,
         secretAccessKey: S3_CONFIG.secretAccessKey,
       },
+      // AWS SDK default is 3 attempts standard mode. Bumped to 4 with
+      // adaptive backoff so transient 5xx (InternalError, SlowDown,
+      // ServiceUnavailable) auto-recover before reaching the caller's
+      // catch block. Adaptive mode also applies client-side rate limiting
+      // when the backend is sustainedly unhealthy — important for MinIO
+      // and other self-hosted backends that hiccup under load.
+      maxAttempts: 4,
+      retryMode: "adaptive",
     })
   }
   return s3Client

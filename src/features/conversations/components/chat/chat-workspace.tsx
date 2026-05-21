@@ -81,6 +81,7 @@ function formatNotebookContext(attachments: ChatAttachment[]): string {
 }
 import { TYPE_ICONS, TYPE_LABELS, getArtifactRegistryEntry } from "./artifacts/registry"
 import { consumeSseChunk } from "./transports/sse"
+import { getMessageDisplayState } from "./message-display-state"
 import { reduceEmployeePollEvents, type EmployeePollEvent } from "./transports/polling"
 import type { TransportToolCallMap } from "./transports/types"
 import {
@@ -481,13 +482,18 @@ function MessagesArea({
             const rawContent = getMessageContent(message)
             const isUser = message.role === "user"
             const isLastMessage = index === allMessages.length - 1
-            const isLoadingMessage =
-              isLoading &&
-              isLastMessage &&
-              message.role === "assistant" &&
-              !rawContent
             const isStreamingMessage =
               isStreaming && isLastMessage && message.role === "assistant"
+            const display = getMessageDisplayState({
+              isLoading,
+              isLastMessage,
+              role: message.role,
+              content: rawContent,
+              parts: (message as unknown as { parts?: Array<Record<string, unknown>> }).parts as
+                | Array<{ type?: string; state?: string; text?: string }>
+                | undefined,
+              metadata: (message as unknown as { metadata?: { reasoning?: unknown } }).metadata,
+            })
             const sources = messageSources[message.id] || []
             const isEditing = editingMessageId === message.id
 
@@ -603,16 +609,7 @@ function MessagesArea({
                         )
                       })()}
 
-                      {isLoadingMessage ? (
-                        // Suppress the typing indicator once reasoning has
-                        // started — the ReasoningBox header is already pulsing
-                        // "Thinking…", showing both would be noisy.
-                        (() => {
-                          const meta = (message as unknown as { metadata?: Record<string, unknown> }).metadata
-                          if (typeof meta?.reasoning === "string" && meta.reasoning.length > 0) return null
-                          return <TypingIndicator />
-                        })()
-                      ) : isEditing ? (
+                      {isEditing ? (
                         <div className="space-y-2">
                           <Textarea
                             value={editContent}
@@ -803,13 +800,16 @@ function MessagesArea({
                               </button>
                             )
                           })}
-                          <MarkdownContent content={content} isStreaming={isStreamingMessage} />
+                          {content.length > 0 && (
+                            <MarkdownContent content={content} isStreaming={isStreamingMessage} />
+                          )}
+                          {display.showTypingIndicator && <TypingIndicator />}
                         </>
                       )}
 
                       {/* Sources */}
                       {!isUser &&
-                        !isLoadingMessage &&
+                        display.showSources &&
                         !isEditing &&
                         sources.length > 0 && (
                           <MessageSources sources={sources} />
@@ -883,7 +883,7 @@ function MessagesArea({
                     )}
 
                     {/* Message footer */}
-                    {!isLoadingMessage && !isEditing && (
+                    {display.showFooter && !isEditing && (
                       <div
                         className={cn(
                           "flex items-center gap-2 mt-2",
@@ -1208,10 +1208,15 @@ export function ChatWorkspace({
     activeArtifactId,
     addOrUpdateArtifact,
     removeArtifact,
+    retryPersist,
     loadFromPersisted,
     openArtifact,
     closeArtifact,
   } = useArtifacts(apiSessionId || session?.id || null)
+
+  // Retry-in-flight gate so the banner's button disables itself during the
+  // POST and the user can't fire a parallel retry against the same artifact.
+  const [retryInFlight, setRetryInFlight] = useState(false)
 
   const { pinned: pinnedNotebookOutputs, togglePin: toggleNotebookPin } =
     usePinToChat(activeArtifactId ?? "")
@@ -2454,35 +2459,59 @@ export function ChatWorkspace({
                       // server rejected, with the LLM's retry sitting next to
                       // it — exactly matching the reported "first artifact
                       // is broken, second one works" pattern.
-                      if (
-                        out.persisted === true &&
-                        out.id &&
-                        out.title &&
-                        isValidArtifactType(out.type) &&
-                        out.content
-                      ) {
-                        // Remove streaming placeholder, add final artifact
+                      const failureReason =
+                        typeof out.failureReason === "string"
+                          ? out.failureReason
+                          : undefined
+                      const isValidContent =
+                        out.id != null &&
+                        out.title != null &&
+                        typeof out.content === "string" &&
+                        out.content.length > 0 &&
+                        isValidArtifactType(out.type)
+
+                      if (out.persisted === true && isValidContent) {
+                        // SUCCESS — replace placeholder with real, DB-backed artifact.
                         removeArtifact(placeholderId)
                         createdStreamingIds.delete(placeholderId)
                         addOrUpdateArtifact({
                           id: out.id as string,
                           title: out.title as string,
-                          type: out.type,
+                          type: out.type as ArtifactType,
                           content: out.content as string,
                           language: (out.language as string) || undefined,
                         })
+                      } else if (
+                        failureReason === "persistence" &&
+                        isValidContent
+                      ) {
+                        // PERSISTENCE FAILURE — validation passed, S3/Prisma
+                        // blew up. Keep the artifact in memory with the real
+                        // id (not the placeholder) so the retry endpoint can
+                        // promote it to persisted without an id swap. Marking
+                        // ephemeral surfaces the "Save failed — Retry" banner.
+                        removeArtifact(placeholderId)
+                        createdStreamingIds.delete(placeholderId)
+                        addOrUpdateArtifact({
+                          id: out.id as string,
+                          title: out.title as string,
+                          type: out.type as ArtifactType,
+                          content: out.content as string,
+                          language: (out.language as string) || undefined,
+                          ephemeral: true,
+                          persistenceError:
+                            typeof out.error === "string" ? out.error : undefined,
+                        })
                       } else {
-                        // Tool output was malformed or carries an error (e.g.
-                        // validation failure / missing artifact / canvas-mode
-                        // mismatch). Without removing the placeholder the user
-                        // would see "Generating..." forever. Log so we can
-                        // diagnose; the LLM will see the error in tc.output
-                        // and can self-correct on the next turn.
+                        // VALIDATION / SIZE / CANVAS-MISMATCH / MISSING-LANGUAGE —
+                        // content is genuinely bad. Remove placeholder and log so
+                        // a new failure mode shows up unhandled if it ever happens.
                         removeArtifact(placeholderId)
                         createdStreamingIds.delete(placeholderId)
                         if (typeof out.error === "string") {
                           console.warn(
-                            "[chat-workspace] create_artifact returned error:",
+                            "[chat-workspace] create_artifact failed:",
+                            failureReason ?? "unknown",
                             out.error,
                           )
                         } else {
@@ -2632,6 +2661,28 @@ export function ChatWorkspace({
         // Final content and sources
         let finalContent = assistantContent
         const sources = streamedSources
+
+        // Surface persistence failures with a single toast — the in-panel
+        // banner is the persistent affordance, this is just a wake-up cue
+        // for users who aren't looking at the panel when the failure occurs.
+        const ephemeralArtifacts = Array.from(toolCalls.values()).filter(
+          (tc) =>
+            tc.toolName === "create_artifact" &&
+            tc.state === "result" &&
+            tc.output &&
+            typeof tc.output === "object" &&
+            (tc.output as Record<string, unknown>).failureReason === "persistence",
+        )
+        if (ephemeralArtifacts.length > 0) {
+          toast({
+            title:
+              ephemeralArtifacts.length === 1
+                ? "Artifact created but not saved"
+                : `${ephemeralArtifacts.length} artifacts created but not saved`,
+            description:
+              "Storage backend rejected the write. Open the panel and click 'Retry save' — the content is preserved in memory.",
+          })
+        }
 
         // Detect and handle agent handoff marker
         const hasHandoffMarker = assistantContent.includes(AGENT_HANDOFF_MARKER)
@@ -3803,6 +3854,27 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                   onFixWithAI={handleFixWithAI}
                   sessionId={apiSessionId}
                   isStreaming={isStreaming}
+                  retryInFlight={retryInFlight}
+                  onRetryPersist={async () => {
+                    if (!activeArtifactId) return
+                    setRetryInFlight(true)
+                    const result = await retryPersist(activeArtifactId, apiSessionId)
+                    setRetryInFlight(false)
+                    if (!result.ok) {
+                      toast({
+                        variant: "destructive",
+                        title: "Retry failed",
+                        description:
+                          result.error ?? "Could not save the artifact.",
+                      })
+                    } else {
+                      toast({
+                        title: "Artifact saved",
+                        description:
+                          "Storage backend recovered. The artifact is now persisted.",
+                      })
+                    }
+                  }}
                 />
               </motion.div>
             </ResizablePanel>
