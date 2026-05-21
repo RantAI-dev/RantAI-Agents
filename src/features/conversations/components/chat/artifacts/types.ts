@@ -44,6 +44,19 @@ export interface Artifact {
    * the indexing pipeline missed (or is still pending) for this artifact.
    */
   ragIndexed?: boolean
+  /**
+   * True when the artifact's content was validated server-side but the
+   * persistence write (S3 / Prisma) failed. The content is live in-memory
+   * but is NOT backed by storage — a page reload loses it. The artifact
+   * panel renders a "Save failed — Retry" banner for these.
+   */
+  ephemeral?: boolean
+  /**
+   * Storage backend's error message captured at the moment persistence
+   * failed. Surfaced verbatim in the retry banner so the user understands
+   * what went wrong ("InternalError" vs "ServiceUnavailable" vs "SlowDown").
+   */
+  persistenceError?: string
 }
 
 /** Shape returned from the session API for persisted artifacts */
