@@ -800,7 +800,9 @@ function MessagesArea({
                               </button>
                             )
                           })}
-                          <MarkdownContent content={content} isStreaming={isStreamingMessage} />
+                          {content.length > 0 && (
+                            <MarkdownContent content={content} isStreaming={isStreamingMessage} />
+                          )}
                           {display.showTypingIndicator && <TypingIndicator />}
                         </>
                       )}
