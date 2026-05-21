@@ -133,6 +133,75 @@ export function useArtifacts(sessionKey?: string | null) {
     setActiveArtifactId((current) => (current && next.has(current) ? current : null))
   }, [])
 
+  const retryPersist = useCallback(
+    async (
+      id: string,
+      sessionId: string | null | undefined,
+    ): Promise<{ ok: boolean; error?: string }> => {
+      // Need a real session id to call the endpoint — ephemeral artifacts on
+      // orphan/unauthenticated sessions can't be retried because there's
+      // nothing to scope ownership against.
+      if (!sessionId) {
+        return {
+          ok: false,
+          error:
+            "Cannot retry: artifact is not bound to a saved chat session.",
+        }
+      }
+      const artifact = artifacts.get(id)
+      if (!artifact) {
+        return { ok: false, error: "Artifact not found in current session." }
+      }
+      try {
+        const res = await fetch(
+          `/api/dashboard/chat/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(id)}/persist`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title: artifact.title,
+              type: artifact.type,
+              content: artifact.content,
+              ...(artifact.language ? { language: artifact.language } : {}),
+            }),
+          },
+        )
+        if (!res.ok) {
+          let errText = ""
+          try {
+            const j = (await res.json()) as { error?: string }
+            errText = j.error ?? ""
+          } catch {
+            // Body wasn't JSON — fall back to status text.
+          }
+          return {
+            ok: false,
+            error: errText || `Retry failed: ${res.status}`,
+          }
+        }
+        setArtifacts((prev) => {
+          const next = new Map(prev)
+          const cur = next.get(id)
+          if (cur) {
+            next.set(id, {
+              ...cur,
+              ephemeral: false,
+              persistenceError: undefined,
+            })
+          }
+          return next
+        })
+        return { ok: true }
+      } catch (err) {
+        return {
+          ok: false,
+          error: err instanceof Error ? err.message : "Network error during retry.",
+        }
+      }
+    },
+    [artifacts],
+  )
+
   const activeArtifact = activeArtifactId
     ? artifacts.get(activeArtifactId) ?? null
     : null
@@ -143,6 +212,7 @@ export function useArtifacts(sessionKey?: string | null) {
     activeArtifactId,
     addOrUpdateArtifact,
     removeArtifact,
+    retryPersist,
     loadFromPersisted,
     openArtifact,
     closeArtifact,
