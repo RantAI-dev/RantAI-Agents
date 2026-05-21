@@ -2662,6 +2662,28 @@ export function ChatWorkspace({
         let finalContent = assistantContent
         const sources = streamedSources
 
+        // Surface persistence failures with a single toast — the in-panel
+        // banner is the persistent affordance, this is just a wake-up cue
+        // for users who aren't looking at the panel when the failure occurs.
+        const ephemeralArtifacts = Array.from(toolCalls.values()).filter(
+          (tc) =>
+            tc.toolName === "create_artifact" &&
+            tc.state === "result" &&
+            tc.output &&
+            typeof tc.output === "object" &&
+            (tc.output as Record<string, unknown>).failureReason === "persistence",
+        )
+        if (ephemeralArtifacts.length > 0) {
+          toast({
+            title:
+              ephemeralArtifacts.length === 1
+                ? "Artifact created but not saved"
+                : `${ephemeralArtifacts.length} artifacts created but not saved`,
+            description:
+              "Storage backend rejected the write. Open the panel and click 'Retry save' — the content is preserved in memory.",
+          })
+        }
+
         // Detect and handle agent handoff marker
         const hasHandoffMarker = assistantContent.includes(AGENT_HANDOFF_MARKER)
         if (hasHandoffMarker) {
