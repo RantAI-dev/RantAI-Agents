@@ -81,6 +81,7 @@ function formatNotebookContext(attachments: ChatAttachment[]): string {
 }
 import { TYPE_ICONS, TYPE_LABELS, getArtifactRegistryEntry } from "./artifacts/registry"
 import { consumeSseChunk } from "./transports/sse"
+import { getMessageDisplayState } from "./message-display-state"
 import { reduceEmployeePollEvents, type EmployeePollEvent } from "./transports/polling"
 import type { TransportToolCallMap } from "./transports/types"
 import {
@@ -481,13 +482,18 @@ function MessagesArea({
             const rawContent = getMessageContent(message)
             const isUser = message.role === "user"
             const isLastMessage = index === allMessages.length - 1
-            const isLoadingMessage =
-              isLoading &&
-              isLastMessage &&
-              message.role === "assistant" &&
-              !rawContent
             const isStreamingMessage =
               isStreaming && isLastMessage && message.role === "assistant"
+            const display = getMessageDisplayState({
+              isLoading,
+              isLastMessage,
+              role: message.role,
+              content: rawContent,
+              parts: (message as unknown as { parts?: Array<Record<string, unknown>> }).parts as
+                | Array<{ type?: string; state?: string; text?: string }>
+                | undefined,
+              metadata: (message as unknown as { metadata?: { reasoning?: unknown } }).metadata,
+            })
             const sources = messageSources[message.id] || []
             const isEditing = editingMessageId === message.id
 
@@ -603,16 +609,7 @@ function MessagesArea({
                         )
                       })()}
 
-                      {isLoadingMessage ? (
-                        // Suppress the typing indicator once reasoning has
-                        // started — the ReasoningBox header is already pulsing
-                        // "Thinking…", showing both would be noisy.
-                        (() => {
-                          const meta = (message as unknown as { metadata?: Record<string, unknown> }).metadata
-                          if (typeof meta?.reasoning === "string" && meta.reasoning.length > 0) return null
-                          return <TypingIndicator />
-                        })()
-                      ) : isEditing ? (
+                      {isEditing ? (
                         <div className="space-y-2">
                           <Textarea
                             value={editContent}
@@ -804,12 +801,13 @@ function MessagesArea({
                             )
                           })}
                           <MarkdownContent content={content} isStreaming={isStreamingMessage} />
+                          {display.showTypingIndicator && <TypingIndicator />}
                         </>
                       )}
 
                       {/* Sources */}
                       {!isUser &&
-                        !isLoadingMessage &&
+                        display.showSources &&
                         !isEditing &&
                         sources.length > 0 && (
                           <MessageSources sources={sources} />
@@ -883,7 +881,7 @@ function MessagesArea({
                     )}
 
                     {/* Message footer */}
-                    {!isLoadingMessage && !isEditing && (
+                    {display.showFooter && !isEditing && (
                       <div
                         className={cn(
                           "flex items-center gap-2 mt-2",
