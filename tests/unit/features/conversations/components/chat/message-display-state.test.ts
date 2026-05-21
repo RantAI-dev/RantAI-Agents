@@ -69,4 +69,59 @@ describe("getMessageDisplayState", () => {
     )
     expect(result.showTypingIndicator).toBe(true)
   })
+
+  it("never shows the indicator on a user message", () => {
+    const result = getMessageDisplayState(input({ isLoading: true, role: "user" }))
+    expect(result.showTypingIndicator).toBe(false)
+  })
+
+  it("never shows the indicator on a non-last assistant message", () => {
+    const result = getMessageDisplayState(
+      input({ isLoading: true, isLastMessage: false })
+    )
+    expect(result.showTypingIndicator).toBe(false)
+  })
+
+  it("hides the indicator once the stream has finished, even with empty content", () => {
+    // Canvas mode: the LLM may legitimately end the stream with zero text
+    // (it 'rendered to the artifact instead'). isLoading=false → done.
+    const result = getMessageDisplayState(input({ isLoading: false, content: "" }))
+    expect(result.showTypingIndicator).toBe(false)
+    expect(result.showFooter).toBe(true)
+  })
+
+  it("hides the indicator once content has been streamed", () => {
+    const result = getMessageDisplayState(
+      input({ isLoading: true, content: "Hello" })
+    )
+    expect(result.showTypingIndicator).toBe(false)
+  })
+
+  it("turns the footer off precisely when the typing indicator is on", () => {
+    const result = getMessageDisplayState(input({ isLoading: true }))
+    expect(result.showFooter).toBe(false)
+    expect(result.showSources).toBe(false)
+  })
+
+  it("treats every non-assistant role as 'show footer, no indicator'", () => {
+    const result = getMessageDisplayState(
+      input({ isLoading: true, role: "system" })
+    )
+    expect(result.showTypingIndicator).toBe(false)
+    expect(result.showFooter).toBe(true)
+    expect(result.showSources).toBe(false)
+  })
+
+  it("ignores non-tool-invocation parts when deciding 'bubble has output'", () => {
+    // A `parts: [{ type: 'text', text: '' }]` array doesn't count as output
+    // for indicator purposes — only tool-invocation parts do. Text content
+    // comes through `content`.
+    const result = getMessageDisplayState(
+      input({
+        isLoading: true,
+        parts: [{ type: "text", text: "" }],
+      })
+    )
+    expect(result.showTypingIndicator).toBe(true)
+  })
 })
