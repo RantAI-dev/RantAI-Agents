@@ -12,6 +12,7 @@ import {
   formatValidationError,
 } from "./_validate-artifact"
 import type { ArtifactFailureReason } from "./_artifact-failure"
+import { validateArtifactTitle } from "./_validate-title"
 
 /** Maximum artifact content size: 512 KB */
 const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
@@ -45,6 +46,26 @@ export const createArtifactTool: ToolDefinition = {
     const type = params.type as string
     const title = params.title as string
     const language = (params.language as string) || undefined
+
+    // Validate title — reject generic LLM-lazy titles ("Snippet", "Untitled",
+    // single chars, empty). The SDK retry loop re-issues with the error in
+    // hand, prompting the model to pick a descriptive name. Surfaces as
+    // failureReason: "validation" so the client treats this like other
+    // content-quality issues (artifact discarded, not kept ephemerally).
+    const titleCheck = validateArtifactTitle(title)
+    if (!titleCheck.ok) {
+      return {
+        id,
+        title,
+        type,
+        content,
+        language,
+        persisted: false,
+        failureReason: "validation" satisfies ArtifactFailureReason,
+        error: titleCheck.reason,
+        validationErrors: [titleCheck.reason],
+      }
+    }
 
     // Validate content size
     const contentBytes = Buffer.byteLength(content, "utf-8")

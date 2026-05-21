@@ -36,7 +36,7 @@ describe("create_artifact — failureReason on persisted=false", () => {
 
   it("attaches failureReason: 'canvas-mode-mismatch' when canvas mode locks a different type", async () => {
     const result = (await createArtifactTool.execute(
-      { title: "X", type: "text/html", content: "<p>ok</p>" },
+      { title: "Hello world page", type: "text/html", content: "<p>ok</p>" },
       { userId: "u", canvasMode: "application/code" },
     )) as { persisted: boolean; failureReason?: string }
     expect(result.persisted).toBe(false)
@@ -45,7 +45,7 @@ describe("create_artifact — failureReason on persisted=false", () => {
 
   it("attaches failureReason: 'missing-language' when application/code omits language", async () => {
     const result = (await createArtifactTool.execute(
-      { title: "X", type: "application/code", content: "print('hi')" },
+      { title: "Hello world script", type: "application/code", content: "print('hi')" },
       { userId: "u" },
     )) as { persisted: boolean; failureReason?: string }
     expect(result.persisted).toBe(false)
@@ -74,7 +74,7 @@ describe("create_artifact — failureReason on persisted=false", () => {
       ),
     )
     const result = (await createArtifactTool.execute(
-      { title: "T", type: "text/html", content: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>T</title></head><body><h1>Hi</h1></body></html>` },
+      { title: "Hello world page", type: "text/html", content: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>T</title></head><body><h1>Hi</h1></body></html>` },
       { userId: "u" },
     )) as { persisted: boolean; failureReason?: string; content?: string }
     expect(result.persisted).toBe(false)
@@ -85,7 +85,7 @@ describe("create_artifact — failureReason on persisted=false", () => {
 
   it("does NOT attach failureReason on the happy path", async () => {
     const result = (await createArtifactTool.execute(
-      { title: "T", type: "text/html", content: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>T</title></head><body><h1>Hi</h1></body></html>` },
+      { title: "Hello world page", type: "text/html", content: `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>T</title></head><body><h1>Hi</h1></body></html>` },
       { userId: "u" },
     )) as { persisted: boolean; failureReason?: string }
     expect(result.persisted).toBe(true)

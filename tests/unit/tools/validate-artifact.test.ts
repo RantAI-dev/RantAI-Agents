@@ -1424,7 +1424,7 @@ describe("create_artifact tool — guard rails", () => {
     )
     const result = (await createArtifactTool.execute(
       {
-        title: "Test",
+        title: "Hello world page",
         type: "text/html",
         content: VALID_HTML,
       },
@@ -1445,7 +1445,7 @@ describe("create_artifact tool — guard rails", () => {
     // canvas-mode check.
     const result = (await createArtifactTool.execute(
       {
-        title: "Test",
+        title: "Hello world page",
         type: "text/html",
         content: "<not-html>",
       },
@@ -1461,7 +1461,7 @@ describe("create_artifact tool — guard rails", () => {
     )
     const result = (await createArtifactTool.execute(
       {
-        title: "Test",
+        title: "Hello world page",
         type: "text/html",
         content: "<not-html>",
       },
@@ -1476,7 +1476,7 @@ describe("create_artifact tool — guard rails", () => {
     )
     const result = (await createArtifactTool.execute(
       {
-        title: "Snippet",
+        title: "Hello world script",
         type: "application/code",
         content: "console.log('hi')",
       },
@@ -1496,7 +1496,7 @@ describe("create_artifact tool — guard rails", () => {
     // language check. We assert language is NOT mentioned in the error path.
     const result = (await createArtifactTool.execute(
       {
-        title: "Snippet",
+        title: "Hello world script",
         type: "application/code",
         content: "console.log('hi')",
         language: "typescript",
