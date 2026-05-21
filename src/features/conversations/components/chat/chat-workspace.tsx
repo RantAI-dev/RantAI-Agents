@@ -2452,35 +2452,59 @@ export function ChatWorkspace({
                       // server rejected, with the LLM's retry sitting next to
                       // it — exactly matching the reported "first artifact
                       // is broken, second one works" pattern.
-                      if (
-                        out.persisted === true &&
-                        out.id &&
-                        out.title &&
-                        isValidArtifactType(out.type) &&
-                        out.content
-                      ) {
-                        // Remove streaming placeholder, add final artifact
+                      const failureReason =
+                        typeof out.failureReason === "string"
+                          ? out.failureReason
+                          : undefined
+                      const isValidContent =
+                        out.id != null &&
+                        out.title != null &&
+                        typeof out.content === "string" &&
+                        out.content.length > 0 &&
+                        isValidArtifactType(out.type)
+
+                      if (out.persisted === true && isValidContent) {
+                        // SUCCESS — replace placeholder with real, DB-backed artifact.
                         removeArtifact(placeholderId)
                         createdStreamingIds.delete(placeholderId)
                         addOrUpdateArtifact({
                           id: out.id as string,
                           title: out.title as string,
-                          type: out.type,
+                          type: out.type as ArtifactType,
                           content: out.content as string,
                           language: (out.language as string) || undefined,
                         })
+                      } else if (
+                        failureReason === "persistence" &&
+                        isValidContent
+                      ) {
+                        // PERSISTENCE FAILURE — validation passed, S3/Prisma
+                        // blew up. Keep the artifact in memory with the real
+                        // id (not the placeholder) so the retry endpoint can
+                        // promote it to persisted without an id swap. Marking
+                        // ephemeral surfaces the "Save failed — Retry" banner.
+                        removeArtifact(placeholderId)
+                        createdStreamingIds.delete(placeholderId)
+                        addOrUpdateArtifact({
+                          id: out.id as string,
+                          title: out.title as string,
+                          type: out.type as ArtifactType,
+                          content: out.content as string,
+                          language: (out.language as string) || undefined,
+                          ephemeral: true,
+                          persistenceError:
+                            typeof out.error === "string" ? out.error : undefined,
+                        })
                       } else {
-                        // Tool output was malformed or carries an error (e.g.
-                        // validation failure / missing artifact / canvas-mode
-                        // mismatch). Without removing the placeholder the user
-                        // would see "Generating..." forever. Log so we can
-                        // diagnose; the LLM will see the error in tc.output
-                        // and can self-correct on the next turn.
+                        // VALIDATION / SIZE / CANVAS-MISMATCH / MISSING-LANGUAGE —
+                        // content is genuinely bad. Remove placeholder and log so
+                        // a new failure mode shows up unhandled if it ever happens.
                         removeArtifact(placeholderId)
                         createdStreamingIds.delete(placeholderId)
                         if (typeof out.error === "string") {
                           console.warn(
-                            "[chat-workspace] create_artifact returned error:",
+                            "[chat-workspace] create_artifact failed:",
+                            failureReason ?? "unknown",
                             out.error,
                           )
                         } else {
