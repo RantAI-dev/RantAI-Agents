@@ -9,6 +9,7 @@ import {
   formatValidationError,
 } from "./_validate-artifact"
 import type { ArtifactFailureReason } from "./_artifact-failure"
+import { validateArtifactTitle } from "./_validate-title"
 
 /** Maximum number of versions to keep in metadata */
 const MAX_VERSION_HISTORY = 20
@@ -47,6 +48,25 @@ export const updateArtifactTool: ToolDefinition = {
     const id = params.id as string
     const content = params.content as string
     const newTitle = params.title as string | undefined
+
+    // Title validation — only applies when the LLM passes a new title (it
+    // can omit it to keep the existing one). Same blocklist as create_artifact
+    // so a rename can't backdoor a "Snippet"-style placeholder past the guard.
+    if (newTitle !== undefined) {
+      const titleCheck = validateArtifactTitle(newTitle)
+      if (!titleCheck.ok) {
+        return {
+          id,
+          title: newTitle,
+          content,
+          updated: false,
+          persisted: false,
+          failureReason: "validation" satisfies ArtifactFailureReason,
+          error: titleCheck.reason,
+          validationErrors: [titleCheck.reason],
+        }
+      }
+    }
 
     // Validate content size
     const contentBytes = Buffer.byteLength(content, "utf-8")
