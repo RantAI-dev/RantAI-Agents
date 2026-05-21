@@ -53,7 +53,7 @@ describe("create_artifact — persists validation.content as the final content",
     validateMock.mockResolvedValue({ ok: true, errors: [], warnings: [], content: REWRITTEN })
 
     const result = await createArtifactTool.execute(
-      { title: "t", type: "text/html", content: RAW },
+      { title: "Hello world page", type: "text/html", content: RAW },
       {
         organizationId: "o-1",
         sessionId: "s-1",
@@ -72,7 +72,7 @@ describe("create_artifact — persists validation.content as the final content",
     validateMock.mockResolvedValue({ ok: true, errors: [], warnings: [] })
 
     const result = await createArtifactTool.execute(
-      { title: "t", type: "text/html", content: RAW },
+      { title: "Hello world page", type: "text/html", content: RAW },
       {
         organizationId: "o-1",
         sessionId: "s-1",

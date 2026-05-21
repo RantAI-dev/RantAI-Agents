@@ -16,6 +16,49 @@ import type { ArtifactFailureReason } from "./_artifact-failure"
 /** Maximum artifact content size: 512 KB */
 const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
 
+/** Minimum title length after trim. Two chars is the practical floor — single
+ *  characters and empty strings are clearly the model giving up on titling. */
+const MIN_TITLE_LENGTH = 3
+
+/** Known generic titles LLMs reach for when they don't bother to be descriptive.
+ *  Stored lowercase; comparison is case-insensitive against the trimmed input.
+ *  Single domain-specific words (e.g. "Fibonacci", "Mandelbrot") aren't here —
+ *  this list is narrowly the placeholder words that carry no information. */
+const LAZY_TITLES: ReadonlySet<string> = new Set([
+  "snippet",
+  "untitled",
+  "example",
+  "code",
+  "test",
+  "document",
+  "output",
+  "result",
+  "artifact",
+  "draft",
+  "sample",
+  "demo",
+  "placeholder",
+  "thing",
+  "file",
+])
+
+function validateArtifactTitle(rawTitle: string): { ok: true } | { ok: false; reason: string } {
+  const title = rawTitle.trim()
+  if (title.length === 0) {
+    return { ok: false, reason: "Title is empty. Provide a concise descriptive title (3-8 words) that identifies the artifact content." }
+  }
+  if (title.length < MIN_TITLE_LENGTH) {
+    return { ok: false, reason: `Title "${title}" is too short. Provide a descriptive 3-8 word title — e.g. "Tip calculator with tax", "Fibonacci visualizer", not single characters.` }
+  }
+  if (LAZY_TITLES.has(title.toLowerCase())) {
+    return {
+      ok: false,
+      reason: `Title "${title}" is a generic placeholder. Re-issue with a descriptive 3-8 word title that summarizes what the artifact does — e.g. "Login form with email validation", "Fibonacci sequence visualizer", "Markdown to HTML converter" — not single placeholder words.`,
+    }
+  }
+  return { ok: true }
+}
+
 export const createArtifactTool: ToolDefinition = {
   name: "create_artifact",
   displayName: "Create Artifact",
@@ -45,6 +88,26 @@ export const createArtifactTool: ToolDefinition = {
     const type = params.type as string
     const title = params.title as string
     const language = (params.language as string) || undefined
+
+    // Validate title — reject generic LLM-lazy titles ("Snippet", "Untitled",
+    // single chars, empty). The SDK retry loop re-issues with the error in
+    // hand, prompting the model to pick a descriptive name. Surfaces as
+    // failureReason: "validation" so the client treats this like other
+    // content-quality issues (artifact discarded, not kept ephemerally).
+    const titleCheck = validateArtifactTitle(title)
+    if (!titleCheck.ok) {
+      return {
+        id,
+        title,
+        type,
+        content,
+        language,
+        persisted: false,
+        failureReason: "validation" satisfies ArtifactFailureReason,
+        error: titleCheck.reason,
+        validationErrors: [titleCheck.reason],
+      }
+    }
 
     // Validate content size
     const contentBytes = Buffer.byteLength(content, "utf-8")
