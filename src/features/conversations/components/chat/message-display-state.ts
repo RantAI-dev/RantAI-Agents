@@ -26,13 +26,22 @@ export interface MessageDisplayState {
 export function getMessageDisplayState(
   input: MessageDisplayInput
 ): MessageDisplayState {
-  const streamInFlight = input.isLoading && input.isLastMessage
-  const bubbleHasOutput = input.content.length > 0
-  const showTypingIndicator =
-    input.role === "assistant" && streamInFlight && !bubbleHasOutput
-  return {
-    showTypingIndicator,
-    showFooter: !showTypingIndicator,
-    showSources: !showTypingIndicator,
+  const { isLoading, isLastMessage, role, content, parts } = input
+
+  if (role !== "assistant") {
+    return { showTypingIndicator: false, showFooter: true, showSources: false }
   }
+
+  const hasContent = content.length > 0
+  const hasToolInvocation = Array.isArray(parts)
+    && parts.some((p) => p?.type === "tool-invocation")
+
+  const streamInFlight = isLoading && isLastMessage
+  const bubbleHasOutput = hasContent || hasToolInvocation
+
+  const showTypingIndicator = streamInFlight && !bubbleHasOutput
+  const showFooter = !showTypingIndicator
+  const showSources = !showTypingIndicator
+
+  return { showTypingIndicator, showFooter, showSources }
 }

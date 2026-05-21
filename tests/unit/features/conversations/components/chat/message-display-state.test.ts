@@ -24,4 +24,23 @@ describe("getMessageDisplayState", () => {
     const result = getMessageDisplayState(input({ isLoading: true }))
     expect(result.showTypingIndicator).toBe(true)
   })
+
+  it("hides the typing indicator when a tool invocation is present, even with empty text content", () => {
+    // This is the canvas-mode bug: model called create_artifact (parts has a
+    // tool-invocation), so the artifact is already visible in the panel —
+    // but content is still "" because canvas mode tells the model not to
+    // produce inline text. The old isLoadingMessage check would keep the
+    // typing indicator on forever; the new function flips it off.
+    const result = getMessageDisplayState(
+      input({
+        isLoading: true,
+        content: "",
+        parts: [
+          { type: "tool-invocation", state: "call" },
+        ],
+      })
+    )
+    expect(result.showTypingIndicator).toBe(false)
+    expect(result.showFooter).toBe(true)
+  })
 })
