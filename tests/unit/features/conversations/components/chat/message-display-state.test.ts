@@ -43,4 +43,30 @@ describe("getMessageDisplayState", () => {
     expect(result.showTypingIndicator).toBe(false)
     expect(result.showFooter).toBe(true)
   })
+
+  it("hides the typing indicator when reasoning has started, even with empty content and no parts", () => {
+    // The old code suppressed TypingIndicator inline with a string-length
+    // check on metadata.reasoning, so the ReasoningBox's own pulsing
+    // 'Thinking…' header would be the single source of truth. New function
+    // handles it cleanly without the JSX needing to know.
+    const result = getMessageDisplayState(
+      input({
+        isLoading: true,
+        metadata: { reasoning: "Let me think about this..." },
+      })
+    )
+    expect(result.showTypingIndicator).toBe(false)
+  })
+
+  it("treats non-string reasoning metadata as 'no reasoning'", () => {
+    const result = getMessageDisplayState(
+      input({
+        isLoading: true,
+        // Defensive: metadata.reasoning is loosely typed via Prisma.JsonValue
+        // upstream. A non-string here must not bypass the typing indicator.
+        metadata: { reasoning: 42 as unknown as string },
+      })
+    )
+    expect(result.showTypingIndicator).toBe(true)
+  })
 })
