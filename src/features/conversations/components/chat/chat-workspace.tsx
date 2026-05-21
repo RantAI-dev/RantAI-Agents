@@ -1206,10 +1206,15 @@ export function ChatWorkspace({
     activeArtifactId,
     addOrUpdateArtifact,
     removeArtifact,
+    retryPersist,
     loadFromPersisted,
     openArtifact,
     closeArtifact,
   } = useArtifacts(apiSessionId || session?.id || null)
+
+  // Retry-in-flight gate so the banner's button disables itself during the
+  // POST and the user can't fire a parallel retry against the same artifact.
+  const [retryInFlight, setRetryInFlight] = useState(false)
 
   const { pinned: pinnedNotebookOutputs, togglePin: toggleNotebookPin } =
     usePinToChat(activeArtifactId ?? "")
@@ -3825,6 +3830,27 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                   onFixWithAI={handleFixWithAI}
                   sessionId={apiSessionId}
                   isStreaming={isStreaming}
+                  retryInFlight={retryInFlight}
+                  onRetryPersist={async () => {
+                    if (!activeArtifactId) return
+                    setRetryInFlight(true)
+                    const result = await retryPersist(activeArtifactId, apiSessionId)
+                    setRetryInFlight(false)
+                    if (!result.ok) {
+                      toast({
+                        variant: "destructive",
+                        title: "Retry failed",
+                        description:
+                          result.error ?? "Could not save the artifact.",
+                      })
+                    } else {
+                      toast({
+                        title: "Artifact saved",
+                        description:
+                          "Storage backend recovered. The artifact is now persisted.",
+                      })
+                    }
+                  }}
                 />
               </motion.div>
             </ResizablePanel>

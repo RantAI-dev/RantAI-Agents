@@ -62,6 +62,15 @@ interface ArtifactPanelProps {
    * follow-up task.
    */
   isStreaming?: boolean
+  /**
+   * Called when the user clicks "Retry save" on the ephemeral-artifact
+   * banner. Receives no arguments — the parent already knows which
+   * artifact it's rendering. Optional so panel still works when retry
+   * isn't wired (e.g. read-only / historical views).
+   */
+  onRetryPersist?: () => void
+  /** True while a retry POST is in flight. Disables the retry button + relabels it. */
+  retryInFlight?: boolean
 }
 
 export function ArtifactPanel({
@@ -72,6 +81,8 @@ export function ArtifactPanel({
   onFixWithAI,
   sessionId,
   isStreaming = false,
+  onRetryPersist,
+  retryInFlight = false,
 }: ArtifactPanelProps) {
   const isTextDocument = artifact.type === "text/document"
   const [copied, setCopied] = useState(false)
@@ -531,6 +542,31 @@ export function ArtifactPanel({
         isFullscreen ? "fixed inset-3 z-50 rounded-xl shadow-2xl border" : "h-full border-l"
       )}
     >
+      {/* Ephemeral artifact banner — content valid but persistence failed.
+          Stays pinned above the header until retry succeeds (banner disappears)
+          or the user closes the panel (artifact lost). */}
+      {displayArtifact.ephemeral && (
+        <div className="flex items-center justify-between gap-2 px-3 py-2 bg-amber-500/10 border-b border-amber-500/30 text-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-medium text-amber-700 dark:text-amber-300 shrink-0">
+              Not saved
+            </span>
+            <span className="text-amber-700/80 dark:text-amber-300/80 truncate">
+              {displayArtifact.persistenceError ??
+                "Storage backend rejected the write. Content is in memory only — reload will lose it."}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onRetryPersist}
+            disabled={retryInFlight || !onRetryPersist}
+            className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {retryInFlight ? "Retrying…" : "Retry save"}
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/50">
         {/* Title area */}
