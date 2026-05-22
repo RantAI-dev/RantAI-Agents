@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
+import { aliveDocumentRelation, aliveDocumentWhere } from "@/features/knowledge/documents/where-alive"
 
 export async function listKnowledgeGroupsByOrganization(organizationId: string | null) {
   return prisma.knowledgeBaseGroup.findMany({
@@ -11,7 +12,10 @@ export async function listKnowledgeGroupsByOrganization(organizationId: string |
     orderBy: { name: "asc" },
     include: {
       _count: {
-        select: { documents: true },
+        // Soft-deleted documents (deletedAt set) must not inflate the
+        // per-KB count the sidebar and Agent Builder render; the join
+        // row stays so restore still works, but the count hides it.
+        select: { documents: aliveDocumentRelation },
       },
     },
   })
@@ -80,8 +84,8 @@ export async function findDocumentsByGroups(groupIds: string[], cap = 200) {
   if (!groupIds.length) return []
   return prisma.document.findMany({
     where: {
+      ...aliveDocumentWhere,
       groups: { some: { groupId: { in: groupIds } } },
-      deletedAt: null,
     },
     select: {
       id: true,
