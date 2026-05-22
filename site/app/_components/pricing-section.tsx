@@ -22,11 +22,12 @@ import { appUrl } from "@/lib/app-url"
 
 const PRICING_TIERS = [
   {
-    name: "Free",
-    priceMonthly: "$0",
-    priceAnnual: "$0",
-    periodMonthly: "Try the platform",
-    periodAnnual: "Try the platform",
+    name: "Lite",
+    priceMonthly: "Rp 49.000",
+    priceAnnual: "Rp 39.000",
+    periodMonthly: "per month",
+    periodAnnual: "per month (billed annually)",
+    annualSavingsYearly: "Rp 120.000",
     description: "Get started with core features.",
     features: ["1 Digital Employee", "Limited knowledge base", "Web chat only", "Community support"],
     cta: `Try ${brand.productShortName}`,
@@ -35,10 +36,11 @@ const PRICING_TIERS = [
   },
   {
     name: "Pro",
-    priceMonthly: "$99",
-    priceAnnual: "$79",
+    priceMonthly: "Rp 199.000",
+    priceAnnual: "Rp 159.000",
     periodMonthly: "per month",
     periodAnnual: "per month (billed annually)",
+    annualSavingsYearly: "Rp 480.000",
     description: "For teams scaling operations.",
     features: ["Multiple employees", "Full knowledge base", "WhatsApp & Email", "Priority support"],
     cta: "Get Pro",
@@ -46,12 +48,15 @@ const PRICING_TIERS = [
     highlighted: true,
   },
   {
-    name: "Enterprise",
-    price: "Contact us",
-    period: " ",
+    name: "Max",
+    priceMonthly: "Rp 999.000",
+    priceAnnual: "Rp 799.000",
+    periodMonthly: "per month",
+    periodAnnual: "per month (billed annually)",
+    annualSavingsYearly: "Rp 2.400.000",
     description: "Security, scale, and SSO.",
     features: ["Unlimited scale", "SSO & audit logs", "Dedicated support", "Custom integrations"],
-    cta: "Contact sales",
+    cta: "Get Max",
     href: appUrl("/login"),
     highlighted: false,
   },
@@ -70,7 +75,7 @@ export function PricingSection() {
           direction="top"
         />
         <p className={landing.sectionSubtitle}>
-          Start free, scale as you grow. Pricing below is placeholder for demonstration.
+          Start small, scale as you grow.
         </p>
 
         <div className="flex flex-row items-center justify-center gap-3 mb-10">
@@ -93,9 +98,8 @@ export function PricingSection() {
 
         <div className="grid gap-6 lg:grid-cols-3" role="list">
           {PRICING_TIERS.map((tier) => {
-            const isEnterprise = tier.name === "Enterprise"
-            const price = isEnterprise ? tier.price : billing === "annual" ? tier.priceAnnual : tier.priceMonthly
-            const period = isEnterprise ? tier.period : billing === "annual" ? (tier as { periodAnnual?: string }).periodAnnual : (tier as { periodMonthly?: string }).periodMonthly
+            const price = billing === "annual" ? tier.priceAnnual : tier.priceMonthly
+            const period = billing === "annual" ? tier.periodAnnual : tier.periodMonthly
 
             return (
               <SpotlightCard
@@ -122,6 +126,12 @@ export function PricingSection() {
                       <span className="text-3xl font-bold text-zinc-100">{price}</span>
                       {period && <span className="text-zinc-500 text-sm ml-1">{period}</span>}
                     </div>
+                    {billing === "annual" && (
+                      <div className="mt-1 flex items-center justify-center gap-2 text-xs">
+                        <span className="text-zinc-500 line-through">{tier.priceMonthly}/mo</span>
+                        <span className="text-emerald-400">Save {tier.annualSavingsYearly}/yr</span>
+                      </div>
+                    )}
                     <CardDescription className="text-zinc-400">{tier.description}</CardDescription>
                   </CardHeader>
                   <CardContent className="flex-1">
@@ -138,9 +148,7 @@ export function PricingSection() {
                     <Button
                       className={cn(
                         "w-full rounded-full",
-                        tier.highlighted && landing.btnHighlight,
-                        isEnterprise && landing.btnSecondaryFilled,
-                        !tier.highlighted && !isEnterprise && landing.btnSecondary
+                        tier.highlighted ? landing.btnHighlight : landing.btnSecondary
                       )}
                       variant="ghost"
                       asChild
@@ -154,7 +162,7 @@ export function PricingSection() {
           })}
         </div>
         <p className="text-center text-sm text-zinc-500 mt-6">
-          Pricing is placeholder for now. Actual plans and pricing will be announced later.
+          All prices in IDR. Taxes may apply.
         </p>
       </div>
     </section>
