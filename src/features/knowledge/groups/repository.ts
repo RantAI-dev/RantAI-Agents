@@ -11,7 +11,12 @@ export async function listKnowledgeGroupsByOrganization(organizationId: string |
     orderBy: { name: "asc" },
     include: {
       _count: {
-        select: { documents: true },
+        select: {
+          // Soft-deleted documents (deletedAt set) must not inflate the
+          // per-KB count the sidebar and Agent Builder render; the join
+          // row stays so restore still works, but the count hides it.
+          documents: { where: { document: { deletedAt: null } } },
+        },
       },
     },
   })

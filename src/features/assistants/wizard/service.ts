@@ -114,7 +114,11 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
         select: {
           id: true,
           name: true,
-          _count: { select: { documents: true } },
+          _count: {
+            select: {
+              documents: { where: { document: { deletedAt: null } } },
+            },
+          },
         },
       })
       return groups.map((g) => ({

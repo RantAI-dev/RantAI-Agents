@@ -91,6 +91,7 @@ export async function countDocumentsByCategoryName(
 ) {
   return prisma.document.count({
     where: {
+      deletedAt: null,
       categories: { has: categoryName },
       ...(organizationId !== null && { organizationId }),
     },
