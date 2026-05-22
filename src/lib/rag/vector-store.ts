@@ -547,27 +547,44 @@ export async function storeChunks(
         const chunk = chunks[i]
         const embedding = embeddings[i]
         const chunkId = `${documentId}_${i}`
+
+        // SurrealDB rejects a literal NULL for `option<string>` fields
+        // ("Found NULL for field X, but expected a option<string>"). The
+        // schema's option<T> permits only T or implicit NONE (field absent
+        // from the SET clause). Build the assignment list dynamically so
+        // contextual_prefix and embedding_model are only set when we have
+        // a real string — otherwise omit them and let SurrealDB treat them
+        // as NONE.
+        const contextualPrefix = chunk.metadata.contextualPrefix
+        const setClauses = [
+          "id = $id",
+          "document_id = $document_id",
+          "content = $content",
+          "chunk_index = $chunk_index",
+          "embedding = $embedding",
+          "metadata = $metadata",
+          "created_at = time::now()",
+        ]
+        const vars: Record<string, unknown> = {
+          id: chunkId,
+          document_id: documentId,
+          content: chunk.content,
+          chunk_index: chunk.metadata.chunkIndex,
+          embedding: embedding,
+          metadata: chunk.metadata,
+        }
+        if (typeof contextualPrefix === "string" && contextualPrefix.length > 0) {
+          setClauses.push("contextual_prefix = $contextual_prefix")
+          vars.contextual_prefix = contextualPrefix
+        }
+        if (typeof embeddingModel === "string" && embeddingModel.length > 0) {
+          setClauses.push("embedding_model = $embedding_model")
+          vars.embedding_model = embeddingModel
+        }
+
         return surrealClient.query(
-          `CREATE document_chunk SET
-            id = $id,
-            document_id = $document_id,
-            content = $content,
-            chunk_index = $chunk_index,
-            embedding = $embedding,
-            metadata = $metadata,
-            contextual_prefix = $contextual_prefix,
-            embedding_model = $embedding_model,
-            created_at = time::now()`,
-          {
-            id: chunkId,
-            document_id: documentId,
-            content: chunk.content,
-            chunk_index: chunk.metadata.chunkIndex,
-            embedding: embedding,
-            metadata: chunk.metadata,
-            contextual_prefix: chunk.metadata.contextualPrefix ?? null,
-            embedding_model: embeddingModel ?? null,
-          }
+          `CREATE document_chunk SET ${setClauses.join(", ")}`,
+          vars,
         )
       }),
     )
