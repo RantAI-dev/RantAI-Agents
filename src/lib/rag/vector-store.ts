@@ -488,6 +488,58 @@ export async function searchSimilarBatch(
  */
 const STORE_CHUNKS_CONCURRENCY = 8
 
+/**
+ * SurrealDB's MTREE index (used on document_chunk.embedding for cosine ANN)
+ * serializes structural updates at the tree-node level. When STORE_CHUNKS_CONCURRENCY
+ * parallel CREATEs land in the same time window, OCC aborts the losers with
+ * "Failed to commit transaction due to a read or write conflict. This
+ * transaction can be retried." The error is verbatim transient — SurrealDB
+ * itself names the recovery path. Each CREATE is wrapped so the conflicting
+ * losers re-attempt with jittered exponential backoff, spreading the
+ * collisions out in time without giving up the per-document throughput we
+ * gained from the parallel writes.
+ */
+const STORE_CHUNKS_RETRY_ATTEMPTS = 5
+const STORE_CHUNKS_RETRY_BASE_MS = 50
+
+const TRANSIENT_CONFLICT_PATTERNS: readonly RegExp[] = [
+  /failed to commit transaction/i,
+  /read or write conflict/i,
+  /can be retried/i,
+]
+
+function isTransientConflict(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  return TRANSIENT_CONFLICT_PATTERNS.some((p) => p.test(err.message))
+}
+
+async function withConflictRetry<T>(
+  label: string,
+  op: () => Promise<T>,
+  attempts = STORE_CHUNKS_RETRY_ATTEMPTS,
+): Promise<T> {
+  let lastErr: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await op()
+    } catch (err) {
+      lastErr = err
+      if (!isTransientConflict(err)) throw err
+      if (i === attempts - 1) break
+      // Exponential backoff with ±50% jitter so two concurrent retriers
+      // that started together don't keep colliding on every attempt.
+      const base = STORE_CHUNKS_RETRY_BASE_MS * Math.pow(2, i)
+      const jitter = base * (Math.random() - 0.5)
+      const delay = Math.max(0, base + jitter)
+      console.warn(
+        `[VectorStore] ${label} transient conflict (attempt ${i + 1}/${attempts}); retrying in ${Math.round(delay)}ms`,
+      )
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+  throw lastErr
+}
+
 export async function storeChunks(
   documentId: string,
   chunks: Chunk[],
@@ -547,27 +599,46 @@ export async function storeChunks(
         const chunk = chunks[i]
         const embedding = embeddings[i]
         const chunkId = `${documentId}_${i}`
-        return surrealClient.query(
-          `CREATE document_chunk SET
-            id = $id,
-            document_id = $document_id,
-            content = $content,
-            chunk_index = $chunk_index,
-            embedding = $embedding,
-            metadata = $metadata,
-            contextual_prefix = $contextual_prefix,
-            embedding_model = $embedding_model,
-            created_at = time::now()`,
-          {
-            id: chunkId,
-            document_id: documentId,
-            content: chunk.content,
-            chunk_index: chunk.metadata.chunkIndex,
-            embedding: embedding,
-            metadata: chunk.metadata,
-            contextual_prefix: chunk.metadata.contextualPrefix ?? null,
-            embedding_model: embeddingModel ?? null,
-          }
+
+        // SurrealDB rejects a literal NULL for `option<string>` fields
+        // ("Found NULL for field X, but expected a option<string>"). The
+        // schema's option<T> permits only T or implicit NONE (field absent
+        // from the SET clause). Build the assignment list dynamically so
+        // contextual_prefix and embedding_model are only set when we have
+        // a real string — otherwise omit them and let SurrealDB treat them
+        // as NONE.
+        const contextualPrefix = chunk.metadata.contextualPrefix
+        const setClauses = [
+          "id = $id",
+          "document_id = $document_id",
+          "content = $content",
+          "chunk_index = $chunk_index",
+          "embedding = $embedding",
+          "metadata = $metadata",
+          "created_at = time::now()",
+        ]
+        const vars: Record<string, unknown> = {
+          id: chunkId,
+          document_id: documentId,
+          content: chunk.content,
+          chunk_index: chunk.metadata.chunkIndex,
+          embedding: embedding,
+          metadata: chunk.metadata,
+        }
+        if (typeof contextualPrefix === "string" && contextualPrefix.length > 0) {
+          setClauses.push("contextual_prefix = $contextual_prefix")
+          vars.contextual_prefix = contextualPrefix
+        }
+        if (typeof embeddingModel === "string" && embeddingModel.length > 0) {
+          setClauses.push("embedding_model = $embedding_model")
+          vars.embedding_model = embeddingModel
+        }
+
+        return withConflictRetry(`CREATE document_chunk:${chunkId}`, () =>
+          surrealClient.query(
+            `CREATE document_chunk SET ${setClauses.join(", ")}`,
+            vars,
+          ),
         )
       }),
     )
