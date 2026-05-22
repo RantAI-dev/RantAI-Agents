@@ -1,6 +1,7 @@
 "use client"
 
 import { useOrgFetch } from "@/hooks/use-organization"
+import { dispatchKnowledgeBasesUpdated } from "@/hooks/use-knowledge-bases"
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
@@ -203,7 +204,7 @@ export default function KnowledgePageClient({
     fetchDocuments(initialSelectedKBId)
     fetchKnowledgeBases()
     // Trigger sidebar refresh by dispatching a custom event
-    window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+    dispatchKnowledgeBasesUpdated()
   }
 
   const handleDelete = async (id: string) => {
@@ -214,7 +215,7 @@ export default function KnowledgePageClient({
       if (response.ok) {
         setDocuments((prev) => prev.filter((doc) => doc.id !== id))
         fetchKnowledgeBases()
-        window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+        dispatchKnowledgeBasesUpdated()
       }
     } catch (error) {
       console.error("Failed to delete document:", error)
@@ -235,7 +236,7 @@ export default function KnowledgePageClient({
     setEditingDocumentId(null)
     fetchDocuments(initialSelectedKBId)
     fetchKnowledgeBases()
-    window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+    dispatchKnowledgeBasesUpdated()
   }
 
   // Toggle category filter
@@ -319,7 +320,7 @@ export default function KnowledgePageClient({
       if (response.ok) {
         router.push("/dashboard/files")
         fetchKnowledgeBases()
-        window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+        dispatchKnowledgeBasesUpdated()
       }
     } catch (error) {
       console.error("Failed to delete knowledge base:", error)
@@ -350,7 +351,7 @@ export default function KnowledgePageClient({
       if (response.ok) {
         setKbDialogOpen(false)
         fetchKnowledgeBases()
-        window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+        dispatchKnowledgeBasesUpdated()
       }
     } catch (error) {
       console.error("Failed to save knowledge base:", error)
@@ -636,7 +637,7 @@ export default function KnowledgePageClient({
                 setSelectionMode(false)
                 fetchDocuments(initialSelectedKBId)
                 fetchKnowledgeBases()
-                window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+                dispatchKnowledgeBasesUpdated()
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

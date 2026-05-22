@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
+import { useKnowledgeBases, type KnowledgeBase } from "@/hooks/use-knowledge-bases"
 import React from "react"
 import { useSession, signOut } from "next-auth/react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
@@ -71,12 +72,6 @@ import { ThemeToggle } from "./theme-toggle"
 
 // ─── Types ───────────────────────────────────────────────────────────
 
-interface KnowledgeBase {
-  id: string
-  name: string
-  color: string | null
-  documentCount: number
-}
 
 interface AppSidebarProps {
   isOpen: boolean
@@ -389,30 +384,11 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
     return true
   })
 
-  // Knowledge Base state
-  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([])
+  // Knowledge Base state — fetch + auto-refresh on `knowledge-bases-updated`
+  // events is owned by the shared hook so the Agent Builder Knowledge tab and
+  // any future consumer stay byte-identical with what the sidebar shows.
+  const { knowledgeBases, totalDocumentCount } = useKnowledgeBases()
   const [selectedKBId, setSelectedKBId] = useState<string | null>(null)
-  const [totalDocumentCount, setTotalDocumentCount] = useState<number>(0)
-
-  const fetchKnowledgeBases = useCallback(async () => {
-    try {
-      const response = await fetch("/api/dashboard/files/groups")
-      if (response.ok) {
-        const data = await response.json()
-        setKnowledgeBases(data.groups)
-        setTotalDocumentCount(data.totalDocumentCount ?? 0)
-      }
-    } catch (error) {
-      console.error("Failed to fetch knowledge bases:", error)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchKnowledgeBases()
-    const handleUpdate = () => fetchKnowledgeBases()
-    window.addEventListener("knowledge-bases-updated", handleUpdate)
-    return () => window.removeEventListener("knowledge-bases-updated", handleUpdate)
-  }, [fetchKnowledgeBases])
 
   useEffect(() => {
     const kbId = searchParams.get("kb")
