@@ -2,6 +2,7 @@
 
 import { useOrgFetch } from "@/hooks/use-organization"
 import { dispatchKnowledgeBasesUpdated } from "@/hooks/use-knowledge-bases"
+import { useToast } from "@/hooks/use-toast"
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
@@ -95,6 +96,7 @@ export default function KnowledgePageClient({
 }) {
   const orgFetch = useOrgFetch()
   const router = useRouter()
+  const { toast } = useToast()
 
   const [documents, setDocuments] = useState<Document[]>(initialDocuments)
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>(initialKnowledgeBases)
@@ -208,17 +210,34 @@ export default function KnowledgePageClient({
   }
 
   const handleDelete = async (id: string) => {
+    // Optimistic removal: snapshot first, drop the row immediately so the
+    // grid responds before the network round-trip. The KB count chip on the
+    // sidebar / Agent Builder reconciles via dispatchKnowledgeBasesUpdated()
+    // after the server confirms — ~one round-trip later, still faster than
+    // the old "wait for response, then update local list" sequence.
+    const prevDocuments = documents
+    const doomedTitle = documents.find((d) => d.id === id)?.title ?? "Document"
+    setDocuments((prev) => prev.filter((doc) => doc.id !== id))
     try {
       const response = await orgFetch(`/api/dashboard/files/${id}`, {
         method: "DELETE",
       })
-      if (response.ok) {
-        setDocuments((prev) => prev.filter((doc) => doc.id !== id))
-        fetchKnowledgeBases()
-        dispatchKnowledgeBasesUpdated()
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
       }
+      fetchKnowledgeBases()
+      dispatchKnowledgeBasesUpdated()
     } catch (error) {
+      // Rollback: put the row back, tell the user why their optimistic
+      // delete vanished and then reappeared.
       console.error("Failed to delete document:", error)
+      setDocuments(prevDocuments)
+      toast({
+        title: "Couldn't delete",
+        description: `${doomedTitle} was restored — ${
+          error instanceof Error ? error.message : "network error, try again."
+        }`,
+      })
     }
   }
 
