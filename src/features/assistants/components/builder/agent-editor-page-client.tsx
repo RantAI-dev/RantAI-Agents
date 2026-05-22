@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, use } from "react"
 import { useOrgFetch } from "@/hooks/use-organization"
 import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useDefaultAssistant } from "@/hooks/use-default-assistant"
 import { useAssistantTools } from "@/hooks/use-assistant-tools"
@@ -121,6 +122,7 @@ export default function AgentEditorPageClient({
   const { id } = use(params)
   const isNew = id === "new"
   const router = useRouter()
+  const { toast } = useToast()
   const orgFetch = useOrgFetch()
 
   const {
@@ -432,7 +434,12 @@ export default function AgentEditorPageClient({
           }
           await Promise.all(promises)
           refetch()
-          router.replace(`/dashboard/agent-builder/${created.id}`)
+          setIsDirty(false)
+          toast({
+            title: "Agent created",
+            description: `${created.name} is saved. Returning to the agent list.`,
+          })
+          router.push("/dashboard/agent-builder")
         }
       } else {
         const success = await updateAssistant(id, input)
@@ -446,6 +453,11 @@ export default function AgentEditorPageClient({
           ])
           refetch()
           setIsDirty(false)
+          toast({
+            title: "Agent saved",
+            description: `${input.name} updated. Returning to the agent list.`,
+          })
+          router.push("/dashboard/agent-builder")
         }
       }
     } finally {
