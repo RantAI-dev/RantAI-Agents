@@ -1,6 +1,7 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { prisma } from "@/lib/prisma"
+import { aliveDocumentRelation } from "@/features/knowledge/documents/where-alive"
 import { AVAILABLE_MODELS } from "@/lib/models"
 import { buildWizardTools, filterKnownIds, type WizardDeps } from "./tools"
 import {
@@ -115,9 +116,7 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
           id: true,
           name: true,
           _count: {
-            select: {
-              documents: { where: { document: { deletedAt: null } } },
-            },
+            select: { documents: aliveDocumentRelation },
           },
         },
       })

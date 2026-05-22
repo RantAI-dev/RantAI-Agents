@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
+import { aliveDocumentWhere } from "./where-alive"
 
 export async function listKnowledgeDocumentsByScope(params: {
   organizationId: string | null
@@ -11,7 +12,7 @@ export async function listKnowledgeDocumentsByScope(params: {
   // SELECT so we don't ship hundreds of KB of text per row across the SSR boundary.
   return prisma.document.findMany({
     where: {
-      ...(params.includeDeleted ? {} : { deletedAt: null }),
+      ...(params.includeDeleted ? {} : aliveDocumentWhere),
       ...(params.groupId ? { groups: { some: { groupId: params.groupId } } } : {}),
       ...(params.organizationId !== null
         ? { OR: [{ organizationId: params.organizationId }, { organizationId: null }] }
@@ -46,7 +47,7 @@ export async function listKnowledgeDocumentsByScope(params: {
 export async function countKnowledgeDocumentsForScope(organizationId: string | null) {
   return prisma.document.count({
     where: {
-      deletedAt: null,
+      ...aliveDocumentWhere,
       ...(organizationId
         ? { OR: [{ organizationId }, { organizationId: null }] }
         : {}),
@@ -215,7 +216,7 @@ export async function listColdDocuments(params: {
     : null
   return prisma.document.findMany({
     where: {
-      deletedAt: null,
+      ...aliveDocumentWhere,
       ...(organizationId !== null
         ? { OR: [{ organizationId }, { organizationId: null }] }
         : { organizationId: null }),
