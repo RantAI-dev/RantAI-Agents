@@ -32,8 +32,8 @@ const FAQ_ITEMS = [
     a: "You can deploy agents on the web portal, embeddable widget, WhatsApp (via Meta Cloud API), and email. One agent can serve multiple channels simultaneously.",
   },
   {
-    q: "What about Digital Employees?",
-    a: "Digital Employees — autonomous AI agents running in isolated Docker containers with their own workspace, VNC access, and graduated autonomy (L1–L4) — are coming soon. Stay tuned for updates.",
+    q: "What's the difference between tiers?",
+    a: "All tiers ship the same platform — agents, knowledge base, workflows, channels, and tools. The difference is usage limits: how many agents you can run, how many messages per month, and how much knowledge base capacity. Max removes the caps and adds SSO, audit logs, and dedicated support.",
   },
 ]
 

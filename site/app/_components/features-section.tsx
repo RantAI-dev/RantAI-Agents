@@ -2,7 +2,7 @@
 
 import { BlurText } from "@/components/reactbits/blur-text"
 import { SpotlightCard } from "@/components/reactbits/spotlight-card"
-import { Bot, MessageSquare, Workflow, FileSearch, Globe, Users } from "@/lib/icons"
+import { Plug, MessageSquare, Workflow, FileSearch, Globe, Users } from "@/lib/icons"
 import { landing } from "./landing-styles"
 
 const FEATURES = [
@@ -37,10 +37,10 @@ const FEATURES = [
     badge: "",
   },
   {
-    title: "Digital Employees",
-    description: "Autonomous AI agents in isolated Docker containers with workspace, VNC access, graduated autonomy (L1–L4), and skill marketplace.",
-    icon: Bot,
-    badge: "Coming Soon",
+    title: "Tools & MCP",
+    description: "Connect agents to your APIs, databases, and SaaS via built-in tools, custom tool authoring, and Model Context Protocol (MCP) servers.",
+    icon: Plug,
+    badge: "",
   },
 ] as const
 
