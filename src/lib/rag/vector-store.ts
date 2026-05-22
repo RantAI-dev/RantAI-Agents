@@ -488,6 +488,58 @@ export async function searchSimilarBatch(
  */
 const STORE_CHUNKS_CONCURRENCY = 8
 
+/**
+ * SurrealDB's MTREE index (used on document_chunk.embedding for cosine ANN)
+ * serializes structural updates at the tree-node level. When STORE_CHUNKS_CONCURRENCY
+ * parallel CREATEs land in the same time window, OCC aborts the losers with
+ * "Failed to commit transaction due to a read or write conflict. This
+ * transaction can be retried." The error is verbatim transient — SurrealDB
+ * itself names the recovery path. Each CREATE is wrapped so the conflicting
+ * losers re-attempt with jittered exponential backoff, spreading the
+ * collisions out in time without giving up the per-document throughput we
+ * gained from the parallel writes.
+ */
+const STORE_CHUNKS_RETRY_ATTEMPTS = 5
+const STORE_CHUNKS_RETRY_BASE_MS = 50
+
+const TRANSIENT_CONFLICT_PATTERNS: readonly RegExp[] = [
+  /failed to commit transaction/i,
+  /read or write conflict/i,
+  /can be retried/i,
+]
+
+function isTransientConflict(err: unknown): boolean {
+  if (!(err instanceof Error)) return false
+  return TRANSIENT_CONFLICT_PATTERNS.some((p) => p.test(err.message))
+}
+
+async function withConflictRetry<T>(
+  label: string,
+  op: () => Promise<T>,
+  attempts = STORE_CHUNKS_RETRY_ATTEMPTS,
+): Promise<T> {
+  let lastErr: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await op()
+    } catch (err) {
+      lastErr = err
+      if (!isTransientConflict(err)) throw err
+      if (i === attempts - 1) break
+      // Exponential backoff with ±50% jitter so two concurrent retriers
+      // that started together don't keep colliding on every attempt.
+      const base = STORE_CHUNKS_RETRY_BASE_MS * Math.pow(2, i)
+      const jitter = base * (Math.random() - 0.5)
+      const delay = Math.max(0, base + jitter)
+      console.warn(
+        `[VectorStore] ${label} transient conflict (attempt ${i + 1}/${attempts}); retrying in ${Math.round(delay)}ms`,
+      )
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+  throw lastErr
+}
+
 export async function storeChunks(
   documentId: string,
   chunks: Chunk[],
@@ -582,9 +634,11 @@ export async function storeChunks(
           vars.embedding_model = embeddingModel
         }
 
-        return surrealClient.query(
-          `CREATE document_chunk SET ${setClauses.join(", ")}`,
-          vars,
+        return withConflictRetry(`CREATE document_chunk:${chunkId}`, () =>
+          surrealClient.query(
+            `CREATE document_chunk SET ${setClauses.join(", ")}`,
+            vars,
+          ),
         )
       }),
     )
