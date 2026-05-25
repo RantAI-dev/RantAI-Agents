@@ -17,50 +17,7 @@ import { SpotlightCard } from "@/components/reactbits/spotlight-card"
 import { BlurText } from "@/components/reactbits/blur-text"
 import { landing } from "./landing-styles"
 import { cn } from "@/lib/utils"
-import { brand } from "@/lib/branding"
-import { appUrl } from "@/lib/app-url"
-
-const PRICING_TIERS = [
-  {
-    name: "Lite",
-    priceMonthly: "Rp 49.000",
-    priceAnnual: "Rp 39.000",
-    periodMonthly: "per month",
-    periodAnnual: "per month (billed annually)",
-    annualSavingsYearly: "Rp 120.000",
-    description: "For solo builders trying things out.",
-    features: ["1 agent", "1,000 messages / month", "Knowledge base (basic)", "Community support"],
-    cta: `Try ${brand.productShortName}`,
-    href: appUrl("/login"),
-    highlighted: false,
-  },
-  {
-    name: "Pro",
-    priceMonthly: "Rp 199.000",
-    priceAnnual: "Rp 159.000",
-    periodMonthly: "per month",
-    periodAnnual: "per month (billed annually)",
-    annualSavingsYearly: "Rp 480.000",
-    description: "For teams running real workloads.",
-    features: ["5 agents", "25,000 messages / month", "Knowledge base (expanded)", "Priority support"],
-    cta: "Get Pro",
-    href: appUrl("/login"),
-    highlighted: true,
-  },
-  {
-    name: "Max",
-    priceMonthly: "Rp 999.000",
-    priceAnnual: "Rp 799.000",
-    periodMonthly: "per month",
-    periodAnnual: "per month (billed annually)",
-    annualSavingsYearly: "Rp 2.400.000",
-    description: "No limits — for serious deployments.",
-    features: ["Unlimited agents", "Unlimited messages", "Unlimited knowledge base", "SSO, audit & dedicated support"],
-    cta: "Get Max",
-    href: appUrl("/login"),
-    highlighted: false,
-  },
-]
+import { PRICING_TIERS } from "@/lib/pricing"
 
 export function PricingSection() {
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly")
@@ -153,7 +110,7 @@ export function PricingSection() {
                       variant="ghost"
                       asChild
                     >
-                      <Link href={tier.href}>{tier.cta}</Link>
+                      <Link href={`/checkout/${tier.slug}/?billing=${billing}`}>{tier.cta}</Link>
                     </Button>
                   </CardFooter>
                 </Card>
