@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -110,7 +109,7 @@ export function PricingSection() {
                       variant="ghost"
                       asChild
                     >
-                      <Link href={`/checkout/${tier.slug}/?billing=${billing}`}>{tier.cta}</Link>
+                      <a href={`/checkout/${tier.slug}/?billing=${billing}`}>{tier.cta}</a>
                     </Button>
                   </CardFooter>
                 </Card>

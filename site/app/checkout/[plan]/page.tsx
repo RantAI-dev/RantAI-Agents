@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { notFound } from "next/navigation"
 import { PRICING_TIERS, getTier } from "@/lib/pricing"
 import { landing } from "../../_components/landing-styles"
@@ -21,9 +20,9 @@ export default async function CheckoutPlanPage({
     <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
       <header className="border-b border-zinc-800/60">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-zinc-200 hover:text-white text-sm">
+          <a href="/" className="text-zinc-200 hover:text-white text-sm">
             ← Back to home
-          </Link>
+          </a>
           <span className="text-xs text-zinc-500">Secure checkout · Sandbox</span>
         </div>
       </header>

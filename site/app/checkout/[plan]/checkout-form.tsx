@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { landing } from "../../_components/landing-styles"
@@ -12,20 +11,21 @@ import { formatIDR } from "@/lib/pricing"
 type Billing = "monthly" | "annual"
 
 function CheckoutFormInner({ tier }: { tier: PricingTier }) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const initialBilling: Billing = searchParams.get("billing") === "annual" ? "annual" : "monthly"
-
-  const [billing, setBilling] = useState<Billing>(initialBilling)
+  const [billing, setBilling] = useState<Billing>("monthly")
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    const fromUrl = searchParams.get("billing")
-    if (fromUrl === "annual" || fromUrl === "monthly") setBilling(fromUrl)
-  }, [searchParams])
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const fromUrl = params.get("billing")
+      if (fromUrl === "annual" || fromUrl === "monthly") setBilling(fromUrl)
+    } catch {
+      // ignore — fall back to monthly default
+    }
+  }, [])
 
   const unitAmount = billing === "annual" ? tier.priceAnnualAmount : tier.priceMonthlyAmount
   const totalLabel = billing === "annual" ? formatIDR(unitAmount * 12) : formatIDR(unitAmount)
@@ -51,7 +51,7 @@ function CheckoutFormInner({ tier }: { tier: PricingTier }) {
       // sessionStorage may be unavailable; success page tolerates missing data
     }
     setTimeout(() => {
-      router.push(`/checkout/success/?order=${tier.slug}-${billing}`)
+      window.location.assign(`/checkout/success/?order=${tier.slug}-${billing}`)
     }, 900)
   }
 
@@ -166,9 +166,5 @@ const inputClass =
   "w-full rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-colors"
 
 export function CheckoutForm({ tier }: { tier: PricingTier }) {
-  return (
-    <Suspense fallback={<div className={`${landing.card} p-6 text-zinc-500 text-sm`}>Loading checkout…</div>}>
-      <CheckoutFormInner tier={tier} />
-    </Suspense>
-  )
+  return <CheckoutFormInner tier={tier} />
 }

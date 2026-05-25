@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { landing } from "../../_components/landing-styles"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -9,9 +8,9 @@ export default function CheckoutSuccessPage() {
     <div className="min-h-screen flex flex-col bg-zinc-950 text-zinc-100">
       <header className="border-b border-zinc-800/60">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-zinc-200 hover:text-white text-sm">
+          <a href="/" className="text-zinc-200 hover:text-white text-sm">
             ← Back to home
-          </Link>
+          </a>
           <span className="text-xs text-zinc-500">Order confirmed</span>
         </div>
       </header>
@@ -37,14 +36,14 @@ export default function CheckoutSuccessPage() {
                 className={cn("rounded-full", landing.btnHighlight)}
                 variant="ghost"
               >
-                <Link href="/">Back to home</Link>
+                <a href="/">Back to home</a>
               </Button>
               <Button
                 asChild
                 className={cn("rounded-full", landing.btnSecondary)}
                 variant="ghost"
               >
-                <Link href="/#pricing">View plans</Link>
+                <a href="/#pricing">View plans</a>
               </Button>
             </div>
           </div>
