@@ -46,7 +46,7 @@ export const emailHandler: ChannelHandler = {
     })
 
     // Generate reference number
-    const referenceNumber = `HL-${Date.now().toString(36).toUpperCase()}`
+    const referenceNumber = `REF-${Date.now().toString(36).toUpperCase()}`
 
     // Build conversation summary
     const conversationSummary = conversation.messages
@@ -76,14 +76,14 @@ export const emailHandler: ChannelHandler = {
 <body>
   <div class="container">
     <div class="header">
-      <h1 style="margin: 0;">HorizonLife Insurance</h1>
+      <h1 style="margin: 0;">${fromName || "Customer Support"}</h1>
       <p style="margin: 5px 0 0 0; opacity: 0.8;">We've received your request</p>
     </div>
 
     <div class="content">
       <p>Dear ${conversation.customerName || "Valued Customer"},</p>
 
-      <p>Thank you for contacting HorizonLife Insurance. We've received your request to speak with an agent and will get back to you within 24 hours.</p>
+      <p>Thank you for contacting us. We've received your request to speak with an agent and will get back to you within 24 hours.</p>
 
       <div class="reference">
         <p style="margin: 0 0 5px 0; font-size: 12px; color: #64748b;">Your Reference Number</p>
@@ -116,13 +116,13 @@ export const emailHandler: ChannelHandler = {
       <div class="summary">${conversationSummary}</div>
       ` : ""}
 
-      <p style="margin-top: 20px;">An agent will review your inquiry and respond to this email. If you have any urgent questions, please call us at <strong>1-800-HORIZON</strong>.</p>
+      <p style="margin-top: 20px;">An agent will review your inquiry and respond to this email. If you have any urgent questions, feel free to reply to this email.</p>
 
-      <p>Best regards,<br><strong>HorizonLife Customer Support Team</strong></p>
+      <p>Best regards,<br><strong>${fromName || "Customer Support Team"}</strong></p>
     </div>
 
     <div class="footer">
-      <p style="margin: 0;">HorizonLife Insurance | Protecting What Matters Most</p>
+      <p style="margin: 0;">${fromName || "Customer Support"}</p>
       <p style="margin: 5px 0 0 0;">This is an automated email. Please do not reply directly to this message.</p>
     </div>
   </div>
@@ -131,11 +131,11 @@ export const emailHandler: ChannelHandler = {
 `
 
     const textContent = `
-HorizonLife Insurance - Request Confirmation
+Request Confirmation
 
 Dear ${conversation.customerName || "Valued Customer"},
 
-Thank you for contacting HorizonLife Insurance. We've received your request to speak with an agent.
+Thank you for contacting us. We've received your request to speak with an agent.
 
 Your Reference Number: ${referenceNumber}
 
@@ -145,17 +145,17 @@ Request Details:
 - Phone: ${conversation.customerPhone || "Not provided"}
 - Interest: ${conversation.productInterest?.replace("-", " ") || "General inquiry"}
 
-An agent will review your inquiry and respond within 24 hours. If you have any urgent questions, please call us at 1-800-HORIZON.
+An agent will review your inquiry and respond within 24 hours. If you have any urgent questions, feel free to reply to this email.
 
 Best regards,
-HorizonLife Customer Support Team
+Customer Support Team
 `
 
     try {
       await transporter.sendMail({
         from: fromName ? `"${fromName}" <${fromEmail}>` : fromEmail,
         to: conversation.customerEmail,
-        subject: `Your HorizonLife Request - ${referenceNumber}`,
+        subject: `Your Request Confirmation - ${referenceNumber}`,
         text: textContent,
         html: htmlContent,
       })
