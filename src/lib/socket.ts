@@ -660,7 +660,7 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
           data: {
             conversationId,
             role: MessageRole.SYSTEM,
-            content: "Conversation has been resolved. Thank you for choosing HorizonLife!",
+            content: "Conversation has been resolved. Thank you!",
           },
         })
 
