@@ -4,15 +4,15 @@ services:
     container_name: rantai-agents-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: horizonlife
-      POSTGRES_PASSWORD: horizonlife_secret
-      POSTGRES_DB: horizonlife_insurance
+      POSTGRES_USER: rantai
+      POSTGRES_PASSWORD: rantai_secret
+      POSTGRES_DB: rantai
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U horizonlife -d horizonlife_insurance"]
+      test: ["CMD-SHELL", "pg_isready -U rantai -d rantai"]
       interval: 10s
       timeout: 5s
       retries: 5

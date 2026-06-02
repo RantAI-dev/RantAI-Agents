@@ -1,8 +1,8 @@
 import { PrismaClient } from "@prisma/client"
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL
-  || process.env.DATABASE_URL?.replace(/\/[^/]+(\?.*)?$/, "/horizonlife_test")
-  || "postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_test"
+  || process.env.DATABASE_URL?.replace(/\/[^/]+(\?.*)?$/, "/rantai_test")
+  || "postgresql://rantai:rantai_secret@localhost:5432/rantai_test"
 
 export const testPrisma = new PrismaClient({
   datasources: { db: { url: TEST_DATABASE_URL } },

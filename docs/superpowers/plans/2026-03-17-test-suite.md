@@ -4,7 +4,7 @@
 
 **Goal:** Set up Vitest + Postgres test infrastructure and implement ~120 tests covering workflow compiler/engine, organization, MCP, tool registry, package generator, and API routes.
 
-**Architecture:** Vitest runner with two pools — unit (parallel, no DB) and integration (sequential, real Postgres). Test DB uses separate `horizonlife_test` database on existing Docker Compose Postgres. Factory fixtures with faker for test data, TRUNCATE cleanup between tests.
+**Architecture:** Vitest runner with two pools — unit (parallel, no DB) and integration (sequential, real Postgres). Test DB uses separate `rantai_test` database on existing Docker Compose Postgres. Factory fixtures with faker for test data, TRUNCATE cleanup between tests.
 
 **Tech Stack:** Vitest, @faker-js/faker, Prisma (test client), PostgreSQL 16, bun
 
@@ -94,8 +94,8 @@ git commit -m "chore: add vitest and test infrastructure"
 import { PrismaClient } from "@prisma/client"
 
 const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL
-  || process.env.DATABASE_URL?.replace(/\/[^/]+$/, "/horizonlife_test")
-  || "postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_test"
+  || process.env.DATABASE_URL?.replace(/\/[^/]+$/, "/rantai_test")
+  || "postgresql://rantai:rantai_secret@localhost:5432/rantai_test"
 
 export const testPrisma = new PrismaClient({
   datasources: { db: { url: TEST_DATABASE_URL } },
@@ -289,13 +289,13 @@ export async function createTestEmployee(
 - [ ] **Step 4: Create test database**
 
 ```bash
-docker exec -i $(docker ps -qf "ancestor=postgres:16") psql -U horizonlife -d horizonlife_insurance -c "CREATE DATABASE horizonlife_test;" 2>/dev/null || true
+docker exec -i $(docker ps -qf "ancestor=postgres:16") psql -U rantai -d rantai -c "CREATE DATABASE rantai_test;" 2>/dev/null || true
 ```
 
 - [ ] **Step 5: Push schema to test database**
 
 ```bash
-TEST_DATABASE_URL="postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_test" bunx prisma db push --skip-generate
+TEST_DATABASE_URL="postgresql://rantai:rantai_secret@localhost:5432/rantai_test" bunx prisma db push --skip-generate
 ```
 
 - [ ] **Step 6: Update vitest.config.ts to use setup file for integration tests**

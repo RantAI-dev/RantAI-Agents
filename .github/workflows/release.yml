@@ -34,9 +34,9 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: horizonlife
-          POSTGRES_PASSWORD: horizonlife_secret
-          POSTGRES_DB: horizonlife_test
+          POSTGRES_USER: rantai
+          POSTGRES_PASSWORD: rantai_secret
+          POSTGRES_DB: rantai_test
         ports:
           - 5432:5432
         options: >-
@@ -46,8 +46,8 @@ jobs:
           --health-retries 5
     env:
       IMAGE_NAME: ghcr.io/${{ github.repository }}
-      DATABASE_URL: postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_test
-      TEST_DATABASE_URL: postgresql://horizonlife:horizonlife_secret@localhost:5432/horizonlife_test
+      DATABASE_URL: postgresql://rantai:rantai_secret@localhost:5432/rantai_test
+      TEST_DATABASE_URL: postgresql://rantai:rantai_secret@localhost:5432/rantai_test
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
