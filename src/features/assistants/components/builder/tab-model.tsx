@@ -94,13 +94,9 @@ export function TabModel({
                 <Zap className="h-3 w-3" />
                 {(modelInfo.contextWindow / 1000).toFixed(0)}k context
               </Badge>
-              {modelInfo.pricing.input === 0 && modelInfo.pricing.output === 0 ? (
+              {modelInfo.pricing.input === 0 && modelInfo.pricing.output === 0 && (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
                   Free
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
-                  ${modelInfo.pricing.input} / ${modelInfo.pricing.output} per M tokens
                 </Badge>
               )}
             </div>

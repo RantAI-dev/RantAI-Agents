@@ -111,11 +111,6 @@ export function ModelSelectorDropdown({ selectedModelId, onSelect, models }: Mod
                         <span className="text-[10px] text-muted-foreground">
                           {(model.contextWindow / 1000).toFixed(0)}k ctx
                         </span>
-                        {model.pricing.input > 0 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            ${model.pricing.input}/${model.pricing.output} per M
-                          </span>
-                        )}
                       </div>
                     </div>
                   </CommandItem>
