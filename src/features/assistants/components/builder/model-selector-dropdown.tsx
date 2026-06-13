@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Check, ChevronsUpDown, Eye, Wrench } from "@/lib/icons"
+import { Lock } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -109,11 +110,16 @@ export function ModelSelectorDropdown({ selectedModelId, onSelect, models }: Mod
                   <CommandItem
                     key={model.id}
                     value={`${model.provider} ${model.name} ${model.id}`}
+                    disabled={model.locked === true}
                     onSelect={() => {
+                      if (model.locked) return
                       onSelect(model.id)
                       setOpen(false)
                     }}
-                    className="flex items-center gap-2"
+                    className={cn(
+                      "flex items-center gap-2",
+                      model.locked && "opacity-50",
+                    )}
                   >
                     <Check
                       className={cn(
@@ -127,6 +133,12 @@ export function ModelSelectorDropdown({ selectedModelId, onSelect, models }: Mod
                         {model.pricing.input === 0 && model.pricing.output === 0 && (
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
                             Free
+                          </Badge>
+                        )}
+                        {model.locked && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5">
+                            <Lock className="h-2.5 w-2.5" />
+                            Upgrade
                           </Badge>
                         )}
                       </div>
