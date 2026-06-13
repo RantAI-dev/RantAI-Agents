@@ -31,9 +31,11 @@ export function ModelSelectorDropdown({ selectedModelId, onSelect, models }: Mod
   const modelList = models ?? AVAILABLE_MODELS
   const selectedModel = modelList.find((m) => m.id === selectedModelId) ?? getModelById(selectedModelId)
 
-  // Group by provider
+  // Pinned "Recommended" group for the Free Models Router; rest grouped by provider.
+  const recommended = modelList.filter((m) => m.id === "openrouter/free")
   const grouped: Record<string, LLMModel[]> = {}
   for (const model of modelList) {
+    if (model.id === "openrouter/free") continue
     if (!grouped[model.provider]) grouped[model.provider] = []
     grouped[model.provider].push(model)
   }
@@ -68,6 +70,39 @@ export function ModelSelectorDropdown({ selectedModelId, onSelect, models }: Mod
           <CommandInput placeholder="Search models..." />
           <CommandList>
             <CommandEmpty>No model found.</CommandEmpty>
+            {recommended.length > 0 && (
+              <CommandGroup heading="Free Models Router">
+                {recommended.map((model) => (
+                  <CommandItem
+                    key={model.id}
+                    value={`recommended ${model.name} ${model.id}`}
+                    onSelect={() => {
+                      onSelect(model.id)
+                      setOpen(false)
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <Check
+                      className={cn(
+                        "h-4 w-4 shrink-0",
+                        selectedModelId === model.id ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{model.name}</span>
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                          Recommended
+                        </Badge>
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground">
+                        Free · auto-routes across free models
+                      </div>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
             {Object.entries(grouped).map(([provider, models]) => (
               <CommandGroup key={provider} heading={provider}>
                 {models.map((model) => (
