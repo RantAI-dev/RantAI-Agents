@@ -19,6 +19,12 @@ export interface LLMModel {
     functionCalling: boolean
     streaming: boolean
   }
+  /** Cloud-only: locked for the current plan (paid model on free plan). */
+  locked?: boolean
+  /** Cloud-only: grouping bucket ("recommended" for the free router, else provider). */
+  category?: string
+  /** Cloud-only: true if this is the plan's default model. */
+  isDefault?: boolean
 }
 
 /**

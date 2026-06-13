@@ -18,6 +18,9 @@ export interface DashboardModel {
   hasStreaming: boolean
   isFree: boolean
   isTrackedLab: boolean
+  locked?: boolean
+  category?: string
+  isDefault?: boolean
 }
 
 /** Convert a DashboardModel to the LLMModel shape used by existing UI components. */
@@ -34,6 +37,9 @@ function toLLMModel(m: DashboardModel): LLMModel {
       functionCalling: m.hasToolCalling,
       streaming: m.hasStreaming,
     },
+    locked: m.locked,
+    category: m.category,
+    isDefault: m.isDefault,
   }
 }
 
