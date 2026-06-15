@@ -1,6 +1,6 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
-import { DEFAULT_MODEL_ID, isValidModel } from "@/lib/models"
+import { DEFAULT_MODEL_ID, isValidModelAsync } from "@/lib/models"
 import { resolveToolsForAssistant } from "@/lib/tools"
 import { buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
 import {
@@ -65,7 +65,8 @@ export async function authenticateV1Request(
 export async function runV1ChatCompletion(
   auth: AuthResult,
   input: V1ChatCompletionInput,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  modelOverride?: string
 ): Promise<Response> {
   // Rate limit
   const rateResult = checkRateLimit(auth.apiKey.id)
@@ -130,7 +131,8 @@ export async function runV1ChatCompletion(
   systemPrompt += LANGUAGE_INSTRUCTION
   systemPrompt += OUTPUT_HYGIENE_INSTRUCTION
 
-  const modelId = isValidModel(assistant.model) ? assistant.model : DEFAULT_MODEL_ID
+  const requestedModel = modelOverride || assistant.model
+  const modelId = (await isValidModelAsync(requestedModel)) ? requestedModel : DEFAULT_MODEL_ID
   const modelConfig = (assistant.modelConfig && typeof assistant.modelConfig === "object")
     ? assistant.modelConfig as Record<string, unknown>
     : null

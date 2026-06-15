@@ -10,7 +10,7 @@ import {
 import type { HybridSearchStats } from "@/lib/rag/hybrid-search"
 import { retrieveR3FContext } from "@/lib/rag/r3f-retriever"
 import { searchByDocumentIds } from "@/lib/rag/vector-store"
-import { DEFAULT_MODEL_ID, isValidModel, getModelById } from "@/lib/models"
+import { DEFAULT_MODEL_ID, isValidModelAsync, getModelById } from "@/lib/models"
 import { resolveToolsForAssistant, resolveToolsByNames } from "@/lib/tools"
 import {
   LANGUAGE_INSTRUCTION,
@@ -169,6 +169,8 @@ export async function runChat(params: {
   /** Forwarded from the HTTP request — used to bail out of background memory
    * work when the client disconnects. Optional so non-HTTP callers still work. */
   abortSignal?: AbortSignal
+  /** When set, overrides the assistant's stored model (e.g. cloud free-tier fallback). */
+  modelOverride?: string
 }) {
   const ragTrace: RagTrace | null = RAG_TRACE_ENABLED ? createRagTrace() : null
   try {
@@ -356,8 +358,13 @@ export async function runChat(params: {
       debug("Fallback to generic prompt");
     }
 
-    // Validate model ID
-    if (!isValidModel(modelId)) {
+    // Cloud may force a specific model (e.g. free-tier fallback) regardless of the assistant.
+    if (params.modelOverride) {
+      modelId = params.modelOverride
+    }
+
+    // Validate model ID (DB-aware: synced models are valid, not just the static list)
+    if (!(await isValidModelAsync(modelId))) {
       console.warn(`[Chat API] Invalid model ID "${modelId}", falling back to default`);
       modelId = DEFAULT_MODEL_ID;
     }
