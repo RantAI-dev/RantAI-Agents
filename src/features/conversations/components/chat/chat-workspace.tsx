@@ -2295,6 +2295,15 @@ export function ChatWorkspace({
           throw new Error(`Failed to get response: ${response.status}`)
         }
 
+        // Free plan fell back to the Free Models Router — let the user know.
+        if (response.headers.get("X-Model-Fallback")) {
+          toast({
+            title: "Memakai Free Models Router",
+            description:
+              "Model berbayar dilewati karena paket Free. Upgrade untuk memakainya.",
+          })
+        }
+
         // Handle streaming response
         const reader = response.body?.getReader()
         const decoder = new TextDecoder()
