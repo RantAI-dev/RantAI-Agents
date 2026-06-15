@@ -241,3 +241,9 @@ export async function isValidModelAsync(id: string): Promise<boolean> {
   if (dbModel) return true
   return AVAILABLE_MODELS.some((m) => m.id === id)
 }
+
+/** Get a model by id from the DB (synced), falling back to the static list. */
+export async function getModelByIdAsync(id: string): Promise<LLMModel | undefined> {
+  const dbModels = await getModelsFromDb()
+  return dbModels.find((m) => m.id === id) ?? getModelById(id)
+}

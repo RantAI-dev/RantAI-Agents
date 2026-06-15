@@ -10,7 +10,7 @@ import {
 import type { HybridSearchStats } from "@/lib/rag/hybrid-search"
 import { retrieveR3FContext } from "@/lib/rag/r3f-retriever"
 import { searchByDocumentIds } from "@/lib/rag/vector-store"
-import { DEFAULT_MODEL_ID, isValidModelAsync, getModelById } from "@/lib/models"
+import { DEFAULT_MODEL_ID, isValidModelAsync, getModelByIdAsync } from "@/lib/models"
 import { resolveToolsForAssistant, resolveToolsByNames } from "@/lib/tools"
 import {
   LANGUAGE_INSTRUCTION,
@@ -980,7 +980,7 @@ export async function runChat(params: {
 
     // ===== AUTO ARTIFACT TOOLS =====
     // Only inject artifact tools when canvas mode is enabled (auto or specific type)
-    const modelInfo = getModelById(modelId);
+    const modelInfo = await getModelByIdAsync(modelId);
     if (body.canvasMode && modelInfo?.capabilities.functionCalling && !resolvedTools.create_artifact) {
       const { BUILTIN_TOOLS } = await import("@/lib/tools/builtin");
       const createTool = BUILTIN_TOOLS.create_artifact;
