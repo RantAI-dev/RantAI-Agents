@@ -72,7 +72,7 @@ export function ModelSelectorDropdown({ selectedModelId, onSelect, models }: Mod
           <CommandList>
             <CommandEmpty>No model found.</CommandEmpty>
             {recommended.length > 0 && (
-              <CommandGroup heading="Free Models Router">
+              <CommandGroup heading="Recommended">
                 {recommended.map((model) => (
                   <CommandItem
                     key={model.id}
