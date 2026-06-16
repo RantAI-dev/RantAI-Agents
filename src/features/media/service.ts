@@ -9,6 +9,12 @@ import {
 } from "./repository"
 import { uploadMediaBytes, downloadMediaBytes } from "./storage"
 import { generateImage, generateAudio, generateVideo } from "./provider/openrouter"
+import * as minimax from "./provider/minimax"
+import {
+  isHouseMediaModel,
+  houseMediaBackendModel,
+  getHouseMediaModel,
+} from "./house-media-models"
 import { getCapability } from "./model-capabilities"
 import type { MediaModality } from "./schema"
 
@@ -56,6 +62,12 @@ function getOpenRouterApiKey(): string {
   return key
 }
 
+function getMiniMaxApiKey(): string {
+  const key = process.env.MINIMAX_API_KEY
+  if (!key) throw new Error("MINIMAX_API_KEY is not set")
+  return key
+}
+
 async function loadModel(modelId: string) {
   const model = await prisma.llmModel.findUnique({ where: { id: modelId } })
   if (!model) throw new Error(`Model not found: ${modelId}`)
@@ -88,7 +100,11 @@ async function loadReferenceUrls(
 }
 
 export async function createMediaJob(input: CreateMediaJobInput) {
-  const model = await loadModel(input.modelId)
+  // House (white-labeled, direct-provider) media models are code-defined and not
+  // in the synced LlmModel catalog — skip the DB existence check for them.
+  if (!isHouseMediaModel(input.modelId)) {
+    await loadModel(input.modelId)
+  }
 
   // ── Per-model capability validation ──────────────────
   const capability = getCapability(input.modelId, input.modality)
@@ -219,16 +235,26 @@ async function runImageJob(input: {
   referenceAssetIds: string[]
   estimatedCostCents: number
 }) {
-  const apiKey = getOpenRouterApiKey()
-  const referenceImageUrls = await loadReferenceUrls(input.referenceAssetIds, input.organizationId)
+  const isHouse = isHouseMediaModel(input.modelId)
+  const referenceImageUrls = isHouse
+    ? []
+    : await loadReferenceUrls(input.referenceAssetIds, input.organizationId)
 
-  const result = await generateImage({
-    apiKey,
-    modelId: input.modelId,
-    prompt: input.prompt,
-    parameters: input.parameters,
-    referenceImageUrls,
-  })
+  const result = isHouse
+    ? await minimax.generateImage({
+        apiKey: getMiniMaxApiKey(),
+        modelId: houseMediaBackendModel(input.modelId),
+        prompt: input.prompt,
+        parameters: input.parameters,
+        referenceImageUrls: [],
+      })
+    : await generateImage({
+        apiKey: getOpenRouterApiKey(),
+        modelId: input.modelId,
+        prompt: input.prompt,
+        parameters: input.parameters,
+        referenceImageUrls,
+      })
 
   const assets: FinalizeAssetInput[] = []
   for (const [index, image] of result.images.entries()) {
@@ -253,7 +279,9 @@ async function runImageJob(input: {
     })
   }
 
-  const costCents = result.actualCostCents ?? input.estimatedCostCents
+  const costCents = isHouse
+    ? (getHouseMediaModel(input.modelId)?.costCentsPerUnit ?? 0) * result.images.length
+    : result.actualCostCents ?? input.estimatedCostCents
   const finalized = await finalizeMediaJobAsSucceeded({
     jobId: input.jobId,
     costCents,
@@ -286,13 +314,20 @@ async function runAudioJob(input: {
   parameters: Record<string, unknown>
   estimatedCostCents: number
 }) {
-  const apiKey = getOpenRouterApiKey()
-  const result = await generateAudio({
-    apiKey,
-    modelId: input.modelId,
-    prompt: input.prompt,
-    parameters: input.parameters,
-  })
+  const isHouse = isHouseMediaModel(input.modelId)
+  const result = isHouse
+    ? await minimax.generateAudio({
+        apiKey: getMiniMaxApiKey(),
+        modelId: houseMediaBackendModel(input.modelId),
+        prompt: input.prompt,
+        parameters: input.parameters,
+      })
+    : await generateAudio({
+        apiKey: getOpenRouterApiKey(),
+        modelId: input.modelId,
+        prompt: input.prompt,
+        parameters: input.parameters,
+      })
 
   const extension = result.audio.mimeType === "audio/mpeg" ? "mp3" : result.audio.mimeType.split("/")[1] ?? "mp3"
   const upload = await uploadMediaBytes({
@@ -304,7 +339,9 @@ async function runAudioJob(input: {
     bytes: result.audio.bytes,
   })
 
-  const audioCostCents = result.actualCostCents ?? input.estimatedCostCents
+  const audioCostCents = isHouse
+    ? getHouseMediaModel(input.modelId)?.costCentsPerUnit ?? 0
+    : result.actualCostCents ?? input.estimatedCostCents
   const finalized = await finalizeMediaJobAsSucceeded({
     jobId: input.jobId,
     costCents: audioCostCents,
