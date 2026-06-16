@@ -2,6 +2,7 @@ import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { prisma } from "@/lib/prisma"
 import { AVAILABLE_MODELS } from "@/lib/models"
+import { HOUSE_MODELS } from "@/lib/llm/house-models"
 import { buildWizardTools, filterKnownIds, type WizardDeps } from "./tools"
 import {
   type WizardMessage,
@@ -55,13 +56,27 @@ export interface StreamAssistantWizardArgs {
 
 export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
   const deps: WizardDeps = {
-    listModels: async () =>
-      AVAILABLE_MODELS.map((m) => ({
-        id: m.id,
-        name: m.name,
-        functionCalling: m.capabilities.functionCalling,
-        ctx: m.contextWindow,
-      })),
+    listModels: async () => {
+      // Offer the cheap white-labeled house model(s) first (when configured) so
+      // wizard-built agents can default to the low-credit option.
+      const houseModels = process.env.MINIMAX_API_KEY
+        ? HOUSE_MODELS.map((m) => ({
+            id: m.id,
+            name: m.name,
+            functionCalling: m.capabilities.functionCalling,
+            ctx: m.contextWindow,
+          }))
+        : []
+      return [
+        ...houseModels,
+        ...AVAILABLE_MODELS.map((m) => ({
+          id: m.id,
+          name: m.name,
+          functionCalling: m.capabilities.functionCalling,
+          ctx: m.contextWindow,
+        })),
+      ]
+    },
     listTools: async (orgId) => {
       const tools = await prisma.tool.findMany({
         where: { OR: [{ organizationId: orgId }, { organizationId: null }] },

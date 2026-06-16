@@ -171,6 +171,9 @@ export async function runChat(params: {
   abortSignal?: AbortSignal
   /** When set, overrides the assistant's stored model (e.g. cloud free-tier fallback). */
   modelOverride?: string
+  /** Called once with the real token usage after generation finishes — used by
+   * the cloud edition to deduct credits accurately. Optional so OSS callers skip it. */
+  onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>
 }) {
   const ragTrace: RagTrace | null = RAG_TRACE_ENABLED ? createRagTrace() : null
   try {
@@ -1182,6 +1185,22 @@ export async function runChat(params: {
       ...(assistantModelConfig?.presencePenalty != null && { presencePenalty: Number(assistantModelConfig.presencePenalty) }),
       ...(assistantModelConfig?.frequencyPenalty != null && { frequencyPenalty: Number(assistantModelConfig.frequencyPenalty) }),
     });
+
+    // Report real token usage (aggregate across steps) so the cloud edition can
+    // deduct credits from actual usage instead of estimating from the stream.
+    if (params.onUsage) {
+      (async () => {
+        try {
+          const u = await result.totalUsage
+          await params.onUsage!({
+            inputTokens: u?.inputTokens ?? 0,
+            outputTokens: u?.outputTokens ?? 0,
+          })
+        } catch (err) {
+          console.error("[Credits] Failed to report usage:", err)
+        }
+      })()
+    }
 
     // If userId is 'anonymous', we still want working memory (session based) but maybe not long-term
     const effectiveUserId = userId === 'anonymous' ? 'anon_' + threadId : userId;

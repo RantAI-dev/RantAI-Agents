@@ -16,7 +16,6 @@ type ModalityMeta = {
   accentBorder: string
   accentRing: string
   spinnerGradient: string
-  heroBarGradient: string
   buttonGradient: string
   promptHint: string
   placeholder: string
@@ -33,7 +32,6 @@ export const MODALITY_META: Record<Modality, ModalityMeta> = {
     accentBorder: "border-indigo-500/50",
     accentRing: "ring-indigo-500/30",
     spinnerGradient: "bg-gradient-to-tr from-indigo-500 via-indigo-500/40 to-transparent",
-    heroBarGradient: "bg-gradient-to-r from-indigo-500/0 via-indigo-500/60 to-fuchsia-500/0",
     buttonGradient: "bg-gradient-to-br from-indigo-500 to-fuchsia-600 hover:from-indigo-400 hover:to-fuchsia-500",
     promptHint: "Describe your vision",
     placeholder:
@@ -49,7 +47,6 @@ export const MODALITY_META: Record<Modality, ModalityMeta> = {
     accentBorder: "border-emerald-500/50",
     accentRing: "ring-emerald-500/30",
     spinnerGradient: "bg-gradient-to-tr from-emerald-500 via-emerald-500/40 to-transparent",
-    heroBarGradient: "bg-gradient-to-r from-emerald-500/0 via-emerald-500/60 to-cyan-500/0",
     buttonGradient: "bg-gradient-to-br from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500",
     promptHint: "Describe your sound",
     placeholder:
@@ -65,7 +62,6 @@ export const MODALITY_META: Record<Modality, ModalityMeta> = {
     accentBorder: "border-rose-500/50",
     accentRing: "ring-rose-500/30",
     spinnerGradient: "bg-gradient-to-tr from-rose-500 via-rose-500/40 to-transparent",
-    heroBarGradient: "bg-gradient-to-r from-rose-500/0 via-rose-500/60 to-amber-500/0",
     buttonGradient: "bg-gradient-to-br from-rose-500 to-amber-600 hover:from-rose-400 hover:to-amber-500",
     promptHint: "Describe your scene",
     placeholder:

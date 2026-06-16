@@ -110,7 +110,13 @@ export const MODEL_CAPABILITIES: Record<string, MediaModelCapability> = {
     supportsSeed: true,
   },
 
+  // ── HOUSE (white-labeled, direct provider) ──────────
+  "rantai/canvas": {
+    maxReferenceImages: 0, // text-to-image only for now
+  },
+
   // ── AUDIO ───────────────────────────────────────────
+  "rantai/voice": { maxReferenceImages: 0 },
   "google/lyria-3-clip-preview": { maxReferenceImages: 0 },
   "google/lyria-3-pro-preview": { maxReferenceImages: 0 },
   "openai/gpt-4o-audio-preview": { maxReferenceImages: 0 },

@@ -227,8 +227,6 @@ export function MediaStudioPanel({ modality, models }: Props) {
       <div className="space-y-6">
         {/* Hero prompt card */}
         <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
-          {/* accent bar */}
-          <div className={cn("absolute inset-x-0 top-0 h-[2px]", meta.heroBarGradient)} />
           {/* subtle backdrop glow */}
           <div
             className={cn(
