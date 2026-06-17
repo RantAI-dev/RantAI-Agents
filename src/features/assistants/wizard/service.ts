@@ -1,5 +1,6 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
+import { createExtractThinkTransform } from "@/lib/llm/strip-think"
 import { prisma } from "@/lib/prisma"
 import { AVAILABLE_MODELS } from "@/lib/models"
 import { HOUSE_MODELS } from "@/lib/llm/house-models"
@@ -10,7 +11,12 @@ import {
   type ProposeAgentInput,
 } from "./schema"
 
-const WIZARD_MODEL_ID = "anthropic/claude-sonnet-4.6"
+// Run the wizard itself on a cheap MiniMax house model (M2.5, served direct —
+// NOT OpenRouter) when configured; fall back to the OpenRouter model only if no
+// MiniMax key is set, so local/dev without the key still works.
+const WIZARD_MODEL_ID = process.env.MINIMAX_API_KEY
+  ? "rantai/nano" // → MiniMax-M2.5 via the direct house-model provider
+  : "anthropic/claude-sonnet-4.6"
 const MAX_STEPS = 8
 
 export interface OrgContextCounts {
@@ -200,6 +206,11 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
     messages: modelMessages,
     tools: wizardTools,
     stopWhen: stepCountIs(MAX_STEPS),
+    // M2.5 is a reasoning model that emits <think>...</think>; route it to
+    // reasoning parts (the wizard client only renders text-delta + tool calls,
+    // so it's hidden) — and this variant's flush avoids the trailing-text-delta
+    // serializer error that the strip variant triggers.
+    experimental_transform: createExtractThinkTransform(),
   })
 }
 
