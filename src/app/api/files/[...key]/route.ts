@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { GetObjectCommand } from "@aws-sdk/client-s3"
 import { auth } from "@/lib/auth"
 import { resolveActiveOrg } from "@/lib/org-context"
 import {
@@ -7,16 +8,21 @@ import {
 } from "@/features/platform-routes/files/schema"
 import { accessFileByKey } from "@/features/platform-routes/files/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
+import { getS3Client, getBucket } from "@/lib/s3"
 
 /**
- * GET /api/files/[...key] - Get file access URL or redirect to presigned URL
+ * GET /api/files/[...key] - Stream a stored file through the app.
  *
- * The key is the full S3 path, e.g., /api/files/documents/org123/doc456/file.pdf
+ * The key is the full S3 path, e.g. /api/files/documents/org123/doc456/file.pdf
+ *
+ * RustFS is internal-only (no published port; Caddy fronts only the app), so we
+ * stream bytes through the app rather than redirecting to a presigned
+ * http://rustfs:9000/... URL the browser can't resolve. accessFileByKey still
+ * performs the access check; we only changed how the bytes are delivered.
  *
  * Query params:
- * - redirect=true (default): Redirect to presigned URL
- * - redirect=false: Return JSON with presigned URL
- * - download=true: Force download (Content-Disposition: attachment)
+ * - redirect=false: Return JSON with a same-origin streaming URL (back-compat).
+ * - download=true: Force download (Content-Disposition: attachment).
  */
 export async function GET(
   request: Request,
@@ -57,16 +63,51 @@ export async function GET(
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
 
-    if (result.shouldRedirect) {
-      return NextResponse.redirect(result.url, 302)
+    // Back-compat: redirect=false callers get JSON, but with a same-origin URL
+    // that streams the bytes (never the internal rustfs host).
+    if (!result.shouldRedirect) {
+      const selfUrl = `/api/files/${s3Key}${forceDownload ? "?download=true" : ""}`
+      return NextResponse.json({
+        url: selfUrl,
+        filename: result.filename,
+        contentType: result.contentType,
+        size: result.size,
+        expiresAt: result.expiresAt,
+      })
     }
 
-    return NextResponse.json({
-      url: result.url,
-      filename: result.filename,
-      contentType: result.contentType,
-      size: result.size,
-      expiresAt: result.expiresAt,
+    const range = request.headers.get("range") ?? undefined
+    let s3res
+    try {
+      s3res = await getS3Client().send(
+        new GetObjectCommand({
+          Bucket: getBucket(),
+          Key: s3Key,
+          ...(range ? { Range: range } : {}),
+        })
+      )
+    } catch {
+      return NextResponse.json({ error: "File not found" }, { status: 404 })
+    }
+
+    const body = s3res.Body
+    if (!body) return NextResponse.json({ error: "File not found" }, { status: 404 })
+    const bytes = await body.transformToByteArray()
+
+    const headers = new Headers()
+    headers.set("Content-Type", result.contentType)
+    headers.set(
+      "Content-Disposition",
+      `${forceDownload ? "attachment" : "inline"}; filename="${result.filename.replace(/"/g, "")}"`
+    )
+    headers.set("Accept-Ranges", "bytes")
+    headers.set("Cache-Control", "private, max-age=3600")
+    headers.set("Content-Length", String(bytes.byteLength))
+    if (s3res.ContentRange) headers.set("Content-Range", s3res.ContentRange)
+
+    return new Response(bytes, {
+      status: range && s3res.ContentRange ? 206 : 200,
+      headers,
     })
   } catch (error) {
     console.error("[Files API] Error:", error)
