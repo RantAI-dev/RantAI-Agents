@@ -49,6 +49,16 @@ function isTransientError(status: number): boolean {
   return status >= 500 || status === 429;
 }
 
+// MiniMax embeddings (embo-01) use a NON-OpenAI shape: request
+// { model, texts, type:"db"|"query" } → response { vectors: number[][], base_resp }.
+// Detected by endpoint host so the same KB_EMBEDDING_BASE_URL override can point
+// at MiniMax (covered by the Token Plan) instead of OpenRouter. MiniMax returns
+// rate-limit/errors as HTTP-200 soft errors in base_resp.status_code (0 = ok).
+function isMiniMaxEmbed(baseUrl: string): boolean {
+  return /minimax/i.test(baseUrl);
+}
+const MINIMAX_RATE_LIMIT_CODES = new Set([1002, 1027]);
+
 /**
  * Validate embedding API response structure
  */
@@ -74,6 +84,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
   const cfg = getRagConfig();
   const apiKey = resolveApiKey(cfg.embeddingApiKey);
   if (!apiKey) throw new Error("No API key configured: set KB_EMBEDDING_API_KEY or OPENROUTER_API_KEY");
+  const minimax = isMiniMaxEmbed(cfg.embeddingBaseUrl);
 
   // Cache key includes the model so swapping KB_EMBEDDING_MODEL doesn't return
   // stale vectors of the wrong dimension/space.
@@ -91,10 +102,11 @@ export async function generateEmbedding(text: string): Promise<number[]> {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: cfg.embeddingModel,
-          input: text,
-        }),
+        body: JSON.stringify(
+          minimax
+            ? { model: cfg.embeddingModel, texts: [text], type: "query" }
+            : { model: cfg.embeddingModel, input: text }
+        ),
       });
 
       if (!response.ok) {
@@ -115,7 +127,26 @@ export async function generateEmbedding(text: string): Promise<number[]> {
 
       const data = await response.json();
 
-      // Validate response structure
+      if (minimax) {
+        const code = data?.base_resp?.status_code;
+        if (code && code !== 0) {
+          if (MINIMAX_RATE_LIMIT_CODES.has(code) && attempt < MAX_RETRIES) {
+            const delay = Math.min(RETRY_DELAY_MS * Math.pow(2, attempt - 1), 10000);
+            console.warn(`[Embeddings] MiniMax rate-limited (${code}), retrying in ${delay}ms...`);
+            await sleep(delay);
+            continue;
+          }
+          throw new Error(`MiniMax embedding error ${code}: ${data?.base_resp?.status_msg ?? "unknown"}`);
+        }
+        const vec = data?.vectors?.[0];
+        if (!Array.isArray(vec)) {
+          throw new Error(`Invalid MiniMax embedding response: ${JSON.stringify(data).slice(0, 300)}`);
+        }
+        QUERY_EMBED_CACHE.set(cacheKey, vec);
+        return vec;
+      }
+
+      // Validate response structure (OpenAI shape)
       if (!validateEmbeddingResponse(data)) {
         throw new Error(`Invalid embedding response structure: ${JSON.stringify(data).slice(0, 500)}`);
       }
@@ -153,6 +184,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   const cfg = getRagConfig();
   const apiKey = resolveApiKey(cfg.embeddingApiKey);
   if (!apiKey) throw new Error("No API key configured: set KB_EMBEDDING_API_KEY or OPENROUTER_API_KEY");
+  const minimax = isMiniMaxEmbed(cfg.embeddingBaseUrl);
 
   // Split into batches.
   const batches: string[][] = [];
@@ -179,10 +211,11 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
               Authorization: `Bearer ${apiKey}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({
-              model: cfg.embeddingModel,
-              input: batch,
-            }),
+            body: JSON.stringify(
+              minimax
+                ? { model: cfg.embeddingModel, texts: batch, type: "db" }
+                : { model: cfg.embeddingModel, input: batch }
+            ),
           });
 
           if (!response.ok) {
@@ -199,6 +232,24 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
           }
 
           const data = await response.json();
+          if (minimax) {
+            const code = data?.base_resp?.status_code;
+            if (code && code !== 0) {
+              if (MINIMAX_RATE_LIMIT_CODES.has(code) && attempt < MAX_RETRIES) {
+                const delay = Math.min(RETRY_DELAY_MS * Math.pow(2, attempt - 1), 10000);
+                console.warn(`[Embeddings] MiniMax batch ${idx + 1}/${batches.length} rate-limited (${code}), retrying in ${delay}ms...`);
+                await sleep(delay);
+                continue;
+              }
+              throw new Error(`MiniMax embedding error ${code}: ${data?.base_resp?.status_msg ?? "unknown"}`);
+            }
+            if (!Array.isArray(data?.vectors)) {
+              throw new Error(`Invalid MiniMax embedding response: ${JSON.stringify(data).slice(0, 300)}`);
+            }
+            results[idx] = data.vectors;
+            lastError = null;
+            break;
+          }
           if (!validateEmbeddingResponse(data)) {
             throw new Error(`Invalid embedding response structure: ${JSON.stringify(data).slice(0, 500)}`);
           }

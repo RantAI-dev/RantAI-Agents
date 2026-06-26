@@ -212,7 +212,7 @@ export function WizardPageClient({ initialAssistants, catalogs }: Props) {
         onSkipToManual={handleSkipToManual}
       />
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0">
         {!hasDraft ? (
           <WizardHero
             turns={stream.turns}
@@ -221,7 +221,8 @@ export function WizardPageClient({ initialAssistants, catalogs }: Props) {
             onSend={handleSend}
           />
         ) : (
-          <div className="mx-auto max-w-3xl px-4 sm:px-6 py-6 space-y-6 pb-32">
+          <div className="h-full overflow-y-auto">
+            <div className="mx-auto max-w-3xl px-4 sm:px-6 py-6 space-y-6 pb-32">
             <WizardAgentCard
               draft={state.draft}
               uncertainty={state.uncertainty}
@@ -256,6 +257,7 @@ export function WizardPageClient({ initialAssistants, catalogs }: Props) {
                 />
               </TabsContent>
             </Tabs>
+            </div>
           </div>
         )}
       </div>

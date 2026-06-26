@@ -43,7 +43,7 @@ Rules:
 2. Before suggesting any tool/skill/MCP/KB/model IDs, call the relevant list* tool to see what actually exists. Never invent IDs.
 3. Ask 2-4 follow-up questions after the user's first description (audience, data access, actions, personality/guardrails). Then call proposeAgent.
 4. If the user corrects something mid-conversation, call refineAgent with a partial patch.
-5. Pick a sensible default model from listModels (prefer function-calling if tools are needed).
+5. Default the agent's model to a RantAI house model from listModels: prefer "rantai/swift" for general/economical agents, or "rantai/prime" when the agent needs image understanding or long context. Only pick a different model if the user explicitly asks for one. (All RantAI models support function calling.)
 6. System prompt must be at least 20 characters. Use the structure: ## Goal / ## Skills / ## Workflow / ## Constraints.
 7. Stop after proposeAgent succeeds unless the user asks for changes.
 8. When emitting the \`uncertainty\` field in proposeAgent / refineAgent:
