@@ -65,6 +65,15 @@ export function MediaStudioPanel({ modality, models }: Props) {
   const [stylePreset, setStylePreset] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Cloud: media generation is a paid feature. Detect free plan to gate the
+  // generate action + show an upsell (the API also enforces this).
+  const [isFreePlan, setIsFreePlan] = useState(false)
+  useEffect(() => {
+    fetch("/api/dashboard/usage/free-limits", { credentials: "same-origin" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setIsFreePlan(!!d?.isFree))
+      .catch(() => {})
+  }, [])
 
   const {
     jobs,
@@ -145,6 +154,14 @@ export function MediaStudioPanel({ modality, models }: Props) {
 
   const handleGenerate = async () => {
     if (!prompt.trim() || !modelId) return
+    // Free plan can't generate media — surface the upgrade modal instead of a
+    // wasted request (the API gate is the source of truth).
+    if (isFreePlan) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("rantai:upgrade-required", { detail: { upgradeRequired: "media" } }))
+      }
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -196,6 +213,10 @@ export function MediaStudioPanel({ modality, models }: Props) {
       })
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+        // Cloud: a plan/limit wall (e.g. media is paid) → pop the upgrade modal.
+        if (body?.upgradeRequired && typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("rantai:upgrade-required", { detail: body }))
+        }
         throw new Error(body.error ?? `${res.status}`)
       }
       const job: StoreJob = await res.json()
@@ -225,6 +246,22 @@ export function MediaStudioPanel({ modality, models }: Props) {
     <div className="grid grid-cols-1 gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       {/* ── Main column ───────────────────────────────────────────── */}
       <div className="space-y-6">
+        {/* Free-plan upsell — generation is a paid feature (cloud; API-enforced) */}
+        {isFreePlan && (
+          <div className="flex items-center gap-3 rounded-2xl border border-violet-500/25 bg-gradient-to-r from-violet-500/10 to-indigo-500/10 px-4 py-3 text-sm">
+            <Sparkles className="h-4 w-4 shrink-0 text-violet-500" />
+            <div className="min-w-0 flex-1">
+              <span className="font-medium text-foreground">Media generation is a paid feature.</span>{" "}
+              <span className="text-muted-foreground">
+                Build your prompt below — upgrade to generate images &amp; voice.
+              </span>
+            </div>
+            <Button asChild size="sm" className="h-7 shrink-0">
+              <a href="/dashboard/settings/billing">Upgrade</a>
+            </Button>
+          </div>
+        )}
+
         {/* Hero prompt card */}
         <div className="relative overflow-hidden rounded-2xl border bg-card shadow-sm">
           {/* subtle backdrop glow */}
