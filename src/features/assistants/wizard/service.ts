@@ -28,9 +28,14 @@ export interface OrgContextCounts {
   mcpCount: number
   kbCount: number
   modelCount: number
+  /** Free-plan orgs can only use free models + Nano; recommend Nano by default. */
+  isFreePlan: boolean
 }
 
 export function buildWizardSystemPrompt(ctx: OrgContextCounts): string {
+  const modelRule = ctx.isFreePlan
+    ? `5. This is a FREE-plan org. Default the agent's model to "rantai/nano" — the free-plan house model. Only "rantai/nano" and free models are available (see listModels); NEVER propose a paid model (e.g. "rantai/swift", "rantai/prime", or other paid models) — they require a plan upgrade and the agent would fail to save.`
+    : `5. Default the agent's model to a RantAI house model from listModels: prefer "rantai/swift" for general/economical agents, or "rantai/prime" when the agent needs image understanding or long context. Only pick a different model if the user explicitly asks for one. (All RantAI models support function calling.)`
   return `You are the Agent Builder Wizard for organization ${ctx.organizationId}. You help the user design a new AI agent by asking targeted questions and proposing a complete draft.
 
 Org context:
@@ -43,7 +48,7 @@ Rules:
 2. Before suggesting any tool/skill/MCP/KB/model IDs, call the relevant list* tool to see what actually exists. Never invent IDs.
 3. Ask 2-4 follow-up questions after the user's first description (audience, data access, actions, personality/guardrails). Then call proposeAgent.
 4. If the user corrects something mid-conversation, call refineAgent with a partial patch.
-5. Default the agent's model to a RantAI house model from listModels: prefer "rantai/swift" for general/economical agents, or "rantai/prime" when the agent needs image understanding or long context. Only pick a different model if the user explicitly asks for one. (All RantAI models support function calling.)
+${modelRule}
 6. System prompt must be at least 20 characters. Use the structure: ## Goal / ## Skills / ## Workflow / ## Constraints.
 7. Stop after proposeAgent succeeds unless the user asks for changes.
 8. When emitting the \`uncertainty\` field in proposeAgent / refineAgent:
@@ -61,12 +66,26 @@ export interface StreamAssistantWizardArgs {
 }
 
 export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
+  // Free-plan orgs may only build agents on free models + Nano; constrain the
+  // models the wizard sees (and thus can propose) so it never offers a paid
+  // model that would 402 on save.
+  const orgRow = await prisma.organization.findUnique({
+    where: { id: args.organizationId },
+    select: { plan: true },
+  })
+  const isFreePlan = (orgRow?.plan ?? "free") === "free"
+  const freeModelAllowed = (id: string, input: number, output: number) =>
+    (input === 0 && output === 0) || id.endsWith(":free") || id === "rantai/nano"
+
   const deps: WizardDeps = {
     listModels: async () => {
       // Offer the cheap white-labeled house model(s) first (when configured) so
-      // wizard-built agents can default to the low-credit option.
+      // wizard-built agents can default to the low-credit option. On the free
+      // plan, only Nano is offered from the house models.
       const houseModels = process.env.MINIMAX_API_KEY
-        ? HOUSE_MODELS.map((m) => ({
+        ? HOUSE_MODELS.filter(
+            (m) => !isFreePlan || freeModelAllowed(m.id, m.pricing.input, m.pricing.output),
+          ).map((m) => ({
             id: m.id,
             name: m.name,
             functionCalling: m.capabilities.functionCalling,
@@ -75,7 +94,9 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
         : []
       return [
         ...houseModels,
-        ...AVAILABLE_MODELS.map((m) => ({
+        ...AVAILABLE_MODELS.filter(
+          (m) => !isFreePlan || freeModelAllowed(m.id, m.pricing.input, m.pricing.output),
+        ).map((m) => ({
           id: m.id,
           name: m.name,
           functionCalling: m.capabilities.functionCalling,
@@ -172,6 +193,7 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
     mcpCount: mcp.length,
     kbCount: kbs.length,
     modelCount: models.length,
+    isFreePlan,
   })
 
   const wizardTools = buildWizardTools({

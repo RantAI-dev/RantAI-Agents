@@ -3,21 +3,35 @@ import { buildWizardSystemPrompt, sanitizeProposal } from "./service"
 import type { ProposeAgentInput } from "./schema"
 
 describe("buildWizardSystemPrompt", () => {
+  const ctx = {
+    organizationId: "org_1",
+    userRole: "admin",
+    existingAgentCount: 3,
+    toolCount: 10,
+    skillCount: 5,
+    mcpCount: 2,
+    kbCount: 1,
+    modelCount: 4,
+    isFreePlan: false,
+  }
+
   it("includes org context and rules", () => {
-    const prompt = buildWizardSystemPrompt({
-      organizationId: "org_1",
-      userRole: "admin",
-      existingAgentCount: 3,
-      toolCount: 10,
-      skillCount: 5,
-      mcpCount: 2,
-      kbCount: 1,
-      modelCount: 4,
-    })
+    const prompt = buildWizardSystemPrompt(ctx)
     expect(prompt).toContain("org_1")
     expect(prompt).toContain("3 existing agents")
     expect(prompt).toContain("Never invent IDs")
     expect(prompt).toContain("proposeAgent")
+  })
+
+  it("recommends Swift/Prime on a paid plan", () => {
+    const prompt = buildWizardSystemPrompt({ ...ctx, isFreePlan: false })
+    expect(prompt).toContain("rantai/swift")
+  })
+
+  it("recommends Nano (and forbids paid models) on the free plan", () => {
+    const prompt = buildWizardSystemPrompt({ ...ctx, isFreePlan: true })
+    expect(prompt).toContain("rantai/nano")
+    expect(prompt).toContain("FREE-plan")
   })
 })
 
