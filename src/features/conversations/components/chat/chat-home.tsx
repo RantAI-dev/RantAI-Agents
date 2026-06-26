@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils"
 import { useOrgFetch, useOrganization } from "@/hooks/use-organization"
 import { ChatInputToolbar, type CanvasMode, type ToolMode, type SkillMode } from "./chat-input-toolbar"
 import { FilePreview } from "./file-preview"
+import { VisionAttachmentHint } from "./vision-attachment-hint"
 import type {
   AssistantSkillInfo,
   AssistantToolInfo,
@@ -53,6 +54,7 @@ interface AgentItem {
   name: string
   description: string
   emoji: string
+  model?: string
   tags?: string[]
   useKnowledgeBase?: boolean
   knowledgeBaseGroupIds?: string[]
@@ -621,6 +623,13 @@ export function ChatHome({
                 </div>
               )}
             </AnimatePresence>
+
+            {/* Non-vision model + image attachment hint */}
+            <VisionAttachmentHint
+              modelId={activeAssistant?.model}
+              files={attachedFiles}
+              className="mb-2"
+            />
 
             <div className="rounded-2xl border border-border/60 bg-muted/30 shadow-sm transition-all focus-within:border-foreground/20 focus-within:shadow-md focus-within:bg-muted/40">
               <div className="relative">

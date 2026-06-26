@@ -4,6 +4,8 @@
  * Updated: February 2026
  */
 
+import { isHouseModel, getHouseModel } from "@/lib/llm/house-models"
+
 export interface LLMModel {
   id: string
   name: string
@@ -185,8 +187,23 @@ export const DEFAULT_MODEL_ID = "google/gemini-3-flash-preview"
 /**
  * Get model by ID
  */
+/** Map a code-defined house model (rantai/*) to the LLMModel shape. */
+function houseModelAsLLM(id: string): LLMModel | undefined {
+  const m = getHouseModel(id)
+  if (!m) return undefined
+  return {
+    id: m.id,
+    name: m.name,
+    provider: m.provider,
+    description: m.description,
+    contextWindow: m.contextWindow,
+    pricing: m.pricing,
+    capabilities: m.capabilities,
+  }
+}
+
 export function getModelById(id: string): LLMModel | undefined {
-  return AVAILABLE_MODELS.find((m) => m.id === id)
+  return houseModelAsLLM(id) ?? AVAILABLE_MODELS.find((m) => m.id === id)
 }
 
 /**
@@ -201,7 +218,7 @@ export function getModelName(id: string): string {
  * Validate if a model ID is valid (static list only — use isValidModelAsync for DB check)
  */
 export function isValidModel(id: string): boolean {
-  return AVAILABLE_MODELS.some((m) => m.id === id)
+  return isHouseModel(id) || AVAILABLE_MODELS.some((m) => m.id === id)
 }
 
 // --- Async DB-backed versions (for server-side use) ---
@@ -234,6 +251,7 @@ export async function getModelsFromDb(): Promise<LLMModel[]> {
 
 /** Check if a model ID exists in DB or static list. */
 export async function isValidModelAsync(id: string): Promise<boolean> {
+  if (isHouseModel(id)) return true
   const dbModel = await prisma.llmModel.findUnique({
     where: { id },
     select: { id: true },

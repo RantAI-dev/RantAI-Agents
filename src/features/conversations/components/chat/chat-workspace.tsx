@@ -53,6 +53,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { FilePreview } from "./file-preview"
+import { VisionAttachmentHint } from "./vision-attachment-hint"
 import { ChatInputToolbar, type AssistantToolInfo, type AssistantSkillInfo, type CanvasMode, type KBGroup, type ToolMode, type SkillMode } from "./chat-input-toolbar"
 import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
 import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } from "./edit-version-indicator"
@@ -3672,6 +3673,12 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                       )}
                     </AnimatePresence>
 
+                    <VisionAttachmentHint
+                      modelId={assistant.model}
+                      files={attachedFiles}
+                      className="mb-2"
+                    />
+
                     {activeArtifact?.type === "application/python" && pinnedNotebookOutputs.length > 0 && (
                       <div className="mb-2 flex flex-wrap gap-1">
                         {pinnedNotebookOutputs.map((p) => (
@@ -3891,6 +3898,12 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               </div>
             )}
           </AnimatePresence>
+
+          <VisionAttachmentHint
+            modelId={assistant.model}
+            files={attachedFiles}
+            className="mb-2"
+          />
 
           {/* Unified input container */}
           <div className="rounded-2xl border border-border/60 bg-muted/30 shadow-sm transition-all focus-within:border-foreground/20 focus-within:shadow-md focus-within:bg-muted/40">
