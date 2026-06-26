@@ -2293,7 +2293,15 @@ export function ChatWorkspace({
         if (!response.ok) {
           const errorText = await response.text()
           console.error("API Error:", response.status, errorText)
-          throw new Error(`Failed to get response: ${response.status}`)
+          // Cloud edition surfaces plan/limit walls via an upgrade modal. Stay
+          // cloud-agnostic: parse the body and dispatch a window event that the
+          // cloud UpgradeModalProvider listens for (no cloud import here).
+          let parsed: { error?: string; upgradeRequired?: string } | null = null
+          try { parsed = JSON.parse(errorText) } catch { /* non-JSON error body */ }
+          if (parsed?.upgradeRequired && typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("rantai:upgrade-required", { detail: parsed }))
+          }
+          throw new Error(parsed?.error || `Failed to get response: ${response.status}`)
         }
 
         // Free plan fell back to the Free Models Router — let the user know.
