@@ -33,6 +33,7 @@ import { useOrgFetch, useOrganization } from "@/hooks/use-organization"
 import { ChatInputToolbar, type CanvasMode, type ToolMode, type SkillMode } from "./chat-input-toolbar"
 import { FilePreview } from "./file-preview"
 import { VisionAttachmentHint } from "./vision-attachment-hint"
+import { FreePlanBanner } from "@/components/free-plan-banner"
 import type {
   AssistantSkillInfo,
   AssistantToolInfo,
@@ -590,6 +591,11 @@ export function ChatHome({
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="flex-1 flex flex-col items-center w-full max-w-3xl mx-auto px-5 pt-28 pb-24">
+
+        {/* Free-plan upsell banner (cloud; hides itself on paid/OSS) */}
+        <div className="w-full">
+          <FreePlanBanner />
+        </div>
 
         {/* ── Animated greeting ────────────────────────────────────── */}
         <motion.div

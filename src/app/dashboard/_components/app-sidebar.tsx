@@ -39,6 +39,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Badge } from "@/components/ui/badge"
+import { PlanUsageBadge } from "@/components/plan-usage-badge"
 import {
   Tooltip,
   TooltipContent,
@@ -1030,6 +1031,9 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
           <span>Settings</span>
         </Link>
       </div>
+
+      {/* Free-plan usage + upgrade (cloud; hides on paid/OSS) */}
+      <PlanUsageBadge />
 
       {/* User section */}
       <div className="p-3 border-t border-sidebar-border">
