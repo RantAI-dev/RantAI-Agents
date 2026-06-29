@@ -2647,6 +2647,15 @@ export function ChatWorkspace({
 
         setIsStreaming(false)
 
+        // Tell cloud usage indicators (free-plan badge/banner/billing) to refresh
+        // now that this message's usage has been recorded — so limits update
+        // live without a page refresh. The follow-up covers the brief race where
+        // the server logs the UsageRecord just after the stream closes.
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("rantai:usage-updated"))
+          setTimeout(() => window.dispatchEvent(new CustomEvent("rantai:usage-updated")), 1500)
+        }
+
         // Final content and sources
         let finalContent = assistantContent
         const sources = streamedSources
