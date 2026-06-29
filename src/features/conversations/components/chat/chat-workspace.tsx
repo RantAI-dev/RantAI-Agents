@@ -1132,8 +1132,13 @@ export function ChatWorkspace({
     return window.sessionStorage.getItem(key) !== null
   }, [apiSessionId, session?.id])
 
-  // Canvas mode — forces AI to create/update artifacts
-  const [canvasMode, setCanvasMode] = useState<CanvasMode>(false)
+  // Canvas mode — forces AI to create/update artifacts. Seed from the agent's
+  // configured default (canvas starter agents) so they produce their artifact
+  // on the first message; the sessionStorage snapshot restore below still wins
+  // when present, and the user can change it in the toolbar.
+  const [canvasMode, setCanvasMode] = useState<CanvasMode>(
+    (assistant.chatConfig?.defaultCanvasMode as CanvasMode | undefined) ?? false,
+  )
 
   // GitHub import dialog state
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)

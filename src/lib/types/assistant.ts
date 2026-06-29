@@ -23,6 +23,12 @@ export interface ChatConfig {
   historyCount?: number       // number of messages to carry
   autoSummary?: boolean
   autoScroll?: boolean
+  /**
+   * Canvas mode this agent enables by default in the composer:
+   * "auto" | an artifact type id (e.g. "application/mermaid"). Lets seeded
+   * canvas agents produce their artifact on the first message.
+   */
+  defaultCanvasMode?: string
 }
 
 export interface GuardRailsConfig {
