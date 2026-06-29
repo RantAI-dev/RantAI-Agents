@@ -24,6 +24,7 @@ export default function ChatPageClient({
   const {
     assistants,
     selectedAssistantId,
+    selectAssistant,
     getAssistantById,
     isLoading: assistantsLoading,
   } = useAssistants({
@@ -88,6 +89,7 @@ export default function ChatPageClient({
         sessions={displaySessions}
         assistants={assistants}
         selectedAssistantId={selectedAssistantId}
+        onSelectAssistant={selectAssistant}
         getAssistantById={getAssistantById}
         initialToolbarData={initialToolbarData}
         onSelectSession={(id) => {

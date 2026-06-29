@@ -79,7 +79,18 @@ export interface KBGroup {
   documentCount: number
 }
 
+export interface AgentOption {
+  id: string
+  name: string
+  emoji?: string
+  description?: string
+}
+
 interface ChatInputToolbarProps {
+  /** Optional agent picker (shown only on the new-chat composer). */
+  agents?: AgentOption[]
+  selectedAgentId?: string | null
+  onSelectAgent?: (id: string) => void
   onFileSelect: (files: File[]) => void
   fileAttached: boolean
   webSearchEnabled: boolean
@@ -157,6 +168,9 @@ function getSkillsLabel(mode: SkillMode, selectedCount: number, totalCount: numb
 }
 
 export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
+  agents,
+  selectedAgentId,
+  onSelectAgent,
   onFileSelect,
   fileAttached,
   webSearchEnabled,
@@ -295,6 +309,8 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
   const toolBadgeCount = toolMode === "auto" ? defaultToolNames.length : toolMode === "select" ? selectedToolNames.length : 0
   const skillBadgeCount = skillMode === "auto" ? defaultSkillIds.length : skillMode === "select" ? selectedSkillIds.length : 0
 
+  const selectedAgent = agents?.find((a) => a.id === selectedAgentId) ?? agents?.[0]
+
   return (
     <div className="flex items-center gap-0.5">
       {/* Hidden file input */}
@@ -307,6 +323,55 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
         className="hidden"
         aria-hidden="true"
       />
+
+      {/* Agent picker (new-chat composer only) */}
+      {onSelectAgent && agents && agents.length > 0 && (
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 max-w-[180px] gap-1.5 rounded-lg px-2 text-muted-foreground hover:text-foreground"
+                  disabled={disabled}
+                >
+                  <span className="text-base leading-none">{selectedAgent?.emoji || "🤖"}</span>
+                  <span className="truncate text-xs font-medium">{selectedAgent?.name || "Choose agent"}</span>
+                  <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent side="top">
+              <p>Choose agent</p>
+            </TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent side="top" align="start" className="w-64 max-h-[340px] overflow-y-auto">
+            <DropdownMenuLabel className="text-[10px] text-muted-foreground font-normal">
+              Agent
+            </DropdownMenuLabel>
+            {agents.map((a) => (
+              <DropdownMenuItem
+                key={a.id}
+                onClick={() => onSelectAgent(a.id)}
+                className="gap-2"
+              >
+                <span className="text-base leading-none shrink-0">{a.emoji || "🤖"}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="block truncate text-xs font-medium">{a.name}</span>
+                  {a.description && (
+                    <span className="block truncate text-[10px] text-muted-foreground">{a.description}</span>
+                  )}
+                </div>
+                {a.id === (selectedAgent?.id ?? selectedAgentId) && (
+                  <Check className="h-3.5 w-3.5 text-primary shrink-0" />
+                )}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
 
       {/* "+" Add menu (Google-style) */}
       <Popover>

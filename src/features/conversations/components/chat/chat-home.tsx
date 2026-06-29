@@ -79,6 +79,8 @@ export interface ChatHomeProps {
   sessions: SessionItem[]
   assistants: AgentItem[]
   selectedAssistantId?: string | null
+  /** Change which agent the next chat uses (composer agent picker). */
+  onSelectAssistant?: (id: string) => void
   getAssistantById: (id: string) => { emoji: string; name: string } | undefined
   onSelectSession: (id: string) => void
   onCreateSession: (
@@ -208,6 +210,7 @@ export function ChatHome({
   sessions,
   assistants,
   selectedAssistantId,
+  onSelectAssistant,
   getAssistantById,
   onSelectSession,
   onCreateSession,
@@ -680,6 +683,9 @@ export function ChatHome({
               {/* Toolbar */}
               <div className="px-2 pb-2">
                 <ChatInputToolbar
+                  agents={onSelectAssistant ? assistants : undefined}
+                  selectedAgentId={activeAssistant?.id}
+                  onSelectAgent={onSelectAssistant}
                   onFileSelect={(files) => setAttachedFiles(prev => [...prev, ...files])}
                   fileAttached={attachedFiles.length > 0}
                   webSearchEnabled={effectiveWebSearch}
