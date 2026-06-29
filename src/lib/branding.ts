@@ -1,3 +1,5 @@
+import type { Metadata } from "next"
+
 export type ProductMode = "default" | "nexus"
 
 export interface BrandConfig {
@@ -9,12 +11,20 @@ export interface BrandConfig {
 
   // Logos
   logoMain: string
+  /** Optional logo variant for dark surfaces (white mark). */
+  logoMainDark?: string
   logoIcon: string
+  logoIconDark?: string
 
   // Favicons & PWA
   favicon16: string
+  favicon16Dark?: string
   favicon32: string
+  favicon32Dark?: string
   appleTouchIcon: string
+  appleTouchIconDark?: string
+  faviconIco?: string
+  faviconIcoDark?: string
   manifestPath: string
 
   // Metadata
@@ -47,12 +57,19 @@ const configs: Record<ProductMode, BrandConfig> = {
     companyName: "RantAI",
     companyUrl: "https://rantai.dev",
 
-    logoMain: "/logo/logo-rantai-border.png",
-    logoIcon: "/logo/logo-rantai-border.png",
+    logoMain: "/logo/logo-rantai.png",
+    logoMainDark: "/logo/logo-rantai-dark.png",
+    logoIcon: "/logo/logo-rantai.png",
+    logoIconDark: "/logo/logo-rantai-dark.png",
 
     favicon16: "/logo/favicon-16x16.png",
+    favicon16Dark: "/logo/dark/favicon-16x16.png",
     favicon32: "/logo/favicon-32x32.png",
+    favicon32Dark: "/logo/dark/favicon-32x32.png",
     appleTouchIcon: "/logo/apple-touch-icon.png",
+    appleTouchIconDark: "/logo/dark/apple-touch-icon.png",
+    faviconIco: "/logo/favicon.ico",
+    faviconIcoDark: "/logo/dark/favicon.ico",
     manifestPath: "/logo/site.webmanifest",
 
     metaTitle: "RantAI Agents | Enterprise AI Agent Platform",
@@ -90,6 +107,7 @@ const configs: Record<ProductMode, BrandConfig> = {
     favicon16: "/nexus/favicon-16x16.png",
     favicon32: "/nexus/favicon-32x32.png",
     appleTouchIcon: "/nexus/apple-touch-icon.png",
+    faviconIco: "/nexus/favicon.ico",
     manifestPath: "/nexus/site.webmanifest",
 
     metaTitle: "NQRust Agents | Enterprise AI Agent Platform",
@@ -118,3 +136,36 @@ const configs: Record<ProductMode, BrandConfig> = {
 
 /** The active brand configuration, determined by NEXT_PUBLIC_PRODUCT_MODE */
 export const brand: BrandConfig = Object.freeze(configs[mode])
+
+type IconList = NonNullable<Metadata["icons"]>
+
+/**
+ * Theme-aware icon metadata for the active brand. When dark variants exist,
+ * favicons + apple-touch icons are emitted with `prefers-color-scheme` media
+ * queries so the browser tab icon follows the OS/browser color scheme. The
+ * `.ico` shortcut is the universal fallback for older clients and bookmarks.
+ */
+function buildBrandIcons(b: BrandConfig): IconList {
+  const icon: Array<{ url: string; sizes?: string; type?: string; media?: string }> = [
+    { url: b.favicon32, sizes: "32x32", type: "image/png", ...(b.favicon32Dark ? { media: "(prefers-color-scheme: light)" } : {}) },
+    { url: b.favicon16, sizes: "16x16", type: "image/png", ...(b.favicon16Dark ? { media: "(prefers-color-scheme: light)" } : {}) },
+  ]
+  if (b.favicon32Dark) icon.push({ url: b.favicon32Dark, sizes: "32x32", type: "image/png", media: "(prefers-color-scheme: dark)" })
+  if (b.favicon16Dark) icon.push({ url: b.favicon16Dark, sizes: "16x16", type: "image/png", media: "(prefers-color-scheme: dark)" })
+
+  const apple = b.appleTouchIconDark
+    ? [
+        { url: b.appleTouchIcon, media: "(prefers-color-scheme: light)" },
+        { url: b.appleTouchIconDark, media: "(prefers-color-scheme: dark)" },
+      ]
+    : b.appleTouchIcon
+
+  return {
+    icon,
+    apple,
+    ...(b.faviconIco ? { shortcut: b.faviconIco } : {}),
+  }
+}
+
+/** Pre-computed `<head>` icon metadata for the active brand (see {@link buildBrandIcons}). */
+export const brandIcons: IconList = buildBrandIcons(brand)

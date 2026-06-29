@@ -29,7 +29,7 @@ export function FooterSection() {
 
       <div className={`${landing.container} relative z-10 flex flex-col sm:flex-row items-center justify-between gap-6`}>
         <div className="flex items-center gap-2">
-          <Image src={brand.logoMain} alt="" width={24} height={24} className="h-6 w-auto opacity-80" />
+          <Image src={brand.logoMainDark ?? brand.logoMain} alt="" width={24} height={24} className="h-6 w-auto opacity-80" />
           <span className="text-sm font-medium text-zinc-300">{brand.productName}</span>
         </div>
         <nav className="flex flex-wrap items-center justify-center gap-6 text-sm" aria-label="Footer navigation">

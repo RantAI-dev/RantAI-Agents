@@ -99,7 +99,7 @@ export default function LoginPage() {
           {/* Logo + heading */}
           <div className="text-center space-y-2">
             <Image
-              src={brand.logoMain}
+              src={brand.logoMainDark ?? brand.logoMain}
               alt={brand.productName}
               width={120}
               height={120}

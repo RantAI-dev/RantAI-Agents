@@ -37,7 +37,7 @@ export function LandingNavbar() {
         aria-label="Main navigation"
       >
         <Link href="/" className="flex items-center gap-2 shrink-0" aria-label={`${brand.productName} home`}>
-          <Image src={brand.logoMain} alt={brand.productShortName} width={28} height={28} className="h-7 w-auto" />
+          <Image src={brand.logoMainDark ?? brand.logoMain} alt={brand.productShortName} width={28} height={28} className="h-7 w-auto" />
           <ShinyText className="font-semibold text-zinc-100 text-sm" shimmerWidth={80} speed={4}>
             {brand.productName}
           </ShinyText>

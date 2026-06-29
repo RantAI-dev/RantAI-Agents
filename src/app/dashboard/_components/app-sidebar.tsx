@@ -56,6 +56,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 import { brand } from "@/lib/branding"
+import { BrandLogo } from "@/components/brand-logo"
 import { useAssistants } from "@/hooks/use-assistants"
 import { useWorkflows } from "@/hooks/use-workflows"
 import { useDigitalEmployees } from "@/hooks/use-digital-employees"
@@ -543,9 +544,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
                   className="group/logo relative flex items-center justify-center w-8 h-8 rounded-lg"
                   aria-label="Expand sidebar"
                 >
-                  <img
-                    src={brand.logoMain}
-                    alt={brand.productName}
+                  <BrandLogo
                     className="h-8 w-8 rounded-lg transition-opacity group-hover/logo:opacity-0"
                   />
                   <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sidebar-hover opacity-0 transition-opacity group-hover/logo:opacity-100">
@@ -678,11 +677,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
       {/* Header: Logo + title */}
       <div className="p-3 border-b border-sidebar-border">
         <Link href="/dashboard/chat" className="flex items-center gap-2">
-          <img
-            src={brand.logoMain}
-            alt={brand.productName}
-            className="h-8 w-8 rounded-lg"
-          />
+          <BrandLogo className="h-8 w-8 rounded-lg" />
           <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
         </Link>
       </div>
