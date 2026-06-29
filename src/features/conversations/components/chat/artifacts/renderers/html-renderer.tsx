@@ -3,6 +3,7 @@
 import { useMemo, useRef, useCallback, useEffect, useState } from "react"
 import { Loader2 } from "@/lib/icons"
 import { IFRAME_NAV_BLOCKER_SCRIPT } from "./_iframe-nav-blocker"
+import { loadDesignSystem } from "@/lib/design-systems/loader"
 
 interface HtmlRendererProps {
   content: string
@@ -11,6 +12,13 @@ interface HtmlRendererProps {
 const TAILWIND_CDN = '<script src="https://cdn.tailwindcss.com"><\/script>'
 const INTER_FONT_LINK =
   '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">'
+
+/**
+ * The house design system's CSS variable contract, injected into every HTML
+ * artifact so `var(--ds-*)` utilities the model emits always resolve — even if
+ * the model didn't paste the :root block itself. Generated once at module load.
+ */
+const DS_TOKENS_STYLE = `<style id="ds-tokens">\n${loadDesignSystem().tokensCss}\n</style>`
 
 /**
  * Match a `<head>` open tag whose attributes (if any) cannot contain a `>`
@@ -30,6 +38,7 @@ const HEAD_OPEN_RE =
 function injectDefaults(html: string): string {
   const hasTailwind = /cdn\.tailwindcss\.com|tailwindcss/i.test(html)
   const hasInter = /fonts\.googleapis\.com\/css2\?family=Inter/i.test(html)
+  const hasDsTokens = /id=["']ds-tokens|--ds-bg\s*:/i.test(html)
 
   // Full HTML document — inject into <head>
   if (HEAD_OPEN_RE.test(html)) {
@@ -42,6 +51,9 @@ function injectDefaults(html: string): string {
     if (!hasInter) {
       result = result.replace(HEAD_OPEN_RE, (match) => `${match}\n${INTER_FONT_LINK}`)
     }
+    if (!hasDsTokens) {
+      result = result.replace(HEAD_OPEN_RE, (match) => `${match}\n${DS_TOKENS_STYLE}`)
+    }
     return result
   }
 
@@ -53,6 +65,7 @@ function injectDefaults(html: string): string {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   ${hasTailwind ? "" : TAILWIND_CDN}
   ${hasInter ? "" : INTER_FONT_LINK}
+  ${hasDsTokens ? "" : DS_TOKENS_STYLE}
   <style>
     body { margin: 0; padding: 16px; font-family: 'Inter', system-ui, -apple-system, sans-serif; }
     *, *::before, *::after { box-sizing: border-box; }

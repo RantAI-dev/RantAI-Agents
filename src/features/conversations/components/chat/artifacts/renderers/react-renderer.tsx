@@ -9,6 +9,13 @@ import {
   type AestheticDirection,
   type ParsedDirectives,
 } from "./_react-directives"
+import { loadDesignSystem } from "@/lib/design-systems/loader"
+
+/**
+ * House design-system CSS variable contract, injected into every React artifact
+ * iframe so `var(--ds-*)` utilities resolve regardless of what the model emits.
+ */
+const DS_TOKENS_CSS = loadDesignSystem().tokensCss
 
 interface ReactRendererProps {
   content: string
@@ -281,9 +288,12 @@ ${fontLinks}
 <script>window.react = window.React;<\/script>
 <script crossorigin src="https://unpkg.com/lucide-react@0.454.0/dist/umd/lucide-react.js"><\/script>
 <script crossorigin src="https://unpkg.com/framer-motion@11/dist/framer-motion.js"><\/script>
+<style id="ds-tokens">
+${DS_TOKENS_CSS}
+</style>
 <style>
   *, *::before, *::after { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  body { margin: 0; font-family: var(--ds-font-sans, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif); }
   #root { min-height: 100vh; }
 </style>
 </head>

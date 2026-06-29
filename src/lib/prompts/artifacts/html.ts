@@ -36,9 +36,9 @@ Every artifact MUST start with:
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><!-- descriptive, <60 chars --></title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" />
-  <style>body{font-family:'Inter',system-ui,sans-serif}</style>
+  <style>body{font-family:var(--ds-font-sans)}</style>
 </head>
-<body class="min-h-full bg-slate-50 text-slate-900 antialiased">
+<body class="min-h-full antialiased" style="background:var(--ds-bg);color:var(--ds-ink)">
   <!-- semantic content here -->
 </body>
 </html>
@@ -46,28 +46,21 @@ Every artifact MUST start with:
 Use semantic landmarks: \`<header>\`, \`<nav>\`, \`<main>\`, \`<section>\`, \`<article>\`, \`<aside>\`, \`<footer>\`. Exactly one \`<h1>\` per document.
 
 ## Design System
-**Palette — pick exactly ONE primary, then neutrals + 1 accent. Total ≤ 5 colors.**
-- Primary candidates: \`indigo-600\`, \`blue-600\`, \`emerald-600\`, \`rose-600\`, \`amber-500\`, \`slate-900\`
-- Neutrals (always): \`slate-50\` (page bg), \`white\` (card bg), \`slate-200\` (borders), \`slate-500\` (secondary text), \`slate-900\` (primary text)
-- **NEVER** use purple/violet unless explicitly asked. **NEVER** mix more than 2 saturated hues.
-
-**Typography (Tailwind):**
-- Display: \`text-5xl font-bold tracking-tight\`
-- H1: \`text-4xl font-bold tracking-tight\`  · H2: \`text-2xl font-semibold tracking-tight\`  · H3: \`text-lg font-semibold\`
-- Body: \`text-base leading-relaxed\`  · Small: \`text-sm text-slate-500\`
-- Use \`text-balance\` on headings, \`text-pretty\` on long body.
+This artifact is steered by the active design system (see the "Active design system" section below — RantAI Warm Paper by default). Its \`--ds-*\` CSS variables are already loaded in the runtime; build with them and do NOT introduce off-brand palettes (no slate/indigo) unless the user explicitly asks for a different look.
+- **Surfaces:** page \`bg-[var(--ds-bg)]\`; cards \`bg-[var(--ds-surface)] rounded-[var(--ds-radius-lg)] shadow-[var(--ds-shadow-card)]\`. Depth comes from 1px rings, not heavy borders.
+- **Text:** primary \`text-[var(--ds-ink)]\`; secondary \`text-[var(--ds-muted)]\`; small labels \`text-[var(--ds-faint)]\`.
+- **Accent:** exactly ONE accent moment per view — \`bg-[var(--ds-accent)] text-[var(--ds-accent-ink)]\` for the main CTA, \`text-[var(--ds-accent)]\` for the single emphasized number.
+- **Typography:** headings use the serif display font — \`style="font-family:var(--ds-font-display)"\` + \`tracking-tight\`; body/UI stays sans (\`var(--ds-font-sans)\`). \`text-balance\` on headings, \`text-pretty\` on long body. Display \`text-5xl\` · H1 \`text-4xl\` · H2 \`text-2xl\` · H3 \`text-lg\`.
 
 **Spacing — Tailwind scale ONLY (no \`p-[16px]\`):**
-- Section padding: \`py-16 md:py-24\`  · Card padding: \`p-6 md:p-8\`  · Gaps: \`gap-4\` / \`gap-6\` / \`gap-8\`
-
-**Cards:** \`rounded-2xl border border-slate-200 bg-white shadow-sm\`. Hover: \`hover:shadow-md hover:-translate-y-0.5 transition\`.
+- Section padding: \`py-12 md:py-16\`  · Card padding: \`p-5 md:p-6\`  · Gaps: \`gap-4\` / \`gap-6\` / \`gap-8\`
 
 **Container:** \`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8\`. Mobile-first: design 360px first, then \`sm:\` / \`md:\` / \`lg:\` / \`xl:\`. Touch targets ≥ \`h-11\` (44px).
 
 **Layout priority:** Flexbox first, Grid only for true 2D, never absolute positioning unless overlaying.
 
 ## Accessibility (non-negotiable)
-- Visible focus ring on every interactive element: \`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2\`
+- Visible focus ring on every interactive element: \`focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-accent)] focus-visible:ring-offset-2\`
 - Buttons: \`<button type="button" aria-label="...">\`. Icon-only: include \`<span class="sr-only">...</span>\`.
 - Images: meaningful \`alt\`; decorative use \`alt=""\`.
 - Form fields: paired \`<label for>\` + \`id\`. Color contrast ≥ 4.5:1.
@@ -92,7 +85,7 @@ Use semantic landmarks: \`<header>\`, \`<nav>\`, \`<main>\`, \`<section>\`, \`<a
 - ❌ Picsum, placeholder.com, or random image services`,
   examples: [
     {
-      label: "complete interactive widget",
+      label: "complete interactive widget (house style)",
       code: `<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
@@ -100,46 +93,46 @@ Use semantic landmarks: \`<header>\`, \`<nav>\`, \`<main>\`, \`<section>\`, \`<a
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Daily calorie calculator</title>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
-  <style>body{font-family:'Inter',system-ui,sans-serif}</style>
+  <style>body{font-family:var(--ds-font-sans)}</style>
 </head>
-<body class="min-h-full bg-slate-50 text-slate-900 antialiased grid place-items-center p-4">
-  <main class="w-full max-w-md rounded-2xl bg-white border border-slate-200 shadow-sm p-8">
-    <h1 class="text-2xl font-semibold tracking-tight">Daily calorie calculator</h1>
-    <p class="mt-1 text-sm text-slate-500">Estimate your maintenance calories using the Mifflin-St Jeor formula.</p>
+<body class="min-h-full antialiased grid place-items-center p-4" style="background:var(--ds-bg);color:var(--ds-ink)">
+  <main class="w-full max-w-md rounded-[var(--ds-radius-xl)] bg-[var(--ds-surface)] shadow-[var(--ds-shadow-card)] p-8">
+    <h1 class="text-2xl tracking-tight" style="font-family:var(--ds-font-display)">Daily calorie calculator</h1>
+    <p class="mt-1 text-sm text-[var(--ds-muted)]">Estimate your maintenance calories using the Mifflin-St Jeor formula.</p>
     <div class="mt-6 grid grid-cols-2 gap-4">
       <label class="flex flex-col gap-1.5">
         <span class="text-sm font-medium">Age</span>
-        <input id="age" type="number" value="30" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" />
+        <input id="age" type="number" value="30" class="h-11 rounded-[var(--ds-radius)] bg-[var(--ds-surface-2)] px-3 shadow-[var(--ds-shadow-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-accent)]" />
       </label>
       <label class="flex flex-col gap-1.5">
         <span class="text-sm font-medium">Sex</span>
-        <select id="sex" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+        <select id="sex" class="h-11 rounded-[var(--ds-radius)] bg-[var(--ds-surface-2)] px-3 shadow-[var(--ds-shadow-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-accent)]">
           <option value="m">Male</option>
           <option value="f">Female</option>
         </select>
       </label>
       <label class="flex flex-col gap-1.5">
         <span class="text-sm font-medium">Weight (kg)</span>
-        <input id="weight" type="number" value="70" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" />
+        <input id="weight" type="number" value="70" class="h-11 rounded-[var(--ds-radius)] bg-[var(--ds-surface-2)] px-3 shadow-[var(--ds-shadow-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-accent)]" />
       </label>
       <label class="flex flex-col gap-1.5">
         <span class="text-sm font-medium">Height (cm)</span>
-        <input id="height" type="number" value="175" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500" />
+        <input id="height" type="number" value="175" class="h-11 rounded-[var(--ds-radius)] bg-[var(--ds-surface-2)] px-3 shadow-[var(--ds-shadow-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-accent)]" />
       </label>
     </div>
     <label class="mt-4 flex flex-col gap-1.5">
       <span class="text-sm font-medium">Activity level</span>
-      <select id="activity" class="h-11 rounded-lg border border-slate-300 px-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">
+      <select id="activity" class="h-11 rounded-[var(--ds-radius)] bg-[var(--ds-surface-2)] px-3 shadow-[var(--ds-shadow-ring)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-accent)]">
         <option value="1.2">Sedentary</option>
         <option value="1.375" selected>Light (1-3 d/wk)</option>
         <option value="1.55">Moderate (3-5 d/wk)</option>
         <option value="1.725">Very active (6-7 d/wk)</option>
       </select>
     </label>
-    <div class="mt-6 rounded-xl bg-indigo-50 p-5 text-center">
-      <div class="text-xs font-medium uppercase tracking-wider text-indigo-700">Maintenance</div>
-      <div id="result" class="mt-1 text-4xl font-bold text-indigo-900">2,400</div>
-      <div class="text-xs text-indigo-700">kcal / day</div>
+    <div class="mt-6 rounded-[var(--ds-radius-lg)] p-5 text-center" style="background:var(--ds-accent-soft)">
+      <div class="text-xs font-medium uppercase tracking-wider text-[var(--ds-faint)]">Maintenance</div>
+      <div id="result" class="mt-1 text-4xl font-bold tabular-nums text-[var(--ds-accent)]" style="font-family:var(--ds-font-display)">2,400</div>
+      <div class="text-xs text-[var(--ds-muted)]">kcal / day</div>
     </div>
   </main>
   <script>

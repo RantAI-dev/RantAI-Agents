@@ -288,6 +288,7 @@ export async function runChat(params: {
     let assistantModelConfig: Record<string, unknown> | null = null
     let assistantGuardRails: Record<string, unknown> | null = null
     let assistantOrganizationId: string | null = null
+    let assistantDesignSystemId: string | undefined
 
     if (assistantId) {
       // Look up assistant from database (all assistants including built-in are seeded there)
@@ -328,6 +329,13 @@ export async function runChat(params: {
           // Read per-assistant guard rails
           if (dbAssistant.guardRails && typeof dbAssistant.guardRails === "object") {
             assistantGuardRails = dbAssistant.guardRails as Record<string, unknown>
+          }
+          // Read per-assistant design system (steers visual artifacts)
+          if (dbAssistant.chatConfig && typeof dbAssistant.chatConfig === "object") {
+            const cc = dbAssistant.chatConfig as Record<string, unknown>
+            if (typeof cc.designSystemId === "string") {
+              assistantDesignSystemId = cc.designSystemId
+            }
           }
           debug("Using database assistant:", dbAssistant.name, "with model:", modelId)
         } else if (customSystemPrompt) {
@@ -1026,6 +1034,7 @@ export async function runChat(params: {
       systemPrompt += buildToolInstruction(toolNames, {
         targetArtifactId: body.targetArtifactId,
         canvasMode: body.canvasMode,
+        designSystemId: body.designSystemId ?? assistantDesignSystemId,
       });
     }
 

@@ -5,6 +5,7 @@
 
 import { CANVAS_TYPE_LABELS } from "./artifacts"
 import { assembleArtifactContext } from "./artifacts/context"
+import { getDesignSystemContext } from "./design-system"
 
 export { CANVAS_TYPE_LABELS } from "./artifacts"
 
@@ -39,26 +40,33 @@ const DESIGN_QUALITY_REMINDER = `All visual artifacts must be production-quality
 /** Tool usage instruction — appended when assistant has tools resolved */
 export function buildToolInstruction(
   toolNames: string[],
-  options?: { targetArtifactId?: string; canvasMode?: boolean | string },
+  options?: {
+    targetArtifactId?: string
+    canvasMode?: boolean | string
+    designSystemId?: string
+  },
 ): string {
-  const { targetArtifactId, canvasMode } = options || {}
+  const { targetArtifactId, canvasMode, designSystemId } = options || {}
 
   let instruction = `\n\n## Available Tools\nYou have these tools: ${toolNames.join(", ")}.\nIMPORTANT: When users ask questions that require external information, current events, calculations, or data processing, you MUST use the appropriate tool. Do NOT fabricate URLs, links, citations, or sources — always use a tool to get real information. If you have a web_search tool, use it for any factual claim that needs a source.`
 
   if (toolNames.includes("create_artifact")) {
     if (canvasMode === true || canvasMode === "auto") {
-      // Auto mode: inject summary of all types
-      instruction += `\n\n## Canvas Mode (ACTIVE)\nThe user has enabled Canvas mode. You MUST use the create_artifact tool for your response content. Render your output as a live artifact in the preview panel instead of inline text. ${assembleArtifactContext(null, "summary")}\n\n${DESIGN_QUALITY_REMINDER}`
+      // Auto mode: inject summary of all types + the house design system
+      // (compact) so whatever type the model picks still looks on-brand.
+      instruction += `\n\n## Canvas Mode (ACTIVE)\nThe user has enabled Canvas mode. You MUST use the create_artifact tool for your response content. Render your output as a live artifact in the preview panel instead of inline text. ${assembleArtifactContext(null, "summary")}\n\n${getDesignSystemContext(null, designSystemId)}\n\n${DESIGN_QUALITY_REMINDER}`
     } else if (
       typeof canvasMode === "string" &&
       canvasMode in CANVAS_TYPE_LABELS
     ) {
       // Specific type: inject ONLY the relevant type's full instructions
+      // (assembleArtifactContext folds in the full design system for the type).
       const label = CANVAS_TYPE_LABELS[canvasMode]
-      instruction += `\n\n## Canvas Mode (ACTIVE — ${label})\nThe user has enabled Canvas mode with a specific artifact type. You MUST use the create_artifact tool with type="${canvasMode}". The user wants a ${label} artifact. Render your output as a live artifact in the preview panel instead of inline text.\n\n${assembleArtifactContext(canvasMode, "full")}\n\n${DESIGN_QUALITY_REMINDER}`
+      instruction += `\n\n## Canvas Mode (ACTIVE — ${label})\nThe user has enabled Canvas mode with a specific artifact type. You MUST use the create_artifact tool with type="${canvasMode}". The user wants a ${label} artifact. Render your output as a live artifact in the preview panel instead of inline text.\n\n${assembleArtifactContext(canvasMode, "full", designSystemId)}\n\n${DESIGN_QUALITY_REMINDER}`
     } else {
-      // No canvas mode: inject summary with usage guidance
-      instruction += `\n\n## Artifacts\nWhen creating substantial content (more than 15 lines of code, full HTML pages, React components, SVG graphics, diagrams, or long documents), use the create_artifact tool to render it in a live preview panel. Keep short code snippets, brief explanations, and simple answers inline in your response. ${assembleArtifactContext(null, "summary")}\n\n${DESIGN_QUALITY_REMINDER}`
+      // No canvas mode: inject summary with usage guidance + compact house
+      // design system so opt-in artifacts are on-brand too.
+      instruction += `\n\n## Artifacts\nWhen creating substantial content (more than 15 lines of code, full HTML pages, React components, SVG graphics, diagrams, or long documents), use the create_artifact tool to render it in a live preview panel. Keep short code snippets, brief explanations, and simple answers inline in your response. ${assembleArtifactContext(null, "summary")}\n\n${getDesignSystemContext(null, designSystemId)}\n\n${DESIGN_QUALITY_REMINDER}`
     }
 
     if (toolNames.includes("update_artifact")) {

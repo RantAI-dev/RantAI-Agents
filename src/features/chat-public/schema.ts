@@ -40,6 +40,8 @@ export const ChatRequestBodySchema = z
     enableWebSearch: z.boolean().optional(),
     enableCodeInterpreter: z.boolean().optional(),
     canvasMode: z.string().optional(),
+    /** Selects the design system used to steer visual artifacts (defaults to house style). */
+    designSystemId: z.string().optional(),
     organizationId: z.string().optional(),
     targetArtifactId: z.string().optional(),
   })

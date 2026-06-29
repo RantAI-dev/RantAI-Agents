@@ -29,6 +29,12 @@ export interface ChatConfig {
    * canvas agents produce their artifact on the first message.
    */
   defaultCanvasMode?: string
+  /**
+   * Design system this agent steers generated visual artifacts toward
+   * (an id from the design-system registry, e.g. "rantai"). Falls back to the
+   * house style when unset. Reserved for a future per-agent / "Design" picker.
+   */
+  designSystemId?: string
 }
 
 export interface GuardRailsConfig {

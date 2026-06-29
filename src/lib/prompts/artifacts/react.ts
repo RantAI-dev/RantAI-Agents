@@ -52,7 +52,9 @@ For every React artifact, pick a distinctive aesthetic direction BEFORE writing 
 | \`organic\` | wellness, sustainability, food, skincare, crafts, artisan, natural |
 | \`retro-futuristic\` | gaming, sci-fi, events, synthwave, cyberpunk, 80s, music/DJ |
 
-**Ambiguous cases:** default to \`editorial\` (opinionated "thoughtful general-purpose", explicitly NOT the old slate+indigo).
+**Default = the RantAI house style.** Unless the user's prompt EXPLICITLY calls for one of the vibes below (by name, or with strong stylistic words like "brutalist", "luxury", "neon", "playful"), produce the house look: use \`// @aesthetic: editorial\` and bind the palette to the active design system's tokens — page \`bg-[var(--ds-bg)]\`, text \`text-[var(--ds-ink)]\`, the single accent \`var(--ds-accent)\` (RantAI blue), cards \`bg-[var(--ds-surface)] shadow-[var(--ds-shadow-card)]\`, serif headings via \`style={{fontFamily:'var(--ds-font-display)'}}\`. These \`--ds-*\` variables are pre-loaded in the runtime. The full contract is in the "Active design system" section below; treat it as authoritative.
+
+The directions below are OPT-IN flavors for explicit requests. A plain functional ask ("a revenue dashboard", "a pricing page") with no stylistic cue → house style, NOT \`industrial\`/\`editorial\` defaults from memory.
 
 **User override:** if the user says "make it brutalist" or "use luxury styling", honor that verbatim regardless of content signal.
 
@@ -74,6 +76,7 @@ Valid family spec shapes:
 ### editorial — content-first, reading-oriented
 **Fonts:** \`Fraunces\` (display, variable ital+opsz+wght) + \`Inter\` (body). Optionally \`Newsreader\` for body as an alternative.
 **Palette:** bone (\`#faf5ef\`, \`#f5f0e6\`) + ink (\`#0a0a0a\`, \`#1c1917\`) + warm neutrals (\`#78716c\`) + ONE bold accent from: terracotta \`#c2410c\`, bottle green \`#065f46\`, deep burgundy \`#7f1d1d\`, ultramarine \`#1e3a8a\`.
+**House default:** when producing the default RantAI look (no explicit aesthetic requested), bind this direction's palette to the design-system tokens instead — \`var(--ds-bg)\` canvas, \`var(--ds-ink)\` ink, \`var(--ds-accent)\` (RantAI blue) as the accent, \`var(--ds-surface)\` cards with \`var(--ds-shadow-card)\`.
 **Rhythm:** Generous whitespace. \`py-24 md:py-32\` sections. Asymmetric 12-col grids (7+5, 8+4). Pull quotes. Drop caps via \`first-letter:text-7xl first-letter:font-['Fraunces']\`.
 **Buttons:** \`px-6 py-3 border border-[#0a0a0a] text-[#0a0a0a] hover:bg-[#0a0a0a] hover:text-[#faf5ef] transition\` — flat, bordered, no shadow.
 **Cards:** content blocks with top/bottom rules, no boxes.

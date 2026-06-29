@@ -21,6 +21,7 @@ function getExamples(type: string, count = 1): string {
 export function assembleArtifactContext(
   type: string | null,
   mode: "summary" | "full",
+  designSystemId?: string,
 ): string {
   if (mode === "summary") {
     const lines = Object.entries(ARTIFACT_TYPE_SUMMARIES)
@@ -32,15 +33,16 @@ export function assembleArtifactContext(
   const parts: string[] = []
   const rules = ARTIFACT_TYPE_INSTRUCTIONS[type]
   if (rules) parts.push(rules)
-  // Design tokens (palette, typography, spacing) only matter for visual
-  // artifact types — injecting them into Python/code/markdown/sheet/latex
-  // wastes tokens and confuses the LLM about what it's generating.
-  if (VISUAL_ARTIFACT_TYPES.has(type)) {
-    const designTokens = getDesignSystemContext(type)
-    if (designTokens) parts.push(designTokens)
-  }
   const examples = getExamples(type, 2)
   if (examples) parts.push(examples)
+  // Design system goes LAST so its authoritative palette/typography is the most
+  // recent guidance the model sees, overriding any off-brand colors shown in the
+  // per-type rules or few-shot examples above. getDesignSystemContext returns ""
+  // for types it doesn't steer (only HTML/React today), so this is a no-op there.
+  if (VISUAL_ARTIFACT_TYPES.has(type)) {
+    const designTokens = getDesignSystemContext(type, designSystemId)
+    if (designTokens) parts.push(designTokens)
+  }
   return parts.join("\n\n---\n\n")
 }
 

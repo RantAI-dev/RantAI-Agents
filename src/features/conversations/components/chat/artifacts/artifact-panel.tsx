@@ -527,26 +527,31 @@ export function ArtifactPanel({
   const panelContent = (
     <div
       className={cn(
-        "flex flex-col bg-background",
-        isFullscreen ? "fixed inset-3 z-50 rounded-xl shadow-2xl border" : "h-full border-l"
+        "flex flex-col bg-[var(--artifact-paper)]",
+        isFullscreen
+          ? "fixed inset-3 z-50 rounded-xl shadow-[var(--artifact-shadow-float)] ring-1 ring-[var(--artifact-border)]"
+          : "h-full border-l border-[var(--artifact-border)]"
       )}
     >
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/50">
+      <div className="flex items-center justify-between gap-3 px-4 py-3.5 bg-[var(--artifact-surface)] shadow-[inset_0_-1px_0_var(--artifact-border)]">
         {/* Title area */}
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className="min-w-0 flex-1">
-            <h3 className="text-base font-semibold truncate">
+            <h3
+              className="text-base font-semibold truncate text-[var(--artifact-ink)]"
+              style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+            >
               {displayArtifact.title}
             </h3>
           </div>
-          <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5 shrink-0">
+          <span className="text-xs font-medium text-[var(--artifact-accent)] bg-[var(--artifact-accent-soft)] rounded-full px-2 py-0.5 shrink-0 shadow-[inset_0_0_0_1px_var(--artifact-accent-ring)]">
             {TYPE_SHORT_LABELS[artifact.type] || artifact.type}
           </span>
 
           {/* Language pill — only for application/code, since other types' format is conveyed by the type label. */}
           {artifact.type === "application/code" && artifact.language && (
-            <span className="inline-flex items-center gap-1 text-[11px] font-mono text-muted-foreground bg-muted rounded-md px-2 py-0.5 shrink-0">
+            <span className="inline-flex items-center gap-1 text-[11px] font-mono tabular-nums text-[var(--artifact-muted)] bg-[var(--artifact-surface)] rounded-md px-2 py-0.5 shrink-0 shadow-[inset_0_0_0_1px_var(--artifact-ring)]">
               {artifact.language}
               {/* Streaming pulse — small animated dot. */}
               {artifact.id.startsWith("streaming-") && (
@@ -569,10 +574,10 @@ export function ArtifactPanel({
               aria-label={codeArtifactMode === "diff" ? "Hide diff" : "Show diff vs previous version"}
               className={
                 codeArtifactMode === "diff"
-                  ? "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-purple-500/25 text-purple-600 dark:text-purple-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  ? "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-[var(--artifact-accent-soft)] text-[var(--artifact-accent)] shadow-[inset_0_0_0_1px_var(--artifact-accent-ring)] disabled:opacity-50 disabled:cursor-not-allowed"
                   : hasVersions && !artifact.id.startsWith("streaming-")
-                  ? "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-purple-500/15 text-purple-600 dark:text-purple-400 hover:bg-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
-                  : "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-muted text-muted-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+                  ? "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-[var(--artifact-surface)] text-[var(--artifact-muted)] shadow-[inset_0_0_0_1px_var(--artifact-ring)] hover:bg-[var(--artifact-accent-soft)] hover:text-[var(--artifact-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  : "inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md transition-colors bg-[var(--artifact-surface)] text-[var(--artifact-faint)] shadow-[inset_0_0_0_1px_var(--artifact-ring)] disabled:opacity-50 disabled:cursor-not-allowed"
               }
             >
               <GitCompareArrows className="h-3 w-3" />
@@ -584,21 +589,21 @@ export function ArtifactPanel({
           {hasVersions && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="flex items-center gap-0.5 tabular-nums text-xs text-muted-foreground bg-muted rounded-full px-1 py-0.5 shrink-0">
+                <span className="flex items-center gap-0.5 tabular-nums text-xs text-[var(--artifact-muted)] bg-[var(--artifact-surface)] rounded-full px-1 py-0.5 shrink-0 shadow-[inset_0_0_0_1px_var(--artifact-ring)]">
                   <button
                     type="button"
-                    className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-background/80 transition-colors disabled:opacity-30"
+                    className="h-5 w-5 flex items-center justify-center rounded-full text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface-2)] hover:text-[var(--artifact-ink)] transition-colors disabled:opacity-30"
                     onClick={goToPrevVersion}
                     disabled={currentViewVersion <= 1}
                   >
                     <ChevronLeft className="h-3 w-3" />
                   </button>
-                  <span className="px-0.5 font-medium">
+                  <span className="px-0.5 font-medium text-[var(--artifact-ink)]">
                     {currentViewVersion}/{totalVersions}
                   </span>
                   <button
                     type="button"
-                    className="h-5 w-5 flex items-center justify-center rounded-full hover:bg-background/80 transition-colors disabled:opacity-30"
+                    className="h-5 w-5 flex items-center justify-center rounded-full text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface-2)] hover:text-[var(--artifact-ink)] transition-colors disabled:opacity-30"
                     onClick={goToNextVersion}
                     disabled={currentViewVersion >= totalVersions}
                   >
@@ -622,7 +627,7 @@ export function ArtifactPanel({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-2 text-xs gap-1 shrink-0"
+                  className="h-6 px-2 text-xs gap-1 shrink-0 text-[var(--artifact-accent)] hover:text-[var(--artifact-accent-hover)] hover:bg-[var(--artifact-accent-soft)] focus-visible:ring-[var(--artifact-accent)]"
                   onClick={() => handleRestoreVersion()}
                   disabled={isSaving}
                 >
@@ -641,7 +646,7 @@ export function ArtifactPanel({
           {ragIndexingFailed && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded-full px-1.5 py-0.5 shrink-0">
+                <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 rounded-full px-1.5 py-0.5 shrink-0 shadow-[inset_0_0_0_1px_rgba(245,158,11,0.25)]">
                   <AlertTriangle className="h-3 w-3" />
                   Not searchable
                 </span>
@@ -662,7 +667,7 @@ export function ArtifactPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 rounded-md text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface)] hover:text-[var(--artifact-ink)] focus-visible:ring-[var(--artifact-accent)]"
                 onClick={handleCopy}
               >
                 {copied ? (
@@ -683,7 +688,7 @@ export function ArtifactPanel({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8"
+                      className="h-8 w-8 rounded-md text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface)] hover:text-[var(--artifact-ink)] focus-visible:ring-[var(--artifact-accent)]"
                       disabled={isExporting}
                     >
                       <Download
@@ -726,7 +731,7 @@ export function ArtifactPanel({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface)] hover:text-[var(--artifact-ink)] focus-visible:ring-[var(--artifact-accent)]">
                       <Download className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -759,7 +764,7 @@ export function ArtifactPanel({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-8 w-8 rounded-md text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface)] hover:text-[var(--artifact-ink)] focus-visible:ring-[var(--artifact-accent)]"
                   onClick={handleDownload}
                 >
                   <Download className="h-4 w-4" />
@@ -775,7 +780,7 @@ export function ArtifactPanel({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 rounded-md text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface)] hover:text-[var(--artifact-ink)] focus-visible:ring-[var(--artifact-accent)]">
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -800,7 +805,7 @@ export function ArtifactPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 rounded-md text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface)] hover:text-[var(--artifact-ink)] focus-visible:ring-[var(--artifact-accent)]"
                 onClick={() => setIsFullscreen((prev) => !prev)}
               >
                 {isFullscreen ? (
@@ -820,7 +825,7 @@ export function ArtifactPanel({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 rounded-md text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface)] hover:text-[var(--artifact-ink)] focus-visible:ring-[var(--artifact-accent)]"
                 onClick={() => {
                   if (isFullscreen) setIsFullscreen(false)
                   onClose()
@@ -838,12 +843,12 @@ export function ArtifactPanel({
           Document downloads have their own dropdown-scoped error display.
           Banner is dismissed automatically on the next download attempt. */}
       {exportError && !isTextDocument && (
-        <div className="flex items-start gap-2 px-4 py-2 text-xs text-destructive bg-destructive/10 border-b border-destructive/30">
+        <div className="flex items-start gap-2 px-4 py-2 text-xs text-destructive bg-destructive/10 shadow-[inset_0_0_0_1px_rgba(220,38,38,0.18),inset_0_-1px_0_var(--artifact-border)]">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           <div className="flex-1">{exportError}</div>
           <button
             type="button"
-            className="text-muted-foreground hover:text-foreground"
+            className="text-[var(--artifact-muted)] hover:text-[var(--artifact-ink)] transition-colors"
             onClick={() => setExportError(null)}
             aria-label="Dismiss error"
           >
@@ -856,7 +861,7 @@ export function ArtifactPanel({
           read-only across every artifact type. Edits happen via the chat
           (the LLM `update_artifact` tool); the panel reflects the latest
           persisted state. */}
-      <div className="flex-1 overflow-auto flex flex-col min-h-0">
+      <div className="flex-1 overflow-auto flex flex-col min-h-0 bg-[var(--artifact-paper)]">
           <div className="flex-1 min-h-0 overflow-auto">
             {displayArtifact.type === "text/document" ? (
               sessionId ? (
@@ -867,8 +872,21 @@ export function ArtifactPanel({
                   isStreaming={isStreaming}
                 />
               ) : (
-                <div className="p-4 text-sm text-muted-foreground">
-                  Preview unavailable: missing session context.
+                <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--artifact-accent-soft)] shadow-[inset_0_0_0_1px_var(--artifact-accent-ring)]">
+                    <AlertCircle className="h-5 w-5 text-[var(--artifact-accent)]" />
+                  </div>
+                  <div className="space-y-1">
+                    <p
+                      className="text-sm font-semibold text-[var(--artifact-ink)]"
+                      style={{ fontFamily: "Georgia, 'Times New Roman', serif" }}
+                    >
+                      Preview unavailable
+                    </p>
+                    <p className="text-xs text-[var(--artifact-muted)]">
+                      Missing session context.
+                    </p>
+                  </div>
                 </div>
               )
             ) : (
@@ -897,7 +915,7 @@ export function ArtifactPanel({
     return createPortal(
       <>
         <div
-          className="fixed inset-0 z-40 bg-black/50"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
           onClick={closeFullscreen}
         />
         {panelContent}

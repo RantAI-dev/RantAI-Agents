@@ -120,24 +120,24 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
       </div>
 
       {/* Navigation bar */}
-      <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-t bg-muted/30 shrink-0">
+      <div className="flex items-center justify-between gap-2 px-4 py-2.5 bg-[var(--artifact-surface)] shadow-[inset_0_1px_0_var(--artifact-border)] shrink-0">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => navigate("prev")}
             disabled={currentSlide <= 0}
-            className="p-1.5 rounded-md hover:bg-muted disabled:opacity-30 transition-colors"
+            className="p-1.5 rounded-md text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface-2)] hover:text-[var(--artifact-ink)] disabled:opacity-30 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--artifact-accent)]"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="text-xs font-medium tabular-nums text-muted-foreground min-w-[48px] text-center">
+          <span className="text-xs font-medium tabular-nums text-[var(--artifact-ink)] min-w-[48px] text-center">
             {totalSlides > 0 ? `${currentSlide + 1} / ${totalSlides}` : "..."}
           </span>
           <button
             type="button"
             onClick={() => navigate("next")}
             disabled={currentSlide >= totalSlides - 1}
-            className="p-1.5 rounded-md hover:bg-muted disabled:opacity-30 transition-colors"
+            className="p-1.5 rounded-md text-[var(--artifact-muted)] hover:bg-[var(--artifact-surface-2)] hover:text-[var(--artifact-ink)] disabled:opacity-30 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--artifact-accent)]"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -159,8 +159,8 @@ export function SlidesRenderer({ content }: SlidesRendererProps) {
                 }
                 className={`w-1.5 h-1.5 rounded-full transition-colors ${
                   i === currentSlide
-                    ? "bg-primary"
-                    : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                    ? "bg-[var(--artifact-accent)]"
+                    : "bg-[var(--artifact-faint)]/40 hover:bg-[var(--artifact-faint)]/70"
                 }`}
               />
             ))}
