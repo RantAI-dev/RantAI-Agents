@@ -33,10 +33,21 @@ export function PlanUsageBadge() {
   const [usage, setUsage] = useState<FreeUsage | null>(null)
 
   useEffect(() => {
-    fetch("/api/dashboard/usage/free-limits", { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setUsage(d))
-      .catch(() => {})
+    const load = () =>
+      fetch("/api/dashboard/usage/free-limits", { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => setUsage(d))
+        .catch(() => {})
+    load()
+    // Refresh live when a message is sent (chat-workspace dispatches this) and
+    // when the tab regains focus, so the counts update without a page refresh.
+    const onUpdate = () => load()
+    window.addEventListener("rantai:usage-updated", onUpdate)
+    window.addEventListener("focus", onUpdate)
+    return () => {
+      window.removeEventListener("rantai:usage-updated", onUpdate)
+      window.removeEventListener("focus", onUpdate)
+    }
   }, [])
 
   if (!usage?.isFree) return null

@@ -26,10 +26,15 @@ export function FreePlanBanner() {
     } catch {
       setDismissed(false)
     }
-    fetch("/api/dashboard/usage/free-limits", { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setUsage(d))
-      .catch(() => {})
+    const load = () =>
+      fetch("/api/dashboard/usage/free-limits", { credentials: "same-origin" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => setUsage(d))
+        .catch(() => {})
+    load()
+    const onUpdate = () => load()
+    window.addEventListener("rantai:usage-updated", onUpdate)
+    return () => window.removeEventListener("rantai:usage-updated", onUpdate)
   }, [])
 
   if (dismissed || !usage?.isFree) return null
