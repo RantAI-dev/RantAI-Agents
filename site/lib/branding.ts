@@ -9,7 +9,10 @@ export interface BrandConfig {
 
   // Logos
   logoMain: string
+  /** Optional logo variant for dark surfaces (white mark). */
+  logoMainDark?: string
   logoIcon: string
+  logoIconDark?: string
 
   // Favicons & PWA
   favicon16: string
@@ -47,8 +50,10 @@ const configs: Record<ProductMode, BrandConfig> = {
     companyName: "RantAI",
     companyUrl: "https://rantai.dev",
 
-    logoMain: "/logo/logo-rantai-border.png",
-    logoIcon: "/logo/logo-rantai-border.png",
+    logoMain: "/logo/logo-rantai.png",
+    logoMainDark: "/logo/logo-rantai-dark.png",
+    logoIcon: "/logo/logo-rantai.png",
+    logoIconDark: "/logo/logo-rantai-dark.png",
 
     favicon16: "/logo/favicon-16x16.png",
     favicon32: "/logo/favicon-32x32.png",

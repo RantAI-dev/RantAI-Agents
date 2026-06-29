@@ -5,7 +5,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { SessionProvider } from '@/components/providers/session-provider'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
-import { brand } from '@/lib/branding'
+import { brand, brandIcons } from '@/lib/branding'
 import './globals.css'
 
 const poppins = localFont({
@@ -34,13 +34,7 @@ export const metadata: Metadata = {
     title: brand.metaTitle,
     description: 'Build and deploy intelligent AI agents with RAG, multi-channel deployment, and human-in-the-loop workflows.',
   },
-  icons: {
-    icon: [
-      { url: brand.favicon16, sizes: '16x16', type: 'image/png' },
-      { url: brand.favicon32, sizes: '32x32', type: 'image/png' },
-    ],
-    apple: brand.appleTouchIcon,
-  },
+  icons: brandIcons,
   manifest: brand.manifestPath,
 }
 
