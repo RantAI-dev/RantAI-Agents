@@ -56,6 +56,7 @@ interface AgentItem {
   description: string
   emoji: string
   model?: string
+  chatConfig?: { defaultCanvasMode?: string }
   tags?: string[]
   useKnowledgeBase?: boolean
   knowledgeBaseGroupIds?: string[]
@@ -251,7 +252,15 @@ export function ChatHome({
   const [selectedToolNames, setSelectedToolNames] = useState<string[]>([])
   const [skillMode, setSkillMode] = useState<SkillMode>("auto")
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
-  const [canvasMode, setCanvasMode] = useState<CanvasMode>(false)
+  // Seed Canvas mode from the selected agent's configured default (canvas
+  // starter agents) so the first message produces their artifact; reset when
+  // the user switches agents. The user can still change it in the toolbar.
+  const [canvasMode, setCanvasMode] = useState<CanvasMode>(
+    (activeAssistant?.chatConfig?.defaultCanvasMode as CanvasMode | undefined) ?? false,
+  )
+  useEffect(() => {
+    setCanvasMode((activeAssistant?.chatConfig?.defaultCanvasMode as CanvasMode | undefined) ?? false)
+  }, [activeAssistant?.id, activeAssistant?.chatConfig?.defaultCanvasMode])
 
   // GitHub import
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
