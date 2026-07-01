@@ -1,10 +1,10 @@
-import type { ChatMessage, ChatRunStatus, ChatSessionMode } from './chat.js';
-import type { OrchestratorWorkspace } from './workspaces.js';
+import type { ChatMessage, ChatRunStatus, ChatSessionMode } from './chat';
+import type { OrchestratorWorkspace } from './workspaces';
 import type {
   ProjectContextConnectorRef,
   ProjectContextMcpServerRef,
   ProjectContextPluginRef,
-} from './context.js';
+} from './context';
 
 export type ProjectKind =
   | 'prototype'

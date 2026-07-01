@@ -3,7 +3,7 @@ import {
   LocalizedTextSchema,
   OPEN_DESIGN_PLUGIN_SPEC_VERSION,
   OpenDesignSpecVersionSchema,
-} from './manifest.js';
+} from './manifest';
 
 const MarketplaceEntryDistSchema = z.object({
   type:           z.string().optional(),

@@ -1,4 +1,4 @@
-import type { Project } from '../api/projects.js';
+import type { Project } from '../api/projects';
 
 export const PLUGIN_SHARE_ACTIONS = [
   'publish-github',

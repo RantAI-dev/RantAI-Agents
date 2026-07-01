@@ -1,5 +1,5 @@
 import type { ProjectFile } from './files';
-import type { RunResultPackageResponse, RunWorkspace } from './workspaces.js';
+import type { RunResultPackageResponse, RunWorkspace } from './workspaces';
 import type {
   PreviewCommentAttachment,
   PreviewCommentMember,
@@ -9,11 +9,11 @@ import type {
   PreviewVisualMarkKind,
 } from './comments';
 import type { ResearchOptions } from './research';
-import type { RunContextSelection } from './context.js';
-import type { MediaExecutionPolicy } from './media.js';
-import type { AppliedPluginSnapshot } from '../plugins/apply.js';
+import type { RunContextSelection } from './context';
+import type { MediaExecutionPolicy } from './media';
+import type { AppliedPluginSnapshot } from '../plugins/apply';
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
-import type { TrackingRuntimeType } from '../analytics/public-params.js';
+import type { TrackingRuntimeType } from '../analytics/public-params';
 
 export type ChatRole = 'user' | 'assistant';
 export type ChatSessionMode = 'design' | 'chat';

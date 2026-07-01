@@ -1,4 +1,4 @@
-import type { ArtifactManifest } from './artifacts.js';
+import type { ArtifactManifest } from './artifacts';
 
 export type OrchestratorWorkspaceKind = 'scratch';
 export type OrchestratorWorkspaceWriteback = 'external';

@@ -7,7 +7,7 @@
  * single-import compile-time guarantee. This file MUST stay free of
  * runtime dependencies — it only consumes `AppliedPluginSnapshot`.
  */
-import type { AppliedPluginSnapshot } from '../plugins/apply.js';
+import type { AppliedPluginSnapshot } from '../plugins/apply';
 
 export function renderPluginBlock(snapshot: AppliedPluginSnapshot): string {
   const lines: string[] = [];

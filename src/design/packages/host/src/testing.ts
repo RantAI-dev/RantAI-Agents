@@ -4,7 +4,7 @@ import {
   type OpenDesignHostBridge,
   type OpenDesignHostGlobalScope,
   type OpenDesignHostUpdaterStatusSnapshot,
-} from "./index.js";
+} from "./index";
 
 export type MockOpenDesignHost = Partial<Omit<OpenDesignHostBridge, "capture" | "client" | "pdf" | "pet" | "project" | "shell" | "updater">> & {
   browser?: Partial<OpenDesignHostBridge["browser"]>;

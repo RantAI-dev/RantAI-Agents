@@ -9,7 +9,7 @@
 // llm_wiki, gbrain, memU. Kept deliberately small so every read/write
 // stays a plain `cat` / `editor` round trip — no DB, no fancy schema.
 
-import type { MemoryTreeNode } from './automations.js';
+import type { MemoryTreeNode } from './automations';
 
 // `profile` — the singleton structured "who I am / how I work" entry (one
 //   well-known id `user_profile`) the intent gateway reads to rewrite a short

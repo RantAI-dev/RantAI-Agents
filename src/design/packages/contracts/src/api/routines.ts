@@ -2,8 +2,8 @@
 // schedule, mints a conversation (in either an existing project or a freshly
 // created one), and runs the configured prompt as an agent task.
 
-import type { AutomationSourceIngestionResponse } from './automations.js';
-import type { RunContextSelection } from './context.js';
+import type { AutomationSourceIngestionResponse } from './automations';
+import type { RunContextSelection } from './context';
 
 export type RoutineScheduleKind =
   | 'hourly'

@@ -1,4 +1,4 @@
-import type { PluginShareAction } from '../plugins/share-actions.js';
+import type { PluginShareAction } from '../plugins/share-actions';
 
 export type SkillPluginCandidateSourceKind = 'file' | 'url';
 export type SkillPluginCandidateStatus = 'active' | 'dismissed';

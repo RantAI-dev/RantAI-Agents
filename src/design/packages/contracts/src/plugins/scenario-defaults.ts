@@ -21,8 +21,8 @@
 // surface-specific seed. Media kinds keep od-media-generation, which
 // dispatches through the media contract instead of emitting HTML.
 
-import type { ProjectKind, ProjectMetadata } from '../api/projects.js';
-import type { AppliedPluginSnapshot } from './apply.js';
+import type { ProjectKind, ProjectMetadata } from '../api/projects';
+import type { AppliedPluginSnapshot } from './apply';
 
 export type TaskKind = AppliedPluginSnapshot['taskKind'];
 
