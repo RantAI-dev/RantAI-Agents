@@ -1,3 +1,8 @@
+// Side-effect import: installs the window.fetch interceptor that re-homes the
+// SPA's bare `/api/*` calls under `/api/design/*` (agents-cloud port). Must run
+// before any other module so no fetch escapes the namespacing. See the module
+// docblock for why this is a gated global patch rather than per-call-site edits.
+import './lib/install-api-base';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
