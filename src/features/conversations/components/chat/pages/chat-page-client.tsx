@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast"
 import { ChatHome } from "@/features/conversations/components/chat/chat-home"
 import type { ChatToolbarHydrationData } from "./chat-hydration-data"
 import { normalizeSerializedChatSession, type SerializedChatSession } from "./chat-session-data"
+import { stashPendingChatFiles } from "./pending-chat-files"
 
 export default function ChatPageClient({
   initialAssistants,
@@ -155,6 +156,12 @@ export default function ChatPageClient({
           let initToken: string | null = null
           if (initialMessage) {
             initToken = crypto.randomUUID()
+            // File objects can't survive JSON.stringify into the sessionStorage
+            // payload below, so hand them off in memory (client-side nav keeps
+            // module state) keyed by the same init token.
+            if (settings?.files?.length) {
+              stashPendingChatFiles(initToken, settings.files)
+            }
             const pendingPayload = {
               message: initialMessage,
               settings: settings ?? null,
