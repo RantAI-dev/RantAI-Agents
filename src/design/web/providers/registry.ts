@@ -2014,7 +2014,11 @@ export function projectRawUrl(projectId: string, filePath: string): string {
 }
 
 export function designSystemStaticUrl(designSystemId: string, filePath: string): string {
-  return `/api/design-systems/${encodeURIComponent(designSystemId)}/static?path=${encodeURIComponent(filePath)}`;
+  // agents-cloud namespacing: consumed as an element `src` (design-kit asset
+  // URLs in runtime/design-kit.ts), so the browser loads it directly and it
+  // bypasses the `install-api-base` window.fetch interceptor — emit the
+  // `/api/design/...` path so it resolves instead of 404-ing on the cloud host.
+  return `/api/design/design-systems/${encodeURIComponent(designSystemId)}/static?path=${encodeURIComponent(filePath)}`;
 }
 
 function looksLikeImage(name: string): boolean {
@@ -2357,7 +2361,12 @@ import { LIBRARY_UPLOAD_MAX_BYTES, isLibraryUploadMimeAllowed } from '@open-desi
 
 /** Raw bytes URL for a library asset (image src / download href). */
 export function libraryAssetRawUrl(id: string): string {
-  return `/api/library/assets/${encodeURIComponent(id)}/raw`;
+  // agents-cloud namespacing: consumed as an `<img src>` / CSS `@font-face`
+  // `url(...)` (LibraryPicker / LibrarySection), which the browser loads
+  // directly, bypassing the `install-api-base` window.fetch interceptor. Emit
+  // the `/api/design/...` path. (fetch callers are unaffected — the interceptor
+  // skips already-namespaced paths.)
+  return `/api/design/library/assets/${encodeURIComponent(id)}/raw`;
 }
 
 /**
@@ -2366,7 +2375,10 @@ export function libraryAssetRawUrl(id: string): string {
  * Figma plugin.
  */
 export function libraryAssetFigmaUrl(id: string): string {
-  return `/api/library/assets/${encodeURIComponent(id)}/figma`;
+  // agents-cloud namespacing: consumed as an anchor `href` download link
+  // (LibraryPreviewModal), a direct browser navigation that bypasses the
+  // window.fetch interceptor — emit the `/api/design/...` path.
+  return `/api/design/library/assets/${encodeURIComponent(id)}/figma`;
 }
 
 /**

@@ -38,7 +38,10 @@ export function MemoryToast({ onOpenMemory }: Props) {
     // Guard for environments without EventSource (jsdom in tests, SSR).
     // The toast is purely a UX nicety; no SSE just means no auto-pop-up.
     if (typeof EventSource === 'undefined') return;
-    const es = new EventSource('/api/memory/events');
+    // agents-cloud namespacing: EventSource opens the URL directly, bypassing
+    // the install-api-base window.fetch interceptor, so this must be the
+    // already-namespaced `/api/design/...` path (else it 404-reconnect-loops).
+    const es = new EventSource('/api/design/memory/events');
     es.addEventListener('change', (raw) => {
       try {
         const event = JSON.parse((raw as MessageEvent).data) as MemoryChangeEvent;

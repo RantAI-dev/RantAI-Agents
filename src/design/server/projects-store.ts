@@ -11,7 +11,13 @@
 import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { Project, ProjectMetadata } from "@open-design/contracts";
+import type {
+  DeployProviderId,
+  DeploymentInfo,
+  DeploymentStatus,
+  Project,
+  ProjectMetadata,
+} from "@open-design/contracts";
 import type { DesignContext } from "./auth";
 
 const MAX_PROJECT_ID_LEN = 128;
@@ -213,4 +219,66 @@ export async function deleteDesignProject(
     where: { id, ...scopeWhere(ctx) },
   });
   return result.count > 0;
+}
+
+/** The OdDeployment scalar subset this store reads (relations omitted). */
+interface OdDeploymentRecord {
+  id: string;
+  projectId: string;
+  fileName: string;
+  providerId: string;
+  url: string;
+  deploymentId: string | null;
+  deploymentCount: number;
+  target: string;
+  status: string;
+  statusMessage: string | null;
+  reachableAt: bigint | null;
+  createdAt: bigint;
+  updatedAt: bigint;
+}
+
+/**
+ * Map an OdDeployment row to the daemon's "public" DeploymentInfo JSON shape
+ * (server.ts `publicDeployment`: normalized row minus `providerMetadata`).
+ * `undefined` optional keys are dropped by JSON serialization.
+ */
+function mapDeployment(row: OdDeploymentRecord): DeploymentInfo {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    fileName: row.fileName,
+    providerId: row.providerId as DeployProviderId,
+    url: row.url,
+    deploymentId: row.deploymentId ?? undefined,
+    deploymentCount: row.deploymentCount,
+    target: "preview",
+    status: row.status as DeploymentStatus,
+    statusMessage: row.statusMessage ?? undefined,
+    reachableAt: row.reachableAt != null ? Number(row.reachableAt) : undefined,
+    createdAt: Number(row.createdAt),
+    updatedAt: Number(row.updatedAt),
+  };
+}
+
+/**
+ * List a project's deployments, newest-first, in the daemon's
+ * `ProjectDeploymentsResponse.deployments` shape. Scoped by verifying the
+ * project is owned by the caller first (mirrors the daemon's per-project
+ * ownership); returns null when the project is missing / not owned.
+ */
+export async function listDesignDeployments(
+  ctx: DesignContext,
+  projectId: string,
+): Promise<DeploymentInfo[] | null> {
+  const project = await prisma.odProject.findFirst({
+    where: { id: projectId, ...scopeWhere(ctx) },
+    select: { id: true },
+  });
+  if (!project) return null;
+  const rows = await prisma.odDeployment.findMany({
+    where: { projectId },
+    orderBy: { updatedAt: "desc" },
+  });
+  return rows.map(mapDeployment);
 }

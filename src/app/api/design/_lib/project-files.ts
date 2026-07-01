@@ -12,11 +12,18 @@
  * program, so it can statically import `@/lib/s3` (which the port's storage
  * adapter loads lazily only to satisfy that isolated typecheck).
  */
-import { ListObjectsV2Command } from "@aws-sdk/client-s3";
-import type { ProjectFile, ProjectFileKind } from "@open-design/contracts";
+import {
+  DeleteObjectsCommand,
+  ListObjectsV2Command,
+} from "@aws-sdk/client-s3";
+import type {
+  ProjectFile,
+  ProjectFileKind,
+  ProjectFolder,
+} from "@open-design/contracts";
 import { getBucket, getS3Client } from "@/lib/s3";
 import type { DesignContext } from "@/design/server/auth";
-import { designFileKey } from "@/design/server/storage";
+import { designFileKey, putDesignFile } from "@/design/server/storage";
 
 // Mirrors the daemon's EXT_MIME map (apps/daemon/src/projects.ts).
 const EXT_MIME: Record<string, string> = {
@@ -118,8 +125,10 @@ export async function listProjectFilesFromS3(
       const key = obj.Key ?? "";
       if (!key.startsWith(prefix)) continue;
       const name = key.slice(prefix.length);
-      // Skip the prefix "folder" placeholder and any empty relative path.
+      // Skip the prefix "folder" placeholder, empty-folder markers, and any
+      // empty relative path.
       if (!name || name.endsWith("/")) continue;
+      if (name === FOLDER_MARKER || name.endsWith(`/${FOLDER_MARKER}`)) continue;
       const mtime = obj.LastModified ? obj.LastModified.getTime() : 0;
       if (typeof opts.since === "number" && Number.isFinite(opts.since) && mtime < opts.since) {
         continue;
@@ -138,4 +147,147 @@ export async function listProjectFilesFromS3(
   } while (continuationToken);
 
   return files;
+}
+
+// ---------------------------------------------------------------------------
+// Project folders
+//
+// The daemon stored folders as real on-disk directories (including empty ones)
+// and listed them from the filesystem. S3 has no directories — only keys — so
+// the cloud port DERIVES folders from key prefixes, and persists an explicit
+// EMPTY folder as a zero-byte marker object (`<folder>/.od-folder`) so a
+// user-created empty folder survives a reload. The marker itself is hidden from
+// the file/folder listings.
+// ---------------------------------------------------------------------------
+
+const FOLDER_MARKER = ".od-folder";
+
+/** Every ancestor directory of a relative key path (basename dropped). */
+function ancestorDirs(rel: string): string[] {
+  const segs = rel.split("/");
+  segs.pop(); // drop the file/marker basename
+  const out: string[] = [];
+  let acc = "";
+  for (const seg of segs) {
+    if (!seg) continue;
+    acc = acc ? `${acc}/${seg}` : seg;
+    out.push(acc);
+  }
+  return out;
+}
+
+/**
+ * List a project's folders (derived from S3 key prefixes + empty-folder
+ * markers), reconstructing the daemon's `ProjectFolder[]` shape. `mtime` is the
+ * newest contained-key timestamp.
+ */
+export async function listProjectFoldersFromS3(
+  ctx: DesignContext,
+  projectId: string,
+): Promise<ProjectFolder[]> {
+  const prefix = designFileKey(ctx, projectId, "");
+  const client = getS3Client();
+  const bucket = getBucket();
+
+  const dirMtime = new Map<string, number>();
+  let continuationToken: string | undefined;
+  do {
+    const res = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    for (const obj of res.Contents ?? []) {
+      const key = obj.Key ?? "";
+      if (!key.startsWith(prefix)) continue;
+      const rel = key.slice(prefix.length);
+      if (!rel) continue;
+      const mtime = obj.LastModified ? obj.LastModified.getTime() : 0;
+      for (const dir of ancestorDirs(rel)) {
+        dirMtime.set(dir, Math.max(dirMtime.get(dir) ?? 0, mtime));
+      }
+    }
+    continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return [...dirMtime.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([path, mtime]) => ({
+      name: path.slice(path.lastIndexOf("/") + 1),
+      path,
+      type: "dir" as const,
+      size: 0 as const,
+      mtime,
+    }));
+}
+
+/** Persist an empty folder by writing its zero-byte marker; returns the folder. */
+export async function createProjectFolderInS3(
+  ctx: DesignContext,
+  projectId: string,
+  name: string,
+): Promise<ProjectFolder> {
+  const clean = name
+    .split("/")
+    .map((seg) => seg.trim())
+    .filter((seg) => seg && seg !== "." && seg !== "..")
+    .join("/");
+  if (!clean) throw new Error("invalid folder name");
+  await putDesignFile(
+    ctx,
+    projectId,
+    `${clean}/${FOLDER_MARKER}`,
+    Buffer.alloc(0),
+    "application/x-empty",
+  );
+  return {
+    name: clean.slice(clean.lastIndexOf("/") + 1),
+    path: clean,
+    type: "dir",
+    size: 0,
+    mtime: Date.now(),
+  };
+}
+
+/** Delete every key under a folder prefix (files + markers). */
+export async function deleteProjectFolderFromS3(
+  ctx: DesignContext,
+  projectId: string,
+  folderPath: string,
+): Promise<void> {
+  const clean = folderPath
+    .split("/")
+    .map((seg) => seg.trim())
+    .filter((seg) => seg && seg !== "." && seg !== "..")
+    .join("/");
+  if (!clean) throw new Error("invalid folder path");
+  const client = getS3Client();
+  const bucket = getBucket();
+  // Trailing slash so `foo` never also matches `foobar`.
+  const prefix = `${designFileKey(ctx, projectId, clean)}/`;
+
+  let continuationToken: string | undefined;
+  do {
+    const res = await client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const keys = (res.Contents ?? [])
+      .map((o) => o.Key)
+      .filter((k): k is string => typeof k === "string");
+    if (keys.length > 0) {
+      await client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+    }
+    continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (continuationToken);
 }
