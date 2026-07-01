@@ -25,6 +25,14 @@
   "include": [
     // React 18 -> 19 shim (restores the global `JSX` namespace).
     "global.d.ts",
+    // RantAI next-auth session/JWT augmentation (adds `user.id` / `role`).
+    // The package build picks this up via its broad include; the server
+    // adapters below consume `@/lib/auth`, so the isolated harness needs it too.
+    "../types/next-auth.d.ts",
+    // Server-side port adapters (auth / projects-store / storage). Isolated
+    // from the SPA; consumed by the Next route handlers under
+    // src/app/api/design/**.
+    "server/**/*",
     // Shell entry + tiny router
     "web/App.tsx",
     "web/router.ts",
