@@ -48,6 +48,8 @@ import type {
   LibraryTaskStatus,
 } from "@open-design/contracts";
 import type { DesignContext } from "./auth";
+import { putDesignFile } from "./storage";
+import { createDesignProject, getDesignProject } from "./projects-store";
 
 // ---------------------------------------------------------------------------
 // S3 bytes (owned content-addressed objects)
@@ -755,4 +757,127 @@ export async function libraryConnectionStatus(
       lastUsedAt: Number(r.lastUsedAt),
     })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Extended library actions: apply-to-project + edit-as-page
+//
+// Ported from apps/daemon/src/routes/library.ts (`applyAssetToProject` +
+// `POST /api/library/assets/:id/edit-as-page`). The daemon copied owned bytes
+// from a local content-addressed store into a project's on-disk `PROJECTS_DIR`
+// subtree; the cloud port streams the bytes from S3 and writes them into the
+// project's S3 file namespace (`design/{org|global}/{project}/…`) via
+// `putDesignFile`. Both the source asset and the target project are scoped to
+// the caller (`getLibraryAssetRecord` / `getDesignProject`), so neither can be
+// touched cross-tenant.
+//
+// NOT ported (clipper/extension artifacts, external): the element-markup
+// sidecar copy behind `includeElement` and the Figma capture IR. The cloud port
+// never persists those sidecars, so `includeElement` is a graceful no-op that
+// simply omits `elementRelPath`, exactly like the daemon on a capture without a
+// stored sidecar.
+// ---------------------------------------------------------------------------
+
+export type ApplyLibraryAssetOutcome =
+  | { ok: true; relPath: string; elementRelPath?: string }
+  | {
+      ok: false;
+      reason: "asset-not-found" | "project-not-found" | "bytes-unavailable";
+    };
+
+export interface ApplyLibraryAssetOptions {
+  /** Project subdirectory to copy into (default `library`, matching the daemon). */
+  dir?: string;
+  /** Provenance kind recorded on the back-link (default `manual-upload`). */
+  sourceKind?: LibrarySourceKind;
+  /** Element-pick sidecar copy (not stored in the cloud port; no-op). */
+  includeElement?: boolean;
+}
+
+/**
+ * Copy a library asset's owned bytes into a project's files and record a
+ * provenance back-link. Mirrors the daemon's `applyAssetToProject`: the file is
+ * content-addressed as `<contentHash[0:12]><ext>` under the target subdir.
+ */
+export async function applyLibraryAssetToProject(
+  ctx: DesignContext,
+  assetId: string,
+  projectId: string,
+  opts: ApplyLibraryAssetOptions = {},
+): Promise<ApplyLibraryAssetOutcome> {
+  const record = await getLibraryAssetRecord(ctx, assetId);
+  if (!record) return { ok: false, reason: "asset-not-found" };
+  const project = await getDesignProject(ctx, projectId);
+  if (!project) return { ok: false, reason: "project-not-found" };
+  const bytes = await getLibraryAssetBytes(record);
+  if (!bytes) return { ok: false, reason: "bytes-unavailable" };
+
+  const subdir = opts.dir && opts.dir.trim() ? opts.dir.trim() : "library";
+  const stem = record.contentHash.slice(0, 12);
+  const ext = extForMime(record.mime, undefined);
+  const name = `${stem}${ext}`;
+  const relPath = `${subdir}/${name}`;
+
+  await putDesignFile(
+    ctx,
+    projectId,
+    relPath,
+    bytes,
+    record.mime ?? "application/octet-stream",
+  );
+  await addLibraryAssetSource(record.id, {
+    sourceKind: opts.sourceKind ?? "manual-upload",
+    projectId,
+  });
+
+  return { ok: true, relPath };
+}
+
+export type EditLibraryAssetAsPageOutcome =
+  | { ok: true; projectId: string; conversationId: string; relPath: string }
+  | { ok: false; reason: "asset-not-found" | "bytes-unavailable" | "not-html" };
+
+/**
+ * Turn a captured `html` library asset into a brand-new editable project whose
+ * `index.html` is the captured page, seed a conversation, and back-link the
+ * asset to the new project. Mirrors the daemon's `edit-as-page` exit.
+ */
+export async function editLibraryAssetAsPage(
+  ctx: DesignContext,
+  assetId: string,
+): Promise<EditLibraryAssetAsPageOutcome> {
+  const record = await getLibraryAssetRecord(ctx, assetId);
+  if (!record) return { ok: false, reason: "asset-not-found" };
+  if (record.kind !== "html") return { ok: false, reason: "not-html" };
+  const bytes = await getLibraryAssetBytes(record);
+  if (!bytes) return { ok: false, reason: "bytes-unavailable" };
+
+  const html = bytes.toString("utf8");
+  const baseName =
+    (record.sourceTitle || record.sourceDomain || "Captured page")
+      .trim()
+      .slice(0, 80) || "Captured page";
+  // `prototype` keeps the new project on the design/canvas surface; the
+  // back-link to the source asset rides on metadata so the asset's "Open
+  // project" affordance can resolve it.
+  const metadata = { kind: "prototype", odLibraryAssetId: record.id };
+  const projectId = randomUUID();
+  const { conversationId } = await createDesignProject(ctx, {
+    id: projectId,
+    name: baseName,
+    metadata,
+  });
+  await putDesignFile(
+    ctx,
+    projectId,
+    "index.html",
+    Buffer.from(html, "utf8"),
+    "text/html; charset=utf-8",
+  );
+  await addLibraryAssetSource(record.id, {
+    sourceKind: "manual-upload",
+    projectId,
+  });
+
+  return { ok: true, projectId, conversationId, relPath: "index.html" };
 }

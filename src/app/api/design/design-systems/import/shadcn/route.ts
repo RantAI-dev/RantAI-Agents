@@ -1,18 +1,49 @@
+import { NextResponse } from "next/server"
 import { apiError, requireDesignContext } from "@/design/server/auth"
+import {
+  DesignImportError,
+  importShadcnDesignSystem,
+  type ShadcnImportRequest,
+} from "@/design/server/design-system-import"
 
-// POST /api/design/design-systems/import/shadcn  [DEFERRED STUB]
+// POST /api/design/design-systems/import/shadcn
 //
-// Daemon shape (apps/daemon/src/routes/static-resource.ts): `201 { designSystem }`.
-// Importing a design system from a shadcn registry depends on the daemon's
-// registry-fetch/scan pipeline, which is not part of the cloud port yet.
-// Returns a valid error envelope; the SPA's `importShadcnDesignSystem` maps a
-// non-ok response to `null` and shows an import-failed state. Deferred.
+// Real port of the daemon's shadcn design-system import
+// (apps/daemon/src/design-systems/shadcn-import.ts). Accepts either the shadcn
+// CLI shorthand `<owner>/<repo>/<item>[#ref]` (resolved against the repo's
+// registry.json on raw.githubusercontent.com) or a direct https URL to a
+// registry-item / registry-index JSON on a well-known shadcn host. Fetches the
+// PUBLIC registry document over an SSRF host allowlist, maps its `cssVars`
+// (theme/light/dark, HSL-triplet or oklch) → hex swatches + a DESIGN.md, and
+// persists via the user design-system store (source='user', isEditable).
+//
+// Daemon response shape: `{ designSystem }`. We return 201 to match the create
+// route convention.
 export async function POST(req: Request) {
   const gate = await requireDesignContext(req)
   if (!gate.ok) return gate.response
-  return apiError(
-    501,
-    "NOT_IMPLEMENTED",
-    "shadcn design-system import is not available in the cloud port yet",
-  )
+
+  let input: ShadcnImportRequest
+  try {
+    input = ((await req.json()) as ShadcnImportRequest) || ({} as ShadcnImportRequest)
+  } catch {
+    return apiError(400, "BAD_REQUEST", "invalid request body")
+  }
+  if (!input.reference || typeof input.reference !== "string") {
+    return apiError(400, "BAD_REQUEST", "reference is required")
+  }
+
+  try {
+    const designSystem = await importShadcnDesignSystem(gate.ctx, input)
+    return NextResponse.json({ designSystem }, { status: 201 })
+  } catch (err) {
+    if (err instanceof DesignImportError) {
+      return apiError(err.status, err.code, err.message)
+    }
+    return apiError(
+      500,
+      "INTERNAL_ERROR",
+      `shadcn import failed: ${err instanceof Error ? err.message : String(err)}`,
+    )
+  }
 }
