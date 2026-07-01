@@ -8,6 +8,7 @@ import { useChatSessions, type ChatSession, type ChatMessage } from "@/hooks/use
 import { useToast } from "@/hooks/use-toast"
 import { ChatWorkspace } from "@/features/conversations/components/chat/chat-workspace"
 import type { InitialChatSettings } from "@/features/conversations/components/chat/chat-home"
+import { takePendingChatFiles } from "./pending-chat-files"
 import type {
   AssistantSkillInfo,
   AssistantToolInfo,
@@ -88,7 +89,15 @@ export default function ChatSessionPageClient({
 
         if (matchesSession && pendingInit.message) {
           setPendingMessage(pendingInit.message)
-          setPendingSettings(pendingInit.settings ?? null)
+          // Files were handed off in memory (they can't survive JSON) — restore
+          // them onto the settings so the initial send re-attaches the image.
+          const handedOffFiles = takePendingChatFiles(initToken)
+          const settings = pendingInit.settings ?? null
+          setPendingSettings(
+            handedOffFiles.length > 0
+              ? { ...(settings ?? {}), files: handedOffFiles }
+              : settings,
+          )
           setPendingStorageKey(tokenStorageKey ?? "rantai-pending-chat-init")
         }
       } catch {
