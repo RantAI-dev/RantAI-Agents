@@ -52,6 +52,33 @@ export type Route =
   | { kind: 'marketplace' }
   | { kind: 'marketplace-detail'; pluginId: string };
 
+// The vendored SPA is embedded under this dashboard subtree in agents-cloud
+// (upstream open-design owned the URL root and mounted at `/`). `buildPath` /
+// `parseRoute` keep speaking the SPA's own root-relative paths; the two
+// boundaries that actually touch `window.location` — `navigate` (writes
+// history) and `getRouteSnapshot` (reads history) — translate to/from this
+// base. Keeping the browser URL inside the mounted subtree also keeps the
+// `/api/design` fetch interceptor's route gate (`underDesignRoute`) satisfied
+// after a client-side navigation into a project, which is what previously
+// broke: pushState to a bare `/projects/:id` left the gate false and every
+// subsequent `/api/*` call (conversations, tabs, events) escaped rewriting and
+// 404'd.
+const ROUTE_BASE = '/dashboard/design';
+
+/** Map a real browser pathname down to the SPA's root-relative path. */
+export function stripRouteBase(pathname: string): string {
+  if (pathname === ROUTE_BASE) return '/';
+  if (pathname.startsWith(`${ROUTE_BASE}/`)) {
+    return pathname.slice(ROUTE_BASE.length) || '/';
+  }
+  return pathname;
+}
+
+/** Map a SPA root-relative path back onto the mounted browser pathname. */
+export function applyRouteBase(path: string): string {
+  return path === '/' ? ROUTE_BASE : `${ROUTE_BASE}${path}`;
+}
+
 export function parseRoute(pathname: string): Route {
   const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
   if (parts.length === 0) return { kind: 'home', view: 'home' };
@@ -173,7 +200,7 @@ export function buildPath(route: Route): string {
 // bar updates immediately; only the `useRoute()` subscriber updates
 // are deferred past the current render.
 export function navigate(route: Route, opts: { replace?: boolean } = {}): void {
-  const target = buildPath(route);
+  const target = applyRouteBase(buildPath(route));
   const current = window.location.pathname;
   if (target === current) return;
   if (opts.replace) {
@@ -190,7 +217,7 @@ let cachedPathname: string | null = null;
 let cachedRoute: Route | null = null;
 
 function getRouteSnapshot(): Route {
-  const pathname = window.location.pathname;
+  const pathname = stripRouteBase(window.location.pathname);
   if (cachedPathname !== pathname || cachedRoute === null) {
     cachedPathname = pathname;
     cachedRoute = parseRoute(pathname);

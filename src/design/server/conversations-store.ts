@@ -612,11 +612,6 @@ async function writeMessageRaw(
 ): Promise<ChatMessage | null> {
   const now = Date.now();
   await prisma.$transaction(async (tx) => {
-    const existing = await tx.odMessage.findUnique({
-      where: { id: m.id },
-      select: { id: true },
-    });
-
     const common = {
       role: m.role,
       content: m.content,
@@ -638,38 +633,43 @@ async function writeMessageRaw(
       endedAt: bigIntOrNull(m.endedAt),
     };
 
-    if (existing) {
-      await tx.odMessage.update({
-        where: { id: m.id },
-        data: {
-          ...common,
-          // Stamp telemetry finalization once (COALESCE-on-first behavior).
-          ...(m.telemetryFinalized === true
-            ? { telemetryFinalizedAt: BigInt(now) }
-            : {}),
-        },
-      });
-    } else {
-      const max = await tx.odMessage.aggregate({
-        where: { conversationId },
-        _max: { position: true },
-      });
-      const position = (max._max.position ?? -1) + 1;
-      const createdAt =
-        typeof m.createdAt === "number" && Number.isFinite(m.createdAt)
-          ? BigInt(Math.trunc(m.createdAt))
-          : BigInt(now);
-      await tx.odMessage.create({
-        data: {
-          id: m.id,
-          conversationId,
-          ...common,
-          telemetryFinalizedAt: m.telemetryFinalized === true ? BigInt(now) : null,
-          position,
-          createdAt,
-        },
-      });
-    }
+    // Position + createdAt only take effect on first insert; on an update the
+    // `create` block is ignored by the upsert.
+    const max = await tx.odMessage.aggregate({
+      where: { conversationId },
+      _max: { position: true },
+    });
+    const position = (max._max.position ?? -1) + 1;
+    const createdAt =
+      typeof m.createdAt === "number" && Number.isFinite(m.createdAt)
+        ? BigInt(Math.trunc(m.createdAt))
+        : BigInt(now);
+
+    // Atomic upsert (INSERT ... ON CONFLICT) rather than a check-then-create.
+    // A streaming assistant turn is persisted repeatedly by the client's
+    // `persistAssistantSoon` throttle, so several PUTs for the SAME message id
+    // can be in flight before the first create round-trips. The old
+    // findUnique→create path let two of those race both see "no row" and both
+    // INSERT, tripping a P2002 unique-id violation that surfaced as a 500 on
+    // the message-save endpoint (and dropped the finalized turn on reload).
+    await tx.odMessage.upsert({
+      where: { id: m.id },
+      update: {
+        ...common,
+        // Stamp telemetry finalization once (COALESCE-on-first behavior).
+        ...(m.telemetryFinalized === true
+          ? { telemetryFinalizedAt: BigInt(now) }
+          : {}),
+      },
+      create: {
+        id: m.id,
+        conversationId,
+        ...common,
+        telemetryFinalizedAt: m.telemetryFinalized === true ? BigInt(now) : null,
+        position,
+        createdAt,
+      },
+    });
 
     // Bump conversation activity so the sidebar's recency sort works.
     await tx.odConversation.update({
