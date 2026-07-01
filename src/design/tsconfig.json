@@ -1,0 +1,61 @@
+{
+  // ISOLATED typecheck config for the ported open-design web SPA.
+  //
+  // Goal: get the SPA's *shell + shared foundation* to typecheck standalone
+  // (desktop -> web adaptation) without dragging every feature screen in yet.
+  // This config is NOT wired into the Next.js build; the package-wide tsconfig
+  // still excludes `src/design` from the app program. Run manually with:
+  //
+  //   node_modules/.bin/tsc --noEmit -p src/design/tsconfig.json
+  //
+  // We inherit compilerOptions + path aliases from the package tsconfig so the
+  // @open-design/* aliases resolve identically, then narrow include/exclude to
+  // the foundation subset.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    // The package tsconfig targets ES6 (fine for the Next app which Turbopack
+    // downlevels), but the vendored open-design code uses BigInt literals
+    // (ES2020) and the RegExp `d` flag (ES2018). Bump the target here to match
+    // the upstream apps/web tsconfig so the foundation typechecks. `lib` is
+    // inherited (esnext) so no runtime lib is lost.
+    "target": "ES2022"
+  },
+  "include": [
+    // React 18 -> 19 shim (restores the global `JSX` namespace).
+    "global.d.ts",
+    // Shell entry + tiny router
+    "web/App.tsx",
+    "web/router.ts",
+    "web/types.ts",
+    // Foundation dirs the shell needs to boot
+    "web/providers/**/*",
+    "web/state/**/*",
+    "web/lib/**/*",
+    "web/hooks/**/*",
+    "web/i18n/**/*",
+    "web/runtime/**/*",
+    "web/utils/**/*",
+    // Vendored web-safe packages the foundation depends on
+    "packages/contracts/src/**/*",
+    "packages/components/src/**/*",
+    "packages/host/src/**/*",
+    "packages/sidecar-proto/src/**/*",
+    "packages/release/src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    // Heavy feature dirs excluded from the root scan for now. NOTE: files here
+    // may still be pulled into the program transitively via imports from the
+    // shell (App.tsx); excluding them only keeps them out of the root file set.
+    "web/features",
+    "web/media",
+    "web/artifacts",
+    "web/edit-mode",
+    "web/analytics",
+    "web/observability",
+    "web/comments.ts",
+    "web/components"
+  ]
+}
