@@ -143,6 +143,18 @@ model Organization {
   mediaJobs           MediaJob[]
   mediaAssets         MediaAsset[]
 
+  // ── DESIGN PORT (open-design) back-relations ──
+  odProjects             OdProject[]
+  odTemplates            OdTemplate[]
+  odRoutines             OdRoutine[]
+  odLibraryAssets        OdLibraryAsset[]
+  odLibraryTokens        OdLibraryToken[]
+  odLibraryDigests       OdLibraryDigest[]
+  odInstalledPlugins     OdInstalledPlugin[]
+  odPluginMarketplaces   OdPluginMarketplace[]
+  odRegistryEntries      OdRegistryEntry[]
+  odRunDevloopIterations OdRunDevloopIteration[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -1481,4 +1493,641 @@ model ResolvedImage {
   expiresAt   DateTime // Cache expiry (30 days from creation)
 
   @@index([expiresAt])
+}
+
+// ===== DESIGN PORT (open-design) =====
+// Ported 1:1 from the open-design daemon's better-sqlite3 schema:
+//   apps/daemon/src/db.ts, library-store.ts, critique/persistence.ts,
+//   plugins/persistence.ts, media/tasks.ts, registry/database-backend.ts.
+// Conventions:
+//   * Every model is Od*-prefixed and @@map("od_<original_table>") so nothing
+//     collides with the existing rantai-agents models. Column names are kept
+//     identical to the daemon via @map so the Postgres tables mirror SQLite.
+//   * Epoch-ms timestamps and byte sizes are BigInt: SQLite INTEGER is 64-bit
+//     and unix-ms (~1.7e12) overflows Postgres 4-byte Int. Small bounded
+//     counters/flags/dimensions stay Int. REAL -> Float, BLOB -> Bytes.
+//   * JSON-in-TEXT columns are String @db.Text (the port JSON.parses them just
+//     like the daemon). Int-boolean flags (enabled/is_active) stay Int to be
+//     faithful to the daemon's read path.
+//   * Multi-tenancy retrofit: the daemon is single-user, so root-owned entities
+//     (no parent FK) gain userId + organizationId + an Organization back-relation;
+//     child tables scope through their parent FK (onDelete: Cascade for ownership,
+//     SetNull where the daemon declares ON DELETE SET NULL).
+
+model OdProject {
+  id                      String  @id
+  name                    String
+  skillId                 String? @map("skill_id")
+  designSystemId          String? @map("design_system_id")
+  pendingPrompt           String? @map("pending_prompt") @db.Text
+  metadataJson            String? @map("metadata_json") @db.Text
+  customInstructions      String? @map("custom_instructions") @db.Text
+  appliedPluginSnapshotId String? @map("applied_plugin_snapshot_id")
+  createdAt               BigInt  @map("created_at")
+  updatedAt               BigInt  @map("updated_at")
+
+  // multi-tenancy retrofit (root-owned)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  conversations         OdConversation[]
+  previewComments       OdPreviewComment[]
+  tabs                  OdTab[]
+  tabsState             OdTabsState?
+  deployments           OdDeployment[]
+  critiqueRuns          OdCritiqueRun[]
+  appliedSnapshots      OdAppliedPluginSnapshot[]
+  genuiSurfaces         OdGenuiSurface[]
+  skillPluginCandidates OdSkillPluginCandidate[]
+  mediaTasks            OdMediaTask[]
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_projects")
+}
+
+model OdTemplate {
+  id              String  @id
+  name            String
+  description     String? @db.Text
+  sourceProjectId String? @map("source_project_id")
+  filesJson       String  @map("files_json") @db.Text
+  createdAt       BigInt  @map("created_at")
+
+  // multi-tenancy retrofit (root-owned; source_project_id is a soft ref, no FK)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_templates")
+}
+
+model OdConversation {
+  id                      String  @id
+  projectId               String  @map("project_id")
+  title                   String?
+  sessionMode             String  @default("design") @map("session_mode")
+  appliedPluginSnapshotId String? @map("applied_plugin_snapshot_id")
+  createdAt               BigInt  @map("created_at")
+  updatedAt               BigInt  @map("updated_at")
+
+  project          OdProject                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentSessions    OdAgentSession[]
+  messages         OdMessage[]
+  previewComments  OdPreviewComment[]
+  critiqueRuns     OdCritiqueRun[]
+  appliedSnapshots OdAppliedPluginSnapshot[]
+
+  @@index([projectId, updatedAt(sort: Desc)])
+  @@map("od_conversations")
+}
+
+model OdAgentSession {
+  conversationId   String  @map("conversation_id")
+  agentId          String  @map("agent_id")
+  sessionId        String  @map("session_id")
+  stablePromptHash String? @map("stable_prompt_hash")
+  model            String?
+  cwd              String?
+  lastMessageId    String? @map("last_message_id")
+  updatedAt        BigInt  @map("updated_at")
+
+  conversation OdConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, agentId])
+  @@map("od_agent_sessions")
+}
+
+model OdMessage {
+  id                        String  @id
+  conversationId            String  @map("conversation_id")
+  role                      String
+  content                   String  @db.Text
+  agentId                   String? @map("agent_id")
+  agentName                 String? @map("agent_name")
+  eventsJson                String? @map("events_json") @db.Text
+  attachmentsJson           String? @map("attachments_json") @db.Text
+  producedFilesJson         String? @map("produced_files_json") @db.Text
+  feedbackJson              String? @map("feedback_json") @db.Text
+  preTurnFileNamesJson      String? @map("pre_turn_file_names_json") @db.Text
+  sessionMode               String? @map("session_mode")
+  runContextJson            String? @map("run_context_json") @db.Text
+  appliedPluginSnapshotJson String? @map("applied_plugin_snapshot_json") @db.Text
+  telemetryFinalizedAt      BigInt? @map("telemetry_finalized_at")
+  startedAt                 BigInt? @map("started_at")
+  endedAt                   BigInt? @map("ended_at")
+  position                  Int
+  createdAt                 BigInt  @map("created_at")
+  // columns added via ALTER TABLE in the daemon migrate()
+  runId                  String? @map("run_id")
+  runStatus              String? @map("run_status")
+  lastRunEventId         String? @map("last_run_event_id")
+  commentAttachmentsJson String? @map("comment_attachments_json") @db.Text
+
+  conversation OdConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, position])
+  @@map("od_messages")
+}
+
+model OdPreviewComment {
+  id              String  @id
+  projectId       String  @map("project_id")
+  conversationId  String  @map("conversation_id")
+  filePath        String  @map("file_path")
+  elementId       String  @map("element_id")
+  selector        String
+  label           String
+  text            String  @db.Text
+  positionJson    String  @map("position_json") @db.Text
+  htmlHint        String  @map("html_hint") @db.Text
+  selectionKind   String? @map("selection_kind")
+  memberCount     Int?    @map("member_count")
+  podMembersJson  String? @map("pod_members_json") @db.Text
+  styleJson       String? @map("style_json") @db.Text
+  attachmentsJson String? @map("attachments_json") @db.Text
+  slideIndex      Int?    @map("slide_index")
+  slideKey        Int     @default(-1) @map("slide_key")
+  note            String  @db.Text
+  status          String
+  createdAt       BigInt  @map("created_at")
+  updatedAt       BigInt  @map("updated_at")
+
+  project      OdProject      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conversation OdConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, conversationId, filePath, elementId, slideKey])
+  @@index([projectId, conversationId, updatedAt(sort: Desc)])
+  @@index([projectId, conversationId, createdAt(sort: Asc)])
+  @@map("od_preview_comments")
+}
+
+model OdTab {
+  projectId String @map("project_id")
+  name      String
+  position  Int
+  isActive  Int    @default(0) @map("is_active")
+
+  project OdProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, name])
+  @@index([projectId, position])
+  @@map("od_tabs")
+}
+
+model OdTabsState {
+  projectId String  @id @map("project_id")
+  updatedAt BigInt  @map("updated_at")
+  stateJson String? @map("state_json") @db.Text
+
+  project OdProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("od_tabs_state")
+}
+
+model OdDeployment {
+  id                   String  @id
+  projectId            String  @map("project_id")
+  fileName             String  @map("file_name")
+  providerId           String  @map("provider_id")
+  url                  String
+  deploymentId         String? @map("deployment_id")
+  deploymentCount      Int     @default(1) @map("deployment_count")
+  target               String  @default("preview")
+  status               String  @default("ready")
+  statusMessage        String? @map("status_message")
+  reachableAt          BigInt? @map("reachable_at")
+  providerMetadataJson String? @map("provider_metadata_json") @db.Text
+  createdAt            BigInt  @map("created_at")
+  updatedAt            BigInt  @map("updated_at")
+
+  project OdProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, fileName, providerId])
+  @@index([projectId, updatedAt(sort: Desc)])
+  @@map("od_deployments")
+}
+
+model OdRoutine {
+  id            String  @id
+  name          String
+  prompt        String  @db.Text
+  scheduleKind  String  @map("schedule_kind")
+  scheduleValue String  @map("schedule_value")
+  scheduleJson  String? @map("schedule_json") @db.Text
+  projectMode   String  @map("project_mode")
+  projectId     String? @map("project_id")
+  skillId       String? @map("skill_id")
+  agentId       String? @map("agent_id")
+  contextJson   String? @map("context_json") @db.Text
+  enabled       Int     @default(1)
+  createdAt     BigInt  @map("created_at")
+  updatedAt     BigInt  @map("updated_at")
+
+  // multi-tenancy retrofit (root-owned; project_id is a soft ref, no FK)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  runs           OdRoutineRun[]
+  scheduleClaims OdRoutineScheduleClaim[]
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_routines")
+}
+
+model OdRoutineRun {
+  id             String  @id
+  routineId      String  @map("routine_id")
+  trigger        String
+  status         String
+  projectId      String  @map("project_id")
+  conversationId String  @map("conversation_id")
+  agentRunId     String  @map("agent_run_id")
+  startedAt      BigInt  @map("started_at")
+  completedAt    BigInt? @map("completed_at")
+  summary        String? @db.Text
+  error          String? @db.Text
+  errorCode      String? @map("error_code")
+
+  routine OdRoutine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  @@index([routineId, startedAt(sort: Desc)])
+  @@map("od_routine_runs")
+}
+
+model OdRoutineScheduleClaim {
+  routineId String @map("routine_id")
+  slotAt    BigInt @map("slot_at")
+  claimedAt BigInt @map("claimed_at")
+
+  routine OdRoutine @relation(fields: [routineId], references: [id], onDelete: Cascade)
+
+  @@id([routineId, slotAt])
+  @@map("od_routine_schedule_claims")
+}
+
+model OdLibraryAsset {
+  id              String  @id
+  kind            String
+  storage         String  @default("owned")
+  sourceUrl       String? @map("source_url")
+  sourceTitle     String? @map("source_title")
+  sourceDomain    String? @map("source_domain")
+  capturedAt      BigInt  @map("captured_at")
+  archivedDate    String  @map("archived_date")
+  filePath        String? @map("file_path")
+  originProjectId String? @map("origin_project_id")
+  relPath         String? @map("rel_path")
+  mime            String?
+  width           Int?
+  height          Int?
+  size            BigInt?
+  contentHash     String  @unique @map("content_hash")
+  caption         String? @db.Text
+  ocrText         String? @map("ocr_text") @db.Text
+  paletteJson     String? @map("palette_json") @db.Text
+  tagsJson        String? @map("tags_json") @db.Text
+  metadataJson    String? @map("metadata_json") @db.Text
+  createdAt       BigInt  @map("created_at")
+  updatedAt       BigInt  @map("updated_at")
+
+  // multi-tenancy retrofit (root-owned)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  sources   OdLibraryAssetSource[]
+  embedding OdLibraryEmbedding?
+  tasks     OdLibraryTask[]
+
+  @@index([archivedDate(sort: Desc), createdAt(sort: Desc)])
+  @@index([kind, createdAt(sort: Desc)])
+  @@index([sourceDomain])
+  @@index([originProjectId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_library_assets")
+}
+
+model OdLibraryAssetSource {
+  id             String  @id
+  assetId        String  @map("asset_id")
+  sourceKind     String  @map("source_kind")
+  projectId      String? @map("project_id")
+  conversationId String? @map("conversation_id")
+  runId          String? @map("run_id")
+  designSystemId String? @map("design_system_id")
+  relPath        String? @map("rel_path")
+  createdAt      BigInt  @map("created_at")
+
+  asset OdLibraryAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([projectId])
+  @@index([designSystemId])
+  @@map("od_library_asset_sources")
+}
+
+model OdLibraryEmbedding {
+  assetId     String  @id @map("asset_id")
+  model       String
+  dim         Int
+  vector      Bytes
+  indexedText String? @map("indexed_text") @db.Text
+  createdAt   BigInt  @map("created_at")
+
+  asset OdLibraryAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@map("od_library_embeddings")
+}
+
+model OdLibraryTask {
+  id           String  @id
+  assetId      String  @map("asset_id")
+  status       String  @default("queued")
+  progressJson String  @default("[]") @map("progress_json") @db.Text
+  errorJson    String? @map("error_json") @db.Text
+  startedAt    BigInt  @map("started_at")
+  endedAt      BigInt? @map("ended_at")
+
+  asset OdLibraryAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@map("od_library_tasks")
+}
+
+model OdLibraryToken {
+  tokenHash       String @id @map("token_hash")
+  label           String
+  extensionOrigin String @map("extension_origin")
+  createdAt       BigInt @map("created_at")
+  lastUsedAt      BigInt @map("last_used_at")
+
+  // multi-tenancy retrofit (root-owned)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_library_tokens")
+}
+
+model OdLibraryDigest {
+  date         String  @id
+  projectId    String? @map("project_id")
+  artifactPath String? @map("artifact_path")
+  summary      String? @db.Text
+  createdAt    BigInt  @map("created_at")
+
+  // multi-tenancy retrofit (root-owned; project_id is a soft ref, no FK)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_library_digests")
+}
+
+model OdCritiqueRun {
+  id              String  @id
+  projectId       String  @map("project_id")
+  conversationId  String? @map("conversation_id")
+  artifactPath    String? @map("artifact_path")
+  status          String
+  score           Float?
+  roundsJson      String  @default("[]") @map("rounds_json") @db.Text
+  transcriptPath  String? @map("transcript_path")
+  protocolVersion Int     @map("protocol_version")
+  createdAt       BigInt  @map("created_at")
+  updatedAt       BigInt  @map("updated_at")
+
+  project      OdProject       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conversation OdConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, updatedAt(sort: Desc)])
+  @@index([status])
+  @@map("od_critique_runs")
+}
+
+model OdInstalledPlugin {
+  id                            String  @id
+  title                         String
+  version                       String
+  sourceKind                    String  @map("source_kind")
+  source                        String
+  pinnedRef                     String? @map("pinned_ref")
+  sourceDigest                  String? @map("source_digest")
+  sourceMarketplaceId           String? @map("source_marketplace_id")
+  sourceMarketplaceEntryName    String? @map("source_marketplace_entry_name")
+  sourceMarketplaceEntryVersion String? @map("source_marketplace_entry_version")
+  marketplaceTrust              String? @map("marketplace_trust")
+  resolvedSource                String? @map("resolved_source")
+  resolvedRef                   String? @map("resolved_ref")
+  manifestDigest                String? @map("manifest_digest")
+  archiveIntegrity              String? @map("archive_integrity")
+  trust                         String
+  capabilitiesGranted           String  @map("capabilities_granted") @db.Text
+  manifestJson                  String  @map("manifest_json") @db.Text
+  fsPath                        String  @map("fs_path")
+  installedAt                   BigInt  @map("installed_at")
+  updatedAt                     BigInt  @map("updated_at")
+
+  // multi-tenancy retrofit (root-owned)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([sourceKind])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_installed_plugins")
+}
+
+model OdPluginMarketplace {
+  id           String @id
+  url          String
+  specVersion  String @default("1.0.0") @map("spec_version")
+  version      String @default("0.0.0")
+  trust        String
+  manifestJson String @map("manifest_json") @db.Text
+  addedAt      BigInt @map("added_at")
+  refreshedAt  BigInt @map("refreshed_at")
+
+  // multi-tenancy retrofit (root-owned)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([version])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_plugin_marketplaces")
+}
+
+model OdAppliedPluginSnapshot {
+  id                            String  @id
+  projectId                     String  @map("project_id")
+  conversationId                String? @map("conversation_id")
+  runId                         String? @map("run_id")
+  pluginId                      String  @map("plugin_id")
+  pluginSpecVersion             String  @default("1.0.0") @map("plugin_spec_version")
+  pluginVersion                 String  @map("plugin_version")
+  manifestSourceDigest          String  @map("manifest_source_digest")
+  sourceMarketplaceId           String? @map("source_marketplace_id")
+  sourceMarketplaceEntryName    String? @map("source_marketplace_entry_name")
+  sourceMarketplaceEntryVersion String? @map("source_marketplace_entry_version")
+  marketplaceTrust              String? @map("marketplace_trust")
+  resolvedSource                String? @map("resolved_source")
+  resolvedRef                   String? @map("resolved_ref")
+  archiveIntegrity              String? @map("archive_integrity")
+  pinnedRef                     String? @map("pinned_ref")
+  taskKind                      String  @map("task_kind")
+  inputsJson                    String  @map("inputs_json") @db.Text
+  resolvedContextJson           String  @map("resolved_context_json") @db.Text
+  craftRequiresJson             String  @default("[]") @map("craft_requires_json") @db.Text
+  pipelineJson                  String? @map("pipeline_json") @db.Text
+  genuiSurfacesJson             String  @default("[]") @map("genui_surfaces_json") @db.Text
+  capabilitiesGranted           String  @map("capabilities_granted") @db.Text
+  capabilitiesRequired          String  @default("[]") @map("capabilities_required") @db.Text
+  assetsStagedJson              String  @map("assets_staged_json") @db.Text
+  connectorsRequiredJson        String  @default("[]") @map("connectors_required_json") @db.Text
+  connectorsResolvedJson        String  @default("[]") @map("connectors_resolved_json") @db.Text
+  mcpServersJson                String  @default("[]") @map("mcp_servers_json") @db.Text
+  pluginTitle                   String? @map("plugin_title")
+  pluginDescription             String? @map("plugin_description") @db.Text
+  queryText                     String? @map("query_text") @db.Text
+  status                        String  @default("fresh")
+  appliedAt                     BigInt  @map("applied_at")
+  expiresAt                     BigInt? @map("expires_at")
+
+  project       OdProject        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  conversation  OdConversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  genuiSurfaces OdGenuiSurface[]
+
+  @@index([projectId])
+  @@index([runId])
+  @@index([pluginId, pluginVersion])
+  @@map("od_applied_plugin_snapshots")
+}
+
+model OdRunDevloopIteration {
+  id                  String  @id
+  runId               String  @map("run_id")
+  stageId             String  @map("stage_id")
+  iteration           Int
+  artifactDiffSummary String? @map("artifact_diff_summary") @db.Text
+  critiqueSummary     String? @map("critique_summary") @db.Text
+  tokensUsed          Int?    @map("tokens_used")
+  endedAt             BigInt  @map("ended_at")
+
+  // multi-tenancy retrofit (root-owned; run_id is a free-text in-memory run id, no FK)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+  @@index([runId, stageId])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_run_devloop_iterations")
+}
+
+model OdGenuiSurface {
+  id               String  @id
+  projectId        String  @map("project_id")
+  conversationId   String? @map("conversation_id")
+  runId            String? @map("run_id")
+  // NOTE: daemon declares plugin_snapshot_id TEXT NOT NULL yet its FK is
+  // ON DELETE SET NULL (self-contradictory in SQLite). Modeled nullable here
+  // so Prisma can honor the declared SetNull behavior.
+  pluginSnapshotId String? @map("plugin_snapshot_id")
+  surfaceId        String  @map("surface_id")
+  kind             String
+  persist          String
+  schemaDigest     String? @map("schema_digest")
+  valueJson        String? @map("value_json") @db.Text
+  status           String
+  respondedBy      String? @map("responded_by")
+  requestedAt      BigInt  @map("requested_at")
+  respondedAt      BigInt? @map("responded_at")
+  expiresAt        BigInt? @map("expires_at")
+
+  project        OdProject                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  pluginSnapshot OdAppliedPluginSnapshot? @relation(fields: [pluginSnapshotId], references: [id], onDelete: SetNull)
+
+  @@index([projectId, surfaceId])
+  @@index([conversationId, surfaceId])
+  @@index([runId])
+  @@map("od_genui_surfaces")
+}
+
+model OdSkillPluginCandidate {
+  id                 String  @id
+  projectId          String  @map("project_id")
+  runId              String? @map("run_id")
+  conversationId     String? @map("conversation_id")
+  assistantMessageId String? @map("assistant_message_id")
+  fingerprint        String
+  status             String  @default("active")
+  title              String
+  description        String  @db.Text
+  confidence         Float
+  sourceRefsJson     String  @map("source_refs_json") @db.Text
+  provenanceJson     String  @map("provenance_json") @db.Text
+  draftPath          String? @map("draft_path")
+  createdAt          BigInt  @map("created_at")
+  updatedAt          BigInt  @map("updated_at")
+  dismissedAt        BigInt? @map("dismissed_at")
+
+  project OdProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, fingerprint])
+  @@index([projectId, status, createdAt(sort: Desc)])
+  @@map("od_skill_plugin_candidates")
+}
+
+model OdMediaTask {
+  id           String  @id
+  projectId    String  @map("project_id")
+  status       String
+  surface      String?
+  model        String?
+  progressJson String  @default("[]") @map("progress_json") @db.Text
+  fileJson     String? @map("file_json") @db.Text
+  errorJson    String? @map("error_json") @db.Text
+  startedAt    BigInt  @map("started_at")
+  endedAt      BigInt? @map("ended_at")
+  createdAt    BigInt  @map("created_at")
+  updatedAt    BigInt  @map("updated_at")
+
+  project OdProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, updatedAt(sort: Desc)])
+  @@index([status, updatedAt(sort: Desc)])
+  @@map("od_media_tasks")
+}
+
+model OdRegistryEntry {
+  backendId String @map("backend_id")
+  name      String
+  version   String
+  entryJson String @map("entry_json") @db.Text
+  updatedAt BigInt @map("updated_at")
+
+  // multi-tenancy retrofit (root-owned)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([backendId, name])
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_registry_entries")
 }
