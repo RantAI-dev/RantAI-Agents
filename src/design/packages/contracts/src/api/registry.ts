@@ -392,8 +392,8 @@ export interface DesignSystemFileResponse {
 }
 
 export interface DesignSystemWorkspaceResponse {
-  project: import('./projects.js').Project;
-  files: import('./files.js').ProjectFile[];
+  project: import('./projects').Project;
+  files: import('./files').ProjectFile[];
 }
 
 export type DesignSystemRevisionStatus = 'pending' | 'accepted' | 'rejected';

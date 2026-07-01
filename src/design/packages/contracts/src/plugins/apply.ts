@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ContextItemSchema, ResolvedContextSchema, type ContextItem } from './context.js';
+import { ContextItemSchema, ResolvedContextSchema, type ContextItem } from './context';
 import {
   GenUISurfaceSpecSchema,
   InputFieldSchema,
@@ -11,7 +11,7 @@ import {
   type McpServerSpec,
   type PluginConnectorRef,
   type PluginPipeline,
-} from './manifest.js';
+} from './manifest';
 
 // Apply-time refs to staged assets. `stageAt` defaults to `'run-start'` to
 // keep `POST /api/projects` from accidentally turning into a staging endpoint

@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import type { Project } from '../api/projects.js';
-import { PluginManifestSchema } from './manifest.js';
+import type { Project } from '../api/projects';
+import { PluginManifestSchema } from './manifest';
 import {
   MarketplaceTrustSchema,
   TrustTierSchema,
   type MarketplaceTrust,
   type TrustTier,
-} from './marketplace.js';
+} from './marketplace';
 
 // `installed_plugins.source_kind` — accepts `'bundled'` from Phase 1 even
 // though `plugins/_official/` arrives in spec §23 / Phase 4 (plan F3). Keeps

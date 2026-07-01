@@ -12,7 +12,7 @@ import type {
   TrackingConfigureAvailability,
   TrackingConfigureType,
   TrackingRuntimeType,
-} from './public-params.js';
+} from './public-params';
 import type { ReleaseChannel } from '@open-design/release';
 
 // ---- Event names ---------------------------------------------------------

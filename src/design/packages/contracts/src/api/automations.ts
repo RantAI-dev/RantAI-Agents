@@ -1,6 +1,6 @@
-import type { JsonValue } from '../common.js';
-import type { RunContextSelection } from './context.js';
-import type { MemoryType } from './memory.js';
+import type { JsonValue } from '../common';
+import type { RunContextSelection } from './context';
+import type { MemoryType } from './memory';
 
 export type AutomationTriggerKind =
   | 'manual'

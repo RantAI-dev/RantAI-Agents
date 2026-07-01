@@ -1,6 +1,6 @@
-import type { LiveArtifactRefreshStatus } from '../api/live-artifacts.js';
-import type { SseErrorPayload } from '../errors.js';
-import type { SseTransportEvent } from './common.js';
+import type { LiveArtifactRefreshStatus } from '../api/live-artifacts';
+import type { SseErrorPayload } from '../errors';
+import type { SseTransportEvent } from './common';
 
 export type LiveArtifactSseAction = 'created' | 'updated' | 'deleted';
 export type LiveArtifactRefreshSsePhase = 'started' | 'succeeded' | 'failed';
