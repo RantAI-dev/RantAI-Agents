@@ -16,7 +16,7 @@ const STEP_PX = 9; // per-frame hover-glide speed
 const NUDGE_PX = 332; // click jump (~2 small cards / one large card + gap)
 
 export interface EdgeAutoScroll {
-  scrollRef: RefObject<HTMLDivElement>;
+  scrollRef: RefObject<HTMLDivElement | null>;
   edges: { left: boolean; right: boolean };
   startAutoScroll: (direction: 1 | -1) => void;
   stopAutoScroll: () => void;

@@ -37,6 +37,8 @@
     "web/i18n/**/*",
     "web/runtime/**/*",
     "web/utils/**/*",
+    // Shell UI components (now that React 19 residuals are fixed)
+    "web/components/**/*",
     // Vendored web-safe packages the foundation depends on
     "packages/contracts/src/**/*",
     "packages/components/src/**/*",
@@ -55,7 +57,6 @@
     "web/edit-mode",
     "web/analytics",
     "web/observability",
-    "web/comments.ts",
-    "web/components"
+    "web/comments.ts"
   ]
 }

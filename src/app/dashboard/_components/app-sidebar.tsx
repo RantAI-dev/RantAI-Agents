@@ -105,6 +105,7 @@ const allNavItems: NavItem[] = [
 
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
   { title: "Media Studio", url: "/dashboard/media", icon: Clapperboard, feature: null },
+  { title: "Design", url: "/dashboard/design", icon: Sparkles, feature: null },
   { title: "Files", url: "/dashboard/files", icon: FolderOpen, feature: null },
   { title: "Marketplace", url: "/dashboard/marketplace", icon: Store, feature: null },
 ]
@@ -119,6 +120,7 @@ const sections = {
   groups: { title: "Teams", subtitle: "Employee Groups", icon: Network, path: "/dashboard/groups" },
   agent: { title: "Live Chat", subtitle: "Customer Support", icon: Headphones, path: "/dashboard/agent" },
   media: { title: "Media Studio", subtitle: "Generate Images & Video", icon: Clapperboard, path: "/dashboard/media" },
+  design: { title: "Design", subtitle: "Design Studio", icon: Sparkles, path: "/dashboard/design" },
   knowledge: { title: "Files", subtitle: "Documents & Knowledge Bases", icon: FolderOpen, path: "/dashboard/files" },
   marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
   settings: { title: "Settings", subtitle: "Preferences", icon: Settings, path: "/dashboard/settings" },
@@ -499,6 +501,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
     if (isDigitalEmployeesEnabled && pathname.startsWith("/dashboard/groups")) return sections.digitalEmployees
     if (pathname.startsWith("/dashboard/agent")) return sections.agent
     if (pathname.startsWith("/dashboard/media")) return sections.media
+    if (pathname.startsWith("/dashboard/design")) return sections.design
     if (pathname.startsWith("/dashboard/files")) return sections.knowledge
     if (pathname.startsWith("/dashboard/marketplace")) return sections.marketplace
     if (pathname.startsWith("/dashboard/settings")) return sections.settings
