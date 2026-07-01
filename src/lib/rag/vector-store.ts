@@ -286,22 +286,29 @@ export async function getDocumentChunkCounts(
   const counts = new Map<string, number>();
   if (documentIds.length === 0) return counts;
 
-  const surrealClient = await getSurrealClient();
-  const result = await surrealClient.query<{ document_id: string; count: number }>(
-    `SELECT document_id, count() AS count FROM document_chunk WHERE document_id IN $ids GROUP BY document_id`,
-    { ids: documentIds }
-  );
+  // Chunk counts are a display nicety (the Files list shows "N chunks"). If
+  // SurrealDB is unavailable/uninitialized, degrade to 0 rather than throwing —
+  // a vector-store hiccup must not crash the whole documents page.
+  try {
+    const surrealClient = await getSurrealClient();
+    const result = await surrealClient.query<{ document_id: string; count: number }>(
+      `SELECT document_id, count() AS count FROM document_chunk WHERE document_id IN $ids GROUP BY document_id`,
+      { ids: documentIds }
+    );
 
-  const rawResult = result[0];
-  const rows = (Array.isArray(rawResult)
-    ? rawResult
-    : (rawResult as { result?: Array<{ document_id: string; count: number }> })?.result ||
-      []) as Array<{ document_id: string; count: number }>;
+    const rawResult = result[0];
+    const rows = (Array.isArray(rawResult)
+      ? rawResult
+      : (rawResult as { result?: Array<{ document_id: string; count: number }> })?.result ||
+        []) as Array<{ document_id: string; count: number }>;
 
-  for (const row of rows) {
-    if (row && typeof row.document_id === "string") {
-      counts.set(row.document_id, row.count ?? 0);
+    for (const row of rows) {
+      if (row && typeof row.document_id === "string") {
+        counts.set(row.document_id, row.count ?? 0);
+      }
     }
+  } catch (error) {
+    console.error("[vector-store] getDocumentChunkCounts failed (SurrealDB); returning 0 counts:", error);
   }
 
   return counts;
