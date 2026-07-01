@@ -2001,7 +2001,16 @@ export function projectRawUrl(projectId: string, filePath: string): string {
     .split('/')
     .map((seg) => encodeURIComponent(seg))
     .join('/');
-  return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
+  // agents-cloud namespacing: unlike the SPA's ~200 `fetch('/api/…')` calls
+  // (re-homed to `/api/design/*` by the `install-api-base` window.fetch
+  // interceptor), this URL is consumed as an element `src` / iframe `baseHref`
+  // — the browser loads it directly, never through `window.fetch`, so the
+  // interceptor can't rewrite it and a bare `/api/projects/...` path 404s on
+  // the cloud host. Emit the namespaced path here so produced-file previews
+  // (and staged-attachment thumbnails) resolve. The interceptor leaves an
+  // already-`/api/design/`-prefixed path untouched, so `fetch()` callers of
+  // this helper are unaffected.
+  return `/api/design/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
 }
 
 export function designSystemStaticUrl(designSystemId: string, filePath: string): string {
