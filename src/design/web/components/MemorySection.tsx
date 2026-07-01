@@ -913,7 +913,9 @@ export function MemorySection({
   // so we just always reload on any change. EventSource auto-reconnects
   // on temporary daemon hiccups.
   useEffect(() => {
-    const es = new EventSource('/api/memory/events');
+    // agents-cloud namespacing: EventSource bypasses the install-api-base
+    // window.fetch interceptor, so target the already-namespaced design path.
+    const es = new EventSource('/api/design/memory/events');
     es.addEventListener('change', (raw) => {
       try {
         const ev = JSON.parse((raw as MessageEvent).data) as MemoryChangeEvent;

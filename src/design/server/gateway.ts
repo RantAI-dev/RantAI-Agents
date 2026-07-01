@@ -32,7 +32,11 @@ import { streamText, type ModelMessage } from "ai";
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider";
 import { DEFAULT_MODEL_ID } from "@/lib/models";
 import { prisma } from "@/lib/prisma";
-import type { ChatRequest } from "@open-design/contracts";
+import type {
+  ChatRequest,
+  ChatRunStatus,
+  ChatRunStatusResponse,
+} from "@open-design/contracts";
 import type { DesignContext } from "./auth";
 import { composeSystemPrompt } from "./prompt-compose";
 
@@ -96,6 +100,111 @@ function takePendingRun(runId: string): PendingRun | undefined {
   const run = pendingRuns.get(runId);
   if (run) pendingRuns.delete(runId);
   return run;
+}
+
+// ---------------------------------------------------------------------------
+// Run-status registry (backs GET /api/design/runs/:id)
+//
+// Upstream the daemon kept an in-memory run record with a queryable status
+// (runs.ts `statusBody`). The SPA's run client reconciles a dropped/reconnected
+// SSE stream by polling `GET /api/runs/:id` (`fetchChatRunStatus`): if that
+// 404s it treats a run that actually SUCCEEDED as failed. streamDesignRun runs
+// the whole generation inside the events GET, so we record a lightweight status
+// snapshot here (running → succeeded/failed/canceled) keyed by runId, scoped by
+// user, and swept after a TTL. Purely in-memory, mirroring the daemon's
+// ephemeral run registry (no new table).
+// ---------------------------------------------------------------------------
+
+interface RunStatusRecord {
+  userId: string;
+  organizationId: string | null;
+  projectId: string;
+  conversationId: string;
+  assistantMessageId: string;
+  agentId: string;
+  status: ChatRunStatus;
+  exitCode: number | null;
+  signal: string | null;
+  error: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+const RUN_STATUS_TTL_MS = 30 * 60 * 1000;
+
+// Back the registry with a `globalThis` singleton. In Next.js dev, sibling
+// route handlers (`POST /runs`, `GET /runs/:id`, `GET /runs/:id/events`) can be
+// bundled into separate server module instances, so a plain module-level `Map`
+// written by one route is invisible to another — the run-status poll would 404
+// a run that was just created. A `Symbol.for` global is one shared instance
+// across every duplicate module copy (the same pattern used for the Prisma
+// client singleton); in production's single module graph it is a harmless no-op.
+const RUN_STATUS_KEY = Symbol.for("rantai.design.gateway.runStatuses");
+type RunStatusGlobal = typeof globalThis & {
+  [RUN_STATUS_KEY]?: Map<string, RunStatusRecord>;
+};
+const runStatuses: Map<string, RunStatusRecord> =
+  ((globalThis as RunStatusGlobal)[RUN_STATUS_KEY] ??= new Map<
+    string,
+    RunStatusRecord
+  >());
+
+function sweepRunStatuses(now: number): void {
+  for (const [id, rec] of runStatuses) {
+    if (now - rec.updatedAt > RUN_STATUS_TTL_MS) runStatuses.delete(id);
+  }
+}
+
+function recordRunStatus(runId: string, patch: Partial<RunStatusRecord>): void {
+  const now = Date.now();
+  sweepRunStatuses(now);
+  const prev = runStatuses.get(runId);
+  if (!prev) {
+    runStatuses.set(runId, {
+      userId: patch.userId ?? "",
+      organizationId: patch.organizationId ?? null,
+      projectId: patch.projectId ?? "",
+      conversationId: patch.conversationId ?? "",
+      assistantMessageId: patch.assistantMessageId ?? "",
+      agentId: patch.agentId ?? "design",
+      status: patch.status ?? "running",
+      exitCode: patch.exitCode ?? null,
+      signal: patch.signal ?? null,
+      error: patch.error ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return;
+  }
+  runStatuses.set(runId, { ...prev, ...patch, updatedAt: now });
+}
+
+/**
+ * Read a run's status snapshot for the owning user, in the daemon's
+ * `ChatRunStatusResponse` shape, or null when unknown (→ 404, matching the
+ * daemon). Recorded by `streamDesignRun`, so any run that started streaming is
+ * resolvable by the SPA's reconciliation poll.
+ */
+export function getDesignRunStatus(
+  ctx: DesignContext,
+  runId: string,
+): ChatRunStatusResponse | null {
+  sweepRunStatuses(Date.now());
+  const rec = runStatuses.get(runId);
+  if (!rec || rec.userId !== ctx.userId) return null;
+  return {
+    id: runId,
+    projectId: rec.projectId || null,
+    conversationId: rec.conversationId || null,
+    assistantMessageId: rec.assistantMessageId || null,
+    agentId: rec.agentId || null,
+    status: rec.status,
+    createdAt: rec.createdAt,
+    updatedAt: rec.updatedAt,
+    exitCode: rec.exitCode,
+    signal: rec.signal,
+    error: rec.error,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -292,6 +401,19 @@ export async function createDesignRun(
     createdAt: Date.now(),
   });
 
+  // Record a `queued` status snapshot at creation so the SPA's status poll
+  // (GET /api/design/runs/:id) resolves even in the window between POST /runs
+  // and the events GET that flips it to `running` — closes a startup 404 race.
+  recordRunStatus(runId, {
+    userId: ctx.userId,
+    organizationId: ctx.organizationId,
+    projectId: resolved.projectId,
+    conversationId: resolved.id,
+    assistantMessageId,
+    agentId,
+    status: "queued",
+  });
+
   return { ok: true, runId, conversationId: resolved.id, assistantMessageId };
 }
 
@@ -341,6 +463,18 @@ export function streamDesignRun(
         return;
       }
 
+      // Record a queryable snapshot so the SPA's reconciliation poll
+      // (GET /api/design/runs/:id) resolves this run instead of 404-ing.
+      recordRunStatus(runId, {
+        userId: pending.userId,
+        organizationId: pending.organizationId,
+        projectId: pending.projectId,
+        conversationId: pending.conversationId,
+        assistantMessageId: pending.assistantMessageId,
+        agentId: pending.agentId,
+        status: "running",
+      });
+
       try {
         // Re-validate ownership + fetch fresh project context (double auth).
         const resolved = await resolveConversation(
@@ -350,6 +484,7 @@ export function streamDesignRun(
         );
         if (!resolved) {
           send("error", { message: "conversation not found" });
+          recordRunStatus(runId, { status: "failed", exitCode: 1, error: "conversation not found" });
           send("end", { code: 1, status: "failed" });
           close();
           return;
@@ -412,6 +547,7 @@ export function streamDesignRun(
           } catch {
             /* best-effort */
           }
+          recordRunStatus(runId, { status: "canceled", signal: "SIGTERM" });
           send("end", { code: null, signal: "SIGTERM", status: "canceled" });
           close();
           return;
@@ -423,16 +559,19 @@ export function streamDesignRun(
           /* durability is best-effort; the live reply already rendered */
         }
 
+        recordRunStatus(runId, { status: "succeeded", exitCode: 0 });
         send("end", { code: 0, status: "succeeded" });
         close();
       } catch (err) {
         if (signal.aborted) {
+          recordRunStatus(runId, { status: "canceled", signal: "SIGTERM" });
           send("end", { code: null, signal: "SIGTERM", status: "canceled" });
           close();
           return;
         }
         const message = err instanceof Error ? err.message : String(err);
         send("error", { message });
+        recordRunStatus(runId, { status: "failed", exitCode: 1, error: message });
         send("end", { code: 1, status: "failed" });
         close();
       }

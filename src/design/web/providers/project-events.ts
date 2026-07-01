@@ -39,7 +39,13 @@ const DEFAULT_INITIAL_BACKOFF = 1000;
 const DEFAULT_MAX_BACKOFF = 30_000;
 
 export function projectEventsUrl(projectId: string): string {
-  return `/api/projects/${encodeURIComponent(projectId)}/events`;
+  // agents-cloud namespacing: this URL is consumed by `new EventSource(...)`
+  // (below), which the browser opens directly — it never passes through the
+  // `install-api-base` window.fetch interceptor, so a bare `/api/...` path 404s
+  // on the cloud host and the EventSource backoff-reconnect-loops. Emit the
+  // `/api/design/...` path so the file-events stream resolves. (fetch callers
+  // are unaffected: the interceptor leaves already-namespaced paths untouched.)
+  return `/api/design/projects/${encodeURIComponent(projectId)}/events`;
 }
 
 export interface ProjectEventsConnection {
