@@ -154,6 +154,7 @@ model Organization {
   odPluginMarketplaces   OdPluginMarketplace[]
   odRegistryEntries      OdRegistryEntry[]
   odRunDevloopIterations OdRunDevloopIteration[]
+  odDesignSystems        OdDesignSystem[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2130,4 +2131,35 @@ model OdRegistryEntry {
   @@index([userId])
   @@index([organizationId])
   @@map("od_registry_entries")
+}
+
+// User-authored / generated design systems (source = "user"). Persisted
+// separately from the read-only bundled catalog (design-catalog.generated.ts)
+// so users can create, generate, edit, and delete their own systems. The
+// row id carries the "user:" prefix that the SPA uses to distinguish
+// editable user systems from built-in presets. Large bodies (DESIGN.md) and
+// tokens are stored inline as text; swatches/provenance are JSON strings.
+model OdDesignSystem {
+  id             String  @id
+  title          String
+  category       String  @default("Custom")
+  summary        String  @default("") @db.Text
+  body           String  @db.Text
+  tokens         String? @db.Text
+  swatchesJson   String  @default("[]") @map("swatches_json") @db.Text
+  surface        String  @default("web")
+  source         String  @default("user")
+  status         String  @default("draft")
+  provenanceJson String? @map("provenance_json") @db.Text
+  createdAt      BigInt  @map("created_at")
+  updatedAt      BigInt  @map("updated_at")
+
+  // multi-tenancy retrofit (root-owned)
+  userId         String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("od_design_systems")
 }
