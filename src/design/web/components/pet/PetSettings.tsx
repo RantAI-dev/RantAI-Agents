@@ -39,12 +39,13 @@ interface Props {
 }
 
 // Curated palette so the customize swatch row stays compact and on-brand
-// without forcing a full color picker. The first entry mirrors --accent.
+// without forcing a full color picker. The first entry mirrors --accent
+// (RantAI Blue) so the default pet color aligns with the studio brand.
 const ACCENT_SWATCHES = [
-  '#c96442',
-  '#2348b8',
-  '#1f7a3a',
-  '#6c3aa6',
+  '#0071df',
+  '#2563eb',
+  '#7c3aed',
+  '#059669',
   '#d97a26',
   '#9c2a25',
   '#74716b',

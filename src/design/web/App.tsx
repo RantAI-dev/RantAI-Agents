@@ -5,7 +5,7 @@
 import './lib/install-api-base';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import { AnimatePresence, motion, MotionConfig } from 'motion/react';
+import { AnimatePresence, MotionConfig } from 'motion/react';
 import { useAnalytics } from './analytics/provider';
 import {
   trackFileUploadResult,
@@ -49,7 +49,6 @@ import {
   type SettingsSection,
   type SettingsHighlight,
 } from './components/SettingsDialog';
-import { PrivacyConsentModal } from './components/PrivacyConsentModal';
 import {
   daemonIsLive,
   fetchAppVersionInfo,
@@ -652,21 +651,6 @@ function AppInner() {
   // {active:false} if this hasn't run.
   const activeProjectId = route.kind === 'project' ? route.projectId : null;
   const activeFileName = route.kind === 'project' ? route.fileName : null;
-  // Gate the privacy banner on three things:
-  //   1. Daemon config has hydrated (privacyDecisionAt is daemon-owned).
-  //   2. The user has not yet made a privacy decision.
-  //   3. Onboarding is complete (Skip and design-system creation both flip
-  //      onboardingCompleted to true; see handleCompleteOnboarding wiring).
-  // Once onboarding is done the banner is allowed on any route — including
-  // the project view the design-system finish path drops the user into, so
-  // they can read and acknowledge the disclosure while the first generation
-  // is running. Settings is irrelevant to visibility; the banner sits above
-  // the modal-backdrop layer in index.css so opening Settings does not hide
-  // it.
-  const showPrivacyConsent =
-    daemonConfigLoaded &&
-    config.privacyDecisionAt == null &&
-    config.onboardingCompleted === true;
   useEffect(() => {
     const body = activeProjectId
       ? { projectId: activeProjectId, fileName: activeFileName }
@@ -2353,49 +2337,6 @@ function AppInner() {
           onDismiss={() => setProjectOpenError(null)}
         />
       ) : null}
-      {/* First-run privacy consent banner. It waits for daemon config
-          hydration because privacyDecisionAt is daemon-owned and stripped
-          from localStorage. It waits for `onboardingCompleted` so first-run
-          users see the welcome panel before the disclosure (Skip and
-          finish both flip the flag). Independent of Settings: z-index in
-          index.css sits above modal backdrops so opening Settings does
-          not hide the banner. */}
-      <AnimatePresence>
-      {showPrivacyConsent ? (
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 10, scale: 0.97 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
-        >
-        <PrivacyConsentModal
-          onAccept={() => {
-            // Default opt-in: clicking "I get it" enables the same telemetry
-            // surface the previous two-button "Share usage data" path opted
-            // into. The banner footer + PrivacySection give the user a
-            // one-click path to flip everything off later.
-            // The banner owns only the privacy decision; it does not drive
-            // navigation. Onboarding is gated by `onboardingCompleted` on
-            // its own and runs in parallel.
-            const installationId = generateInstallationIdSafe();
-            void handleConfigPersist({
-              ...latestPersistedConfigRef.current,
-              installationId,
-              privacyDecisionAt: Date.now(),
-              telemetry: { metrics: true, content: true },
-            });
-          }}
-        />
-      </motion.div>
-      ) : null}
-      </AnimatePresence>
     </>
   );
-}
-
-function generateInstallationIdSafe(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `inst-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

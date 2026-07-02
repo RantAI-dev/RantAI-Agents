@@ -24,6 +24,16 @@ interface AnalyticsContext {
   appVersion: string;
 }
 
+// RantAI Design: the upstream open-design PostHog telemetry is disabled in
+// this port. This flag is the single hard off-switch — both init entry points
+// (`getAnalyticsClient` and `bootstrapExceptionTracking`) short-circuit on it
+// so posthog-js is never dynamically imported/initialised and the direct
+// exception-ingest transport never receives credentials. Nothing phones home.
+// Typed `boolean` (not narrowed to `true`) so the guarded code stays reachable
+// for the typechecker. The /api/analytics/config endpoint also returns
+// disabled, so this is belt-and-braces.
+const TELEMETRY_DISABLED: boolean = true;
+
 let client: PostHog | null = null;
 let initPromise: Promise<PostHog | null> | null = null;
 let resolvedDeviceId: string | null = null;
@@ -139,6 +149,12 @@ export function setAnalyticsUserId(userId: string | null): void {
 // (consent-gated) analytics init with the (always-on) error tracker.
 let exceptionBootstrapPromise: Promise<void> | null = null;
 export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<void> {
+  if (TELEMETRY_DISABLED) {
+    // Never wire the direct-ingest exception transport to a PostHog key/host,
+    // so error-tracking.ts buffers in memory but can never dispatch.
+    clearExceptionTrackingContext();
+    return Promise.resolve();
+  }
   if (exceptionBootstrapPromise) return exceptionBootstrapPromise;
   exceptionBootstrapPromise = (async () => {
     try {
@@ -175,6 +191,8 @@ export function bootstrapExceptionTracking(context: AnalyticsContext): Promise<v
 export async function getAnalyticsClient(
   context: AnalyticsContext,
 ): Promise<PostHog | null> {
+  // RantAI Design: hard-disabled — never dynamically import or init posthog-js.
+  if (TELEMETRY_DISABLED) return null;
   if (client) return client;
   if (initPromise) return initPromise;
   // PR #1428 reviewer (Siri-Ray): the first /api/analytics/config response
