@@ -1076,9 +1076,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     <section className="home-hero" data-testid="home-hero">
       <div className="home-hero__brand" aria-hidden>
         <span className="home-hero__brand-mark">
-          <img src="/app-icon.svg" alt="" draggable={false} />
+          <img src="/logo/logo-rantai.png" alt="" draggable={false} />
         </span>
-        <span className="home-hero__brand-name">Open Design</span>
+        <span className="home-hero__brand-name">RantAI Design</span>
       </div>
       <h1 className="home-hero__title">{t('homeHero.title')}</h1>
       <p className="home-hero__subtitle">

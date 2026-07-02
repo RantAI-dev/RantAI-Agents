@@ -93,7 +93,6 @@ import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
 import { LibrarySection } from './LibrarySection';
 import { UpdaterPopup } from './UpdaterPopup';
-import { GithubStarBadge } from './GithubStarBadge';
 import {
   formatDiscordPresenceCount,
   useDiscordPresence,
@@ -776,7 +775,6 @@ export function EntryShell({
               <Icon name="panel-left" size={20} />
             </button>
             <div className="entry-main__topbar-chips entry-main__topbar-chips--icon-only">
-              <GithubStarBadge />
               <a
                 className="entry-workspace-chip od-tooltip"
                 href={enterpriseUrl(uiLocale)}
@@ -1746,7 +1744,7 @@ function OnboardingView({
   }
 
   // Cloud-landing primary CTA: pick the AMR cloud runtime and kick off the
-  // Open Design Cloud sign-in in one gesture. Mirrors the old AMR card's
+  // RantAI Design Cloud sign-in in one gesture. Mirrors the old AMR card's
   // selection side effects (mode/agent) followed by the sign-in path, so a
   // successful login advances to the next onboarding step exactly the same way.
   async function handleCloudSignIn() {
@@ -2187,7 +2185,7 @@ function OnboardingView({
       ? t('settings.onboardingFinish')
       : t('settings.onboardingContinue');
 
-  // Connect step, default face: a minimal, centered Open Design Cloud sign-in
+  // Connect step, default face: a minimal, centered RantAI Design Cloud sign-in
   // landing. No stepper, no runtime cards — just the cloud CTA, a secondary
   // link into the full runtime chooser, and a top-left language/theme bar.
   if (step === 0 && connectExpanded === null) {
@@ -2222,7 +2220,7 @@ function OnboardingView({
           <span
             className="onboarding-cloud__logo"
             role="img"
-            aria-label="Open Design"
+            aria-label="RantAI Design"
           />
           <h1 className="onboarding-cloud__title">{t('settings.onboardingCloudTitle')}</h1>
           <p className="onboarding-cloud__body">{t('settings.onboardingCloudBody')}</p>
@@ -2316,7 +2314,7 @@ function OnboardingView({
           )}
         </div>
         <footer className="onboarding-cloud__footer">
-          © {new Date().getFullYear()} Open Design · {t('settings.onboardingCloudRights')}
+          © {new Date().getFullYear()} RantAI · {t('settings.onboardingCloudRights')}
         </footer>
       </section>
     );
