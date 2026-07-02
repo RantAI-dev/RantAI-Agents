@@ -106,7 +106,7 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
             data-testid="entry-nav-logo"
           >
             <img
-              src="/app-icon.svg"
+              src="/logo/logo-rantai.png"
               alt=""
               className="entry-nav-rail__logo-img"
               draggable={false}

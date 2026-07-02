@@ -8,7 +8,11 @@ const ACCENT_VARS = [
   '--accent-hover',
 ] as const;
 
-export const DEFAULT_ACCENT_COLOR = '#c96442';
+// RantAI Blue — matches the app brand accent (oklch(0.55 0.2 250) in
+// src/app/globals.css). This is the single source of truth for the studio's
+// default accent (config default, settings picker default swatch, and the
+// inline vars applied to <html> at hydration).
+export const DEFAULT_ACCENT_COLOR = '#0071df';
 export const ACCENT_SWATCHES = [
   DEFAULT_ACCENT_COLOR,
   '#2563eb',
