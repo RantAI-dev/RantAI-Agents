@@ -29,7 +29,6 @@ const INTEGRATION_TABS: ReadonlyArray<{
   { id: 'mcp' },
   { id: 'connectors' },
   { id: 'skills' },
-  { id: 'use-everywhere' },
 ];
 
 function integrationTabToTrackingElement(

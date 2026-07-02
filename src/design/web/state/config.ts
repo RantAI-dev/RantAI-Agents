@@ -23,6 +23,13 @@ import { randomUUID } from '../utils/uuid';
 const STORAGE_KEY = 'open-design:config';
 const CONFIG_MIGRATION_VERSION = 1;
 
+// The pre-rebrand open-design default accent (terracotta). Configs persisted
+// before the RantAI rebrand carry this value even though the user never
+// deliberately picked it, so loadConfig() treats it as "unset" and flips it to
+// the new brand default (RantAI Blue, DEFAULT_ACCENT_COLOR). See
+// migrateLegacyAccentColor below.
+const LEGACY_OPEN_DESIGN_ACCENT_COLOR = '#c96442';
+
 // Hatched out of the box, but tucked away — the user has to go through
 // either the entry-view "adopt a pet" callout or Settings → Pets to
 // summon them. Keeps the workspace quiet for first-run users.
@@ -333,6 +340,21 @@ export const KNOWN_PROVIDERS: KnownProvider[] = [
   },
 ];
 
+// One-time rebrand migration for the persisted accent. normalizeAccentColor
+// lowercases the value, so comparing against the lowercase legacy default is
+// effectively case-insensitive. A saved accent still equal to the old
+// open-design terracotta default was never deliberately chosen, so we flip it
+// to the new RantAI Blue brand accent. This is idempotent (once flipped to
+// DEFAULT_ACCENT_COLOR it no longer matches) and still honors ANY other saved
+// color as a deliberate user choice.
+function migrateLegacyAccentColor(value: unknown): string {
+  const normalized = normalizeAccentColor(value);
+  if (!normalized || normalized === LEGACY_OPEN_DESIGN_ACCENT_COLOR) {
+    return DEFAULT_ACCENT_COLOR;
+  }
+  return normalized;
+}
+
 function normalizePet(input: Partial<PetConfig> | undefined): PetConfig {
   if (!input) return { ...DEFAULT_PET, custom: { ...DEFAULT_PET.custom } };
   // Merge stored values onto defaults so newly-added fields land safely
@@ -421,7 +443,7 @@ export function loadConfig(): AppConfig {
       agentModels: { ...(parsed.agentModels ?? {}) },
       agentCliEnv: { ...(parsed.agentCliEnv ?? {}) },
       agentCliEnvIntent: { ...(parsed.agentCliEnvIntent ?? {}) },
-      accentColor: normalizeAccentColor(parsed.accentColor) ?? DEFAULT_CONFIG.accentColor,
+      accentColor: migrateLegacyAccentColor(parsed.accentColor),
       pet: normalizePet(parsed.pet),
       notifications: normalizeNotifications(parsed.notifications),
       orbit: normalizeOrbit(parsed.orbit),
