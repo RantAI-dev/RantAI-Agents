@@ -19,7 +19,6 @@ const DASHBOARD_TITLES: Record<string, string> = {
   "/dashboard/agent-builder": "Agent Builder",
   "/dashboard/workflows": "Workflows",
   "/dashboard/agent": "Live Chat",
-  "/dashboard/design": "Design",
   "/dashboard/files": "Files",
   "/dashboard/marketplace": "Marketplace",
   "/dashboard/organization": "Organization",
@@ -33,7 +32,6 @@ function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/dashboard/agent-builder/")) return "Agent Builder"
   if (pathname.startsWith("/dashboard/workflows/")) return "Workflows"
   if (pathname.startsWith("/dashboard/marketplace/")) return "Marketplace"
-  if (pathname.startsWith("/dashboard/design")) return "Design"
   if (pathname.startsWith("/dashboard/organization/")) return "Organization"
   if (pathname.startsWith("/dashboard/settings/")) return "Settings"
   return "Dashboard"
