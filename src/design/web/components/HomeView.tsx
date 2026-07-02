@@ -74,7 +74,7 @@ import { findChip, HOME_HERO_CHIPS, type HomeHeroChip } from './home-hero/chips'
 import { homeHeroChipLabel } from './home-hero/chip-labels';
 import type { PlaceholderScenario } from './home-hero/placeholderScenarios';
 import { consumePendingHomeChip, HOME_CHIP_INTENT_EVENT } from '../runtime/home-intent';
-import { navigate } from '../router';
+import { navigate, isHiddenEntryView } from '../router';
 import { setPendingDesignSystemCreateEntry } from '../analytics/ds-create-entry';
 import {
   buildHomeMediaComposer,
@@ -1968,7 +1968,11 @@ export function HomeView({
           onUse={(record, action) => void routePluginUse(record, action)}
           onDuplicate={(record) => void duplicateExamplePlugin(record)}
           onOpenDetails={handleCommunityOpenDetails}
-          onBrowseRegistry={onBrowseRegistry}
+          // Hidden per audit 2026-07 (router.ts HIDDEN_DESIGN_VIEWS): the home
+          // "Browse registry" link points at the hidden PLUGINS view, so drop the
+          // handler (the button self-hides when undefined). Re-enable by clearing
+          // HIDDEN_DESIGN_VIEWS.
+          onBrowseRegistry={isHiddenEntryView('plugins') ? undefined : onBrowseRegistry}
           preferDefaultFacet={false}
           cardLayout="gallery"
         />

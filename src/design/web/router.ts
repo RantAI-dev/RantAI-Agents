@@ -52,6 +52,42 @@ export type Route =
   | { kind: 'marketplace' }
   | { kind: 'marketplace-detail'; pluginId: string };
 
+// Hidden per audit 2026-07: non-functional/duplicate in cloud; re-enable by clearing this set.
+//
+// The three top-level Design-studio features PLUGINS (plugin library + the
+// `marketplace` deep routes), INTEGRATIONS (MCP / connectors) and AUTOMATION
+// (routines / "Tasks") are hidden from every UI entry point. NOTHING here is
+// deleted — components, routes, `/api/design` endpoints and Prisma tables all
+// stay intact. This single set is the source of truth consulted by:
+//   • EntryNavRail  — filters the left-rail nav buttons
+//   • App.tsx       — route guard (redirects hidden deep-links to home)
+//   • WorkspaceTabsBar — drops stale persisted tabs pointing at hidden views
+//   • HomeView      — hides the plugins home-card "Browse registry" link
+// Values are the ACTUAL route kinds / home-view ids used by this router.
+export const HIDDEN_DESIGN_VIEWS = new Set<string>([
+  'plugins', // PLUGINS — plugin library home view
+  'marketplace', // PLUGINS — marketplace catalog route kind
+  'marketplace-detail', // PLUGINS — marketplace plugin-detail route kind
+  'integrations', // INTEGRATIONS — MCP / connectors home view
+  'tasks', // AUTOMATION — routines / "Tasks" home view
+]);
+
+/** True when a home-shell view id (or nav-rail view id) is hidden per the audit. */
+export function isHiddenEntryView(view: string): boolean {
+  return HIDDEN_DESIGN_VIEWS.has(view);
+}
+
+/**
+ * True when a resolved route lands on a view hidden per the audit. Consulted by
+ * the App route guard so direct deep-links / a stale persisted "last route"
+ * gracefully redirect to home instead of rendering an orphaned surface.
+ */
+export function isHiddenRoute(route: Route): boolean {
+  if (route.kind === 'marketplace' || route.kind === 'marketplace-detail') return true;
+  if (route.kind === 'home') return HIDDEN_DESIGN_VIEWS.has(route.view);
+  return false;
+}
+
 // The vendored SPA is embedded under this dashboard subtree in agents-cloud
 // (upstream open-design owned the URL root and mounted at `/`). `buildPath` /
 // `parseRoute` keep speaking the SPA's own root-relative paths; the two

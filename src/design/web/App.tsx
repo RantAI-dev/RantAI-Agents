@@ -68,7 +68,7 @@ import {
   type VelaLoginStatus,
 } from './providers/daemon';
 import { AMR_LOGIN_STATUS_EVENT } from './components/amrLoginPolling';
-import { navigate, useRoute } from './router';
+import { navigate, useRoute, isHiddenRoute } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_PET,
@@ -448,6 +448,17 @@ function AppInner() {
   const [composioConfigLoading, setComposioConfigLoading] = useState(true);
   const route = useRoute();
   const analytics = useAnalytics();
+
+  // Route guard — hidden per audit 2026-07 (router.ts HIDDEN_DESIGN_VIEWS).
+  // The PLUGINS / INTEGRATIONS / AUTOMATION surfaces are still routable by kind,
+  // so a direct deep-link or a stale persisted "last route" could otherwise land
+  // on a now-hidden view. Redirect those to home instead of rendering an
+  // orphaned surface. Re-enable the views by clearing HIDDEN_DESIGN_VIEWS.
+  useEffect(() => {
+    if (isHiddenRoute(route)) {
+      navigate({ kind: 'home', view: 'home' }, { replace: true });
+    }
+  }, [route]);
 
   const beginAgentStreamRequest = useCallback(() => {
     agentStreamRequestSeqRef.current += 1;
@@ -2108,6 +2119,18 @@ function AppInner() {
     config.onboardingCompleted !== true &&
     !daemonConfigLoaded;
   if (pendingFirstRunOnboardingRoute) {
+    appMain = (
+      <div className="entry-shell entry-shell--no-header">
+        <CenteredLoader label={t('entry.loadingWorkspace')} />
+      </div>
+    );
+  } else if (isHiddenRoute(route)) {
+    // Hidden per audit 2026-07 (router.ts HIDDEN_DESIGN_VIEWS): PLUGINS /
+    // marketplace / INTEGRATIONS / AUTOMATION are unreachable. A deep-link or
+    // stale persisted route can still resolve here for one frame — render a
+    // transient loader while the guard effect above redirects to home rather
+    // than paint the orphaned view. The branches below stay intact (dead while
+    // hidden) so re-enabling is just clearing HIDDEN_DESIGN_VIEWS.
     appMain = (
       <div className="entry-shell entry-shell--no-header">
         <CenteredLoader label={t('entry.loadingWorkspace')} />
