@@ -13,6 +13,7 @@ import { EntryHelpMenu } from './EntryHelpMenu';
 import { Icon } from './Icon';
 import { useT } from '../i18n';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
+import { isHiddenEntryView } from '../router';
 
 export type EntryView =
   | 'home'
@@ -170,33 +171,42 @@ export function EntryNavRail({ view, onViewChange, onNewProject, open, onClose }
             <Icon name="layers-filled" size={18} />
           </NavButton>
         ) : null}
-        <NavButton
-          active={view === 'tasks'}
-          ariaLabel={t('entry.navTasks')}
-          tooltip={t('entry.navTasks')}
-          onClick={() => selectView('tasks')}
-          testId="entry-nav-tasks"
-        >
-          <Icon name="kanban" size={18} />
-        </NavButton>
-        <NavButton
-          active={view === 'plugins'}
-          ariaLabel={t('entry.navPlugins')}
-          tooltip={t('entry.navPlugins')}
-          onClick={() => selectView('plugins')}
-          testId="entry-nav-plugins"
-        >
-          <Icon name="grid" size={18} />
-        </NavButton>
-        <NavButton
-          active={view === 'integrations'}
-          ariaLabel={t('entry.navIntegrations')}
-          tooltip={t('entry.navIntegrations')}
-          onClick={() => selectView('integrations')}
-          testId="entry-nav-integrations"
-        >
-          <Icon name="link" size={18} />
-        </NavButton>
+        {/* Hidden per audit 2026-07 (router.ts HIDDEN_DESIGN_VIEWS): AUTOMATION
+            (tasks), PLUGINS and INTEGRATIONS nav entries are non-functional /
+            duplicate in cloud. Re-enable by clearing HIDDEN_DESIGN_VIEWS. */}
+        {isHiddenEntryView('tasks') ? null : (
+          <NavButton
+            active={view === 'tasks'}
+            ariaLabel={t('entry.navTasks')}
+            tooltip={t('entry.navTasks')}
+            onClick={() => selectView('tasks')}
+            testId="entry-nav-tasks"
+          >
+            <Icon name="kanban" size={18} />
+          </NavButton>
+        )}
+        {isHiddenEntryView('plugins') ? null : (
+          <NavButton
+            active={view === 'plugins'}
+            ariaLabel={t('entry.navPlugins')}
+            tooltip={t('entry.navPlugins')}
+            onClick={() => selectView('plugins')}
+            testId="entry-nav-plugins"
+          >
+            <Icon name="grid" size={18} />
+          </NavButton>
+        )}
+        {isHiddenEntryView('integrations') ? null : (
+          <NavButton
+            active={view === 'integrations'}
+            ariaLabel={t('entry.navIntegrations')}
+            tooltip={t('entry.navIntegrations')}
+            onClick={() => selectView('integrations')}
+            testId="entry-nav-integrations"
+          >
+            <Icon name="link" size={18} />
+          </NavButton>
+        )}
       </div>
       <div className="entry-nav-rail__footer">
         <div className="entry-nav-rail__divider" role="separator" />

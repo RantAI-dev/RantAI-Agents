@@ -1,7 +1,7 @@
 import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '../i18n';
-import { navigate, type EntryHomeView, type Route } from '../router';
+import { navigate, isHiddenEntryView, type EntryHomeView, type Route } from '../router';
 import type { Project } from '../types';
 import { Icon, type IconName } from './Icon';
 
@@ -149,6 +149,10 @@ function reviveTab(value: unknown): WorkspaceChromeTab | null {
   if (!id) return null;
   if (record.kind === 'entry') {
     const view = record.view;
+    // Hidden per audit 2026-07 (router.ts HIDDEN_DESIGN_VIEWS): drop stale
+    // persisted tabs that point at PLUGINS / INTEGRATIONS / AUTOMATION so the
+    // workspace tab bar never re-surfaces them. Re-enable by clearing the set.
+    if (typeof view === 'string' && isHiddenEntryView(view)) return null;
     if (
       view === 'home'
       || view === 'projects'
@@ -172,6 +176,9 @@ function reviveTab(value: unknown): WorkspaceChromeTab | null {
     };
   }
   if (record.kind === 'marketplace') {
+    // Hidden per audit 2026-07 (router.ts HIDDEN_DESIGN_VIEWS): the marketplace
+    // (PLUGINS) deep routes are hidden, so drop any persisted marketplace tab.
+    if (isHiddenEntryView('marketplace')) return null;
     return {
       id,
       kind: 'marketplace',
