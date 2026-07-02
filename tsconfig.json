@@ -28,36 +28,6 @@
       ],
       "@cloud/*": [
         "./src/cloud-shim/*"
-      ],
-      "@open-design/components": [
-        "./src/design/packages/components/src/index.ts"
-      ],
-      "@open-design/components/*": [
-        "./src/design/packages/components/src/*"
-      ],
-      "@open-design/contracts": [
-        "./src/design/packages/contracts/src/index.ts"
-      ],
-      "@open-design/contracts/*": [
-        "./src/design/packages/contracts/src/*"
-      ],
-      "@open-design/host": [
-        "./src/design/packages/host/src/index.ts"
-      ],
-      "@open-design/host/*": [
-        "./src/design/packages/host/src/*"
-      ],
-      "@open-design/platform": [
-        "./src/design/packages/platform/src/index.ts"
-      ],
-      "@open-design/sidecar": [
-        "./src/design/packages/sidecar/src/index.ts"
-      ],
-      "@open-design/sidecar-proto": [
-        "./src/design/packages/sidecar-proto/src/index.ts"
-      ],
-      "@open-design/release": [
-        "./src/design/packages/release/src/index.ts"
       ]
     }
   },
