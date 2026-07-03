@@ -938,10 +938,16 @@ export default function WorkflowEditorPageClient({
                       })()}
                     </span>
                   )}
-                  {activeRun?.error && (
-                    <span className="text-xs text-destructive truncate flex-1">{activeRun.error}</span>
-                  )}
                 </div>
+
+                {/* Error message — its own full-width, wrapping block so long
+                    provider errors (e.g. "model deprecated") stay readable and
+                    never overlap the footer buttons. */}
+                {activeRun?.error && (
+                  <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive break-words whitespace-pre-wrap">
+                    {activeRun.error}
+                  </div>
+                )}
 
                 {/* Output */}
                 {outputText != null && (
