@@ -1,9 +1,11 @@
 import { generateText } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
+import { DEFAULT_MODEL_ID } from "@/lib/models"
 import type { WorkflowNodeData, LlmNodeData } from "../types"
 import type { ExecutionContext } from "../engine"
 import { buildTemplateContext } from "../engine"
 import { resolveTemplate } from "../template-engine"
+import { reportWorkflowUsage } from "../usage-hook"
 
 /**
  * LLM / Prompt node handler — direct LLM call with configured model.
@@ -16,7 +18,8 @@ export async function executeLlm(
   const nodeData = data as LlmNodeData
   const tctx = buildTemplateContext(data.label, data.nodeType, input, context)
 
-  const model = getChatProvider()(resolveModelId(nodeData.model || "openai/gpt-4o-mini"))
+  const modelId = nodeData.model || DEFAULT_MODEL_ID
+  const model = getChatProvider()(resolveModelId(modelId))
 
   // Resolve system prompt and input through template engine
   const systemPrompt = nodeData.systemPrompt
@@ -36,6 +39,16 @@ export async function executeLlm(
     frequencyPenalty: nodeData.frequencyPenalty,
     presencePenalty: nodeData.presencePenalty,
     stopSequences: nodeData.stopSequences,
+  })
+
+  // Meter usage against credits / rantai limits (workflow model calls were
+  // previously unmetered). Fire-and-forget via the cloud-provided reporter.
+  reportWorkflowUsage({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    modelId,
+    inputTokens: result.usage?.inputTokens ?? 0,
+    outputTokens: result.usage?.outputTokens ?? 0,
   })
 
   // Consistent output format — always {text, usage, finishReason}.

@@ -1,5 +1,6 @@
 import { generateText, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
+import { DEFAULT_MODEL_ID } from "@/lib/models"
 import { prisma } from "@/lib/prisma"
 import { resolveToolsForAssistant } from "@/lib/tools/registry"
 import { resolveSkillsForAssistant } from "@/lib/skills/resolver"
@@ -9,6 +10,7 @@ import type { ExecutionContext } from "../engine"
 import { buildTemplateContext } from "../engine"
 import { resolveTemplate } from "../template-engine"
 import { extractPrompt } from "./llm"
+import { reportWorkflowUsage } from "../usage-hook"
 
 /**
  * Agent node handler — loads an assistant and generates text using its config,
@@ -35,7 +37,8 @@ export async function executeAgent(
     throw new Error(`Agent node: assistant ${nodeData.assistantId} not found`)
   }
 
-  const model = getChatProvider()(resolveModelId(assistant.model || "openai/gpt-4o-mini"))
+  const modelId = assistant.model || DEFAULT_MODEL_ID
+  const model = getChatProvider()(resolveModelId(modelId))
 
   const prompt = nodeData.promptTemplate
     ? resolveTemplate(nodeData.promptTemplate, tctx)
@@ -56,7 +59,7 @@ export async function executeAgent(
     sessionId: context.runId,
   }
   const { tools } = await resolveToolsForAssistant(
-    nodeData.assistantId, assistant.model || "openai/gpt-4o-mini", toolContext
+    nodeData.assistantId, modelId, toolContext
   )
 
   const hasTools = Object.keys(tools).length > 0
@@ -67,6 +70,14 @@ export async function executeAgent(
     system: systemPrompt,
     prompt,
     ...(hasTools ? { tools, stopWhen: stepCountIs(maxSteps) } : {}),
+  })
+
+  reportWorkflowUsage({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    modelId,
+    inputTokens: result.usage?.inputTokens ?? 0,
+    outputTokens: result.usage?.outputTokens ?? 0,
   })
 
   return {

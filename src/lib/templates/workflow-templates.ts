@@ -54,7 +54,7 @@ const simpleChatNodes: Node<WorkflowNodeData>[] = [
       label: "Chat LLM",
       description: "Process the user message with an LLM",
       nodeType: NodeType.LLM,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: "You are a helpful assistant. Answer the user's question concisely.",
       temperature: 0.7,
     } as LlmNodeData,
@@ -112,7 +112,7 @@ const ragQANodes: Node<WorkflowNodeData>[] = [
       label: "Answer with Context",
       description: "Generate an answer using retrieved context",
       nodeType: NodeType.LLM,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt:
         "Answer the user's question based on the provided context. Cite sources when possible. If the context doesn't contain relevant information, say so.",
       temperature: 0.3,
@@ -222,7 +222,7 @@ const fraudDetectionNodes: Node<WorkflowNodeData>[] = [
       label: "Narrative Analysis",
       description: "AI analyzes claim data for inconsistencies and suspicious patterns",
       nodeType: NodeType.LLM,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah spesialis deteksi fraud asuransi kesehatan Indonesia. Analisis klaim secara OBJEKTIF dan PROPORSIONAL.
 
 DATA KLAIM:
@@ -428,7 +428,7 @@ return { rule_score: score, flags: flags, total_flags: flags.length, rules_evalu
       label: "Pattern Analysis",
       description: "Compare claim against known fraud patterns and cost benchmarks from knowledge base",
       nodeType: NodeType.LLM,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah sistem pendeteksi pola fraud asuransi kesehatan Indonesia. Bandingkan klaim dengan pola fraud dan benchmark biaya secara OBJEKTIF.
 
 DATA KLAIM:
@@ -527,7 +527,7 @@ Respond ONLY with JSON:
       label: "Synthesize Assessment",
       description: "Produce final weighted risk score and recommendation",
       nodeType: NodeType.LLM,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah analis fraud senior asuransi yang menghasilkan penilaian akhir.
 
 Input yang kamu terima adalah JSON object dengan 4 key:
@@ -717,7 +717,7 @@ const customerServiceNodes: Node<WorkflowNodeData>[] = [
       label: "Classify Intent",
       description: "Classify the customer message into product inquiry, claim question, or complaint",
       nodeType: NodeType.LLM,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `You are an intent classifier for an insurance company customer service chatbot.
 
 Classify the customer's message into one of these categories:
@@ -779,7 +779,7 @@ Respond with JSON only: { "intent": "product" | "claim" | "complaint" | "general
       label: "Product Advisor",
       description: "Answer product questions with KB context",
       nodeType: NodeType.STREAM_OUTPUT,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah customer service virtual perusahaan asuransi. Jawab pertanyaan nasabah tentang produk asuransi berdasarkan konteks yang diberikan.
 
 Panduan:
@@ -812,7 +812,7 @@ Panduan:
       label: "Claim Info",
       description: "Answer claim-related questions with KB context",
       nodeType: NodeType.STREAM_OUTPUT,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah customer service virtual perusahaan asuransi yang membantu nasabah terkait klaim.
 
 Panduan:
@@ -918,7 +918,7 @@ const agentPolicyNodes: Node<WorkflowNodeData>[] = [
       label: "Policy Advisor",
       description: "Answer agent's question using combined KB context",
       nodeType: NodeType.STREAM_OUTPUT,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah asisten internal untuk agent asuransi. Tugasmu membantu agent mencari informasi polis, coverage, dan aturan underwriting.
 
 Panduan:
@@ -969,7 +969,7 @@ const claimFilingNodes: Node<WorkflowNodeData>[] = [
       label: "Classify Need",
       description: "Determine if customer wants to inquire about, file, or track a claim",
       nodeType: NodeType.LLM,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `You are a claim intent classifier for an insurance company.
 
 Classify the customer's message into one of these categories:
@@ -1031,7 +1031,7 @@ Respond with JSON only: { "need": "inquiry" | "file_new" | "check_status" | "gen
       label: "Explain Process",
       description: "Explain claim process and requirements",
       nodeType: NodeType.STREAM_OUTPUT,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah pemandu klaim asuransi. Jelaskan proses klaim berdasarkan konteks yang diberikan.
 
 Panduan:
@@ -1065,7 +1065,7 @@ Panduan:
       label: "Guide Filing",
       description: "Guide customer through claim filing step by step",
       nodeType: NodeType.STREAM_OUTPUT,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah pemandu pengajuan klaim asuransi. Bantu nasabah mengajukan klaim baru langkah demi langkah.
 
 Panduan:
@@ -1087,7 +1087,7 @@ Panduan:
       label: "Claim Status",
       description: "Help customer check their claim status",
       nodeType: NodeType.STREAM_OUTPUT,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah asisten tracking klaim asuransi. Bantu nasabah mengecek status klaim mereka.
 
 Panduan:
@@ -1120,7 +1120,7 @@ Panduan:
       label: "General Claim Help",
       description: "Handle general claim questions",
       nodeType: NodeType.STREAM_OUTPUT,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah asisten klaim asuransi. Jawab pertanyaan umum nasabah terkait klaim berdasarkan konteks yang diberikan.
 
 Panduan:
@@ -1224,7 +1224,7 @@ const fraudInvestigationNodes: Node<WorkflowNodeData>[] = [
       label: "Investigation Assistant",
       description: "Answer investigator questions using combined KB context and claim data",
       nodeType: NodeType.STREAM_OUTPUT,
-      model: "xiaomi/mimo-v2.5",
+      model: "rantai/nano",
       systemPrompt: `Kamu adalah rekan kerja senior di tim investigasi fraud asuransi kesehatan. Kamu berpengalaman dan bisa menjelaskan hal teknis dengan bahasa sehari-hari yang mudah dipahami.
 
 KONTEKS KLAIM YANG SEDANG DIINVESTIGASI:
