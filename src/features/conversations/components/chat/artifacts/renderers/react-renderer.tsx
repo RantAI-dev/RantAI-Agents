@@ -261,10 +261,11 @@ function buildSrcdoc(
   // Escape </script> inside user code to prevent breaking out of the script tag
   const escapedCode = code.replace(/<\/script>/gi, "<\\/script>")
 
-  // Pick fonts based on declared @aesthetic + @fonts directives. Falls back
-  // to "industrial" defaults if the aesthetic is somehow null at this point
-  // (validator should have caught it upstream, but defend anyway).
-  const aesthetic: AestheticDirection = directives.aesthetic ?? "industrial"
+  // Pick fonts based on declared @aesthetic + @fonts directives. The validator
+  // no longer forces @aesthetic (small models often omit it), so this fallback
+  // is the normal path when a directive is absent — apply a clean default
+  // direction so the artifact still renders with house style.
+  const aesthetic: AestheticDirection = directives.aesthetic ?? "editorial"
   const fontLinks = buildFontLinks(aesthetic, directives.fonts)
 
   return `<!DOCTYPE html>
