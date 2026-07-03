@@ -1,7 +1,7 @@
 /**
  * LLM-based Entity Extractor
  *
- * Uses LLM (xiaomi/mimo-v2-flash via OpenRouter) to extract semantic entities from text.
+ * Uses LLM (xiaomi/mimo-v2.5 via OpenRouter) to extract semantic entities from text.
  * Handles large documents by chunking and processing in parallel.
  * Includes robust JSON parsing for handling truncated responses.
  */

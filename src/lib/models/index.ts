@@ -36,8 +36,8 @@ export interface LLMModel {
 export const AVAILABLE_MODELS: LLMModel[] = [
   // Default Free Model
   {
-    id: "xiaomi/mimo-v2-flash",
-    name: "MiMo V2 Flash",
+    id: "xiaomi/mimo-v2.5",
+    name: "MiMo V2.5",
     provider: "Xiaomi",
     description: "Fast and efficient for general chat",
     contextWindow: 32768,
