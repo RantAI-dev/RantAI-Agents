@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="public/logo/logo-rantai.png" alt="RantAI Agents" width="120" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/logo/rantai-agents-dark.svg">
+    <img src="public/logo/rantai-agents-light.svg" alt="RantAI Agents" width="220">
+  </picture>
 </p>
 
 <h1 align="center">RantAI Agents</h1>
