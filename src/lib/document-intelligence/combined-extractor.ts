@@ -60,7 +60,7 @@ export class CombinedExtractor {
       model:
         config.model ||
         process.env.ENTITY_EXTRACTION_LLM_MODEL ||
-        "xiaomi/mimo-v2-flash",
+        "xiaomi/mimo-v2.5",
       temperature: config.temperature ?? 0.1,
       maxRetries: config.maxRetries ?? DEFAULT_MAX_RETRIES,
       retryDelayMs: config.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS,
