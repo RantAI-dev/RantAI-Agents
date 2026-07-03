@@ -62,8 +62,12 @@ export function useAgentApiKeys(assistantId: string | null) {
         return newKey
       } catch (err) {
         console.error("Failed to create agent API key:", err)
-        setError("Failed to create API key")
-        return null
+        // Re-throw with the server's real reason (e.g. "API keys are not
+        // available on your plan. Please upgrade.") so the dialog can show it
+        // instead of silently closing.
+        const message = err instanceof Error ? err.message : "Failed to create API key"
+        setError(message)
+        throw err instanceof Error ? err : new Error(message)
       }
     },
     []
@@ -86,8 +90,9 @@ export function useAgentApiKeys(assistantId: string | null) {
         return true
       } catch (err) {
         console.error("Failed to update agent API key:", err)
-        setError("Failed to update API key")
-        return false
+        const message = err instanceof Error ? err.message : "Failed to update API key"
+        setError(message)
+        throw err instanceof Error ? err : new Error(message)
       }
     },
     []

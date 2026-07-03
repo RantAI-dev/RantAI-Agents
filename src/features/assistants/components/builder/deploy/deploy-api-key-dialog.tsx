@@ -48,6 +48,7 @@ export function DeployApiKeyDialog({
   const [scopes, setScopes] = useState<string[]>(["chat", "chat:stream"])
   const [ipWhitelist, setIpWhitelist] = useState("")
   const [expiresAt, setExpiresAt] = useState("")
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   useEffect(() => {
     if (editingKey) {
@@ -74,6 +75,7 @@ export function DeployApiKeyDialog({
     if (!name) return
 
     setSaving(true)
+    setSubmitError(null)
     try {
       const ips = ipWhitelist
         .split("\n")
@@ -88,6 +90,12 @@ export function DeployApiKeyDialog({
         ...(expiresAt && { expiresAt: new Date(expiresAt).toISOString() }),
       })
       onOpenChange(false)
+    } catch (err) {
+      // Surface the real reason (plan limit, permissions, …) instead of closing
+      // the dialog with no feedback.
+      setSubmitError(
+        err instanceof Error ? err.message : "Couldn't save the API key. Please try again.",
+      )
     } finally {
       setSaving(false)
     }
@@ -165,6 +173,10 @@ export function DeployApiKeyDialog({
             </p>
           </div>
         </form>
+
+        {submitError && (
+          <p className="text-sm text-destructive px-1">{submitError}</p>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
