@@ -201,7 +201,7 @@ function AssistantSelector({
   initialAssistants,
 }: {
   value: string
-  onChange: (id: string) => void
+  onChange: (id: string, name?: string, emoji?: string) => void
   error?: string
   initialAssistants?: AssistantOption[]
 }) {
@@ -210,7 +210,14 @@ function AssistantSelector({
   return (
     <div className="space-y-1">
       <Label className="text-xs">Assistant</Label>
-      <Select value={value || "__none__"} onValueChange={(v) => onChange(v === "__none__" ? "" : v)}>
+      <Select
+        value={value || "__none__"}
+        onValueChange={(v) => {
+          if (v === "__none__") return onChange("")
+          const a = assistants.find((x) => x.id === v)
+          onChange(v, a?.name, a?.emoji)
+        }}
+      >
         <SelectTrigger className={cn("h-7 text-xs", error && "border-destructive")}>
           <SelectValue placeholder="Select assistant" />
         </SelectTrigger>
@@ -865,7 +872,15 @@ function NodeSpecificFields({
           <Section title="Configuration">
             <AssistantSelector
               value={ad.assistantId}
-              onChange={(id) => update({ assistantId: id } as Partial<AgentNodeData>)}
+              onChange={(id, name, emoji) =>
+                update({
+                  assistantId: id,
+                  // Persist name/emoji so the node body shows the agent instead
+                  // of "No agent selected" (the node renders assistantName).
+                  assistantName: id ? name ?? "" : "",
+                  assistantEmoji: id ? emoji ?? "" : "",
+                } as Partial<AgentNodeData>)
+              }
               error={errors.assistantId}
               initialAssistants={initialAssistants}
             />
