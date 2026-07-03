@@ -11,7 +11,7 @@ import { Entity, LLMExtractionConfig } from "./types";
 const DEFAULT_CONFIG: Required<LLMExtractionConfig> = {
   apiKey: process.env.OPENROUTER_API_KEY || "",
   baseUrl: "https://openrouter.ai/api/v1",
-  model: "xiaomi/mimo-v2-flash", // Same model as chat
+  model: "xiaomi/mimo-v2.5", // OpenRouter model for entity/graph extraction
   maxTokens: 4000,
   temperature: 0.1,
   maxChunkChars: 6000, // ~1500 tokens per chunk

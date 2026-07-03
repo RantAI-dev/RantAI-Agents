@@ -294,6 +294,11 @@ export default function WorkflowEditorPageClient({
           tags: updated.tags,
         })
       }
+      toast.success("Workflow saved")
+    } catch (err) {
+      // Previously the save threw with no catch — the workflow silently failed
+      // to persist with zero feedback. Surface the server's reason instead.
+      toast.error(err instanceof Error ? err.message : "Failed to save workflow")
     } finally {
       editor.setSaving(false)
     }

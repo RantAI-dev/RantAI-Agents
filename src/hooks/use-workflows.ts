@@ -74,7 +74,10 @@ export function useWorkflows(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       })
-      if (!res.ok) throw new Error("Failed to update workflow")
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || "Failed to update workflow")
+      }
       const workflow = await res.json()
       setWorkflows((prev) => prev.map((w) => (w.id === id ? workflow : w)))
       return workflow as WorkflowItem

@@ -28,7 +28,9 @@ export const CreateWorkflowSchema = z
 export const UpdateWorkflowSchema = z
   .object({
     name: z.string().optional(),
-    description: z.string().optional(),
+    // The editor sends `description || null` and may clear the assistant, so
+    // accept null — otherwise an empty description 400'd the entire save.
+    description: z.string().nullable().optional(),
     nodes: z.unknown().optional(),
     edges: z.unknown().optional(),
     trigger: z.unknown().optional(),
@@ -38,7 +40,7 @@ export const UpdateWorkflowSchema = z
     category: z.string().optional(),
     chatflowConfig: z.unknown().optional(),
     apiEnabled: z.boolean().optional(),
-    assistantId: z.string().optional(),
+    assistantId: z.string().nullable().optional(),
     tags: z.unknown().optional(),
   })
   .passthrough()
