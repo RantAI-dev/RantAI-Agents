@@ -1470,7 +1470,22 @@ export async function runChat(params: {
 
     // Canonical stream mode for chat: always UI message SSE
     // (tools and non-tools share the same protocol).
-    const uiResponse = result.toUIMessageStreamResponse()
+    // Surface upstream failures as a readable message instead of a blank bubble:
+    // free models (esp. OpenRouter) routinely 401 on a bad key or 429 when
+    // rate-limited, and without onError the AI SDK ends the stream silently.
+    const uiResponse = result.toUIMessageStreamResponse({
+      onError: (error: unknown) => {
+        console.error("[Chat API] stream error:", error)
+        const msg = error instanceof Error ? error.message : String(error)
+        if (/401|403|unauthor|api[_ ]?key|no auth|invalid.?key/i.test(msg)) {
+          return "The model provider rejected the request — its API key may be missing or invalid. Try a different model."
+        }
+        if (/429|rate.?limit|quota|temporarily|overloaded|unavailable/i.test(msg)) {
+          return "This model is busy or rate-limited right now. Please wait a moment or switch models."
+        }
+        return "The model didn't return a response. Please try again or switch models."
+      },
+    })
     return appendSourcesEventToUiStreamResponse(uiResponse, ragSources, ragTrace?.traceId ?? null)
   } catch (error) {
     console.error("[Chat API] Error:", error)
