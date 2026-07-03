@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
+import { SELECTED_KEY } from "@/hooks/use-assistants"
 import Link from "next/link"
 import Image from "next/image"
 import { Eye, EyeOff } from "lucide-react"
@@ -20,6 +21,24 @@ export default function LoginPage() {
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+
+  // The login screen is the logout→login boundary. Reset the chat UI state here
+  // so each new login starts at the default assistant (and clean composer),
+  // instead of restoring the previous session's last selection. In-session
+  // changes still persist across refreshes — they're only reset on (re)login.
+  useEffect(() => {
+    try {
+      localStorage.removeItem(SELECTED_KEY)
+      for (let i = sessionStorage.length - 1; i >= 0; i--) {
+        const k = sessionStorage.key(i)
+        if (k && (k.startsWith("chat-toolbar-state:") || k.startsWith("rantai-pending-chat-init"))) {
+          sessionStorage.removeItem(k)
+        }
+      }
+    } catch {
+      // storage unavailable (private mode) — non-fatal
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
