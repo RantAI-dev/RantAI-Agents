@@ -171,6 +171,11 @@ export async function runChat(params: {
   abortSignal?: AbortSignal
   /** When set, overrides the assistant's stored model (e.g. cloud free-tier fallback). */
   modelOverride?: string
+  /** Server-resolved organization for tool execution (artifact/KB/tool scoping).
+   * The trusted org for the acting user — must NOT come from the request body,
+   * which is client-controlled. When set it takes precedence over the assistant's
+   * org so built-in agents (org = null) still scope artifacts to the user's org. */
+  organizationId?: string | null
   /** Called once with the real token usage after generation finishes — used by
    * the cloud edition to deduct credits accurately. Optional so OSS callers skip it. */
   onUsage?: (usage: { inputTokens: number; outputTokens: number }) => void | Promise<void>
@@ -846,6 +851,13 @@ export async function runChat(params: {
 
     // ===== TOOL RESOLUTION =====
     ragTrace?.mark("toolsStart")
+    // Trusted org for tool execution. Prefer the server-resolved org passed by
+    // the caller; fall back to the assistant's own org. NEVER use
+    // body.organizationId — it's client-controlled, and relying on it let
+    // built-in agents (org = null) save artifacts with a null org, which the
+    // dashboard scope query treats as global => visible to every account.
+    const effectiveOrgId: string | null =
+      params.organizationId ?? assistantOrganizationId ?? null
     const selectedSkillIds =
       body.enableSkills !== false && Array.isArray(body.enabledSkillIds)
         ? body.enabledSkillIds
@@ -854,7 +866,7 @@ export async function runChat(params: {
       selectedSkillIds.length > 0
         ? await resolveRequiredToolNamesForSkills(
             selectedSkillIds,
-            body.organizationId ?? assistantOrganizationId,
+            effectiveOrgId,
             session.user.id
           ).catch(() => [])
         : []
@@ -873,7 +885,7 @@ export async function runChat(params: {
         userId: session?.user?.id,
         assistantId,
         sessionId: body.sessionId || undefined,
-        organizationId: body.organizationId || assistantOrganizationId || undefined,
+        organizationId: effectiveOrgId ?? undefined,
       })
       : { tools: {}, toolNames: [] as string[] };
 
@@ -898,7 +910,7 @@ export async function runChat(params: {
             userId: session?.user?.id,
             assistantId: assistantId ?? undefined,
             sessionId: body.sessionId || undefined,
-            organizationId: body.organizationId || assistantOrganizationId || undefined,
+            organizationId: effectiveOrgId ?? undefined,
           }
         )
         Object.assign(resolvedTools, onDemand.tools)
@@ -995,7 +1007,7 @@ export async function runChat(params: {
           execute: async (params) => createTool.execute(params as Record<string, unknown>, {
             userId: session?.user?.id,
             assistantId: assistantId ?? undefined,
-            organizationId: body.organizationId || undefined,
+            organizationId: effectiveOrgId ?? undefined,
             sessionId: body.sessionId || undefined,
             canvasMode: body.canvasMode ?? undefined,
           }),
@@ -1009,7 +1021,7 @@ export async function runChat(params: {
           execute: async (params) => updateTool.execute(params as Record<string, unknown>, {
             userId: session?.user?.id,
             assistantId: assistantId ?? undefined,
-            organizationId: body.organizationId || undefined,
+            organizationId: effectiveOrgId ?? undefined,
             sessionId: body.sessionId || undefined,
             canvasMode: body.canvasMode ?? undefined,
           }),
