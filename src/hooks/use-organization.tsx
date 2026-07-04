@@ -354,7 +354,28 @@ export function useOrgFetch() {
       if (activeOrgIdRef.current) {
         headers.set("x-organization-id", activeOrgIdRef.current)
       }
-      return fetch(url, { ...options, headers, credentials: "include" })
+      const res = await fetch(url, { ...options, headers, credentials: "include" })
+
+      // Central upgrade-wall bridge: whenever any dashboard API blocks an action
+      // for a plan/limit reason (it responds with `upgradeRequired`), surface the
+      // cloud upgrade modal so the user understands why — instead of a silent
+      // failure or a raw error. Covers make-agent, make-workflow, run-workflow,
+      // API keys, members, storage, etc. Reads a clone so callers still get the body.
+      if (
+        (res.status === 402 || res.status === 403 || res.status === 429) &&
+        typeof window !== "undefined"
+      ) {
+        try {
+          const body = await res.clone().json()
+          if (body?.upgradeRequired) {
+            window.dispatchEvent(new CustomEvent("rantai:upgrade-required", { detail: body }))
+          }
+        } catch {
+          // non-JSON body (or already consumed) — nothing to surface
+        }
+      }
+
+      return res
     },
     []
   )
