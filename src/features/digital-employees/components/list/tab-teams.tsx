@@ -1,7 +1,12 @@
 "use client"
 
 import { useState, useMemo } from "react"
-import { Search, Plus, Loader2, Users } from "lucide-react"
+import {
+  Loader2,
+  Plus,
+  Search,
+  Users,
+} from "@/lib/icons"
 import { motion } from "framer-motion"
 import { Squares } from "@/components/reactbits/squares"
 import { useRouter } from "next/navigation"

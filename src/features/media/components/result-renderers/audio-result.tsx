@@ -1,7 +1,10 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Heart, Download } from "lucide-react"
+import {
+  Download,
+  Heart,
+} from "@/lib/icons"
 import type { StoreAsset } from "@/features/media/store"
 
 interface Props {

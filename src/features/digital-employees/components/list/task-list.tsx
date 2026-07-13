@@ -2,15 +2,15 @@
 
 import { useState, useMemo, Fragment } from "react"
 import {
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Circle,
-  CheckCircle2,
   Clock,
   MoreHorizontal,
   Plus,
   UserCircle,
-} from "lucide-react"
+} from "@/lib/icons"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"

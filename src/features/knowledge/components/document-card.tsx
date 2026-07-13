@@ -19,8 +19,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { MoreVertical, Trash2, Eye, Pencil } from "@/lib/icons"
-import { BrainCircuit } from "lucide-react"
+import {
+  BrainCircuit,
+  Eye,
+  MoreVertical,
+  Pencil,
+  Trash2,
+} from "@/lib/icons"
 import {
   Tooltip,
   TooltipContent,
