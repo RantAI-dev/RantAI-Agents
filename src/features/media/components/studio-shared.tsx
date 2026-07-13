@@ -2,7 +2,12 @@
 
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
-import { Sparkles, Music, Film, Loader2 } from "lucide-react"
+import {
+  Film,
+  Loader2,
+  Music,
+  Sparkles,
+} from "@/lib/icons"
 
 export type Modality = "IMAGE" | "AUDIO" | "VIDEO"
 

@@ -1,6 +1,12 @@
 "use client"
 
-import { Eye, Clock, UserCircle, CloudOff, CheckCircle2 } from "lucide-react"
+import {
+  CheckCircle2,
+  Clock,
+  CloudOff,
+  Eye,
+  UserCircle,
+} from "@/lib/icons"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import {
