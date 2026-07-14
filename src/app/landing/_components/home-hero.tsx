@@ -139,7 +139,9 @@ export function HomeHero() {
               className="h-10 rounded-full border-border bg-background px-6 text-sm font-medium text-foreground shadow-sm transition-transform hover:scale-[1.03] hover:bg-muted active:scale-[0.98]"
               asChild
             >
-              <Link href="/docs/">Read Documentations</Link>
+              {/* Was "Read Documentations" → /docs; restore once the Nextra site
+                  under site/ is ported into this app and /docs exists here. */}
+              <Link href="#features">Explore Platform</Link>
             </Button>
           </motion.div>
         </div>
