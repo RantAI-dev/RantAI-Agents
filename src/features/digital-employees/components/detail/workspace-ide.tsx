@@ -3,27 +3,27 @@
 import { useState, useRef, useCallback, useEffect } from "react"
 import { cn } from "@/lib/utils"
 import {
-  File,
-  FileCode,
-  FileJson,
-  FileText,
-  Settings,
-  Folder,
-  FolderOpen,
-  Save,
-  Copy,
-  RotateCcw,
   Check,
-  FileIcon,
   ChevronDown,
   ChevronRight,
-  Terminal,
-  X,
+  Copy,
+  File,
+  FileCode,
+  FileIcon,
+  FileJson,
+  FileText,
+  Folder,
+  FolderOpen,
+  Loader2,
   Maximize2,
   Minimize2,
-  Loader2,
   RefreshCw,
-} from "lucide-react"
+  RotateCcw,
+  Save,
+  Settings,
+  Terminal,
+  X,
+} from "@/lib/icons"
 import { useWorkspace, type FileTreeNode } from "@/hooks/use-workspace"
 
 // ── Helpers ──

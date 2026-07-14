@@ -5,26 +5,36 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Surface, text and brand tokens come from the Figma "RantAI" collection — the same
+ * palette the landing page uses, so the marketing page and the product read as one
+ * product. Chart, syntax and terminal colours deliberately stay as they were: the
+ * Figma chart ramp is five shades of the same blue, which is unreadable for the
+ * categorical series the dashboard plots, and syntax/terminal colours are functional
+ * rather than brand.
+ */
 :root {
-  --background: oklch(0.98 0.002 90);
-  --foreground: oklch(0.15 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.15 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.15 0 0);
-  --primary: oklch(0.15 0 0);
-  --primary-foreground: oklch(0.98 0.002 90);
-  --secondary: oklch(0.94 0.01 80);
-  --secondary-foreground: oklch(0.15 0 0);
-  --muted: oklch(0.92 0.01 80);
-  --muted-foreground: oklch(0.45 0 0);
-  --accent: oklch(0.55 0.2 250);
-  --accent-foreground: oklch(1 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.88 0.01 80);
-  --input: oklch(0.92 0.01 80);
-  --ring: oklch(0.15 0 0);
+  --background: #ffffff;
+  --foreground: #090b0c;
+  --card: #ffffff;
+  --card-foreground: #090b0c;
+  --popover: #ffffff;
+  --popover-foreground: #090b0c;
+  --primary: #0069a8;
+  --primary-foreground: #f0f9ff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f1f3f3;
+  --muted-foreground: #67787c;
+  --accent: #f1f3f3;
+  --accent-foreground: #161b1d;
+  --destructive: #e7000b;
+  --destructive-foreground: #ffffff;
+  --border: #e3e7e8;
+  --input: #e3e7e8;
+  --ring: #9ca8ab;
+  --brand-1: #5cb6f9;
+  --brand-2: #050a30;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -32,20 +42,20 @@
   --chart-5: oklch(0.769 0.188 70.08);
   --radius: 0.75rem;
   /* Light mode sidebar - white/light */
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.15 0 0);
-  --sidebar-primary: oklch(0.94 0.01 80);
-  --sidebar-primary-foreground: oklch(0.15 0 0);
-  --sidebar-accent: oklch(0.94 0.01 80);
-  --sidebar-accent-foreground: oklch(0.15 0 0);
-  --sidebar-border: oklch(0.88 0.01 80);
-  --sidebar-ring: oklch(0.15 0 0 / 0.1);
-  --sidebar-muted: oklch(0.45 0 0);
-  --sidebar-hover: oklch(0.92 0.01 80);
+  --sidebar: #f9fbfb;
+  --sidebar-foreground: #090b0c;
+  --sidebar-primary: #f1f3f3;
+  --sidebar-primary-foreground: #090b0c;
+  --sidebar-accent: #f1f3f3;
+  --sidebar-accent-foreground: #161b1d;
+  --sidebar-border: #e3e7e8;
+  --sidebar-ring: rgba(9, 11, 12, 0.1);
+  --sidebar-muted: #67787c;
+  --sidebar-hover: #f1f3f3;
   /* Panel gradient for light mode */
-  --panel-from: oklch(0.96 0.01 80);
-  --panel-via: oklch(0.96 0.01 80);
-  --panel-to: oklch(0.985 0 0);
+  --panel-from: #f1f3f3;
+  --panel-via: #f1f3f3;
+  --panel-to: #f9fbfb;
 
   /* Workspace IDE - Editor (light) */
   --editor-bg: oklch(0.98 0 0);
@@ -71,46 +81,54 @@
   --terminal-success: oklch(0.45 0.15 140);
 }
 
+/*
+ * Dark counterpart to the Figma palette. The design system only ships a light
+ * collection, so this ramp is derived, not authored: cool near-neutral surfaces
+ * keyed off --brand-2, with --primary lifted to #00a6f4 (the brand blue is too dark
+ * to carry contrast on a dark background). Worth a designer's eye before it ships.
+ */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
+  --background: #0b0e10;
+  --foreground: #f1f3f3;
+  --card: #12161a;
+  --card-foreground: #f1f3f3;
+  --popover: #12161a;
+  --popover-foreground: #f1f3f3;
+  --primary: #00a6f4;
+  --primary-foreground: #04141f;
+  --secondary: #1c2226;
+  --secondary-foreground: #f1f3f3;
+  --muted: #1c2226;
+  --muted-foreground: #93a1a6;
+  --accent: #1c2226;
+  --accent-foreground: #f1f3f3;
+  --destructive: #e7000b;
+  --destructive-foreground: #ffffff;
+  --border: #262d33;
+  --input: #262d33;
+  --ring: #4d5b63;
+  --brand-1: #5cb6f9;
+  --brand-2: #050a30;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  /* Dark mode sidebar - FULLY BLACK */
-  --sidebar: oklch(0.145 0 0);
+  /* Dark mode sidebar */
+  --sidebar: #0b0e10;
   --sidebar-foreground: rgba(255, 255, 255, 0.95);
-  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary: #12161a;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.205 0 0);
+  --sidebar-accent: #12161a;
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: rgba(255, 255, 255, 0.1);
   --sidebar-ring: rgba(255, 255, 255, 0.3);
   --sidebar-muted: rgba(255, 255, 255, 0.45);
   --sidebar-hover: rgba(255, 255, 255, 0.1);
-  /* Panel gradient for dark mode - black */
-  --panel-from: oklch(0.205 0 0);
-  --panel-via: oklch(0.205 0 0);
-  --panel-to: oklch(0.145 0 0);
+  /* Panel gradient for dark mode */
+  --panel-from: #12161a;
+  --panel-via: #12161a;
+  --panel-to: #0b0e10;
 
   /* Workspace IDE - Editor */
   --editor-bg: oklch(0.1 0.005 260);
@@ -134,6 +152,43 @@
   --terminal-output: oklch(0.75 0 0);
   --terminal-error: oklch(0.65 0.2 25);
   --terminal-success: oklch(0.72 0.12 140);
+}
+
+/*
+ * Scoped design tokens for the landing page (Figma "RantAI" collection, light mode).
+ * Applied via the `theme-home` class on the landing root wrapper only. Because these
+ * land on the wrapper itself, they win over the `:root`/`.dark` tokens it inherits —
+ * the landing stays light even while the app is in dark mode. Deliberate: it is a
+ * public marketing page with no dark palette in the design system.
+ */
+.theme-home {
+  --background: #ffffff;
+  --foreground: #090b0c;
+  --card: #ffffff;
+  --card-foreground: #090b0c;
+  --popover: #ffffff;
+  --popover-foreground: #090b0c;
+  --primary: #0069a8;
+  --primary-foreground: #f0f9ff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f1f3f3;
+  --muted-foreground: #67787c;
+  --accent: #f1f3f3;
+  --accent-foreground: #161b1d;
+  --destructive: #e7000b;
+  --border: #e3e7e8;
+  --input: #e3e7e8;
+  --ring: #9ca8ab;
+  --radius: 0.45rem;
+  --chart-1: #74d4ff;
+  --chart-2: #00a6f4;
+  --chart-3: #0084d1;
+  --chart-4: #0069a8;
+  --chart-5: #00598a;
+  --brand-1: #5cb6f9;
+  --brand-2: #050a30;
+  --sidebar: #f9fbfb;
 }
 
 @theme inline {

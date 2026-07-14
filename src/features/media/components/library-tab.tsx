@@ -12,14 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Heart,
-  ImagePlus,
-  Trash2,
   Download,
-  Music,
+  Heart,
   ImageIcon,
+  ImagePlus,
   Maximize2,
-} from "lucide-react"
+  Music,
+  Trash2,
+} from "@/lib/icons"
 import { MediaPreviewDialog, assetName, type PreviewableAsset } from "./media-preview-dialog"
 import { Button } from "@/components/ui/button"
 import { useMediaStudioStore } from "@/features/media/store"

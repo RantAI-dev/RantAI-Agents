@@ -7,13 +7,13 @@ import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import {
   ArrowLeft,
+  CheckSquare,
+  Folder,
   Loader2,
   MessageSquare,
   Settings,
   Zap,
-  Folder,
 } from "@/lib/icons"
-import { CheckSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {

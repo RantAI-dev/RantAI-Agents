@@ -6,26 +6,26 @@ import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  ArrowLeft,
-  Square,
-  Bot,
-  User,
-  Copy,
-  Pencil,
-  Trash2,
-  RefreshCw,
-  Check,
-  ArrowDown,
   AlertCircle,
-  Reply,
-  X,
-  Headphones,
-  Loader2,
-  FileText,
-  Layers,
+  ArrowDown,
+  ArrowLeft,
+  Bot,
+  Check,
+  Copy,
   Download,
+  FileText,
+  Headphones,
+  Layers,
+  Loader2,
+  Pencil,
+  RefreshCw,
+  Reply,
+  SendHorizontal,
+  Square,
+  Trash2,
+  User,
+  X,
 } from "@/lib/icons"
-import { SendHorizontal } from "lucide-react"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
 import type { Assistant } from "@/lib/types/assistant"
 import { cn } from "@/lib/utils"

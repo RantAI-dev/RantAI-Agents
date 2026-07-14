@@ -55,3 +55,38 @@
     @apply border-border outline-ring/50;
   }
 }
+
+/*
+ * Scoped design tokens for the /home landing page (Figma "RantAI" collection, light mode).
+ * Applied via the `theme-home` class on the /home root wrapper only — the site-wide
+ * `:root` tokens above stay untouched for /, /docs and /checkout.
+ */
+.theme-home {
+  --background: #ffffff;
+  --foreground: #090b0c;
+  --card: #ffffff;
+  --card-foreground: #090b0c;
+  --popover: #ffffff;
+  --popover-foreground: #090b0c;
+  --primary: #0069a8;
+  --primary-foreground: #f0f9ff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f1f3f3;
+  --muted-foreground: #67787c;
+  --accent: #f1f3f3;
+  --accent-foreground: #161b1d;
+  --destructive: #e7000b;
+  --border: #e3e7e8;
+  --input: #e3e7e8;
+  --ring: #9ca8ab;
+  --radius: 0.45rem;
+  --chart-1: #74d4ff;
+  --chart-2: #00a6f4;
+  --chart-3: #0084d1;
+  --chart-4: #0069a8;
+  --chart-5: #00598a;
+  --brand-1: #5cb6f9;
+  --brand-2: #050a30;
+  --sidebar: #f9fbfb;
+}

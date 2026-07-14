@@ -11,13 +11,15 @@ import {
   CommandItem,
 } from "@/components/ui/command"
 import {
-  MessageSquare,
   Blocks,
+  FolderOpen,
   GitBranch,
+  MessageSquare,
+  Plug,
+  Store,
   Users,
   Wrench,
 } from "@/lib/icons"
-import { FolderOpen, Store, Plug } from "lucide-react"
 import type { SearchResult } from "@/app/api/dashboard/search/route"
 
 const TYPE_CONFIG: Record<
