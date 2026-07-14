@@ -1,6 +1,5 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { appUrl } from "@/lib/app-url"
 import { Reveal } from "./reveal"
 
 export function HomeCta() {
@@ -15,7 +14,7 @@ export function HomeCta() {
             className="h-10 rounded-full bg-foreground px-6 text-sm font-medium text-background transition-transform hover:scale-[1.03] hover:bg-foreground/85 active:scale-[0.98]"
             asChild
           >
-            <Link href={appUrl("/login")}>Get Started</Link>
+            <Link href="/login">Get Started</Link>
           </Button>
         </Reveal>
       </div>

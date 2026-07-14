@@ -15,12 +15,13 @@ import {
 } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { brand } from "@/lib/branding"
-import { appUrl } from "@/lib/app-url"
 
+// Docs stays hidden until the Nextra site under site/ is ported into this app —
+// /docs has no route here yet, so linking to it would 404.
 const NAV_LINKS = [
   { href: "#features", label: "Features" },
   { href: "#pricing", label: "Pricing" },
-  { href: "/docs/", label: "Docs" },
+  { href: "#faq", label: "FAQ" },
 ] as const
 
 export function HomeNavbar() {
@@ -46,7 +47,7 @@ export function HomeNavbar() {
         className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-6"
         aria-label="Main navigation"
       >
-        <Link href="/home/" className="flex shrink-0 items-center gap-2" aria-label={`${brand.productName} home`}>
+        <Link href="/" className="flex shrink-0 items-center gap-2" aria-label={`${brand.productName} home`}>
           <Image
             src="/logo/rantai-agents-light.svg"
             alt={brand.productName}
@@ -73,7 +74,7 @@ export function HomeNavbar() {
             className="h-10 rounded-full bg-foreground px-6 text-sm font-medium text-background transition-transform hover:scale-[1.03] hover:bg-foreground/85 active:scale-[0.98]"
             asChild
           >
-            <Link href={appUrl("/login")}>Get Started</Link>
+            <Link href="/login">Get Started</Link>
           </Button>
 
           <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
@@ -106,7 +107,7 @@ export function HomeNavbar() {
                   className="mt-4 h-10 rounded-full bg-foreground text-sm font-medium text-background hover:bg-foreground/85"
                   asChild
                 >
-                  <Link href={appUrl("/login")} onClick={() => setMenuOpen(false)}>
+                  <Link href="/login" onClick={() => setMenuOpen(false)}>
                     Get Started
                   </Link>
                 </Button>

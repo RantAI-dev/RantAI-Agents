@@ -136,6 +136,43 @@
   --terminal-success: oklch(0.72 0.12 140);
 }
 
+/*
+ * Scoped design tokens for the landing page (Figma "RantAI" collection, light mode).
+ * Applied via the `theme-home` class on the landing root wrapper only. Because these
+ * land on the wrapper itself, they win over the `:root`/`.dark` tokens it inherits —
+ * the landing stays light even while the app is in dark mode. Deliberate: it is a
+ * public marketing page with no dark palette in the design system.
+ */
+.theme-home {
+  --background: #ffffff;
+  --foreground: #090b0c;
+  --card: #ffffff;
+  --card-foreground: #090b0c;
+  --popover: #ffffff;
+  --popover-foreground: #090b0c;
+  --primary: #0069a8;
+  --primary-foreground: #f0f9ff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #18181b;
+  --muted: #f1f3f3;
+  --muted-foreground: #67787c;
+  --accent: #f1f3f3;
+  --accent-foreground: #161b1d;
+  --destructive: #e7000b;
+  --border: #e3e7e8;
+  --input: #e3e7e8;
+  --ring: #9ca8ab;
+  --radius: 0.45rem;
+  --chart-1: #74d4ff;
+  --chart-2: #00a6f4;
+  --chart-3: #0084d1;
+  --chart-4: #0069a8;
+  --chart-5: #00598a;
+  --brand-1: #5cb6f9;
+  --brand-2: #050a30;
+  --sidebar: #f9fbfb;
+}
+
 @theme inline {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';

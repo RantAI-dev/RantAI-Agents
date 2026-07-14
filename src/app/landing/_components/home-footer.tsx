@@ -1,11 +1,12 @@
 import Link from "next/link"
 import { brand } from "@/lib/branding"
 
+// "Documentations" stays hidden until the Nextra site under site/ is ported into
+// this app — /docs has no route here yet, so linking to it would 404.
 const FOOTER_COLUMNS = [
   {
     heading: "Explore",
     links: [
-      { href: "/docs/", label: "Documentations" },
       { href: "https://github.com/RantAI-dev", label: "RantAIClaw" },
       { href: brand.companyUrl, label: brand.companyName },
     ],
