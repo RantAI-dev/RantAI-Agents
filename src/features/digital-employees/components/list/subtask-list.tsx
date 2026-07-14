@@ -3,10 +3,10 @@
 import { useState } from "react"
 import {
   Check,
+  CheckCircle2,
   Eye,
   Plus,
-  CheckCircle2,
-} from "lucide-react"
+} from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"

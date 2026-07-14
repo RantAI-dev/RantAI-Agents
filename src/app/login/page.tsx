@@ -5,11 +5,15 @@ import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { Eye, EyeOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Loader2, ArrowLeft } from "@/lib/icons"
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  Loader2,
+} from "@/lib/icons"
 import { LineWaves } from "@/components/reactbits/line-waves"
 import { brand } from "@/lib/branding"
 
@@ -99,7 +103,7 @@ export default function LoginPage() {
           {/* Logo + heading */}
           <div className="text-center space-y-2">
             <Image
-              src={brand.logoMain}
+              src={brand.logoMainDark}
               alt={brand.productName}
               width={120}
               height={120}

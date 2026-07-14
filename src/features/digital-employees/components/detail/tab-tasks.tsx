@@ -1,7 +1,10 @@
 "use client"
 
 import { useCallback, useMemo, useState } from "react"
-import { Plus, Loader2 } from "lucide-react"
+import {
+  Loader2,
+  Plus,
+} from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { useTasks } from "@/hooks/use-tasks"
 import { useOrgFetch } from "@/hooks/use-organization"

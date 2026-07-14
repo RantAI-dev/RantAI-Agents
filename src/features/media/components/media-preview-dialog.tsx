@@ -7,12 +7,12 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import {
+  Download,
   Heart,
   ImagePlus,
-  Trash2,
-  Download,
   Music,
-} from "lucide-react"
+  Trash2,
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { MODALITY_META } from "./studio-shared"
 import type { StoreAsset } from "@/features/media/store"

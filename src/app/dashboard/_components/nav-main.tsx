@@ -1,11 +1,11 @@
 "use client"
 
 import {
-  MessageSquare,
+  FolderOpen,
   Headphones,
+  MessageSquare,
   Settings,
 } from "@/lib/icons"
-import { FolderOpen } from "lucide-react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
 import { cn } from "@/lib/utils"

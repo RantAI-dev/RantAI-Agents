@@ -1,7 +1,14 @@
 "use client"
 
 import { useState, useMemo, useCallback } from "react"
-import { Search, LayoutGrid, List, Plus, Loader2, ClipboardList } from "lucide-react"
+import {
+  ClipboardList,
+  LayoutGrid,
+  List,
+  Loader2,
+  Plus,
+  Search,
+} from "@/lib/icons"
 import { motion } from "framer-motion"
 import { Squares } from "@/components/reactbits/squares"
 import { Button } from "@/components/ui/button"

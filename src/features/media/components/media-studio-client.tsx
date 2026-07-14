@@ -9,7 +9,9 @@ import { useMediaStudioStore, type StoreAsset, type StoreJob } from "@/features/
 import { useMediaJobUpdates } from "@/features/media/use-media-job-updates"
 import { MODALITY_META } from "./studio-shared"
 import { cn } from "@/lib/utils"
-import { Library } from "lucide-react"
+import {
+  Library,
+} from "@/lib/icons"
 
 interface ModelInfo {
   id: string
