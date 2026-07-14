@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from "@/lib/icons"
 import { brand } from "@/lib/branding"
+import { BrandLogo } from "@/components/brand-logo"
 
 const features = [
   {
@@ -69,11 +70,7 @@ export default function AboutPage() {
           <div className="flex flex-col items-center text-center space-y-5">
             <div className="relative">
               <div className="absolute inset-0 rounded-2xl bg-primary/5 blur-2xl scale-150" />
-              <img
-                src={brand.logoMain}
-                alt={brand.productName}
-                className="relative h-20 w-20 rounded-2xl shadow-lg ring-1 ring-border"
-              />
+              <BrandLogo className="relative h-20 w-20 rounded-2xl shadow-lg ring-1 ring-border" />
             </div>
 
             <div className="space-y-1.5">
