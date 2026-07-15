@@ -1,4 +1,5 @@
-import { pollVideoJob, fetchVideoBytes } from "@/features/media/provider/openrouter"
+import { prisma } from "@/lib/prisma"
+import { pollVideoJobAlpha } from "@/features/media/provider/openrouter"
 import { uploadMediaBytes } from "@/features/media/storage"
 import {
   finalizeMediaJobAsSucceeded,
@@ -11,6 +12,33 @@ interface PollResult {
   advanced: number
   failed: number
   errors: string[]
+}
+
+async function logVideoAuditEvent(input: {
+  jobId: string
+  organizationId: string
+  userId: string
+  modelId: string
+  costCents: number
+}) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        organizationId: input.organizationId,
+        userId: input.userId,
+        action: "media.generate",
+        resource: `MediaJob:${input.jobId}`,
+        riskLevel: "low",
+        detail: {
+          modality: "VIDEO",
+          modelId: input.modelId,
+          costCents: input.costCents,
+        },
+      },
+    })
+  } catch (error) {
+    console.warn("[media] video audit log write failed:", error)
+  }
 }
 
 export async function pollPendingVideoJobs(): Promise<PollResult> {
@@ -27,31 +55,44 @@ export async function pollPendingVideoJobs(): Promise<PollResult> {
   for (const job of jobs) {
     if (!job.providerJobId) continue
     try {
-      const status = await pollVideoJob({ apiKey, providerJobId: job.providerJobId })
+      const status = await pollVideoJobAlpha({ apiKey, providerJobId: job.providerJobId })
 
-      if (status.status === "succeeded" && status.videoUrl) {
-        const bytes = await fetchVideoBytes(status.videoUrl)
+      if (status.status === "succeeded" && status.video) {
+        const mimeType = status.video.mimeType || "video/mp4"
+        const extension = mimeType.split("/")[1]?.split(";")[0] ?? "mp4"
         const upload = await uploadMediaBytes({
           organizationId: job.organizationId,
           modality: "VIDEO",
           assetId: job.id,
-          mimeType: "video/mp4",
-          extension: "mp4",
-          bytes,
+          mimeType,
+          extension,
+          bytes: status.video.bytes,
         })
 
+        const costCents = status.actualCostCents ?? job.estimatedCostCents ?? 1
         await finalizeMediaJobAsSucceeded({
           jobId: job.id,
-          costCents: status.actualCostCents ?? job.estimatedCostCents ?? 1,
+          costCents,
           assets: [
             {
               modality: "VIDEO",
-              mimeType: "video/mp4",
+              mimeType,
               s3Key: upload.s3Key,
               sizeBytes: upload.sizeBytes,
-              metadata: { providerJobId: job.providerJobId },
+              width: status.video.width ?? null,
+              height: status.video.height ?? null,
+              durationMs: status.video.durationMs ?? null,
+              metadata: { modelId: job.modelId, providerJobId: job.providerJobId },
             },
           ],
+        })
+
+        await logVideoAuditEvent({
+          jobId: job.id,
+          organizationId: job.organizationId,
+          userId: job.userId,
+          modelId: job.modelId,
+          costCents,
         })
 
         emitToOrgRoom(job.organizationId, "media:job:update", {
@@ -59,7 +100,7 @@ export async function pollPendingVideoJobs(): Promise<PollResult> {
           status: "SUCCEEDED",
         })
         advanced++
-      } else if (status.status === "failed") {
+      } else if (status.status === "failed" || status.status === "cancelled") {
         await failMediaJob(job.id, status.errorMessage ?? "Provider reported failure")
         emitToOrgRoom(job.organizationId, "media:job:update", {
           jobId: job.id,

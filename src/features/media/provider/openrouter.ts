@@ -497,10 +497,28 @@ const VIDEO_ALPHA_BASE = "https://openrouter.ai/api/alpha/videos"
 const VIDEO_POLL_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes
 const VIDEO_POLL_INTERVAL_MS = 10 * 1000 // 10s (docs recommend 30s but dev UX benefits from faster)
 
-export async function generateVideo(
-  input: GenerateVideoInput
-): Promise<GenerateVideoResult> {
-  // Build the submit body. Map our canonical parameter names to the alpha API.
+// ─── Alpha video: submit-only ──────────────────────────────────────
+// Submits a video generation job and returns the provider job id WITHOUT
+// blocking on the poll loop. Callers persist the id and let a backstop cron
+// (pollAlphaVideoJob + finalize) complete the job out-of-band.
+
+export interface SubmitVideoAlphaInput {
+  apiKey: string
+  modelId: string
+  prompt: string
+  parameters: Record<string, unknown>
+}
+
+export interface SubmitVideoAlphaResult {
+  providerJobId: string
+  status: string
+}
+
+function buildAlphaVideoBody(input: {
+  modelId: string
+  prompt: string
+  parameters: Record<string, unknown>
+}): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: input.modelId,
     prompt: input.prompt,
@@ -517,8 +535,12 @@ export async function generateVideo(
     body.generate_audio = input.parameters.generateAudio
   if (Array.isArray(input.parameters.inputReferences))
     body.input_references = input.parameters.inputReferences
+  return body
+}
 
-  // ── Step 1: submit ─────────────────────────────────────
+export async function submitVideoJobAlpha(
+  input: SubmitVideoAlphaInput
+): Promise<SubmitVideoAlphaResult> {
   const submit = await fetch(VIDEO_ALPHA_BASE, {
     method: "POST",
     headers: {
@@ -527,7 +549,7 @@ export async function generateVideo(
       "HTTP-Referer": "https://rantai.dev",
       "X-Title": "RantAI Agents Media Studio",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(buildAlphaVideoBody(input)),
   })
 
   if (!submit.ok) {
@@ -556,58 +578,71 @@ export async function generateVideo(
     )
   }
 
-  const jobId = submitJson.id
+  return { providerJobId: submitJson.id, status: submitJson.status ?? "pending" }
+}
 
-  // ── Step 2: poll until completed / failed ─────────────
-  const deadline = Date.now() + VIDEO_POLL_TIMEOUT_MS
-  let poll: {
+// ─── Alpha video: single poll (no loop) ───────────────────────────
+// One-shot status check against the alpha API. Used by the backstop cron to
+// advance a persisted RUNNING job. Downloads bytes only once completed.
+
+export interface PollVideoAlphaResult {
+  // Normalized to the same vocabulary the cron/repository uses.
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled"
+  video?: GeneratedVideo
+  errorMessage?: string
+  actualCostCents?: number
+  rawResponse: unknown
+}
+
+export async function pollVideoJobAlpha(input: {
+  apiKey: string
+  providerJobId: string
+}): Promise<PollVideoAlphaResult> {
+  const pollRes = await fetch(`${VIDEO_ALPHA_BASE}/${input.providerJobId}`, {
+    headers: { Authorization: `Bearer ${input.apiKey}` },
+  })
+  if (!pollRes.ok) {
+    const t = await pollRes.text().catch(() => "")
+    throw new Error(`OpenRouter video poll failed: ${pollRes.status} ${t}`)
+  }
+
+  const poll = (await pollRes.json()) as {
     id?: string
     status?: string
     unsigned_urls?: string[]
     usage?: { cost?: number }
     error?: string
     generation_id?: string
-  } = submitJson
-  let lastStatus = poll.status ?? "pending"
-
-  while (
-    lastStatus !== "completed" &&
-    lastStatus !== "failed" &&
-    lastStatus !== "cancelled" &&
-    lastStatus !== "expired"
-  ) {
-    if (Date.now() > deadline) {
-      throw new Error(
-        `OpenRouter video generation timed out after ${VIDEO_POLL_TIMEOUT_MS / 1000}s (job ${jobId})`
-      )
-    }
-    await new Promise((r) => setTimeout(r, VIDEO_POLL_INTERVAL_MS))
-    const pollRes = await fetch(`${VIDEO_ALPHA_BASE}/${jobId}`, {
-      headers: { Authorization: `Bearer ${input.apiKey}` },
-    })
-    if (!pollRes.ok) {
-      const t = await pollRes.text().catch(() => "")
-      throw new Error(`OpenRouter video poll failed: ${pollRes.status} ${t}`)
-    }
-    poll = await pollRes.json()
-    lastStatus = poll.status ?? lastStatus
   }
 
-  if (lastStatus !== "completed") {
-    const rawErr = poll.error ?? `job ended with status: ${lastStatus}`
-    const friendly = friendlyContentPolicyMessage(rawErr)
-    if (friendly) throw new Error(friendly)
-    throw new Error(`OpenRouter video generation ${lastStatus}: ${rawErr}`)
+  const rawStatus = poll.status ?? "pending"
+
+  // Terminal-but-not-completed → failed.
+  if (rawStatus === "failed" || rawStatus === "cancelled" || rawStatus === "expired") {
+    const rawErr = poll.error ?? `job ended with status: ${rawStatus}`
+    const errorMessage = friendlyContentPolicyMessage(rawErr) ?? rawErr
+    return {
+      status: rawStatus === "cancelled" ? "cancelled" : "failed",
+      errorMessage,
+      rawResponse: poll,
+    }
   }
 
+  // Still in flight.
+  if (rawStatus !== "completed") {
+    return {
+      status: rawStatus === "pending" || rawStatus === "queued" ? "queued" : "running",
+      rawResponse: poll,
+    }
+  }
+
+  // Completed → download bytes (auth required for the alpha unsigned URL).
   const firstUrl = poll.unsigned_urls?.[0]
   if (!firstUrl) {
     throw new Error(
       `OpenRouter video completed but no URL returned: ${JSON.stringify(poll).slice(0, 400)}`
     )
   }
-
-  // ── Step 3: download the raw MP4 bytes (auth required) ──
   const download = await fetch(firstUrl, {
     headers: { Authorization: `Bearer ${input.apiKey}` },
   })
@@ -624,9 +659,59 @@ export async function generateVideo(
       : undefined
 
   return {
+    status: "succeeded",
     video: { bytes, mimeType },
     actualCostCents,
     rawResponse: poll,
   }
+}
+
+export async function generateVideo(
+  input: GenerateVideoInput
+): Promise<GenerateVideoResult> {
+  // ── Step 1: submit ─────────────────────────────────────
+  const { providerJobId: jobId, status: initialStatus } = await submitVideoJobAlpha({
+    apiKey: input.apiKey,
+    modelId: input.modelId,
+    prompt: input.prompt,
+    parameters: input.parameters,
+  })
+
+  // ── Step 2: poll until completed / failed ─────────────
+  const deadline = Date.now() + VIDEO_POLL_TIMEOUT_MS
+  let lastStatus = initialStatus
+
+  while (
+    lastStatus !== "completed" &&
+    lastStatus !== "failed" &&
+    lastStatus !== "cancelled" &&
+    lastStatus !== "expired"
+  ) {
+    if (Date.now() > deadline) {
+      throw new Error(
+        `OpenRouter video generation timed out after ${VIDEO_POLL_TIMEOUT_MS / 1000}s (job ${jobId})`
+      )
+    }
+    await new Promise((r) => setTimeout(r, VIDEO_POLL_INTERVAL_MS))
+    const result = await pollVideoJobAlpha({ apiKey: input.apiKey, providerJobId: jobId })
+    if (result.status === "failed" || result.status === "cancelled") {
+      const rawErr = result.errorMessage ?? `job ended with status: ${result.status}`
+      const friendly = friendlyContentPolicyMessage(rawErr)
+      if (friendly) throw new Error(friendly)
+      throw new Error(`OpenRouter video generation ${result.status}: ${rawErr}`)
+    }
+    if (result.status === "succeeded" && result.video) {
+      return {
+        video: result.video,
+        actualCostCents: result.actualCostCents,
+        rawResponse: result.rawResponse,
+      }
+    }
+    // queued / running → keep polling
+  }
+
+  // Loop only exits via return (succeeded) or throw above; reaching here means a
+  // terminal non-completed status slipped through.
+  throw new Error(`OpenRouter video generation ${lastStatus} (job ${jobId})`)
 }
 

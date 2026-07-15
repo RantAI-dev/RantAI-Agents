@@ -8,7 +8,7 @@ import {
   type FinalizeAssetInput,
 } from "./repository"
 import { uploadMediaBytes, downloadMediaBytes } from "./storage"
-import { generateImage, generateAudio, generateVideo } from "./provider/openrouter"
+import { generateImage, generateAudio, submitVideoJobAlpha } from "./provider/openrouter"
 import * as minimax from "./provider/minimax"
 import {
   isHouseMediaModel,
@@ -373,6 +373,11 @@ async function runAudioJob(input: {
   return finalized
 }
 
+// Video generation is submit-and-return: we hand the prompt to the provider,
+// persist the returned providerJobId on the RUNNING job row, and return
+// promptly. The poll-video-jobs cron (every minute) finalizes the job
+// out-of-band via pollVideoJobAlpha — so a deploy/restart mid-generation
+// can't strand the request, and the request no longer blocks up to 10 min.
 async function runVideoJob(input: {
   jobId: string
   organizationId: string
@@ -393,7 +398,8 @@ async function runVideoJob(input: {
     type: "image_url" as const,
     image_url: { url },
   }))
-  const result = await generateVideo({
+
+  const submitted = await submitVideoJobAlpha({
     apiKey,
     modelId: input.modelId,
     prompt: input.prompt,
@@ -403,47 +409,16 @@ async function runVideoJob(input: {
         : input.parameters,
   })
 
-  const extension =
-    result.video.mimeType.split("/")[1]?.split(";")[0] ?? "mp4"
-  const upload = await uploadMediaBytes({
-    organizationId: input.organizationId,
-    modality: "VIDEO",
-    assetId: input.jobId,
-    mimeType: result.video.mimeType,
-    extension,
-    bytes: result.video.bytes,
-  })
-
-  const videoCostCents = result.actualCostCents ?? input.estimatedCostCents
-  const finalized = await finalizeMediaJobAsSucceeded({
-    jobId: input.jobId,
-    costCents: videoCostCents,
-    assets: [
-      {
-        modality: "VIDEO",
-        mimeType: result.video.mimeType,
-        s3Key: upload.s3Key,
-        sizeBytes: upload.sizeBytes,
-        width: result.video.width ?? null,
-        height: result.video.height ?? null,
-        durationMs: result.video.durationMs ?? null,
-        metadata: { modelId: input.modelId },
-      },
-    ],
-  })
-
-  await logMediaAuditEvent({
-    jobId: input.jobId,
-    organizationId: input.organizationId,
-    userId: input.userId,
-    modality: "VIDEO",
-    modelId: input.modelId,
-    costCents: videoCostCents,
-  })
+  // Persist the provider job id on the RUNNING row so the backstop cron can
+  // poll + finalize it. Return the RUNNING job immediately (no assets yet);
+  // the client upserts it and receives SUCCEEDED via socket once the cron
+  // finalizes.
+  const running = await setJobRunning(input.jobId, submitted.providerJobId)
 
   emitToOrgRoom(input.organizationId, "media:job:update", {
     jobId: input.jobId,
-    status: "SUCCEEDED",
+    status: "RUNNING",
   })
-  return finalized
+
+  return running
 }
