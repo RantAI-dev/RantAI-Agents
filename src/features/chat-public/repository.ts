@@ -1,14 +1,12 @@
-import { access, mkdir, readFile, writeFile } from "fs/promises"
 import path from "path"
 import crypto from "crypto"
 import { prisma } from "@/lib/prisma"
 import { MIME_TO_EXT } from "@/lib/files/mime-types"
+import { uploadFile, downloadFile, fileExists, getFileMetadata } from "@/lib/s3"
 
-const CHAT_ATTACHMENTS_STORAGE_DIR = path.join(
-  process.cwd(),
-  "storage",
-  "chat-attachments"
-)
+// Chat attachments live under this S3 key prefix (RustFS/MinIO-backed). Bytes
+// still flow through the app route — we never presign to the browser.
+const CHAT_ATTACHMENTS_S3_PREFIX = "chat-attachments"
 
 const CHAT_ATTACHMENT_MIME_MAP: Record<string, string> = {
   ".png": "image/png",
@@ -63,21 +61,37 @@ export async function saveChatAttachment(params: {
   const fileId = crypto.randomUUID()
   const ext = MIME_TO_EXT[params.mimeType] || ""
   const storedFileName = `${fileId}${ext}`
-  await mkdir(CHAT_ATTACHMENTS_STORAGE_DIR, { recursive: true })
-  await writeFile(
-    path.join(CHAT_ATTACHMENTS_STORAGE_DIR, storedFileName),
-    params.buffer
+  await uploadFile(
+    `${CHAT_ATTACHMENTS_S3_PREFIX}/${storedFileName}`,
+    params.buffer,
+    params.mimeType
   )
   return storedFileName
 }
 
 export async function readChatAttachment(fileId: string) {
-  const filePath = path.join(CHAT_ATTACHMENTS_STORAGE_DIR, fileId)
-  await access(filePath)
+  const key = `${CHAT_ATTACHMENTS_S3_PREFIX}/${fileId}`
 
-  const buffer = await readFile(filePath)
+  // Preserve the local-disk 404 contract: the service maps a native ENOENT
+  // into a 404, so a missing S3 object must surface the same signal. HEAD
+  // first (cheap) and throw an ENOENT-coded Error when the object is absent.
+  if (!(await fileExists(key))) {
+    const err = new Error(`Chat attachment not found: ${fileId}`) as Error & {
+      code?: string
+    }
+    err.code = "ENOENT"
+    throw err
+  }
+
+  const buffer = await downloadFile(key)
+
+  // Prefer the stored object's ContentType; fall back to the extension map.
+  const metadata = await getFileMetadata(key)
   const ext = path.extname(fileId).toLowerCase()
-  const contentType = CHAT_ATTACHMENT_MIME_MAP[ext] || "application/octet-stream"
+  const contentType =
+    metadata?.contentType ||
+    CHAT_ATTACHMENT_MIME_MAP[ext] ||
+    "application/octet-stream"
 
   return {
     buffer,
