@@ -26,15 +26,15 @@ export async function createOpenApiSpec(data: {
   })
 }
 
-export async function findOpenApiSpecById(id: string) {
-  return prisma.openApiSpec.findUnique({
-    where: { id },
+export async function findOpenApiSpecById(id: string, organizationId: string | null) {
+  return prisma.openApiSpec.findFirst({
+    where: { id, organizationId },
   })
 }
 
-export async function findOpenApiSpecWithToolsById(id: string) {
-  return prisma.openApiSpec.findUnique({
-    where: { id },
+export async function findOpenApiSpecWithToolsById(id: string, organizationId: string | null) {
+  return prisma.openApiSpec.findFirst({
+    where: { id, organizationId },
   })
 }
 
@@ -89,8 +89,8 @@ export async function deleteOpenApiToolsBySpecId(specId: string) {
   })
 }
 
-export async function deleteOpenApiSpecById(id: string) {
-  return prisma.openApiSpec.delete({
-    where: { id },
+export async function deleteOpenApiSpecById(id: string, organizationId: string | null) {
+  return prisma.openApiSpec.deleteMany({
+    where: { id, organizationId },
   })
 }

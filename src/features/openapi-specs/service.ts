@@ -218,8 +218,9 @@ export async function importDashboardOpenApiSpec(params: {
  */
 export async function getDashboardOpenApiSpec(params: {
   id: string
+  organizationId: string | null
 }): Promise<Record<string, unknown> | ServiceError> {
-  const spec = await findOpenApiSpecWithToolsById(params.id)
+  const spec = await findOpenApiSpecWithToolsById(params.id, params.organizationId)
   if (!spec) {
     return { status: 404, error: "Spec not found" }
   }
@@ -233,9 +234,16 @@ export async function getDashboardOpenApiSpec(params: {
  */
 export async function deleteDashboardOpenApiSpec(params: {
   id: string
+  organizationId: string | null
 }): Promise<{ success: true } | ServiceError> {
+  // Verify org ownership before touching any rows.
+  const spec = await findOpenApiSpecById(params.id, params.organizationId)
+  if (!spec) {
+    return { status: 404, error: "Spec not found" }
+  }
+
   await deleteOpenApiToolsBySpecId(params.id)
-  await deleteOpenApiSpecById(params.id)
+  await deleteOpenApiSpecById(params.id, params.organizationId)
   return { success: true }
 }
 
@@ -244,9 +252,10 @@ export async function deleteDashboardOpenApiSpec(params: {
  */
 export async function resyncDashboardOpenApiSpec(params: {
   id: string
+  organizationId: string | null
   createdBy: string
 }): Promise<{ toolsCreated: number } | ServiceError> {
-  const spec = await findOpenApiSpecById(params.id)
+  const spec = await findOpenApiSpecById(params.id, params.organizationId)
   if (!spec) {
     return { status: 404, error: "Spec not found" }
   }

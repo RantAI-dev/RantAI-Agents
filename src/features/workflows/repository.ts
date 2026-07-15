@@ -26,7 +26,21 @@ export async function createWorkflowWithCount(data: Prisma.WorkflowUncheckedCrea
   })
 }
 
-export async function findWorkflowById(id: string) {
+export async function findWorkflowById(id: string, organizationId: string | null) {
+  return prisma.workflow.findFirst({
+    where: { id, organizationId },
+    include: {
+      _count: { select: { runs: true } },
+    },
+  })
+}
+
+/**
+ * Loads a workflow by primary key without org scoping. Callers MUST enforce
+ * scoping themselves — used only by execute, which allows global (null-org)
+ * workflows in addition to the caller's own org.
+ */
+export async function findWorkflowByIdForExecution(id: string) {
   return prisma.workflow.findUnique({
     where: { id },
     include: {
@@ -35,26 +49,36 @@ export async function findWorkflowById(id: string) {
   })
 }
 
-export async function findWorkflowApiKeyById(id: string) {
-  return prisma.workflow.findUnique({
-    where: { id },
+export async function findWorkflowApiKeyById(id: string, organizationId: string | null) {
+  return prisma.workflow.findFirst({
+    where: { id, organizationId },
     select: { apiKey: true },
   })
 }
 
-export async function updateWorkflowById(id: string, data: Prisma.WorkflowUpdateInput) {
-  return prisma.workflow.update({
-    where: { id },
+export async function updateWorkflowById(
+  id: string,
+  organizationId: string | null,
+  data: Prisma.WorkflowUpdateInput
+) {
+  const result = await prisma.workflow.updateMany({
+    where: { id, organizationId },
     data,
+  })
+  if (result.count === 0) {
+    return null
+  }
+  return prisma.workflow.findUnique({
+    where: { id },
     include: {
       _count: { select: { runs: true } },
     },
   })
 }
 
-export async function deleteWorkflowById(id: string) {
-  return prisma.workflow.delete({
-    where: { id },
+export async function deleteWorkflowById(id: string, organizationId: string | null) {
+  return prisma.workflow.deleteMany({
+    where: { id, organizationId },
   })
 }
 

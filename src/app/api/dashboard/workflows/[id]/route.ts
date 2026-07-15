@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   WorkflowIdParamsSchema,
   UpdateWorkflowSchema,
@@ -28,7 +29,11 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid workflow id" }, { status: 400 })
     }
 
-    const workflow = await getDashboardWorkflow(parsedParams.data.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
+    const workflow = await getDashboardWorkflow(
+      parsedParams.data.id,
+      orgContext?.organizationId ?? null
+    )
     if (isHttpServiceError(workflow)) {
       return NextResponse.json({ error: workflow.error }, { status: workflow.status })
     }
@@ -58,8 +63,10 @@ export async function PUT(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const workflow = await updateDashboardWorkflow({
       id: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
       input: parsedBody.data,
     })
     if (isHttpServiceError(workflow)) {
@@ -86,7 +93,11 @@ export async function DELETE(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid workflow id" }, { status: 400 })
     }
 
-    const result = await deleteDashboardWorkflow(parsedParams.data.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
+    const result = await deleteDashboardWorkflow(
+      parsedParams.data.id,
+      orgContext?.organizationId ?? null
+    )
     if (isHttpServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

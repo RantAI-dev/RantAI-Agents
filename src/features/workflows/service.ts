@@ -11,6 +11,7 @@ import {
   deleteWorkflowById,
   findWorkflowApiKeyById,
   findWorkflowById,
+  findWorkflowByIdForExecution,
   findWorkflowRunById,
   findWorkflowRunsByWorkflowId,
   findWorkflowsByScope,
@@ -140,8 +141,8 @@ export async function importDashboardWorkflow(params: {
 /**
  * Loads a single workflow for dashboard inspection.
  */
-export async function getDashboardWorkflow(id: string) {
-  const workflow = await findWorkflowById(id)
+export async function getDashboardWorkflow(id: string, organizationId: string | null) {
+  const workflow = await findWorkflowById(id, organizationId)
   if (!workflow) {
     return { status: 404, error: "Workflow not found" } satisfies ServiceError
   }
@@ -154,6 +155,7 @@ export async function getDashboardWorkflow(id: string) {
  */
 export async function updateDashboardWorkflow(params: {
   id: string
+  organizationId: string | null
   input: {
     name?: string
     description?: string
@@ -172,13 +174,13 @@ export async function updateDashboardWorkflow(params: {
 }): Promise<unknown | ServiceError> {
   let apiKey: string | undefined
   if (params.input.apiEnabled === true) {
-    const existing = await findWorkflowApiKeyById(params.id)
+    const existing = await findWorkflowApiKeyById(params.id, params.organizationId)
     if (!existing?.apiKey) {
       apiKey = `wf_${params.id.slice(0, 8)}_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
     }
   }
 
-  return updateWorkflowById(params.id, {
+  const updated = await updateWorkflowById(params.id, params.organizationId, {
     ...(params.input.name !== undefined && { name: params.input.name }),
     ...(params.input.description !== undefined && { description: params.input.description }),
     ...(params.input.nodes !== undefined && { nodes: params.input.nodes as Prisma.InputJsonValue }),
@@ -195,27 +197,42 @@ export async function updateDashboardWorkflow(params: {
     ...(apiKey && { apiKey }),
     ...(params.input.apiEnabled === false && { apiKey: null }),
   })
+
+  if (!updated) {
+    return { status: 404, error: "Workflow not found" } satisfies ServiceError
+  }
+
+  return updated
 }
 
 /**
  * Deletes a dashboard workflow.
  */
-export async function deleteDashboardWorkflow(id: string): Promise<{ success: true } | ServiceError> {
-  await deleteWorkflowById(id)
+export async function deleteDashboardWorkflow(
+  id: string,
+  organizationId: string | null
+): Promise<{ success: true } | ServiceError> {
+  const result = await deleteWorkflowById(id, organizationId)
+  if (result.count === 0) {
+    return { status: 404, error: "Workflow not found" } satisfies ServiceError
+  }
   return { success: true }
 }
 
 /**
  * Exports a workflow in the legacy import/export JSON format.
  */
-export async function exportDashboardWorkflow(id: string): Promise<
+export async function exportDashboardWorkflow(
+  id: string,
+  organizationId: string | null
+): Promise<
   | {
       name: string
       exportData: WorkflowExportFormat
     }
   | ServiceError
 > {
-  const workflow = await findWorkflowById(id)
+  const workflow = await findWorkflowById(id, organizationId)
   if (!workflow) {
     return { status: 404, error: "Workflow not found" }
   }
@@ -287,8 +304,15 @@ export async function executeDashboardWorkflow(params: {
   threadId?: string
   deps?: WorkflowExecutionDependencies
 }): Promise<WorkflowExecuteResult | ServiceError> {
-  const workflow = await findWorkflowById(params.workflowId)
+  const workflow = await findWorkflowByIdForExecution(params.workflowId)
   if (!workflow) {
+    return { status: 404, error: "Workflow not found" }
+  }
+
+  // Allow global (null-org) built-in workflows; otherwise the workflow must
+  // belong to the caller's active organization. Mirrors findWorkflowsByScope,
+  // which surfaces null-org rows alongside the caller's own org.
+  if (workflow.organizationId !== null && workflow.organizationId !== params.organizationId) {
     return { status: 404, error: "Workflow not found" }
   }
 

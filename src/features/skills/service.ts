@@ -120,9 +120,10 @@ export async function createDashboardSkillRecord(params: {
  * Loads one skill with its assistant binding count.
  */
 export async function getDashboardSkillById(
-  id: string
+  id: string,
+  organizationId: string | null
 ): Promise<Record<string, unknown> | ServiceError> {
-  const skill = await findDashboardSkillById(id)
+  const skill = await findDashboardSkillById(id, organizationId)
   if (!skill) {
     return { status: 404, error: "Skill not found" }
   }
@@ -134,9 +135,10 @@ export async function getDashboardSkillById(
  */
 export async function updateDashboardSkillRecord(params: {
   id: string
+  organizationId: string | null
   input: UpdateDashboardSkillInput
 }): Promise<Record<string, unknown> | ServiceError> {
-  const skill = await updateDashboardSkill(params.id, {
+  const skill = await updateDashboardSkill(params.id, params.organizationId, {
     ...(params.input.displayName !== undefined && {
       displayName: params.input.displayName,
     }),
@@ -149,6 +151,10 @@ export async function updateDashboardSkillRecord(params: {
     ...(params.input.enabled !== undefined && { enabled: params.input.enabled }),
   })
 
+  if (!skill) {
+    return { status: 404, error: "Skill not found" }
+  }
+
   return skill
 }
 
@@ -156,9 +162,13 @@ export async function updateDashboardSkillRecord(params: {
  * Deletes a skill by id.
  */
 export async function deleteDashboardSkillRecord(
-  id: string
+  id: string,
+  organizationId: string | null
 ): Promise<{ success: true } | ServiceError> {
-  await deleteDashboardSkill(id)
+  const result = await deleteDashboardSkill(id, organizationId)
+  if (result.count === 0) {
+    return { status: 404, error: "Skill not found" }
+  }
   return { success: true }
 }
 

@@ -18,6 +18,7 @@ vi.mock("./repository", () => ({
   deleteWorkflowById: vi.fn(),
   findWorkflowApiKeyById: vi.fn(),
   findWorkflowById: vi.fn(),
+  findWorkflowByIdForExecution: vi.fn(),
   findWorkflowRunById: vi.fn(),
   findWorkflowRunsByWorkflowId: vi.fn(),
   findWorkflowsByScope: vi.fn(),
@@ -79,9 +80,20 @@ describe("workflows service", () => {
   it("returns 404 for missing workflow lookups", async () => {
     vi.mocked(repository.findWorkflowById).mockResolvedValue(null)
 
-    const result = await getDashboardWorkflow("wf_missing")
+    const result = await getDashboardWorkflow("wf_missing", "org_1")
 
     expect(result).toEqual({ status: 404, error: "Workflow not found" })
+    expect(repository.findWorkflowById).toHaveBeenCalledWith("wf_missing", "org_1")
+  })
+
+  it("returns 404 when reading a workflow owned by another tenant", async () => {
+    // Repo enforces org scoping, so a cross-tenant id resolves to null.
+    vi.mocked(repository.findWorkflowById).mockResolvedValue(null)
+
+    const result = await getDashboardWorkflow("wf_other_org", "org_1")
+
+    expect(result).toEqual({ status: 404, error: "Workflow not found" })
+    expect(repository.findWorkflowById).toHaveBeenCalledWith("wf_other_org", "org_1")
   })
 
   it("generates an api key when enabling API access on update", async () => {
@@ -90,17 +102,32 @@ describe("workflows service", () => {
 
     const result = await updateDashboardWorkflow({
       id: "wf_1",
+      organizationId: "org_1",
       input: { apiEnabled: true },
     })
 
     expect(result).toEqual({ id: "wf_1" })
+    expect(repository.findWorkflowApiKeyById).toHaveBeenCalledWith("wf_1", "org_1")
     expect(repository.updateWorkflowById).toHaveBeenCalledWith(
       "wf_1",
+      "org_1",
       expect.objectContaining({
         apiEnabled: true,
         apiKey: expect.stringMatching(/^wf_wf_1_/),
       })
     )
+  })
+
+  it("returns 404 when updating a workflow outside the caller's org", async () => {
+    vi.mocked(repository.updateWorkflowById).mockResolvedValue(null)
+
+    const result = await updateDashboardWorkflow({
+      id: "wf_other_org",
+      organizationId: "org_1",
+      input: { name: "Renamed" },
+    })
+
+    expect(result).toEqual({ status: 404, error: "Workflow not found" })
   })
 
   it("returns an exported workflow payload", async () => {
@@ -115,8 +142,9 @@ describe("workflows service", () => {
       edges: [],
     } as never)
 
-    const result = await exportDashboardWorkflow("wf_1")
+    const result = await exportDashboardWorkflow("wf_1", "org_1")
 
+    expect(repository.findWorkflowById).toHaveBeenCalledWith("wf_1", "org_1")
     expect(result).toMatchObject({
       name: "Workflow",
       exportData: { version: 1, name: "Workflow" },
@@ -157,10 +185,19 @@ describe("workflows service", () => {
   })
 
   it("deletes workflows through the repository", async () => {
-    vi.mocked(repository.deleteWorkflowById).mockResolvedValue({ id: "wf_1" } as never)
+    vi.mocked(repository.deleteWorkflowById).mockResolvedValue({ count: 1 } as never)
 
-    const result = await deleteDashboardWorkflow("wf_1")
+    const result = await deleteDashboardWorkflow("wf_1", "org_1")
 
     expect(result).toEqual({ success: true })
+    expect(repository.deleteWorkflowById).toHaveBeenCalledWith("wf_1", "org_1")
+  })
+
+  it("returns 404 when deleting a workflow outside the caller's org", async () => {
+    vi.mocked(repository.deleteWorkflowById).mockResolvedValue({ count: 0 } as never)
+
+    const result = await deleteDashboardWorkflow("wf_other_org", "org_1")
+
+    expect(result).toEqual({ status: 404, error: "Workflow not found" })
   })
 })

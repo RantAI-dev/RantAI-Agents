@@ -71,10 +71,22 @@ describe("dashboard-skills service", () => {
   it("returns 404 when skill is missing", async () => {
     vi.mocked(repository.findDashboardSkillById).mockResolvedValue(null)
 
-    await expect(getDashboardSkillById("skill_1")).resolves.toEqual({
+    await expect(getDashboardSkillById("skill_1", "org_1")).resolves.toEqual({
       status: 404,
       error: "Skill not found",
     })
+    expect(repository.findDashboardSkillById).toHaveBeenCalledWith("skill_1", "org_1")
+  })
+
+  it("returns 404 when reading a skill owned by another tenant", async () => {
+    // Repo scopes to global-or-own-org, so a cross-tenant id resolves to null.
+    vi.mocked(repository.findDashboardSkillById).mockResolvedValue(null)
+
+    await expect(getDashboardSkillById("skill_other_org", "org_1")).resolves.toEqual({
+      status: 404,
+      error: "Skill not found",
+    })
+    expect(repository.findDashboardSkillById).toHaveBeenCalledWith("skill_other_org", "org_1")
   })
 
   it("creates skills", async () => {
@@ -164,14 +176,37 @@ describe("dashboard-skills service", () => {
     await expect(
       updateDashboardSkillRecord({
         id: "skill_1",
+        organizationId: "org_1",
         input: { displayName: "Updated" },
       })
     ).resolves.toMatchObject({ id: "skill_1" })
+    expect(repository.updateDashboardSkill).toHaveBeenCalledWith(
+      "skill_1",
+      "org_1",
+      expect.objectContaining({ displayName: "Updated" })
+    )
 
-    vi.mocked(repository.deleteDashboardSkill).mockResolvedValue({} as never)
-    await expect(deleteDashboardSkillRecord("skill_1")).resolves.toEqual({
+    vi.mocked(repository.deleteDashboardSkill).mockResolvedValue({ count: 1 } as never)
+    await expect(deleteDashboardSkillRecord("skill_1", "org_1")).resolves.toEqual({
       success: true,
     })
+    expect(repository.deleteDashboardSkill).toHaveBeenCalledWith("skill_1", "org_1")
+  })
+
+  it("returns 404 when updating or deleting a skill outside the caller's org", async () => {
+    vi.mocked(repository.updateDashboardSkill).mockResolvedValue(null)
+    await expect(
+      updateDashboardSkillRecord({
+        id: "skill_other_org",
+        organizationId: "org_1",
+        input: { displayName: "Nope" },
+      })
+    ).resolves.toEqual({ status: 404, error: "Skill not found" })
+
+    vi.mocked(repository.deleteDashboardSkill).mockResolvedValue({ count: 0 } as never)
+    await expect(
+      deleteDashboardSkillRecord("skill_other_org", "org_1")
+    ).resolves.toEqual({ status: 404, error: "Skill not found" })
   })
 
   it("resolves readiness", async () => {
