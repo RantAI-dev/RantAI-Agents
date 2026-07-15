@@ -42,6 +42,61 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
   ioInstance = io
   globalThis.__socketIO = io
 
+  // Multi-instance realtime: when REDIS_URL is set, attach the Redis adapter so
+  // events emitted on one app instance reach sockets connected to any other
+  // instance. When it's unset we keep the default in-memory adapter — behaviour
+  // is identical to single-instance deployments. Adapter setup is best-effort:
+  // if it fails we log and continue WITHOUT it (degrade to single-instance)
+  // rather than crash the server. The pub/sub clients are closed by wrapping
+  // io.close() (see below) so graceful shutdown stays clean.
+  const redisUrl = process.env.REDIS_URL
+  if (redisUrl) {
+    // Attach the adapter asynchronously (dynamic import, matching this file's
+    // lazy-load style) so initSocketServer stays synchronous and OSS consumers
+    // without ioredis / the adapter installed never load them. There are no
+    // connections at init time, so attaching the adapter a tick later is safe.
+    void (async () => {
+      try {
+        const { default: Redis } = await import("ioredis")
+        const { createAdapter } = await import("@socket.io/redis-adapter")
+
+        const pub = new Redis(redisUrl)
+        const sub = pub.duplicate()
+
+        // Don't let a Redis blip take down the process — log and let ioredis
+        // reconnect on its own.
+        pub.on("error", (err: Error) => console.error("[socket] redis pub error:", err))
+        sub.on("error", (err: Error) => console.error("[socket] redis sub error:", err))
+
+        io.adapter(createAdapter(pub, sub))
+
+        // Close the pub/sub clients when the io server closes so graceful
+        // shutdown (server.ts calls io.close()) doesn't leave the two Redis
+        // connections holding the process open past server.close(). The Server
+        // exposes no public "close" event, so we wrap io.close() to quit the
+        // clients after the underlying close resolves, preserving its async
+        // signature and optional callback.
+        const originalClose = io.close.bind(io)
+        io.close = ((fn?: (err?: Error) => void) => {
+          return originalClose(async (err?: Error) => {
+            await Promise.allSettled([pub.quit(), sub.quit()])
+            fn?.(err)
+          })
+        }) as typeof io.close
+
+        console.log("[socket] Redis adapter enabled — multi-instance broadcast active")
+      } catch (error) {
+        // Degrade to the in-memory adapter (single-instance broadcast only).
+        console.error(
+          "[socket] Redis adapter setup failed, falling back to in-memory (single-instance) mode:",
+          error
+        )
+      }
+    })()
+  } else {
+    console.log("[socket] REDIS_URL not set — in-memory adapter (single-instance) mode")
+  }
+
   // API key authentication middleware for external connections
   io.use(async (socket, next) => {
     const apiKey = socket.handshake.auth?.apiKey as string | undefined
