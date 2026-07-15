@@ -1,8 +1,9 @@
 import { canManage } from "@/lib/organization"
-import { generateAgentApiKey } from "@/lib/embed/api-key-generator"
+import { generateAgentApiKey, hashAgentApiKey } from "@/lib/embed/api-key-generator"
 import {
   createAgentApiKey as createKey,
   deleteAgentApiKey as deleteKey,
+  findAgentApiKeyByHash,
   findAgentApiKeyByKey,
   findAgentApiKeyById,
   findAgentApiKeysByAssistantId,
@@ -111,9 +112,15 @@ export async function createAgentApiKey(params: {
     }
   }
 
+  const generatedKey = generateAgentApiKey()
+
   const apiKey = await createKey({
     name: params.input.name,
-    key: generateAgentApiKey(),
+    // Plaintext `key` is stored so it can be returned to the user exactly once
+    // in this create response (and for the legacy lookup fallback during the
+    // backfill window). `keyHash` is what authentication looks up going forward.
+    key: generatedKey,
+    keyHash: hashAgentApiKey(generatedKey),
     assistantId: params.input.assistantId,
     scopes: params.input.scopes ?? ["chat", "chat:stream"],
     ipWhitelist: params.input.ipWhitelist ?? [],
@@ -203,12 +210,30 @@ export async function deleteAgentApiKey(
 /**
  * Authenticate an API key for external access (used by /api/v1/ routes).
  * Returns the key record + assistant info, or null if invalid.
+ *
+ * Lookup is by SHA-256 hash of the provided key (keys are stored hashed). A
+ * fallback to the legacy plaintext lookup covers any rows not yet backfilled
+ * with a `keyHash`; that fallback is removable in phase 2 once every row has a
+ * hash and the plaintext `key` column is dropped.
+ *
+ * `requestIp` enforces `ipWhitelist`: an empty whitelist allows all IPs, but a
+ * non-empty whitelist requires a `requestIp` present in the list — otherwise
+ * authentication fails (returns null), same as an invalid key.
  */
-export async function authenticateAgentApiKey(key: string) {
-  const apiKey = await findAgentApiKeyByKey(key)
+export async function authenticateAgentApiKey(key: string, requestIp?: string | null) {
+  const apiKey =
+    (await findAgentApiKeyByHash(hashAgentApiKey(key))) ??
+    // Legacy fallback for not-yet-backfilled rows — remove in phase 2.
+    (await findAgentApiKeyByKey(key))
   if (!apiKey) return null
   if (!apiKey.enabled) return null
   if (apiKey.expiresAt && apiKey.expiresAt < new Date()) return null
+
+  // IP whitelist enforcement. Empty list = allow all. Non-empty requires a
+  // known request IP that is in the list.
+  if (apiKey.ipWhitelist.length > 0) {
+    if (!requestIp || !apiKey.ipWhitelist.includes(requestIp)) return null
+  }
 
   const assistant = await findAssistantById(apiKey.assistantId)
   if (!assistant) return null
