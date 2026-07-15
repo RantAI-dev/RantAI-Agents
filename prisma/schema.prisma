@@ -407,7 +407,8 @@ model EmbedApiKey {
 model AgentApiKey {
   id          String @id @default(cuid())
   name        String // Human-readable name (e.g., "Production Backend")
-  key         String @unique // Generated API key (e.g., "rantai_sk_...")
+  key         String  @unique // Generated API key (e.g., "rantai_sk_...") — legacy plaintext, kept for backfill window
+  keyHash     String? @unique // SHA-256(key) hex; nullable during backfill, becomes the auth lookup column
   assistantId String // Assistant this key accesses
 
   // Access control

@@ -31,6 +31,10 @@ export async function findAgentApiKeyByKey(key: string) {
   return prisma.agentApiKey.findUnique({ where: { key } })
 }
 
+export async function findAgentApiKeyByHash(keyHash: string) {
+  return prisma.agentApiKey.findUnique({ where: { keyHash } })
+}
+
 export async function createAgentApiKey(
   data: Prisma.AgentApiKeyUncheckedCreateInput
 ) {
