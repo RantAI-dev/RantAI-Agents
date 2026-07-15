@@ -92,7 +92,10 @@ export async function GET(
 
     const body = s3res.Body
     if (!body) return NextResponse.json({ error: "File not found" }, { status: 404 })
-    const bytes = await body.transformToByteArray()
+    // Stream the S3 body straight through instead of buffering the whole object
+    // (or range) into memory first. This keeps heap usage flat and TTFB low even
+    // for large files and concurrent Range/video requests.
+    const stream = body.transformToWebStream()
 
     const headers = new Headers()
     headers.set("Content-Type", result.contentType)
@@ -102,10 +105,15 @@ export async function GET(
     )
     headers.set("Accept-Ranges", "bytes")
     headers.set("Cache-Control", "private, max-age=3600")
-    headers.set("Content-Length", String(bytes.byteLength))
+    // ContentLength reflects the bytes in this response (the range length for
+    // partial responses); set it when the SDK reports it so clients get progress
+    // and seeking without us having to buffer the body to measure it.
+    if (typeof s3res.ContentLength === "number") {
+      headers.set("Content-Length", String(s3res.ContentLength))
+    }
     if (s3res.ContentRange) headers.set("Content-Range", s3res.ContentRange)
 
-    return new Response(bytes, {
+    return new Response(stream, {
       status: range && s3res.ContentRange ? 206 : 200,
       headers,
     })
