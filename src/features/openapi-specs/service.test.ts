@@ -138,12 +138,28 @@ describe("dashboard openapi specs service", () => {
       },
     ] as never)
 
-    const result = await getDashboardOpenApiSpec({ id: "spec_1" })
+    const result = await getDashboardOpenApiSpec({ id: "spec_1", organizationId: "org_1" })
 
+    expect(repository.findOpenApiSpecWithToolsById).toHaveBeenCalledWith("spec_1", "org_1")
     expect(result).toMatchObject({
       id: "spec_1",
       tools: [{ id: "tool_1" }],
     })
+  })
+
+  it("returns 404 when reading a spec owned by another tenant", async () => {
+    vi.mocked(repository.findOpenApiSpecWithToolsById).mockResolvedValue(null)
+
+    const result = await getDashboardOpenApiSpec({
+      id: "spec_other_org",
+      organizationId: "org_1",
+    })
+
+    expect(result).toEqual({ status: 404, error: "Spec not found" })
+    expect(repository.findOpenApiSpecWithToolsById).toHaveBeenCalledWith(
+      "spec_other_org",
+      "org_1"
+    )
   })
 
   it("resyncs tools from a stored spec", async () => {
@@ -170,15 +186,49 @@ describe("dashboard openapi specs service", () => {
 
     const result = await resyncDashboardOpenApiSpec({
       id: "spec_1",
+      organizationId: "org_1",
       createdBy: "user_1",
     })
 
+    expect(repository.findOpenApiSpecById).toHaveBeenCalledWith("spec_1", "org_1")
     expect(result).toEqual({ toolsCreated: 1 })
   })
 
+  it("returns 404 when resyncing a spec outside the caller's org", async () => {
+    vi.mocked(repository.findOpenApiSpecById).mockResolvedValue(null)
+
+    const result = await resyncDashboardOpenApiSpec({
+      id: "spec_other_org",
+      organizationId: "org_1",
+      createdBy: "user_1",
+    })
+
+    expect(result).toEqual({ status: 404, error: "Spec not found" })
+  })
+
   it("deletes a spec and its tools", async () => {
-    const result = await deleteDashboardOpenApiSpec({ id: "spec_1" })
+    vi.mocked(repository.findOpenApiSpecById).mockResolvedValue({
+      id: "spec_1",
+      organizationId: "org_1",
+    } as never)
+    vi.mocked(repository.deleteOpenApiSpecById).mockResolvedValue({ count: 1 } as never)
+
+    const result = await deleteDashboardOpenApiSpec({ id: "spec_1", organizationId: "org_1" })
 
     expect(result).toEqual({ success: true })
+    expect(repository.findOpenApiSpecById).toHaveBeenCalledWith("spec_1", "org_1")
+    expect(repository.deleteOpenApiSpecById).toHaveBeenCalledWith("spec_1", "org_1")
+  })
+
+  it("returns 404 when deleting a spec outside the caller's org", async () => {
+    vi.mocked(repository.findOpenApiSpecById).mockResolvedValue(null)
+
+    const result = await deleteDashboardOpenApiSpec({
+      id: "spec_other_org",
+      organizationId: "org_1",
+    })
+
+    expect(result).toEqual({ status: 404, error: "Spec not found" })
+    expect(repository.deleteOpenApiSpecById).not.toHaveBeenCalled()
   })
 })

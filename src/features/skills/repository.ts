@@ -20,9 +20,20 @@ export async function findDashboardSkillsByOrganization(
   })
 }
 
-export async function findDashboardSkillById(id: string) {
-  return prisma.skill.findUnique({
-    where: { id },
+export async function findDashboardSkillById(
+  id: string,
+  organizationId: string | null
+) {
+  // Mirrors findDashboardSkillsByOrganization: global (null-org) skills are
+  // readable by everyone; org-owned skills only by the owning org.
+  return prisma.skill.findFirst({
+    where: {
+      id,
+      OR: [
+        { organizationId: null },
+        ...(organizationId ? [{ organizationId }] : []),
+      ],
+    },
     include: { _count: { select: { assistantSkills: true } } },
   })
 }
@@ -44,13 +55,26 @@ export async function createDashboardSkill(
 
 export async function updateDashboardSkill(
   id: string,
+  organizationId: string | null,
   data: Prisma.SkillUpdateInput
 ) {
-  return prisma.skill.update({ where: { id }, data })
+  // Writes are scoped strictly to the caller's org — global (null-org)
+  // platform skills are not user-editable.
+  const result = await prisma.skill.updateMany({
+    where: { id, organizationId },
+    data,
+  })
+  if (result.count === 0) {
+    return null
+  }
+  return prisma.skill.findUnique({ where: { id } })
 }
 
-export async function deleteDashboardSkill(id: string) {
-  return prisma.skill.delete({ where: { id } })
+export async function deleteDashboardSkill(
+  id: string,
+  organizationId: string | null
+) {
+  return prisma.skill.deleteMany({ where: { id, organizationId } })
 }
 
 export async function resolveDashboardSkillReadiness(params: {
