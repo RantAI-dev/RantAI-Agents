@@ -39,14 +39,20 @@ async function loadAssistantFull(assistantId: string) {
 }
 
 export async function authenticateV1Request(
-  authHeader: string | null
+  authHeader: string | null,
+  requestHeaders?: Headers
 ): Promise<AuthResult | { status: number; error: string }> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return { status: 401, error: "Missing or invalid Authorization header. Expected: Bearer rantai_sk_..." }
   }
 
   const key = authHeader.slice(7)
-  const result = await authenticateAgentApiKey(key)
+  // Client IP for ipWhitelist enforcement: first hop of x-forwarded-for, else x-real-ip.
+  const requestIp =
+    requestHeaders?.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    requestHeaders?.get("x-real-ip")?.trim() ||
+    undefined
+  const result = await authenticateAgentApiKey(key, requestIp)
   if (!result) {
     return { status: 401, error: "Invalid or expired API key" }
   }
@@ -310,6 +316,29 @@ function createSSEStreamResponse(
           ],
         })
         controller.enqueue(encoder.encode(`data: ${finalData}\n\n`))
+
+        // Terminal usage frame — OpenAI-compatible (empty choices + usage).
+        // Lets the credit tracker deduct REAL token counts instead of estimating.
+        // Wrapped so a usage-resolution failure can't break the client stream.
+        try {
+          const usage = await result.totalUsage
+          const usageData = JSON.stringify({
+            id: requestId,
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model: modelId,
+            choices: [],
+            usage: {
+              prompt_tokens: usage.inputTokens ?? 0,
+              completion_tokens: usage.outputTokens ?? 0,
+              total_tokens: usage.totalTokens ?? 0,
+            },
+          })
+          controller.enqueue(encoder.encode(`data: ${usageData}\n\n`))
+        } catch {
+          // Usage unavailable — client stream stays intact; tracker falls back.
+        }
+
         controller.enqueue(encoder.encode("data: [DONE]\n\n"))
         controller.close()
       } catch (err) {
@@ -338,6 +367,7 @@ async function createJsonResponse(
   modelId: string
 ): Promise<Response> {
   const text = await result.text
+  const usage = await result.totalUsage
 
   const body = {
     id: requestId,
@@ -352,9 +382,9 @@ async function createJsonResponse(
       },
     ],
     usage: {
-      prompt_tokens: 0,
-      completion_tokens: 0,
-      total_tokens: 0,
+      prompt_tokens: usage.inputTokens ?? 0,
+      completion_tokens: usage.outputTokens ?? 0,
+      total_tokens: usage.totalTokens ?? 0,
     },
   }
 
