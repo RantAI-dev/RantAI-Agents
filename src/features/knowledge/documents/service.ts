@@ -7,6 +7,7 @@ import {
   generateEmbeddings,
   detectFileType,
   storeChunks,
+  deleteChunksByDocumentId,
   getDocumentChunkCount,
   getDocumentChunkCounts,
   type Chunk,
@@ -675,6 +676,14 @@ export async function createKnowledgeDocumentForDashboard(params: {
     const embeddings = await generateEmbeddings(chunkTexts)
     const { getRagConfig } = await import("@/lib/rag/config")
     const embeddingModel = getRagConfig().embeddingModel
+    // Idempotency guard: storeChunks CREATEs chunks under the deterministic id
+    // `${documentId}_${i}`, which throws on a pre-existing id. Clearing any
+    // stale chunks first makes this step safe to re-run for the same
+    // document.id — the precondition a future ingest-retry endpoint/cron needs
+    // to recover a half-processed doc (e.g. a request killed by a deploy after
+    // some chunks were written). No-op on the happy path (fresh random id →
+    // zero existing chunks).
+    await deleteChunksByDocumentId(document.id)
     await storeChunks(document.id, chunks, embeddings, embeddingModel)
   } catch (err) {
     console.error(
