@@ -13,18 +13,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Loader2,
-  Sparkles,
-  X,
-  Wand2,
-  Minus,
-  Plus,
   Dices,
   ImagePlus,
-  Upload,
-  Music,
+  Loader2,
   Maximize2,
-} from "lucide-react"
+  Minus,
+  Music,
+  Plus,
+  Sparkles,
+  Upload,
+  Wand2,
+  X,
+} from "@/lib/icons"
 import { ParameterForm } from "./parameter-form"
 import { MediaPreviewDialog, type PreviewableAsset } from "./media-preview-dialog"
 import { useMediaStudioStore, type StoreJob } from "@/features/media/store"

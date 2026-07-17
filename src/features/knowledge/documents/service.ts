@@ -160,11 +160,17 @@ function toStringList(value: unknown): string[] {
 }
 
 function hasDocumentAccess(documentOrganizationId: string | null, organizationId: string | null) {
+  // Org-scoped doc: caller must be in the same org.
   if (documentOrganizationId) {
     return organizationId !== null && documentOrganizationId === organizationId
   }
-
-  return organizationId === null
+  // Null-org (personal/global) doc: any caller in any org context can access.
+  // This matches the listing query's permissiveness at repository.ts:16-18,
+  // which surfaces null-org docs to org-active callers via the OR clause.
+  // Previously this branch returned `organizationId === null`, which meant
+  // null-org docs were visible-but-unmutable from any org context — Files
+  // page DELETE returned 404 even though the row appeared in the list.
+  return true
 }
 
 function mapListItem(document: {

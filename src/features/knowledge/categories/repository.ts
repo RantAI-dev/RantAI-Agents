@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { aliveDocumentWhere } from "@/features/knowledge/documents/where-alive"
 
 export const DEFAULT_KNOWLEDGE_CATEGORIES = [
   { name: "LIFE_INSURANCE", label: "Life Insurance", color: "#3b82f6", isSystem: true },
@@ -91,6 +92,7 @@ export async function countDocumentsByCategoryName(
 ) {
   return prisma.document.count({
     where: {
+      ...aliveDocumentWhere,
       categories: { has: categoryName },
       ...(organizationId !== null && { organizationId }),
     },

@@ -23,7 +23,7 @@
 ### Test Database
 
 - Reuse existing `postgres:16` from Docker Compose
-- Separate database: `horizonlife_test` (via `TEST_DATABASE_URL`)
+- Separate database: `rantai_test` (via `TEST_DATABASE_URL`)
 - Schema sync: `prisma db push` in global setup
 - Cleanup: `TRUNCATE ... CASCADE` all tables in `afterEach` for integration tests
 

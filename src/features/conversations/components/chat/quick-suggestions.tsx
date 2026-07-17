@@ -12,12 +12,6 @@ interface QuickSuggestionsProps {
 
 // Default suggestions for different assistant types
 const SUGGESTIONS: Record<string, string[]> = {
-  // Insurance assistant
-  "horizon-insurance": [
-    "What life insurance options do you have?",
-    "Compare health insurance tiers",
-    "Tell me about home insurance coverage",
-  ],
   // General fallback
   default: [
     "What can you help me with?",

@@ -1,6 +1,7 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { prisma } from "@/lib/prisma"
+import { aliveDocumentRelation } from "@/features/knowledge/documents/where-alive"
 import { AVAILABLE_MODELS } from "@/lib/models"
 import { HOUSE_MODELS } from "@/lib/llm/house-models"
 import { buildWizardTools, filterKnownIds, type WizardDeps } from "./tools"
@@ -156,7 +157,9 @@ export async function streamAssistantWizard(args: StreamAssistantWizardArgs) {
         select: {
           id: true,
           name: true,
-          _count: { select: { documents: true } },
+          _count: {
+            select: { documents: aliveDocumentRelation },
+          },
         },
       })
       return groups.map((g) => ({

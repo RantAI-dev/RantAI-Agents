@@ -6,16 +6,17 @@ import { AnimatePresence, motion } from "framer-motion"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import {
-  Bot,
-  Workflow,
-  Pencil,
-  MessageSquare,
   ArrowRight,
-  Sparkles,
+  Bot,
+  FolderOpen,
   Loader2,
+  MessageSquare,
+  Pencil,
+  SendHorizontal,
+  Sparkles,
   Square,
+  Workflow,
 } from "@/lib/icons"
-import { SendHorizontal, FolderOpen } from "lucide-react"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

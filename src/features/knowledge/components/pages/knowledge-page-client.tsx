@@ -1,6 +1,8 @@
 "use client"
 
 import { useOrgFetch } from "@/hooks/use-organization"
+import { dispatchKnowledgeBasesUpdated } from "@/hooks/use-knowledge-bases"
+import { useToast } from "@/hooks/use-toast"
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
@@ -94,6 +96,7 @@ export default function KnowledgePageClient({
 }) {
   const orgFetch = useOrgFetch()
   const router = useRouter()
+  const { toast } = useToast()
 
   const [documents, setDocuments] = useState<Document[]>(initialDocuments)
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>(initialKnowledgeBases)
@@ -203,21 +206,38 @@ export default function KnowledgePageClient({
     fetchDocuments(initialSelectedKBId)
     fetchKnowledgeBases()
     // Trigger sidebar refresh by dispatching a custom event
-    window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+    dispatchKnowledgeBasesUpdated()
   }
 
   const handleDelete = async (id: string) => {
+    // Optimistic removal: snapshot first, drop the row immediately so the
+    // grid responds before the network round-trip. The KB count chip on the
+    // sidebar / Agent Builder reconciles via dispatchKnowledgeBasesUpdated()
+    // after the server confirms — ~one round-trip later, still faster than
+    // the old "wait for response, then update local list" sequence.
+    const prevDocuments = documents
+    const doomedTitle = documents.find((d) => d.id === id)?.title ?? "Document"
+    setDocuments((prev) => prev.filter((doc) => doc.id !== id))
     try {
       const response = await orgFetch(`/api/dashboard/files/${id}`, {
         method: "DELETE",
       })
-      if (response.ok) {
-        setDocuments((prev) => prev.filter((doc) => doc.id !== id))
-        fetchKnowledgeBases()
-        window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
       }
+      fetchKnowledgeBases()
+      dispatchKnowledgeBasesUpdated()
     } catch (error) {
+      // Rollback: put the row back, tell the user why their optimistic
+      // delete vanished and then reappeared.
       console.error("Failed to delete document:", error)
+      setDocuments(prevDocuments)
+      toast({
+        title: "Couldn't delete",
+        description: `${doomedTitle} was restored — ${
+          error instanceof Error ? error.message : "network error, try again."
+        }`,
+      })
     }
   }
 
@@ -235,7 +255,7 @@ export default function KnowledgePageClient({
     setEditingDocumentId(null)
     fetchDocuments(initialSelectedKBId)
     fetchKnowledgeBases()
-    window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+    dispatchKnowledgeBasesUpdated()
   }
 
   // Toggle category filter
@@ -319,7 +339,7 @@ export default function KnowledgePageClient({
       if (response.ok) {
         router.push("/dashboard/files")
         fetchKnowledgeBases()
-        window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+        dispatchKnowledgeBasesUpdated()
       }
     } catch (error) {
       console.error("Failed to delete knowledge base:", error)
@@ -350,7 +370,7 @@ export default function KnowledgePageClient({
       if (response.ok) {
         setKbDialogOpen(false)
         fetchKnowledgeBases()
-        window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+        dispatchKnowledgeBasesUpdated()
       }
     } catch (error) {
       console.error("Failed to save knowledge base:", error)
@@ -636,7 +656,7 @@ export default function KnowledgePageClient({
                 setSelectionMode(false)
                 fetchDocuments(initialSelectedKBId)
                 fetchKnowledgeBases()
-                window.dispatchEvent(new CustomEvent("knowledge-bases-updated"))
+                dispatchKnowledgeBasesUpdated()
               }}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >

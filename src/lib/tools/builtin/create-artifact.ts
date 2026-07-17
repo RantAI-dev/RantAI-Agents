@@ -11,6 +11,8 @@ import {
   validateArtifactContent,
   formatValidationError,
 } from "./_validate-artifact"
+import type { ArtifactFailureReason } from "./_artifact-failure"
+import { validateArtifactTitle } from "./_validate-title"
 
 /** Maximum artifact content size: 512 KB */
 const MAX_ARTIFACT_CONTENT_BYTES = 512 * 1024
@@ -45,6 +47,26 @@ export const createArtifactTool: ToolDefinition = {
     const title = params.title as string
     const language = (params.language as string) || undefined
 
+    // Validate title — reject generic LLM-lazy titles ("Snippet", "Untitled",
+    // single chars, empty). The SDK retry loop re-issues with the error in
+    // hand, prompting the model to pick a descriptive name. Surfaces as
+    // failureReason: "validation" so the client treats this like other
+    // content-quality issues (artifact discarded, not kept ephemerally).
+    const titleCheck = validateArtifactTitle(title)
+    if (!titleCheck.ok) {
+      return {
+        id,
+        title,
+        type,
+        content,
+        language,
+        persisted: false,
+        failureReason: "validation" satisfies ArtifactFailureReason,
+        error: titleCheck.reason,
+        validationErrors: [titleCheck.reason],
+      }
+    }
+
     // Validate content size
     const contentBytes = Buffer.byteLength(content, "utf-8")
     if (contentBytes > MAX_ARTIFACT_CONTENT_BYTES) {
@@ -55,6 +77,7 @@ export const createArtifactTool: ToolDefinition = {
         content,
         language,
         persisted: false,
+        failureReason: "size" satisfies ArtifactFailureReason,
         error: `Artifact content exceeds maximum size (${Math.round(contentBytes / 1024)}KB > ${MAX_ARTIFACT_CONTENT_BYTES / 1024}KB)`,
       }
     }
@@ -77,6 +100,7 @@ export const createArtifactTool: ToolDefinition = {
         content,
         language,
         persisted: false,
+        failureReason: "canvas-mode-mismatch" satisfies ArtifactFailureReason,
         error: `Canvas mode is locked to "${canvasMode}" but you called create_artifact with type "${type}". Re-issue the call with type="${canvasMode}". The user explicitly chose this type — do not switch.`,
         validationErrors: [
           `Wrong artifact type: expected "${canvasMode}", got "${type}".`,
@@ -94,6 +118,7 @@ export const createArtifactTool: ToolDefinition = {
         content,
         language,
         persisted: false,
+        failureReason: "missing-language" satisfies ArtifactFailureReason,
         error:
           'application/code artifacts require a `language` parameter (e.g. "python", "typescript", "rust"). Re-issue the call with the language set — it controls syntax highlighting and the download file extension.',
         validationErrors: ["Missing required `language` parameter for application/code."],
@@ -116,6 +141,7 @@ export const createArtifactTool: ToolDefinition = {
         content,
         language,
         persisted: false,
+        failureReason: "validation" satisfies ArtifactFailureReason,
         error: formatValidationError(type, validation),
         validationErrors: validation.errors,
       }
@@ -128,6 +154,7 @@ export const createArtifactTool: ToolDefinition = {
 
     // Persist to S3 + Document (knowledge system)
     let persisted = true
+    let persistenceError: string | undefined
     try {
       const ext = getArtifactExtension(type)
       const s3Key = S3Paths.artifact(
@@ -172,9 +199,25 @@ export const createArtifactTool: ToolDefinition = {
         console.error("[create_artifact] Background indexing error:", err)
       )
     } catch (err) {
-      // Log but don't fail the tool — artifact still works in-memory
+      // Log but don't fail the tool — artifact still works in-memory.
+      // Capture the message so the client can show "Save failed: <reason>".
       console.error("[create_artifact] Persistence error:", err)
       persisted = false
+      persistenceError = err instanceof Error ? err.message : String(err)
+    }
+
+    if (!persisted) {
+      return {
+        id,
+        title,
+        type,
+        content: finalContent,
+        language,
+        persisted: false,
+        failureReason: "persistence" satisfies ArtifactFailureReason,
+        error: `Artifact validated but failed to save (storage backend error: ${persistenceError ?? "unknown"}). The content is shown in the panel marked "Not saved" and can be retried.`,
+        ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),
+      }
     }
 
     return {
@@ -183,7 +226,7 @@ export const createArtifactTool: ToolDefinition = {
       type,
       content: finalContent,
       language,
-      persisted,
+      persisted: true,
       ...(validationWarnings.length > 0 ? { warnings: validationWarnings } : {}),
     }
   },

@@ -798,11 +798,6 @@ enum RunStatus {
   FAILED
 }
 
-// ─── Insurance models removed in Fase 8 ─────────────────────
-// InsuranceCustomer, InsurancePolicy, Provider, Claim models
-// have been migrated to HorizonLife-Demo (merged into Customer/Policy models).
-// RantAI-Agents now serves as pure workflow service provider only.
-
 // ─── Skills System (OpenClaw / Custom) ──────────────────────
 
 model Skill {
