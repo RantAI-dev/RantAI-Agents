@@ -1,6 +1,7 @@
 import "server-only"
 import { generateText, stepCountIs, tool, zodSchema } from "ai"
 
+import { findAssistantById } from "@/features/assistants/core/repository"
 import {
   addDashboardChatSessionMessages,
   deleteDashboardChatSessionMessages,
@@ -60,6 +61,16 @@ type ServiceError = { status: number; error: string }
  */
 const DEFAULT_MODEL = "openai/gpt-4o-mini"
 const MAX_OUTPUT_TOKENS = 1024
+/** Batas atas token keluaran untuk mobile — mencegah modelConfig.maxTokens yang
+ * besar memicu limit kredit provider (mis. permintaan 65k token). */
+const HARD_MAX_OUTPUT_TOKENS = 4096
+const GENERIC_SYSTEM =
+  "You are RantAI, a helpful assistant. Answer clearly and concisely."
+
+/** Ambil angka valid dari nilai modelConfig, atau undefined. */
+function num(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
 
 /**
  * Bangun tools bawaan sesuai toggle dari toolbar mobile. Memakai ulang
@@ -122,7 +133,16 @@ async function runGeneration(params: {
     options: params.options,
   })
 
-  let system = "You are RantAI, a helpful assistant. Answer clearly and concisely."
+  // Muat konfigurasi agent dari sesi: persona (systemPrompt), model, dan
+  // parameter (temperature dll). Bila agent tak ditemukan, pakai default umum.
+  const assistant = await findAssistantById(params.assistantId).catch(() => null)
+  let system = assistant?.systemPrompt?.trim() ? assistant.systemPrompt : GENERIC_SYSTEM
+  const modelId = assistant?.model || DEFAULT_MODEL
+  const modelConfig =
+    assistant?.modelConfig && typeof assistant.modelConfig === "object"
+      ? (assistant.modelConfig as Record<string, unknown>)
+      : null
+
   if (params.options.enabledSkillIds?.length) {
     const skillPrompt = await resolveSkillsForAssistant(
       params.assistantId,
@@ -137,12 +157,25 @@ async function runGeneration(params: {
     })
   }
 
+  const temperature = num(modelConfig?.temperature)
+  const topP = num(modelConfig?.topP)
+  const presencePenalty = num(modelConfig?.presencePenalty)
+  const frequencyPenalty = num(modelConfig?.frequencyPenalty)
+  const maxTokens = Math.min(
+    num(modelConfig?.maxTokens) ?? MAX_OUTPUT_TOKENS,
+    HARD_MAX_OUTPUT_TOKENS
+  )
+
   try {
     const result = await generateText({
-      model: getChatProvider()(resolveModelId(DEFAULT_MODEL)),
+      model: getChatProvider()(resolveModelId(modelId)),
       system,
       messages: params.history,
-      maxTokens: MAX_OUTPUT_TOKENS,
+      maxOutputTokens: maxTokens,
+      ...(temperature != null && { temperature }),
+      ...(topP != null && { topP }),
+      ...(presencePenalty != null && { presencePenalty }),
+      ...(frequencyPenalty != null && { frequencyPenalty }),
       // Canvas perlu langkah ekstra: buat artifact lalu simpulkan hasilnya.
       ...(tools ? { tools, stopWhen: stepCountIs(params.options.canvasMode ? 8 : 5) } : {}),
     })
