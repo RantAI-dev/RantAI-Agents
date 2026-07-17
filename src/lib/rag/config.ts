@@ -1,3 +1,5 @@
+import { getKbOverrides } from "./config-overrides";
+
 export interface RagConfig {
   extractPrimary: string;
   extractFallback: string;
@@ -97,6 +99,16 @@ function parseIntEnv(key: string, fallback: number): number {
 }
 
 export function getRagConfig(): RagConfig {
+  const overrides = getKbOverrides();
+  return {
+    ...envRagConfig(),
+    ...overrides,
+  };
+}
+
+/** Env + built-in defaults only — what applies when no DB override exists.
+ *  Exposed separately so the admin UI can show each field's effective source. */
+export function envRagConfig(): RagConfig {
   return {
     extractPrimary: process.env.KB_EXTRACT_PRIMARY || DEFAULTS.extractPrimary,
     extractFallback: process.env.KB_EXTRACT_FALLBACK || DEFAULTS.extractFallback,

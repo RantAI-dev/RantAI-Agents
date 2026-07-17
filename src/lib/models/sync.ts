@@ -194,6 +194,9 @@ export async function syncModelsFromOpenRouter(): Promise<SyncResult> {
       id: { notIn: syncedIds },
       isActive: true,
       lastSeenAt: { lt: graceCutoff },
+      // Only OpenRouter-synced rows: discovered/manual models from managed
+      // providers are never in the OpenRouter list and must not be culled.
+      source: "openrouter_sync",
     },
     data: { isActive: false },
   })

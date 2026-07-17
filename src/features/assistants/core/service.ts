@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client"
 import { canEdit, canManage } from "@/lib/organization"
 import { DEFAULT_MODEL_ID, isValidModelAsync } from "@/lib/models"
+import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import {
   createAssistant,
   deleteAssistantById,
@@ -135,7 +136,7 @@ export async function createAssistantForUser(params: {
     return { status: 403, error: "Insufficient permissions" }
   }
 
-  const selectedModel = params.input.model ?? DEFAULT_MODEL_ID
+  const selectedModel = params.input.model ?? getPlatformDefaultModel(DEFAULT_MODEL_ID)
   if (!(await isValidModelAsync(selectedModel))) {
     return { status: 400, error: "Invalid model selected" }
   }

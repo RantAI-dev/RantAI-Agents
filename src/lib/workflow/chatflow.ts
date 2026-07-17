@@ -1,6 +1,7 @@
 import { streamText } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
+import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import type { Node, Edge } from "@xyflow/react"
 import type { Workflow } from "@prisma/client"
 import { compileWorkflow, createStepLog } from "./compiler"
@@ -214,7 +215,7 @@ export async function executeChatflow(
     resolvedSystemPrompt = (resolvedSystemPrompt || "") + followUpInstruction
   }
 
-  const model = getChatProvider()(resolveModelId(streamNodeData.model || DEFAULT_MODEL_ID))
+  const model = getChatProvider()(resolveModelId(streamNodeData.model || getPlatformDefaultModel(DEFAULT_MODEL_ID)))
 
   // Capture RAG sources from any RAG_SEARCH node outputs
   const ragSources: Array<{ title: string; section: string | null }> = []
@@ -253,7 +254,7 @@ export async function executeChatflow(
     { nodeId: streamOutputNode.id, nodeType: NodeType.STREAM_OUTPUT, data: streamNodeData, successors: [], predecessors: [], sourceHandles: {} },
     "success",
     prompt,
-    { streaming: true, model: streamNodeData.model || DEFAULT_MODEL_ID }
+    { streaming: true, model: streamNodeData.model || getPlatformDefaultModel(DEFAULT_MODEL_ID) }
   )
   stepLogs.push(streamStepLog)
 

@@ -11,6 +11,7 @@ import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { z } from "zod"
 import { updateUserProfile } from "@/lib/memory"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
+import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 
 const SOURCES_DELIMITER = "\n\n---SOURCES---\n"
 
@@ -55,7 +56,7 @@ export async function extractAndSaveFacts(
     if (userMessage.length < 5 || assistantResponse.length < 10) return
 
     const { object } = await generateObject({
-      model: getChatProvider()(resolveModelId(DEFAULT_MODEL_ID)),
+      model: getChatProvider()(resolveModelId(getPlatformDefaultModel(DEFAULT_MODEL_ID))),
       schema: extractionSchema,
       prompt: `Extract facts, preferences, and entities from this conversation.
 
