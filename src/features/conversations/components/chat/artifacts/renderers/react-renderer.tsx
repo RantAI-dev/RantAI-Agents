@@ -277,6 +277,7 @@ ${fontLinks}
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/recharts@2/umd/Recharts.js"><\/script>
 <script>window.react = window.React;<\/script>
 <script crossorigin src="https://unpkg.com/lucide-react@0.454.0/dist/umd/lucide-react.js"><\/script>

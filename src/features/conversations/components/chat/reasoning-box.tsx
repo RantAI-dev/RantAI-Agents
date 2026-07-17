@@ -1,7 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, ChevronRight, Brain } from "lucide-react"
+import {
+  Brain,
+  ChevronDown,
+  ChevronRight,
+} from "@/lib/icons"
 import { cn } from "@/lib/utils"
 
 interface ReasoningBoxProps {

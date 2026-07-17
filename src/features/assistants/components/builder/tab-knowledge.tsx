@@ -6,18 +6,18 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-
-interface KnowledgeGroup {
-  id: string
-  name: string
-  color: string | null
-  documentCount: number
-}
+import { useKnowledgeBases, type KnowledgeBase } from "@/hooks/use-knowledge-bases"
 
 interface TabKnowledgeProps {
   useKnowledgeBase: boolean
   knowledgeBaseGroupIds: string[]
-  initialKnowledgeGroups: KnowledgeGroup[]
+  /**
+   * Server-rendered KB list passed in by the Agent Builder page hydration so
+   * the first paint shows the correct counts; thereafter useKnowledgeBases
+   * keeps the local copy in sync with sidebar / Files page mutations via the
+   * `knowledge-bases-updated` event.
+   */
+  initialKnowledgeGroups: KnowledgeBase[]
   onUseKnowledgeBaseChange: (v: boolean) => void
   onKnowledgeBaseGroupIdsChange: (ids: string[]) => void
 }
@@ -29,7 +29,9 @@ export function TabKnowledge({
   onUseKnowledgeBaseChange,
   onKnowledgeBaseGroupIdsChange,
 }: TabKnowledgeProps) {
-  const groups = initialKnowledgeGroups
+  const { knowledgeBases: groups } = useKnowledgeBases({
+    groups: initialKnowledgeGroups,
+  })
 
   const toggleGroup = (groupId: string) => {
     const current = knowledgeBaseGroupIds || []

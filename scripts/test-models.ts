@@ -76,7 +76,7 @@ Coverage Details:
 - Pediatric therapy (speech, occupational): $25 copay
 `;
 
-const SYSTEM_PROMPT = `You are a friendly and knowledgeable insurance assistant for HorizonLife, a trusted insurance company.
+const SYSTEM_PROMPT = `You are a friendly and knowledgeable insurance assistant for a trusted insurance company.
 
 Guidelines:
 - Be helpful, friendly, and professional

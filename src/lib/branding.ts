@@ -9,10 +9,13 @@ export interface BrandConfig {
   companyName: string
   companyUrl: string
 
-  // Logos
+  // Logos.
+  // logoMain is the wide mark, for surfaces that give it free width (w-auto).
+  // logoMainDark is the same mark recoloured for dark surfaces — the default one
+  // is near-black navy and disappears against them.
+  // logoIcon is a square tile, for the fixed-square slots (sidebar, about).
   logoMain: string
-  /** Optional logo variant for dark surfaces (white mark). */
-  logoMainDark?: string
+  logoMainDark: string
   logoIcon: string
   logoIconDark?: string
 
@@ -57,10 +60,9 @@ const configs: Record<ProductMode, BrandConfig> = {
     companyName: "RantAI",
     companyUrl: "https://rantai.dev",
 
-    logoMain: "/logo/logo-rantai.png",
-    logoMainDark: "/logo/logo-rantai-dark.png",
-    logoIcon: "/logo/logo-rantai.png",
-    logoIconDark: "/logo/logo-rantai-dark.png",
+    logoMain: "/logo/rantai-agents-light.svg",
+    logoMainDark: "/logo/rantai-agents-dark.svg",
+    logoIcon: "/logo/rantai-agents-light.svg",
 
     favicon16: "/logo/favicon-16x16.png",
     favicon16Dark: "/logo/dark/favicon-16x16.png",
@@ -102,6 +104,8 @@ const configs: Record<ProductMode, BrandConfig> = {
     companyUrl: "https://nexusquantum.id",
 
     logoMain: "/nexus/nq-logo.png",
+    // No dark-surface variant ships for this brand; reuse the main mark.
+    logoMainDark: "/nexus/nq-logo.png",
     logoIcon: "/nexus/nqr-icon.png",
 
     favicon16: "/nexus/favicon-16x16.png",
