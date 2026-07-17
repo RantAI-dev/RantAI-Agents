@@ -1,6 +1,7 @@
 import { streamText } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { DEFAULT_MODEL_ID } from "@/lib/models"
+import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import type { WorkflowNodeData, StreamOutputNodeData } from "../types"
 import type { ExecutionContext } from "../engine"
 import { buildTemplateContext } from "../engine"
@@ -22,7 +23,7 @@ export async function executeStreamOutput(
   const nodeData = data as StreamOutputNodeData
   const tctx = buildTemplateContext(data.label, data.nodeType, input, context)
 
-  const model = getChatProvider()(resolveModelId(nodeData.model || DEFAULT_MODEL_ID))
+  const model = getChatProvider()(resolveModelId(nodeData.model || getPlatformDefaultModel(DEFAULT_MODEL_ID)))
 
   // Resolve system prompt through template engine
   const systemPrompt = nodeData.systemPrompt

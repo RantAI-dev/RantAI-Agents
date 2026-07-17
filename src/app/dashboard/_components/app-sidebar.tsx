@@ -27,6 +27,7 @@ import {
   Plus,
   Search,
   Settings,
+  Shield,
   Sparkles,
   Star,
   Store,
@@ -398,6 +399,11 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
     if (item.feature === "MEDIA") return isMediaEnabled
     return true
   })
+
+  // Platform administration — only for role=ADMIN (superadmin) accounts.
+  if (session?.user?.role === "ADMIN") {
+    mainNavItems.push({ title: "Admin", url: "/dashboard/admin", icon: Shield, feature: null })
+  }
 
   // Knowledge Base state — fetch + auto-refresh on `knowledge-bases-updated`
   // events is owned by the shared hook so the Agent Builder Knowledge tab and

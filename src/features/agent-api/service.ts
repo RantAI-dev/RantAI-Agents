@@ -1,6 +1,7 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { DEFAULT_MODEL_ID, isValidModelAsync } from "@/lib/models"
+import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import { resolveToolsForAssistant } from "@/lib/tools"
 import { buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
 import {
@@ -132,7 +133,7 @@ export async function runV1ChatCompletion(
   systemPrompt += OUTPUT_HYGIENE_INSTRUCTION
 
   const requestedModel = modelOverride || assistant.model
-  const modelId = (await isValidModelAsync(requestedModel)) ? requestedModel : DEFAULT_MODEL_ID
+  const modelId = (await isValidModelAsync(requestedModel)) ? requestedModel : getPlatformDefaultModel(DEFAULT_MODEL_ID)
   const modelConfig = (assistant.modelConfig && typeof assistant.modelConfig === "object")
     ? assistant.modelConfig as Record<string, unknown>
     : null

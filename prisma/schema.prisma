@@ -22,6 +22,10 @@ model User {
   role          Role           @default(USER)
   status        String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE (for live chat)
   avatarS3Key   String? // S3 key for avatar image
+  // Platform-admin suspension — distinct from `status` (live-chat presence).
+  // suspendedAt != null → login blocked and sessions rejected.
+  suspendedAt   DateTime?
+  lastActiveAt  DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   conversations Conversation[]
@@ -1387,12 +1391,67 @@ model LlmModel {
   inputModalities  String[] @default([]) // from OpenRouter architecture.input_modalities
   rawData          Json? // full OpenRouter response for future use
   lastSeenAt       DateTime @default(now()) // last time seen in OpenRouter API
+  // Admin model management: which LlmProvider serves this model (null = legacy
+  // OpenRouter via env), how it entered the catalog, and an admin on/off switch
+  // (independent of isActive, which is the OpenRouter-sync soft-delete).
+  providerId       String?
+  llmProvider      LlmProvider? @relation(fields: [providerId], references: [id], onDelete: SetNull)
+  source           String   @default("openrouter_sync") // "openrouter_sync" | "discovered" | "manual"
+  enabled          Boolean  @default(true)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   @@index([provider])
   @@index([isFree, hasToolCalling])
   @@index([isActive])
+  @@index([providerId])
+}
+
+// Chat/LLM upstream endpoints managed from the admin UI (global per-deployment).
+// type "openrouter" keeps the existing OpenRouter wiring (baseUrl null);
+// type "openai_compatible" covers vLLM/Ollama/TGI/any /v1 endpoint.
+model LlmProvider {
+  id              String     @id @default(cuid())
+  name            String
+  type            String // "openrouter" | "openai_compatible"
+  baseUrl         String?
+  encryptedApiKey String? // AES-256-GCM via lib/workflow/credentials.ts — never returned by APIs
+  enabled         Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  models          LlmModel[]
+}
+
+// Deployment-wide scalar settings (e.g. "kb_config", "default_chat_model").
+// DB value overrides env; env remains the fallback so existing deploys work
+// with zero migration steps.
+model PlatformSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// Who did what in the admin pages (suspensions, role changes, provider/key
+// edits, KB config changes). Append-only. Shape matches the cloud repo's
+// existing AdminAuditLog so shared admin services work in both builds.
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorId     String
+  actorEmail  String
+  action      String // e.g. "user.suspend", "provider.update", "kb.update"
+  targetType  String // "user" | "provider" | "model" | "setting"
+  targetId    String
+  targetLabel String?
+  reason      String
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetId])
+  @@index([targetType])
+  @@index([action])
+  @@index([createdAt])
 }
 
 enum MediaModality {

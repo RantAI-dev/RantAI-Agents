@@ -23,7 +23,8 @@ export async function GET(req: Request) {
     const freeOnly = url.searchParams.get("free") === "true"
     const toolsOnly = url.searchParams.get("tools") === "true"
 
-    const where: Record<string, unknown> = { isActive: true }
+    // isActive = OpenRouter-sync liveness; enabled = admin on/off switch.
+    const where: Record<string, unknown> = { isActive: true, enabled: true }
     if (freeOnly) where.isFree = true
     if (toolsOnly) where.hasToolCalling = true
 

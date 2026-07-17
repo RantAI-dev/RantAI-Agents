@@ -11,6 +11,7 @@ import type { HybridSearchStats } from "@/lib/rag/hybrid-search"
 import { retrieveR3FContext } from "@/lib/rag/r3f-retriever"
 import { searchByDocumentIds } from "@/lib/rag/vector-store"
 import { DEFAULT_MODEL_ID, isValidModelAsync, getModelByIdAsync } from "@/lib/models"
+import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import { resolveToolsForAssistant, resolveToolsByNames } from "@/lib/tools"
 import {
   LANGUAGE_INSTRUCTION,
@@ -289,7 +290,7 @@ export async function runChat(params: {
     // Priority: database assistant > custom prompt from request > fallback generic
     let systemPrompt: string
     let useKnowledgeBase: boolean
-    let modelId: string = DEFAULT_MODEL_ID
+    let modelId: string = getPlatformDefaultModel(DEFAULT_MODEL_ID)
     let assistantModelConfig: Record<string, unknown> | null = null
     let assistantGuardRails: Record<string, unknown> | null = null
     let assistantOrganizationId: string | null = null
@@ -307,7 +308,7 @@ export async function runChat(params: {
           useKnowledgeBase =
             useKnowledgeBaseParam ??
             (knowledgeBaseGroupsRequested ? true : dbAssistant.useKnowledgeBase)
-          modelId = dbAssistant.model || DEFAULT_MODEL_ID
+          modelId = dbAssistant.model || getPlatformDefaultModel(DEFAULT_MODEL_ID)
           // Read per-assistant memory config (null = all enabled)
           if (dbAssistant.memoryConfig && typeof dbAssistant.memoryConfig === "object") {
             const mc = dbAssistant.memoryConfig as Record<string, unknown>
@@ -374,7 +375,7 @@ export async function runChat(params: {
     // Validate model ID (DB-aware: synced models are valid, not just the static list)
     if (!(await isValidModelAsync(modelId))) {
       console.warn(`[Chat API] Invalid model ID "${modelId}", falling back to default`);
-      modelId = DEFAULT_MODEL_ID;
+      modelId = getPlatformDefaultModel(DEFAULT_MODEL_ID);
     }
 
     debug("System prompt preview:", systemPrompt.substring(0, 60) + "...");

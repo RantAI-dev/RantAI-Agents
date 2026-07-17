@@ -1,7 +1,37 @@
 import { PrismaClient } from "@prisma/client"
 import { hash } from "bcryptjs"
+import { randomBytes } from "crypto"
 
 const prisma = new PrismaClient()
+
+// First-superadmin bootstrap for real deployments: SUPERADMIN_EMAIL (+ optional
+// SUPERADMIN_PASSWORD) seeds an ADMIN account. If the password env is missing a
+// random one is generated and printed ONCE — change it after first login.
+// Idempotent: an existing user is promoted to ADMIN but their password is only
+// overwritten when SUPERADMIN_PASSWORD is explicitly set.
+async function seedSuperadmin() {
+  const email = process.env.SUPERADMIN_EMAIL
+  if (!email) return
+  const explicitPassword = process.env.SUPERADMIN_PASSWORD
+  const password = explicitPassword || randomBytes(12).toString("base64url")
+  const passwordHash = await hash(password, 12)
+  const existing = await prisma.user.findUnique({ where: { email } })
+  await prisma.user.upsert({
+    where: { email },
+    update: { role: "ADMIN", ...(explicitPassword ? { passwordHash } : {}) },
+    create: {
+      email,
+      name: process.env.SUPERADMIN_NAME || "Superadmin",
+      passwordHash,
+      status: "OFFLINE",
+      role: "ADMIN",
+    },
+  })
+  console.log(`\n[Superadmin]\n  ✓ ${email} (ADMIN)`)
+  if (!existing && !explicitPassword) {
+    console.log(`  Generated password (shown ONCE — change after first login): ${password}`)
+  }
+}
 
 
 // All built-in assistants — single source of truth for seeding
@@ -351,36 +381,47 @@ async function main() {
   // FORCE_RESEED: clean up memory + assistants BEFORE seeding
   await forceReseedCleanup()
 
-  // Create test users
-  const passwordHash = await hash("password123", 12)
+  // Env-driven superadmin (real deployments); demo users only outside
+  // production unless SEED_DEMO_USERS=true forces them.
+  await seedSuperadmin()
 
-  const user1 = await prisma.user.upsert({
-    where: { email: "agent@rantai.com" },
-    update: { role: "ADMIN" },
-    create: {
-      email: "agent@rantai.com",
-      name: "Sarah Johnson",
-      passwordHash,
-      status: "OFFLINE",
-      role: "ADMIN",
-    },
-  })
+  const seedDemoUsers =
+    process.env.SEED_DEMO_USERS === "true" ||
+    (process.env.SEED_DEMO_USERS !== "false" && process.env.NODE_ENV !== "production")
 
-  const user2 = await prisma.user.upsert({
-    where: { email: "admin@rantai.com" },
-    update: { role: "ADMIN" },
-    create: {
-      email: "admin@rantai.com",
-      name: "Michael Chen",
-      passwordHash,
-      status: "OFFLINE",
-      role: "ADMIN",
-    },
-  })
+  if (seedDemoUsers) {
+    const passwordHash = await hash("password123", 12)
 
-  console.log("[Users]")
-  console.log(`  ${user1.name} (${user1.email}) — ${user1.role}`)
-  console.log(`  ${user2.name} (${user2.email}) — ${user2.role}`)
+    const user1 = await prisma.user.upsert({
+      where: { email: "agent@rantai.com" },
+      update: { role: "ADMIN" },
+      create: {
+        email: "agent@rantai.com",
+        name: "Sarah Johnson",
+        passwordHash,
+        status: "OFFLINE",
+        role: "ADMIN",
+      },
+    })
+
+    const user2 = await prisma.user.upsert({
+      where: { email: "admin@rantai.com" },
+      update: { role: "ADMIN" },
+      create: {
+        email: "admin@rantai.com",
+        name: "Michael Chen",
+        passwordHash,
+        status: "OFFLINE",
+        role: "ADMIN",
+      },
+    })
+
+    console.log("[Users]")
+    console.log(`  ${user1.name} (${user1.email}) — ${user1.role}`)
+    console.log(`  ${user2.name} (${user2.email}) — ${user2.role}`)
+  } else {
+    console.log("[Users]\n  demo users skipped (production; set SEED_DEMO_USERS=true to force)")
+  }
 
   // Seed Built-in Assistants
   await seedAssistants()

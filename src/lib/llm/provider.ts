@@ -2,6 +2,7 @@ import "server-only"
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { isHouseModel, houseBackendModel } from "./house-models"
+import { getProviderRegistry, type ManagedProvider } from "./provider-registry"
 
 // MiniMax powers two SEPARATE things here; don't conflate them:
 //   1. House models (white-labeled, e.g. "rantai/swift") — a PRODUCTION feature.
@@ -42,8 +43,16 @@ function createMiniMax() {
   })
 }
 
-function createOpenRouterClient() {
-  return createOpenRouter({ apiKey: process.env.OPENROUTER_API_KEY || "" })
+function createOpenRouterClient(apiKey?: string) {
+  return createOpenRouter({ apiKey: apiKey || process.env.OPENROUTER_API_KEY || "" })
+}
+
+function createManagedClient(p: ManagedProvider) {
+  return createOpenAICompatible({
+    name: p.name,
+    baseURL: p.baseUrl || "",
+    apiKey: p.apiKey || "",
+  })
 }
 
 /**
@@ -64,8 +73,14 @@ export function getChatProvider() {
     return (_id: string) => minimax(MINIMAX_DEV_GLOBAL_MODEL)
   }
 
-  const openrouter = createOpenRouterClient()
+  // Admin-managed providers (LlmProvider table): a model claimed by a managed
+  // openai_compatible provider is served from that endpoint with its stored
+  // key; a managed openrouter-type provider's key overrides the env key.
+  // Empty registry (no rows) → exact pre-existing env behavior.
+  const registry = getProviderRegistry()
+  const openrouter = createOpenRouterClient(registry.openrouter?.apiKey ?? undefined)
   let minimax: ReturnType<typeof createMiniMax> | null = null
+  const managedClients = new Map<string, ReturnType<typeof createManagedClient>>()
 
   return (modelId: string) => {
     if (isHouseModel(modelId)) {
@@ -76,6 +91,18 @@ export function getChatProvider() {
       }
       minimax ??= createMiniMax()
       return minimax(houseBackendModel(modelId))
+    }
+    const managedId = registry.modelProvider.get(modelId)
+    if (managedId) {
+      const p = registry.providers.get(managedId)
+      if (p && p.type === "openai_compatible" && p.baseUrl) {
+        let client = managedClients.get(p.id)
+        if (!client) {
+          client = createManagedClient(p)
+          managedClients.set(p.id, client)
+        }
+        return client(modelId)
+      }
     }
     return openrouter(modelId)
   }

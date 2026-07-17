@@ -195,6 +195,7 @@ export {
   UserCheck,
   UserCircle,
   UserPlus,
+  UserX,
   Users,
   Variable,
   Wallet,
