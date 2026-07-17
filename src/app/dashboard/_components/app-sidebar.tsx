@@ -86,7 +86,7 @@ interface AppSidebarProps {
   onSearchOpen?: () => void
 }
 
-type FeatureKey = "AGENT" | "DIGITAL_EMPLOYEES" | null
+type FeatureKey = "AGENT" | "DIGITAL_EMPLOYEES" | "MEDIA" | null
 
 interface NavItem {
   title: string
@@ -109,7 +109,7 @@ const allNavItems: NavItem[] = [
   { title: "Digital Employees", url: "/dashboard/digital-employees", icon: Users, feature: "DIGITAL_EMPLOYEES" },
 
   { title: "Live Chat", url: "/dashboard/agent", icon: Headphones, feature: "AGENT" },
-  { title: "Media Studio", url: "/dashboard/media", icon: Clapperboard, feature: null },
+  { title: "Media Studio", url: "/dashboard/media", icon: Clapperboard, feature: "MEDIA" },
   // Cloud-only: full navigation OUT of the dashboard into the standalone studio.
   ...(isCloudEdition
     ? [{ title: "Design", url: "/design", icon: Sparkles, feature: null } as NavItem]
@@ -387,7 +387,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { isAgentEnabled, isDigitalEmployeesEnabled } = useFeaturesContext()
+  const { isAgentEnabled, isDigitalEmployeesEnabled, isMediaEnabled } = useFeaturesContext()
 
   const { avatarUrl, fetchProfile } = useProfileStore()
 
@@ -397,6 +397,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
   const mainNavItems = allNavItems.filter((item) => {
     if (item.feature === "AGENT") return isAgentEnabled
     if (item.feature === "DIGITAL_EMPLOYEES") return isDigitalEmployeesEnabled
+    if (item.feature === "MEDIA") return isMediaEnabled
     return true
   })
 

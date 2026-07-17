@@ -149,6 +149,9 @@ export async function runV1ChatCompletion(
   const lastUserMsg = [...input.messages].reverse().find((m) => m.role === "user")
   const rawUserQuery = lastUserMsg?.content || ""
 
+  // Sources surfaced back to the API client so an external frontend can render
+  // reference cards ("which documents did the answer draw on").
+  let ragSources: Array<{ title: string; section: string | null }> = []
   if (assistant.useKnowledgeBase && rawUserQuery) {
     try {
       const groupIds = assistant.knowledgeBaseGroupIds.length > 0
@@ -193,6 +196,7 @@ export async function runV1ChatCompletion(
       if (hybridResult.context) {
         const formattedContext = formatHybridContextForPrompt(hybridResult)
         systemPrompt = `${systemPrompt}\n\n${formattedContext}`
+        ragSources = hybridResult.sources.map((s) => ({ title: s.documentTitle, section: s.section }))
         console.log(`[V1 API] RAG hybrid: ${hybridResult.results.length} chunks`)
       } else {
         const retrievalResult = await smartRetrieve(userQuery, {
@@ -202,6 +206,7 @@ export async function runV1ChatCompletion(
         if (retrievalResult.context) {
           const formattedContext = formatContextForPrompt(retrievalResult)
           systemPrompt = `${systemPrompt}\n\n${formattedContext}`
+          ragSources = retrievalResult.sources.map((s) => ({ title: s.documentTitle, section: s.section }))
           console.log(`[V1 API] RAG vector: ${retrievalResult.chunks.length} chunks`)
         }
       }
@@ -262,16 +267,20 @@ export async function runV1ChatCompletion(
   })
 
   if (wantStream) {
-    return createSSEStreamResponse(result, requestId, modelId)
+    return createSSEStreamResponse(result, requestId, modelId, ragSources)
   }
 
-  return createJsonResponse(result, requestId, modelId)
+  return createJsonResponse(result, requestId, modelId, ragSources)
 }
+
+/** Sources (KB documents) an answer drew on, for the client to render references. */
+type RagSource = { title: string; section: string | null }
 
 function createSSEStreamResponse(
   result: ReturnType<typeof streamText>,
   requestId: string,
-  modelId: string
+  modelId: string,
+  sources: RagSource[] = []
 ): Response {
   const encoder = new TextEncoder()
 
@@ -295,7 +304,9 @@ function createSSEStreamResponse(
           controller.enqueue(encoder.encode(`data: ${data}\n\n`))
         }
 
-        // Final chunk with finish_reason
+        // Final chunk with finish_reason. `sources` is a custom top-level field
+        // (OpenAI clients ignore unknown keys) carrying the KB references so a
+        // frontend can render reference cards.
         const finalData = JSON.stringify({
           id: requestId,
           object: "chat.completion.chunk",
@@ -308,6 +319,7 @@ function createSSEStreamResponse(
               finish_reason: "stop",
             },
           ],
+          sources,
         })
         controller.enqueue(encoder.encode(`data: ${finalData}\n\n`))
         controller.enqueue(encoder.encode("data: [DONE]\n\n"))
@@ -335,7 +347,8 @@ function createSSEStreamResponse(
 async function createJsonResponse(
   result: ReturnType<typeof streamText>,
   requestId: string,
-  modelId: string
+  modelId: string,
+  sources: RagSource[] = []
 ): Promise<Response> {
   const text = await result.text
 
@@ -356,6 +369,8 @@ async function createJsonResponse(
       completion_tokens: 0,
       total_tokens: 0,
     },
+    // KB references the answer drew on (custom field; OpenAI clients ignore it).
+    sources,
   }
 
   return new Response(JSON.stringify(body), {
