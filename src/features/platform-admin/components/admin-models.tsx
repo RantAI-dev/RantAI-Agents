@@ -491,7 +491,23 @@ function ModelsTab() {
                   )}
                 </TableCell>
                 <TableCell className="space-x-1">
-                  {m.hasToolCalling && <Badge variant="outline" className="text-[10px]">tools</Badge>}
+                  {/* Clickable: models that mishandle tool schemas (common for
+                      small local GGUF models) should have tools switched off —
+                      chat then sends no tools and always gets plain text. */}
+                  <button
+                    type="button"
+                    title={m.hasToolCalling ? "Tool calling ON — click to disable" : "Tool calling OFF — click to enable"}
+                    onClick={() =>
+                      patchModel(
+                        { id: m.id, hasToolCalling: !m.hasToolCalling },
+                        m.hasToolCalling ? "Tool calling disabled" : "Tool calling enabled"
+                      )
+                    }
+                  >
+                    <Badge variant={m.hasToolCalling ? "outline" : "secondary"} className="text-[10px] cursor-pointer">
+                      {m.hasToolCalling ? "tools" : "tools off"}
+                    </Badge>
+                  </button>
                   {m.hasVision && <Badge variant="outline" className="text-[10px]">vision</Badge>}
                   {m.isFree && <Badge variant="outline" className="text-[10px]">free</Badge>}
                 </TableCell>
