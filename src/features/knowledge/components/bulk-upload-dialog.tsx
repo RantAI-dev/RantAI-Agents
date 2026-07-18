@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useCallback } from "react"
+import { generateUUID } from "@/lib/uuid"
 import {
   Dialog,
   DialogContent,
@@ -168,7 +169,7 @@ export function BulkUploadDialog({
         continue
       }
       newEntries.push({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         file,
         title: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
         status: "idle",
@@ -201,7 +202,7 @@ export function BulkUploadDialog({
         continue
       }
       newEntries.push({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         file,
         title: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
         status: "idle",

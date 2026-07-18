@@ -1,6 +1,7 @@
 "use client"
 
 import { useOrgFetch } from "@/hooks/use-organization"
+import { generateUUID } from "@/lib/uuid"
 
 import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react"
 import { QueuePanel } from "@/features/conversations/components/agent/queue-panel"
@@ -307,7 +308,7 @@ export default function AgentPage({ agentId }: { agentId: string }) {
     // Optimistic update - use a temp prefix so we can identify it.
     // The next poll cycle will replace the full list with DB data.
     const newMessage: Message = {
-      id: `pending-${crypto.randomUUID()}`,
+      id: `pending-${generateUUID()}`,
       role: "AGENT",
       content,
       createdAt: new Date().toISOString(),

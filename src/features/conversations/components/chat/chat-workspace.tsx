@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState, useCallback } from "react"
+import { generateUUID } from "@/lib/uuid"
 import { useChat } from "@ai-sdk/react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Button } from "@/components/ui/button"
@@ -2071,7 +2072,7 @@ export function ChatWorkspace({
       const persistableAttachments = attachments?.map(({ fileUrl, ...rest }) => rest)
 
       const userMessage = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         role: "user" as const,
         content: userInput,
         ...(replyToId && { replyTo: replyToId }),
@@ -2080,7 +2081,7 @@ export function ChatWorkspace({
           metadata: { attachments: persistableAttachments },
         }),
       }
-      const assistantMsgId = crypto.randomUUID()
+      const assistantMsgId = generateUUID()
 
       // Store attachment info for display on user message bubble
       if (attachments && attachments.length > 0) {
@@ -3427,7 +3428,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
     if (handoffState === "connected" && handoffConversationId) {
       // Add user message to chat locally
       const userMsg = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         role: "user" as const,
         content: userInput,
       }

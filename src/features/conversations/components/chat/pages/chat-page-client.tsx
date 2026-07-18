@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { generateUUID } from "@/lib/uuid"
 import { useRouter } from "next/navigation"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
@@ -155,7 +156,7 @@ export default function ChatPageClient({
           }
           let initToken: string | null = null
           if (initialMessage) {
-            initToken = crypto.randomUUID()
+            initToken = generateUUID()
             // File objects can't survive JSON.stringify into the sessionStorage
             // payload below, so hand them off in memory (client-side nav keeps
             // module state) keyed by the same init token.
