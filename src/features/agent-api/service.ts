@@ -1,6 +1,6 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
-import { DEFAULT_MODEL_ID, isValidModelAsync } from "@/lib/models"
+import { DEFAULT_MODEL_ID, isValidModelAsync, getModelByIdAsync } from "@/lib/models"
 import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import { resolveToolsForAssistant } from "@/lib/tools"
 import { buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
@@ -228,12 +228,18 @@ export async function runV1ChatCompletion(
     console.error("[V1 API] Skill resolution error:", error)
   }
 
-  // Resolve tools for the assistant
-  const { tools: resolvedTools, toolNames } = await resolveToolsForAssistant(
-    assistant.id,
-    modelId,
-    { userId: syntheticUserId, assistantId: assistant.id }
-  )
+  // Resolve tools for the assistant. Models flagged non-tool-capable in the
+  // catalog (e.g. small local GGUF models) get NO tools and no tool
+  // instructions — sending tools to them yields malformed calls or empty
+  // replies instead of text.
+  const apiModelInfo = await getModelByIdAsync(modelId)
+  const modelSupportsTools = apiModelInfo?.capabilities.functionCalling !== false
+  const { tools: resolvedTools, toolNames } = modelSupportsTools
+    ? await resolveToolsForAssistant(assistant.id, modelId, {
+        userId: syntheticUserId,
+        assistantId: assistant.id,
+      })
+    : { tools: {}, toolNames: [] as string[] }
 
   if (Object.keys(resolvedTools).length > 0) {
     systemPrompt += buildToolInstruction(toolNames, {})

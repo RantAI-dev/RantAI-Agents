@@ -1032,7 +1032,12 @@ export async function runChat(params: {
       debug("Artifact tools auto-injected for capable model");
     }
 
-    const hasAssistantTools = Object.keys(resolvedTools).length > 0;
+    // Models flagged as non-tool-capable in the catalog (e.g. small local GGUF
+    // models) get NO tools and no tool instructions: sending tools to them
+    // yields malformed calls, refusals, or empty replies instead of text.
+    const modelSupportsTools = modelInfo?.capabilities.functionCalling !== false;
+
+    const hasAssistantTools = modelSupportsTools && Object.keys(resolvedTools).length > 0;
     if (hasAssistantTools) {
       debug("Tools enabled:", toolNames.join(", "));
       // Instruct the model to use its tools instead of hallucinating
@@ -1179,7 +1184,7 @@ export async function runChat(params: {
       model: getChatProvider()(resolveModelId(modelId)),
       system: systemPrompt,
       messages,
-      tools: allTools,
+      tools: modelSupportsTools ? allTools : undefined,
       stopWhen: stepCountIs(resolveMaxSteps(assistantModelConfig, hasAssistantTools)),
       // Surface <think>...</think> blocks from reasoning models (MiniMax-M2.7,
       // etc.) as AI SDK v6 reasoning parts so the dashboard chat can render

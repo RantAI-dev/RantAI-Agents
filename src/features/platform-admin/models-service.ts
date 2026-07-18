@@ -96,6 +96,24 @@ export async function setModelEnabled(actor: AdminActor, modelId: string, enable
   return { ok: true }
 }
 
+/** Flip a model's tool-calling capability flag — chat stops sending tools to
+ *  models marked false (weak/local models often mishandle tool schemas). */
+export async function setModelToolCalling(actor: AdminActor, modelId: string, hasToolCalling: boolean) {
+  const model = await prisma.llmModel.update({
+    where: { id: modelId },
+    data: { hasToolCalling },
+    select: { name: true },
+  })
+  await writeAdminAudit({
+    actor,
+    action: hasToolCalling ? "model.tools_enable" : "model.tools_disable",
+    targetType: "model",
+    targetId: modelId,
+    targetLabel: model.name,
+  })
+  return { ok: true }
+}
+
 export async function addManualModel(
   actor: AdminActor,
   input: {
