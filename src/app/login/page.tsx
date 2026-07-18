@@ -40,8 +40,12 @@ export default function LoginPage() {
       if (result?.error) {
         setError("Invalid email or password")
       } else {
-        router.push("/dashboard")
-        router.refresh()
+        // Full-page navigation, NOT router.push: client-side transitions keep
+        // the pre-login SessionProvider state ("unauthenticated"), so anything
+        // session-gated in the shell (e.g. the role=ADMIN nav) stays hidden
+        // until a hard refresh. A real load remounts providers with the fresh
+        // session cookie.
+        window.location.href = "/dashboard"
       }
     } catch {
       setError("An error occurred. Please try again.")
