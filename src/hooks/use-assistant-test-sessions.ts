@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { generateUUID } from "@/lib/uuid"
 
 const STORAGE_KEY = "rantai-assistants-test-sessions"
 
@@ -83,7 +84,7 @@ export function useAssistantTestSessions(assistantId: string | null) {
 
   const createSession = useCallback((targetAssistantId: string): TestSession => {
     const newSession: TestSession = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       assistantId: targetAssistantId,
       title: "New Test Chat",
       createdAt: new Date(),

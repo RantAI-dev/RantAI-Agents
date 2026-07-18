@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback } from "react"
+import { generateUUID } from "@/lib/uuid"
 import { Loader2, AlertTriangle, RotateCcw, Code } from "@/lib/icons"
 import { useTheme } from "next-themes"
 import { getMermaidConfig } from "./mermaid-config"
@@ -37,7 +38,7 @@ export function MermaidRenderer({ content }: MermaidRendererProps) {
   const [loading, setLoading] = useState(true)
   const [showSource, setShowSource] = useState(false)
   const [retryCount, setRetryCount] = useState(0)
-  const idRef = useRef(`mermaid-${crypto.randomUUID().slice(0, 8)}`)
+  const idRef = useRef(`mermaid-${generateUUID().slice(0, 8)}`)
   const { resolvedTheme } = useTheme()
 
   useEffect(() => {
@@ -52,7 +53,7 @@ export function MermaidRenderer({ content }: MermaidRendererProps) {
         const mermaid = await getMermaid(theme)
 
         // Generate a fresh ID for each render attempt to avoid DOM conflicts
-        idRef.current = `mermaid-${crypto.randomUUID().slice(0, 8)}`
+        idRef.current = `mermaid-${generateUUID().slice(0, 8)}`
 
         // Validate syntax first
         const isValid = await mermaid.parse(content, { suppressErrors: true })

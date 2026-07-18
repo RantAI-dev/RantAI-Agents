@@ -1,6 +1,7 @@
 "use client"
 
 import { useOrgFetch } from "@/hooks/use-organization"
+import { generateUUID } from "@/lib/uuid"
 
 import { useState, useCallback } from "react"
 import { Loader2, Clock, Send } from "@/lib/icons"
@@ -48,7 +49,7 @@ export function TabChat({
     if (!offlineInput.trim()) return
     setQueuedMessages((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), content: offlineInput.trim(), queuedAt: new Date() },
+      { id: generateUUID(), content: offlineInput.trim(), queuedAt: new Date() },
     ])
     setOfflineInput("")
   }, [offlineInput])
