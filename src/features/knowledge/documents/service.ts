@@ -385,7 +385,27 @@ export async function createKnowledgeDocumentForDashboard(params: {
       const isScanned = params.input.forceOCR || (await isPDFScanned(fileBuffer))
 
       if (isScanned) {
-        try {
+        // Prefer the MinerU sidecar when deployed (KB_EXTRACT_MINERU_BASE_URL)
+        // — purpose-built for scanned/table-heavy PDFs and fully local. The
+        // legacy OCR pipeline (Ollama → OpenRouter vision) stays as fallback.
+        const { getRagConfig } = await import("@/lib/rag/config")
+        const mineruBaseUrl = getRagConfig().extractMineruBaseUrl
+        if (mineruBaseUrl) {
+          try {
+            const { MineruExtractor } = await import("@/lib/rag/extractors/mineru-extractor")
+            const mineruResult = await new MineruExtractor(mineruBaseUrl).extract(fileBuffer)
+            if (mineruResult.text?.trim()) {
+              content = mineruResult.text
+              usedOCR = true
+            }
+          } catch (error) {
+            console.warn(
+              `[Knowledge] MinerU extraction failed, falling back to OCR pipeline: ${error instanceof Error ? error.message : error}`
+            )
+          }
+        }
+
+        if (!usedOCR) try {
           const ocrResult = await processDocumentOCR(fileBuffer, "application/pdf", {
             outputFormat: "markdown",
             documentType: params.input.documentType as
