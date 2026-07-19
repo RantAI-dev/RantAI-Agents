@@ -85,14 +85,19 @@ export default function DocumentViewerClient({
     return ".md"
   }
 
+  // Same-origin stream route — document.fileUrl is a presigned URL against the
+  // INTERNAL object store host (http://rustfs:9000), which browsers can't
+  // resolve on self-hosted deployments → blank previews/broken downloads.
+  const rawUrl = document?.id && hasS3File ? `/api/dashboard/files/${document.id}/raw` : null
+
   const handleDownload = () => {
     if (!document) return
 
     const filename = `${document.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}${getFileExtension()}`
 
-    if ((isPdf || isImage) && hasS3File && document.fileUrl) {
+    if ((isPdf || isImage) && hasS3File && (rawUrl || document.fileUrl)) {
       const a = window.document.createElement("a")
-      a.href = document.fileUrl
+      a.href = rawUrl || document.fileUrl!
       a.download = filename
       a.target = "_blank"
       window.document.body.appendChild(a)
@@ -130,6 +135,9 @@ export default function DocumentViewerClient({
   }
 
   const getPdfViewUrl = () => {
+    if (rawUrl) {
+      return rawUrl
+    }
     if (document?.fileUrl) {
       return document.fileUrl
     }
@@ -331,7 +339,7 @@ export default function DocumentViewerClient({
             <div className="h-full rounded-lg overflow-hidden flex items-center justify-center bg-neutral-900">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={document.fileUrl || (document.metadata?.fileData ? `data:${document.mimeType || "image/png"};base64,${document.metadata.fileData}` : "")}
+                src={rawUrl || document.fileUrl || (document.metadata?.fileData ? `data:${document.mimeType || "image/png"};base64,${document.metadata.fileData}` : "")}
                 alt={document.title}
                 className="max-w-full max-h-full object-contain"
               />
