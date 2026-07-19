@@ -514,6 +514,15 @@ export async function createKnowledgeDocumentForDashboard(params: {
     })
   }
 
+  // Belt-and-braces: extraction must yield a string; anything else (a parser
+  // resolving an error object, etc.) becomes a clean 422 instead of a 500.
+  if (typeof content !== "string" || typeof title !== "string") {
+    return {
+      status: 422,
+      error: `Extraction produced no usable text for "${originalFilename || title}" — the file may be image-only or unsupported. Try converting to PDF (image-heavy decks go through OCR/MinerU there).`,
+    }
+  }
+
   // Strip null bytes — PostgreSQL UTF-8 columns reject 0x00
   const sanitize = (s: string) => s.replace(/\0/g, "")
 
