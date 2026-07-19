@@ -76,8 +76,12 @@ async function parsePptx(buffer: Buffer): Promise<string> {
   }
   return new Promise((resolve, reject) => {
     officeparser.parseOffice(buffer, (text: string, err?: Error) => {
-      if (err) reject(err)
-      else resolve(text || "")
+      // Some officeparser versions pass an Error/object in the text slot on
+      // failure — resolving that upstream crashed ingest with a 500 instead
+      // of a clean extraction error. Only ever resolve actual strings.
+      if (err) reject(err instanceof Error ? err : new Error(String(err)))
+      else if (typeof text === "string") resolve(text)
+      else reject(new Error(`office parser returned ${typeof text} instead of text`))
     }, { outputErrorToConsole: false })
   })
 }
@@ -139,8 +143,12 @@ async function parseOfficeGeneric(buffer: Buffer): Promise<string> {
   }
   return new Promise((resolve, reject) => {
     officeparser.parseOffice(buffer, (text: string, err?: Error) => {
-      if (err) reject(err)
-      else resolve(text || "")
+      // Some officeparser versions pass an Error/object in the text slot on
+      // failure — resolving that upstream crashed ingest with a 500 instead
+      // of a clean extraction error. Only ever resolve actual strings.
+      if (err) reject(err instanceof Error ? err : new Error(String(err)))
+      else if (typeof text === "string") resolve(text)
+      else reject(new Error(`office parser returned ${typeof text} instead of text`))
     }, { outputErrorToConsole: false })
   })
 }
