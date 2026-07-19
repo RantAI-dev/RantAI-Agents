@@ -24,6 +24,7 @@ import type {
   CombinedExtractionConfig,
   CombinedExtractionResult,
 } from "./types";
+import { resolveExtractionEndpoint } from "./resolve-endpoint";
 
 interface ChunkExtraction {
   entities: Array<{
@@ -230,7 +231,7 @@ export class CombinedExtractor {
   ): Promise<ChunkExtraction> {
     const prompt = this.buildPrompt(chunk);
 
-    const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+    const response = await fetch(`${resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey).baseUrl}/chat/completions`, {
       body: JSON.stringify({
         max_tokens: this.config.maxTokens,
         messages: [
@@ -242,7 +243,7 @@ export class CombinedExtractor {
         temperature: this.config.temperature,
       }),
       headers: {
-        Authorization: `Bearer ${this.config.apiKey}`,
+        Authorization: `Bearer ${resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey).apiKey}`,
         "Content-Type": "application/json",
         "HTTP-Referer": "https://rantai.dev",
         "X-Title": "RantAI Document Intelligence",
