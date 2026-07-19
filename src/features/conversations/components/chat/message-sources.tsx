@@ -7,6 +7,8 @@ export interface Source {
   title: string
   section?: string | null
   url?: string | null
+  /** KB document id — source card links to /dashboard/files/{id} when set. */
+  documentId?: string | null
 }
 
 interface MessageSourcesProps {
@@ -44,7 +46,7 @@ export const MessageSources = memo<MessageSourcesProps>(({ sources }) => {
         {sources.map((source, i) => (
           <a
             key={i}
-            href={source.url || "#"}
+            href={source.documentId ? `/dashboard/files/${source.documentId}` : source.url || "#"}
             target="_blank"
             rel="noopener noreferrer"
             className="flex-shrink-0 group/source flex items-center gap-2.5 px-3 py-2 rounded-xl bg-muted/50 border border-border/40 hover:border-border/80 hover:bg-muted/80 transition-all cursor-pointer min-w-[180px] max-w-[240px]"

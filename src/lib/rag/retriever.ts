@@ -24,6 +24,7 @@ import { getDefaultReranker } from "./rerankers";
 export interface HybridRetrievalResult {
   context: string;
   sources: Array<{
+    documentId: string | null;
     documentTitle: string;
     section: string | null;
   }>;
@@ -34,6 +35,7 @@ export interface HybridRetrievalResult {
 export interface RetrievalResult {
   context: string;
   sources: Array<{
+    documentId: string | null;
     documentTitle: string;
     section: string | null;
     categories: string[];
@@ -186,13 +188,14 @@ export async function retrieveContext(
   // Extract unique sources
   const sourceMap = new Map<
     string,
-    { documentTitle: string; section: string | null; categories: string[] }
+    { documentId: string | null; documentTitle: string; section: string | null; categories: string[] }
   >();
 
   for (const chunk of chunks) {
     const key = `${chunk.documentTitle}-${chunk.section || ""}`;
     if (!sourceMap.has(key)) {
       sourceMap.set(key, {
+        documentId: chunk.documentId ?? null,
         documentTitle: chunk.documentTitle,
         section: chunk.section,
         categories: chunk.categories,
@@ -328,7 +331,7 @@ export async function hybridRetrieve(
   // Extract unique sources
   const sourceMap = new Map<
     string,
-    { documentTitle: string; section: string | null }
+    { documentId: string | null; documentTitle: string; section: string | null }
   >();
 
   for (const result of results) {
@@ -336,6 +339,7 @@ export async function hybridRetrieve(
     const key = `${title}-${result.section || ""}`;
     if (!sourceMap.has(key)) {
       sourceMap.set(key, {
+        documentId: result.documentId ?? null,
         documentTitle: title,
         section: result.section || null,
       });
