@@ -43,7 +43,20 @@ interface ChunkExtraction {
 }
 
 const DEFAULT_MAX_CHUNK_CHARS = 5000;
-const DEFAULT_CONCURRENCY = 10; // Reduced from 20 to prevent rate limiting
+// Concurrency: cloud APIs (OpenRouter) love parallelism, but a single local
+// model (Ollama/vLLM on one GPU) serves ~1 request at a time — 10 parallel
+// chunks just queue and time out. Set ENTITY_EXTRACTION_CONCURRENCY=1..2 for
+// local endpoints. Timeout is generous by default so a slow local model
+// finishing in 40-60s isn't killed mid-generation.
+const DEFAULT_CONCURRENCY = parsePositiveIntEnv("ENTITY_EXTRACTION_CONCURRENCY", 10);
+const REQUEST_TIMEOUT_MS = parsePositiveIntEnv("ENTITY_EXTRACTION_TIMEOUT_MS", 120000);
+
+function parsePositiveIntEnv(key: string, fallback: number): number {
+  const raw = process.env[key];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
 const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 const DEFAULT_BATCH_DELAY_MS = 500;
@@ -232,6 +245,7 @@ export class CombinedExtractor {
     const prompt = this.buildPrompt(chunk);
 
     const response = await fetch(`${resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey).baseUrl}/chat/completions`, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       body: JSON.stringify({
         max_tokens: this.config.maxTokens,
         messages: [
