@@ -12,10 +12,9 @@ import { resolveExtractionEndpoint } from "./resolve-endpoint";
 const DEFAULT_CONFIG: Required<LLMExtractionConfig> = {
   apiKey: process.env.OPENROUTER_API_KEY || "",
   baseUrl: "https://openrouter.ai/api/v1",
-  // xiaomi/mimo-v2-flash was deprecated by OpenRouter (404s) — pin the
-  // successor and allow env override so the next deprecation is a config
-  // change, not a rebuild.
-  model: process.env.ENTITY_EXTRACTION_LLM_MODEL || "xiaomi/mimo-v2.5",
+  // Extraction wants FAST + reliable JSON, not reasoning. gpt-4.1-nano fits;
+  // env override lets on-prem point at a local model.
+  model: process.env.ENTITY_EXTRACTION_LLM_MODEL || "openai/gpt-4.1-nano",
   maxTokens: 4000,
   temperature: 0.1,
   maxChunkChars: 6000, // ~1500 tokens per chunk

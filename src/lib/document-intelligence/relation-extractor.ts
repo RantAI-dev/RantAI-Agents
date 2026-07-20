@@ -35,7 +35,7 @@ export class LLMRelationExtractor {
       model:
         config.model ||
         process.env.RELATION_EXTRACTION_LLM_MODEL ||
-        "qwen/qwen3-8b",
+        "openai/gpt-4.1-nano",
       temperature: config.temperature ?? 0.1,
     };
 
