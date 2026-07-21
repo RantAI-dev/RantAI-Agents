@@ -40,6 +40,7 @@ import { ReasoningBox } from "./reasoning-box"
 import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
+import { embeddedFigureNumbers, type EmbeddableFigure } from "./citations"
 import { ConversationExport } from "./conversation-export"
 import { CommandPalette } from "./command-palette"
 import {
@@ -55,7 +56,7 @@ import {
 } from "@/components/ui/tooltip"
 import { FilePreview } from "./file-preview"
 import { VisionAttachmentHint } from "./vision-attachment-hint"
-import { ChatInputToolbar, type AssistantToolInfo, type AssistantSkillInfo, type CanvasMode, type KBGroup, type ToolMode, type SkillMode } from "./chat-input-toolbar"
+import { ChatInputToolbar, ALL_DOCS_GROUP_ID, type AssistantToolInfo, type AssistantSkillInfo, type CanvasMode, type KBGroup, type ToolMode, type SkillMode } from "./chat-input-toolbar"
 import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
 import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } from "./edit-version-indicator"
 import { ToolCallIndicator } from "./tool-call-indicator"
@@ -507,6 +508,21 @@ function MessagesArea({
               ? getVersionContent(rawContent, msgEditHistory, currentViewingVersion)
               : rawContent
 
+            // Figure sources the model can embed inline via [figure:N], numbered
+            // to match the Sources list. Those it DID embed are dropped from the
+            // Figures card row (below) so they don't render twice.
+            const embeddableFigures: EmbeddableFigure[] = sources
+              .map((s, i) => ({ ...s, n: i + 1 }))
+              .filter((s) => s.assetKey && s.documentId)
+              .map((s) => ({
+                n: s.n,
+                documentId: s.documentId as string,
+                assetKey: s.assetKey as string,
+                title: s.title,
+                page: s.page,
+              }))
+            const embeddedFigureNums = embeddedFigureNumbers(content)
+
             const historicalAssistantResponse =
               isUser && hasEditHistory
                 ? getVersionAssistantResponse(msgEditHistory, currentViewingVersion, totalVersions)
@@ -803,7 +819,19 @@ function MessagesArea({
                             )
                           })}
                           {content.length > 0 && (
-                            <MarkdownContent content={content} isStreaming={isStreamingMessage} />
+                            <MarkdownContent
+                              content={content}
+                              isStreaming={isStreamingMessage}
+                              citations={
+                                !isUser && sources.length > 0
+                                  ? {
+                                      messageId: message.id,
+                                      count: sources.length,
+                                      figures: embeddableFigures,
+                                    }
+                                  : undefined
+                              }
+                            />
                           )}
                           {display.showTypingIndicator && <TypingIndicator />}
                         </>
@@ -814,7 +842,11 @@ function MessagesArea({
                         display.showSources &&
                         !isEditing &&
                         sources.length > 0 && (
-                          <MessageSources sources={sources} />
+                          <MessageSources
+                            sources={sources}
+                            messageId={message.id}
+                            hiddenFigureNums={embeddedFigureNums}
+                          />
                         )}
 
                       {/* Handoff button */}
@@ -1878,9 +1910,13 @@ export function ChatWorkspace({
   const effectiveWebSearch = webSearchOverride ?? webSearchAvailable
   const codeInterpreterAvailable = assistantTools.some((t) => t.name === "code_interpreter")
   const effectiveCodeInterpreter = codeInterpreterOverride ?? codeInterpreterAvailable
-  const effectiveKBGroupIds = selectedKBGroupIds ?? (assistant.knowledgeBaseGroupIds || [])
+  const rawKBGroupIds = selectedKBGroupIds ?? (assistant.knowledgeBaseGroupIds || [])
+  const isAllDocsKB = rawKBGroupIds.includes(ALL_DOCS_GROUP_ID)
+  // "All documents" sentinel → KB on with NO group filter (empty list, which the
+  // vector store treats as "search all docs").
+  const effectiveKBGroupIds = isAllDocsKB ? [] : rawKBGroupIds
   const effectiveKnowledgeBase = selectedKBGroupIds !== null
-    ? selectedKBGroupIds.length > 0
+    ? isAllDocsKB || selectedKBGroupIds.length > 0
     : (assistant.useKnowledgeBase ?? false)
   const effectiveToolsEnabled = toolMode !== "off"
   const effectiveToolNames = toolMode === "select" ? selectedToolNames : undefined
@@ -2950,7 +2986,10 @@ export function ChatWorkspace({
       useKnowledgeBase: initialSettings.knowledgeBaseGroupIds
         ? initialSettings.knowledgeBaseGroupIds.length > 0
         : undefined,
-      knowledgeBaseGroupIds: initialSettings.knowledgeBaseGroupIds,
+      // Strip the "all documents" sentinel → empty list (= no group filter).
+      knowledgeBaseGroupIds: initialSettings.knowledgeBaseGroupIds?.filter(
+        (id) => id !== ALL_DOCS_GROUP_ID,
+      ),
       enableTools: initialSettings.toolMode ? initialSettings.toolMode !== "off" : undefined,
       enabledToolNames: initialSettings.toolMode === "select" ? initialSettings.selectedToolNames : undefined,
       enableSkills: initialSettings.skillMode ? initialSettings.skillMode !== "off" : undefined,
