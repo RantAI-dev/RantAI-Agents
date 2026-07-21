@@ -4,6 +4,7 @@ import { CreateMediaJobInputSchema, ListJobsQuerySchema } from "@/features/media
 import { createMediaJob } from "@/features/media/service"
 import { listJobsForUser } from "@/features/media/repository"
 import { createMobileAudioJob } from "@/lib/mobile-media-audio"
+import { applyAspectRatioToImageJob } from "@/lib/mobile-media-image"
 import { getMobileContext } from "@/lib/mobile-org"
 
 // Image/audio generation is synchronous; give the route headroom beyond 60s.
@@ -48,21 +49,30 @@ export async function POST(req: Request) {
   try {
     // Audio uses a mobile-only non-streaming path (playable WAV) so the shared
     // web generateAudio is left untouched. Image stays on the shared service.
-    const result =
-      parsed.data.modality === "AUDIO"
-        ? await createMobileAudioJob({
-            userId: ctx.userId,
-            organizationId: ctx.organizationId,
-            modelId: parsed.data.modelId,
-            prompt: parsed.data.prompt,
-            parameters: parsed.data.parameters,
-            referenceAssetIds: parsed.data.referenceAssetIds,
-          })
-        : await createMediaJob({
-            userId: ctx.userId,
-            organizationId: ctx.organizationId,
-            ...parsed.data,
-          })
+    if (parsed.data.modality === "AUDIO") {
+      const audio = await createMobileAudioJob({
+        userId: ctx.userId,
+        organizationId: ctx.organizationId,
+        modelId: parsed.data.modelId,
+        prompt: parsed.data.prompt,
+        parameters: parsed.data.parameters,
+        referenceAssetIds: parsed.data.referenceAssetIds,
+      })
+      return NextResponse.json(audio)
+    }
+
+    let result = (await createMediaJob({
+      userId: ctx.userId,
+      organizationId: ctx.organizationId,
+      ...parsed.data,
+    })) as { id: string; assets: Array<{ id: string; s3Key: string; modality: string; mimeType: string }> }
+
+    // The image models ignore width/height, so honor the picked aspect ratio by
+    // cropping the result to it (mobile-only; the web path is unchanged).
+    const p = parsed.data.parameters as { width?: number; height?: number }
+    if (typeof p.width === "number" && typeof p.height === "number") {
+      result = (await applyAspectRatioToImageJob(result, p.width, p.height)) as typeof result
+    }
     return NextResponse.json(result)
   } catch (error) {
     console.error("[Mobile Media API] POST /jobs failed:", error)
