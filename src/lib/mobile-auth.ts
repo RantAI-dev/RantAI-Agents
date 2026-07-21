@@ -52,14 +52,23 @@ export async function loginMobile(
   }
 }
 
-async function userIdFromBearer(header: string | null): Promise<string | null> {
-  if (!header?.startsWith("Bearer ")) return null
+/**
+ * Verifikasi token mobile mentah (tanpa prefix "Bearer ") dan kembalikan userId,
+ * atau null. Dipakai mis. oleh endpoint media yang menerima `?token=` pada URL
+ * karena <Image>/<Video> React Native tidak andal mengirim header Authorization.
+ */
+export async function userIdFromMobileToken(token: string): Promise<string | null> {
   try {
-    const { payload } = await jwtVerify(header.slice(7), secret)
+    const { payload } = await jwtVerify(token, secret)
     return typeof payload.sub === "string" ? payload.sub : null
   } catch {
     return null
   }
+}
+
+async function userIdFromBearer(header: string | null): Promise<string | null> {
+  if (!header?.startsWith("Bearer ")) return null
+  return userIdFromMobileToken(header.slice(7))
 }
 
 /**
