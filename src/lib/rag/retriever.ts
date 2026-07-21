@@ -178,27 +178,15 @@ export async function retrieveContext(
   // (KB_CONTEXTUAL_RETRIEVAL_ENABLED=true; ~1 sentence per chunk locating it
   // in the document), prepend it before the chunk body so the model sees the
   // chunk's position in the source. Drops cleanly when the prefix is null.
-  const contextParts: string[] = [];
-
-  for (const chunk of chunks) {
-    const source = chunk.section
-      ? `[${chunk.documentTitle} - ${chunk.section}]`
-      : `[${chunk.documentTitle}]`;
-
-    const prefix = chunk.contextualPrefix ? `${chunk.contextualPrefix}\n\n` : "";
-    contextParts.push(`${source}\n${prefix}${chunk.content}`);
-  }
-
-  const context = contextParts.join("\n\n---\n\n");
-
-  // Extract unique sources
+  // Assign each unique source a stable number (first-seen order) so the excerpt
+  // labels, the Sources list, and the UI source cards ALL share the same [N] —
+  // otherwise the model cites excerpt positions the deduped card list lacks.
   const sourceMap = new Map<
     string,
     { documentId: string | null; documentTitle: string; section: string | null; categories: string[]; assetKey?: string | null; page?: number | null; chunkType?: string | null }
   >();
-
   for (const chunk of chunks) {
-    const key = chunk.assetKey ? `asset:${chunk.assetKey}` : `${chunk.documentTitle}-${chunk.section || ""}`;
+    const key = sourceDedupeKey(chunk);
     if (!sourceMap.has(key)) {
       sourceMap.set(key, {
         documentId: chunk.documentId ?? null,
@@ -211,6 +199,19 @@ export async function retrieveContext(
       });
     }
   }
+  const keyToNumber = new Map(Array.from(sourceMap.keys()).map((k, i) => [k, i + 1]));
+
+  const contextParts: string[] = [];
+  for (const chunk of chunks) {
+    const n = keyToNumber.get(sourceDedupeKey(chunk));
+    const label = chunk.section
+      ? `[${n}] ${chunk.documentTitle} — ${chunk.section}`
+      : `[${n}] ${chunk.documentTitle}`;
+    const prefix = chunk.contextualPrefix ? `${chunk.contextualPrefix}\n\n` : "";
+    contextParts.push(`${label}\n${prefix}${chunk.content}`);
+  }
+
+  const context = contextParts.join("\n\n---\n\n");
 
   return {
     context,
@@ -243,32 +244,65 @@ export async function smartRetrieve(
  * prompt biases models toward terseness, so for RAG turns we restate the rules
  * locally — be thorough, cite, and refuse cleanly when the context falls short.
  */
+/**
+ * Shared answer/citation instructions for both the vector and hybrid RAG
+ * prompt formatters. Citations are bracketed NUMBERS keyed to the numbered
+ * Sources list (rendered as clickable chips in the UI), NOT inline document
+ * titles — the old `[Document Title — Section]` style cluttered the prose with
+ * repeated full titles when the Sources card already carries provenance.
+ */
+const RAG_ANSWER_INSTRUCTIONS = `When answering:
+- Treat the excerpts as the source of truth for specific facts. Every concrete claim (definitions, paragraph numbers, effective dates, scope rules, exclusions, numerical thresholds) MUST come from the excerpts and be cited.
+- You MAY add brief background context (1-2 sentences) to frame an answer when essential for understanding — but mark it as framing, not fact. Never substitute general knowledge for an absent specific detail.
+- Cite each factual claim inline with a bracketed NUMBER matching the numbered Sources list below — e.g. \`[1]\`. Use only the numbers shown; never write the document title or section inline. If several sources support one claim, chain them like \`[1][3]\`.
+- Be thorough within the excerpts. Cover every aspect the excerpts support; do not invent aspects they do not mention.
+- If a specific detail the user asked for is not in the excerpts, say so explicitly ("not specified in the available excerpts") rather than guessing.
+- Sources tagged [FIGURE] are images/charts. When one directly illustrates a point you're making, embed it inline by writing \`[figure:N]\` on its OWN line right after the sentence it supports (N = that [FIGURE] source's number). Only embed a figure that's genuinely relevant; never write a raw image path.`;
+
+/** Number a source list 1..N so inline `[n]` citations line up with the UI chips.
+ *  Figure sources are tagged [FIGURE] so the model can embed them via [figure:N]. */
+function numberedSourceList(
+  sources: Array<{ documentTitle: string; section: string | null; chunkType?: string | null }>
+): string {
+  return sources
+    .map((s, i) => {
+      const tag = s.chunkType === "figure" ? "[FIGURE] " : ""
+      return `${i + 1}. ${tag}${s.documentTitle}${s.section ? ` — ${s.section}` : ""}`
+    })
+    .join("\n");
+}
+
+/**
+ * Dedupe key for a retrieved item → one source card. Figures are distinct by
+ * asset; text chunks collapse by title+section. Shared by both context builders
+ * so excerpt labels and the Sources list number identically.
+ */
+function sourceDedupeKey(c: {
+  assetKey?: string | null
+  documentTitle?: string | null
+  section?: string | null
+}): string {
+  const title = c.documentTitle || "Document"
+  return c.assetKey ? `asset:${c.assetKey}` : `${title}-${c.section || ""}`
+}
+
 export function formatContextForPrompt(result: RetrievalResult): string {
   if (!result.context) {
     return "";
   }
-
-  const sourceList = result.sources
-    .map((s) => `- ${s.documentTitle}${s.section ? `: ${s.section}` : ""}`)
-    .join("\n");
 
   return `
 ## Knowledge Base Context
 
 The excerpts below are your primary source for this question.
 
-When answering:
-- Treat the excerpts as the source of truth for specific facts. Every concrete claim (definitions, paragraph numbers, effective dates, scope rules, exclusions, numerical thresholds) MUST come from the excerpts and be cited.
-- You MAY add brief background context (1-2 sentences) to frame an answer when essential for understanding — but mark it as framing, not fact. Never substitute general knowledge for an absent specific detail.
-- Cite each factual claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
-- Be thorough within the excerpts. Cover every aspect the excerpts support; do not invent aspects they do not mention.
-- If a specific detail the user asked for is not in the excerpts, say so explicitly ("not specified in the available excerpts") rather than guessing.
+${RAG_ANSWER_INSTRUCTIONS}
 
 Excerpts:
 ${result.context}
 
 Sources:
-${sourceList}
+${numberedSourceList(result.sources)}
 `.trim();
 }
 
@@ -322,36 +356,23 @@ export async function hybridRetrieve(
     recordRetrievalHits(results.map((r) => r.documentId));
   }).catch(() => {});
 
-  // Format context for LLM; mirror formatContextForPrompt's contextual-prefix
-  // handling — drop in null cleanly when no prefix was generated at ingest.
-  const contextParts: string[] = [];
-
-  for (const result of results) {
-    const source = result.section
-      ? `[${result.documentTitle || "Document"} - ${result.section}]`
-      : `[${result.documentTitle || "Document"}]`;
-
-    const prefix = result.contextualPrefix ? `${result.contextualPrefix}\n\n` : "";
-    contextParts.push(`${source}\n${prefix}${result.content}`);
-  }
-
-  const context = contextParts.join("\n\n---\n\n");
-
-  // Extract unique sources
+  // Number sources first (first-seen order), then label each excerpt with its
+  // source's [N] — keeps excerpt / Sources-list / UI-card numbering in lockstep
+  // so the model's inline [N] citations always resolve to a real source card.
   const sourceMap = new Map<
     string,
     { documentId: string | null; documentTitle: string; section: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }
   >();
-
   for (const result of results) {
-    const title = result.documentTitle || "Document";
-    // Figures get their own source entry (keyed by asset) so each retrieved
-    // image surfaces distinctly; text chunks dedupe by title+section.
-    const key = result.assetKey ? `asset:${result.assetKey}` : `${title}-${result.section || ""}`;
+    const key = sourceDedupeKey({
+      assetKey: result.assetKey,
+      documentTitle: result.documentTitle || "Document",
+      section: result.section || null,
+    });
     if (!sourceMap.has(key)) {
       sourceMap.set(key, {
         documentId: result.documentId ?? null,
-        documentTitle: title,
+        documentTitle: result.documentTitle || "Document",
         section: result.section || null,
         assetKey: result.assetKey ?? null,
         page: result.page ?? null,
@@ -359,6 +380,20 @@ export async function hybridRetrieve(
       });
     }
   }
+  const keyToNumber = new Map(Array.from(sourceMap.keys()).map((k, i) => [k, i + 1]));
+
+  const contextParts: string[] = [];
+  for (const result of results) {
+    const title = result.documentTitle || "Document";
+    const n = keyToNumber.get(
+      sourceDedupeKey({ assetKey: result.assetKey, documentTitle: title, section: result.section || null }),
+    );
+    const label = result.section ? `[${n}] ${title} — ${result.section}` : `[${n}] ${title}`;
+    const prefix = result.contextualPrefix ? `${result.contextualPrefix}\n\n` : "";
+    contextParts.push(`${label}\n${prefix}${result.content}`);
+  }
+
+  const context = contextParts.join("\n\n---\n\n");
 
   return {
     context,
@@ -395,10 +430,6 @@ export function formatHybridContextForPrompt(
     return "";
   }
 
-  const sourceList = result.sources
-    .map((s) => `- ${s.documentTitle}${s.section ? `: ${s.section}` : ""}`)
-    .join("\n");
-
   // Include entity information if available
   const entities = result.results
     .flatMap((r) => r.relatedEntities)
@@ -415,17 +446,12 @@ export function formatHybridContextForPrompt(
 
 The excerpts below are your primary source for this question.
 
-When answering:
-- Treat the excerpts as the source of truth for specific facts. Every concrete claim (definitions, paragraph numbers, effective dates, scope rules, exclusions, numerical thresholds) MUST come from the excerpts and be cited.
-- You MAY add brief background context (1-2 sentences) to frame an answer when essential for understanding — but mark it as framing, not fact. Never substitute general knowledge for an absent specific detail.
-- Cite each factual claim inline using \`[Document Title — Section]\` (or \`[Document Title]\` when no section is given). Match the list below.
-- Be thorough within the excerpts. Cover every aspect the excerpts support; do not invent aspects they do not mention.
-- If a specific detail the user asked for is not in the excerpts, say so explicitly ("not specified in the available excerpts") rather than guessing.
+${RAG_ANSWER_INSTRUCTIONS}
 
 Excerpts:
 ${result.context}
 
 Sources:
-${sourceList}${entityInfo}
+${numberedSourceList(result.sources)}${entityInfo}
 `.trim();
 }

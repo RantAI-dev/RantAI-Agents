@@ -268,7 +268,11 @@ export async function runChat(params: {
     const useKnowledgeBaseParam = body.useKnowledgeBase !== undefined
       ? body.useKnowledgeBase
       : (headerUseKnowledgeBase !== null ? headerUseKnowledgeBase === 'true' : undefined);
-    const knowledgeBaseGroupIds: string[] | undefined = body.knowledgeBaseGroupIds;
+    // Strip the client-only "all documents" sentinel → empty list means no
+    // group filter (search everything). Safety net in case it reaches the API.
+    const knowledgeBaseGroupIds: string[] | undefined = Array.isArray(body.knowledgeBaseGroupIds)
+      ? body.knowledgeBaseGroupIds.filter((id) => id !== "__all__")
+      : body.knowledgeBaseGroupIds;
     const knowledgeBaseGroupsRequested = Array.isArray(knowledgeBaseGroupIds) && knowledgeBaseGroupIds.length > 0
 
     // Per-assistant memory configuration (null = all enabled for backward compatibility)
@@ -706,6 +710,9 @@ export async function runChat(params: {
                 title: s.documentTitle,
                 section: s.section,
                 documentId: s.documentId ?? null,
+                assetKey: s.assetKey ?? null,
+                page: s.page ?? null,
+                chunkType: s.chunkType ?? null,
               }))
 
               console.log(

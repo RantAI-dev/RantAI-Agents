@@ -381,6 +381,9 @@ export async function searchByDocumentIds(
         section: (chunk.metadata as { section?: string } | null)?.section || null,
         similarity: chunk.similarity,
         contextualPrefix: chunk.contextual_prefix,
+        assetKey: (chunk.metadata as { assetKey?: string } | null)?.assetKey ?? null,
+        page: (chunk.metadata as { page?: number } | null)?.page ?? null,
+        chunkType: (chunk.metadata as { chunkType?: string } | null)?.chunkType ?? null,
       };
     });
 }
@@ -466,6 +469,9 @@ export async function searchByVector(
       section: (md.section as string | undefined) ?? null,
       similarity: chunk.similarity,
       contextualPrefix: chunk.contextual_prefix,
+      assetKey: (md.assetKey as string | undefined) ?? null,
+      page: (md.page as number | undefined) ?? null,
+      chunkType: (md.chunkType as string | undefined) ?? null,
     };
   });
 }
