@@ -246,6 +246,9 @@ export function UploadDialog({
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
   const [enableEnhanced, setEnableEnhanced] = useState(true)
+  // Opt-in: force the layout parser (MinerU) so figures/charts/tables are
+  // cropped even from text-layer PDFs (slower + heavier, so off by default).
+  const [extractFigures, setExtractFigures] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [formatsDialogOpen, setFormatsDialogOpen] = useState(false)
@@ -328,6 +331,8 @@ export function UploadDialog({
       formData.append("categories", JSON.stringify(selectedCategories))
       if (subcategory) formData.append("subcategory", subcategory)
       if (selectedKBIds.length > 0) formData.append("groupIds", JSON.stringify(selectedKBIds))
+      // Force the layout parser (figures/tables) when the user opts in.
+      if (extractFigures) formData.append("forceOCR", "true")
 
       const url = enableEnhanced
         ? "/api/dashboard/files?enhanced=true"
@@ -661,6 +666,26 @@ export function UploadDialog({
               id="enhanced"
               checked={enableEnhanced}
               onCheckedChange={setEnableEnhanced}
+            />
+          </div>
+
+          {/* Extract figures & tables (layout parser) — opt-in for PDFs */}
+          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Image className="h-4 w-4 text-chart-1" />
+              <div>
+                <Label htmlFor="extract-figures" className="text-sm font-medium cursor-pointer">
+                  Extract figures &amp; tables
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Uses the layout parser to pull charts, figures &amp; tables — slower, best for figure-rich or scanned PDFs
+                </p>
+              </div>
+            </div>
+            <Switch
+              id="extract-figures"
+              checked={extractFigures}
+              onCheckedChange={setExtractFigures}
             />
           </div>
 

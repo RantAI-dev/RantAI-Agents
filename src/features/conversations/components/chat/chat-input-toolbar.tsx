@@ -55,6 +55,14 @@ export type CanvasMode = false | "auto" | ArtifactType
 export type ToolMode = "auto" | "off" | "select"
 export type SkillMode = "auto" | "off" | "select"
 
+/**
+ * Sentinel in knowledgeBaseGroupIds meaning "search ALL documents" (no group
+ * filter). Lets the user turn KB on without picking a specific group — useful
+ * before any groups exist. Stripped to an empty groupIds list before retrieval,
+ * which the vector store already treats as "no filter → all docs".
+ */
+export const ALL_DOCS_GROUP_ID = "__all__"
+
 export interface AssistantToolInfo {
   id?: string
   name: string
@@ -209,7 +217,7 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
   const toolCount = assistantTools.length
   const skillCount = assistantSkills.length
   const artifactCount = artifacts.size
-  const kbCount = knowledgeBaseGroupIds.length
+  const kbCount = knowledgeBaseGroupIds.filter((id) => id !== ALL_DOCS_GROUP_ID).length
 
   const toolsActive = toolMode !== "off"
   const skillsActive = skillMode !== "off"
@@ -224,12 +232,22 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
     e.target.value = ""
   }
 
+  const isAllDocs = knowledgeBaseGroupIds.includes(ALL_DOCS_GROUP_ID)
+
   const handleKBToggle = (groupId: string, checked: boolean) => {
+    // Selecting a specific group clears the "All documents" sentinel (they're
+    // mutually exclusive — all vs a filtered subset).
+    const withoutAll = knowledgeBaseGroupIds.filter((id) => id !== ALL_DOCS_GROUP_ID)
     if (checked) {
-      onKBGroupsChange([...knowledgeBaseGroupIds, groupId])
+      onKBGroupsChange([...withoutAll, groupId])
     } else {
-      onKBGroupsChange(knowledgeBaseGroupIds.filter((id) => id !== groupId))
+      onKBGroupsChange(withoutAll.filter((id) => id !== groupId))
     }
+  }
+
+  const handleAllDocsToggle = (checked: boolean) => {
+    // "All documents" replaces any specific selection with the sentinel.
+    onKBGroupsChange(checked ? [ALL_DOCS_GROUP_ID] : [])
   }
 
   const handleToolCheckbox = (toolName: string, checked: boolean) => {
@@ -424,14 +442,14 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                 type="button"
                 className={cn(
                   "flex items-center gap-2.5 w-full text-left text-sm px-2.5 py-2 rounded-md hover:bg-accent transition-colors",
-                  kbCount > 0 && "text-primary"
+                  (isAllDocs || kbCount > 0) && "text-primary"
                 )}
               >
                 <BookOpen className="h-4 w-4 text-muted-foreground" />
                 <span className="flex-1">Knowledge base</span>
-                {kbCount > 0 && (
+                {(isAllDocs || kbCount > 0) && (
                   <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4">
-                    {kbCount}
+                    {isAllDocs ? "All" : kbCount}
                   </Badge>
                 )}
                 <ChevronDown className={cn(
@@ -442,29 +460,44 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
             </CollapsibleTrigger>
             <CollapsibleContent>
               <div className="pl-9 pr-2 py-1 space-y-0.5 max-h-[160px] overflow-y-auto">
-                {kbGroups.length > 0 ? (
-                  kbGroups.map((group) => (
-                    <label
-                      key={group.id}
-                      className="flex items-center gap-2 text-xs py-1.5 cursor-pointer rounded px-1 hover:bg-accent/50"
-                    >
-                      <Checkbox
-                        checked={knowledgeBaseGroupIds.includes(group.id)}
-                        onCheckedChange={(checked) => handleKBToggle(group.id, !!checked)}
+                {/* All documents — search everything, no group filter. Always
+                    available, including before any group exists. */}
+                <label className="flex items-center gap-2 text-xs py-1.5 cursor-pointer rounded px-1 hover:bg-accent/50 font-medium">
+                  <Checkbox
+                    checked={isAllDocs}
+                    onCheckedChange={(checked) => handleAllDocsToggle(!!checked)}
+                  />
+                  <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="flex-1">All documents</span>
+                </label>
+                {kbGroups.length > 0 && (
+                  <div className="border-t border-border/40 my-1" />
+                )}
+                {kbGroups.map((group) => (
+                  <label
+                    key={group.id}
+                    className={cn(
+                      "flex items-center gap-2 text-xs py-1.5 cursor-pointer rounded px-1 hover:bg-accent/50",
+                      isAllDocs && "opacity-50",
+                    )}
+                  >
+                    <Checkbox
+                      checked={!isAllDocs && knowledgeBaseGroupIds.includes(group.id)}
+                      onCheckedChange={(checked) => handleKBToggle(group.id, !!checked)}
+                    />
+                    {group.color && (
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: group.color }}
                       />
-                      {group.color && (
-                        <span
-                          className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: group.color }}
-                        />
-                      )}
-                      <span className="flex-1 truncate">{group.name}</span>
-                      <span className="text-muted-foreground text-[10px]">{group.documentCount}</span>
-                    </label>
-                  ))
-                ) : (
+                    )}
+                    <span className="flex-1 truncate">{group.name}</span>
+                    <span className="text-muted-foreground text-[10px]">{group.documentCount}</span>
+                  </label>
+                ))}
+                {kbGroups.length === 0 && (
                   <p className="text-[11px] text-muted-foreground py-2">
-                    No knowledge base groups found
+                    No groups yet — “All documents” searches everything you’ve uploaded.
                   </p>
                 )}
               </div>
