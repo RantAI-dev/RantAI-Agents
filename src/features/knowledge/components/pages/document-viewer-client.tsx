@@ -7,17 +7,28 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Download, FileText, Layers, Eye, Code, Brain, HelpCircle } from "@/lib/icons"
+import { ArrowLeft, Download, FileText, Layers, Eye, Code, Brain, HelpCircle, ImageIcon } from "@/lib/icons"
 import DocumentIntelligence from "@/features/knowledge/components/document-intelligence"
+import DocumentFigures from "./document-figures"
 import { getFileTypeIcon, getFileExtensionLabel, CATEGORY_LABELS } from "@/features/knowledge/components/file-type-utils"
 import { ArtifactRenderer } from "@/features/conversations/components/chat/artifacts/artifact-renderer"
 import type { ArtifactType } from "@/features/conversations/components/chat/artifacts/types"
 import { StreamdownContent } from "@/features/conversations/components/chat/streamdown-content"
 
+/** A cropped figure/chart/table extracted from the document (multimodal RAG).
+ *  Mirrors FigureAsset saved to Document.metadata.figures at ingest. */
+export interface DocumentFigure {
+  assetKey: string
+  page: number
+  caption: string | null
+  type?: "chart" | "table" | "image" | "figure"
+}
+
 export interface DocumentMetadata {
   fileType?: "markdown" | "pdf" | "image"
   fileData?: string
   artifactLanguage?: string
+  figures?: DocumentFigure[]
 }
 
 export interface DocumentGroup {
@@ -66,10 +77,13 @@ export default function DocumentViewerClient({
   const router = useRouter()
   const [document] = useState<DocumentDetail | null>(initialDocument)
   const [activeTab, setActiveTab] = useState("preview")
+  // 1-based page to jump the PDF preview to (from the Figures gallery).
+  const [pdfPage, setPdfPage] = useState<number | null>(null)
 
   const fileType = document?.fileType || document?.metadata?.fileType || "markdown"
   const isPdf = fileType === "pdf"
   const isImage = fileType === "image"
+  const figures = document?.metadata?.figures ?? []
   const hasS3File = !!document?.fileUrl
   const hasBase64 = !!document?.metadata?.fileData
 
@@ -302,6 +316,15 @@ export default function DocumentViewerClient({
               <Layers className="h-4 w-4" />
               Chunks ({document.chunks.length})
             </TabsTrigger>
+            {figures.length > 0 && (
+              <TabsTrigger
+                value="figures"
+                className="gap-2 bg-transparent rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 py-2.5 -mb-px"
+              >
+                <ImageIcon className="h-4 w-4" />
+                Figures ({figures.length})
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="intelligence"
               className="gap-2 bg-transparent rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 py-2.5 -mb-px"
@@ -330,7 +353,7 @@ export default function DocumentViewerClient({
           ) : isPdf && (hasS3File || hasBase64) ? (
             <div className="h-full rounded-lg overflow-hidden bg-neutral-900">
               <iframe
-                src={getPdfViewUrl() || ""}
+                src={`${getPdfViewUrl() || ""}${pdfPage ? `#page=${pdfPage}` : ""}`}
                 className="w-full h-full"
                 title={document.title}
               />
@@ -403,6 +426,22 @@ export default function DocumentViewerClient({
             </div>
           </ScrollArea>
         </TabsContent>
+
+        {figures.length > 0 && (
+          <TabsContent value="figures" className="flex-1 min-h-0 mt-0 px-6 py-4">
+            <ScrollArea className="h-full">
+              <DocumentFigures
+                documentId={document.id}
+                figures={figures}
+                isPdf={isPdf}
+                onOpenPage={(page) => {
+                  setPdfPage(page)
+                  setActiveTab("preview")
+                }}
+              />
+            </ScrollArea>
+          </TabsContent>
+        )}
 
         <TabsContent value="intelligence" className="flex-1 min-h-0 mt-0 px-6 py-4">
           <DocumentIntelligence documentId={document.id} />
