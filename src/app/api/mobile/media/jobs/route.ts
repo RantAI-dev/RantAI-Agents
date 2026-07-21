@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { CreateMediaJobInputSchema, ListJobsQuerySchema } from "@/features/media/schema"
 import { createMediaJob } from "@/features/media/service"
 import { listJobsForUser } from "@/features/media/repository"
+import { createMobileAudioJob } from "@/lib/mobile-media-audio"
 import { getMobileContext } from "@/lib/mobile-org"
 
 // Image/audio generation is synchronous; give the route headroom beyond 60s.
@@ -45,11 +46,23 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await createMediaJob({
-      userId: ctx.userId,
-      organizationId: ctx.organizationId,
-      ...parsed.data,
-    })
+    // Audio uses a mobile-only non-streaming path (playable WAV) so the shared
+    // web generateAudio is left untouched. Image stays on the shared service.
+    const result =
+      parsed.data.modality === "AUDIO"
+        ? await createMobileAudioJob({
+            userId: ctx.userId,
+            organizationId: ctx.organizationId,
+            modelId: parsed.data.modelId,
+            prompt: parsed.data.prompt,
+            parameters: parsed.data.parameters,
+            referenceAssetIds: parsed.data.referenceAssetIds,
+          })
+        : await createMediaJob({
+            userId: ctx.userId,
+            organizationId: ctx.organizationId,
+            ...parsed.data,
+          })
     return NextResponse.json(result)
   } catch (error) {
     console.error("[Mobile Media API] POST /jobs failed:", error)
