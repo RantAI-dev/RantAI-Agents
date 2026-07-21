@@ -2,11 +2,15 @@
 
 import { memo, useEffect, useRef, useState } from "react"
 import { StreamdownContent } from "./streamdown-content"
+import type { EmbeddableFigure } from "./citations"
 
 interface MarkdownContentProps {
   content: string
   isStreaming?: boolean
   className?: string
+  /** RAG citation wiring — turns `[n]` into clickable source chips and embeds
+   *  `[figure:N]` figures inline. */
+  citations?: { messageId: string; count: number; figures?: EmbeddableFigure[] }
 }
 
 // Pace character delivery into Streamdown via requestAnimationFrame so
@@ -80,6 +84,7 @@ export const MarkdownContent = memo(function MarkdownContent({
   content,
   isStreaming,
   className,
+  citations,
 }: MarkdownContentProps) {
   const displayed = useTypewriter(content, isStreaming ?? false)
   return (
@@ -87,6 +92,7 @@ export const MarkdownContent = memo(function MarkdownContent({
       content={displayed}
       isStreaming={isStreaming}
       className={className}
+      citations={citations}
     />
   )
 })

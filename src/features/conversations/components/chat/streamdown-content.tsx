@@ -1,14 +1,22 @@
 "use client"
 
-import { Component, useState, type ErrorInfo, type ReactNode } from "react"
+import { Component, useState, type ComponentProps, type ErrorInfo, type ReactNode } from "react"
 import { Streamdown } from "streamdown"
-import type { MermaidErrorComponentProps } from "streamdown"
+import type { MermaidErrorComponentProps, ExtraProps } from "streamdown"
 import "streamdown/styles.css"
 import "katex/dist/katex.min.css"
 import remarkMath from "remark-math"
 import rehypeKatex from "rehype-katex"
 import { useTheme } from "next-themes"
 import { AlertTriangle, RotateCcw, Code } from "@/lib/icons"
+import {
+  linkifyCitations,
+  stripDeadImages,
+  parseCiteHref,
+  citeAnchorId,
+  embedFigures,
+  type EmbeddableFigure,
+} from "./citations"
 
 // Error boundary specifically for Streamdown render failures. Streamdown
 // parses markdown + KaTeX + Mermaid + Shiki on every render; a malformed
@@ -117,18 +125,106 @@ interface StreamdownContentProps {
   content: string
   isStreaming?: boolean
   className?: string
+  /** When set, `[n]` markers become clickable chips scrolling to the matching
+   *  source card (RAG answers). count = number of sources for this message.
+   *  figures = figure sources the model may embed inline via `[figure:N]`. */
+  citations?: { messageId: string; count: number; figures?: EmbeddableFigure[] }
+}
+
+/** Renders an inline figure the model embedded via `[figure:N]` (its src points
+ *  at our asset route) as a bordered figure block with a caption. Non-figure
+ *  images fall back to a plain img. */
+function FigureImage({ src, alt, node: _node, ...props }: ComponentProps<"img"> & ExtraProps) {
+  const isFigure = typeof src === "string" && src.includes("/asset?key=")
+  if (!isFigure) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={alt} {...props} />
+  }
+  return (
+    <span className="block my-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        className="rounded-lg border border-border/50 max-h-80 w-auto object-contain bg-white"
+      />
+      {alt && (
+        <span className="block text-[11px] text-muted-foreground mt-1.5">{alt}</span>
+      )}
+    </span>
+  )
+}
+
+/** Scroll to a source card and briefly ring it. */
+function focusCitation(messageId: string, n: number) {
+  const el =
+    typeof document !== "undefined"
+      ? document.getElementById(citeAnchorId(messageId, n))
+      : null
+  if (!el) return
+  el.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" })
+  // Inset ring draws INSIDE the card, so it's never clipped by the sources
+  // row's overflow-x-auto (which also clips vertically). A subtle bg tint adds
+  // visibility without spilling outside the element bounds.
+  el.classList.add("ring-2", "ring-inset", "ring-primary", "bg-primary/5")
+  window.setTimeout(() => {
+    el.classList.remove("ring-2", "ring-inset", "ring-primary", "bg-primary/5")
+  }, 1400)
+}
+
+/** Anchor renderer: sentinel `#cite-…` hrefs become citation chips; everything
+ *  else renders as a normal external link. */
+function CitationAnchor({
+  href,
+  children,
+  node: _node,
+  ...props
+}: ComponentProps<"a"> & ExtraProps) {
+  const cite = typeof href === "string" ? parseCiteHref(href) : null
+  if (cite) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault()
+          focusCitation(cite.messageId, cite.n)
+        }}
+        className="inline-flex items-center justify-center align-super mx-[1px] min-w-[1.25em] h-[1.25em] px-1 rounded-full bg-primary/15 text-primary text-[0.7em] font-bold leading-none no-underline hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+        title={`Lihat sumber ${cite.n}`}
+      >
+        {cite.n}
+      </button>
+    )
+  }
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+      {children}
+    </a>
+  )
 }
 
 export function StreamdownContent({
   content,
   isStreaming,
   className,
+  citations,
 }: StreamdownContentProps) {
   const { resolvedTheme } = useTheme()
 
+  // Pipeline: strip dead MinerU image refs → embed any [figure:N] the model
+  // placed → linkify [n] citations into clickable chips.
+  const rendered = citations
+    ? linkifyCitations(
+        embedFigures(stripDeadImages(content), citations.figures ?? []),
+        citations.messageId,
+        citations.count,
+      )
+    : content
+
   return (
     <div className={className ?? "chat-message max-w-none"}>
-      <StreamdownErrorBoundary content={content}>
+      <StreamdownErrorBoundary content={rendered}>
         <Streamdown
           animated={{ animation: "fadeIn", sep: "char", duration: 180 }}
           isAnimating={isStreaming}
@@ -140,6 +236,7 @@ export function StreamdownContent({
           }
           controls={{ code: true, table: true, mermaid: true }}
           mermaid={{ errorComponent: MermaidError }}
+          components={citations ? { a: CitationAnchor, img: FigureImage } : undefined}
           plugins={{
             math: {
               name: "katex",
@@ -149,7 +246,7 @@ export function StreamdownContent({
             },
           }}
         >
-          {content}
+          {rendered}
         </Streamdown>
       </StreamdownErrorBoundary>
     </div>

@@ -1,7 +1,8 @@
 "use client"
 
 import { memo } from "react"
-import { ExternalLink } from "@/lib/icons"
+import { ExternalLink, FileText } from "@/lib/icons"
+import { citeAnchorId } from "./citations"
 
 export interface Source {
   title: string
@@ -17,6 +18,11 @@ export interface Source {
 
 interface MessageSourcesProps {
   sources: Source[]
+  /** Message id — scopes citation anchor ids so `[n]` chips scroll here. */
+  messageId?: string
+  /** Figure source numbers the model embedded inline in the answer — hidden
+   *  from the Figures card row so they don't render twice. */
+  hiddenFigureNums?: Set<number>
 }
 
 // Extract domain from URL
@@ -38,40 +44,72 @@ function getFaviconUrl(url: string): string {
   }
 }
 
-export const MessageSources = memo<MessageSourcesProps>(({ sources }) => {
+export const MessageSources = memo<MessageSourcesProps>(({ sources, messageId, hiddenFigureNums }) => {
   if (!sources || sources.length === 0) return null
 
-  // Figures render as image cards; text/table sources as the usual chip.
-  const figures = sources.filter((s) => s.assetKey && s.documentId)
-  const textSources = sources.filter((s) => !s.assetKey)
+  // Number in the SAME order the model was given the source list, so an inline
+  // `[n]` citation lines up with the badge here. Then split for rendering.
+  const numbered = sources.map((s, i) => ({ ...s, n: i + 1 }))
+  // Figures the model embedded inline are dropped from the card row.
+  const figures = numbered.filter(
+    (s) => s.assetKey && s.documentId && !hiddenFigureNums?.has(s.n),
+  )
+  const textSources = numbered.filter((s) => !s.assetKey)
+  const anchorId = (n: number) => (messageId ? citeAnchorId(messageId, n) : undefined)
+
+  // Build the secondary meta line: page and section, whichever exist, without
+  // repeating the title.
+  const metaLine = (s: (typeof numbered)[number]) => {
+    const parts: string[] = []
+    if (s.page != null) parts.push(`hal. ${s.page + 1}`)
+    if (s.section && s.section.trim() && s.section.trim() !== s.title.trim()) {
+      parts.push(s.section.trim())
+    }
+    return parts.join(" · ")
+  }
 
   return (
-    <div className="mt-3 pt-3 border-t border-border/30">
+    <div className="mt-3 pt-3 border-t border-border/30 space-y-3">
       {figures.length > 0 && (
-        <div className="mb-3">
-          <span className="text-[11px] font-medium text-muted-foreground">Figures</span>
-          <div className="flex gap-2 overflow-x-auto pb-1 mt-1.5 scrollbar-thin">
+        <div>
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            Figures
+          </span>
+          <div className="flex gap-2.5 overflow-x-auto pb-1 mt-2 scrollbar-thin">
             {figures.map((source, i) => (
               <a
                 key={`fig-${i}`}
+                id={anchorId(source.n)}
                 href={`/dashboard/files/${source.documentId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-shrink-0 group/fig rounded-xl overflow-hidden border border-border/40 hover:border-border/80 transition-all bg-muted/30"
+                className="relative flex-shrink-0 group/fig rounded-xl border border-border/50 hover:border-primary/50 hover:shadow-sm transition-all bg-card scroll-mt-8"
                 title={source.title}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`/api/dashboard/files/${source.documentId}/asset?key=${encodeURIComponent(source.assetKey as string)}`}
-                  alt={source.title}
-                  className="h-32 w-auto max-w-[280px] object-contain bg-white"
-                  loading="lazy"
-                />
-                <div className="px-2 py-1 max-w-[280px]">
-                  <p className="text-[10px] text-muted-foreground truncate leading-tight">
+                <span className="absolute top-2 left-2 z-10 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none shadow-sm ring-2 ring-background">
+                  {source.n}
+                </span>
+                {/* overflow-hidden lives on the image wrapper (not the card) so
+                    the number badge in the corner isn't clipped by the card's
+                    rounded corner. */}
+                <div className="overflow-hidden rounded-t-xl">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/dashboard/files/${source.documentId}/asset?key=${encodeURIComponent(source.assetKey as string)}`}
+                    alt={source.title}
+                    className="h-32 w-auto max-w-[280px] object-contain bg-white"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="px-2.5 py-1.5 max-w-[280px] border-t border-border/40">
+                  <p className="text-[11px] font-medium text-foreground truncate leading-tight">
                     {source.title}
-                    {source.page != null && ` · hal. ${source.page + 1}`}
                   </p>
+                  {source.page != null && (
+                    <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
+                      hal. {source.page + 1}
+                    </p>
+                  )}
                 </div>
               </a>
             ))}
@@ -79,47 +117,55 @@ export const MessageSources = memo<MessageSourcesProps>(({ sources }) => {
         </div>
       )}
       {textSources.length > 0 && (
-      <>
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-[11px] font-medium text-muted-foreground">Sources</span>
-      </div>
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-        {textSources.map((source, i) => (
-          <a
-            key={i}
-            href={source.documentId ? `/dashboard/files/${source.documentId}` : source.url || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-shrink-0 group/source flex items-center gap-2.5 px-3 py-2 rounded-xl bg-muted/50 border border-border/40 hover:border-border/80 hover:bg-muted/80 transition-all cursor-pointer min-w-[180px] max-w-[240px]"
-          >
-            {source.url ? (
-              <img
-                src={getFaviconUrl(source.url)}
-                alt=""
-                className="h-4 w-4 rounded-sm shrink-0"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none"
-                }}
-              />
-            ) : (
-              <div className="h-4 w-4 rounded-sm bg-muted-foreground/20 shrink-0 flex items-center justify-center">
-                <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-medium text-foreground truncate leading-tight">
-                {source.url ? getDomain(source.url) : source.title}
-              </p>
-              <p className="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">
-                {source.title}
-                {source.section && ` · ${source.section}`}
-              </p>
-            </div>
-            <ExternalLink className="h-3 w-3 text-muted-foreground/0 group-hover/source:text-muted-foreground transition-colors shrink-0" />
-          </a>
-        ))}
-      </div>
-      </>
+        <div>
+          <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            Sources
+          </span>
+          <div className="flex gap-2.5 overflow-x-auto pb-1 mt-2 scrollbar-thin">
+            {textSources.map((source, i) => {
+              const meta = metaLine(source)
+              return (
+                <a
+                  key={i}
+                  id={anchorId(source.n)}
+                  href={source.documentId ? `/dashboard/files/${source.documentId}` : source.url || "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-shrink-0 group/source flex items-start gap-2.5 p-2.5 rounded-xl bg-card border border-border/50 hover:border-primary/50 hover:shadow-sm transition-all cursor-pointer w-[230px] scroll-mt-8"
+                >
+                  <span className="mt-0.5 inline-flex items-center justify-center h-5 min-w-[1.25rem] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none shrink-0">
+                    {source.n}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      {source.url ? (
+                        <img
+                          src={getFaviconUrl(source.url)}
+                          alt=""
+                          className="h-3.5 w-3.5 rounded-sm shrink-0"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = "none"
+                          }}
+                        />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      )}
+                      <p className="text-[11px] font-medium text-foreground truncate leading-tight">
+                        {source.url ? getDomain(source.url) : source.title}
+                      </p>
+                    </div>
+                    {meta && (
+                      <p className="text-[10px] text-muted-foreground truncate leading-tight mt-1">
+                        {meta}
+                      </p>
+                    )}
+                  </div>
+                  <ExternalLink className="h-3 w-3 text-muted-foreground/0 group-hover/source:text-muted-foreground transition-colors shrink-0 mt-0.5" />
+                </a>
+              )
+            })}
+          </div>
+        </div>
       )}
     </div>
   )
