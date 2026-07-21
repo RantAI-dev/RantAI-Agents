@@ -114,7 +114,7 @@ export function isChatPublicServiceError(
 
 function appendSourcesEventToUiStreamResponse(
   response: Response,
-  ragSources: Array<{ title: string; section: string | null; documentId?: string | null }>,
+  ragSources: Array<{ title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }>,
   traceId: string | null = null
 ) {
   const needsSources = ragSources.length > 0 && response.body
@@ -553,7 +553,7 @@ export async function runChat(params: {
     }
 
     // Store RAG sources to send with response
-    let ragSources: Array<{ title: string; section: string | null; documentId?: string | null }> = [];
+    let ragSources: Array<{ title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }> = [];
 
     // Trace data captured during RAG retrieval, emitted later in the structured log.
     let ragTraceData: {
@@ -666,6 +666,9 @@ export async function runChat(params: {
               title: s.documentTitle,
               section: s.section,
               documentId: s.documentId ?? null,
+              assetKey: s.assetKey ?? null,
+              page: s.page ?? null,
+              chunkType: s.chunkType ?? null,
             }))
 
             console.log(

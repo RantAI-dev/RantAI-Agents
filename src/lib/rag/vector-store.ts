@@ -19,6 +19,10 @@ export interface SearchResult {
   similarity: number;
   /** Optional context prefix populated when KB_CONTEXTUAL_RETRIEVAL_ENABLED ran at ingest. */
   contextualPrefix: string | null;
+  /** Figure asset (multimodal RAG): object key + page when chunkType is "figure". */
+  assetKey?: string | null;
+  page?: number | null;
+  chunkType?: string | null;
 }
 
 interface SurrealChunk {
@@ -161,6 +165,9 @@ export async function searchSimilar(
         section: (chunk.metadata as { section?: string } | null)?.section || null,
         similarity: chunk.similarity,
         contextualPrefix: chunk.contextual_prefix,
+        assetKey: (chunk.metadata as { assetKey?: string } | null)?.assetKey ?? null,
+        page: (chunk.metadata as { page?: number } | null)?.page ?? null,
+        chunkType: (chunk.metadata as { chunkType?: string } | null)?.chunkType ?? null,
       };
     });
 

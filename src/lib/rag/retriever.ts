@@ -27,6 +27,9 @@ export interface HybridRetrievalResult {
     documentId: string | null;
     documentTitle: string;
     section: string | null;
+    assetKey?: string | null;
+    page?: number | null;
+    chunkType?: string | null;
   }>;
   results: HybridSearchResult[];
   stats: HybridSearchStats;
@@ -331,17 +334,22 @@ export async function hybridRetrieve(
   // Extract unique sources
   const sourceMap = new Map<
     string,
-    { documentId: string | null; documentTitle: string; section: string | null }
+    { documentId: string | null; documentTitle: string; section: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }
   >();
 
   for (const result of results) {
     const title = result.documentTitle || "Document";
-    const key = `${title}-${result.section || ""}`;
+    // Figures get their own source entry (keyed by asset) so each retrieved
+    // image surfaces distinctly; text chunks dedupe by title+section.
+    const key = result.assetKey ? `asset:${result.assetKey}` : `${title}-${result.section || ""}`;
     if (!sourceMap.has(key)) {
       sourceMap.set(key, {
         documentId: result.documentId ?? null,
         documentTitle: title,
         section: result.section || null,
+        assetKey: result.assetKey ?? null,
+        page: result.page ?? null,
+        chunkType: result.chunkType ?? null,
       });
     }
   }

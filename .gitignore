@@ -54,3 +54,4 @@ site/.next/
 site/out/
 site/tsconfig.tsbuildinfo
 .superpowers/
+services/mineru-server/__pycache__/
