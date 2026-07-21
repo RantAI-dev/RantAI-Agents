@@ -84,7 +84,15 @@ export class SmartChunker {
 
     if (avgBlockSize > this.options.maxChunkSize * 2 && totalLength > this.options.maxChunkSize) {
       console.log(`[SmartChunker] Detected large blocks (avg ${Math.round(avgBlockSize)} chars), using sentence-based splitting`);
-      blocks = this.splitBySentences(markdown);
+      // Sentence-split ONLY oversized prose blocks — tables and code stay whole.
+      // (Blindly sentence-splitting the whole doc shredded tables into unusable
+      // half-rows, the #1 reason table Q&A was weak.)
+      blocks = blocks.flatMap((b) => {
+        const t = this.detectStructure(b).chunkType;
+        if (t === "table" || t === "code") return [b];
+        if (b.length > this.options.maxChunkSize * 2) return this.splitBySentences(b);
+        return [b];
+      });
     }
 
     let currentChunk = "";
@@ -103,6 +111,26 @@ export class SmartChunker {
           structure.headingLevel
         );
         structure.hierarchyPath = [...currentHierarchy];
+      }
+
+      // Tables and code are ATOMIC: emit each as its own whole chunk so a table
+      // is never merged with surrounding prose nor split mid-row. Retrieval +
+      // rendering then treat chunkType "table" specially (return the full table).
+      if (structure.chunkType === "table" || structure.chunkType === "code") {
+        if (currentChunk.trim().length > 0) {
+          chunks.push({
+            chunkIndex: chunkIndex++,
+            metadata: { ...currentMetadata },
+            text: currentChunk.trim(),
+          });
+          currentChunk = "";
+        }
+        chunks.push({
+          chunkIndex: chunkIndex++,
+          metadata: { ...structure, hierarchyPath: structure.hierarchyPath || currentHierarchy },
+          text: block.trim(),
+        });
+        continue;
       }
 
       // Check if new heading/section detected and we respect boundaries
@@ -380,6 +408,7 @@ function smartChunkToChunk(
         smartChunk.metadata.section ||
         smartChunk.metadata.hierarchyPath?.join(" > "),
       chunkIndex: smartChunk.chunkIndex,
+      chunkType: smartChunk.metadata.chunkType,
     },
   };
 }

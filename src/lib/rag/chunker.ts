@@ -12,6 +12,7 @@ export interface Chunk {
     section?: string;
     chunkIndex: number;
     contextualPrefix?: string;  // Phase 7 — added at ingest
+    chunkType?: "text" | "table" | "list" | "code" | "heading";  // structure-aware retrieval/render
   };
 }
 
