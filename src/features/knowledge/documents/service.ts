@@ -392,18 +392,25 @@ export async function createKnowledgeDocumentForDashboard(params: {
         // (KB_EXTRACT_MINERU_BASE_URL, local GPU) OR the hosted API
         // (KB_MINERU_API_KEY, cloud/no-GPU). Sidecar wins when both are set
         // (local + private). Legacy OCR pipeline stays as final fallback.
+        // Layout extractor precedence: on-prem sidecar (local GPU, private) >
+        // hosted MinerU API (free tier) > Mistral OCR (payable, EU). First one
+        // configured wins.
         const { getRagConfig } = await import("@/lib/rag/config")
         const mineruBaseUrl = getRagConfig().extractMineruBaseUrl
         const mineruApiKey = process.env.KB_MINERU_API_KEY
-        if (mineruBaseUrl || mineruApiKey) {
+        const mistralOcrKey = process.env.KB_MISTRAL_OCR_KEY
+        if (mineruBaseUrl || mineruApiKey || mistralOcrKey) {
           try {
             let extractor
             if (mineruBaseUrl) {
               const { MineruExtractor } = await import("@/lib/rag/extractors/mineru-extractor")
               extractor = new MineruExtractor(mineruBaseUrl)
-            } else {
+            } else if (mineruApiKey) {
               const { MineruApiExtractor } = await import("@/lib/rag/extractors/mineru-api-extractor")
               extractor = new MineruApiExtractor()
+            } else {
+              const { MistralOcrExtractor } = await import("@/lib/rag/extractors/mistral-ocr-extractor")
+              extractor = new MistralOcrExtractor()
             }
             const mineruResult = await extractor.extract(fileBuffer, { withFigures: true })
             if (mineruResult.text?.trim()) {
