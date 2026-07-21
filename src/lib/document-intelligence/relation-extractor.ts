@@ -138,6 +138,7 @@ export class LLMRelationExtractor {
             { content: prompt.userPrompt, role: "user" },
           ],
           model: this.config.model,
+          reasoning: { enabled: false }, // extraction: no chain-of-thought (tames reasoning models like mimo)
           response_format: { type: "json_object" },
           temperature: this.config.temperature,
         }),

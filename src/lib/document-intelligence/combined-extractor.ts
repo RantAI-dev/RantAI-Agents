@@ -253,6 +253,10 @@ export class CombinedExtractor {
           { content: prompt.userPrompt, role: "user" },
         ],
         model: this.config.model,
+        // Extraction never needs chain-of-thought; disabling it turns a reasoning
+        // model (e.g. xiaomi/mimo) from 45s+null into ~5s valid JSON. Ignored by
+        // non-reasoning and local models, so it is safe to always send.
+        reasoning: { enabled: false },
         response_format: { type: "json_object" },
         temperature: this.config.temperature,
       }),
