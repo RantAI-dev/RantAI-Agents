@@ -123,6 +123,7 @@ export class LLMEntityExtractor {
           ],
           max_tokens: this.config.maxTokens,
           temperature: this.config.temperature,
+          reasoning: { enabled: false }, // extraction: no chain-of-thought (tames reasoning models like mimo)
           response_format: { type: "json_object" },
         }),
       });
