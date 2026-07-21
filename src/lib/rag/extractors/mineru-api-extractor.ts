@@ -16,6 +16,26 @@ import type { Extractor, ExtractionResult, ExtractedFigure } from "./types"
  * (default https://mineru.net), KB_MINERU_API_LANG (default "id").
  */
 const FIGURE_TYPES = new Set(["image", "chart", "image_block"])
+const CAPTION_RE = /^(gambar|figure|fig\.?|tabel|table|chart|grafik|diagram)\b/i
+
+/** Nearest caption-like text block just below a figure on the same page. */
+function findNearbyCaption(blocks: ContentBlock[], fig: ContentBlock): string | null {
+  const page = fig.page_idx ?? 0
+  const figBottom = fig.bbox?.[3] ?? 0
+  let best: string | null = null
+  let bestGap = Infinity
+  for (const b of blocks) {
+    if (b === fig || (b.page_idx ?? 0) !== page || !b.text?.trim()) continue
+    const top = b.bbox?.[1] ?? 0
+    const gap = top - figBottom
+    // Just below the figure (allow slight overlap), closest wins.
+    if (gap >= -30 && gap < bestGap && gap < 200 && CAPTION_RE.test(b.text.trim())) {
+      bestGap = gap
+      best = b.text.trim()
+    }
+  }
+  return best
+}
 
 interface ContentBlock {
   type?: string
@@ -129,7 +149,6 @@ export class MineruApiExtractor implements Extractor {
               zip[b.img_path] ??
               zip[Object.keys(zip).find((k) => k.endsWith(b.img_path!.split("/").pop()!)) ?? ""]
             if (!imgEntry) continue
-            const caption = Array.isArray(b.image_caption) ? b.image_caption.join(" ").trim() : null
             const bbox = b.bbox
               ? (b.bbox.map((c) => c / 1000) as [number, number, number, number])
               : ([0, 0, 1, 1] as [number, number, number, number])
@@ -137,7 +156,12 @@ export class MineruApiExtractor implements Extractor {
               type: b.type,
               page: b.page_idx ?? 0,
               bbox,
-              caption: caption || null,
+              // Prefer an attached image_caption; else find the nearest caption
+              // text block below the figure (the API emits captions as separate
+              // "text" blocks, e.g. "Gambar 2.1 …").
+              caption:
+                (Array.isArray(b.image_caption) ? b.image_caption.join(" ").trim() : null) ||
+                findNearbyCaption(blocks, b),
               imageBase64: Buffer.from(imgEntry).toString("base64"),
             })
           }
