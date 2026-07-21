@@ -387,15 +387,25 @@ export async function createKnowledgeDocumentForDashboard(params: {
       const isScanned = params.input.forceOCR || (await isPDFScanned(fileBuffer))
 
       if (isScanned) {
-        // Prefer the MinerU sidecar when deployed (KB_EXTRACT_MINERU_BASE_URL)
-        // — purpose-built for scanned/table-heavy PDFs and fully local. The
-        // legacy OCR pipeline (Ollama → OpenRouter vision) stays as fallback.
+        // MinerU is purpose-built for scanned/table-heavy PDFs and returns
+        // cropped figures. Prefer it two ways: the on-prem sidecar
+        // (KB_EXTRACT_MINERU_BASE_URL, local GPU) OR the hosted API
+        // (KB_MINERU_API_KEY, cloud/no-GPU). Sidecar wins when both are set
+        // (local + private). Legacy OCR pipeline stays as final fallback.
         const { getRagConfig } = await import("@/lib/rag/config")
         const mineruBaseUrl = getRagConfig().extractMineruBaseUrl
-        if (mineruBaseUrl) {
+        const mineruApiKey = process.env.KB_MINERU_API_KEY
+        if (mineruBaseUrl || mineruApiKey) {
           try {
-            const { MineruExtractor } = await import("@/lib/rag/extractors/mineru-extractor")
-            const mineruResult = await new MineruExtractor(mineruBaseUrl).extract(fileBuffer, { withFigures: true })
+            let extractor
+            if (mineruBaseUrl) {
+              const { MineruExtractor } = await import("@/lib/rag/extractors/mineru-extractor")
+              extractor = new MineruExtractor(mineruBaseUrl)
+            } else {
+              const { MineruApiExtractor } = await import("@/lib/rag/extractors/mineru-api-extractor")
+              extractor = new MineruApiExtractor()
+            }
+            const mineruResult = await extractor.extract(fileBuffer, { withFigures: true })
             if (mineruResult.text?.trim()) {
               content = mineruResult.text
               usedOCR = true
