@@ -42,6 +42,9 @@ export interface RetrievalResult {
     documentTitle: string;
     section: string | null;
     categories: string[];
+    assetKey?: string | null;
+    page?: number | null;
+    chunkType?: string | null;
   }>;
   chunks: SearchResult[];
 }
@@ -191,17 +194,20 @@ export async function retrieveContext(
   // Extract unique sources
   const sourceMap = new Map<
     string,
-    { documentId: string | null; documentTitle: string; section: string | null; categories: string[] }
+    { documentId: string | null; documentTitle: string; section: string | null; categories: string[]; assetKey?: string | null; page?: number | null; chunkType?: string | null }
   >();
 
   for (const chunk of chunks) {
-    const key = `${chunk.documentTitle}-${chunk.section || ""}`;
+    const key = chunk.assetKey ? `asset:${chunk.assetKey}` : `${chunk.documentTitle}-${chunk.section || ""}`;
     if (!sourceMap.has(key)) {
       sourceMap.set(key, {
         documentId: chunk.documentId ?? null,
         documentTitle: chunk.documentTitle,
         section: chunk.section,
         categories: chunk.categories,
+        assetKey: chunk.assetKey ?? null,
+        page: chunk.page ?? null,
+        chunkType: chunk.chunkType ?? null,
       });
     }
   }

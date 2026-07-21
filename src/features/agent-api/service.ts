@@ -152,7 +152,7 @@ export async function runV1ChatCompletion(
 
   // Sources surfaced back to the API client so an external frontend can render
   // reference cards ("which documents did the answer draw on").
-  let ragSources: Array<{ title: string; section: string | null; documentId?: string | null }> = []
+  let ragSources: Array<{ title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }> = []
   if (assistant.useKnowledgeBase && rawUserQuery) {
     try {
       const groupIds = assistant.knowledgeBaseGroupIds.length > 0
@@ -197,7 +197,7 @@ export async function runV1ChatCompletion(
       if (hybridResult.context) {
         const formattedContext = formatHybridContextForPrompt(hybridResult)
         systemPrompt = `${systemPrompt}\n\n${formattedContext}`
-        ragSources = hybridResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null }))
+        ragSources = hybridResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null }))
         console.log(`[V1 API] RAG hybrid: ${hybridResult.results.length} chunks`)
       } else {
         const retrievalResult = await smartRetrieve(userQuery, {
@@ -207,7 +207,7 @@ export async function runV1ChatCompletion(
         if (retrievalResult.context) {
           const formattedContext = formatContextForPrompt(retrievalResult)
           systemPrompt = `${systemPrompt}\n\n${formattedContext}`
-          ragSources = retrievalResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null }))
+          ragSources = retrievalResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null }))
           console.log(`[V1 API] RAG vector: ${retrievalResult.chunks.length} chunks`)
         }
       }
@@ -281,7 +281,7 @@ export async function runV1ChatCompletion(
 }
 
 /** Sources (KB documents) an answer drew on, for the client to render references. */
-type RagSource = { title: string; section: string | null; documentId?: string | null }
+type RagSource = { title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }
 
 function createSSEStreamResponse(
   result: ReturnType<typeof streamText>,
