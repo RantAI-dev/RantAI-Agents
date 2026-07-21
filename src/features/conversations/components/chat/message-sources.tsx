@@ -9,6 +9,10 @@ export interface Source {
   url?: string | null
   /** KB document id — source card links to /dashboard/files/{id} when set. */
   documentId?: string | null
+  /** Figure asset (multimodal RAG): object key of a cropped figure to render. */
+  assetKey?: string | null
+  page?: number | null
+  chunkType?: string | null
 }
 
 interface MessageSourcesProps {
@@ -37,13 +41,50 @@ function getFaviconUrl(url: string): string {
 export const MessageSources = memo<MessageSourcesProps>(({ sources }) => {
   if (!sources || sources.length === 0) return null
 
+  // Figures render as image cards; text/table sources as the usual chip.
+  const figures = sources.filter((s) => s.assetKey && s.documentId)
+  const textSources = sources.filter((s) => !s.assetKey)
+
   return (
     <div className="mt-3 pt-3 border-t border-border/30">
+      {figures.length > 0 && (
+        <div className="mb-3">
+          <span className="text-[11px] font-medium text-muted-foreground">Figures</span>
+          <div className="flex gap-2 overflow-x-auto pb-1 mt-1.5 scrollbar-thin">
+            {figures.map((source, i) => (
+              <a
+                key={`fig-${i}`}
+                href={`/dashboard/files/${source.documentId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0 group/fig rounded-xl overflow-hidden border border-border/40 hover:border-border/80 transition-all bg-muted/30"
+                title={source.title}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={`/api/dashboard/files/${source.documentId}/asset?key=${encodeURIComponent(source.assetKey as string)}`}
+                  alt={source.title}
+                  className="h-32 w-auto max-w-[280px] object-contain bg-white"
+                  loading="lazy"
+                />
+                <div className="px-2 py-1 max-w-[280px]">
+                  <p className="text-[10px] text-muted-foreground truncate leading-tight">
+                    {source.title}
+                    {source.page != null && ` · hal. ${source.page + 1}`}
+                  </p>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+      {textSources.length > 0 && (
+      <>
       <div className="flex items-center gap-1.5 mb-2">
         <span className="text-[11px] font-medium text-muted-foreground">Sources</span>
       </div>
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-        {sources.map((source, i) => (
+        {textSources.map((source, i) => (
           <a
             key={i}
             href={source.documentId ? `/dashboard/files/${source.documentId}` : source.url || "#"}
@@ -78,6 +119,8 @@ export const MessageSources = memo<MessageSourcesProps>(({ sources }) => {
           </a>
         ))}
       </div>
+      </>
+      )}
     </div>
   )
 })

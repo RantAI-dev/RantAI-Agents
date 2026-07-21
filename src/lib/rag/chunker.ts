@@ -12,7 +12,9 @@ export interface Chunk {
     section?: string;
     chunkIndex: number;
     contextualPrefix?: string;  // Phase 7 — added at ingest
-    chunkType?: "text" | "table" | "list" | "code" | "heading";  // structure-aware retrieval/render
+    chunkType?: "text" | "table" | "list" | "code" | "heading" | "figure";  // structure-aware retrieval/render
+    assetKey?: string;   // object-store key of the figure crop (chunkType "figure")
+    page?: number;       // source page index for the figure/chunk
   };
 }
 

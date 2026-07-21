@@ -19,6 +19,7 @@ import { canEdit, canManage } from "@/lib/organization"
 import {
   countKnowledgeDocumentsForScope,
   createKnowledgeDocument,
+  updateKnowledgeDocumentMetadata,
   deleteKnowledgeDocument,
   findKnowledgeDocumentAccessById,
   findKnowledgeDocumentById,
@@ -349,6 +350,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
   let mimeType: string | undefined
   let originalFilename: string | undefined
   let fileType: "markdown" | "pdf" | "image" = "markdown"
+  let extractedFigures: import("@/lib/rag/extractors/types").ExtractedFigure[] | undefined
   let usedOCR = false
 
   if (params.input.kind === "file") {
@@ -393,10 +395,11 @@ export async function createKnowledgeDocumentForDashboard(params: {
         if (mineruBaseUrl) {
           try {
             const { MineruExtractor } = await import("@/lib/rag/extractors/mineru-extractor")
-            const mineruResult = await new MineruExtractor(mineruBaseUrl).extract(fileBuffer)
+            const mineruResult = await new MineruExtractor(mineruBaseUrl).extract(fileBuffer, { withFigures: true })
             if (mineruResult.text?.trim()) {
               content = mineruResult.text
               usedOCR = true
+              if (mineruResult.figures?.length) extractedFigures = mineruResult.figures
             }
           } catch (error) {
             console.warn(
@@ -697,6 +700,35 @@ export async function createKnowledgeDocumentForDashboard(params: {
       chunkSize: 1000,
       chunkOverlap: 200,
     })
+  }
+
+  // ── Figure asset layer (multimodal RAG): upload crops + append searchable
+  // figure chunks so retrieval can surface + render the original image. ──
+  if (extractedFigures?.length) {
+    try {
+      const { storeFiguresAsChunks } = await import("@/lib/rag/figure-assets")
+      const { chunks: figChunks, assets } = await storeFiguresAsChunks({
+        organizationId: params.context.organizationId || null,
+        documentId: document.id,
+        documentTitle: title,
+        category: categories[0] ?? "general",
+        subcategory: params.input.subcategory || undefined,
+        figures: extractedFigures,
+      })
+      if (figChunks.length) {
+        // Reindex chunkIndex across the combined set (figure chunks were -1).
+        chunks = [...chunks, ...figChunks].map((c, i) => ({
+          ...c,
+          metadata: { ...c.metadata, chunkIndex: i },
+        }))
+      }
+      if (assets.length) {
+        await updateKnowledgeDocumentMetadata(document.id, { figures: assets })
+      }
+      console.log(`[Knowledge API] Figures: ${assets.length} stored for document ${document.id}`)
+    } catch (err) {
+      console.warn(`[Knowledge API] Figure asset ingest failed (non-fatal): ${err instanceof Error ? err.message : err}`)
+    }
   }
 
   // Embed + store atomically: if either step fails, the Document row in

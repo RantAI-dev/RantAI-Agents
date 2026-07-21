@@ -85,6 +85,10 @@ export interface HybridSearchResult {
   section?: string;
   /** Category */
   category?: string;
+  /** Figure asset (multimodal RAG): object key + page when chunkType is "figure". */
+  assetKey?: string | null;
+  page?: number | null;
+  chunkType?: string | null;
   /** Vector similarity score (0-1) */
   vectorScore: number;
   /** Entity/Graph match score (0-1) */
@@ -545,7 +549,7 @@ export class HybridSearch {
       // code read `.title` which is not the field name → "[Document]" placeholder
       // leaked into every citation.
       const meta = data.chunk.metadata as
-        | { documentTitle?: string; section?: string; category?: string; title?: string }
+        | { documentTitle?: string; section?: string; category?: string; title?: string; assetKey?: string; page?: number; chunkType?: string }
         | undefined
       // contextual_prefix is a top-level SurrealDB column (see schema.surql:22),
       // not in `metadata`. Surface it via a separate cast.
@@ -559,6 +563,9 @@ export class HybridSearch {
         documentTitle: meta?.documentTitle ?? meta?.title,
         section: meta?.section,
         category: meta?.category,
+        assetKey: meta?.assetKey ?? null,
+        page: meta?.page ?? null,
+        chunkType: meta?.chunkType ?? null,
         vectorScore: data.vectorScore,
         entityScore: data.entityScore,
         graphScore: data.graphScore,

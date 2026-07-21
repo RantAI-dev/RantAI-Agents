@@ -74,6 +74,13 @@ export const S3Paths = {
     `documents/${orgId || "global"}/${docId}/${sanitizeFilename(filename)}`,
 
   /**
+   * Path for a cropped figure/asset extracted from a document (multimodal RAG).
+   * Format: documents/{orgId|global}/{docId}/assets/{filename}
+   */
+  documentAsset: (orgId: string | null, docId: string, filename: string): string =>
+    `documents/${orgId || "global"}/${docId}/assets/${sanitizeFilename(filename)}`,
+
+  /**
    * Path for organization logos
    * Format: organizations/{orgId}/logo/{filename}
    */

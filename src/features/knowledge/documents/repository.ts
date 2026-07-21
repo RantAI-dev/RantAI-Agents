@@ -96,6 +96,21 @@ export async function createKnowledgeDocument(data: Prisma.DocumentCreateArgs["d
   })
 }
 
+/** Merge extra keys into a document's metadata JSON (preserves existing keys). */
+export async function updateKnowledgeDocumentMetadata(
+  id: string,
+  patch: Record<string, unknown>,
+) {
+  const existing = await prisma.document.findUnique({ where: { id }, select: { metadata: true } })
+  const current = (existing?.metadata && typeof existing.metadata === "object")
+    ? (existing.metadata as Record<string, unknown>)
+    : {}
+  return prisma.document.update({
+    where: { id },
+    data: { metadata: { ...current, ...patch } as Prisma.InputJsonValue },
+  })
+}
+
 export async function updateKnowledgeDocumentWithGroups(
   id: string,
   data: Prisma.DocumentUpdateInput,
