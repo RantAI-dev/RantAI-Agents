@@ -387,40 +387,47 @@ export async function createKnowledgeDocumentForDashboard(params: {
       const isScanned = params.input.forceOCR || (await isPDFScanned(fileBuffer))
 
       if (isScanned) {
-        // MinerU is purpose-built for scanned/table-heavy PDFs and returns
-        // cropped figures. Prefer it two ways: the on-prem sidecar
-        // (KB_EXTRACT_MINERU_BASE_URL, local GPU) OR the hosted API
-        // (KB_MINERU_API_KEY, cloud/no-GPU). Sidecar wins when both are set
-        // (local + private). Legacy OCR pipeline stays as final fallback.
-        // Layout extractor precedence: on-prem sidecar (local GPU, private) >
-        // hosted MinerU API (free tier) > Mistral OCR (payable, EU). First one
-        // configured wins.
+        // Layout extractors (MinerU/Mistral) — purpose-built for scanned/
+        // table-heavy PDFs and return cropped figures. Build an ordered CHAIN
+        // from whatever is configured and try each until one yields text, so a
+        // provider outage/quota falls through to the next rather than dropping
+        // to the (figure-less) legacy OCR pipeline:
+        //   1. on-prem MinerU sidecar  (KB_EXTRACT_MINERU_BASE_URL) — GPU, private
+        //   2. hosted MinerU API       (KB_MINERU_API_KEY)          — free tier
+        //   3. Mistral OCR             (KB_MISTRAL_OCR_KEY)         — payable, EU
+        // Override the order with KB_LAYOUT_EXTRACTOR_ORDER (csv of
+        // sidecar,mineru-api,mistral). Legacy OCR remains the final fallback.
         const { getRagConfig } = await import("@/lib/rag/config")
         const mineruBaseUrl = getRagConfig().extractMineruBaseUrl
-        const mineruApiKey = process.env.KB_MINERU_API_KEY
-        const mistralOcrKey = process.env.KB_MISTRAL_OCR_KEY
-        if (mineruBaseUrl || mineruApiKey || mistralOcrKey) {
+        const available: Record<string, () => Promise<import("@/lib/rag/extractors/types").Extractor>> = {
+          sidecar: mineruBaseUrl
+            ? async () => new (await import("@/lib/rag/extractors/mineru-extractor")).MineruExtractor(mineruBaseUrl)
+            : undefined as never,
+          "mineru-api": process.env.KB_MINERU_API_KEY
+            ? async () => new (await import("@/lib/rag/extractors/mineru-api-extractor")).MineruApiExtractor()
+            : undefined as never,
+          mistral: process.env.KB_MISTRAL_OCR_KEY
+            ? async () => new (await import("@/lib/rag/extractors/mistral-ocr-extractor")).MistralOcrExtractor()
+            : undefined as never,
+        }
+        const defaultOrder = ["sidecar", "mineru-api", "mistral"]
+        const order = (process.env.KB_LAYOUT_EXTRACTOR_ORDER?.split(",").map((x) => x.trim()) || defaultOrder)
+          .filter((name) => typeof available[name] === "function")
+        for (const name of order) {
           try {
-            let extractor
-            if (mineruBaseUrl) {
-              const { MineruExtractor } = await import("@/lib/rag/extractors/mineru-extractor")
-              extractor = new MineruExtractor(mineruBaseUrl)
-            } else if (mineruApiKey) {
-              const { MineruApiExtractor } = await import("@/lib/rag/extractors/mineru-api-extractor")
-              extractor = new MineruApiExtractor()
-            } else {
-              const { MistralOcrExtractor } = await import("@/lib/rag/extractors/mistral-ocr-extractor")
-              extractor = new MistralOcrExtractor()
-            }
-            const mineruResult = await extractor.extract(fileBuffer, { withFigures: true })
-            if (mineruResult.text?.trim()) {
-              content = mineruResult.text
+            const extractor = await available[name]()
+            const result = await extractor.extract(fileBuffer, { withFigures: true })
+            if (result.text?.trim()) {
+              content = result.text
               usedOCR = true
-              if (mineruResult.figures?.length) extractedFigures = mineruResult.figures
+              if (result.figures?.length) extractedFigures = result.figures
+              console.log(`[Knowledge] Layout extraction via ${name} (${result.figures?.length ?? 0} figures)`)
+              break
             }
+            console.warn(`[Knowledge] ${name} returned no text, trying next extractor`)
           } catch (error) {
             console.warn(
-              `[Knowledge] MinerU extraction failed, falling back to OCR pipeline: ${error instanceof Error ? error.message : error}`
+              `[Knowledge] ${name} extraction failed, trying next: ${error instanceof Error ? error.message : error}`
             )
           }
         }
