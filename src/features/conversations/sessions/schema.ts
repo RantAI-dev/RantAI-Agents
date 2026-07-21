@@ -1,5 +1,24 @@
 import { z } from "zod"
 
+/**
+ * A retrieval source persisted on an assistant message. Mirrors the RagSource
+ * the chat stream emits so figures/pages/citations survive a reload. `content`
+ * and `similarity` are legacy/optional; the rest drive the Sources & Figures
+ * cards and numbered `[n]` citations. Keep OPTIONAL + additive — z.object
+ * strips unknown keys, so any field the UI reads MUST be listed here.
+ */
+export const PersistedSourceSchema = z.object({
+  title: z.string(),
+  section: z.string().nullable().optional(),
+  url: z.string().nullable().optional(),
+  documentId: z.string().nullable().optional(),
+  assetKey: z.string().nullable().optional(),
+  page: z.number().nullable().optional(),
+  chunkType: z.string().nullable().optional(),
+  content: z.string().optional(),
+  similarity: z.number().optional(),
+})
+
 export const DashboardChatSessionIdParamsSchema = z.object({
   id: z.string().min(1),
 })
@@ -34,15 +53,7 @@ export const DashboardChatSessionMessagesBodySchema = z.object({
           })
         )
         .optional(),
-      sources: z
-        .array(
-          z.object({
-            title: z.string(),
-            content: z.string(),
-            similarity: z.number().optional(),
-          })
-        )
-        .optional(),
+      sources: z.array(PersistedSourceSchema).optional(),
       metadata: z.record(z.unknown()).optional(),
     })
   ),
@@ -60,16 +71,7 @@ export const DashboardChatSessionMessageUpdateBodySchema = z.object({
       })
     )
     .optional(),
-  sources: z
-    .array(
-      z.object({
-        title: z.string(),
-        content: z.string(),
-        similarity: z.number().optional(),
-      })
-    )
-    .nullable()
-    .optional(),
+  sources: z.array(PersistedSourceSchema).nullable().optional(),
   metadata: z.record(z.unknown()).optional(),
 })
 

@@ -57,7 +57,13 @@ export interface DashboardChatSessionMessage {
   }>
   sources?: Array<{
     title: string
-    content: string
+    section?: string | null
+    url?: string | null
+    documentId?: string | null
+    assetKey?: string | null
+    page?: number | null
+    chunkType?: string | null
+    content?: string
     similarity?: number
   }>
   metadata: Record<string, unknown> | null
@@ -360,7 +366,7 @@ export async function addDashboardChatSessionMessages(params: {
       content: string
       replyTo?: string
       editHistory?: Array<{ content: string; assistantResponse?: string; editedAt: string }>
-      sources?: Array<{ title: string; content: string; similarity?: number }>
+      sources?: DashboardChatSessionMessage["sources"]
       metadata?: Record<string, unknown>
     }) => ({
       id: message.id,

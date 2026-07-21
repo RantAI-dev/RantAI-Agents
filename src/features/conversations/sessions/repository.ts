@@ -1,6 +1,20 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
+/** Persisted retrieval source shape (RAG). Stored as JSON; kept permissive so
+ *  figure/page/citation fields survive round-trips. */
+type PersistedMessageSource = {
+  title: string
+  section?: string | null
+  url?: string | null
+  documentId?: string | null
+  assetKey?: string | null
+  page?: number | null
+  chunkType?: string | null
+  content?: string
+  similarity?: number
+}
+
 export async function findDashboardSessionsByUser(userId: string) {
   return prisma.dashboardSession.findMany({
     where: { userId },
@@ -84,7 +98,7 @@ export async function createDashboardMessages(
     content: string
     replyTo?: string
     editHistory?: Array<{ content: string; assistantResponse?: string; editedAt: string }>
-    sources?: Array<{ title: string; content: string; similarity?: number }>
+    sources?: Array<PersistedMessageSource>
     metadata?: Record<string, unknown>
   }>
 ) {
@@ -148,7 +162,7 @@ export async function updateDashboardMessageById(
   data: {
     content?: string
     editHistory?: Array<{ content: string; assistantResponse?: string; editedAt: string }>
-    sources?: Array<{ title: string; content: string; similarity?: number }>
+    sources?: Array<PersistedMessageSource>
     metadata?: Record<string, unknown>
   }
 ) {
