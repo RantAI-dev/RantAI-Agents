@@ -1,4 +1,4 @@
-import type { Extractor, ExtractionResult } from "./types";
+import type { Extractor, ExtractionResult, ExtractedFigure } from "./types";
 
 /**
  * Client for the MinerU2.5-Pro extraction sidecar defined in
@@ -24,7 +24,7 @@ export class MineruExtractor implements Extractor {
     this.baseUrl = baseUrl.replace(/\/+$/, "").replace(/\/extract$/, "");
   }
 
-  async extract(pdfBuffer: Buffer): Promise<ExtractionResult> {
+  async extract(pdfBuffer: Buffer, opts?: { withFigures?: boolean }): Promise<ExtractionResult> {
     const t0 = Date.now();
     const form = new FormData();
     // Copy into a standalone ArrayBuffer. Node's Buffer/Uint8Array parameterize
@@ -40,6 +40,7 @@ export class MineruExtractor implements Extractor {
       new Blob([ab], { type: "application/pdf" }),
       "document.pdf"
     );
+    if (opts?.withFigures) form.append("structured", "true");
 
     const res = await fetch(`${this.baseUrl}/extract`, {
       method: "POST",
@@ -57,13 +58,29 @@ export class MineruExtractor implements Extractor {
       text: string;
       ms?: number;
       pages?: number;
+      figures?: Array<{
+        type: string;
+        page: number;
+        bbox: [number, number, number, number];
+        caption: string | null;
+        image_b64: string;
+      }>;
     };
+
+    const figures: ExtractedFigure[] | undefined = data.figures?.map((f) => ({
+      type: f.type,
+      page: f.page,
+      bbox: f.bbox,
+      caption: f.caption,
+      imageBase64: f.image_b64,
+    }));
 
     return {
       text: data.text ?? "",
       ms: data.ms ?? Date.now() - t0,
       pages: data.pages,
       model: "mineru-2.5-pro",
+      ...(figures ? { figures } : {}),
     };
   }
 }
