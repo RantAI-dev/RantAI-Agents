@@ -135,9 +135,22 @@ export class MineruApiExtractor implements Extractor {
     const text = mdKey ? new TextDecoder().decode(zip[mdKey]) : ""
 
     // 5. Figures from content_list.json, reading the pre-cropped images.
+    //    We also build a pageMap from the same blocks (text + page_idx) so
+    //    text chunks can be tagged with their source page later.
     let figures: ExtractedFigure[] | undefined
+    let pageMap: Array<{ page: number; text: string }> | undefined
+    const clKey = Object.keys(zip).find((k) => k.endsWith("content_list.json"))
+    if (clKey) {
+      try {
+        const allBlocks = JSON.parse(new TextDecoder().decode(zip[clKey])) as ContentBlock[]
+        pageMap = allBlocks
+          .filter((b) => b.text?.trim())
+          .map((b) => ({ page: b.page_idx ?? 0, text: b.text!.trim() }))
+      } catch {
+        // pageMap is best-effort; ignore parse issues.
+      }
+    }
     if (opts?.withFigures) {
-      const clKey = Object.keys(zip).find((k) => k.endsWith("content_list.json"))
       if (clKey) {
         try {
           const blocks = JSON.parse(new TextDecoder().decode(zip[clKey])) as ContentBlock[]
@@ -176,6 +189,7 @@ export class MineruApiExtractor implements Extractor {
       ms: Date.now() - t0,
       model: "mineru-api-2.5-pro",
       ...(figures ? { figures } : {}),
+      ...(pageMap?.length ? { pageMap } : {}),
     }
   }
 }

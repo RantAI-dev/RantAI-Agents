@@ -14,6 +14,13 @@ export interface ExtractionResult {
   pages?: number;
   model: string;
   figures?: ExtractedFigure[];
+  /**
+   * Ordered text blocks with their 0-based page index (from layout parsers
+   * that expose per-block pages, e.g. MinerU content_list). Used to attach a
+   * page number to each text chunk so sources can show "hal. N". Optional —
+   * extractors without page info omit it and chunk pages stay null.
+   */
+  pageMap?: Array<{ page: number; text: string }>;
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;

@@ -11,6 +11,7 @@ import {
   getDocumentChunkCounts,
   type Chunk,
 } from "@/lib/rag"
+import { assignChunkPages } from "@/lib/rag/page-map"
 import { extractEntities, extractEntitiesAndRelations } from "@/lib/document-intelligence"
 import { getSurrealClient } from "@/lib/surrealdb"
 import { uploadFile, S3Paths, validateUpload, getPresignedDownloadUrl, deleteFile } from "@/lib/s3"
@@ -351,6 +352,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
   let originalFilename: string | undefined
   let fileType: "markdown" | "pdf" | "image" = "markdown"
   let extractedFigures: import("@/lib/rag/extractors/types").ExtractedFigure[] | undefined
+  let extractionPageMap: Array<{ page: number; text: string }> | undefined
   let usedOCR = false
 
   if (params.input.kind === "file") {
@@ -421,7 +423,8 @@ export async function createKnowledgeDocumentForDashboard(params: {
               content = result.text
               usedOCR = true
               if (result.figures?.length) extractedFigures = result.figures
-              console.log(`[Knowledge] Layout extraction via ${name} (${result.figures?.length ?? 0} figures)`)
+              if (result.pageMap?.length) extractionPageMap = result.pageMap
+              console.log(`[Knowledge] Layout extraction via ${name} (${result.figures?.length ?? 0} figures, ${result.pageMap?.length ?? 0} page blocks)`)
               break
             }
             console.warn(`[Knowledge] ${name} returned no text, trying next extractor`)
@@ -454,8 +457,15 @@ export async function createKnowledgeDocumentForDashboard(params: {
         try {
           const { extractText, getDocumentProxy } = await import("unpdf")
           const pdf = await getDocumentProxy(new Uint8Array(fileBuffer))
-          const { text } = await extractText(pdf, { mergePages: true })
-          content = text
+          // Per-page extraction (mergePages:false → string[]) so we can build a
+          // pageMap and tag every text chunk with its source page, then join
+          // for the chunker input.
+          const { text } = await extractText(pdf, { mergePages: false })
+          const pages = Array.isArray(text) ? text : [text]
+          content = pages.join("\n\n")
+          extractionPageMap = pages
+            .map((t, i) => ({ page: i, text: (t || "").trim() }))
+            .filter((p) => p.text.length > 0)
         } catch (error) {
           console.error("PDF parsing error:", error)
           extractionError = `PDF parse failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
@@ -724,6 +734,12 @@ export async function createKnowledgeDocumentForDashboard(params: {
       chunkSize: 1000,
       chunkOverlap: 200,
     })
+  }
+
+  // Tag text chunks with their source page (from the layout parser's page map)
+  // so retrieval sources can show "hal. N". Best-effort; no-op without a map.
+  if (extractionPageMap?.length) {
+    chunks = assignChunkPages(chunks, extractionPageMap)
   }
 
   // ── Figure asset layer (multimodal RAG): upload crops + append searchable

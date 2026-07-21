@@ -15,6 +15,17 @@ export interface FigureAsset {
   page: number
   caption: string | null
   bbox: [number, number, number, number]
+  /** Coarse kind for UI badging. MinerU emits image/chart/image_block; we
+   *  normalize to a small set the gallery can label. */
+  type: "chart" | "table" | "image" | "figure"
+}
+
+/** Normalize the extractor's raw block type to a UI-facing figure kind. */
+function normalizeFigureType(raw: string): FigureAsset["type"] {
+  if (raw === "chart") return "chart"
+  if (raw === "table") return "table"
+  if (raw === "image" || raw === "image_block") return "image"
+  return "figure"
 }
 
 /**
@@ -52,7 +63,13 @@ export async function storeFiguresAsChunks(params: {
       continue
     }
 
-    assets.push({ assetKey: key, page: fig.page, caption: fig.caption, bbox: fig.bbox })
+    assets.push({
+      assetKey: key,
+      page: fig.page,
+      caption: fig.caption,
+      bbox: fig.bbox,
+      type: normalizeFigureType(fig.type),
+    })
 
     // The embedded text is what makes the figure findable. MinerU's printed
     // caption ("Gambar 2.1 Grafik ...") is more reliable than a VLM guess;
