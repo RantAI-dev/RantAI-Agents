@@ -78,7 +78,9 @@ export async function POST(request: Request) {
           categories: parseList(formData.get("categories")),
           subcategory: (formData.get("subcategory") as string | null) ?? undefined,
           groupIds: parseList(formData.get("groupIds")),
-          useEnhanced: false,
+          // Enhanced (entity/relation extraction for the Intelligence view) is
+          // on by default, matching the web; the client can disable it for speed.
+          useEnhanced: formData.get("enhanced") !== "false",
           useCombined: true,
           forceOCR: formData.get("forceOCR") === "true",
           documentType: (formData.get("documentType") as string | null) ?? undefined,
