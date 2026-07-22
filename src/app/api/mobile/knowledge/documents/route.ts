@@ -99,6 +99,7 @@ export async function POST(request: Request) {
         { status: 400 },
       )
     }
+    const enhanced = new URL(request.url).searchParams.get("enhanced") === "true"
     const result = await createKnowledgeDocumentForDashboard({
       context,
       input: {
@@ -108,7 +109,7 @@ export async function POST(request: Request) {
         categories: parsed.data.categories,
         subcategory: parsed.data.subcategory,
         groupIds: Array.isArray(parsed.data.groupIds) ? parsed.data.groupIds : [],
-        useEnhanced: false,
+        useEnhanced: enhanced,
         useCombined: true,
       },
     })
