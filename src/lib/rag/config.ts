@@ -7,6 +7,22 @@ export interface RagConfig {
   embeddingDim: number;
   /** Default number of chunks returned to the LLM. Env: KB_DEFAULT_MAX_CHUNKS. */
   defaultMaxChunks: number;
+  /** Neighbor-window expansion: after ranking, pull ±N adjacent chunks (same
+   *  doc, by chunk_index) around each retrieved chunk so a table/figure travels
+   *  with its surrounding explanation. 0 disables. Env: KB_NEIGHBOR_WINDOW. */
+  neighborWindow: number;
+  /** Selective VLM-at-answer: when a retrieved chunk is a visual figure of a
+   *  trigger kind, attach its actual crop image to the generation call so a
+   *  vision model reads the pixels. Off by default (needs a vision model + adds
+   *  image tokens). Env: KB_VLM_AT_ANSWER_ENABLED. */
+  vlmAtAnswerEnabled: boolean;
+  /** Which figure kinds trigger VLM-at-answer. Comma list of: chart, figure
+   *  (figure/image = all figures). Default "chart" — charts/plots are where
+   *  pixels carry the answer; tables stay text. Env: KB_VLM_AT_ANSWER_TYPES. */
+  vlmAtAnswerTypes: string;
+  /** Hard cap on images attached per answer (cost/latency guard).
+   *  Env: KB_VLM_AT_ANSWER_MAX_IMAGES. */
+  vlmAtAnswerMaxImages: number;
   rerankEnabled: boolean;
   rerankModel: string;
   rerankInitialK: number;
@@ -63,6 +79,10 @@ const DEFAULTS: RagConfig = {
   // too few — answers came back missing facets. 8 still fits comfortably in any
   // modern context window given chunk size ~1000 chars.
   defaultMaxChunks: 8,
+  neighborWindow: 1,                    // ±1 adjacent chunk — cheap; keeps table+explanation together
+  vlmAtAnswerEnabled: false,            // opt-in: needs a vision model + adds image tokens
+  vlmAtAnswerTypes: "chart",            // charts carry answer in pixels; tables stay text
+  vlmAtAnswerMaxImages: 2,
   rerankEnabled: false,
   rerankModel: "openai/gpt-4.1-nano",
   rerankInitialK: 20,
@@ -115,6 +135,10 @@ export function envRagConfig(): RagConfig {
     embeddingModel: process.env.KB_EMBEDDING_MODEL || DEFAULTS.embeddingModel,
     embeddingDim: parseIntEnv("KB_EMBEDDING_DIM", DEFAULTS.embeddingDim),
     defaultMaxChunks: parseIntEnv("KB_DEFAULT_MAX_CHUNKS", DEFAULTS.defaultMaxChunks),
+    neighborWindow: parseIntEnv("KB_NEIGHBOR_WINDOW", DEFAULTS.neighborWindow),
+    vlmAtAnswerEnabled: process.env.KB_VLM_AT_ANSWER_ENABLED === "true",
+    vlmAtAnswerTypes: process.env.KB_VLM_AT_ANSWER_TYPES || DEFAULTS.vlmAtAnswerTypes,
+    vlmAtAnswerMaxImages: parseIntEnv("KB_VLM_AT_ANSWER_MAX_IMAGES", DEFAULTS.vlmAtAnswerMaxImages),
     rerankEnabled: process.env.KB_RERANK_ENABLED === "true",
     rerankModel: process.env.KB_RERANK_MODEL || DEFAULTS.rerankModel,
     rerankInitialK: parseIntEnv("KB_RERANK_INITIAL_K", DEFAULTS.rerankInitialK),

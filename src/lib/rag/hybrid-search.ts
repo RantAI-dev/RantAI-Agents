@@ -103,6 +103,9 @@ export interface HybridSearchResult {
   contextualPrefix?: string | null;
   /** Related entities found */
   relatedEntities: Entity[];
+  /** True when this chunk was pulled in by neighbor-window expansion (context,
+   *  not a ranked hit). */
+  isNeighbor?: boolean;
   /** Graph context (relation paths) */
   graphContext?: {
     relationType: string;
@@ -657,4 +660,88 @@ export async function hybridSearch(
   const { topK, ...config } = options || {};
   const search = new HybridSearch(config);
   return search.search(query, topK);
+}
+
+/**
+ * Neighbor-window expansion (auto-merge / sentence-window retrieval).
+ *
+ * Given the ranked anchor chunks, fetch the ±`window` adjacent chunks (same
+ * document, by chunk_index) so a retrieved table/figure travels together with
+ * the paragraphs that explain it — and a retrieved explanation pulls in the
+ * table it refers to. Neighbors carry zero relevance score (they are context,
+ * not hits) and fold into their anchor's Source card because they share
+ * document+section, so they add grounding without inflating citation numbers.
+ *
+ * Returns only the NEW neighbor chunks (anchors and duplicates removed).
+ */
+export async function fetchNeighborChunks(
+  anchors: Array<{ documentId: string; chunkIndex: number; chunkId: string }>,
+  window: number,
+): Promise<HybridSearchResult[]> {
+  if (!anchors.length || window <= 0) return [];
+
+  // Wanted (docId → set of neighbor indices), excluding the anchor index itself.
+  const wantByDoc = new Map<string, Set<number>>();
+  for (const a of anchors) {
+    let set = wantByDoc.get(a.documentId);
+    if (!set) {
+      set = new Set<number>();
+      wantByDoc.set(a.documentId, set);
+    }
+    for (let d = -window; d <= window; d++) {
+      if (d === 0) continue;
+      const i = a.chunkIndex + d;
+      if (i >= 0) set.add(i);
+    }
+  }
+  const docIds = [...wantByDoc.keys()];
+  const allIndices = [...new Set([...wantByDoc.values()].flatMap((s) => [...s]))];
+  if (!docIds.length || !allIndices.length) return [];
+
+  const client = await getSurrealClient();
+  // Over-fetch the (docIds × indices) cross-product, then keep only the exact
+  // (doc, index) pairs we asked for. Anchor counts are small, so this is cheap.
+  const res = await client.query<ChunkResult & { contextual_prefix?: string | null }>(
+    `SELECT id, document_id, file_id, content, chunk_index, metadata, contextual_prefix
+     FROM document_chunk
+     WHERE document_id IN $docIds AND chunk_index IN $indices`,
+    { docIds, indices: allIndices },
+  );
+  const rows = res[0]?.result || [];
+  if (!rows.length) return [];
+
+  const anchorIds = new Set(anchors.map((a) => String(a.chunkId)));
+  const seen = new Set<string>();
+  const out: HybridSearchResult[] = [];
+  for (const row of rows) {
+    if (!wantByDoc.get(row.document_id)?.has(row.chunk_index)) continue; // drop cross-product noise
+    const rid = String(row.id);
+    if (anchorIds.has(rid) || seen.has(rid)) continue; // never duplicate an anchor
+    seen.add(rid);
+    const meta = row.metadata as
+      | { documentTitle?: string; section?: string; category?: string; title?: string; assetKey?: string; page?: number; chunkType?: string }
+      | undefined;
+    out.push({
+      chunkId: row.id,
+      documentId: row.document_id,
+      fileId: row.file_id,
+      content: row.content,
+      chunkIndex: row.chunk_index,
+      documentTitle: meta?.documentTitle ?? meta?.title,
+      section: meta?.section,
+      category: meta?.category,
+      assetKey: meta?.assetKey ?? null,
+      page: meta?.page ?? null,
+      chunkType: meta?.chunkType ?? null,
+      vectorScore: 0,
+      entityScore: 0,
+      graphScore: 0,
+      combinedScore: 0,
+      rank: Number.MAX_SAFE_INTEGER,
+      contextualPrefix: row.contextual_prefix ?? null,
+      relatedEntities: [],
+      isNeighbor: true,
+    });
+  }
+  return out;
 }
