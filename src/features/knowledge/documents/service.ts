@@ -74,7 +74,7 @@ export interface KnowledgeDocumentDetail {
   mimeType: string | null
   s3Key: string | null
   fileUrl?: string
-  chunks: Array<{ id: string; content: string; chunkIndex: number; createdAt: string }>
+  chunks: Array<{ id: string; content: string; chunkIndex: number; chunkType: string | null; createdAt: string }>
   createdAt: string
   updatedAt: string
 }
@@ -275,8 +275,9 @@ export async function getKnowledgeDocumentForDashboard(params: {
     content: string
     chunk_index: number
     created_at: string
+    chunk_type: string | null
   }>(
-    `SELECT id, content, chunk_index, created_at FROM document_chunk WHERE document_id = $document_id ORDER BY chunk_index ASC`,
+    `SELECT id, content, chunk_index, created_at, metadata.chunkType AS chunk_type FROM document_chunk WHERE document_id = $document_id ORDER BY chunk_index ASC`,
     { document_id: params.documentId }
   )
 
@@ -286,11 +287,13 @@ export async function getKnowledgeDocumentForDashboard(params: {
     content: string
     chunk_index: number
     created_at: string
+    chunk_type: string | null
   }> })?.result || []) as Array<{
     id: unknown
     content: string
     chunk_index: number
     created_at: string
+    chunk_type: string | null
   }>
 
   let fileUrl: string | undefined
@@ -320,6 +323,7 @@ export async function getKnowledgeDocumentForDashboard(params: {
       id: normalizeSurrealId(chunk.id),
       content: chunk.content,
       chunkIndex: chunk.chunk_index,
+      chunkType: chunk.chunk_type ?? null,
       createdAt: chunk.created_at,
     })),
     createdAt: document.createdAt.toISOString(),

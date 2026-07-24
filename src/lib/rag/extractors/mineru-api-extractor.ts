@@ -102,9 +102,13 @@ export class MineruApiExtractor implements Extractor {
     }
 
     // 3. Poll the batch until the file is done (or fails). The API auto-submits
-    //    the parse task after upload.
-    const deadline = Date.now() + 10 * 60 * 1000
+    //    the parse task after upload. Total wait is bounded by
+    //    KB_MINERU_API_TIMEOUT_MS (default 10 min) — bump it for large books on
+    //    the slower hosted free tier.
+    const timeoutMs = Number(process.env.KB_MINERU_API_TIMEOUT_MS) || 10 * 60 * 1000
+    const deadline = Date.now() + timeoutMs
     let zipUrl = ""
+    let lastState = ""
     while (Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 4000))
       const pollRes = await fetch(`${this.base}/api/v4/extract-results/batch/${batch_id}`, {
@@ -115,6 +119,10 @@ export class MineruApiExtractor implements Extractor {
         data?: { extract_result?: Array<{ state?: string; full_zip_url?: string; err_msg?: string }> }
       }
       const r = pollJson.data?.extract_result?.[0]
+      if (r?.state && r.state !== lastState) {
+        lastState = r.state
+        console.log(`[MineruApi] state=${r.state} (${Math.round((Date.now() - (deadline - timeoutMs)) / 1000)}s elapsed)`)
+      }
       if (r?.state === "done" && r.full_zip_url) {
         zipUrl = r.full_zip_url
         break

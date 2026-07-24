@@ -35,6 +35,8 @@ function assetUrl(documentId: string, assetKey: string) {
  * presigned URL); clicking one opens a lightbox with the full-res crop and,
  * for PDFs, a jump-to-page action back into the Preview tab.
  */
+type FilterKey = NonNullable<DocumentFigure["type"]>
+
 export default function DocumentFigures({
   documentId,
   figures,
@@ -42,13 +44,71 @@ export default function DocumentFigures({
   onOpenPage,
 }: DocumentFiguresProps) {
   const [active, setActive] = useState<DocumentFigure | null>(null)
+  const [filter, setFilter] = useState<FilterKey | null>(null)
 
   const meta = (f: DocumentFigure) => TYPE_META[f.type ?? "figure"] ?? TYPE_META.figure
 
+  // Count per type so we only show chips for types actually present, with a
+  // running tally. Order chips by a stable, human-friendly sequence.
+  const counts = figures.reduce<Record<string, number>>((acc, f) => {
+    const key = (f.type ?? "figure") as FilterKey
+    acc[key] = (acc[key] ?? 0) + 1
+    return acc
+  }, {})
+  const order: FilterKey[] = ["image", "table", "chart", "figure"]
+  const present = order.filter((k) => counts[k])
+
+  const visible = filter ? figures.filter((f) => (f.type ?? "figure") === filter) : figures
+
   return (
     <>
+      {present.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <Badge
+            role="button"
+            tabIndex={0}
+            variant={filter === null ? "default" : "outline"}
+            onClick={() => setFilter(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                setFilter(null)
+              }
+            }}
+            className="h-6 px-2.5 cursor-pointer select-none gap-1 text-xs"
+          >
+            Semua
+            <span className="tabular-nums opacity-70">{figures.length}</span>
+          </Badge>
+          {present.map((key) => {
+            const { label, Icon } = TYPE_META[key]
+            const on = filter === key
+            return (
+              <Badge
+                key={key}
+                role="button"
+                tabIndex={0}
+                variant={on ? "default" : "outline"}
+                onClick={() => setFilter(on ? null : key)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    setFilter(on ? null : key)
+                  }
+                }}
+                className="h-6 px-2.5 cursor-pointer select-none gap-1 text-xs"
+              >
+                <Icon className="h-3 w-3" />
+                {label}
+                <span className="tabular-nums opacity-70">{counts[key]}</span>
+              </Badge>
+            )
+          })}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-        {figures.map((fig, i) => {
+        {visible.map((fig, i) => {
           const { label, Icon } = meta(fig)
           return (
             <button
