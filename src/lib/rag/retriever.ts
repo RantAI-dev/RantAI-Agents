@@ -4,6 +4,7 @@ import {
   HybridSearchConfig,
   HybridSearchResult,
   HybridSearchStats,
+  fetchNeighborChunks,
 } from "./hybrid-search";
 import { getRagConfig } from "./config";
 import { getDefaultReranker } from "./rerankers";
@@ -340,7 +341,9 @@ export async function hybridRetrieve(
   };
 
   const hybridSearch = new HybridSearch(searchConfig);
-  const { results, stats } = await hybridSearch.search(query, maxResults);
+  const searchOutput = await hybridSearch.search(query, maxResults);
+  let results = searchOutput.results;
+  const stats = searchOutput.stats;
 
   if (results.length === 0) {
     return {
@@ -349,6 +352,45 @@ export async function hybridRetrieve(
       results: [],
       stats,
     };
+  }
+
+  // Neighbor-window expansion (auto-merge): pull ±N adjacent chunks around each
+  // ranked hit so a retrieved table/figure travels with its explanation (and an
+  // explanation pulls in its table). Neighbors are woven into reading order
+  // right next to their anchor, keeping the anchor's rank priority; they share
+  // the anchor's Source card, so no new citation numbers appear.
+  const neighborWindow = getRagConfig().neighborWindow;
+  if (neighborWindow > 0) {
+    const neighbors = await fetchNeighborChunks(
+      results
+        .filter((r) => r.documentId && Number.isInteger(r.chunkIndex))
+        .map((r) => ({ documentId: r.documentId, chunkIndex: r.chunkIndex, chunkId: r.chunkId })),
+      neighborWindow,
+    ).catch((err) => {
+      console.warn(`[RAG] neighbor-window expansion failed (non-fatal): ${(err as Error).message?.slice(0, 120)}`);
+      return [] as HybridSearchResult[];
+    });
+    if (neighbors.length > 0) {
+      const emitted = new Set<string>();
+      const ordered: HybridSearchResult[] = [];
+      const push = (c: HybridSearchResult) => {
+        const cid = String(c.chunkId);
+        if (!emitted.has(cid)) {
+          emitted.add(cid);
+          ordered.push(c);
+        }
+      };
+      for (const anchor of results) {
+        const group = [
+          anchor,
+          ...neighbors.filter(
+            (n) => n.documentId === anchor.documentId && Math.abs(n.chunkIndex - anchor.chunkIndex) <= neighborWindow,
+          ),
+        ].sort((a, b) => a.chunkIndex - b.chunkIndex);
+        for (const g of group) push(g);
+      }
+      results = ordered;
+    }
   }
 
   // Coverage analytics: fire-and-forget bump on every doc surfaced.

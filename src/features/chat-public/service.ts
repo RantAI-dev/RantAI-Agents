@@ -558,6 +558,8 @@ export async function runChat(params: {
 
     // Store RAG sources to send with response
     let ragSources: Array<{ title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }> = [];
+    // Retrieved chunks kept for selective VLM-at-answer (figure kind + assetKey).
+    let vlmResults: import("@/lib/rag/vlm-figures").FigureCandidate[] = [];
 
     // Trace data captured during RAG retrieval, emitted later in the structured log.
     let ragTraceData: {
@@ -674,6 +676,7 @@ export async function runChat(params: {
               page: s.page ?? null,
               chunkType: s.chunkType ?? null,
             }))
+            vlmResults = hybridResult.results
 
             console.log(
               `[RAG] Hybrid retrieved ${hybridResult.results.length} chunks (vector=${hybridResult.stats.vectorResults}, graph=${hybridResult.stats.graphResults}) for "${userQuery.substring(0, 50)}..."`
@@ -714,6 +717,7 @@ export async function runChat(params: {
                 page: s.page ?? null,
                 chunkType: s.chunkType ?? null,
               }))
+              vlmResults = retrievalResult.chunks
 
               console.log(
                 `[RAG] Retrieved ${retrievalResult.chunks.length} chunks for query: "${userQuery.substring(0, 50)}..."`
@@ -1189,6 +1193,30 @@ export async function runChat(params: {
           },
         })
       )
+    }
+
+    // ===== SELECTIVE VLM-AT-ANSWER =====
+    // Attach figure crop(s) to the call ONLY when enabled, the model has vision,
+    // and a retrieved chunk is a trigger-kind figure (charts by default). Charts
+    // carry the answer in pixels; tables/prose stay text-only.
+    try {
+      const { getRagConfig } = await import("@/lib/rag/config")
+      const { vlmAtAnswerEnabled, vlmAtAnswerTypes, vlmAtAnswerMaxImages } = getRagConfig()
+      const modelHasVision = (modelInfo?.capabilities as { vision?: boolean } | undefined)?.vision === true
+      if (vlmAtAnswerEnabled && modelHasVision && vlmResults.length > 0) {
+        const { selectVlmFigures, buildFigureParts } = await import("@/lib/rag/vlm-figures")
+        const selected = selectVlmFigures(vlmResults, ragSources, {
+          types: vlmAtAnswerTypes,
+          maxImages: vlmAtAnswerMaxImages,
+        })
+        const figureParts = await buildFigureParts(selected)
+        if (figureParts.length > 0) {
+          messages.push({ role: "user", content: figureParts })
+          console.log(`[RAG] VLM-at-answer: attached ${selected.length} figure image(s)`)
+        }
+      }
+    } catch (err) {
+      console.warn(`[RAG] VLM-at-answer skipped: ${err instanceof Error ? err.message.slice(0, 120) : err}`)
     }
 
     const { createExtractThinkTransform } = await import("@/lib/llm/strip-think")

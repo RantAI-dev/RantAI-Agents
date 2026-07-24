@@ -153,6 +153,8 @@ export async function runV1ChatCompletion(
   // Sources surfaced back to the API client so an external frontend can render
   // reference cards ("which documents did the answer draw on").
   let ragSources: Array<{ title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }> = []
+  // Retrieved chunks kept for selective VLM-at-answer (figure kind + assetKey).
+  let vlmResults: import("@/lib/rag/vlm-figures").FigureCandidate[] = []
   if (assistant.useKnowledgeBase && rawUserQuery) {
     try {
       const groupIds = assistant.knowledgeBaseGroupIds.length > 0
@@ -198,6 +200,7 @@ export async function runV1ChatCompletion(
         const formattedContext = formatHybridContextForPrompt(hybridResult)
         systemPrompt = `${systemPrompt}\n\n${formattedContext}`
         ragSources = hybridResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null }))
+        vlmResults = hybridResult.results
         console.log(`[V1 API] RAG hybrid: ${hybridResult.results.length} chunks`)
       } else {
         const retrievalResult = await smartRetrieve(userQuery, {
@@ -208,6 +211,7 @@ export async function runV1ChatCompletion(
           const formattedContext = formatContextForPrompt(retrievalResult)
           systemPrompt = `${systemPrompt}\n\n${formattedContext}`
           ragSources = retrievalResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null }))
+          vlmResults = retrievalResult.chunks
           console.log(`[V1 API] RAG vector: ${retrievalResult.chunks.length} chunks`)
         }
       }
@@ -252,6 +256,30 @@ export async function runV1ChatCompletion(
     parts: [{ type: "text" as const, text: msg.content }],
   }))
   const messages = await convertToModelMessages(uiMessages)
+
+  // ===== SELECTIVE VLM-AT-ANSWER =====
+  // Attach the actual figure crop(s) to the call ONLY when: the feature is on,
+  // the model has vision, and a retrieved chunk is a trigger-kind figure (charts
+  // by default). Charts carry the answer in pixels; tables/prose stay text-only.
+  try {
+    const { getRagConfig } = await import("@/lib/rag/config")
+    const { vlmAtAnswerEnabled, vlmAtAnswerTypes, vlmAtAnswerMaxImages } = getRagConfig()
+    const modelHasVision = (apiModelInfo?.capabilities as { vision?: boolean } | undefined)?.vision === true
+    if (vlmAtAnswerEnabled && modelHasVision && vlmResults.length > 0) {
+      const { selectVlmFigures, buildFigureParts } = await import("@/lib/rag/vlm-figures")
+      const selected = selectVlmFigures(vlmResults, ragSources, {
+        types: vlmAtAnswerTypes,
+        maxImages: vlmAtAnswerMaxImages,
+      })
+      const figureParts = await buildFigureParts(selected)
+      if (figureParts.length > 0) {
+        messages.push({ role: "user", content: figureParts })
+        console.log(`[V1 API] VLM-at-answer: attached ${selected.length} figure image(s)`)
+      }
+    }
+  } catch (err) {
+    console.warn(`[V1 API] VLM-at-answer skipped: ${err instanceof Error ? err.message.slice(0, 120) : err}`)
+  }
 
   // Request ID for the response
   const requestId = `chatcmpl-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
