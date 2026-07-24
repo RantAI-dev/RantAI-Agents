@@ -27,6 +27,60 @@ interface MistralPage {
   dimensions?: { dpi?: number; height?: number; width?: number }
 }
 
+/**
+ * Find the printed caption for a Mistral image by its `id`. Mistral embeds the
+ * image in the page markdown as `![id](id)`; the caption is normally the first
+ * non-empty line just after that reference (Indonesian textbooks: "Gambar 1.1
+ * …", "Tabel 2.3 …", "Sumber: …"). Falls back to the line just before, then to
+ * null so the downstream fallback ("Figure on page N") still applies.
+ */
+function captionForImage(markdown: string, imageId: string): string | null {
+  if (!markdown || !imageId) return null
+  const lines = markdown.split(/\r?\n/)
+  const refIdx = lines.findIndex((l) => l.includes(`](${imageId})`) || l.includes(imageId))
+  if (refIdx === -1) return null
+
+  const isImageRef = (l: string) => /!\[[^\]]*\]\([^)]*\)/.test(l)
+  const clean = (l: string) =>
+    l
+      .replace(/^#+\s*/, "")
+      .replace(/^[>*\-\s]+/, "")
+      .trim()
+      .slice(0, 200)
+  // Real figure captions in ID textbooks: "Gambar 1.1 …", "Tabel 2.3 …",
+  // "Foto/Diagram/Grafik/Bagan …", "Sumber: …".
+  const isCaptionLike = (l: string) => /^(gambar|tabel|foto|diagram|grafik|bagan|ilustrasi|sumber)\b/i.test(l)
+
+  const window: string[] = []
+  for (let i = refIdx - 3; i <= refIdx + 3; i++) {
+    if (i < 0 || i >= lines.length || i === refIdx) continue
+    const raw = lines[i]
+    if (!raw?.trim() || isImageRef(raw)) continue
+    window.push(clean(raw))
+  }
+  // 1) Prefer an explicit caption-pattern line anywhere in the window.
+  const captioned = window.find((l) => isCaptionLike(l))
+  if (captioned) return captioned
+  // 2) Else the nearest non-empty line (below preferred, then above).
+  for (const dir of [1, -1]) {
+    for (let i = refIdx + dir; i >= 0 && i < lines.length && Math.abs(i - refIdx) <= 3; i += dir) {
+      const raw = lines[i]
+      if (!raw?.trim() || isImageRef(raw)) continue
+      const c = clean(raw)
+      if (c.length >= 3) return c
+    }
+  }
+  return null
+}
+
+/** Infer figure kind from its printed caption (ID textbook conventions). */
+function figureTypeFromCaption(caption: string | null): "image" | "table" | "chart" {
+  if (!caption) return "image"
+  if (/^tabel\b/i.test(caption)) return "table"
+  if (/^(grafik|diagram|bagan|chart|kurva)\b/i.test(caption)) return "chart"
+  return "image"
+}
+
 export class MistralOcrExtractor implements Extractor {
   readonly name = "MistralOcrExtractor"
   private readonly base: string
@@ -91,11 +145,18 @@ export class MistralOcrExtractor implements Extractor {
                   (img.bottom_right_y ?? H) / H,
                 ]
               : [0, 0, 1, 1]
+          // Mistral returns images inline in the page markdown as `![id](id)`,
+          // with the printed caption ("Gambar 1.1 …") usually on the next
+          // non-empty line. Pair it here so the figure chunk is searchable by
+          // its real caption instead of a generic "Figure on page N".
+          const caption = captionForImage(p.markdown ?? "", img.id)
           figures.push({
-            type: "image",
+            // Mistral tags every crop as a generic image; infer a finer type
+            // from the printed caption so the UI can filter Gambar/Tabel/Chart.
+            type: figureTypeFromCaption(caption),
             page: p.index,
             bbox,
-            caption: null, // Mistral embeds images inline; nearby markdown chunk gives context.
+            caption,
             imageBase64: b64,
           })
         }

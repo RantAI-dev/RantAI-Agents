@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Download, FileText, Layers, Eye, Code, Brain, HelpCircle, ImageIcon } from "@/lib/icons"
+import { ArrowLeft, Download, FileText, Layers, Eye, Code, Brain, HelpCircle, ImageIcon, Table2, Type } from "@/lib/icons"
 import DocumentIntelligence from "@/features/knowledge/components/document-intelligence"
 import DocumentFigures from "./document-figures"
 import { getFileTypeIcon, getFileExtensionLabel, CATEGORY_LABELS } from "@/features/knowledge/components/file-type-utils"
@@ -55,6 +55,7 @@ export interface DocumentDetail {
     id: string
     content: string
     chunkIndex: number
+    chunkType?: string | null
   }>
   createdAt: string
   updatedAt: string
@@ -79,6 +80,8 @@ export default function DocumentViewerClient({
   const [activeTab, setActiveTab] = useState("preview")
   // 1-based page to jump the PDF preview to (from the Figures gallery).
   const [pdfPage, setPdfPage] = useState<number | null>(null)
+  // Chunks tab: filter by chunkType (Semua / Teks / Tabel / Gambar / Heading).
+  const [chunkFilter, setChunkFilter] = useState<string | null>(null)
 
   const fileType = document?.fileType || document?.metadata?.fileType || "markdown"
   const isPdf = fileType === "pdf"
@@ -399,32 +402,116 @@ export default function DocumentViewerClient({
         </TabsContent>
 
         <TabsContent value="chunks" className="flex-1 min-h-0 mt-0 px-6 py-4">
-          <ScrollArea className="h-full">
-            <div className="space-y-3">
-              {document.chunks.map((chunk, index) => (
+          {(() => {
+            const CHUNK_TYPE_META: Record<string, { label: string; Icon: typeof FileText }> = {
+              text: { label: "Teks", Icon: FileText },
+              table: { label: "Tabel", Icon: Table2 },
+              figure: { label: "Gambar", Icon: ImageIcon },
+              heading: { label: "Heading", Icon: Type },
+            }
+            const counts = document.chunks.reduce<Record<string, number>>((acc, c) => {
+              const k = c.chunkType ?? "text"
+              acc[k] = (acc[k] ?? 0) + 1
+              return acc
+            }, {})
+            const present = ["text", "table", "figure", "heading"].filter((k) => counts[k])
+            const filtered = chunkFilter
+              ? document.chunks.filter((c) => (c.chunkType ?? "text") === chunkFilter)
+              : document.chunks
+            return (
+              <>
+                {present.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    <Badge
+                      role="button"
+                      tabIndex={0}
+                      variant={chunkFilter === null ? "default" : "outline"}
+                      onClick={() => setChunkFilter(null)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          setChunkFilter(null)
+                        }
+                      }}
+                      className="h-6 px-2.5 cursor-pointer select-none gap-1 text-xs"
+                    >
+                      Semua
+                      <span className="tabular-nums opacity-70">{document.chunks.length}</span>
+                    </Badge>
+                    {present.map((key) => {
+                      const { label, Icon } = CHUNK_TYPE_META[key]
+                      const on = chunkFilter === key
+                      return (
+                        <Badge
+                          key={key}
+                          role="button"
+                          tabIndex={0}
+                          variant={on ? "default" : "outline"}
+                          onClick={() => setChunkFilter(on ? null : key)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault()
+                              setChunkFilter(on ? null : key)
+                            }
+                          }}
+                          className="h-6 px-2.5 cursor-pointer select-none gap-1 text-xs"
+                        >
+                          <Icon className="h-3 w-3" />
+                          {label}
+                          <span className="tabular-nums opacity-70">{counts[key]}</span>
+                        </Badge>
+                      )
+                    })}
+                  </div>
+                )}
+                <ScrollArea className="h-full">
+                  <div className="space-y-3">
+                    {filtered.map((chunk, index) => (
                 <div
                   key={chunk.id}
                   className="relative border rounded-lg p-4 pl-5 bg-muted/30 transition-colors hover:bg-muted/40 overflow-hidden"
                 >
                   <div className="absolute left-0 top-0 bottom-0 w-1 bg-chart-1/60 rounded-l-lg" />
                   <div className="flex items-center justify-between mb-2">
-                    <Badge
-                      variant="outline"
-                      className="text-[10px] font-mono font-medium h-5 px-1.5"
-                    >
-                      #{index + 1}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] font-mono font-medium h-5 px-1.5"
+                      >
+                        #{chunk.chunkIndex + 1}
+                      </Badge>
+                      {(() => {
+                        const m = CHUNK_TYPE_META[chunk.chunkType ?? "text"]
+                        if (!m) return null
+                        const { label, Icon } = m
+                        return (
+                          <Badge variant="secondary" className="h-5 px-1.5 gap-1 text-[10px] font-medium">
+                            <Icon className="h-3 w-3" />
+                            {label}
+                          </Badge>
+                        )
+                      })()}
+                    </div>
                     <span className="text-[10px] text-muted-foreground tabular-nums">
                       {chunk.content.length} chars
                     </span>
                   </div>
-                  <p className="text-sm whitespace-pre-wrap line-clamp-4">
-                    {chunk.content}
-                  </p>
+                  {chunk.chunkType === "table" ? (
+                    <div className="text-sm overflow-x-auto [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_td]:border [&_th]:border-border [&_td]:border-border [&_th]:px-2 [&_td]:px-2 [&_th]:py-1 [&_td]:py-1 [&_th]:bg-muted/50 [&_th]:text-left">
+                      <StreamdownContent content={chunk.content} />
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap line-clamp-4">
+                      {chunk.content}
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
-          </ScrollArea>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </>
+            )
+          })()}
         </TabsContent>
 
         {figures.length > 0 && (
