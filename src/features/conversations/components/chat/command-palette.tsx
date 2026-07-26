@@ -83,6 +83,7 @@ export function CommandPalette({
       <button
         onClick={() => setOpen(true)}
         className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover:bg-muted"
+        aria-label="Open command palette"
       >
         <Command className="h-3 w-3" />
         <span>K</span>

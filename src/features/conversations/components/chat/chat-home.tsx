@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react"
 import { useSession } from "next-auth/react"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import {
@@ -148,13 +148,15 @@ const QUICK_ACTIONS = [
 
 // ─── Animated greeting hook ──────────────────────────────────────────────────
 
-function useRotatingText(greeting: string, phrases: string[]) {
+function useRotatingText(greeting: string, phrases: string[], reduceMotion: boolean) {
   const [phase, setPhase] = useState<"greeting" | "rotating">("greeting")
   const [phraseIndex, setPhraseIndex] = useState(0)
   const [displayText, setDisplayText] = useState("")
   const [isDeleting, setIsDeleting] = useState(false)
 
   useEffect(() => {
+    if (reduceMotion) return
+
     // Phase 1: Type the greeting
     if (phase === "greeting") {
       if (displayText.length < greeting.length) {
@@ -200,9 +202,9 @@ function useRotatingText(greeting: string, phrases: string[]) {
       setPhraseIndex((prev) => (prev + 1) % phrases.length)
     }, 3000)
     return () => clearTimeout(timer)
-  }, [phase, displayText, isDeleting, greeting, phrases, phraseIndex])
+  }, [phase, displayText, isDeleting, greeting, phrases, phraseIndex, reduceMotion])
 
-  return displayText
+  return reduceMotion ? greeting : displayText
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -223,8 +225,13 @@ export function ChatHome({
   const { data: authSession } = useSession()
   const firstName = authSession?.user?.name?.split(" ")[0] ?? ""
   const greeting = getGreeting(firstName)
+  const shouldReduceMotion = useReducedMotion()
 
-  const animatedText = useRotatingText(greeting, ROTATING_PHRASES)
+  const animatedText = useRotatingText(
+    greeting,
+    ROTATING_PHRASES,
+    Boolean(shouldReduceMotion),
+  )
 
   // The active assistant is the user's selected assistant (fallback to first assistant).
   const activeAssistant = selectedAssistantId
@@ -619,7 +626,9 @@ export function ChatHome({
         >
           <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight min-h-[2.5rem] sm:min-h-[3rem]">
             {animatedText}
-            <span className="inline-block w-[2px] h-[1em] bg-foreground/60 ml-0.5 align-middle animate-pulse" />
+            {!shouldReduceMotion && (
+              <span className="inline-block w-[2px] h-[1em] bg-foreground/60 ml-0.5 align-middle animate-pulse" />
+            )}
           </h1>
         </motion.div>
 
@@ -654,6 +663,7 @@ export function ChatHome({
               <div className="relative">
                 <Textarea
                   ref={textareaRef}
+                  aria-label="Message"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onFocus={() => void loadToolbarData()}
@@ -671,6 +681,7 @@ export function ChatHome({
                   type="submit"
                   size="icon"
                   className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
+                  aria-label={creatingSession ? "Creating chat" : "Send message"}
                   disabled={!input.trim() || creatingSession}
                 >
                   {creatingSession ? (

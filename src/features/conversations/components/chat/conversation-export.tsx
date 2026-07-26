@@ -97,6 +97,7 @@ export const ConversationExport = memo<ConversationExportProps>(
             variant="ghost"
             size="icon"
             className="h-8 w-8"
+            aria-label="Export conversation"
             title="Export conversation"
           >
             <Download className="h-4 w-4" />

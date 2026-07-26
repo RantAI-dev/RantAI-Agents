@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useKnowledgeBases, type KnowledgeBase } from "@/hooks/use-knowledge-bases"
 import React from "react"
 import { useSession, signOut } from "next-auth/react"
+import { useTheme } from "next-themes"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -22,6 +23,8 @@ import {
   Headphones,
   LogOut,
   MessageSquare,
+  Monitor,
+  Moon,
   Network,
   Pencil,
   Plus,
@@ -31,6 +34,7 @@ import {
   Sparkles,
   Star,
   Store,
+  Sun,
   Trash2,
   User,
   Users,
@@ -55,7 +59,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -74,7 +84,6 @@ import { useFeaturesContext } from "@/components/providers/features-provider"
 import { useProfileStore } from "@/hooks/use-profile"
 import { SETTINGS_NAV_ITEMS } from "../settings/settings-nav-items"
 import { MARKETPLACE_NAV_ITEMS } from "../marketplace/marketplace-nav-items"
-import { ThemeToggle } from "./theme-toggle"
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -83,6 +92,7 @@ interface AppSidebarProps {
   isOpen: boolean
   onToggle: () => void
   onSearchOpen?: () => void
+  mobile?: boolean
 }
 
 type FeatureKey = "AGENT" | "DIGITAL_EMPLOYEES" | "MEDIA" | null
@@ -131,6 +141,56 @@ const sections = {
   marketplace: { title: "Marketplace", subtitle: "Skills, Tools & More", icon: Store, path: "/dashboard/marketplace" },
   settings: { title: "Settings", subtitle: "Preferences", icon: Settings, path: "/dashboard/settings" },
   account: { title: "Account", subtitle: "Profile", icon: User, path: "/dashboard/account" },
+}
+
+const themeOptions = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+] as const
+
+function ThemeMenuSelector() {
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+
+  const currentTheme = mounted && themeOptions.some((option) => option.value === theme)
+    ? theme!
+    : "system"
+  const currentOption = themeOptions.find((option) => option.value === currentTheme)!
+  const CurrentIcon = currentOption.icon
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className="cursor-pointer">
+        <CurrentIcon className="mr-2 h-4 w-4" />
+        <span>Theme</span>
+        <span className="ml-auto mr-2 text-xs text-muted-foreground">
+          {currentOption.label}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuPortal>
+        <DropdownMenuSubContent className="w-40" sideOffset={8}>
+          <DropdownMenuRadioGroup value={currentTheme} onValueChange={setTheme}>
+            {themeOptions.map((option) => {
+              const Icon = option.icon
+              return (
+                <DropdownMenuRadioItem
+                  key={option.value}
+                  value={option.value}
+                  className="cursor-pointer"
+                >
+                  <Icon className="h-4 w-4" />
+                  {option.label}
+                </DropdownMenuRadioItem>
+              )
+            })}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuSubContent>
+      </DropdownMenuPortal>
+    </DropdownMenuSub>
+  )
 }
 
 // ─── Assistant Selector Header ───────────────────────────────────────
@@ -361,6 +421,7 @@ function ChatSectionContent({
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-sidebar-foreground/60 hover:text-destructive hover:bg-sidebar-hover"
+                  aria-label={`Delete chat ${session.title}`}
                   onClick={(e) => {
                     e.stopPropagation()
                     const wasActive = isActive
@@ -381,7 +442,7 @@ function ChatSectionContent({
 
 // ─── Main Sidebar Component ──────────────────────────────────────────
 
-export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) {
+export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: AppSidebarProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const router = useRouter()
@@ -512,18 +573,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
     .toUpperCase()
     .slice(0, 2) || "U"
 
-  // Keyboard shortcut: Cmd/Ctrl+B
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
-        e.preventDefault()
-        onToggle()
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [onToggle])
-
   // ─── Collapsed Sidebar (icon-only) ─────────────────────────────────
 
   if (!isOpen) {
@@ -553,7 +602,11 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
           <div className="flex items-center justify-center pb-1">
             <Tooltip>
               <TooltipTrigger asChild>
-                <button onClick={onSearchOpen} className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all">
+                <button
+                  onClick={onSearchOpen}
+                  className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+                  aria-label="Search"
+                >
                   <Search className="h-5 w-5" />
                 </button>
               </TooltipTrigger>
@@ -570,6 +623,8 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
                   <TooltipTrigger asChild>
                     <Link
                       href={item.url}
+                      aria-label={item.title}
+                      aria-current={active ? "page" : undefined}
                       className={cn(
                         "flex items-center justify-center w-10 h-10 rounded-lg transition-all",
                         active
@@ -585,27 +640,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
               )
             })}
           </nav>
-
-          {/* Bottom: Theme + Settings */}
-          <div className="flex flex-col items-center gap-1 py-2 border-t border-sidebar-border">
-            <ThemeToggle />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  href="/dashboard/settings"
-                  className={cn(
-                    "flex items-center justify-center w-10 h-10 rounded-lg transition-all",
-                    isActive("/dashboard/settings")
-                      ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                  )}
-                >
-                  <Settings className="h-5 w-5" />
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right">Settings</TooltipContent>
-            </Tooltip>
-          </div>
 
           {/* User Avatar */}
           <div className="flex items-center justify-center py-3 border-t border-sidebar-border">
@@ -632,10 +666,18 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
                     Account
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/settings" className="cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <ThemeMenuSelector />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => signOut({ callbackUrl: "/login" })}
-                  className="cursor-pointer text-destructive focus:text-destructive"
+                  variant="destructive"
+                  className="cursor-pointer"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
@@ -652,28 +694,35 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
 
   return (
     <TooltipProvider delayDuration={0}>
-    <div className="relative flex flex-col h-full w-[260px] bg-sidebar border-r border-sidebar-border transition-all duration-200">
-      {/* Collapse button — on the sidebar border edge */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={onToggle}
-            className="absolute -right-3 top-4 z-50 flex items-center justify-center w-6 h-6 rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover shadow-sm transition-all"
-            aria-label="Collapse sidebar"
-          >
-            <ChevronsLeft className="h-3.5 w-3.5" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right">Collapse sidebar</TooltipContent>
-      </Tooltip>
+      <div
+        className={cn(
+          "relative flex h-full flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200",
+          mobile ? "w-full" : "w-[260px]"
+        )}
+      >
+        {/* Collapse button — on the sidebar border edge */}
+        {!mobile && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onToggle}
+                className="absolute -right-3 top-4 z-50 flex items-center justify-center w-6 h-6 rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover shadow-sm transition-all"
+                aria-label="Collapse sidebar"
+              >
+                <ChevronsLeft className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Collapse sidebar</TooltipContent>
+          </Tooltip>
+        )}
 
-      {/* Header: Logo + title */}
-      <div className="p-3 border-b border-sidebar-border">
-        <Link href="/dashboard/chat" className="flex items-center gap-2">
-          <BrandLogo className="h-8 w-8 rounded-lg" />
-          <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
-        </Link>
-      </div>
+        {/* Header: Logo + title */}
+        <div className={cn("border-b border-sidebar-border p-3", mobile && "pr-12")}>
+          <Link href="/dashboard/chat" className="flex items-center gap-2">
+            <BrandLogo className="h-8 w-8 rounded-lg" />
+            <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
+          </Link>
+        </div>
 
       {/* Primary Navigation */}
       <nav className="px-2 space-y-0.5">
@@ -1000,26 +1049,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
         </div>
       </div>
 
-      {/* Bottom: Theme + Settings */}
-      <div className="px-2 py-2 border-t border-sidebar-border space-y-0.5">
-        <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-sm text-sidebar-foreground/70">Theme</span>
-          <ThemeToggle />
-        </div>
-        <Link
-          href="/dashboard/settings"
-          className={cn(
-            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all",
-            isActive("/dashboard/settings")
-              ? "bg-sidebar-accent text-sidebar-foreground font-medium"
-              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-          )}
-        >
-          <Settings className="h-5 w-5" />
-          <span>Settings</span>
-        </Link>
-      </div>
-
       {/* Free-plan usage + upgrade (cloud; hides on paid/OSS) */}
       <PlanUsageBadge />
 
@@ -1052,10 +1081,18 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
                 Account
               </Link>
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/settings" className="cursor-pointer">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <ThemeMenuSelector />
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="cursor-pointer text-destructive focus:text-destructive"
+              variant="destructive"
+              className="cursor-pointer"
             >
               <LogOut className="mr-2 h-4 w-4" />
               Sign out

@@ -405,6 +405,7 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                   (fileAttached || kbCount > 0) &&
                   "bg-primary/10 text-primary hover:bg-primary/20"
                 )}
+                aria-label="Add attachments"
                 disabled={disabled}
               >
                 <Plus className="h-4 w-4" />
@@ -529,6 +530,8 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                 ? "bg-primary/10 text-primary hover:bg-primary/20"
                 : "text-muted-foreground hover:text-foreground"
             )}
+            aria-label={webSearchEnabled ? "Disable web search" : "Enable web search"}
+            aria-pressed={webSearchEnabled}
             onClick={onToggleWebSearch}
             disabled={disabled}
           >
@@ -553,6 +556,12 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                 ? "bg-primary/10 text-primary hover:bg-primary/20"
                 : "text-muted-foreground hover:text-foreground"
             )}
+            aria-label={
+              codeInterpreterEnabled
+                ? "Disable code interpreter"
+                : "Enable code interpreter"
+            }
+            aria-pressed={codeInterpreterEnabled}
             onClick={onToggleCodeInterpreter}
             disabled={disabled}
           >
@@ -578,6 +587,11 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                   toolsActive
                     ? "bg-primary/10 text-primary hover:bg-primary/20"
                     : "text-muted-foreground hover:text-foreground"
+                )}
+                aria-label={getToolsLabel(
+                  toolMode,
+                  toolMode === "auto" ? defaultToolNames.length : selectedToolNames.length,
+                  toolCount,
                 )}
                 disabled={disabled}
               >
@@ -662,6 +676,11 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                     skillsActive
                       ? "bg-primary/10 text-primary hover:bg-primary/20"
                       : "text-muted-foreground hover:text-foreground"
+                  )}
+                  aria-label={getSkillsLabel(
+                    skillMode,
+                    skillMode === "auto" ? defaultSkillIds.length : selectedSkillIds.length,
+                    skillCount,
                   )}
                   disabled={disabled}
                 >
@@ -748,6 +767,7 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                     ? "bg-primary/10 text-primary hover:bg-primary/20"
                     : "text-muted-foreground hover:text-foreground"
                 )}
+                aria-label={getCanvasLabel(canvasMode)}
                 disabled={disabled}
               >
                 <LayoutPanelLeft className="h-4 w-4" />
@@ -807,6 +827,7 @@ export const ChatInputToolbar = memo<ChatInputToolbarProps>(({
                       ? "bg-primary/10 text-primary hover:bg-primary/20"
                       : "text-muted-foreground hover:text-foreground"
                   )}
+                  aria-label={`Open artifacts (${artifactCount})`}
                 >
                   <Layers className="h-4 w-4" />
                   <span className={cn(
