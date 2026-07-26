@@ -235,6 +235,8 @@ export function Grainient({
     let raf = 0
     let isVisible = true
     let isPageVisible = !document.hidden
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)")
+    let prefersReducedMotion = motionPreference.matches
     const t0 = performance.now()
 
     const loop = (t: number) => {
@@ -244,7 +246,14 @@ export function Grainient({
     }
 
     const tryStart = () => {
-      if (isVisible && isPageVisible && raf === 0) raf = requestAnimationFrame(loop)
+      if (
+        isVisible &&
+        isPageVisible &&
+        !prefersReducedMotion &&
+        raf === 0
+      ) {
+        raf = requestAnimationFrame(loop)
+      }
     }
     const tryStop = () => {
       if (raf !== 0) {
@@ -268,7 +277,13 @@ export function Grainient({
       if (isPageVisible) tryStart()
       else tryStop()
     }
+    const onMotionPreferenceChange = (event: MediaQueryListEvent) => {
+      prefersReducedMotion = event.matches
+      if (prefersReducedMotion) tryStop()
+      else tryStart()
+    }
     document.addEventListener("visibilitychange", onVisibility)
+    motionPreference.addEventListener("change", onMotionPreferenceChange)
 
     tryStart()
 
@@ -277,6 +292,7 @@ export function Grainient({
       ro.disconnect()
       io.disconnect()
       document.removeEventListener("visibilitychange", onVisibility)
+      motionPreference.removeEventListener("change", onMotionPreferenceChange)
       ctxMap.delete(container)
       try {
         container.removeChild(canvas)
