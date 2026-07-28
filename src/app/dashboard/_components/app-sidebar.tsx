@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useKnowledgeBases, type KnowledgeBase } from "@/hooks/use-knowledge-bases"
 import React from "react"
@@ -26,13 +26,11 @@ import {
   Monitor,
   Moon,
   Network,
-  Pencil,
   Plus,
   Search,
   Settings,
   Shield,
   Sparkles,
-  Star,
   Store,
   Sun,
   Trash2,
@@ -42,12 +40,6 @@ import {
   type IconComponent,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { Badge } from "@/components/ui/badge"
 import { PlanUsageBadge } from "@/components/plan-usage-badge"
 import {
   Tooltip,
@@ -75,11 +67,9 @@ import { BrandLogo } from "@/components/brand-logo"
 import { useAssistants } from "@/hooks/use-assistants"
 import { useWorkflows } from "@/hooks/use-workflows"
 import { useDigitalEmployees } from "@/hooks/use-digital-employees"
-import { useDefaultAssistant } from "@/hooks/use-default-assistant"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
-import { AssistantEditor } from "@/features/conversations/components/chat/assistant-editor"
 import { formatDistanceToNow, differenceInMinutes } from "date-fns"
-import type { Assistant, AssistantInput } from "@/lib/types/assistant"
+import type { Assistant } from "@/lib/types/assistant"
 import { useFeaturesContext } from "@/components/providers/features-provider"
 import { useProfileStore } from "@/hooks/use-profile"
 import { SETTINGS_NAV_ITEMS } from "../settings/settings-nav-items"
@@ -193,105 +183,51 @@ function ThemeMenuSelector() {
   )
 }
 
-// ─── Assistant Selector Header ───────────────────────────────────────
+// ─── Chat navigation ─────────────────────────────────────────────────
 
-function AssistantSelectorHeader({
-  assistants,
-  selectedAssistant,
-  onSelectAssistant,
-  onCreateAssistant,
-  onEditAssistant,
+function ChatNavigationItem({
+  active,
+  onMobileNavigate,
 }: {
-  assistants: Assistant[]
-  selectedAssistant: Assistant | undefined
-  onSelectAssistant: (assistant: Assistant) => void
-  onCreateAssistant: () => void
-  onEditAssistant: (assistant: Assistant) => void
+  active: boolean
+  onMobileNavigate?: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  const { assistant: defaultAssistant } = useDefaultAssistant()
-
-  if (!selectedAssistant) {
-    return (
-      <div className="px-2 py-1.5 mb-2">
-        <h3 className="text-sm font-medium text-sidebar-foreground">Chat</h3>
-        <p className="text-xs text-sidebar-muted">Loading assistants...</p>
-      </div>
-    )
+  const router = useRouter()
+  const handleNewChat = () => {
+    router.push(`/dashboard/chat?new=${crypto.randomUUID()}`)
+    onMobileNavigate?.()
   }
 
   return (
-    <div className="px-2 py-1.5 mb-2">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button className="w-full flex items-center gap-2 hover:bg-sidebar-hover rounded-lg p-1 -m-1 transition-colors">
-            <span className="text-xl">{selectedAssistant.emoji}</span>
-            <div className="flex-1 text-left min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-sm font-medium text-sidebar-foreground truncate">
-                  {selectedAssistant.name}
-                </h3>
-                {defaultAssistant?.id === selectedAssistant.id && (
-                  <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 gap-0.5 shrink-0">
-                    <Star className="h-2 w-2" />
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-sidebar-muted truncate">{selectedAssistant.description}</p>
-            </div>
-            <ChevronDown className="h-4 w-4" />
+    <div
+      className={cn(
+        "group flex items-center rounded-lg text-sm transition-all",
+        active
+          ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+          : "text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground"
+      )}
+    >
+      <Link
+        href="/dashboard/chat"
+        aria-current={active ? "page" : undefined}
+        className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2"
+      >
+        <MessageSquare className="h-5 w-5 shrink-0" />
+        <span>Chat</span>
+      </Link>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={handleNewChat}
+            className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground"
+            aria-label="Start new chat"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
           </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-2" align="start" side="bottom">
-          <div className="space-y-1 max-h-[300px] overflow-y-auto">
-            {assistants.map((assistant) => {
-              const isSelected = selectedAssistant.id === assistant.id
-              const isDefault = defaultAssistant?.id === assistant.id
-              return (
-                <div
-                  key={assistant.id}
-                  className={cn(
-                    "group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all",
-                    isSelected ? "bg-sidebar-accent" : "hover:bg-sidebar-hover"
-                  )}
-                  onClick={() => { onSelectAssistant(assistant); setOpen(false) }}
-                >
-                  <span className="text-lg shrink-0">{assistant.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-medium truncate">{assistant.name}</span>
-                      {isDefault && <Star className="h-3 w-3" />}
-                      {assistant.useKnowledgeBase && <Database className="h-3 w-3" />}
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{assistant.description}</p>
-                  </div>
-                  {assistant.isEditable && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      onClick={(e) => { e.stopPropagation(); onEditAssistant(assistant); setOpen(false) }}
-                      aria-label={`Edit ${assistant.name}`}
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <div className="mt-2 pt-2 border-t">
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-2 text-muted-foreground"
-              onClick={() => { onCreateAssistant(); setOpen(false) }}
-            >
-              <Plus className="h-4 w-4" />
-              New Assistant
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
+        </TooltipTrigger>
+        <TooltipContent side="right">Start new chat</TooltipContent>
+      </Tooltip>
     </div>
   )
 }
@@ -299,88 +235,23 @@ function AssistantSelectorHeader({
 // ─── Chat Section Content ────────────────────────────────────────────
 
 function ChatSectionContent({
-  assistants,
-  selectedAssistant,
-  onSelectAssistant,
-  onCreateAssistant,
-  onEditAssistant,
   getAssistantById,
 }: {
-  assistants: Assistant[]
-  selectedAssistant: Assistant
-  onSelectAssistant: (assistant: Assistant) => void
-  onCreateAssistant: () => void
-  onEditAssistant: (assistant: Assistant) => void
   getAssistantById: (id: string) => Assistant | undefined
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { sessions, createPersistedSession, deleteSession } = useChatSessions()
-  const { toast } = useToast()
-  const [creatingNewChat, setCreatingNewChat] = useState(false)
-  const newChatAbortRef = useRef<AbortController | null>(null)
-
-  useEffect(() => {
-    return () => {
-      newChatAbortRef.current?.abort()
-    }
-  }, [])
-
-  const handleNewChat = async () => {
-    if (!selectedAssistant || creatingNewChat) return
-    newChatAbortRef.current?.abort()
-    const controller = new AbortController()
-    newChatAbortRef.current = controller
-    setCreatingNewChat(true)
-    try {
-      const newSession = await createPersistedSession(selectedAssistant.id, controller.signal)
-      router.push(`/dashboard/chat/${newSession.id}`)
-    } catch (error) {
-      if ((error as { name?: string })?.name === "AbortError") return
-      console.error("[AppSidebar] Failed to create new chat:", error)
-      toast({
-        title: "Couldn't start chat",
-        description:
-          error instanceof Error ? error.message : "Network error — try again in a moment.",
-        variant: "destructive",
-      })
-    } finally {
-      if (newChatAbortRef.current === controller) {
-        newChatAbortRef.current = null
-      }
-      setCreatingNewChat(false)
-    }
-  }
+  const { sessions, deleteSession } = useChatSessions()
 
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
   if (!mounted) {
-    return (
-      <div className="space-y-1">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-hover mb-2"
-          onClick={handleNewChat}
-        >
-          <Plus className="h-4 w-4" />
-          New Chat
-        </Button>
-      </div>
-    )
+    return null
   }
 
   return (
     <div className="space-y-1">
-      <Button
-        variant="ghost"
-        className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-hover mb-2"
-        onClick={handleNewChat}
-      >
-        <Plus className="h-4 w-4" />
-        New Chat
-      </Button>
-
       {sessions.length > 0 && (
         <div className="space-y-1">
           <p className="px-3 py-1 text-xs font-medium text-sidebar-muted uppercase tracking-wider">
@@ -490,8 +361,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
 
   // Assistant management
   const {
-    assistants, selectedAssistant, selectAssistant,
-    addAssistant, updateAssistant, deleteAssistant, getAssistantById,
+    assistants, getAssistantById,
     missingSelection, acknowledgeMissingSelection,
   } = useAssistants()
 
@@ -513,7 +383,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
     acknowledgeMissingSelection()
   }, [missingSelection, getAssistantById, sidebarToast, acknowledgeMissingSelection])
 
-  const { assistant: defaultAssistant } = useDefaultAssistant()
   const { workflows } = useWorkflows()
 
   // Only load digital employees when feature is enabled
@@ -526,24 +395,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
       refreshEmployees()
     }
   }, [pathname, isDigitalEmployeesEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const [editorOpen, setEditorOpen] = useState(false)
-  const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null)
-
-  const handleSelectAssistant = (assistant: Assistant) => selectAssistant(assistant.id)
-  const handleCreateAssistant = () => { setEditingAssistant(null); setEditorOpen(true) }
-  const handleEditAssistant = (assistant: Assistant) => { setEditingAssistant(assistant); setEditorOpen(true) }
-
-  const handleSaveAssistant = async (input: AssistantInput) => {
-    if (editingAssistant) {
-      await updateAssistant(editingAssistant.id, input)
-    } else {
-      const newAssistant = await addAssistant(input)
-      if (newAssistant) selectAssistant(newAssistant.id)
-    }
-  }
-
-  const handleDeleteAssistant = (id: string) => deleteAssistant(id)
 
   // Current section detection
   const getCurrentSection = () => {
@@ -736,6 +587,16 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
         </button>
         {mainNavItems.map((item) => {
           const active = isActive(item.url)
+          if (item.url === "/dashboard/chat") {
+            return (
+              <ChatNavigationItem
+                key={item.url}
+                active={active}
+                onMobileNavigate={mobile ? onToggle : undefined}
+              />
+            )
+          }
+
           return (
             <Link
               key={item.url}
@@ -757,32 +618,19 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
       {/* Contextual Panel */}
       <div className="flex-1 flex flex-col overflow-hidden p-2 mt-2 border-t border-sidebar-border">
         {/* Section Header */}
-        <div className="shrink-0">
-          {currentSection === sections.chat ? (
-            <AssistantSelectorHeader
-              assistants={assistants}
-              selectedAssistant={selectedAssistant}
-              onSelectAssistant={handleSelectAssistant}
-              onCreateAssistant={handleCreateAssistant}
-              onEditAssistant={handleEditAssistant}
-            />
-          ) : (
+        {currentSection !== sections.chat && (
+          <div className="shrink-0">
             <div className="px-2 py-1.5 mb-2">
               <h3 className="text-sm font-medium text-sidebar-foreground">{currentSection.title}</h3>
               <p className="text-xs text-sidebar-muted">{currentSection.subtitle}</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
           {currentSection === sections.chat && (
             <ChatSectionContent
-              assistants={assistants}
-              selectedAssistant={selectedAssistant}
-              onSelectAssistant={handleSelectAssistant}
-              onCreateAssistant={handleCreateAssistant}
-              onEditAssistant={handleEditAssistant}
               getAssistantById={getAssistantById}
             />
           )}
@@ -1101,14 +949,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
         </DropdownMenu>
       </div>
 
-      {/* Assistant Editor Dialog */}
-      <AssistantEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        assistant={editingAssistant}
-        onSave={handleSaveAssistant}
-        onDelete={handleDeleteAssistant}
-      />
     </div>
     </TooltipProvider>
   )
