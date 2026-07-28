@@ -44,6 +44,9 @@ export interface EmbeddableFigure {
   documentId: string
   assetKey: string
   title: string
+  /** The figure's own printed caption ("Gambar 1.1 …"), used both as the inline
+   *  caption and to place the figure next to the prose that discusses it. */
+  caption?: string | null
   page?: number | null
 }
 
@@ -67,9 +70,7 @@ export function embedFigures(content: string, figures: EmbeddableFigure[]): stri
   return content.replace(/\[figure:(\d+)\]/g, (whole, num) => {
     const f = byN.get(Number(num))
     if (!f) return whole
-    const url = `/api/dashboard/files/${f.documentId}/asset?key=${encodeURIComponent(f.assetKey)}`
-    const caption = `${f.title}${f.page != null ? ` (hal. ${f.page + 1})` : ""}`
-    return `\n\n![${caption}](${url})\n\n`
+    return figureMarkdown(f)
   })
 }
 
@@ -106,14 +107,72 @@ export function autoEmbedFigures(
     if (alreadyEmbedded.has(f.n)) continue
     const cite = new RegExp(`\\[${f.n}\\](?!\\()`)
     const m = cite.exec(out)
-    if (!m) continue // not referenced in prose → leave it for the Figures strip
-    const url = `/api/dashboard/files/${f.documentId}/asset?key=${encodeURIComponent(f.assetKey)}`
-    const caption = `${f.title}${f.page != null ? ` (hal. ${f.page + 1})` : ""}`
-    const img = `\n\n![${caption}](${url})\n\n`
+    if (!m) continue // not referenced in prose → left for autoPlaceFigures
     const after = m.index + m[0].length
     const nextBreak = out.indexOf("\n\n", after)
     const insertAt = nextBreak === -1 ? out.length : nextBreak
-    out = out.slice(0, insertAt) + img + out.slice(insertAt)
+    out = out.slice(0, insertAt) + figureMarkdown(f) + out.slice(insertAt)
+  }
+  return out
+}
+
+/** Markdown image block for a figure, captioned by its own printed caption. */
+function figureMarkdown(f: EmbeddableFigure): string {
+  const url = `/api/dashboard/files/${f.documentId}/asset?key=${encodeURIComponent(f.assetKey)}`
+  const label = (f.caption?.trim() || f.title).replace(/[\[\]]/g, "")
+  const caption = `${label}${f.page != null ? ` (hal. ${f.page + 1})` : ""}`
+  return `\n\n![${caption}](${url})\n\n`
+}
+
+const CAPTION_STOPWORDS = new Set([
+  "yang", "untuk", "pada", "dan", "dengan", "dari", "atau", "adalah", "dalam",
+  "serta", "oleh", "hal", "ini", "itu", "para", "kepada", "gambar", "tabel",
+])
+
+/** Distinctive keywords from a figure caption, for matching against prose. */
+function figureKeywords(caption: string): string[] {
+  const body = caption
+    .replace(/^\s*(gambar|tabel|grafik|diagram|foto|bagan|ilustrasi|peta)\.?\s*[\d.]*/i, "")
+    .trim()
+  return body
+    .split(/[^A-Za-zÀ-ÿ]+/)
+    .filter((w) => w.length >= 4 && !CAPTION_STOPWORDS.has(w.toLowerCase()))
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+/**
+ * Place every remaining meaningful figure INLINE (no separate strip): next to
+ * the paragraph whose prose mentions a distinctive word from the figure's
+ * caption (e.g. caption "…Raja Udayana" → the paragraph that says "Udayana"),
+ * falling back to appending at the end so nothing is lost. `alreadyInlined` =
+ * figures already placed by embedFigures/autoEmbedFigures.
+ */
+export function autoPlaceFigures(
+  content: string,
+  figures: EmbeddableFigure[],
+  alreadyInlined: Set<number>,
+): string {
+  if (!content || !figures?.length) return content
+  let out = content
+  for (const f of figures) {
+    if (alreadyInlined.has(f.n)) continue
+    const kws = figureKeywords(f.caption ?? "")
+    let idx = -1
+    for (const kw of kws) {
+      const m = new RegExp(`\\b${escapeRegExp(kw)}\\b`, "i").exec(out)
+      if (m && (idx === -1 || m.index < idx)) idx = m.index
+    }
+    const img = figureMarkdown(f)
+    if (idx === -1) {
+      out = `${out}\n${img}` // no textual anchor → keep it in the flow, at the end
+    } else {
+      const nextBreak = out.indexOf("\n\n", idx)
+      const insertAt = nextBreak === -1 ? out.length : nextBreak
+      out = out.slice(0, insertAt) + img + out.slice(insertAt)
+    }
   }
   return out
 }

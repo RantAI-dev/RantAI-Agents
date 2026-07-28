@@ -16,7 +16,9 @@ import {
   citeAnchorId,
   embedFigures,
   autoEmbedFigures,
+  autoPlaceFigures,
   embeddedFigureNumbers,
+  citedFigureNumbers,
   type EmbeddableFigure,
 } from "./citations"
 
@@ -214,15 +216,21 @@ export function StreamdownContent({
 }: StreamdownContentProps) {
   const { resolvedTheme } = useTheme()
 
-  // Pipeline: strip dead MinerU image refs → embed any [figure:N] the model
-  // placed → auto-embed figures cited [N] in prose (once streaming settles) so
-  // the figure sits with its explanation → linkify [n] citations into chips.
+  // Pipeline (once streaming settles so we don't shuffle mid-stream):
+  //   strip dead MinerU refs → embed explicit [figure:N] → auto-embed figures
+  //   cited [N] next to their citation → auto-place the rest inline next to the
+  //   prose their caption matches (so ALL figures live in the answer, none in a
+  //   separate strip) → linkify [n] citations into chips.
   const rendered = (() => {
     if (!citations) return content
     const figs = citations.figures ?? []
     const explicit = embeddedFigureNumbers(content)
     let out = embedFigures(stripDeadImages(content), figs)
-    if (!isStreaming) out = autoEmbedFigures(out, figs, explicit)
+    if (!isStreaming) {
+      out = autoEmbedFigures(out, figs, explicit)
+      const inlined = new Set<number>([...explicit, ...citedFigureNumbers(content, figs)])
+      out = autoPlaceFigures(out, figs, inlined)
+    }
     return linkifyCitations(out, citations.messageId, citations.count)
   })()
 

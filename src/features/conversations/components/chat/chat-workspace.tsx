@@ -40,7 +40,7 @@ import { ReasoningBox } from "./reasoning-box"
 import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
-import { embeddedFigureNumbers, citedFigureNumbers, isMeaningfulFigureCaption, type EmbeddableFigure } from "./citations"
+import { isMeaningfulFigureCaption, type EmbeddableFigure } from "./citations"
 import { ConversationExport } from "./conversation-export"
 import { CommandPalette } from "./command-palette"
 import {
@@ -521,15 +521,14 @@ function MessagesArea({
                 documentId: s.documentId as string,
                 assetKey: s.assetKey as string,
                 title: s.title,
+                caption: s.section,
                 page: s.page,
               }))
-            // Hide from the Figures strip both the figures the model embedded
-            // via [figure:N] AND those cited [N] in prose (auto-embedded inline
-            // next to their reference). Unreferenced figures stay in the strip.
-            const embeddedFigureNums = new Set<number>([
-              ...embeddedFigureNumbers(content),
-              ...citedFigureNumbers(content, embeddableFigures),
-            ])
+            // Every meaningful figure is rendered inline in the answer (next to
+            // its citation or the prose its caption matches), so ALL of them are
+            // hidden from the Figures strip — the strip effectively disappears
+            // and figures live entirely in the chat flow.
+            const embeddedFigureNums = new Set<number>(embeddableFigures.map((f) => f.n))
 
             const historicalAssistantResponse =
               isUser && hasEditHistory
