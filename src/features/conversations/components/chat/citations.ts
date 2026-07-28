@@ -24,6 +24,20 @@ export function stripDeadImages(content: string): string {
   })
 }
 
+/**
+ * Whether a figure crop is a *meaningful* book figure vs a decorative page
+ * ornament. Mistral's bbox extraction crops every page's mandala/lotus border
+ * as a "figure" and captions it from nearby text ("Ayo Membaca", "Kata
+ * Pengantar", a teacher's name…). Real figures carry a printed caption like
+ * "Gambar 1.1 …" / "Tabel 2.3 …". We only surface those in chat — inline and in
+ * the Figures strip — so answers aren't cluttered with ornamental noise.
+ * `caption` is the figure chunk's section (its paired caption).
+ */
+export function isMeaningfulFigureCaption(caption?: string | null): boolean {
+  if (!caption) return false
+  return /^\s*(gambar|tabel|grafik|diagram|foto|bagan|ilustrasi|peta)\b/i.test(caption)
+}
+
 /** A figure source the model can embed inline via a `[figure:N]` marker. */
 export interface EmbeddableFigure {
   n: number

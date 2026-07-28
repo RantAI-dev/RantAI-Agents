@@ -2,7 +2,7 @@
 
 import { memo } from "react"
 import { ExternalLink, FileText } from "@/lib/icons"
-import { citeAnchorId } from "./citations"
+import { citeAnchorId, isMeaningfulFigureCaption } from "./citations"
 
 export interface Source {
   title: string
@@ -50,9 +50,16 @@ export const MessageSources = memo<MessageSourcesProps>(({ sources, messageId, h
   // Number in the SAME order the model was given the source list, so an inline
   // `[n]` citation lines up with the badge here. Then split for rendering.
   const numbered = sources.map((s, i) => ({ ...s, n: i + 1 }))
-  // Figures the model embedded inline are dropped from the card row.
+  // Figures shown in the strip: real book figures only (caption like
+  // "Gambar 1.1 …"), and not the ones already embedded inline. Decorative page
+  // ornaments Mistral cropped (caption = "Ayo Membaca", a name, …) are dropped
+  // so the strip carries only figures that matter to the answer.
   const figures = numbered.filter(
-    (s) => s.assetKey && s.documentId && !hiddenFigureNums?.has(s.n),
+    (s) =>
+      s.assetKey &&
+      s.documentId &&
+      !hiddenFigureNums?.has(s.n) &&
+      isMeaningfulFigureCaption(s.section),
   )
   const textSources = numbered.filter((s) => !s.assetKey)
   const anchorId = (n: number) => (messageId ? citeAnchorId(messageId, n) : undefined)

@@ -40,7 +40,7 @@ import { ReasoningBox } from "./reasoning-box"
 import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
-import { embeddedFigureNumbers, citedFigureNumbers, type EmbeddableFigure } from "./citations"
+import { embeddedFigureNumbers, citedFigureNumbers, isMeaningfulFigureCaption, type EmbeddableFigure } from "./citations"
 import { ConversationExport } from "./conversation-export"
 import { CommandPalette } from "./command-palette"
 import {
@@ -513,7 +513,9 @@ function MessagesArea({
             // Figures card row (below) so they don't render twice.
             const embeddableFigures: EmbeddableFigure[] = sources
               .map((s, i) => ({ ...s, n: i + 1 }))
-              .filter((s) => s.assetKey && s.documentId)
+              // Only real book figures (caption "Gambar 1.1 …") can be inlined —
+              // never decorative page ornaments Mistral cropped.
+              .filter((s) => s.assetKey && s.documentId && isMeaningfulFigureCaption(s.section))
               .map((s) => ({
                 n: s.n,
                 documentId: s.documentId as string,
