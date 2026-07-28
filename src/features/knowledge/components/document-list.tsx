@@ -24,6 +24,16 @@ interface Document {
   updatedAt: string
   fileSize?: number
   thumbnailUrl?: string
+  status?: string
+  ingest?: {
+    jobId: string
+    step: string | null
+    progress: number
+    stepCurrent: number | null
+    stepTotal: number | null
+    etaSeconds: number | null
+    error: string | null
+  } | null
 }
 
 interface Category {
