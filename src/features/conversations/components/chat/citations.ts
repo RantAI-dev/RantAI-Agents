@@ -59,6 +59,51 @@ export function embedFigures(content: string, figures: EmbeddableFigure[]): stri
   })
 }
 
+/** Figure numbers that appear as a plain `[N]` citation in the answer — i.e.
+ *  figures the model referenced in prose, so they belong inline next to that
+ *  reference rather than in the separate Figures strip. */
+export function citedFigureNumbers(content: string, figures: EmbeddableFigure[]): Set<number> {
+  const out = new Set<number>()
+  if (!content || !figures?.length) return out
+  const nums = new Set(figures.map((f) => f.n))
+  for (const m of content.matchAll(/\[(\d{1,3})\](?!\()/g)) {
+    const n = Number(m[1])
+    if (nums.has(n)) out.add(n)
+  }
+  return out
+}
+
+/**
+ * Auto-place each figure that's cited `[N]` in prose (but the model didn't
+ * explicitly embed via `[figure:N]`) right after the paragraph containing its
+ * first `[N]` reference — so the figure sits WITH the explanation that cites it
+ * instead of being dumped in the Figures strip. Runs after embedFigures (which
+ * consumes explicit `[figure:N]`) and before linkifyCitations (which turns `[N]`
+ * into links). `alreadyEmbedded` = numbers the model embedded explicitly.
+ */
+export function autoEmbedFigures(
+  content: string,
+  figures: EmbeddableFigure[],
+  alreadyEmbedded: Set<number>,
+): string {
+  if (!content || !figures?.length) return content
+  let out = content
+  for (const f of figures) {
+    if (alreadyEmbedded.has(f.n)) continue
+    const cite = new RegExp(`\\[${f.n}\\](?!\\()`)
+    const m = cite.exec(out)
+    if (!m) continue // not referenced in prose → leave it for the Figures strip
+    const url = `/api/dashboard/files/${f.documentId}/asset?key=${encodeURIComponent(f.assetKey)}`
+    const caption = `${f.title}${f.page != null ? ` (hal. ${f.page + 1})` : ""}`
+    const img = `\n\n![${caption}](${url})\n\n`
+    const after = m.index + m[0].length
+    const nextBreak = out.indexOf("\n\n", after)
+    const insertAt = nextBreak === -1 ? out.length : nextBreak
+    out = out.slice(0, insertAt) + img + out.slice(insertAt)
+  }
+  return out
+}
+
 /** Stable id for a source card so a citation chip can scroll to it. */
 export function citeAnchorId(messageId: string, n: number): string {
   return `cite-anchor-${messageId}-${n}`
