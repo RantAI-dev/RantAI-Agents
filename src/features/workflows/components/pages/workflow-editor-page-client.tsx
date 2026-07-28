@@ -294,6 +294,11 @@ export default function WorkflowEditorPageClient({
           tags: updated.tags,
         })
       }
+      toast.success("Workflow saved")
+    } catch (err) {
+      // Previously the save threw with no catch — the workflow silently failed
+      // to persist with zero feedback. Surface the server's reason instead.
+      toast.error(err instanceof Error ? err.message : "Failed to save workflow")
     } finally {
       editor.setSaving(false)
     }
@@ -933,10 +938,16 @@ export default function WorkflowEditorPageClient({
                       })()}
                     </span>
                   )}
-                  {activeRun?.error && (
-                    <span className="text-xs text-destructive truncate flex-1">{activeRun.error}</span>
-                  )}
                 </div>
+
+                {/* Error message — its own full-width, wrapping block so long
+                    provider errors (e.g. "model deprecated") stay readable and
+                    never overlap the footer buttons. */}
+                {activeRun?.error && (
+                  <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive break-words whitespace-pre-wrap">
+                    {activeRun.error}
+                  </div>
+                )}
 
                 {/* Output */}
                 {outputText != null && (

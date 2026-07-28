@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   UpdateDashboardSkillSchema,
 } from "@/features/skills/schema"
@@ -29,7 +30,8 @@ export async function GET(
     }
 
     const { id } = await params
-    const result = await getDashboardSkillById(id)
+    const orgContext = await resolveActiveOrg(_req, session.user.id)
+    const result = await getDashboardSkillById(id, orgContext?.organizationId ?? null)
     if (isServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
@@ -60,8 +62,10 @@ export async function PUT(
       )
     }
 
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await updateDashboardSkillRecord({
       id,
+      organizationId: orgContext?.organizationId ?? null,
       input: parsed.data,
     })
     if (isServiceError(result)) {
@@ -86,7 +90,8 @@ export async function DELETE(
     }
 
     const { id } = await params
-    const result = await deleteDashboardSkillRecord(id)
+    const orgContext = await resolveActiveOrg(_req, session.user.id)
+    const result = await deleteDashboardSkillRecord(id, orgContext?.organizationId ?? null)
     if (isServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }

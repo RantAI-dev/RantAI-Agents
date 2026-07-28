@@ -36,8 +36,8 @@ export interface LLMModel {
 export const AVAILABLE_MODELS: LLMModel[] = [
   // Default Free Model
   {
-    id: "xiaomi/mimo-v2-flash",
-    name: "MiMo V2 Flash",
+    id: "xiaomi/mimo-v2.5",
+    name: "MiMo V2.5",
     provider: "Xiaomi",
     description: "Fast and efficient for general chat",
     contextWindow: 32768,
@@ -182,7 +182,7 @@ export const AVAILABLE_MODELS: LLMModel[] = [
 /**
  * Default model ID used when no model is specified
  */
-export const DEFAULT_MODEL_ID = "google/gemini-3-flash-preview"
+export const DEFAULT_MODEL_ID = "rantai/nano"
 
 /**
  * Get model by ID

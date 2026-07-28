@@ -2193,8 +2193,14 @@ function validateReact(content: string): ArtifactValidationResult {
   //    surface a clear author-time error instead of a confusing parse fail.
   const directives = parseDirectives(content)
 
+  // Auto-default, don't block: a missing/unknown @aesthetic is a warning, not a
+  // hard error, so the artifact still renders (the renderer falls back to a
+  // default direction). Small free-tier models (nano) routinely omit the
+  // directive; hard-failing here caused an infinite create/update retry loop
+  // that never produced an artifact. Opt back into strict mode with
+  // ARTIFACT_REACT_AESTHETIC_REQUIRED=true.
   const aestheticRequired =
-    process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED !== "false"
+    process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED === "true"
 
   if (!directives.rawAestheticLine) {
     const message =

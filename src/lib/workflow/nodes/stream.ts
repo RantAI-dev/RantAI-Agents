@@ -8,6 +8,7 @@ import { buildTemplateContext } from "../engine"
 import { resolveTemplate } from "../template-engine"
 import { getIOInstance } from "@/lib/socket"
 import { extractPrompt } from "./llm"
+import { reportWorkflowUsage } from "../usage-hook"
 
 /**
  * STREAM_OUTPUT node handler — terminal node in chatflow workflows.
@@ -68,6 +69,20 @@ export async function executeStreamOutput(
   }
 
   const finalResult = await result
+
+  let usage
+  try {
+    usage = await finalResult.usage
+  } catch {
+    usage = undefined
+  }
+  reportWorkflowUsage({
+    organizationId: context.organizationId,
+    userId: context.userId,
+    modelId: nodeData.model || DEFAULT_MODEL_ID,
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+  })
 
   return {
     output: {

@@ -86,7 +86,11 @@ export default function AccountPageClient({
   const currentAvatarUrl = avatarUrl ?? initialProfile.avatarUrl
 
   return (
-    <div className="space-y-6">
+    // The dashboard <main> is overflow-hidden, so this page must own its scroll —
+    // otherwise on short screens the content is clipped with no way to reach it.
+    // Padding keeps it off the sidebar edge; max-width keeps the cards readable.
+    <div className="h-full overflow-y-auto">
+      <div className="mx-auto max-w-4xl space-y-6 p-6 md:p-8">
       <div>
         <h2 className="text-xl font-semibold">Profile Settings</h2>
         <p className="text-muted-foreground text-sm">
@@ -176,6 +180,7 @@ export default function AccountPageClient({
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   )
 }

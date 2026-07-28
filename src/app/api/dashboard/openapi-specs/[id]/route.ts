@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { resolveActiveOrg } from "@/lib/org-context"
 import {
   DashboardOpenApiSpecIdParamsSchema,
 } from "@/features/openapi-specs/schema"
@@ -25,7 +26,11 @@ export async function GET(
       return NextResponse.json({ error: "Spec not found" }, { status: 404 })
     }
 
-    const result = await getDashboardOpenApiSpec({ id: parsedParams.data.id })
+    const orgContext = await resolveActiveOrg(_req, session.user.id)
+    const result = await getDashboardOpenApiSpec({
+      id: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+    })
     if (isHttpServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
@@ -52,7 +57,11 @@ export async function DELETE(
       return NextResponse.json({ error: "Spec not found" }, { status: 404 })
     }
 
-    const result = await deleteDashboardOpenApiSpec({ id: parsedParams.data.id })
+    const orgContext = await resolveActiveOrg(_req, session.user.id)
+    const result = await deleteDashboardOpenApiSpec({
+      id: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
+    })
     if (isHttpServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
@@ -79,8 +88,10 @@ export async function POST(
       return NextResponse.json({ error: "Spec not found" }, { status: 404 })
     }
 
+    const orgContext = await resolveActiveOrg(_req, session.user.id)
     const result = await resyncDashboardOpenApiSpec({
       id: parsedParams.data.id,
+      organizationId: orgContext?.organizationId ?? null,
       createdBy: session.user.id,
     })
 
