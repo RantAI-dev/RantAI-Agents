@@ -745,3 +745,115 @@ export async function fetchNeighborChunks(
   }
   return out;
 }
+
+// ── Figure co-retrieval (multimodal linking) ──────────────────────────────
+// Figures are stored as separate low-text chunks (just a caption) appended at
+// the END of a document's chunk_index. On a specific query the rich text chunks
+// out-rank them and neighbor-window can't reach them (they aren't adjacent to
+// their subject text, and Mistral gives text chunks no page to join on). So a
+// figure that's exactly about the asked topic never surfaces. This pulls in
+// figures whose printed caption matches the query (or the already-retrieved
+// text), so a figure travels with its subject.
+
+const FIG_CAPTION_STOPWORDS = new Set([
+  "yang", "untuk", "pada", "dan", "dengan", "dari", "atau", "adalah", "dalam",
+  "serta", "oleh", "hal", "ini", "itu", "para", "kepada", "gambar", "tabel",
+  "raja", "dewa", "kitab", "hari", "suci",
+]);
+
+function figCaptionMeaningful(caption: string): boolean {
+  return /^\s*(gambar|tabel|grafik|diagram|foto|bagan|ilustrasi|peta)\b/i.test(caption);
+}
+
+function figCaptionKeywords(caption: string): string[] {
+  const body = caption
+    .replace(/^\s*(gambar|tabel|grafik|diagram|foto|bagan|ilustrasi|peta)\.?\s*[\d.]*/i, "")
+    .trim();
+  return body
+    .split(/[^A-Za-zÀ-ÿ]+/)
+    .filter((w) => w.length >= 4 && !FIG_CAPTION_STOPWORDS.has(w.toLowerCase()));
+}
+
+/**
+ * Fetch meaningful figures from `docIds` whose caption keyword appears in the
+ * query or in the already-retrieved text, excluding figures already present.
+ * Returned as zero-score results so they surface as sources without displacing
+ * ranked hits. Capped at `limit`.
+ */
+export async function fetchMatchingFigures(
+  docIds: string[],
+  query: string,
+  retrievedText: string,
+  alreadyPresent: Set<string>,
+  limit: number,
+): Promise<HybridSearchResult[]> {
+  if (!docIds.length || limit <= 0) return [];
+  const q = query.toLowerCase();
+  const text = retrievedText.toLowerCase();
+
+  const client = await getSurrealClient();
+  const res = await client.query<ChunkResult & { contextual_prefix?: string | null }>(
+    `SELECT id, document_id, file_id, content, chunk_index, metadata, contextual_prefix
+     FROM document_chunk
+     WHERE document_id IN $docIds AND metadata.chunkType = 'figure'`,
+    { docIds },
+  );
+  const rows = res[0]?.result || [];
+  if (!rows.length) return [];
+
+  const docs = await prisma.document.findMany({
+    where: { id: { in: [...new Set(rows.map((r) => r.document_id))] }, deletedAt: null },
+    select: { id: true, title: true },
+  });
+  const titleById = new Map(docs.map((d) => [d.id, d.title]));
+
+  // Score each meaningful figure: a caption keyword in the QUERY (2) beats one
+  // only in the retrieved text (1). Dedup by normalized caption so duplicate
+  // crops don't stack. Then take the top-scoring `limit`.
+  type Scored = { score: number; row: (typeof rows)[number]; caption: string; assetKey: string };
+  const scored: Scored[] = [];
+  const seenCaption = new Set<string>();
+  for (const row of rows) {
+    if (alreadyPresent.has(String(row.id))) continue;
+    const meta = row.metadata as { section?: string; assetKey?: string } | undefined;
+    const caption = (meta?.section ?? row.content ?? "").replace(/^\[[^\]]*\]\s*/, "").trim();
+    if (!figCaptionMeaningful(caption)) continue;
+    const assetKey = meta?.assetKey ?? null;
+    if (!assetKey) continue;
+    const capKey = caption.toLowerCase();
+    if (seenCaption.has(capKey)) continue;
+    const kws = figCaptionKeywords(caption).map((k) => k.toLowerCase());
+    if (!kws.length) continue;
+    const score = kws.some((kw) => q.includes(kw)) ? 2 : kws.some((kw) => text.includes(kw)) ? 1 : 0;
+    if (score === 0) continue;
+    seenCaption.add(capKey);
+    scored.push({ score, row, caption, assetKey });
+  }
+  scored.sort((a, b) => b.score - a.score);
+
+  return scored.slice(0, limit).map(({ row, assetKey }) => {
+    const meta = row.metadata as
+      | { documentTitle?: string; section?: string; page?: number }
+      | undefined;
+    return {
+      chunkId: row.id,
+      documentId: row.document_id,
+      fileId: row.file_id,
+      content: row.content,
+      chunkIndex: row.chunk_index,
+      documentTitle: meta?.documentTitle ?? titleById.get(row.document_id),
+      section: meta?.section,
+      assetKey,
+      page: meta?.page ?? null,
+      chunkType: "figure",
+      vectorScore: 0,
+      entityScore: 0,
+      graphScore: 0,
+      combinedScore: 0,
+      rank: Number.MAX_SAFE_INTEGER,
+      contextualPrefix: row.contextual_prefix ?? null,
+      relatedEntities: [],
+      isNeighbor: true,
+    } as HybridSearchResult;
+  });
+}
