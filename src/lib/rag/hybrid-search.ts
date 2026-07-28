@@ -379,13 +379,18 @@ export class HybridSearch {
 
       if (topFileIds.length === 0) return [];
 
-      // Find entities in these documents
+      // Pull the candidate entities of the top documents so we can test which
+      // ones the query actually names. The old `ORDER BY confidence DESC LIMIT
+      // 20` fetched an arbitrary 20 of the (often hundreds of) equally-confident
+      // entities, so the entity the user asked about was almost never among them
+      // — e.g. "Raja Mulawarman" sits at rank ~440/577, far past 20, and entity/
+      // graph search silently returned nothing. Fetch a generous slice (entity
+      // rows are tiny) and let the name-match below pick the relevant ones.
       const entitySql = `
-        SELECT *
+        SELECT name, type, document_id, file_id, confidence
         FROM entity
         WHERE document_id IN $fileIds OR file_id IN $fileIds
-        ORDER BY confidence DESC
-        LIMIT 20;
+        LIMIT 2000;
       `;
 
       const entityResult = await client.query<Entity & { id: string }>(
