@@ -143,16 +143,16 @@ function FigureImage({ src, alt, node: _node, ...props }: ComponentProps<"img"> 
     return <img src={src} alt={alt} {...props} />
   }
   return (
-    <span className="block my-3">
+    <span className="block my-3 text-center">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt={alt}
         loading="lazy"
-        className="rounded-lg border border-border/50 max-h-80 w-auto object-contain bg-white"
+        className="rounded-lg border border-border/50 max-h-80 w-auto object-contain bg-white mx-auto inline-block"
       />
       {alt && (
-        <span className="block text-[11px] text-muted-foreground mt-1.5">{alt}</span>
+        <span className="block text-[11px] text-muted-foreground mt-1.5 text-center">{alt}</span>
       )}
     </span>
   )
