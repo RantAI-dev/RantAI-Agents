@@ -238,17 +238,8 @@ export function StreamdownContent({
     <div className={className ?? "chat-message max-w-none"}>
       <StreamdownErrorBoundary content={rendered}>
         <Streamdown
-          // Remount when streaming ends so the final answer renders from a clean
-          // DOM. Streamdown's per-char fadeIn wraps tokens in opacity:0→1
-          // animation spans; when isAnimating flips false mid-flight (and the
-          // content shifts as figures are placed inline), some spans get stranded
-          // at opacity:0 → invisible text that only a refresh fixed. The remount +
-          // dropping the animation entirely on the final pass guarantees full
-          // opacity. Keyed per-message so only the finishing message remounts.
-          key={isStreaming ? "streaming" : "final"}
-          {...(isStreaming
-            ? { animated: { animation: "fadeIn" as const, sep: "char" as const, duration: 180 }, isAnimating: true }
-            : {})}
+          animated={{ animation: "fadeIn", sep: "char", duration: 180 }}
+          isAnimating={isStreaming}
           caret={isStreaming ? "block" : undefined}
           shikiTheme={
             resolvedTheme === "dark"
