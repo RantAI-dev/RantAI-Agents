@@ -770,6 +770,62 @@ export async function handleWidgetChat(req: NextRequest) {
     })();
     } // end assistantMemoryConfig.enabled (normal chat save)
 
+    // ── Structured SSE mode (opt-in: ?format=sse or Accept: text/event-stream) ──
+    // Emits typed events so integrators don't parse text markers:
+    //   data: {"type":"delta","text":"…"}          (answer tokens, streamed)
+    //   data: {"type":"sources","sources":[{id,title,section,page,documentId}]}
+    //   data: {"type":"figures","figures":[{id,caption,page,documentId,documentTitle,imageUrl}]}
+    //   data: {"type":"done"}
+    // Sources carry names (no extra call); figures carry a ready image link.
+    const wantSSE =
+      new URL(req.url).searchParams.get("format") === "sse" ||
+      (req.headers.get("accept") || "").includes("text/event-stream")
+    if (wantSSE) {
+      const textSources = ragSources
+        .filter((s) => s.chunkType !== "figure")
+        .map((s, i) => ({ id: i + 1, title: s.title, section: s.section, page: s.page, documentId: s.documentId }))
+      // only real captioned figures ("Gambar/Tabel/…"), not page ornaments
+      const figMeaning = /^\s*(gambar|tabel|grafik|diagram|foto|bagan|ilustrasi|peta)\b/i
+      const figures = ragSources
+        .filter((s) => s.chunkType === "figure" && s.imageUrl && figMeaning.test(s.section || ""))
+        .map((s, i) => ({
+          id: i + 1,
+          caption: s.section || s.title,
+          page: s.page,
+          documentId: s.documentId,
+          documentTitle: s.title,
+          imageUrl: s.imageUrl,
+        }))
+      const enc = new TextEncoder()
+      const sse = (obj: unknown) => enc.encode(`data: ${JSON.stringify(obj)}\n\n`)
+      const textStream = result.textStream
+      const stream = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          try {
+            for await (const delta of textStream) {
+              if (delta) controller.enqueue(sse({ type: "delta", text: delta }))
+            }
+          } catch (err) {
+            controller.enqueue(sse({ type: "error", message: (err as Error)?.message ?? "stream error" }))
+          }
+          if (textSources.length) controller.enqueue(sse({ type: "sources", sources: textSources }))
+          if (figures.length) controller.enqueue(sse({ type: "figures", figures }))
+          controller.enqueue(sse({ type: "done" }))
+          controller.close()
+        },
+      })
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+          "Access-Control-Allow-Origin": "*",
+          "X-RateLimit-Remaining": String(rateLimit.remaining),
+        },
+      })
+    }
+
+    // ── Legacy text mode (backward-compatible with the drop-in widget) ──
     // Stream the answer text, then append a `---SOURCES---` marker followed by
     // the rich sources JSON so the client can split it off and render citations
     // + inline figures. (Matches the delimiter the memory-save path strips.)
