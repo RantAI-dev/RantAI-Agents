@@ -15,6 +15,8 @@ import {
   parseCiteHref,
   citeAnchorId,
   embedFigures,
+  autoEmbedFigures,
+  embeddedFigureNumbers,
   type EmbeddableFigure,
 } from "./citations"
 
@@ -213,14 +215,16 @@ export function StreamdownContent({
   const { resolvedTheme } = useTheme()
 
   // Pipeline: strip dead MinerU image refs → embed any [figure:N] the model
-  // placed → linkify [n] citations into clickable chips.
-  const rendered = citations
-    ? linkifyCitations(
-        embedFigures(stripDeadImages(content), citations.figures ?? []),
-        citations.messageId,
-        citations.count,
-      )
-    : content
+  // placed → auto-embed figures cited [N] in prose (once streaming settles) so
+  // the figure sits with its explanation → linkify [n] citations into chips.
+  const rendered = (() => {
+    if (!citations) return content
+    const figs = citations.figures ?? []
+    const explicit = embeddedFigureNumbers(content)
+    let out = embedFigures(stripDeadImages(content), figs)
+    if (!isStreaming) out = autoEmbedFigures(out, figs, explicit)
+    return linkifyCitations(out, citations.messageId, citations.count)
+  })()
 
   return (
     <div className={className ?? "chat-message max-w-none"}>

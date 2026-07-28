@@ -40,7 +40,7 @@ import { ReasoningBox } from "./reasoning-box"
 import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
-import { embeddedFigureNumbers, type EmbeddableFigure } from "./citations"
+import { embeddedFigureNumbers, citedFigureNumbers, type EmbeddableFigure } from "./citations"
 import { ConversationExport } from "./conversation-export"
 import { CommandPalette } from "./command-palette"
 import {
@@ -521,7 +521,13 @@ function MessagesArea({
                 title: s.title,
                 page: s.page,
               }))
-            const embeddedFigureNums = embeddedFigureNumbers(content)
+            // Hide from the Figures strip both the figures the model embedded
+            // via [figure:N] AND those cited [N] in prose (auto-embedded inline
+            // next to their reference). Unreferenced figures stay in the strip.
+            const embeddedFigureNums = new Set<number>([
+              ...embeddedFigureNumbers(content),
+              ...citedFigureNumbers(content, embeddableFigures),
+            ])
 
             const historicalAssistantResponse =
               isUser && hasEditHistory
