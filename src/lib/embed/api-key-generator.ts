@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto"
+import { createHash, randomBytes } from "crypto"
 
 /**
  * Generate a secure API key for embed widgets
@@ -23,6 +23,17 @@ export function validateApiKeyFormat(key: string): boolean {
 export function generateAgentApiKey(): string {
   const randomPart = randomBytes(24).toString("base64url").slice(0, 32)
   return `rantai_sk_${randomPart}`
+}
+
+/**
+ * Hash an agent API key for storage / lookup.
+ *
+ * Unsalted SHA-256 hex — the keys are high-entropy (192 random bits) so salting
+ * buys nothing, and it MUST stay byte-for-byte identical to the SQL backfill
+ * (`encode(digest(key, 'sha256'), 'hex')`) so migrated rows resolve.
+ */
+export function hashAgentApiKey(key: string): string {
+  return createHash("sha256").update(key).digest("hex")
 }
 
 /**

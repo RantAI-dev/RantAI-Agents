@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useOrgFetch, useActiveOrgChange } from "@/hooks/use-organization"
 import type { Assistant, AssistantInput, MemoryConfig, ModelConfig, ChatConfig, GuardRailsConfig } from "@/lib/types/assistant"
 
-const SELECTED_KEY = "rantai-selected-assistant"
+export const SELECTED_KEY = "rantai-selected-assistant"
 const ASSISTANT_CHANGE_EVENT = "rantai-assistant-change"
 const ASSISTANTS_MUTATED_EVENT = "rantai-assistants-mutated"
 

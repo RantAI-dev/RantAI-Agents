@@ -7,6 +7,7 @@ import {
   generateEmbeddings,
   detectFileType,
   storeChunks,
+  deleteChunksByDocumentId,
   getDocumentChunkCount,
   getDocumentChunkCounts,
   type Chunk,
@@ -14,7 +15,7 @@ import {
 import { assignChunkPages } from "@/lib/rag/page-map"
 import { extractEntities, extractEntitiesAndRelations } from "@/lib/document-intelligence"
 import { getSurrealClient } from "@/lib/surrealdb"
-import { uploadFile, S3Paths, validateUpload, getPresignedDownloadUrl, deleteFile } from "@/lib/s3"
+import { uploadFile, S3Paths, validateUpload, deleteFile } from "@/lib/s3"
 import { processDocumentOCR, isPDFScanned } from "@/lib/ocr"
 import { canEdit, canManage } from "@/lib/organization"
 import {
@@ -204,14 +205,20 @@ function mapListItem(document: {
   }
 }
 
-async function resolveImageThumbnail(s3Key: string | null | undefined) {
-  if (!s3Key) return undefined
+/**
+ * Same-origin streaming URL for a stored file. RustFS is internal-only (no
+ * published port), so a presigned `http://rustfs:9000/...` URL is unreachable
+ * from the browser — hand it `/api/files/[...key]` instead, which streams the
+ * bytes through the (auth + org-scoped) app route.
+ */
+function appFileUrl(s3Key: string): string {
+  const encoded = s3Key.split("/").map(encodeURIComponent).join("/")
+  return `/api/files/${encoded}`
+}
 
-  try {
-    return await getPresignedDownloadUrl(s3Key, 3600)
-  } catch {
-    return undefined
-  }
+function resolveImageThumbnail(s3Key: string | null | undefined) {
+  if (!s3Key) return undefined
+  return appFileUrl(s3Key)
 }
 
 /**
@@ -296,14 +303,9 @@ export async function getKnowledgeDocumentForDashboard(params: {
     chunk_type: string | null
   }>
 
-  let fileUrl: string | undefined
-  if (document.s3Key) {
-    try {
-      fileUrl = await getPresignedDownloadUrl(document.s3Key)
-    } catch (error) {
-      console.error("[Knowledge API] Failed to generate presigned URL:", error)
-    }
-  }
+  // Stream through the app route (RustFS is internal-only) so the browser can
+  // actually load the preview instead of a dead presigned rustfs:9000 URL.
+  const fileUrl = document.s3Key ? appFileUrl(document.s3Key) : undefined
 
   return {
     id: document.id,
@@ -785,6 +787,14 @@ export async function createKnowledgeDocumentForDashboard(params: {
     const embeddings = await generateEmbeddings(chunkTexts)
     const { getRagConfig } = await import("@/lib/rag/config")
     const embeddingModel = getRagConfig().embeddingModel
+    // Idempotency guard: storeChunks CREATEs chunks under the deterministic id
+    // `${documentId}_${i}`, which throws on a pre-existing id. Clearing any
+    // stale chunks first makes this step safe to re-run for the same
+    // document.id — the precondition a future ingest-retry endpoint/cron needs
+    // to recover a half-processed doc (e.g. a request killed by a deploy after
+    // some chunks were written). No-op on the happy path (fresh random id →
+    // zero existing chunks).
+    await deleteChunksByDocumentId(document.id)
     await storeChunks(document.id, chunks, embeddings, embeddingModel)
   } catch (err) {
     console.error(
@@ -805,14 +815,8 @@ export async function createKnowledgeDocumentForDashboard(params: {
     throw err
   }
 
-  let fileUrl: string | undefined
-  if (s3Key) {
-    try {
-      fileUrl = await getPresignedDownloadUrl(s3Key)
-    } catch (error) {
-      console.error("[Knowledge API] Failed to generate presigned URL:", error)
-    }
-  }
+  // Same-origin streaming URL (RustFS is internal-only) — see appFileUrl.
+  const fileUrl = s3Key ? appFileUrl(s3Key) : undefined
 
   recordKnowledgeAudit({
     organizationId: params.context.organizationId,
