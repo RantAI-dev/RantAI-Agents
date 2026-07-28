@@ -5,6 +5,7 @@ import {
   HybridSearchResult,
   HybridSearchStats,
   fetchNeighborChunks,
+  fetchMatchingFigures,
 } from "./hybrid-search";
 import { getRagConfig } from "./config";
 import { getDefaultReranker } from "./rerankers";
@@ -391,6 +392,22 @@ export async function hybridRetrieve(
       }
       results = ordered;
     }
+  }
+
+  // Figure co-retrieval (multimodal linking): pull in figures whose printed
+  // caption matches the query or the retrieved text but which lost the ranking
+  // race (figure chunks are thin captions appended at the end of the doc, so a
+  // specific query surfaces the topic's text but never its figure). This lets a
+  // figure travel with its subject — ask about "Raja Mulawarman" and its
+  // portrait surfaces alongside the text about him.
+  try {
+    const figDocIds = [...new Set(results.map((r) => r.documentId).filter(Boolean))];
+    const present = new Set(results.map((r) => String(r.chunkId)));
+    const retrievedText = results.map((r) => r.content).join("\n");
+    const matchedFigs = await fetchMatchingFigures(figDocIds, query, retrievedText, present, 3);
+    if (matchedFigs.length > 0) results = [...results, ...matchedFigs];
+  } catch (err) {
+    console.warn(`[RAG] figure co-retrieval failed (non-fatal): ${(err as Error).message?.slice(0, 120)}`);
   }
 
   // Coverage analytics: fire-and-forget bump on every doc surfaced.

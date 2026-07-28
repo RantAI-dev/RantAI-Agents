@@ -144,11 +144,13 @@ function escapeRegExp(s: string): string {
 }
 
 /**
- * Place every remaining meaningful figure INLINE (no separate strip): next to
- * the paragraph whose prose mentions a distinctive word from the figure's
- * caption (e.g. caption "…Raja Udayana" → the paragraph that says "Udayana"),
- * falling back to appending at the end so nothing is lost. `alreadyInlined` =
- * figures already placed by embedFigures/autoEmbedFigures.
+ * Place each remaining meaningful figure INLINE next to the paragraph whose
+ * prose mentions a distinctive word from the figure's caption (e.g. caption
+ * "…Raja Udayana" → the paragraph that says "Udayana"). A figure whose caption
+ * does NOT match anywhere in the answer is DROPPED, not appended — this is the
+ * final relevance gate: retrieval may co-surface a topically-adjacent figure,
+ * but if the answer never discusses it, it shouldn't appear. `alreadyInlined` =
+ * figures already placed by embedFigures/autoEmbedFigures (cited figures).
  */
 export function autoPlaceFigures(
   content: string,
@@ -165,14 +167,10 @@ export function autoPlaceFigures(
       const m = new RegExp(`\\b${escapeRegExp(kw)}\\b`, "i").exec(out)
       if (m && (idx === -1 || m.index < idx)) idx = m.index
     }
-    const img = figureMarkdown(f)
-    if (idx === -1) {
-      out = `${out}\n${img}` // no textual anchor → keep it in the flow, at the end
-    } else {
-      const nextBreak = out.indexOf("\n\n", idx)
-      const insertAt = nextBreak === -1 ? out.length : nextBreak
-      out = out.slice(0, insertAt) + img + out.slice(insertAt)
-    }
+    if (idx === -1) continue // caption doesn't match the answer → not relevant, drop
+    const nextBreak = out.indexOf("\n\n", idx)
+    const insertAt = nextBreak === -1 ? out.length : nextBreak
+    out = out.slice(0, insertAt) + figureMarkdown(f) + out.slice(insertAt)
   }
   return out
 }
