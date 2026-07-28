@@ -383,8 +383,48 @@ export async function handleWidgetChat(req: NextRequest) {
       }
     }
 
-    // Store RAG sources to send with response (match dashboard behavior)
-    let ragSources: Array<{ title: string; section: string | null }> = []
+    // Store RAG sources to send with the response. Rich shape so external
+    // frontends can render citations + inline figures (multimodal RAG). For
+    // figure chunks we hand back a ready-to-<img> `imageUrl` on the public
+    // key-authed asset endpoint.
+    interface WidgetSource {
+      title: string
+      section: string | null
+      documentId: string | null
+      page: number | null
+      chunkType: string | null
+      assetKey: string | null
+      imageUrl: string | null
+    }
+    const toWidgetSource = (s: {
+      documentId: string | null
+      documentTitle: string
+      section: string | null
+      page?: number | null
+      chunkType?: string | null
+      assetKey?: string | null
+    }): WidgetSource => ({
+      title: s.documentTitle,
+      section: s.section,
+      documentId: s.documentId ?? null,
+      page: s.page ?? null,
+      chunkType: s.chunkType ?? null,
+      assetKey: s.assetKey ?? null,
+      imageUrl:
+        s.chunkType === "figure" && s.assetKey && s.documentId
+          ? `/api/widget/asset?key=${encodeURIComponent(apiKey)}&documentId=${encodeURIComponent(s.documentId)}&assetKey=${encodeURIComponent(s.assetKey)}`
+          : null,
+    })
+
+    // Effective KB scope: caller may pass knowledgeBaseGroupIds to narrow the
+    // search, but only to KB groups this assistant is actually bound to.
+    const requestedKbGroupIds = body.knowledgeBaseGroupIds
+    const effectiveGroupIds =
+      requestedKbGroupIds && requestedKbGroupIds.length > 0
+        ? assistant.knowledgeBaseGroupIds.filter((g) => requestedKbGroupIds.includes(g))
+        : assistant.knowledgeBaseGroupIds
+
+    let ragSources: WidgetSource[] = []
 
     // RAG retrieval if enabled
     if (assistant.useKnowledgeBase) {
@@ -411,17 +451,14 @@ export async function handleWidgetChat(req: NextRequest) {
           // here than in the dashboard.
           const hybridResult = await smartHybridRetrieve(userQuery, {
             enableEntitySearch: true,
-            groupIds: assistant.knowledgeBaseGroupIds,
+            groupIds: effectiveGroupIds,
           })
 
           if (hybridResult.context) {
             const formattedContext = formatHybridContextForPrompt(hybridResult)
             systemPrompt = `${systemPrompt}\n\n${formattedContext}`
 
-            ragSources = hybridResult.sources.map((s) => ({
-              title: s.documentTitle,
-              section: s.section,
-            }))
+            ragSources = hybridResult.sources.map(toWidgetSource)
 
             console.log(
               `[Widget RAG] Hybrid retrieved ${hybridResult.results.length} chunks (vector=${hybridResult.stats.vectorResults}, graph=${hybridResult.stats.graphResults}) for "${userQuery.substring(0, 50)}..."`
@@ -432,17 +469,14 @@ export async function handleWidgetChat(req: NextRequest) {
           } else {
             const retrievalResult = await smartRetrieve(userQuery, {
               minSimilarity: 0.35,
-              groupIds: assistant.knowledgeBaseGroupIds,
+              groupIds: effectiveGroupIds,
             })
 
             if (retrievalResult.context) {
               const formattedContext = formatContextForPrompt(retrievalResult)
               systemPrompt = `${systemPrompt}\n\n${formattedContext}`
 
-              ragSources = retrievalResult.sources.map((s) => ({
-                title: s.documentTitle,
-                section: s.section,
-              }))
+              ragSources = retrievalResult.sources.map(toWidgetSource)
 
               console.log(
                 `[Widget RAG] Vector-fallback retrieved ${retrievalResult.chunks.length} chunks for query: "${userQuery.substring(0, 50)}..."`
@@ -736,7 +770,19 @@ export async function handleWidgetChat(req: NextRequest) {
     })();
     } // end assistantMemoryConfig.enabled (normal chat save)
 
-    const response = result.toTextStreamResponse()
+    // Stream the answer text, then append a `---SOURCES---` marker followed by
+    // the rich sources JSON so the client can split it off and render citations
+    // + inline figures. (Matches the delimiter the memory-save path strips.)
+    const baseResponse = result.toTextStreamResponse()
+    const sourcesTail = ragSources.length > 0 ? `\n\n---SOURCES---\n${JSON.stringify(ragSources)}` : ""
+    const streamBody = baseResponse.body!.pipeThrough(
+      new TransformStream<Uint8Array, Uint8Array>({
+        flush(controller) {
+          if (sourcesTail) controller.enqueue(new TextEncoder().encode(sourcesTail))
+        },
+      })
+    )
+    const response = new Response(streamBody, { status: baseResponse.status, headers: baseResponse.headers })
 
     // Add CORS headers
     response.headers.set("Access-Control-Allow-Origin", "*")
