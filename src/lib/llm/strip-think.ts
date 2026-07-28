@@ -41,6 +41,28 @@ export function createStripThinkTransform<TOOLS extends ToolSet>() {
 
     return new TransformStream<TextStreamPart<TOOLS>, TextStreamPart<TOOLS>>({
     transform(chunk, controller) {
+      // text-end signals the model finished a text part. Flush the held-back
+      // buffer (up to OPEN_PEEK chars we kept back in case a `<think>` opener
+      // was still forming) BEFORE text-end propagates. If we wait for flush()
+      // instead, that trailing text-delta lands AFTER text-end and v6's stream
+      // reader drops it — which on this path silently truncated the final word
+      // of the answer (e.g. "...kutipan yang ter" losing "sedia").
+      if (chunk.type === "text-end") {
+        if (!inThink && buffer.length > 0) {
+          const tail = buffer
+          buffer = ""
+          emittedAnything = true
+          const endId = (chunk as unknown as { id: string }).id
+          controller.enqueue({
+            type: "text-delta",
+            id: endId,
+            text: tail,
+          } as unknown as TextStreamPart<TOOLS>)
+        }
+        controller.enqueue(chunk)
+        return
+      }
+
       // Only filter text-delta. Reasoning, tool-call, etc. pass through untouched.
       if (chunk.type !== "text-delta") {
         controller.enqueue(chunk)
@@ -110,16 +132,14 @@ export function createStripThinkTransform<TOOLS extends ToolSet>() {
         controller.enqueue(replaced)
       }
     },
-      flush(controller) {
-        // Drain any leftover safe-to-emit buffer at stream end.
-        if (!inThink && buffer.length) {
-          // We held back OPEN_PEEK chars in case a tag was forming — none did, emit them.
-          const emit = buffer
-          buffer = ""
-          controller.enqueue({ type: "text-delta", textDelta: emit } as unknown as TextStreamPart<TOOLS>)
-        }
-        // If inThink at end → discard the unclosed buffer silently. Better to
-        // drop a stray planning blob than leak it.
+      flush() {
+        // By now the text-end handler above has already drained the safe
+        // buffer (the normal path for v6 providers). Don't emit a trailing
+        // text-delta here: it would land after text-end and make the UI
+        // message-stream serializer error ("text part undefined not found"),
+        // and the raw text stream drops it anyway. Any leftover here is either
+        // an unclosed <think> blob (discard — don't leak) or ≤6 held-back chars
+        // on a provider that never sent text-end (negligible).
       },
     })
   }
