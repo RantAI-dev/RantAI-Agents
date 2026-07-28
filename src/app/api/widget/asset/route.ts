@@ -53,10 +53,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Document not accessible for this key" }, { status: 403, headers: CORS })
     }
 
-    // IDOR guard: the asset must live under this document's asset folder.
-    const orgSeg = embedKey.organizationId || "global"
-    const expectedPrefix = `documents/${orgSeg}/${documentId}/assets/`
-    if (!assetKey.startsWith(expectedPrefix)) {
+    // IDOR guard: the asset must live under THIS document's asset folder. We
+    // match on the document segment rather than the org segment — the stored
+    // org path can differ from the key's org (e.g. content migrated between
+    // orgs), but the documentId (already checked to be in the key's KB above)
+    // uniquely scopes the asset.
+    if (!assetKey.startsWith("documents/") || !assetKey.includes(`/${documentId}/assets/`)) {
       return NextResponse.json({ error: "Asset not in this document" }, { status: 403, headers: CORS })
     }
 
