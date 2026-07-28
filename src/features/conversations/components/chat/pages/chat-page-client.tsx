@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { generateUUID } from "@/lib/uuid"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
@@ -22,6 +22,8 @@ export default function ChatPageClient({
   initialToolbarData?: ChatToolbarHydrationData | null
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const newChatKey = searchParams.get("new") ?? "default"
 
   const {
     assistants,
@@ -88,6 +90,7 @@ export default function ChatPageClient({
   return (
     <div className="flex flex-col h-full">
       <ChatHome
+        key={newChatKey}
         sessions={displaySessions}
         assistants={assistants}
         selectedAssistantId={selectedAssistantId}
