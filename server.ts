@@ -24,6 +24,7 @@ import { readFileSync, existsSync } from "fs"
 import { join } from "path"
 import next from "next"
 import { initSocketServer } from "./src/lib/socket"
+import { startIngestWorker } from "./src/lib/ingest/worker"
 
 const dev = process.env.NODE_ENV !== "production"
 const hostname = "localhost"
@@ -60,6 +61,10 @@ app.prepare().then(() => {
 
   // Initialize Socket.io
   initSocketServer(server)
+
+  // Background document-ingest worker (polls IngestJob, runs the pipeline off
+  // the request path, emits progress over the socket above).
+  startIngestWorker()
 
   const protocol = useHttps ? "https" : "http"
   server.listen(port, () => {
