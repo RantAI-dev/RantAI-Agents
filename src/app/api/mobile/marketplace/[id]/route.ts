@@ -5,6 +5,7 @@ import {
   type ServiceError,
 } from "@/features/marketplace/service"
 import { DashboardMarketplaceIdParamsSchema } from "@/features/marketplace/schema"
+import { getCatalogItemById } from "@/lib/marketplace/catalog"
 import { getMobileContext } from "@/lib/mobile-org"
 
 function isServiceError(value: unknown): value is ServiceError {
@@ -38,6 +39,16 @@ export async function GET(
     })
     if (isServiceError(detail)) {
       return NextResponse.json({ error: detail.error }, { status: detail.status })
+    }
+
+    // Mobile "Use Template" for assistants opens the agent builder pre-filled
+    // (unsaved) from the template, so expose the raw assistantTemplate. Web's
+    // shared detail service intentionally omits it.
+    if (detail.type === "assistant") {
+      const catalog = await getCatalogItemById(parsedParams.data.id)
+      if (catalog?.assistantTemplate) {
+        detail.assistantTemplate = catalog.assistantTemplate
+      }
     }
 
     return NextResponse.json(detail)
