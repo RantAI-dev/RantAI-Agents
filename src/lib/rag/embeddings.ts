@@ -105,7 +105,7 @@ export async function generateEmbedding(text: string): Promise<number[]> {
         body: JSON.stringify(
           minimax
             ? { model: cfg.embeddingModel, texts: [text], type: "query" }
-            : { model: cfg.embeddingModel, input: text }
+            : { model: cfg.embeddingModel, input: text, dimensions: cfg.embeddingDim }
         ),
       });
 
@@ -214,7 +214,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
             body: JSON.stringify(
               minimax
                 ? { model: cfg.embeddingModel, texts: batch, type: "db" }
-                : { model: cfg.embeddingModel, input: batch }
+                : { model: cfg.embeddingModel, input: batch, dimensions: cfg.embeddingDim }
             ),
           });
 
