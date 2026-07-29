@@ -308,16 +308,21 @@ export class HybridSearch {
         LIMIT $limit;
       `;
 
-      const knnEnabled = process.env.KB_VECTOR_KNN === "true" && conditions.length === 0;
+      const knnEnabled = process.env.KB_VECTOR_KNN === "true";
       let chunks: Array<ChunkResult & { similarity: number }> = [];
       if (knnEnabled) {
-        const k = Math.max(1, Math.min(2000, Math.trunc(Number(this.config.vectorTopK) || 20)));
-        const ef = Math.max(64, k * 4);
-        // K and ef are validated integers, safe to inline (the operator needs literals).
+        const limit = Math.max(1, Math.min(2000, Math.trunc(Number(this.config.vectorTopK) || 20)));
+        const scoped = conditions.length > 0;
+        // When a scope filter is present, over-fetch index candidates so enough
+        // survive the post-filter; unscoped just fetches `limit`. K and ef are
+        // validated integers, safe to inline (the operator needs literals).
+        const k = scoped ? Math.min(2000, Math.max(limit * 5, 100)) : limit;
+        const ef = Math.max(64, k * 2);
+        const filter = scoped ? ` AND ${whereClause}` : "";
         const knnSql = `
           SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity
           FROM document_chunk
-          WHERE embedding <|${k},${ef}|> $embedding
+          WHERE embedding <|${k},${ef}|> $embedding${filter}
           ORDER BY similarity DESC
           LIMIT $limit;
         `;

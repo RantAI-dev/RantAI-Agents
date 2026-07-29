@@ -131,8 +131,15 @@ async function reEmbedOneDocument(documentId: string, embeddingModel: string): P
       await Promise.all(
         slice.map((c, idx) =>
           client.query(
-            `UPDATE document_chunk:\`${c.id}\` SET embedding = $embedding, embedding_model = $embedding_model`,
+            // Bind the RecordId directly. The SurrealDB JS SDK v2 returns `id`
+            // from a SELECT as a RecordId object, so interpolating it into
+            // `document_chunk:\`${c.id}\`` produced a malformed target (the value
+            // already stringifies to `document_chunk:⟨…⟩`) and the UPDATE
+            // silently hit nothing — re-embeds reported success but never
+            // persisted. Passing the RecordId as a bound param updates in place.
+            `UPDATE $rid SET embedding = $embedding, embedding_model = $embedding_model`,
             {
+              rid: c.id,
               embedding: embeddings[start2 + idx],
               embedding_model: embeddingModel,
             }
