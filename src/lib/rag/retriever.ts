@@ -325,7 +325,12 @@ export async function hybridRetrieve(
 ): Promise<HybridRetrievalResult> {
   const {
     maxResults = getRagConfig().defaultMaxChunks,
-    enableEntitySearch = true,
+    // Entity/graph arm defaults on, but can be turned off per-deployment via
+    // KB_ENTITY_SEARCH_ENABLED=false. On corpora with no populated entity graph
+    // it returns 0 results yet can add tens of seconds (measured up to +28s on
+    // the demo KB), so disabling it is a large, quality-neutral latency win.
+    // An explicit `options.enableEntitySearch` still overrides this default.
+    enableEntitySearch = process.env.KB_ENTITY_SEARCH_ENABLED !== "false",
     vectorWeight = 0.7,
     entityWeight = 0.3,
     groupIds,
