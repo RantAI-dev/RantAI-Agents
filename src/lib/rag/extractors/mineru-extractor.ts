@@ -98,6 +98,9 @@ export class MineruExtractor implements Extractor {
       text: string;
       ms?: number;
       pages?: number;
+      /** Per-page markdown (parts[page]) — lets us tag text chunks + figures with
+       *  their source page. Sidecar server.py emits this alongside `text`. */
+      pages_text?: string[];
       figures?: Array<{
         type: string;
         page: number;
@@ -115,12 +118,19 @@ export class MineruExtractor implements Extractor {
       imageBase64: f.image_b64,
     }));
 
+    // Build a pageMap from the per-page text so text chunks get "hal. N" and
+    // caption-less figures can borrow their page's prose (figure-assets.ts).
+    const pageMap = data.pages_text?.length
+      ? data.pages_text.map((text, page) => ({ page, text }))
+      : undefined;
+
     return {
       text: data.text ?? "",
       ms: data.ms ?? Date.now() - t0,
       pages: data.pages,
       model: "mineru-2.5-pro",
       ...(figures ? { figures } : {}),
+      ...(pageMap ? { pageMap } : {}),
     };
   }
 }
