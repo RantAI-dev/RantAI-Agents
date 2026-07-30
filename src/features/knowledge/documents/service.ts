@@ -870,6 +870,9 @@ export async function createKnowledgeDocumentForDashboard(params: {
         category: categories[0] ?? "general",
         subcategory: params.input.subcategory || undefined,
         figures: extractedFigures,
+        // Page-tagged text chunks so caption-less figures borrow the prose around
+        // them (findability + a real "keterangan" instead of "Tanpa keterangan").
+        textChunks: chunks,
       })
       if (figChunks.length) {
         // Reindex chunkIndex across the combined set (figure chunks were -1).
