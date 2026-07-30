@@ -412,6 +412,12 @@ export async function createKnowledgeDocumentForDashboard(params: {
 
   const useEnhanced = params.input.useEnhanced
   const useCombined = params.input.useCombined !== false
+  // Global kill-switch for entity/relation extraction at ingest. Extraction is a
+  // per-chunk LLM call — expensive at scale, especially with a local model — and
+  // on corpora where the entity graph isn't used for retrieval
+  // (KB_ENTITY_SEARCH_ENABLED=false) it's pure cost. Defaults on; set
+  // KB_ENTITY_EXTRACTION_ENABLED=false to skip it regardless of per-upload flags.
+  const entityExtractionEnabled = process.env.KB_ENTITY_EXTRACTION_ENABLED !== "false"
   const groupIds = toStringList(params.input.groupIds)
   const categories = toCategoryList(params.input.categories)
   let title = params.input.title || ""
@@ -725,7 +731,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
     try {
       await emit?.("extracting_entities")
       const surrealClient = await getSurrealClient()
-      if (useCombined) {
+      if (entityExtractionEnabled && useCombined) {
         const { entities, relations } = await extractEntitiesAndRelations(content, document.id, params.context.userId)
         entityCount = entities.length
 
@@ -798,7 +804,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
           }
           console.log(`[Knowledge API] Relations: ${storedCount} stored, ${skippedCount} skipped (no matching entity), ${relations.length} total`)
         }
-      } else {
+      } else if (entityExtractionEnabled) {
         const entities = await extractEntities(content, document.id, undefined, {
           useLLM: true,
           usePatterns: true,
