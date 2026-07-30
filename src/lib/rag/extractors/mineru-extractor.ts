@@ -1,3 +1,6 @@
+import http from "node:http";
+import https from "node:https";
+import { URL } from "node:url";
 import type { Extractor, ExtractionResult, ExtractedFigure } from "./types";
 
 /**
@@ -26,35 +29,72 @@ export class MineruExtractor implements Extractor {
 
   async extract(pdfBuffer: Buffer, opts?: { withFigures?: boolean }): Promise<ExtractionResult> {
     const t0 = Date.now();
-    const form = new FormData();
-    // Copy into a standalone ArrayBuffer. Node's Buffer/Uint8Array parameterize
-    // on ArrayBufferLike, but DOM's BlobPart demands ArrayBuffer specifically —
-    // this slice produces the stricter type. Copies ~one page worth of bytes,
-    // negligible vs. the multi-second extraction call.
-    const ab = pdfBuffer.buffer.slice(
-      pdfBuffer.byteOffset,
-      pdfBuffer.byteOffset + pdfBuffer.byteLength,
-    ) as ArrayBuffer;
-    form.append(
-      "file",
-      new Blob([ab], { type: "application/pdf" }),
-      "document.pdf"
-    );
-    if (opts?.withFigures) form.append("structured", "true");
 
-    const res = await fetch(`${this.baseUrl}/extract`, {
-      method: "POST",
-      body: form,
+    // Build the multipart body by hand and POST it via node:http rather than fetch.
+    // mineru does per-block VLM OCR synchronously and only sends response headers
+    // once the whole document is parsed. Node's global fetch (undici) enforces a
+    // 300s headersTimeout that can't be raised per-request without importing undici
+    // (not a dependency here), so dense/large books that take longer were aborted
+    // with "The operation timed out" and fell back to text — silently losing all
+    // figures/tables. node:http has no headers cap; we set an explicit inactivity
+    // timeout via KB_EXTRACT_MINERU_TIMEOUT_MS (default 20 min).
+    const timeoutMs = Number(process.env.KB_EXTRACT_MINERU_TIMEOUT_MS) || 20 * 60 * 1000;
+    const boundary = `----mineru${Date.now().toString(36)}${Math.round(Date.now() % 1e6)}`;
+    const CRLF = "\r\n";
+    const head = Buffer.from(
+      `--${boundary}${CRLF}` +
+        `Content-Disposition: form-data; name="file"; filename="document.pdf"${CRLF}` +
+        `Content-Type: application/pdf${CRLF}${CRLF}`,
+    );
+    const structuredPart = opts?.withFigures
+      ? Buffer.from(
+          `${CRLF}--${boundary}${CRLF}` +
+            `Content-Disposition: form-data; name="structured"${CRLF}${CRLF}true`,
+        )
+      : Buffer.alloc(0);
+    const tail = Buffer.from(`${CRLF}--${boundary}--${CRLF}`);
+    const body = Buffer.concat([head, pdfBuffer, structuredPart, tail]);
+
+    const url = new URL(`${this.baseUrl}/extract`);
+    const transport = url.protocol === "https:" ? https : http;
+
+    const { status, text: responseText } = await new Promise<{
+      status: number;
+      text: string;
+    }>((resolve, reject) => {
+      const req = transport.request(
+        url,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": `multipart/form-data; boundary=${boundary}`,
+            "Content-Length": body.length,
+          },
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on("data", (c: Buffer) => chunks.push(c));
+          res.on("end", () =>
+            resolve({
+              status: res.statusCode ?? 0,
+              text: Buffer.concat(chunks).toString("utf-8"),
+            }),
+          );
+        },
+      );
+      // Inactivity timeout: fires only if no socket activity for timeoutMs.
+      req.setTimeout(timeoutMs, () => {
+        req.destroy(new Error(`mineru sidecar timeout after ${timeoutMs}ms`));
+      });
+      req.on("error", reject);
+      req.end(body);
     });
 
-    if (!res.ok) {
-      const body = await res.text();
-      throw new Error(
-        `mineru sidecar ${res.status}: ${body.slice(0, 300)}`
-      );
+    if (status < 200 || status >= 300) {
+      throw new Error(`mineru sidecar ${status}: ${responseText.slice(0, 300)}`);
     }
 
-    const data = (await res.json()) as {
+    const data = JSON.parse(responseText) as {
       text: string;
       ms?: number;
       pages?: number;
