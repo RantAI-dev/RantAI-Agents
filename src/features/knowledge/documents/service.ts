@@ -722,7 +722,14 @@ export async function createKnowledgeDocumentForDashboard(params: {
       respectHeadingBoundaries: true,
     })
 
-    try {
+    // Entity/relation extraction is an expensive per-chunk LLM pass. On-prem KBs
+    // that only need vector retrieval can disable it with
+    // KB_ENTITY_EXTRACTION_ENABLED=false — it otherwise competes with the mineru
+    // sidecar for the shared GPU and slows figure/table OCR (pushing dense books
+    // past the extractor timeout, which drops them to text-only).
+    if (process.env.KB_ENTITY_EXTRACTION_ENABLED === "false") {
+      console.log("[Knowledge] entity extraction disabled (KB_ENTITY_EXTRACTION_ENABLED=false)")
+    } else try {
       await emit?.("extracting_entities")
       const surrealClient = await getSurrealClient()
       if (useCombined) {
