@@ -30,6 +30,7 @@ export async function listKnowledgeDocumentsByScope(params: {
       fileSize: true,
       mimeType: true,
       s3Key: true,
+      status: true,
       organizationId: true,
       createdAt: true,
       updatedAt: true,

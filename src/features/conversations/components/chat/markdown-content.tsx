@@ -71,7 +71,15 @@ function useTypewriter(target: string, isStreaming: boolean): string {
     }
   }, [isStreaming])
 
-  return displayed
+  // When NOT streaming, always return the full target — never the paced
+  // `displayed` state. The typewriter effect only re-runs on isStreaming
+  // changes; if `target` lands its final value in a render AFTER isStreaming
+  // already flipped false (common with reasoning models that stream the answer
+  // text in a burst after a long think), the effect never re-fires and
+  // `displayed` is stranded at a stale, partial length — the answer renders
+  // blank/truncated until a refresh. Returning `target` directly when idle makes
+  // the settled render always show the complete content.
+  return isStreaming ? displayed : target
 }
 
 // React.memo so non-streaming (historical) bubbles skip the Streamdown

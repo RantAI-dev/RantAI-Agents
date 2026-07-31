@@ -284,6 +284,7 @@ function MessageActions({
         size="icon"
         className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-lg"
         onClick={onCopy}
+        aria-label={copied ? "Message copied" : "Copy message"}
         title="Copy message"
       >
         {copied ? (
@@ -298,6 +299,7 @@ function MessageActions({
           size="icon"
           className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-lg"
           onClick={onReply}
+          aria-label="Reply to message"
           title="Reply"
         >
           <Reply className="h-3 w-3" />
@@ -309,6 +311,7 @@ function MessageActions({
           size="icon"
           className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-lg"
           onClick={onEdit}
+          aria-label="Edit message"
           title="Edit message"
         >
           <Pencil className="h-3 w-3" />
@@ -320,6 +323,7 @@ function MessageActions({
           size="icon"
           className="h-6 w-6 text-muted-foreground hover:text-foreground rounded-lg"
           onClick={onRegenerate}
+          aria-label="Regenerate response"
           title="Regenerate response"
         >
           <RefreshCw className="h-3 w-3" />
@@ -331,6 +335,7 @@ function MessageActions({
           size="icon"
           className="h-6 w-6 text-muted-foreground hover:text-destructive rounded-lg"
           onClick={onDelete}
+          aria-label="Delete message"
           title="Delete message"
         >
           <Trash2 className="h-3 w-3" />
@@ -637,6 +642,7 @@ function MessagesArea({
                       {isEditing ? (
                         <div className="space-y-2">
                           <Textarea
+                            aria-label="Edit message"
                             value={editContent}
                             onChange={(e) => setEditContent(e.target.value)}
                             className="min-h-[60px] bg-background"
@@ -1002,6 +1008,7 @@ function MessagesArea({
                 size="icon"
                 variant="ghost"
                 className="h-7 w-7"
+                aria-label="Dismiss error"
                 onClick={() => setError(null)}
               >
                 <X className="h-4 w-4" />
@@ -1019,6 +1026,7 @@ function MessagesArea({
           variant="secondary"
           size="icon"
           className="absolute bottom-4 right-4 rounded-full shadow-lg"
+          aria-label="Scroll to latest message"
           onClick={scrollToBottom}
         >
           <ArrowDown className="h-4 w-4" />
@@ -3658,6 +3666,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               size="icon"
               onClick={onBack}
               className="md:hidden"
+              aria-label="Back to chats"
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -3695,6 +3704,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 relative"
+                  aria-label={`Open artifacts (${artifacts.size})`}
                   onClick={() => setArtifactsSheetOpen(true)}
                 >
                   <Layers className="h-4 w-4" />
@@ -3825,6 +3835,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                       <div className="relative">
                         <Textarea
                           ref={textareaRef}
+                          aria-label="Message"
                           value={input}
                           onChange={(e) => setInput(e.target.value)}
                           onKeyDown={handleKeyDown}
@@ -3843,6 +3854,13 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                           type={isLoading ? "button" : "submit"}
                           size="icon"
                           className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
+                          aria-label={
+                            isUploading
+                              ? "Uploading attachment"
+                              : isLoading
+                                ? "Stop response"
+                                : "Send message"
+                          }
                           disabled={isUploading ? true : (isLoading ? false : !input.trim())}
                           onClick={isLoading ? handleStop : undefined}
                         >
@@ -4051,6 +4069,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
             <div className="relative">
               <Textarea
                 ref={textareaRef}
+                aria-label="Message"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
@@ -4069,6 +4088,13 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                 type={isLoading ? "button" : "submit"}
                 size="icon"
                 className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
+                aria-label={
+                  isUploading
+                    ? "Uploading attachment"
+                    : isLoading
+                      ? "Stop response"
+                      : "Send message"
+                }
                 disabled={isUploading ? true : (isLoading ? false : !input.trim())}
                 onClick={isLoading ? handleStop : undefined}
               >

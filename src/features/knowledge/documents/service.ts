@@ -59,6 +59,19 @@ export interface KnowledgeDocumentListItem {
   groups: Array<{ id: string; name: string; color: string | null }>
   createdAt: string
   updatedAt: string
+  // Ingest lifecycle: "ready" (default) | "processing" | "failed".
+  status: string
+  // Live progress snapshot for a doc still being ingested (null otherwise) —
+  // lets the card render its bar on first load / reload without the socket.
+  ingest?: {
+    jobId: string
+    step: string | null
+    progress: number
+    stepCurrent: number | null
+    stepTotal: number | null
+    etaSeconds: number | null
+    error: string | null
+  } | null
 }
 
 export interface KnowledgeDocumentDetail {
@@ -186,6 +199,7 @@ function mapListItem(document: {
   artifactType?: string | null
   fileSize: number | null
   s3Key: string | null
+  status?: string | null
   groups: Array<{ group: { id: string; name: string; color: string | null } }>
   createdAt: Date
   updatedAt: Date
@@ -199,6 +213,7 @@ function mapListItem(document: {
     artifactType: document.artifactType || null,
     fileSize: document.fileSize,
     hasS3File: Boolean(document.s3Key),
+    status: document.status || "ready",
     groups: mapGroups(document.groups),
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
@@ -243,6 +258,39 @@ export async function listKnowledgeDocumentsForDashboard(params: {
   // One SurrealDB query for all chunk counts instead of one-per-document (was N+1).
   const chunkCounts = await getDocumentChunkCounts(documents.map((d) => d.id))
 
+  // For docs still being ingested, attach the latest job's progress snapshot so
+  // the card renders its bar on first load (the socket only carries deltas).
+  const processingIds = documents.filter((d) => d.status === "processing").map((d) => d.id)
+  const ingestByDoc = new Map<string, KnowledgeDocumentListItem["ingest"]>()
+  if (processingIds.length > 0) {
+    const jobs = await prisma.ingestJob.findMany({
+      where: { documentId: { in: processingIds } },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        documentId: true,
+        step: true,
+        progress: true,
+        stepCurrent: true,
+        stepTotal: true,
+        etaSeconds: true,
+        error: true,
+      },
+    })
+    for (const job of jobs) {
+      if (!job.documentId || ingestByDoc.has(job.documentId)) continue // keep newest per doc
+      ingestByDoc.set(job.documentId, {
+        jobId: job.id,
+        step: job.step,
+        progress: job.progress,
+        stepCurrent: job.stepCurrent,
+        stepTotal: job.stepTotal,
+        etaSeconds: job.etaSeconds,
+        error: job.error,
+      })
+    }
+  }
+
   // Thumbnails still need per-image S3 presigning, but only for actual images;
   // run those in parallel rather than awaiting sequentially per row.
   return Promise.all(
@@ -255,6 +303,7 @@ export async function listKnowledgeDocumentsForDashboard(params: {
         ...mapListItem(document),
         chunkCount: chunkCounts.get(document.id) ?? 0,
         thumbnailUrl,
+        ingest: ingestByDoc.get(document.id) ?? null,
       }
     })
   )
@@ -339,9 +388,23 @@ export async function getKnowledgeDocumentForDashboard(params: {
 export async function createKnowledgeDocumentForDashboard(params: {
   context: KnowledgeDocumentContext
   input: KnowledgeDocumentCreateInput
+  // Background-ingest hooks. When the ingest worker drives this it passes the
+  // pre-created placeholder documentId, the existing job id, the already-
+  // uploaded S3 key/size, and an onProgress sink. All absent on the direct
+  // (json) synchronous path, in which case a fresh doc + job are created.
+  documentId?: string
+  jobId?: string | null
+  s3Key?: string
+  fileSize?: number
+  onProgress?: (sp: import("@/lib/ingest/progress").StepProgress) => void | Promise<void>
 }): Promise<Record<string, unknown> | ServiceError> {
-  const { recordIngestJobStart, recordIngestJobSuccess, recordIngestJobFailure } = await import("@/lib/ingest/job")
-  let ingestJobId: string | null = null
+  const { createIngestJob, recordIngestJobSuccess, recordIngestJobFailure } = await import("@/lib/ingest/job")
+  const isBackground = !!params.documentId
+  const emit = params.onProgress
+    ? (step: import("@/lib/ingest/progress").IngestStep, current?: number, total?: number) =>
+        params.onProgress!({ step, current, total })
+    : undefined
+  let ingestJobId: string | null = params.jobId ?? null
 
   if (params.context.organizationId && params.context.role && !canEdit(params.context.role)) {
     return { status: 403, error: "Insufficient permissions" }
@@ -363,24 +426,29 @@ export async function createKnowledgeDocumentForDashboard(params: {
 
   if (params.input.kind === "file") {
     const file = params.input.file as File
-    const validation = validateUpload("document", file.size, file.type)
-    if (!validation.valid) {
-      return { status: 400, error: validation.error }
-    }
+    // Validation + quota already ran at enqueue for the background path — skip
+    // to avoid a second quota charge (the file is already stored).
+    if (!isBackground) {
+      const validation = validateUpload("document", file.size, file.type)
+      if (!validation.valid) {
+        return { status: 400, error: validation.error }
+      }
 
-    // Per-org quota check. Both maxDocuments and maxStorageBytes are nullable
-    // on Organization → checkKnowledgeQuota returns allowed=true when no limits
-    // are set, so this is a no-op for unbounded orgs.
-    const { checkKnowledgeQuota } = await import("@/lib/quota/knowledge")
-    const quota = await checkKnowledgeQuota(params.context.organizationId, file.size)
-    if (!quota.allowed) {
-      return { status: 413, error: quota.reason ?? "Knowledge base quota exceeded" }
+      // Per-org quota check. Both maxDocuments and maxStorageBytes are nullable
+      // on Organization → checkKnowledgeQuota returns allowed=true when no limits
+      // are set, so this is a no-op for unbounded orgs.
+      const { checkKnowledgeQuota } = await import("@/lib/quota/knowledge")
+      const quota = await checkKnowledgeQuota(params.context.organizationId, file.size)
+      if (!quota.allowed) {
+        return { status: 413, error: quota.reason ?? "Knowledge base quota exceeded" }
+      }
     }
 
     originalFilename = file.name
     mimeType = file.type
     const detectedType = detectFileType(file.name)
     fileBuffer = Buffer.from(await file.arrayBuffer())
+    await emit?.("extracting")
 
     // Extraction failures used to fall back to a literal placeholder string
     // ("Failed to OCR PDF.") which then got chunked + embedded + indexed. RAG
@@ -541,11 +609,13 @@ export async function createKnowledgeDocumentForDashboard(params: {
     }
   }
 
-  const documentId = crypto.randomUUID()
-  let s3Key: string | undefined
-  let fileSize: number | undefined
+  const documentId = params.documentId ?? crypto.randomUUID()
+  let s3Key: string | undefined = params.s3Key
+  let fileSize: number | undefined = params.fileSize
 
-  if (fileBuffer) {
+  // Background path already uploaded the file to S3 at enqueue and carries the
+  // key/size on `params` — don't re-upload (would re-push tens of MB).
+  if (fileBuffer && !isBackground) {
     try {
       s3Key = S3Paths.document(
         params.context.organizationId || null,
@@ -564,16 +634,28 @@ export async function createKnowledgeDocumentForDashboard(params: {
     }
   }
 
-  // Open the IngestJob row now that we know s3Key + fileSize. We don't track
-  // text-only / JSON-mode submissions (no file = no DLQ value).
-  if (fileBuffer && originalFilename) {
-    ingestJobId = await recordIngestJobStart({
+  // Background path already has its IngestJob (created at enqueue). Only the
+  // legacy synchronous file path opens one here; text-only / JSON submissions
+  // (no file) are not tracked (no DLQ value).
+  if (!isBackground && fileBuffer && originalFilename) {
+    ingestJobId = await createIngestJob({
       organizationId: params.context.organizationId,
       userId: params.context.userId,
       filename: originalFilename,
       fileSize: fileSize ?? null,
       mimeType: mimeType ?? null,
       s3Key: s3Key ?? null,
+      documentId,
+      params: {
+        useEnhanced,
+        useCombined,
+        forceOCR: params.input.forceOCR,
+        documentType: params.input.documentType,
+        title,
+        categories: params.input.categories,
+        subcategory: params.input.subcategory,
+        groupIds,
+      },
     })
   }
 
@@ -589,31 +671,48 @@ export async function createKnowledgeDocumentForDashboard(params: {
   // Strip null bytes — PostgreSQL UTF-8 columns reject 0x00
   const sanitize = (s: string) => s.replace(/\0/g, "")
 
-  const document = await createKnowledgeDocument({
-    id: documentId,
-    title: sanitize(title),
-    content: sanitize(content),
-    categories,
-    subcategory: params.input.subcategory || null,
-    metadata: { fileType } as Prisma.InputJsonValue,
-    s3Key,
-    fileType,
-    fileSize,
-    mimeType,
-    organizationId: params.context.organizationId || null,
-    createdBy: params.context.userId,
-    groups:
-      groupIds.length > 0
-        ? {
-            create: groupIds.map((groupId) => ({
-              groupId,
-            })),
-          }
-        : undefined,
-  })
+  // Background: the placeholder Document (+ its groups) was created at enqueue.
+  // Fill in the now-extracted content instead of creating a second row.
+  const document = isBackground
+    ? await (async () => {
+        await replaceKnowledgeDocumentContent(documentId, {
+          content: sanitize(content),
+          s3Key,
+          fileType,
+          fileSize,
+          mimeType,
+        })
+        const doc = await findKnowledgeDocumentById(documentId)
+        if (!doc) throw new Error(`Placeholder document ${documentId} not found`)
+        return doc
+      })()
+    : await createKnowledgeDocument({
+        id: documentId,
+        title: sanitize(title),
+        content: sanitize(content),
+        categories,
+        subcategory: params.input.subcategory || null,
+        metadata: { fileType } as Prisma.InputJsonValue,
+        s3Key,
+        fileType,
+        fileSize,
+        mimeType,
+        organizationId: params.context.organizationId || null,
+        createdBy: params.context.userId,
+        groups:
+          groupIds.length > 0
+            ? {
+                create: groupIds.map((groupId) => ({
+                  groupId,
+                })),
+              }
+            : undefined,
+      })
 
   let chunks: Chunk[] = []
   let entityCount = 0
+
+  await emit?.("chunking")
 
   if (useEnhanced) {
     chunks = await smartChunkDocument(content, title, categories[0], params.input.subcategory || undefined, {
@@ -624,13 +723,16 @@ export async function createKnowledgeDocumentForDashboard(params: {
     })
 
     try {
+      await emit?.("extracting_entities")
       const surrealClient = await getSurrealClient()
       if (useCombined) {
         const { entities, relations } = await extractEntitiesAndRelations(content, document.id, params.context.userId)
         entityCount = entities.length
 
         const entityIdMap = new Map<string, string>()
+        let entityIdx = 0
         for (const entity of entities) {
+          await emit?.("extracting_entities", ++entityIdx, entities.length)
           const sanitizedName = entity.name.toLowerCase().replace(/[^a-z0-9]/g, "_")
           const entityId = `entity:${document.id}_${sanitizedName}`
 
@@ -751,6 +853,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
   // ── Figure asset layer (multimodal RAG): upload crops + append searchable
   // figure chunks so retrieval can surface + render the original image. ──
   if (extractedFigures?.length) {
+    await emit?.("processing_figures", 0, extractedFigures.length)
     try {
       const { storeFiguresAsChunks } = await import("@/lib/rag/figure-assets")
       const { chunks: figChunks, assets } = await storeFiguresAsChunks({
@@ -784,9 +887,11 @@ export async function createKnowledgeDocumentForDashboard(params: {
   // API route surfaces a real failure to the caller.
   const chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)
   try {
+    await emit?.("embedding", 0, chunks.length)
     const embeddings = await generateEmbeddings(chunkTexts)
     const { getRagConfig } = await import("@/lib/rag/config")
     const embeddingModel = getRagConfig().embeddingModel
+    await emit?.("storing", 0, chunks.length)
     // Idempotency guard: storeChunks CREATEs chunks under the deterministic id
     // `${documentId}_${i}`, which throws on a pre-existing id. Clearing any
     // stale chunks first makes this step safe to re-run for the same
@@ -798,13 +903,21 @@ export async function createKnowledgeDocumentForDashboard(params: {
     await storeChunks(document.id, chunks, embeddings, embeddingModel)
   } catch (err) {
     console.error(
-      `[Knowledge API] Ingest failed for document ${document.id} (${chunks.length} chunks); rolling back:`,
+      `[Knowledge API] Ingest failed for document ${document.id} (${chunks.length} chunks):`,
       err
     )
-    try {
-      await deleteKnowledgeDocument(document.id)
-    } catch (rbErr) {
-      console.error(`[Knowledge API] Rollback: Document.delete failed for ${document.id}:`, rbErr)
+    if (isBackground) {
+      // Keep the row so the card can show "failed" + a Retry button; stale
+      // chunks are cleared before re-store on retry (idempotency guard above).
+      await prisma.document
+        .update({ where: { id: document.id }, data: { status: "failed" } })
+        .catch((e) => console.error(`[Knowledge API] mark failed for ${document.id}:`, e))
+    } else {
+      try {
+        await deleteKnowledgeDocument(document.id)
+      } catch (rbErr) {
+        console.error(`[Knowledge API] Rollback: Document.delete failed for ${document.id}:`, rbErr)
+      }
     }
     // NOTE: S3 key intentionally preserved so the DLQ retry endpoint can
     // replay this upload without re-asking the user for the file. The
@@ -827,6 +940,13 @@ export async function createKnowledgeDocumentForDashboard(params: {
     detail: { title: document.title, fileType, fileSize, chunkCount: chunks.length, entityCount },
   })
 
+  if (isBackground) {
+    await prisma.document
+      .update({ where: { id: document.id }, data: { status: "ready" } })
+      .catch((e) => console.error(`[Knowledge API] mark ready for ${document.id}:`, e))
+    await emit?.("done")
+  }
+
   recordIngestJobSuccess(ingestJobId, document.id)
 
   return {
@@ -843,6 +963,206 @@ export async function createKnowledgeDocumentForDashboard(params: {
     enhanced: useEnhanced,
     usedOCR,
   }
+}
+
+/**
+ * Enqueue a file upload for background ingest. Does only the fast, synchronous
+ * work the user waits on: validate, quota, store the bytes to S3, create a
+ * placeholder Document (status "processing") + a pending IngestJob. The worker
+ * (see lib/ingest/worker.ts) picks the job up and runs the heavy pipeline.
+ * Returns immediately so the route can respond 202 and the modal can close.
+ */
+export async function enqueueFileIngest(params: {
+  context: KnowledgeDocumentContext
+  input: KnowledgeDocumentCreateInput
+}): Promise<Record<string, unknown> | ServiceError> {
+  const { createIngestJob } = await import("@/lib/ingest/job")
+
+  if (params.context.organizationId && params.context.role && !canEdit(params.context.role)) {
+    return { status: 403, error: "Insufficient permissions" }
+  }
+  if (params.input.kind !== "file") {
+    return { status: 400, error: "enqueueFileIngest requires a file upload" }
+  }
+
+  const file = params.input.file as File
+  const validation = validateUpload("document", file.size, file.type)
+  if (!validation.valid) {
+    return { status: 400, error: validation.error }
+  }
+
+  const { checkKnowledgeQuota } = await import("@/lib/quota/knowledge")
+  const quota = await checkKnowledgeQuota(params.context.organizationId, file.size)
+  if (!quota.allowed) {
+    return { status: 413, error: quota.reason ?? "Knowledge base quota exceeded" }
+  }
+
+  const detectedType = detectFileType(file.name)
+  const fileType: "markdown" | "pdf" | "image" =
+    detectedType === "pdf" ? "pdf" : detectedType === "image" ? "image" : "markdown"
+  const title = (params.input.title || file.name.replace(/\.[^/.]+$/, "")).replace(/\0/g, "")
+  const categories = toCategoryList(params.input.categories)
+  const groupIds = toStringList(params.input.groupIds)
+  const documentId = crypto.randomUUID()
+
+  // Store the bytes first — the placeholder + job are worthless without the
+  // file the worker will re-download.
+  let s3Key: string
+  let fileSize: number
+  try {
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+    s3Key = S3Paths.document(params.context.organizationId || null, documentId, file.name)
+    const uploadResult = await uploadFile(s3Key, fileBuffer, file.type || "application/octet-stream", {
+      documentId,
+      fileType,
+      originalFilename: file.name,
+    })
+    fileSize = uploadResult.size
+  } catch (error) {
+    console.error("[Knowledge API] enqueue S3 upload failed:", error)
+    return { status: 502, error: "Failed to store the uploaded file. Please try again." }
+  }
+
+  const document = await createKnowledgeDocument({
+    id: documentId,
+    title,
+    content: "",
+    categories,
+    subcategory: params.input.subcategory || null,
+    metadata: { fileType } as Prisma.InputJsonValue,
+    s3Key,
+    fileType,
+    fileSize,
+    mimeType: file.type || null,
+    organizationId: params.context.organizationId || null,
+    createdBy: params.context.userId,
+    status: "processing",
+    groups: groupIds.length > 0 ? { create: groupIds.map((groupId) => ({ groupId })) } : undefined,
+  })
+
+  const jobId = await createIngestJob({
+    organizationId: params.context.organizationId,
+    userId: params.context.userId,
+    filename: file.name,
+    fileSize,
+    mimeType: file.type || null,
+    s3Key,
+    documentId,
+    params: {
+      useEnhanced: params.input.useEnhanced,
+      useCombined: params.input.useCombined !== false,
+      forceOCR: params.input.forceOCR,
+      documentType: params.input.documentType,
+      title,
+      categories: params.input.categories,
+      subcategory: params.input.subcategory,
+      groupIds,
+    },
+  })
+
+  return {
+    id: documentId,
+    jobId,
+    status: "processing",
+    title: document.title,
+    categories: document.categories,
+    groups: document.groups.map((dg) => dg.group),
+    fileType,
+    fileSize,
+    s3Key,
+    fileUrl: appFileUrl(s3Key),
+    enhanced: params.input.useEnhanced,
+  }
+}
+
+/**
+ * Worker entry point: run the full ingest pipeline for a claimed job. Re-
+ * downloads the file from S3, wraps it as a File, and drives the (shared)
+ * createKnowledgeDocumentForDashboard in background mode so it updates the
+ * placeholder Document and streams progress. On any hard failure the Document
+ * is marked "failed" (kept for Retry); success flips it to "ready".
+ */
+export async function processIngestJob(
+  job: {
+    id: string
+    organizationId: string | null
+    userId: string | null
+    documentId: string | null
+    s3Key: string | null
+    filename: string
+    mimeType: string | null
+    attempt: number
+    params: Record<string, unknown> | null
+  },
+  onProgress?: (sp: import("@/lib/ingest/progress").StepProgress) => void | Promise<void>
+): Promise<"ready" | "failed"> {
+  const { recordIngestJobFailure } = await import("@/lib/ingest/job")
+
+  const markFailed = async (reason: string) => {
+    recordIngestJobFailure(job.id, reason)
+    if (job.documentId) {
+      await prisma.document.update({ where: { id: job.documentId }, data: { status: "failed" } }).catch(() => {})
+    }
+  }
+
+  if (!job.documentId || !job.s3Key) {
+    await markFailed("job missing documentId or s3Key")
+    return "failed"
+  }
+
+  const p = (job.params ?? {}) as {
+    useEnhanced?: boolean
+    useCombined?: boolean
+    forceOCR?: boolean
+    documentType?: string
+    title?: string
+    categories?: string[]
+    subcategory?: string | null
+    groupIds?: string[]
+  }
+
+  let fileBuffer: Buffer
+  try {
+    const { downloadFile } = await import("@/lib/s3")
+    fileBuffer = await downloadFile(job.s3Key)
+  } catch (err) {
+    await markFailed(`S3 download failed: ${(err as Error).message ?? "unknown"}`)
+    return "failed"
+  }
+
+  const file = new File([new Uint8Array(fileBuffer)], job.filename, {
+    type: job.mimeType || "application/octet-stream",
+  })
+
+  const result = await createKnowledgeDocumentForDashboard({
+    // role null → skip the org edit-permission gate (already authorized at enqueue)
+    context: { userId: job.userId ?? "", organizationId: job.organizationId, role: null },
+    input: {
+      kind: "file",
+      file,
+      title: p.title,
+      categories: p.categories ?? [],
+      subcategory: p.subcategory ?? undefined,
+      groupIds: p.groupIds ?? [],
+      useEnhanced: !!p.useEnhanced,
+      useCombined: p.useCombined !== false,
+      forceOCR: p.forceOCR,
+      documentType: p.documentType,
+    } as KnowledgeDocumentCreateInput,
+    documentId: job.documentId,
+    jobId: job.id,
+    s3Key: job.s3Key,
+    fileSize: undefined,
+    onProgress,
+  })
+
+  // Validation-style ServiceError (rare — file already validated at enqueue).
+  // Hard extraction/index failures throw and are caught by the worker.
+  if (result && typeof result === "object" && "status" in result && "error" in result) {
+    await markFailed(String((result as ServiceError).error))
+    return "failed"
+  }
+  return "ready"
 }
 
 /**

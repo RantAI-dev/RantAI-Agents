@@ -2,14 +2,19 @@
 
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Check } from "@/lib/icons"
+import { ArrowRight, Building2, Check } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
+import { brand } from "@/lib/branding"
 import { PRICING_TIERS } from "@/lib/pricing"
 import { Reveal } from "./reveal"
 
 type Billing = "monthly" | "annual"
+
+const enterpriseContactHref = `mailto:${brand.supportEmail}?subject=${encodeURIComponent(
+  `${brand.productName} Enterprise inquiry`
+)}`
 
 export function HomePricing() {
   const [billing, setBilling] = useState<Billing>("monthly")
@@ -82,18 +87,20 @@ export function HomePricing() {
                   </AnimatePresence>
                   <span className="text-sm text-muted-foreground">/ month</span>
                 </div>
-                {billing === "annual" && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    billed annually — save {tier.annualSavingsYearly}/yr
-                  </p>
-                )}
+                <p className="mt-1 min-h-4 text-xs text-muted-foreground">
+                  {billing === "annual" ? (
+                    <>billed annually — save {tier.annualSavingsYearly}/yr</>
+                  ) : (
+                    <span aria-hidden="true">&nbsp;</span>
+                  )}
+                </p>
                 <p className="mt-2 text-sm text-muted-foreground">{tier.description}</p>
 
                 <Button
                   className={cn(
                     "mt-5 w-full rounded-full",
                     tier.highlighted
-                      ? "bg-foreground text-background hover:bg-foreground/85"
+                      ? "bg-foreground text-background hover:bg-foreground/85 hover:text-background"
                       : "border border-border bg-background text-foreground shadow-sm hover:bg-muted"
                   )}
                   variant="ghost"
@@ -118,6 +125,47 @@ export function HomePricing() {
             )
           })}
         </div>
+
+        {brand.mode === "default" && (
+          <Reveal
+            delay={0.2}
+            className="mt-5 flex flex-col gap-8 overflow-hidden rounded-[32px] border border-border bg-[var(--sidebar)] p-8 sm:p-10 lg:flex-row lg:items-center lg:justify-between"
+          >
+            <div className="flex max-w-2xl items-start gap-4">
+              <span className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-foreground text-background">
+                <Building2 className="size-5" aria-hidden />
+              </span>
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  Enterprise
+                </p>
+                <h3 className="mt-2 text-2xl font-normal tracking-tight text-foreground sm:text-3xl">
+                  Need a plan tailored to your organization?
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
+                  Tell our customer service team about your requirements and we&apos;ll help you
+                  find the right RantAI Agents setup.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 flex-col items-center gap-2 lg:items-end">
+              <Button
+                className="h-11 rounded-full bg-foreground px-6 text-background hover:bg-foreground/85 hover:text-background"
+                asChild
+              >
+                <a
+                  href={enterpriseContactHref}
+                  aria-label="Contact Customer Service (opens your email app)"
+                >
+                  Contact Customer Service
+                  <ArrowRight className="ml-2 size-4" aria-hidden />
+                </a>
+              </Button>
+              <span className="text-xs text-muted-foreground">Opens your email app</span>
+            </div>
+          </Reveal>
+        )}
       </div>
     </section>
   )

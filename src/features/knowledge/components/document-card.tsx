@@ -25,7 +25,12 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
+  Loader2,
+  RefreshCw,
+  AlertTriangle,
 } from "@/lib/icons"
+import { Progress } from "@/components/ui/progress"
+import { formatProgressLabel, type IngestStep } from "@/lib/ingest/progress"
 import {
   Tooltip,
   TooltipContent,
@@ -54,6 +59,16 @@ interface Document {
   updatedAt: string
   fileSize?: number
   thumbnailUrl?: string
+  status?: string
+  ingest?: {
+    jobId: string
+    step: string | null
+    progress: number
+    stepCurrent: number | null
+    stepTotal: number | null
+    etaSeconds: number | null
+    error: string | null
+  } | null
 }
 
 interface Category {
@@ -86,14 +101,32 @@ export function DocumentCard({
 }: DocumentCardProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const [retrying, setRetrying] = useState(false)
   const { Icon: FileIcon, iconColor, bgColor } = getFileTypeIcon(document.fileType, document.artifactType)
+
+  const isProcessing = document.status === "processing"
+  const isFailed = document.status === "failed"
 
   const handleDelete = () => {
     onDelete(document.id)
     setDeleteDialogOpen(false)
   }
 
+  const handleRetry = async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!document.ingest?.jobId || retrying) return
+    setRetrying(true)
+    try {
+      await fetch(`/api/dashboard/files/ingest-jobs/${document.ingest.jobId}/retry`, { method: "POST" })
+      // The worker re-picks the job; socket updates flip the card back to
+      // processing. Leave `retrying` true until the next status event arrives.
+    } catch {
+      setRetrying(false)
+    }
+  }
+
   const handleCardClick = () => {
+    if (isProcessing) return // no-op while still ingesting
     if (selectionMode) {
       onToggleSelection?.(document.id)
     } else {
@@ -113,6 +146,42 @@ export function DocumentCard({
         }`}
         onClick={handleCardClick}
       >
+        {/* Background-ingest overlay: progress while processing, error + retry on failure */}
+        {isProcessing && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-background/85 backdrop-blur-sm px-4 text-center">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <div className="w-full max-w-[200px]">
+              <Progress value={document.ingest?.progress ?? 0} className="h-1.5" />
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-tight">
+              {formatProgressLabel({
+                step: (document.ingest?.step as IngestStep) ?? "queued",
+                stepCurrent: document.ingest?.stepCurrent,
+                stepTotal: document.ingest?.stepTotal,
+                etaSeconds: document.ingest?.etaSeconds,
+              })}
+              {typeof document.ingest?.progress === "number" ? ` · ${document.ingest.progress}%` : ""}
+            </p>
+          </div>
+        )}
+        {isFailed && (
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-destructive/10 backdrop-blur-sm px-4 text-center">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            <p className="text-[11px] text-destructive leading-tight line-clamp-2">
+              {document.ingest?.error || "Ingest failed"}
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="h-7 gap-1.5"
+              onClick={handleRetry}
+              disabled={retrying || !document.ingest?.jobId}
+            >
+              {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Retry
+            </Button>
+          </div>
+        )}
         {selectionMode && (
           <div
             className="absolute top-2 left-2 z-20 flex items-center justify-center w-7 h-7 rounded-md bg-background/90 backdrop-blur-sm border shadow-sm"

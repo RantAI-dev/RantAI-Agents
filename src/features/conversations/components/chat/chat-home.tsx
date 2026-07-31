@@ -1,25 +1,28 @@
 "use client"
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react"
-import { useSession } from "next-auth/react"
 import { AnimatePresence, motion } from "framer-motion"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import {
   ArrowRight,
-  Bot,
-  FolderOpen,
+  Check,
+  ChevronDown,
   Loader2,
   MessageSquare,
-  Pencil,
+  Search,
   SendHorizontal,
   Sparkles,
   Square,
-  Workflow,
 } from "@/lib/icons"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Dialog,
   DialogContent,
@@ -80,9 +83,8 @@ export interface ChatHomeProps {
   sessions: SessionItem[]
   assistants: AgentItem[]
   selectedAssistantId?: string | null
-  /** Change which agent the next chat uses (composer agent picker). */
-  onSelectAssistant?: (id: string) => void
   getAssistantById: (id: string) => { emoji: string; name: string } | undefined
+  onSelectAssistant: (id: string) => void
   onSelectSession: (id: string) => void
   onCreateSession: (
     assistantId: string,
@@ -94,21 +96,122 @@ export interface ChatHomeProps {
   creatingSession?: boolean
 }
 
-// ─── Rotating phrases ────────────────────────────────────────────────────────
+// ─── Home content ────────────────────────────────────────────────────────────
 
-function getGreeting(name: string): string {
-  const h = new Date().getHours()
-  if (h < 12) return `Good morning${name ? `, ${name}` : ""}`
-  if (h < 18) return `Good afternoon${name ? `, ${name}` : ""}`
-  return `Good evening${name ? `, ${name}` : ""}`
-}
-
-const ROTATING_PHRASES = [
+const HOME_HEADLINES = [
   "Let's finish your task",
   "Explore the future of AI",
   "What would you like to create?",
   "Ready when you are",
+] as const
+
+interface PromptSuggestion {
+  label: string
+  prompt: string
+}
+
+const DEFAULT_PROMPTS: PromptSuggestion[] = [
+  {
+    label: "Start a task",
+    prompt: "Help me break down a task and decide the best next steps.",
+  },
+  {
+    label: "Summarize content",
+    prompt: "Summarize this content and highlight the most important points.",
+  },
+  {
+    label: "Brainstorm ideas",
+    prompt: "Help me brainstorm practical ideas for this topic.",
+  },
 ]
+
+function getPromptSuggestions(agent?: AgentItem): PromptSuggestion[] {
+  if (!agent) return DEFAULT_PROMPTS
+
+  const context = [
+    agent.name,
+    agent.description,
+    ...(agent.tags ?? []),
+  ].join(" ").toLowerCase()
+
+  if (context.includes("research") || context.includes("rag")) {
+    return [
+      {
+        label: "Research a topic",
+        prompt: "Research this topic and summarize the key findings.",
+      },
+      {
+        label: "Summarize a source",
+        prompt: "Summarize this source and highlight the most important points.",
+      },
+      {
+        label: "Compare findings",
+        prompt: "Compare these findings and explain the key differences.",
+      },
+    ]
+  }
+
+  if (context.includes("data") || context.includes("analytic")) {
+    return [
+      {
+        label: "Analyze my data",
+        prompt: "Analyze this data and identify the most important patterns.",
+      },
+      {
+        label: "Create a chart",
+        prompt: "Recommend the clearest chart for this data and explain why.",
+      },
+      {
+        label: "Find key insights",
+        prompt: "Find the key insights, anomalies, and actionable takeaways in this data.",
+      },
+    ]
+  }
+
+  if (
+    context.includes("write") ||
+    context.includes("creative") ||
+    context.includes("marketing")
+  ) {
+    return [
+      {
+        label: "Draft content",
+        prompt: "Draft clear and engaging content for this topic.",
+      },
+      {
+        label: "Improve my writing",
+        prompt: "Improve this writing while preserving its original meaning and tone.",
+      },
+      {
+        label: "Brainstorm ideas",
+        prompt: "Brainstorm fresh content ideas for this audience and goal.",
+      },
+    ]
+  }
+
+  if (
+    context.includes("code") ||
+    context.includes("develop") ||
+    context.includes("debug")
+  ) {
+    return [
+      {
+        label: "Debug an issue",
+        prompt: "Help me diagnose this issue and identify the likely root cause.",
+      },
+      {
+        label: "Review my code",
+        prompt: "Review this code for correctness, clarity, and meaningful risks.",
+      },
+      {
+        label: "Explain a concept",
+        prompt: "Explain this technical concept with a practical example.",
+      },
+    ]
+  }
+
+  return DEFAULT_PROMPTS
+}
 
 // ─── Animation variants ──────────────────────────────────────────────────────
 
@@ -138,81 +241,14 @@ const scaleIn = {
   },
 }
 
-// ─── Quick action config ─────────────────────────────────────────────────────
-
-const QUICK_ACTIONS = [
-  { label: "Create Agent", icon: Bot, href: "/dashboard/agent-builder" },
-  { label: "Files", icon: FolderOpen, href: "/dashboard/files" },
-  { label: "Workflows", icon: Workflow, href: "/dashboard/workflows" },
-] as const
-
-// ─── Animated greeting hook ──────────────────────────────────────────────────
-
-function useRotatingText(greeting: string, phrases: string[]) {
-  const [phase, setPhase] = useState<"greeting" | "rotating">("greeting")
-  const [phraseIndex, setPhraseIndex] = useState(0)
-  const [displayText, setDisplayText] = useState("")
-  const [isDeleting, setIsDeleting] = useState(false)
-
-  useEffect(() => {
-    // Phase 1: Type the greeting
-    if (phase === "greeting") {
-      if (displayText.length < greeting.length) {
-        const timer = setTimeout(() => {
-          setDisplayText(greeting.slice(0, displayText.length + 1))
-        }, 40)
-        return () => clearTimeout(timer)
-      }
-      // Pause then start rotating
-      const timer = setTimeout(() => {
-        setIsDeleting(true)
-        setPhase("rotating")
-      }, 2500)
-      return () => clearTimeout(timer)
-    }
-
-    // Phase 2: Rotate through phrases
-    const currentPhrase = phrases[phraseIndex]
-
-    if (isDeleting) {
-      if (displayText.length > 0) {
-        const timer = setTimeout(() => {
-          setDisplayText(displayText.slice(0, -1))
-        }, 20)
-        return () => clearTimeout(timer)
-      }
-      // Done deleting, start typing next phrase
-      setIsDeleting(false)
-      return
-    }
-
-    // Typing
-    if (displayText.length < currentPhrase.length) {
-      const timer = setTimeout(() => {
-        setDisplayText(currentPhrase.slice(0, displayText.length + 1))
-      }, 45)
-      return () => clearTimeout(timer)
-    }
-
-    // Pause then delete
-    const timer = setTimeout(() => {
-      setIsDeleting(true)
-      setPhraseIndex((prev) => (prev + 1) % phrases.length)
-    }, 3000)
-    return () => clearTimeout(timer)
-  }, [phase, displayText, isDeleting, greeting, phrases, phraseIndex])
-
-  return displayText
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function ChatHome({
   sessions,
   assistants,
   selectedAssistantId,
-  onSelectAssistant,
   getAssistantById,
+  onSelectAssistant,
   onSelectSession,
   onCreateSession,
   initialToolbarData,
@@ -220,16 +256,39 @@ export function ChatHome({
 }: ChatHomeProps) {
   const orgFetch = useOrgFetch()
   const { activeOrganization } = useOrganization()
-  const { data: authSession } = useSession()
-  const firstName = authSession?.user?.name?.split(" ")[0] ?? ""
-  const greeting = getGreeting(firstName)
+  const [headline, setHeadline] = useState<string>(HOME_HEADLINES[0])
+  const [clientReady, setClientReady] = useState(false)
 
-  const animatedText = useRotatingText(greeting, ROTATING_PHRASES)
+  // Pick once when Chat Home is entered, then keep the headline still.
+  // The deterministic initial value avoids a server/client hydration mismatch.
+  useEffect(() => {
+    const nextHeadline =
+      HOME_HEADLINES[Math.floor(Math.random() * HOME_HEADLINES.length)]
+    setHeadline(nextHeadline)
+    setClientReady(true)
+  }, [])
 
-  // The active assistant is the user's selected assistant (fallback to first assistant).
-  const activeAssistant = selectedAssistantId
+  // The server cannot read the locally selected assistant. Keep the first
+  // render deterministic, then restore the user's selection after hydration.
+  const activeAssistant = clientReady && selectedAssistantId
     ? assistants.find((assistant) => assistant.id === selectedAssistantId) ?? assistants[0]
     : assistants[0]
+  const [assistantPickerOpen, setAssistantPickerOpen] = useState(false)
+  const [assistantSearch, setAssistantSearch] = useState("")
+  const promptSuggestions = useMemo(
+    () => getPromptSuggestions(activeAssistant),
+    [activeAssistant],
+  )
+  const filteredAssistants = useMemo(() => {
+    const query = assistantSearch.trim().toLowerCase()
+    if (!query) return assistants
+    return assistants.filter((assistant) =>
+      [assistant.name, assistant.description, ...(assistant.tags ?? [])]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    )
+  }, [assistantSearch, assistants])
 
   // Input state
   const [input, setInput] = useState("")
@@ -265,6 +324,25 @@ export function ChatHome({
   useEffect(() => {
     setCanvasMode((activeAssistant?.chatConfig?.defaultCanvasMode as CanvasMode | undefined) ?? false)
   }, [activeAssistant?.id, activeAssistant?.chatConfig?.defaultCanvasMode])
+
+  const handleAssistantSelect = useCallback((assistantId: string) => {
+    onSelectAssistant(assistantId)
+    setAssistantPickerOpen(false)
+    setAssistantSearch("")
+
+    // Clear assistant-scoped overrides before the new defaults are loaded.
+    setWebSearchOverride(null)
+    setCodeInterpreterOverride(null)
+    setSelectedKBGroupIds(null)
+    setSelectedToolNames([])
+    setSelectedSkillIds([])
+    setToolMode("auto")
+    setSkillMode("auto")
+
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+    })
+  }, [onSelectAssistant])
 
   // GitHub import
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
@@ -555,6 +633,13 @@ export function ChatHome({
     adjustTextareaHeight()
   }, [input, adjustTextareaHeight])
 
+  const handlePromptSelect = useCallback((prompt: string) => {
+    setInput(prompt)
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus()
+    })
+  }, [])
+
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault()
@@ -599,33 +684,157 @@ export function ChatHome({
     [sessions],
   )
 
-  const topAgents = useMemo(() => assistants.slice(0, 6), [assistants])
-
   return (
-    <div className="flex flex-col h-full overflow-y-auto">
-      <div className="flex-1 flex flex-col items-center w-full max-w-3xl mx-auto px-5 pt-28 pb-24">
+    <div className="flex h-full flex-col overflow-hidden bg-background">
+      <header className="flex shrink-0 items-center border-b border-border/50 py-3 pl-14 pr-4">
+        <h1 className="truncate font-medium">New Chat</h1>
+      </header>
 
-        {/* Free-plan upsell banner (cloud; hides itself on paid/OSS) */}
-        <div className="w-full">
-          <FreePlanBanner />
-        </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-5">
+          {/* Free-plan upsell banner (cloud; hides itself on paid/OSS) */}
+          <div className="w-full pt-4">
+            <FreePlanBanner />
+          </div>
 
-        {/* ── Animated greeting ────────────────────────────────────── */}
-        <motion.div
-          className="text-center mb-8"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
+          <div className="flex w-full flex-1 flex-col items-center justify-center py-10 sm:py-14">
+            {/* ── Visit-level greeting ─────────────────────────────────── */}
+            <div className="mb-6 text-center">
+              <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                {headline}
+              </h2>
+            </div>
+
+            {/* ── Active assistant selector ────────────────────────────── */}
+            <Popover
+          open={assistantPickerOpen}
+          onOpenChange={(open) => {
+            setAssistantPickerOpen(open)
+            if (!open) setAssistantSearch("")
+          }}
         >
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight min-h-[2.5rem] sm:min-h-[3rem]">
-            {animatedText}
-            <span className="inline-block w-[2px] h-[1em] bg-foreground/60 ml-0.5 align-middle animate-pulse" />
-          </h1>
-        </motion.div>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs shadow-xs transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label={
+                activeAssistant
+                  ? `Select agent. Current agent: ${activeAssistant.name}`
+                  : "Select an agent"
+              }
+            >
+              <span className="text-muted-foreground">Using</span>
+              {activeAssistant ? (
+                <>
+                  <span aria-hidden>{activeAssistant.emoji}</span>
+                  <span className="max-w-[220px] truncate font-medium text-foreground">
+                    {activeAssistant.name}
+                  </span>
+                </>
+              ) : (
+                <span className="font-medium text-foreground">
+                  Select an agent
+                </span>
+              )}
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[min(320px,calc(100vw-2rem))] p-2" align="center">
+            <div className="relative mb-2">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                value={assistantSearch}
+                onChange={(event) => setAssistantSearch(event.target.value)}
+                placeholder="Search agents..."
+                aria-label="Search agents"
+                className="h-9 pl-8"
+              />
+            </div>
+            <div
+              className="max-h-72 space-y-1 overflow-y-auto"
+              role="listbox"
+              aria-label="Available agents"
+            >
+              {filteredAssistants.length === 0 ? (
+                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  No agents found
+                </p>
+              ) : (
+                filteredAssistants.map((assistant) => {
+                  const selected = assistant.id === activeAssistant?.id
+                  return (
+                    <button
+                      key={assistant.id}
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      onClick={() => handleAssistantSelect(assistant.id)}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
+                        selected
+                          ? "bg-muted text-foreground"
+                          : "text-foreground/80 hover:bg-muted/60 hover:text-foreground"
+                      )}
+                    >
+                      <span className="text-lg" aria-hidden>{assistant.emoji}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium">
+                          {assistant.name}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {assistant.description || "No description"}
+                        </span>
+                      </span>
+                      {selected && (
+                        <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                      )}
+                    </button>
+                  )
+                })
+              )}
+            </div>
+          </PopoverContent>
+            </Popover>
 
-        {/* ── Chat input ──────────────────────────────────────────── */}
-        <motion.div
-          className="w-full mb-3"
+            {/* ── Contextual prompt suggestions ─────────────────────────── */}
+            <motion.div
+          key={`prompt-suggestions-${activeAssistant?.id ?? "default"}`}
+          className="scrollbar-none mb-4 mt-4 flex w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 sm:w-auto sm:flex-wrap sm:justify-center sm:overflow-visible sm:pb-0"
+          variants={stagger}
+          initial="hidden"
+          animate="show"
+          role="group"
+          aria-label={
+            activeAssistant
+              ? `Suggested prompts for ${activeAssistant.name}`
+              : "Suggested prompts"
+          }
+        >
+          {promptSuggestions.map((suggestion) => (
+            <motion.div
+              key={suggestion.label}
+              className="shrink-0"
+              variants={scaleIn}
+            >
+              <button
+                type="button"
+                onClick={() => handlePromptSelect(suggestion.prompt)}
+                className="group inline-flex cursor-pointer items-center gap-2 rounded-full border border-border/60 bg-background px-4 py-2 text-sm font-medium text-foreground/80 transition-all hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-muted-foreground transition-colors group-hover:text-primary" />
+                {suggestion.label}
+              </button>
+            </motion.div>
+          ))}
+            </motion.div>
+          </div>
+
+          {/* ── Chat input ──────────────────────────────────────────── */}
+          <motion.div
+          className="w-full shrink-0 pb-4"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
@@ -654,6 +863,7 @@ export function ChatHome({
               <div className="relative">
                 <Textarea
                   ref={textareaRef}
+                  aria-label="Message"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onFocus={() => void loadToolbarData()}
@@ -671,6 +881,7 @@ export function ChatHome({
                   type="submit"
                   size="icon"
                   className="absolute right-3 bottom-2 rounded-full h-8 w-8 shadow-sm"
+                  aria-label={creatingSession ? "Creating chat" : "Send message"}
                   disabled={!input.trim() || creatingSession}
                 >
                   {creatingSession ? (
@@ -684,9 +895,6 @@ export function ChatHome({
               {/* Toolbar */}
               <div className="px-2 pb-2">
                 <ChatInputToolbar
-                  agents={onSelectAssistant ? assistants : undefined}
-                  selectedAgentId={activeAssistant?.id}
-                  onSelectAgent={onSelectAssistant}
                   onFileSelect={(files) => setAttachedFiles(prev => [...prev, ...files])}
                   fileAttached={attachedFiles.length > 0}
                   webSearchEnabled={effectiveWebSearch}
@@ -731,137 +939,59 @@ export function ChatHome({
           </form>
 
           {/* Keyboard hints */}
-          <div className="flex items-center justify-center gap-1.5 mt-2.5 text-[11px] text-muted-foreground/40">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted/40 font-mono text-[10px]">Enter</kbd>
+          <div className="mt-2.5 hidden items-center justify-center gap-1.5 text-[11px] text-muted-foreground sm:flex">
+            <kbd className="rounded bg-muted/70 px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">Enter</kbd>
             <span>to send</span>
             <span className="mx-0.5">·</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-muted/40 font-mono text-[10px]">Shift+Enter</kbd>
+            <kbd className="rounded bg-muted/70 px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">Shift+Enter</kbd>
             <span>new line</span>
             <span className="mx-0.5">·</span>
-            <kbd className="px-1.5 py-0.5 rounded bg-muted/40 font-mono text-[10px]">⌘K</kbd>
+            <kbd className="rounded bg-muted/70 px-1.5 py-0.5 font-mono text-[10px] text-foreground/70">⌘K</kbd>
             <span>commands</span>
           </div>
         </motion.div>
 
-        {/* ── Quick actions ─────────────────────────────────────────── */}
-        <motion.div
-          className="flex flex-wrap items-center justify-center gap-2 mb-10 mt-6"
-          variants={stagger}
-          initial="hidden"
-          animate="show"
-        >
-          {QUICK_ACTIONS.map((action) => (
-            <motion.div key={action.label} variants={scaleIn}>
-              <Link
-                href={action.href}
-                className="group inline-flex items-center gap-2 rounded-full border border-border/60 bg-background px-4 py-2 text-sm font-medium text-foreground/80 transition-all hover:border-primary/40 hover:bg-muted/50 hover:text-foreground"
-              >
-                <action.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
-                {action.label}
-              </Link>
-            </motion.div>
-          ))}
-
-          {activeAssistant && (
-            <motion.div variants={scaleIn}>
-              <button
-                type="button"
-                onClick={() => onCreateSession(activeAssistant.id)}
-                className="group inline-flex items-center gap-2 rounded-full border border-border/60 bg-background px-4 py-2 text-sm font-medium text-foreground/80 transition-all hover:border-primary/40 hover:bg-muted/50 hover:text-foreground cursor-pointer"
-              >
-                <Pencil className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
-                Write
-              </button>
-            </motion.div>
-          )}
-        </motion.div>
-
-        {/* ── Sections ──────────────────────────────────────────────── */}
-        <div className="w-full space-y-10">
-          {/* Recent Conversations */}
+        {/* Recent Conversations are already available in the desktop sidebar. */}
+        <div className="mt-10 w-full md:hidden">
           <Section title="Recent Conversations" delay={0.3}>
-            {recentSessions.length === 0 ? (
-              <EmptyHint icon={MessageSquare} text="No conversations yet" />
-            ) : (
-              <ScrollRow>
-                {recentSessions.map((s) => {
-                  const agent = getAssistantById(s.assistantId)
-                  return (
-                    <motion.button
-                      key={s.id}
-                      type="button"
-                      variants={scaleIn}
-                      onClick={() => onSelectSession(s.id)}
-                      className="group snap-start shrink-0 w-[220px] rounded-xl border border-border/50 bg-card/60 p-4 text-left transition-all hover:border-primary/30 hover:bg-muted/40 cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2.5 mb-3">
-                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/60 text-base shrink-0">
-                          {agent?.emoji || "💬"}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground/60 font-medium">
-                          {formatDistanceToNow(s.createdAt, { addSuffix: true })}
-                        </span>
-                      </div>
-                      <p className="text-sm font-medium truncate text-foreground/90 group-hover:text-foreground transition-colors">
-                        {s.title}
-                      </p>
-                      {agent && (
-                        <p className="text-xs text-muted-foreground/50 mt-1 truncate">
-                          {agent.name}
-                        </p>
-                      )}
-                    </motion.button>
-                  )
-                })}
-              </ScrollRow>
-            )}
-          </Section>
-
-          {/* Your Agents */}
-          <Section title="Your Agents" delay={0.4}>
-            {topAgents.length === 0 ? (
-              <EmptyHint
-                icon={Sparkles}
-                text="Create your first agent"
-                href="/dashboard/agent-builder"
-              />
-            ) : (
-              <ScrollRow>
-                {topAgents.map((agent) => (
-                  <motion.button
-                    key={agent.id}
-                    type="button"
-                    variants={scaleIn}
-                    onClick={() => onCreateSession(agent.id)}
-                    className="group snap-start shrink-0 w-[220px] rounded-xl border border-border/50 bg-card/60 p-4 text-left transition-all hover:border-primary/30 hover:bg-muted/40 cursor-pointer"
-                  >
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500/10 to-purple-600/10 border border-violet-500/15 text-xl mb-3">
-                      {agent.emoji}
-                    </span>
-                    <p className="text-sm font-medium truncate text-foreground/90 group-hover:text-foreground transition-colors">
-                      {agent.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground/60 mt-1 line-clamp-2 leading-relaxed">
-                      {agent.description || "No description"}
-                    </p>
-                    {agent.tags && agent.tags.length > 0 && (
-                      <div className="flex gap-1 mt-2.5 overflow-hidden">
-                        {agent.tags.slice(0, 2).map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-block rounded-md bg-muted/50 px-1.5 py-0.5 text-[10px] text-muted-foreground/60 font-medium"
-                          >
-                            {tag}
+              {recentSessions.length === 0 ? (
+                <EmptyHint icon={MessageSquare} text="No conversations yet" />
+              ) : (
+                <ScrollRow>
+                  {recentSessions.map((s) => {
+                    const agent = getAssistantById(s.assistantId)
+                    return (
+                      <motion.button
+                        key={s.id}
+                        type="button"
+                        variants={scaleIn}
+                        onClick={() => onSelectSession(s.id)}
+                        className="group snap-start shrink-0 w-[220px] rounded-xl border border-border/50 bg-card/60 p-4 text-left transition-all hover:border-primary/30 hover:bg-muted/40 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5 mb-3">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted/60 text-base shrink-0">
+                            {agent?.emoji || "💬"}
                           </span>
-                        ))}
-                      </div>
-                    )}
-                  </motion.button>
-                ))}
-              </ScrollRow>
-            )}
+                          <span className="text-[11px] text-muted-foreground/60 font-medium">
+                            {formatDistanceToNow(s.createdAt, { addSuffix: true })}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium truncate text-foreground/90 group-hover:text-foreground transition-colors">
+                          {s.title}
+                        </p>
+                        {agent && (
+                          <p className="text-xs text-muted-foreground/50 mt-1 truncate">
+                            {agent.name}
+                          </p>
+                        )}
+                      </motion.button>
+                    )
+                  })}
+                </ScrollRow>
+              )}
           </Section>
         </div>
+      </div>
       </div>
 
       {/* GitHub Import Dialog */}

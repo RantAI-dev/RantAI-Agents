@@ -1,8 +1,9 @@
 "use client"
 
-import { useOrgFetch } from "@/hooks/use-organization"
+import { useOrgFetch, useOrganization } from "@/hooks/use-organization"
 import { dispatchKnowledgeBasesUpdated } from "@/hooks/use-knowledge-bases"
 import { useToast } from "@/hooks/use-toast"
+import { useIngestJobUpdates } from "@/features/knowledge/use-ingest-job-updates"
 
 import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
@@ -64,6 +65,17 @@ export interface Document {
   updatedAt: string
   fileSize?: number
   thumbnailUrl?: string
+  // Ingest lifecycle + live progress (background upload processing).
+  status?: string
+  ingest?: {
+    jobId: string
+    step: string | null
+    progress: number
+    stepCurrent: number | null
+    stepTotal: number | null
+    etaSeconds: number | null
+    error: string | null
+  } | null
 }
 
 export interface KnowledgeBase {
@@ -95,6 +107,7 @@ export default function KnowledgePageClient({
   initialAction: string | null
 }) {
   const orgFetch = useOrgFetch()
+  const { activeOrganization } = useOrganization()
   const router = useRouter()
   const { toast } = useToast()
 
@@ -167,6 +180,43 @@ export default function KnowledgePageClient({
       setLoading(false)
     }
   }, [])
+
+  // Live ingest progress: patch the processing doc's status/progress in place;
+  // on terminal status refetch to pull the final chunk count / clear the bar.
+  useIngestJobUpdates(
+    activeOrganization?.id ?? null,
+    useCallback(
+      (e) => {
+        if (!e.documentId) return
+        setDocuments((docs) =>
+          docs.map((d) =>
+            d.id === e.documentId
+              ? {
+                  ...d,
+                  status: e.status,
+                  ingest:
+                    e.status === "processing"
+                      ? {
+                          jobId: e.jobId,
+                          step: e.step,
+                          progress: e.progress,
+                          stepCurrent: e.stepCurrent,
+                          stepTotal: e.stepTotal,
+                          etaSeconds: e.etaSeconds,
+                          error: e.error ?? null,
+                        }
+                      : null,
+                }
+              : d
+          )
+        )
+        if (e.status === "ready" || e.status === "failed") {
+          window.setTimeout(() => void fetchDocuments(), 400)
+        }
+      },
+      [fetchDocuments]
+    )
+  )
 
   const fetchKnowledgeBases = useCallback(async () => {
     try {

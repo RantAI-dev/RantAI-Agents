@@ -7,6 +7,7 @@ import {
 } from "@/features/knowledge/documents/schema"
 import {
   createKnowledgeDocumentForDashboard,
+  enqueueFileIngest,
   listKnowledgeDocumentsForDashboard,
 } from "@/features/knowledge/documents/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
@@ -101,7 +102,10 @@ export async function POST(request: Request) {
       const forceOCR = forceOCRParam === "true" || forceOCRField === "true"
       const documentType = (formData.get("documentType") as string | null) || searchParams.get("documentType") || undefined
 
-      const result = await createKnowledgeDocumentForDashboard({
+      // File uploads run in the background: enqueue (store bytes + placeholder
+      // Document + pending IngestJob) and return 202 immediately. The ingest
+      // worker runs extraction/embedding and streams progress over the socket.
+      const result = await enqueueFileIngest({
         context: {
           userId: session.user.id,
           organizationId: orgContext?.organizationId ?? null,
@@ -125,7 +129,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: result.error }, { status: result.status })
       }
 
-      return NextResponse.json(result)
+      return NextResponse.json(result, { status: 202 })
     }
 
     const parsedBody = KnowledgeDocumentCreateSchema.safeParse(await request.json())

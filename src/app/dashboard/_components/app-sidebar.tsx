@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useKnowledgeBases, type KnowledgeBase } from "@/hooks/use-knowledge-bases"
 import React from "react"
 import { useSession, signOut } from "next-auth/react"
+import { useTheme } from "next-themes"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
@@ -22,15 +23,16 @@ import {
   Headphones,
   LogOut,
   MessageSquare,
+  Monitor,
+  Moon,
   Network,
-  Pencil,
   Plus,
   Search,
   Settings,
   Shield,
   Sparkles,
-  Star,
   Store,
+  Sun,
   Trash2,
   User,
   Users,
@@ -38,12 +40,6 @@ import {
   type IconComponent,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { Badge } from "@/components/ui/badge"
 import { PlanUsageBadge } from "@/components/plan-usage-badge"
 import {
   Tooltip,
@@ -55,7 +51,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -65,16 +67,13 @@ import { BrandLogo } from "@/components/brand-logo"
 import { useAssistants } from "@/hooks/use-assistants"
 import { useWorkflows } from "@/hooks/use-workflows"
 import { useDigitalEmployees } from "@/hooks/use-digital-employees"
-import { useDefaultAssistant } from "@/hooks/use-default-assistant"
 import { useChatSessions } from "@/hooks/use-chat-sessions"
-import { AssistantEditor } from "@/features/conversations/components/chat/assistant-editor"
 import { formatDistanceToNow, differenceInMinutes } from "date-fns"
-import type { Assistant, AssistantInput } from "@/lib/types/assistant"
+import type { Assistant } from "@/lib/types/assistant"
 import { useFeaturesContext } from "@/components/providers/features-provider"
 import { useProfileStore } from "@/hooks/use-profile"
 import { SETTINGS_NAV_ITEMS } from "../settings/settings-nav-items"
 import { MARKETPLACE_NAV_ITEMS } from "../marketplace/marketplace-nav-items"
-import { ThemeToggle } from "./theme-toggle"
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -83,6 +82,7 @@ interface AppSidebarProps {
   isOpen: boolean
   onToggle: () => void
   onSearchOpen?: () => void
+  mobile?: boolean
 }
 
 type FeatureKey = "AGENT" | "DIGITAL_EMPLOYEES" | "MEDIA" | null
@@ -133,105 +133,101 @@ const sections = {
   account: { title: "Account", subtitle: "Profile", icon: User, path: "/dashboard/account" },
 }
 
-// ─── Assistant Selector Header ───────────────────────────────────────
+const themeOptions = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+] as const
 
-function AssistantSelectorHeader({
-  assistants,
-  selectedAssistant,
-  onSelectAssistant,
-  onCreateAssistant,
-  onEditAssistant,
+function ThemeMenuSelector() {
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+
+  const currentTheme = mounted && themeOptions.some((option) => option.value === theme)
+    ? theme!
+    : "system"
+  const currentOption = themeOptions.find((option) => option.value === currentTheme)!
+  const CurrentIcon = currentOption.icon
+
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className="cursor-pointer">
+        <CurrentIcon className="mr-2 h-4 w-4" />
+        <span>Theme</span>
+        <span className="ml-auto mr-2 text-xs text-muted-foreground">
+          {currentOption.label}
+        </span>
+      </DropdownMenuSubTrigger>
+      <DropdownMenuPortal>
+        <DropdownMenuSubContent className="w-40" sideOffset={8}>
+          <DropdownMenuRadioGroup value={currentTheme} onValueChange={setTheme}>
+            {themeOptions.map((option) => {
+              const Icon = option.icon
+              return (
+                <DropdownMenuRadioItem
+                  key={option.value}
+                  value={option.value}
+                  className="cursor-pointer"
+                >
+                  <Icon className="h-4 w-4" />
+                  {option.label}
+                </DropdownMenuRadioItem>
+              )
+            })}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuSubContent>
+      </DropdownMenuPortal>
+    </DropdownMenuSub>
+  )
+}
+
+// ─── Chat navigation ─────────────────────────────────────────────────
+
+function ChatNavigationItem({
+  active,
+  onMobileNavigate,
 }: {
-  assistants: Assistant[]
-  selectedAssistant: Assistant | undefined
-  onSelectAssistant: (assistant: Assistant) => void
-  onCreateAssistant: () => void
-  onEditAssistant: (assistant: Assistant) => void
+  active: boolean
+  onMobileNavigate?: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  const { assistant: defaultAssistant } = useDefaultAssistant()
-
-  if (!selectedAssistant) {
-    return (
-      <div className="px-2 py-1.5 mb-2">
-        <h3 className="text-sm font-medium text-sidebar-foreground">Chat</h3>
-        <p className="text-xs text-sidebar-muted">Loading assistants...</p>
-      </div>
-    )
+  const router = useRouter()
+  const handleNewChat = () => {
+    router.push(`/dashboard/chat?new=${crypto.randomUUID()}`)
+    onMobileNavigate?.()
   }
 
   return (
-    <div className="px-2 py-1.5 mb-2">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button className="w-full flex items-center gap-2 hover:bg-sidebar-hover rounded-lg p-1 -m-1 transition-colors">
-            <span className="text-xl">{selectedAssistant.emoji}</span>
-            <div className="flex-1 text-left min-w-0">
-              <div className="flex items-center gap-1.5">
-                <h3 className="text-sm font-medium text-sidebar-foreground truncate">
-                  {selectedAssistant.name}
-                </h3>
-                {defaultAssistant?.id === selectedAssistant.id && (
-                  <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4 gap-0.5 shrink-0">
-                    <Star className="h-2 w-2" />
-                  </Badge>
-                )}
-              </div>
-              <p className="text-xs text-sidebar-muted truncate">{selectedAssistant.description}</p>
-            </div>
-            <ChevronDown className="h-4 w-4" />
+    <div
+      className={cn(
+        "group flex items-center rounded-lg text-sm transition-all",
+        active
+          ? "bg-sidebar-accent text-sidebar-foreground font-medium"
+          : "text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground"
+      )}
+    >
+      <Link
+        href="/dashboard/chat"
+        aria-current={active ? "page" : undefined}
+        className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2"
+      >
+        <MessageSquare className="h-5 w-5 shrink-0" />
+        <span>Chat</span>
+      </Link>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={handleNewChat}
+            className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground"
+            aria-label="Start new chat"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
           </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-2" align="start" side="bottom">
-          <div className="space-y-1 max-h-[300px] overflow-y-auto">
-            {assistants.map((assistant) => {
-              const isSelected = selectedAssistant.id === assistant.id
-              const isDefault = defaultAssistant?.id === assistant.id
-              return (
-                <div
-                  key={assistant.id}
-                  className={cn(
-                    "group flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all",
-                    isSelected ? "bg-sidebar-accent" : "hover:bg-sidebar-hover"
-                  )}
-                  onClick={() => { onSelectAssistant(assistant); setOpen(false) }}
-                >
-                  <span className="text-lg shrink-0">{assistant.emoji}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1">
-                      <span className="text-sm font-medium truncate">{assistant.name}</span>
-                      {isDefault && <Star className="h-3 w-3" />}
-                      {assistant.useKnowledgeBase && <Database className="h-3 w-3" />}
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{assistant.description}</p>
-                  </div>
-                  {assistant.isEditable && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                      onClick={(e) => { e.stopPropagation(); onEditAssistant(assistant); setOpen(false) }}
-                      aria-label={`Edit ${assistant.name}`}
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-          <div className="mt-2 pt-2 border-t">
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-2 text-muted-foreground"
-              onClick={() => { onCreateAssistant(); setOpen(false) }}
-            >
-              <Plus className="h-4 w-4" />
-              New Assistant
-            </Button>
-          </div>
-        </PopoverContent>
-      </Popover>
+        </TooltipTrigger>
+        <TooltipContent side="right">Start new chat</TooltipContent>
+      </Tooltip>
     </div>
   )
 }
@@ -239,88 +235,23 @@ function AssistantSelectorHeader({
 // ─── Chat Section Content ────────────────────────────────────────────
 
 function ChatSectionContent({
-  assistants,
-  selectedAssistant,
-  onSelectAssistant,
-  onCreateAssistant,
-  onEditAssistant,
   getAssistantById,
 }: {
-  assistants: Assistant[]
-  selectedAssistant: Assistant
-  onSelectAssistant: (assistant: Assistant) => void
-  onCreateAssistant: () => void
-  onEditAssistant: (assistant: Assistant) => void
   getAssistantById: (id: string) => Assistant | undefined
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { sessions, createPersistedSession, deleteSession } = useChatSessions()
-  const { toast } = useToast()
-  const [creatingNewChat, setCreatingNewChat] = useState(false)
-  const newChatAbortRef = useRef<AbortController | null>(null)
-
-  useEffect(() => {
-    return () => {
-      newChatAbortRef.current?.abort()
-    }
-  }, [])
-
-  const handleNewChat = async () => {
-    if (!selectedAssistant || creatingNewChat) return
-    newChatAbortRef.current?.abort()
-    const controller = new AbortController()
-    newChatAbortRef.current = controller
-    setCreatingNewChat(true)
-    try {
-      const newSession = await createPersistedSession(selectedAssistant.id, controller.signal)
-      router.push(`/dashboard/chat/${newSession.id}`)
-    } catch (error) {
-      if ((error as { name?: string })?.name === "AbortError") return
-      console.error("[AppSidebar] Failed to create new chat:", error)
-      toast({
-        title: "Couldn't start chat",
-        description:
-          error instanceof Error ? error.message : "Network error — try again in a moment.",
-        variant: "destructive",
-      })
-    } finally {
-      if (newChatAbortRef.current === controller) {
-        newChatAbortRef.current = null
-      }
-      setCreatingNewChat(false)
-    }
-  }
+  const { sessions, deleteSession } = useChatSessions()
 
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
   if (!mounted) {
-    return (
-      <div className="space-y-1">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-hover mb-2"
-          onClick={handleNewChat}
-        >
-          <Plus className="h-4 w-4" />
-          New Chat
-        </Button>
-      </div>
-    )
+    return null
   }
 
   return (
     <div className="space-y-1">
-      <Button
-        variant="ghost"
-        className="w-full justify-start gap-2 text-sidebar-foreground hover:bg-sidebar-hover mb-2"
-        onClick={handleNewChat}
-      >
-        <Plus className="h-4 w-4" />
-        New Chat
-      </Button>
-
       {sessions.length > 0 && (
         <div className="space-y-1">
           <p className="px-3 py-1 text-xs font-medium text-sidebar-muted uppercase tracking-wider">
@@ -361,6 +292,7 @@ function ChatSectionContent({
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-sidebar-foreground/60 hover:text-destructive hover:bg-sidebar-hover"
+                  aria-label={`Delete chat ${session.title}`}
                   onClick={(e) => {
                     e.stopPropagation()
                     const wasActive = isActive
@@ -381,7 +313,7 @@ function ChatSectionContent({
 
 // ─── Main Sidebar Component ──────────────────────────────────────────
 
-export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) {
+export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: AppSidebarProps) {
   const { data: session } = useSession()
   const pathname = usePathname()
   const router = useRouter()
@@ -429,8 +361,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
 
   // Assistant management
   const {
-    assistants, selectedAssistant, selectAssistant,
-    addAssistant, updateAssistant, deleteAssistant, getAssistantById,
+    assistants, getAssistantById,
     missingSelection, acknowledgeMissingSelection,
   } = useAssistants()
 
@@ -452,7 +383,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
     acknowledgeMissingSelection()
   }, [missingSelection, getAssistantById, sidebarToast, acknowledgeMissingSelection])
 
-  const { assistant: defaultAssistant } = useDefaultAssistant()
   const { workflows } = useWorkflows()
 
   // Only load digital employees when feature is enabled
@@ -465,24 +395,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
       refreshEmployees()
     }
   }, [pathname, isDigitalEmployeesEnabled]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const [editorOpen, setEditorOpen] = useState(false)
-  const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null)
-
-  const handleSelectAssistant = (assistant: Assistant) => selectAssistant(assistant.id)
-  const handleCreateAssistant = () => { setEditingAssistant(null); setEditorOpen(true) }
-  const handleEditAssistant = (assistant: Assistant) => { setEditingAssistant(assistant); setEditorOpen(true) }
-
-  const handleSaveAssistant = async (input: AssistantInput) => {
-    if (editingAssistant) {
-      await updateAssistant(editingAssistant.id, input)
-    } else {
-      const newAssistant = await addAssistant(input)
-      if (newAssistant) selectAssistant(newAssistant.id)
-    }
-  }
-
-  const handleDeleteAssistant = (id: string) => deleteAssistant(id)
 
   // Current section detection
   const getCurrentSection = () => {
@@ -511,18 +423,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
     .join("")
     .toUpperCase()
     .slice(0, 2) || "U"
-
-  // Keyboard shortcut: Cmd/Ctrl+B
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
-        e.preventDefault()
-        onToggle()
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [onToggle])
 
   // ─── Collapsed Sidebar (icon-only) ─────────────────────────────────
 
@@ -553,7 +453,11 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
           <div className="flex items-center justify-center pb-1">
             <Tooltip>
               <TooltipTrigger asChild>
-                <button onClick={onSearchOpen} className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all">
+                <button
+                  onClick={onSearchOpen}
+                  className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+                  aria-label="Search"
+                >
                   <Search className="h-5 w-5" />
                 </button>
               </TooltipTrigger>
@@ -570,6 +474,8 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
                   <TooltipTrigger asChild>
                     <Link
                       href={item.url}
+                      aria-label={item.title}
+                      aria-current={active ? "page" : undefined}
                       className={cn(
                         "flex items-center justify-center w-10 h-10 rounded-lg transition-all",
                         active
@@ -585,27 +491,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
               )
             })}
           </nav>
-
-          {/* Bottom: Theme + Settings */}
-          <div className="flex flex-col items-center gap-1 py-2 border-t border-sidebar-border">
-            <ThemeToggle />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link
-                  href="/dashboard/settings"
-                  className={cn(
-                    "flex items-center justify-center w-10 h-10 rounded-lg transition-all",
-                    isActive("/dashboard/settings")
-                      ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-                  )}
-                >
-                  <Settings className="h-5 w-5" />
-                </Link>
-              </TooltipTrigger>
-              <TooltipContent side="right">Settings</TooltipContent>
-            </Tooltip>
-          </div>
 
           {/* User Avatar */}
           <div className="flex items-center justify-center py-3 border-t border-sidebar-border">
@@ -632,10 +517,18 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
                     Account
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/dashboard/settings" className="cursor-pointer">
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
+                  </Link>
+                </DropdownMenuItem>
+                <ThemeMenuSelector />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => signOut({ callbackUrl: "/login" })}
-                  className="cursor-pointer text-destructive focus:text-destructive"
+                  variant="destructive"
+                  className="cursor-pointer"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
                   Sign out
@@ -652,28 +545,35 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
 
   return (
     <TooltipProvider delayDuration={0}>
-    <div className="relative flex flex-col h-full w-[260px] bg-sidebar border-r border-sidebar-border transition-all duration-200">
-      {/* Collapse button — on the sidebar border edge */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            onClick={onToggle}
-            className="absolute -right-3 top-4 z-50 flex items-center justify-center w-6 h-6 rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover shadow-sm transition-all"
-            aria-label="Collapse sidebar"
-          >
-            <ChevronsLeft className="h-3.5 w-3.5" />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right">Collapse sidebar</TooltipContent>
-      </Tooltip>
+      <div
+        className={cn(
+          "relative flex h-full flex-col border-r border-sidebar-border bg-sidebar transition-all duration-200",
+          mobile ? "w-full" : "w-[260px]"
+        )}
+      >
+        {/* Collapse button — on the sidebar border edge */}
+        {!mobile && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onToggle}
+                className="absolute -right-3 top-4 z-50 flex items-center justify-center w-6 h-6 rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover shadow-sm transition-all"
+                aria-label="Collapse sidebar"
+              >
+                <ChevronsLeft className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Collapse sidebar</TooltipContent>
+          </Tooltip>
+        )}
 
-      {/* Header: Logo + title */}
-      <div className="p-3 border-b border-sidebar-border">
-        <Link href="/dashboard/chat" className="flex items-center gap-2">
-          <BrandLogo className="h-8 w-8 rounded-lg" />
-          <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
-        </Link>
-      </div>
+        {/* Header: Logo + title */}
+        <div className={cn("border-b border-sidebar-border p-3", mobile && "pr-12")}>
+          <Link href="/dashboard/chat" className="flex items-center gap-2">
+            <BrandLogo className="h-8 w-8 rounded-lg" />
+            <span className="font-semibold text-sidebar-foreground">{brand.productName}</span>
+          </Link>
+        </div>
 
       {/* Primary Navigation */}
       <nav className="px-2 space-y-0.5">
@@ -687,6 +587,16 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
         </button>
         {mainNavItems.map((item) => {
           const active = isActive(item.url)
+          if (item.url === "/dashboard/chat") {
+            return (
+              <ChatNavigationItem
+                key={item.url}
+                active={active}
+                onMobileNavigate={mobile ? onToggle : undefined}
+              />
+            )
+          }
+
           return (
             <Link
               key={item.url}
@@ -708,32 +618,19 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
       {/* Contextual Panel */}
       <div className="flex-1 flex flex-col overflow-hidden p-2 mt-2 border-t border-sidebar-border">
         {/* Section Header */}
-        <div className="shrink-0">
-          {currentSection === sections.chat ? (
-            <AssistantSelectorHeader
-              assistants={assistants}
-              selectedAssistant={selectedAssistant}
-              onSelectAssistant={handleSelectAssistant}
-              onCreateAssistant={handleCreateAssistant}
-              onEditAssistant={handleEditAssistant}
-            />
-          ) : (
+        {currentSection !== sections.chat && (
+          <div className="shrink-0">
             <div className="px-2 py-1.5 mb-2">
               <h3 className="text-sm font-medium text-sidebar-foreground">{currentSection.title}</h3>
               <p className="text-xs text-sidebar-muted">{currentSection.subtitle}</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin">
           {currentSection === sections.chat && (
             <ChatSectionContent
-              assistants={assistants}
-              selectedAssistant={selectedAssistant}
-              onSelectAssistant={handleSelectAssistant}
-              onCreateAssistant={handleCreateAssistant}
-              onEditAssistant={handleEditAssistant}
               getAssistantById={getAssistantById}
             />
           )}
@@ -1000,26 +897,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
         </div>
       </div>
 
-      {/* Bottom: Theme + Settings */}
-      <div className="px-2 py-2 border-t border-sidebar-border space-y-0.5">
-        <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-sm text-sidebar-foreground/70">Theme</span>
-          <ThemeToggle />
-        </div>
-        <Link
-          href="/dashboard/settings"
-          className={cn(
-            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all",
-            isActive("/dashboard/settings")
-              ? "bg-sidebar-accent text-sidebar-foreground font-medium"
-              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
-          )}
-        >
-          <Settings className="h-5 w-5" />
-          <span>Settings</span>
-        </Link>
-      </div>
-
       {/* Free-plan usage + upgrade (cloud; hides on paid/OSS) */}
       <PlanUsageBadge />
 
@@ -1052,10 +929,18 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
                 Account
               </Link>
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/dashboard/settings" className="cursor-pointer">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <ThemeMenuSelector />
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => signOut({ callbackUrl: "/login" })}
-              className="cursor-pointer text-destructive focus:text-destructive"
+              variant="destructive"
+              className="cursor-pointer"
             >
               <LogOut className="mr-2 h-4 w-4" />
               Sign out
@@ -1064,14 +949,6 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen }: AppSidebarProps) 
         </DropdownMenu>
       </div>
 
-      {/* Assistant Editor Dialog */}
-      <AssistantEditor
-        open={editorOpen}
-        onOpenChange={setEditorOpen}
-        assistant={editingAssistant}
-        onSave={handleSaveAssistant}
-        onDelete={handleDeleteAssistant}
-      />
     </div>
     </TooltipProvider>
   )
