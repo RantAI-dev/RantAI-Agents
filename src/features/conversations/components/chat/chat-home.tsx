@@ -44,6 +44,10 @@ import type {
   KBGroup,
   ChatToolbarHydrationData,
 } from "./pages/chat-hydration-data"
+import {
+  NEW_CHAT_DRAFT_STORAGE_KEY,
+  parseNewChatDraft,
+} from "./pages/new-chat-draft"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -90,7 +94,7 @@ export interface ChatHomeProps {
     assistantId: string,
     initialMessage?: string,
     settings?: InitialChatSettings,
-  ) => void | Promise<void>
+  ) => Promise<boolean>
   initialToolbarData?: ChatToolbarHydrationData | null
   /** When true, the input + create buttons disable so the user knows the session is being persisted before navigation. */
   creatingSession?: boolean
@@ -315,6 +319,9 @@ export function ChatHome({
   const [selectedToolNames, setSelectedToolNames] = useState<string[]>([])
   const [skillMode, setSkillMode] = useState<SkillMode>("auto")
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [draftReady, setDraftReady] = useState(false)
+  const restoredToolbarDraftRef = useRef(false)
+  const submittedDraftRef = useRef(false)
   // Seed Canvas mode from the selected agent's configured default (canvas
   // starter agents) so the first message produces their artifact; reset when
   // the user switches agents. The user can still change it in the toolbar.
@@ -326,6 +333,7 @@ export function ChatHome({
   }, [activeAssistant?.id, activeAssistant?.chatConfig?.defaultCanvasMode])
 
   const handleAssistantSelect = useCallback((assistantId: string) => {
+    restoredToolbarDraftRef.current = false
     onSelectAssistant(assistantId)
     setAssistantPickerOpen(false)
     setAssistantSearch("")
@@ -430,6 +438,78 @@ export function ChatHome({
     setAssistantDefaultSkillIds([])
     setToolbarLoadedForAssistantId(null)
   }, [activeAssistant?.id, initialToolbarData])
+
+  // Restore the unsent composer after the client-selected assistant and its
+  // server-hydrated toolbar defaults have settled. Files intentionally stay
+  // in memory only; File objects cannot be serialized to sessionStorage.
+  useEffect(() => {
+    if (!clientReady) return
+
+    const draft = parseNewChatDraft(sessionStorage.getItem(NEW_CHAT_DRAFT_STORAGE_KEY))
+    if (draft) {
+      restoredToolbarDraftRef.current = true
+      setInput(draft.input)
+      setWebSearchOverride(draft.webSearchOverride)
+      setCodeInterpreterOverride(draft.codeInterpreterOverride)
+      setSelectedKBGroupIds(draft.selectedKBGroupIds)
+      setToolMode(draft.toolMode)
+      setSelectedToolNames(draft.selectedToolNames)
+      setSkillMode(draft.skillMode)
+      setSelectedSkillIds(draft.selectedSkillIds)
+      setCanvasMode(draft.canvasMode)
+    }
+    setDraftReady(true)
+  }, [clientReady])
+
+  // Keep one unsent new-chat draft per browser tab. A short debounce avoids
+  // synchronously writing storage on every keystroke.
+  useEffect(() => {
+    if (!draftReady || submittedDraftRef.current) return
+
+    const timeout = window.setTimeout(() => {
+      sessionStorage.setItem(
+        NEW_CHAT_DRAFT_STORAGE_KEY,
+        JSON.stringify({
+          input,
+          webSearchOverride,
+          codeInterpreterOverride,
+          selectedKBGroupIds,
+          toolMode,
+          selectedToolNames,
+          skillMode,
+          selectedSkillIds,
+          canvasMode,
+          updatedAt: Date.now(),
+        }),
+      )
+    }, 150)
+
+    return () => window.clearTimeout(timeout)
+  }, [
+    canvasMode,
+    codeInterpreterOverride,
+    draftReady,
+    input,
+    selectedKBGroupIds,
+    selectedSkillIds,
+    selectedToolNames,
+    skillMode,
+    toolMode,
+    webSearchOverride,
+  ])
+
+  // A browser reload/close cannot preserve File objects, so warn only in that
+  // case. Client-side Chat navigation keeps this component and its files alive.
+  useEffect(() => {
+    if (attachedFiles.length === 0) return
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [attachedFiles.length])
 
   useEffect(() => {
     // Organization can hydrate after first render. Force KB groups refresh for new org scope.
@@ -571,8 +651,10 @@ export function ChatHome({
             .map((t: { name: string }) => t.name)
             .filter((name: string) => visibleToolNames.has(name))
           setAssistantDefaultToolNames(defaults)
-          setSelectedToolNames(defaults)
-          setToolMode(defaults.length > 0 ? "auto" : "off")
+          if (!restoredToolbarDraftRef.current) {
+            setSelectedToolNames(defaults)
+            setToolMode(defaults.length > 0 ? "auto" : "off")
+          }
         } else {
           setAssistantDefaultToolNames([])
           setSelectedToolNames([])
@@ -585,8 +667,10 @@ export function ChatHome({
             .filter((s: { enabled?: boolean }) => s.enabled !== false)
             .map((s: { id: string }) => s.id)
           setAssistantDefaultSkillIds(defaults)
-          setSelectedSkillIds(defaults)
-          setSkillMode(defaults.length > 0 ? "auto" : "off")
+          if (!restoredToolbarDraftRef.current) {
+            setSelectedSkillIds(defaults)
+            setSkillMode(defaults.length > 0 ? "auto" : "off")
+          }
         } else {
           setAssistantDefaultSkillIds([])
           setSelectedSkillIds([])
@@ -641,7 +725,7 @@ export function ChatHome({
   }, [])
 
   const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
+    async (e: React.FormEvent) => {
       e.preventDefault()
       const message = input.trim()
       if (!message || !activeAssistant) return
@@ -659,9 +743,13 @@ export function ChatHome({
         canvasMode: canvasMode || undefined,
       }
 
+      const created = await onCreateSession(activeAssistant.id, message, settings)
+      if (!created) return
+
+      submittedDraftRef.current = true
+      sessionStorage.removeItem(NEW_CHAT_DRAFT_STORAGE_KEY)
       setInput("")
       setAttachedFiles([])
-      onCreateSession(activeAssistant.id, message, settings)
     },
     [input, activeAssistant, attachedFiles, effectiveWebSearch, effectiveCodeInterpreter, selectedKBGroupIds, toolMode, selectedToolNames, skillMode, selectedSkillIds, canvasMode, onCreateSession],
   )
@@ -691,13 +779,13 @@ export function ChatHome({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col px-5">
+        <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-5">
           {/* Free-plan upsell banner (cloud; hides itself on paid/OSS) */}
           <div className="w-full pt-4">
             <FreePlanBanner />
           </div>
 
-          <div className="flex w-full flex-1 flex-col items-center justify-center py-10 sm:py-14">
+          <div className="flex w-full flex-col items-center justify-center pt-10 pb-6 sm:pt-14 sm:pb-8">
             {/* ── Visit-level greeting ─────────────────────────────────── */}
             <div className="mb-6 text-center">
               <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -705,104 +793,10 @@ export function ChatHome({
               </h2>
             </div>
 
-            {/* ── Active assistant selector ────────────────────────────── */}
-            <Popover
-          open={assistantPickerOpen}
-          onOpenChange={(open) => {
-            setAssistantPickerOpen(open)
-            if (!open) setAssistantSearch("")
-          }}
-        >
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-full border border-border/70 bg-background px-3 py-1.5 text-xs shadow-xs transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              aria-label={
-                activeAssistant
-                  ? `Select agent. Current agent: ${activeAssistant.name}`
-                  : "Select an agent"
-              }
-            >
-              <span className="text-muted-foreground">Using</span>
-              {activeAssistant ? (
-                <>
-                  <span aria-hidden>{activeAssistant.emoji}</span>
-                  <span className="max-w-[220px] truncate font-medium text-foreground">
-                    {activeAssistant.name}
-                  </span>
-                </>
-              ) : (
-                <span className="font-medium text-foreground">
-                  Select an agent
-                </span>
-              )}
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[min(320px,calc(100vw-2rem))] p-2" align="center">
-            <div className="relative mb-2">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <Input
-                value={assistantSearch}
-                onChange={(event) => setAssistantSearch(event.target.value)}
-                placeholder="Search agents..."
-                aria-label="Search agents"
-                className="h-9 pl-8"
-              />
-            </div>
-            <div
-              className="max-h-72 space-y-1 overflow-y-auto"
-              role="listbox"
-              aria-label="Available agents"
-            >
-              {filteredAssistants.length === 0 ? (
-                <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-                  No agents found
-                </p>
-              ) : (
-                filteredAssistants.map((assistant) => {
-                  const selected = assistant.id === activeAssistant?.id
-                  return (
-                    <button
-                      key={assistant.id}
-                      type="button"
-                      role="option"
-                      aria-selected={selected}
-                      onClick={() => handleAssistantSelect(assistant.id)}
-                      className={cn(
-                        "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
-                        selected
-                          ? "bg-muted text-foreground"
-                          : "text-foreground/80 hover:bg-muted/60 hover:text-foreground"
-                      )}
-                    >
-                      <span className="text-lg" aria-hidden>{assistant.emoji}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">
-                          {assistant.name}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {assistant.description || "No description"}
-                        </span>
-                      </span>
-                      {selected && (
-                        <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-                      )}
-                    </button>
-                  )
-                })
-              )}
-            </div>
-          </PopoverContent>
-            </Popover>
-
             {/* ── Contextual prompt suggestions ─────────────────────────── */}
             <motion.div
           key={`prompt-suggestions-${activeAssistant?.id ?? "default"}`}
-          className="scrollbar-none mb-4 mt-4 flex w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 sm:w-auto sm:flex-wrap sm:justify-center sm:overflow-visible sm:pb-0"
+          className="scrollbar-none mb-4 flex w-full flex-nowrap items-center justify-start gap-2 overflow-x-auto pb-1 sm:w-auto sm:flex-wrap sm:justify-center sm:overflow-visible sm:pb-0"
           variants={stagger}
           initial="hidden"
           animate="show"
@@ -859,7 +853,101 @@ export function ChatHome({
               className="mb-2"
             />
 
-            <div className="rounded-2xl border border-border/60 bg-muted/30 shadow-sm transition-all focus-within:border-foreground/20 focus-within:shadow-md focus-within:bg-muted/40">
+            <div className="rounded-2xl border border-border/60 bg-muted/30 transition-colors focus-within:border-foreground/20 focus-within:bg-muted/40">
+              {/* Agent selection belongs to this new-chat composer. */}
+              <div className="px-2 pt-2">
+                <Popover
+                  open={assistantPickerOpen}
+                  onOpenChange={(open) => {
+                    setAssistantPickerOpen(open)
+                    if (!open) setAssistantSearch("")
+                  }}
+                >
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-colors hover:bg-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                      aria-label={
+                        activeAssistant
+                          ? `Select agent. Current agent: ${activeAssistant.name}`
+                          : "Select an agent"
+                      }
+                    >
+                      <span className="text-muted-foreground">Using</span>
+                      {activeAssistant ? (
+                        <>
+                          <span aria-hidden>{activeAssistant.emoji}</span>
+                          <span className="max-w-[220px] truncate font-medium text-foreground">
+                            {activeAssistant.name}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="font-medium text-foreground">Select an agent</span>
+                      )}
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[min(320px,calc(100vw-2rem))] p-2" align="start">
+                    <div className="relative mb-2">
+                      <Search
+                        className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                        aria-hidden
+                      />
+                      <Input
+                        value={assistantSearch}
+                        onChange={(event) => setAssistantSearch(event.target.value)}
+                        placeholder="Search agents..."
+                        aria-label="Search agents"
+                        className="h-9 pl-8"
+                      />
+                    </div>
+                    <div
+                      className="max-h-72 space-y-1 overflow-y-auto"
+                      role="listbox"
+                      aria-label="Available agents"
+                    >
+                      {filteredAssistants.length === 0 ? (
+                        <p className="px-3 py-6 text-center text-sm text-muted-foreground">
+                          No agents found
+                        </p>
+                      ) : (
+                        filteredAssistants.map((assistant) => {
+                          const selected = assistant.id === activeAssistant?.id
+                          return (
+                            <button
+                              key={assistant.id}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              onClick={() => handleAssistantSelect(assistant.id)}
+                              className={cn(
+                                "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
+                                selected
+                                  ? "bg-muted text-foreground"
+                                  : "text-foreground/80 hover:bg-muted/60 hover:text-foreground"
+                              )}
+                            >
+                              <span className="text-lg" aria-hidden>{assistant.emoji}</span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-medium">
+                                  {assistant.name}
+                                </span>
+                                <span className="block truncate text-xs text-muted-foreground">
+                                  {assistant.description || "No description"}
+                                </span>
+                              </span>
+                              {selected && (
+                                <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                              )}
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
               <div className="relative">
                 <Textarea
                   ref={textareaRef}
