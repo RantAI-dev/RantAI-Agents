@@ -503,10 +503,15 @@ export async function searchSimilarBatch(
  * The previous implementation issued one CREATE per chunk sequentially —
  * a 128KB artifact produces ~140 chunks at the default 1000-char split,
  * so indexing serialized into ~140 round-trips back-to-back. Parallelism
- * is bounded so the surreal connection isn't flooded; 8 concurrent
- * inserts keeps the throughput up without saturating a single connection.
+ * is bounded so the surreal connection isn't flooded. Was 8, but the MTREE
+ * (embedding ANN) index takes a table-level write lock, so 8 concurrent
+ * CREATEs on a figure-heavy doc (600+ chunks) produced a storm of
+ * optimistic-lock "read or write conflict" retries that could exhaust the
+ * retry budget → 500 "Failed to create document". 3 keeps useful throughput
+ * while cutting index contention. Env-tunable so it can be adjusted without
+ * a rebuild (set KB_STORE_CHUNKS_CONCURRENCY in the stack).
  */
-const STORE_CHUNKS_CONCURRENCY = 8
+const STORE_CHUNKS_CONCURRENCY = Number(process.env.KB_STORE_CHUNKS_CONCURRENCY) || 3
 
 /**
  * SurrealDB's MTREE index (used on document_chunk.embedding for cosine ANN)
