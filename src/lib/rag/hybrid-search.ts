@@ -13,6 +13,7 @@
 
 import { getSurrealClient, SurrealDBClient } from "../surrealdb";
 import { generateEmbedding } from "./embeddings";
+import { getDefaultReranker } from "./rerankers";
 import { Entity } from "../document-intelligence/types";
 import { prisma } from "../prisma";
 
@@ -864,7 +865,49 @@ export async function fetchMatchingFigures(
   }
   scored.sort((a, b) => b.score - a.score);
 
-  return scored.slice(0, limit).map(({ row, assetKey }) => {
+  // Relevance gate: keyword overlap alone (esp. a caption keyword that only
+  // appears in the retrieved TEXT, score=1) surfaces off-topic pictures, because
+  // figure captions are thin and borrow their page's prose. Rerank the keyword
+  // candidates against the QUERY itself and keep only those the reranker scores
+  // above KB_FIGURE_MIN_RERANK. Env-tunable (no rebuild): unset = gate off (keeps
+  // old keyword behaviour); the per-query figure scores are logged so the right
+  // floor can be picked from real traffic.
+  let final: Scored[] = scored;
+  const reranker = getDefaultReranker();
+  const rawMin = process.env.KB_FIGURE_MIN_RERANK;
+  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : NaN;
+  if (reranker && scored.length > 0) {
+    try {
+      const ranked = await reranker.rerank(
+        query,
+        scored.map((s, i) => ({
+          id: String(s.row.id),
+          text: s.caption,
+          originalRank: i,
+          originalScore: s.score,
+        })),
+        scored.length,
+      );
+      const byId = new Map(scored.map((s) => [String(s.row.id), s]));
+      const rr = ranked
+        .map((r) => {
+          const s = byId.get(r.id);
+          return s ? { s, score: r.score } : null;
+        })
+        .filter((x): x is { s: Scored; score: number } => x !== null);
+      console.log(
+        `[RAG] figure rerank (floor=${rawMin ?? "off"}): [${rr
+          .map((x) => `${x.score.toFixed(3)}:${x.s.caption.slice(0, 22)}`)
+          .join(" | ")}]`,
+      );
+      const gated = Number.isNaN(figMin) ? rr : rr.filter((x) => x.score >= figMin);
+      final = gated.map((x) => x.s);
+    } catch (err) {
+      console.warn(`[RAG] figure rerank failed (non-fatal): ${(err as Error).message?.slice(0, 100)}`);
+    }
+  }
+
+  return final.slice(0, limit).map(({ row, assetKey }) => {
     const meta = row.metadata as
       | { documentTitle?: string; section?: string; page?: number }
       | undefined;
