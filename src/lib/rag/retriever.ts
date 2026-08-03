@@ -52,6 +52,60 @@ export interface RetrievalResult {
 }
 
 /**
+ * Figure relevance policy — applied after rerank so only figures the model
+ * actually scored as relevant to THIS query survive.
+ *
+ * Why: a figure chunk is embedded on its caption + the prose that happened to
+ * sit near it on the page, so it can be retrieved whenever that page's text
+ * loosely matches — even when the picture itself is off-topic. Text chunks are
+ * always kept; figures are gated by their rerank score and capped in number.
+ *
+ * Tunable via env (no rebuild needed to adjust):
+ *   KB_FIGURE_MIN_RERANK      absolute rerank-score floor a figure must clear
+ *                             (unset = disabled; bge-reranker score scale is
+ *                             logged below so the right value can be picked).
+ *   KB_FIGURE_MAX_PER_ANSWER  max figures kept per retrieval (default 3).
+ */
+function applyFigurePolicy(
+  chunks: SearchResult[],
+  scoreById: Map<string, number>,
+): SearchResult[] {
+  const rawMin = process.env.KB_FIGURE_MIN_RERANK;
+  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : NaN;
+  const figMax = Number(process.env.KB_FIGURE_MAX_PER_ANSWER) || 3;
+
+  let kept = 0;
+  const dropped: Array<{ score: number; label: string }> = [];
+  const out = chunks.filter((c) => {
+    if (c.chunkType !== "figure") return true; // text always kept
+    const score = scoreById.get(c.id);
+    const belowFloor = !Number.isNaN(figMin) && score !== undefined && score < figMin;
+    const overCap = kept >= figMax;
+    if (belowFloor || overCap) {
+      dropped.push({
+        score: score ?? NaN,
+        label: `${(c.section ?? c.content ?? "").slice(0, 40)}${overCap ? " [over-cap]" : ""}`,
+      });
+      return false;
+    }
+    kept++;
+    return true;
+  });
+
+  // Log figure scores (kept + dropped) so KB_FIGURE_MIN_RERANK can be tuned to
+  // the reranker's actual scale from real queries.
+  const figScores = chunks
+    .filter((c) => c.chunkType === "figure")
+    .map((c) => `${(scoreById.get(c.id) ?? NaN).toFixed(3)}:${(c.section ?? "").slice(0, 24)}`);
+  if (figScores.length) {
+    console.log(
+      `[RAG] figure policy: kept ${kept}/${figScores.length} (floor=${rawMin ?? "off"} cap=${figMax}) scores=[${figScores.join(" | ")}]`,
+    );
+  }
+  return out;
+}
+
+/**
  * Retrieve relevant context for a query
  * Returns formatted context string and source information
  */
@@ -149,9 +203,11 @@ export async function retrieveContext(
     try {
       const ranked = await reranker.rerank(query, candidates, maxChunks);
       const byId = new Map(chunks.map((c) => [c.id, c]));
+      const scoreById = new Map(ranked.map((r) => [r.id, r.score]));
       chunks = ranked
         .map((r) => byId.get(r.id))
         .filter((c): c is SearchResult => c !== undefined);
+      chunks = applyFigurePolicy(chunks, scoreById); // gate + cap figures by relevance
     } catch (err) {
       console.warn(
         `[RAG] rerank (${reranker.name}) failed, falling back to fused order: ${(err as Error).message.slice(0, 120)}`
