@@ -2,10 +2,11 @@ import { getRagConfig } from "../config";
 import { CohereReranker } from "./cohere-reranker";
 import { LlmReranker } from "./llm-reranker";
 import { VllmReranker } from "./vllm-reranker";
+import { TeiReranker } from "./tei-reranker";
 import type { Reranker, RerankCandidate, RerankedResult } from "./types";
 
 export type { Reranker, RerankCandidate, RerankedResult };
-export { LlmReranker, CohereReranker, VllmReranker };
+export { LlmReranker, CohereReranker, VllmReranker, TeiReranker };
 
 /**
  * Returns the configured reranker, or null if rerank is disabled.
@@ -24,6 +25,13 @@ export function getDefaultReranker(): Reranker | null {
   if (!rerankEnabled) return null;
 
   const provider = (process.env.KB_RERANK_PROVIDER || "").toLowerCase();
+
+  if (provider === "tei") {
+    // Hugging Face Text-Embeddings-Inference /rerank (the GB10 tei-rerank service).
+    const baseUrl = process.env.KB_RERANK_BASE_URL || "http://tei-rerank:80";
+    const model = process.env.KB_RERANK_MODEL || "BAAI/bge-reranker-v2-m3";
+    return new TeiReranker(baseUrl, model);
+  }
 
   if (provider === "vllm") {
     const baseUrl = process.env.KB_RERANK_BASE_URL || "http://localhost:8200";

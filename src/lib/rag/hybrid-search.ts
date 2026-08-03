@@ -875,7 +875,11 @@ export async function fetchMatchingFigures(
   let final: Scored[] = scored;
   const reranker = getDefaultReranker();
   const rawMin = process.env.KB_FIGURE_MIN_RERANK;
-  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : NaN;
+  // Default floor 0.2: bge-reranker-v2-m3 (TEI, sigmoid) scores relevant
+  // figures ~0.5–0.8 and off-topic ones ~0.00002, so 0.2 cleanly cuts noise
+  // while keeping weaker-but-real matches. Override via KB_FIGURE_MIN_RERANK
+  // (set to 0 to disable the floor).
+  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : 0.2;
   if (reranker && scored.length > 0) {
     try {
       const ranked = await reranker.rerank(

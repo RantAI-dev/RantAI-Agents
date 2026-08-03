@@ -71,7 +71,8 @@ function applyFigurePolicy(
   scoreById: Map<string, number>,
 ): SearchResult[] {
   const rawMin = process.env.KB_FIGURE_MIN_RERANK;
-  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : NaN;
+  // Default 0.2 — see fetchMatchingFigures (bge-reranker sigmoid scale).
+  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : 0.2;
   const figMax = Number(process.env.KB_FIGURE_MAX_PER_ANSWER) || 3;
 
   let kept = 0;
