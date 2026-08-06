@@ -152,13 +152,24 @@ async function main() {
   // them to the generator, S6 additionally indexes them for its recall arm.
   const needDescriptions = systems.includes("anchor_vlm") || systems.includes("anchor_hybrid")
 
-  const indexes = new Map<string, DocIndex>()
+  // Figure records for every document: small (no vectors), needed throughout to
+  // resolve metrics. The heavy per-document INDEXES are built one at a time
+  // below and released immediately after that document's questions are done —
+  // holding all 13 at once alongside the box's resident vLLM and ollama models
+  // got the process killed by the OOM reaper, twice, with no error in the log.
   const figuresById = new Map<string, FigureRecord>()
   const descByDoc = new Map<string, Map<string, string>>()
-
   for (const slug of docSlugs) {
     const doc = JSON.parse(fs.readFileSync(path.join(BUILT_DIR, `${slug}.json`), "utf-8")) as BuiltDoc
     doc.figures.forEach((f) => figuresById.set(f.id, f))
+  }
+
+  // ── Run, document by document ──
+  const scored: Scored[] = []
+  const raw: Array<{ q: BenchQuestion; system: SystemId; out: SystemOutput }> = []
+
+  for (const slug of docSlugs) {
+    const doc = JSON.parse(fs.readFileSync(path.join(BUILT_DIR, `${slug}.json`), "utf-8")) as BuiltDoc
 
     let desc = new Map<string, string>()
     if (needDescriptions) {
@@ -169,19 +180,13 @@ async function main() {
     descByDoc.set(slug, desc)
 
     console.log(`[ikat] indexing ${slug} (${doc.chunks.length} chunks)…`)
-    indexes.set(slug, await buildIndex(doc, desc))
-  }
+    let baseIdx: DocIndex | null = await buildIndex(doc, desc)
 
-  // ── Run ──
-  const scored: Scored[] = []
-  const raw: Array<{ q: BenchQuestion; system: SystemId; out: SystemOutput }> = []
-
-  for (const q of questions) {
-    const baseIdx = indexes.get(q.docSlug)
-    if (!baseIdx) continue
+    for (const q of questions.filter((x) => x.docSlug === slug)) {
     for (const system of systems) {
       try {
         // S5 differs from S4 only in having descriptions available.
+        if (!baseIdx) continue
         const idx: DocIndex =
           system === "anchor_vlm" || system === "anchor_hybrid"
             ? baseIdx
@@ -205,6 +210,14 @@ async function main() {
       }
     }
     if (scored.length % 25 === 0) console.log(`[ikat] … ${scored.length} system-runs done`)
+    }
+
+    // Release this document's vectors before touching the next one.
+    baseIdx = null
+    // Nudge the collector where the runtime offers one — dropping the reference
+    // is what matters, this only makes the release prompt rather than eventual.
+    const gc = (globalThis as { Bun?: { gc?: (sync: boolean) => void } }).Bun?.gc
+    if (gc) gc(true)
   }
 
   // ── Judge: answer quality (sampled) ──
