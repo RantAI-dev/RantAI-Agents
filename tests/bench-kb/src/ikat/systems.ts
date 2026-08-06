@@ -19,7 +19,8 @@
  */
 import * as fs from "node:fs"
 import * as path from "node:path"
-import { chat, embed, cosine, sleep } from "../lib"
+import { cosine, sleep } from "../lib"
+import { genChat as chat, genEmbed as embed } from "./providers"
 import { splitSentences } from "../placement-metrics"
 import type { BuiltDoc, Chunk, FigureRecord } from "./build-corpus"
 
