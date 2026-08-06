@@ -44,6 +44,20 @@ describe("splitSentences", () => {
   it("returns empty for blank input", () => {
     expect(splitSentences("   ")).toEqual([])
   })
+
+  it("keeps a trailing citation marker on its own sentence", () => {
+    // Generators write "…gulung. [1]" — a naive split makes "[1]" a sentence,
+    // which shifts every slot after it and feeds an empty token to the
+    // similarity that decides ideal().
+    expect(splitSentences("Alat ukurnya penggaris. [1] Lalu meteran. [2]")).toEqual([
+      "Alat ukurnya penggaris. [1]",
+      "Lalu meteran. [2]",
+    ])
+  })
+
+  it("merges a multi-citation fragment too", () => {
+    expect(splitSentences("Jawabannya begitu. [1][2]")).toEqual(["Jawabannya begitu. [1][2]"])
+  })
 })
 
 describe("idealSlot", () => {
