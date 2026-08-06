@@ -16,7 +16,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { loadEnv } from "./env"
 import { cosine, sleep } from "../lib"
-import { genEmbed as embed, providerInfo } from "./providers"
+import { genEmbed as embed, providerInfo, flushEmbedCache } from "./providers"
 import {
   DEFAULT_JUDGE,
   assertJudgeIndependence,
@@ -341,8 +341,15 @@ async function main() {
 }
 
 if (import.meta.main) {
-  main().catch((e) => {
-    console.error(e)
-    process.exit(1)
-  })
+  // Persist the embedding cache on the way out, success or failure — a run that
+  // dies to a provider quota must not throw away the embeddings it already paid
+  // for, or the retry costs the same again.
+  const done = () => flushEmbedCache()
+  main()
+    .then(done)
+    .catch((e) => {
+      done()
+      console.error(e)
+      process.exit(1)
+    })
 }
