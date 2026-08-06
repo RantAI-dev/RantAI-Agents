@@ -18,6 +18,9 @@
  * Qwen/SEA-LION variant — judging SEA-LION output with SEA-LION would be exactly
  * the self-preference the guard exists to prevent.
  */
+import * as fs from "node:fs"
+import * as path from "node:path"
+import { createHash } from "node:crypto"
 import { chat as orChat, embed as orEmbed, type ChatOut } from "../lib"
 
 export type Provider = "openrouter" | "ugm" | "mistral"
@@ -164,6 +167,46 @@ export function genChat(model: string, messages: unknown[], maxTokens = 900): Pr
   return orChat(model, messages as never[], maxTokens)
 }
 
+
+// ── Embedding cache ────────────────────────────────────────────────────────
+
+/**
+ * Disk cache for embeddings, keyed by (model, text).
+ *
+ * Embedding is by far the highest-volume call in a sweep — 3,137 chunks before a
+ * single question is asked — and it is perfectly deterministic, so recomputing
+ * it on every run is pure waste. More importantly it is what makes the benchmark
+ * survive a flaky provider: a run that dies to a quota error resumes from the
+ * cache in seconds instead of re-spending the whole index.
+ *
+ * Written through on every batch, so even a hard kill keeps what it earned.
+ */
+const CACHE_DIR = path.resolve(import.meta.dirname, "../..", "corpus", "embed-cache")
+
+let cacheFile: string | null = null
+let cache: Record<string, number[]> | null = null
+let pendingWrites = 0
+
+function keyFor(model: string, text: string): string {
+  return createHash("sha1").update(`${model}\u0000${text}`).digest("hex")
+}
+
+function loadCache(model: string): Record<string, number[]> {
+  const file = path.join(CACHE_DIR, `${model.replace(/[^\w.-]/g, "_")}.json`)
+  if (cache && cacheFile === file) return cache
+  fs.mkdirSync(CACHE_DIR, { recursive: true })
+  cacheFile = file
+  cache = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf-8")) as Record<string, number[]>) : {}
+  return cache
+}
+
+function flushCache(force = false): void {
+  if (!cache || !cacheFile) return
+  if (!force && pendingWrites < 32) return
+  fs.writeFileSync(cacheFile, JSON.stringify(cache))
+  pendingWrites = 0
+}
+
 // ── Embeddings ─────────────────────────────────────────────────────────────
 
 /**
@@ -188,13 +231,57 @@ async function teiEmbed(input: string | string[]): Promise<{ vectors: number[][]
   return { vectors, dim: vectors[0]?.length ?? 0, ms }
 }
 
-export function genEmbed(
+function embedUncached(
   model: string,
-  input: string | string[],
+  input: string[],
 ): Promise<{ vectors: number[][]; dim: number; ms: number }> {
   if (PROVIDER === "ugm") return teiEmbed(input)
   if (PROVIDER === "mistral") return mistralEmbed(input)
   return orEmbed(model, input)
+}
+
+/**
+ * Embed with a read-through disk cache. Only the texts missing from the cache
+ * reach the provider, and results are merged back in the caller's order.
+ */
+export async function genEmbed(
+  model: string,
+  input: string | string[],
+): Promise<{ vectors: number[][]; dim: number; ms: number }> {
+  const texts = Array.isArray(input) ? input : [input]
+  const c = loadCache(model)
+
+  const missIdx: number[] = []
+  const out: (number[] | undefined)[] = texts.map((t, i) => {
+    const hit = c[keyFor(model, t)]
+    if (hit) return hit
+    missIdx.push(i)
+    return undefined
+  })
+
+  let ms = 0
+  if (missIdx.length) {
+    const res = await embedUncached(
+      model,
+      missIdx.map((i) => texts[i]),
+    )
+    ms = res.ms
+    missIdx.forEach((srcIdx, k) => {
+      const v = res.vectors[k]
+      out[srcIdx] = v
+      c[keyFor(model, texts[srcIdx])] = v
+      pendingWrites++
+    })
+    flushCache()
+  }
+
+  const vectors = out.map((v) => v ?? [])
+  return { vectors, dim: vectors[0]?.length ?? 0, ms }
+}
+
+/** Persist anything still buffered. Callers should invoke this before exiting. */
+export function flushEmbedCache(): void {
+  flushCache(true)
 }
 
 /** Human-readable provider description for the results header. */
