@@ -25,7 +25,9 @@ import { splitSentences } from "../placement-metrics"
 import type { BuiltDoc, Chunk, FigureRecord } from "./build-corpus"
 
 const BENCH_ROOT = path.resolve(import.meta.dirname, "../..")
-const FIG_DIR = path.join(BENCH_ROOT, "corpus", "figures")
+// Which corpus's crops to read. The two extraction paths keep separate figure
+// sets and must not be crossed — a figure id from one does not exist in the other.
+const FIG_DIR = path.join(BENCH_ROOT, "corpus", process.env.IKAT_FIGURES ?? "figures")
 
 export const EMBED_MODEL = process.env.IKAT_EMBED_MODEL ?? "qwen/qwen3-embedding-8b"
 /** Not the judge's vendor — enforced by assertJudgeIndependence at run time. */

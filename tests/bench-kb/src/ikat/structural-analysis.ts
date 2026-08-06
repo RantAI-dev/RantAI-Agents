@@ -26,8 +26,11 @@ import * as path from "node:path"
 import type { BuiltDoc, FigureRecord } from "./build-corpus"
 
 const BENCH_ROOT = path.resolve(import.meta.dirname, "../..")
-const BUILT_DIR = path.join(BENCH_ROOT, "corpus", "built")
-const OUT = path.join(BENCH_ROOT, "corpus", "structural-analysis.json")
+// Which corpus to analyse. The two extraction paths produce materially
+// different figure sets and must never be pooled — see the manuscript, 4.1.
+const CORPUS = process.env.IKAT_CORPUS ?? "built"
+const BUILT_DIR = path.join(BENCH_ROOT, "corpus", CORPUS)
+const OUT = path.join(BENCH_ROOT, "corpus", `structural-analysis-${CORPUS}.json`)
 
 /** Same index text a caption-based system would build for the figure. */
 function indexText(f: FigureRecord): string {
@@ -340,7 +343,7 @@ function main() {
   fs.writeFileSync(OUT, JSON.stringify(summary, null, 2))
 
   const f1 = (n: number) => n.toFixed(1)
-  console.log(`\n=== IKAT-Bench structural analysis (no model involved) ===`)
+  console.log(`\n=== IKAT-Bench structural analysis — corpus "${CORPUS}" (no model involved) ===`)
   console.log(`books ${summary.books}   usable figures ${total}\n`)
   console.log(`A1  printed caption available      ${summary.captioned} (${f1(summary.captionedPct)}%)`)
   console.log(`A2  lexically indistinguishable    ${summary.indistinguishable} (${f1(summary.indistinguishablePct)}%)`)

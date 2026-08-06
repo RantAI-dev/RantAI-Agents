@@ -52,9 +52,9 @@ import type { BenchQuestion } from "./generate-questions"
 loadEnv()
 
 const BENCH_ROOT = path.resolve(import.meta.dirname, "../..")
-const BUILT_DIR = path.join(BENCH_ROOT, "corpus", "built")
+const BUILT_DIR = path.join(BENCH_ROOT, "corpus", process.env.IKAT_CORPUS ?? "built")
 const RESULTS_DIR = path.join(BENCH_ROOT, "corpus", "results")
-const QUESTIONS = path.join(BENCH_ROOT, "corpus", "questions.json")
+const QUESTIONS = path.join(BENCH_ROOT, "corpus", process.env.IKAT_QUESTIONS ?? "questions.json")
 const DESC_DIR = path.join(BENCH_ROOT, "corpus", "descriptions")
 
 const ALL_SYSTEMS: SystemId[] = ["text_only", "caption_match", "co_embed", "anchor", "anchor_vlm"]

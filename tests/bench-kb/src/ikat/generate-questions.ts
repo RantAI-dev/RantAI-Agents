@@ -28,9 +28,9 @@ import type { BuiltDoc, FigureRecord } from "./build-corpus"
 loadEnv()
 
 const BENCH_ROOT = path.resolve(import.meta.dirname, "../..")
-const BUILT_DIR = path.join(BENCH_ROOT, "corpus", "built")
-const FIG_DIR = path.join(BENCH_ROOT, "corpus", "figures")
-const OUT = path.join(BENCH_ROOT, "corpus", "questions.json")
+const BUILT_DIR = path.join(BENCH_ROOT, "corpus", process.env.IKAT_CORPUS ?? "built")
+const FIG_DIR = path.join(BENCH_ROOT, "corpus", process.env.IKAT_FIGURES ?? "figures")
+const OUT = path.join(BENCH_ROOT, "corpus", process.env.IKAT_QUESTIONS ?? "questions.json")
 
 /** Deliberately not the judge's vendor. */
 const QGEN_MODEL = process.env.IKAT_QGEN_MODEL ?? "google/gemini-3-flash-preview"
