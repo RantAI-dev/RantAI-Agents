@@ -63,12 +63,21 @@ export interface DocIndex {
   descriptions: Map<string, string>
 }
 
+/**
+ * Batch-embed with a pacing delay.
+ *
+ * The delay is deliberately generous: indexing 1,675 chunks in one burst tripped
+ * a provider per-minute quota mid-run. Retry/backoff in the provider handles the
+ * spikes, but pacing avoids provoking them, which matters more for an unattended
+ * sweep than the few minutes it costs. Tunable via IKAT_EMBED_DELAY_MS.
+ */
 async function embedAll(texts: string[], batch = 16): Promise<number[][]> {
+  const delay = Number(process.env.IKAT_EMBED_DELAY_MS ?? 350)
   const out: number[][] = []
   for (let i = 0; i < texts.length; i += batch) {
     const r = await embed(EMBED_MODEL, texts.slice(i, i + batch))
     out.push(...r.vectors)
-    await sleep(60)
+    await sleep(delay)
   }
   return out
 }

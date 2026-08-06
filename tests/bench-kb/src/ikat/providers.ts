@@ -35,6 +35,34 @@ const OLLAMA_BASE = process.env.IKAT_OLLAMA_BASE ?? "http://ollama:11434"
 /** HF text-embeddings-inference serving BAAI/bge-m3. */
 const TEI_BASE = process.env.IKAT_TEI_BASE ?? "http://tei-embed:80"
 
+
+/**
+ * Retry on rate limits and transient server errors, with exponential backoff.
+ *
+ * An unattended benchmark sweep makes thousands of calls; a single 429 partway
+ * through would otherwise lose the whole run. Only 429 and 5xx are retried —
+ * a 400 (bad request) or 401 (bad key) is a bug or a config error and must
+ * surface immediately rather than be retried into a long silence.
+ */
+async function withRetry<T>(label: string, fn: () => Promise<T>, attempts = 6): Promise<T> {
+  let lastErr: unknown
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastErr = err
+      const msg = err instanceof Error ? err.message : String(err)
+      const retryable = /\b(429|500|502|503|504)\b/.test(msg) || /rate.?limit/i.test(msg)
+      if (!retryable || i === attempts - 1) throw err
+      // 2s, 4s, 8s, 16s, 32s — long enough for a per-minute quota to roll over.
+      const wait = 2000 * 2 ** i
+      console.warn(`[ikat] ${label} retry ${i + 1}/${attempts - 1} in ${wait}ms: ${msg.slice(0, 90)}`)
+      await new Promise((r) => setTimeout(r, wait))
+    }
+  }
+  throw lastErr
+}
+
 // ── Chat ───────────────────────────────────────────────────────────────────
 
 /**
@@ -80,13 +108,15 @@ async function mistralChat(model: string, messages: unknown[], maxTokens: number
   })
 
   const t0 = Date.now()
-  const res = await fetch(`${MISTRAL_BASE}/v1/chat/completions`, {
+  const res = await withRetry("mistral chat", () => fetch(`${MISTRAL_BASE}/v1/chat/completions`, {
     method: "POST",
     headers: { Authorization: `Bearer ${MISTRAL_KEY()}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model, messages: fixed, max_tokens: maxTokens, temperature: 0 }),
-  })
+  }).then(async (r) => {
+    if (!r.ok) throw new Error(`mistral ${model} ${r.status}: ${(await r.text()).slice(0, 300)}`)
+    return r
+  }))
   const ms = Date.now() - t0
-  if (!res.ok) throw new Error(`mistral ${model} ${res.status}: ${(await res.text()).slice(0, 300)}`)
   const data = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>
     usage?: { completion_tokens?: number }
@@ -113,13 +143,15 @@ async function mistralEmbed(input: string | string[]): Promise<{ vectors: number
     t.length > EMBED_CHAR_BUDGET ? t.slice(0, EMBED_CHAR_BUDGET) : t,
   )
   const t0 = Date.now()
-  const res = await fetch(`${MISTRAL_BASE}/v1/embeddings`, {
+  const res = await withRetry("mistral embed", () => fetch(`${MISTRAL_BASE}/v1/embeddings`, {
     method: "POST",
     headers: { Authorization: `Bearer ${MISTRAL_KEY()}`, "Content-Type": "application/json" },
     body: JSON.stringify({ model: process.env.IKAT_MISTRAL_EMBED ?? "mistral-embed", input: inputs }),
-  })
+  }).then(async (r) => {
+    if (!r.ok) throw new Error(`mistral embed ${r.status}: ${(await r.text()).slice(0, 300)}`)
+    return r
+  }))
   const ms = Date.now() - t0
-  if (!res.ok) throw new Error(`mistral embed ${res.status}: ${(await res.text()).slice(0, 300)}`)
   const data = (await res.json()) as { data: Array<{ embedding: number[] }> }
   const vectors = data.data.map((d) => d.embedding)
   return { vectors, dim: vectors[0]?.length ?? 0, ms }
