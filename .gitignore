@@ -67,3 +67,9 @@ tests/bench-kb/corpus/embed-cache/
 tests/bench-kb/corpus/structural-analysis.json
 tests/bench-kb/corpus/corpus-stats.json
 tests/bench-kb/corpus/questions.json
+
+# IKAT-Bench: on-premise corpus artifacts (regenerable)
+tests/bench-kb/corpus/ugm-built/
+tests/bench-kb/corpus/ugm-figures/
+tests/bench-kb/corpus/ugm-raw/
+tests/bench-kb/corpus/structural-analysis-*.json

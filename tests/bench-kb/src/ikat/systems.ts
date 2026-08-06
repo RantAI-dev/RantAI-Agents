@@ -266,9 +266,27 @@ function selectFigures(
   if (out.length >= limit) return out
   const taken = new Set(out.map((f) => f.id))
   const byId = new Map(usable.map((f) => [f.id, f]))
+
+  // Admission rule, deliberately PARAMETER-FREE: a figure may be pulled in by
+  // description similarity only if it scores at least as high as the weakest
+  // TEXT chunk we already accepted into the context. If a passage that similar
+  // was good enough to retrieve, a figure that similar is good enough to show;
+  // if not, reaching for it is a guess.
+  //
+  // The first version of this system had no gate and always filled the empty
+  // slots. It doubled figure-dependent performance and LOST overall accuracy,
+  // because on questions with few anchored figures it spent every spare slot on
+  // whatever ranked highest, however weakly. A tuned threshold would have fixed
+  // the number while fitting the test set; this rule is fixed by the retriever's
+  // own decisions and has nothing to tune.
+  const floor = retrieved.length
+    ? Math.min(...retrieved.map((c) => cosine(qVec, idx.chunkVecs.get(c.id) ?? [])))
+    : 0
+
   const extra = Array.from(idx.figureVecs.entries())
     .filter(([id]) => !taken.has(id))
     .map(([id, v]) => ({ id, s: cosine(qVec, v) }))
+    .filter((x) => x.s >= floor)
     .sort((a, b) => b.s - a.s)
     .slice(0, limit - out.length)
     .map((x) => byId.get(x.id))
