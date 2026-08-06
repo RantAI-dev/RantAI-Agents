@@ -12,11 +12,10 @@ things follow — each aimed at the measured bottleneck, which is retrieval (onl
      of 3,079 blocks (14.3%). Embedding them dilutes every chunk that contains
      them and pollutes the vector with text no reader would ever search for.
 
-  2. CUT chunks at headings.  A `title` block starts a new section. Splitting on
-     character count alone puts the end of one topic and the start of the next in
-     one chunk, which is precisely the chunk a query then half-matches. Chunks now
-     break at titles, and carry the heading as their first line so the topic is
-     present in the embedded text.
+  2. RECORD the heading, do not split on it.  Each chunk carries the heading in
+     force, which is useful context — but breaking at headings was measured to
+     HURT retrieval badly (see HEADING_MODE below). Kept as an option, off by
+     default, because the negative result is worth being able to reproduce.
 
   3. KEEP captions.  Caption blocks (`image_caption`, `table_caption`,
      `image_footnote`, `table_footnote`) were dropped entirely before. They are
@@ -74,13 +73,29 @@ def build_blocks(pages_blocks, known_ids):
     return blocks, dropped
 
 
-def chunk_blocks(blocks, slug):
-    """Group consecutive text blocks into chunks, breaking at headings.
+# How headings affect chunking.
+#   "split"  — break at every heading (revision 2; measured WORSE, see below)
+#   "prefer" — break at a heading only once the chunk is reasonably full
+#   "off"    — headings are ordinary text; size is the only criterion
+#
+# Measured, all four on the same questions, embedder and top-k:
+#
+#   baseline (no block types)                2,188 chunks   hit@5 51.8%
+#   furniture dropped + captions kept        2,108 chunks   hit@5 59.6%   <- default
+#   + heading break when chunk is half full  2,624 chunks   hit@5 56.0%
+#   + heading break at every heading         7,044 chunks   hit@5 40.4%
+#
+# The block types help, but for CLEANING, not for splitting. Dropping running
+# headers/footers and keeping caption blocks lifts the ceiling that bounds every
+# figure mechanism by 7.8 points. Breaking on headings hurts monotonically with
+# how aggressively it is applied: it shrinks chunks, and the same top-5 then
+# covers less text. Default is "off" for that reason, not by preference.
+HEADING_MODE = os.environ.get("HEADING_MODE", "off")
+# A heading only justifies an early break once the chunk carries this much.
+HEADING_MIN_FILL = 0.5
 
-    A heading both terminates the previous chunk and opens the next, so the
-    section title is the first line of the chunk it introduces — present in the
-    embedded text, where a topical query can match it.
-    """
+
+def chunk_blocks(blocks, slug):
     chunks, buf, size, n = [], [], 0, 0
     heading = None
 
@@ -100,12 +115,15 @@ def chunk_blocks(blocks, slug):
     for b in blocks:
         if b["kind"] == "figure":
             continue
-        if b["type"] in HEADING:
-            flush()
+        is_heading = b["type"] in HEADING
+        if is_heading:
+            # A heading is the best available break point, but only worth taking
+            # when the current chunk has enough in it to stand alone.
+            if HEADING_MODE == "split" and buf:
+                flush()
+            elif HEADING_MODE == "prefer" and buf and size >= CHUNK_CHARS * HEADING_MIN_FILL:
+                flush()
             heading = b["text"][:120]
-            buf.append(b)
-            size += len(b["text"])
-            continue
         if size + len(b["text"]) > CHUNK_CHARS and buf:
             flush()
         buf.append(b)
