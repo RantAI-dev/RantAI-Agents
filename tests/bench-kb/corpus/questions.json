@@ -1,0 +1,908 @@
+[
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q0::factual",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "factual",
+    "question": "Siapa sajakah nama-nama penulis yang menyusun Buku Panduan Guru Matematika untuk SD/MI Kelas III berdasarkan data publikasi tersebut?",
+    "goldAnswer": "Penulis buku tersebut adalah Susanto, Arika Indah Kristiana, Arif Fatahillah, Eko Waluyo, Ridho Alfarisi, dan Hobri.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q1::explanatory",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa buku teks yang diterbitkan oleh Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi ini disebut sebagai dokumen hidup?",
+    "goldAnswer": "Buku tersebut disebut sebagai dokumen hidup karena senantiasa diperbaiki, diperbarui, dan dimutakhirkan sesuai dengan dinamika kebutuhan serta perubahan zaman.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q2::factual",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "factual",
+    "question": "Apa saja sarana dan media yang perlu disiapkan guru untuk mendukung pembelajaran materi nilai tempat berdasarkan panduan tersebut?",
+    "goldAnswer": "Sarana dan media yang perlu disiapkan meliputi kaleng bekas atau wadah lain, kertas karton, gunting, dan spidol warna.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c57"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q3::explanatory",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "explanatory",
+    "question": "Bagaimana cara guru melakukan apersepsi untuk mengeksplorasi aspek psikomotor peserta didik pada materi bilangan cacah 3 angka?",
+    "goldAnswer": "Guru melakukan apersepsi dengan menyediakan barang kontekstual dan contoh cerita yang relevan, seperti menunjukkan kertas nomor antrian yang berisi angka-angka representasi bilangan cacah 3 angka.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c57"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q4::factual",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "factual",
+    "question": "Berapakah bobot skor maksimal yang diberikan kepada peserta didik jika mereka berhasil menjawab soal pengurangan 33 – 28 dengan cara susun pendek secara tepat?",
+    "goldAnswer": "Bobot skor maksimal untuk soal tersebut adalah 7.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c116"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q5::comparison",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "comparison",
+    "question": "Berdasarkan kriteria penskoran pada buku panduan tersebut, apa perbedaan nilai yang diperoleh peserta didik yang menjawab sebagian jawaban dengan kurang tepat dibandingkan dengan peserta didik yang menjawab semua jawaban dengan tepat pada soal nomor 1?",
+    "goldAnswer": "Peserta didik yang menjawab sebagian jawaban kurang tepat mendapatkan skor 3, sedangkan peserta didik yang menjawab semua jawaban dengan tepat mendapatkan skor 6.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c116"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q6::factual",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "factual",
+    "question": "Sebutkan berbagai jenis alat ukur panjang yang dijelaskan oleh guru kepada peserta didik berdasarkan panduan materi tersebut.",
+    "goldAnswer": "Alat ukur panjang tersebut meliputi penggaris, meteran gulung, meteran, dan pengukur tinggi badan.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c174"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q7::explanatory",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "explanatory",
+    "question": "Bagaimana langkah-langkah yang harus dilakukan peserta didik dalam melaksanakan kegiatan Aktivitas 1 menurut buku panduan tersebut?",
+    "goldAnswer": "Peserta didik menggunakan penggaris untuk mengukur benda-benda yang ada di dalam tas mereka, mengisi tabel yang telah disediakan, dan mempresentasikan hasilnya di depan kelas.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c174"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q8::factual",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "factual",
+    "question": "Berdasarkan materi mengenai huruf, huruf manakah yang memiliki karakteristik garis tegak lurus namun tidak memiliki garis sejajar sama sekali?",
+    "goldAnswer": "Huruf yang memiliki garis tegak lurus tetapi tidak memiliki garis sejajar adalah huruf T.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c231"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p189::img-123.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p189::img-124.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p189::img-125.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p189::img-126.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-127.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-128.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-129.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-130.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-131.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-132.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p191::img-133.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p191::img-134.jpeg"
+    ]
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q9::comparison",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "comparison",
+    "question": "Berdasarkan analisis struktur garis pada huruf M dan huruf T, manakah di antara keduanya yang memiliki pasangan garis sejajar?",
+    "goldAnswer": "Huruf M memiliki sepasang garis sejajar, sedangkan huruf T tidak memiliki garis sejajar melainkan memiliki ruas garis tegak lurus.",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c231"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p189::img-123.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p189::img-124.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p189::img-125.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p189::img-126.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-127.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-128.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-129.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-130.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-131.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p190::img-132.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p191::img-133.jpeg",
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p191::img-134.jpeg"
+    ]
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::fq0",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar tersebut, apa judul bab yang tertulis pada halaman tersebut?",
+    "goldAnswer": "Unsur-Unsur Bangun Datar",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c7"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p6::img-7.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::fq1",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Apa warna badan timbangan yang digunakan Meutia pada gambar tersebut?",
+    "goldAnswer": "Merah",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c193"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p145::img-40.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::fq2",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar tersebut, apa warna tanda panah yang menghubungkan kedua susunan segitiga?",
+    "goldAnswer": "Merah",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c221"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p171::img-68.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::fq3",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar tersebut, apa label huruf yang terletak di sudut kanan bawah persegi panjang?",
+    "goldAnswer": "R",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c228"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p182::img-93.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::fq4",
+    "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar tersebut, berapa satuan jarak horizontal antara titik pangkal kedua garis merah di bagian bawah?",
+    "goldAnswer": "2 satuan (ditunjukkan oleh dua lengkungan panah putus-putus)",
+    "goldChunkIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c229"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p186::img-112.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q0::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Siapakah nama penulis yang menyusun Buku Panduan Guru Pendidikan Agama Buddha dan Budi Pekerti untuk SD Kelas III berdasarkan kutipan tersebut?",
+    "goldAnswer": "Penulis buku tersebut adalah Widi Astiyono dan Sri Winarni.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q1::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa buku panduan guru tersebut disebut sebagai dokumen hidup yang perlu terus diperbaiki dan dimutakhirkan?",
+    "goldAnswer": "Buku tersebut disebut sebagai dokumen hidup agar dapat senantiasa disesuaikan dengan dinamika kebutuhan dan perubahan zaman guna meningkatkan kualitasnya.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q2::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Berdasarkan Aturan 2 (UNDERSCORE & LINE RULES), bagaimana seharusnya hasil OCR memperlakukan garis horizontal tunggal yang dianggap sebagai elemen gaya atau latar belakang?",
+    "goldAnswer": "Hasil OCR harus mengabaikan garis tersebut dan tidak mengeluarkan output apa pun atau hanya mengeluarkan teks yang bermakna.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c81"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q3::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa hasil OCR yang mengeluarkan karakter \"____\" dianggap tidak konsisten dengan Ground Truth (GT) dalam konteks aturan garis gaya?",
+    "goldAnswer": "Karena OCR tersebut salah menafsirkan garis gaya sebagai placeholder (garis bawah), sehingga menciptakan halusinasi karakter yang seharusnya diabaikan menurut konteks visual Ground Truth.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c81"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q4::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Berapakah skor maksimal yang dapat diperoleh dalam evaluasi Bab 3 mengenai Menghargai Identitas Masyarakat di Lingkungan Terdekat?",
+    "goldAnswer": "Skor maksimal yang dapat diperoleh adalah 10.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c161"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p97::img-9.jpeg"
+    ]
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q5::comparison",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "comparison",
+    "question": "Berdasarkan kriteria penilaian dalam kutipan tersebut, apa perbedaan antara kegiatan yang mendapatkan skor 3 dengan kegiatan yang mendapatkan skor 2?",
+    "goldAnswer": "Kegiatan dengan skor 3 berfokus pada aksi sosial kemasyarakatan yang kolektif seperti kerja bakti, saling mengunjungi saat hari raya, dan saling membantu dalam acara warga. Sementara itu, kegiatan dengan skor 2 lebih berfokus pada sikap toleransi individu dalam interaksi sehari-hari, seperti mempersilakan teman beribadah saat belajar kelompok dan berteman tanpa membedakan adat istiadat.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c161"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p97::img-9.jpeg"
+    ]
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q6::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Sebutkan dua manfaat dari menumbuhkan sikap peduli dan berbagi kepada sesama berdasarkan materi pembelajaran tersebut.",
+    "goldAnswer": "Manfaatnya adalah dapat meringankan beban penderitaan orang lain dan mempererat persahabatan.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c243"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q7::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa kita perlu menasihati teman agar memiliki sifat peduli kepada orang lain?",
+    "goldAnswer": "Karena dalam hidup ini kita selalu membutuhkan orang lain dan suatu saat kita juga akan membutuhkan bantuan orang lain.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c243"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q8::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Berdasarkan Aturan 2 (UNDERSCORE & LINE RULES), bagaimana seharusnya hasil OCR memperlakukan garis horizontal tunggal yang dianggap sebagai elemen gaya atau latar belakang?",
+    "goldAnswer": "Hasil OCR harus mengabaikan garis tersebut dan tidak mengeluarkan output apa pun atau hanya mengeluarkan teks yang bermakna.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c322"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q9::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa hasil OCR yang mengeluarkan karakter \"____\" dianggap tidak konsisten dengan Ground Truth (GT) dalam konteks aturan garis gaya?",
+    "goldAnswer": "Karena OCR tersebut salah menafsirkan garis gaya sebagai placeholder (garis bawah), sehingga menciptakan halusinasi karakter yang seharusnya diabaikan menurut konteks visual Ground Truth.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c322"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Dalam posisi apa tangan tokoh pada gambar tersebut diletakkan?",
+    "goldAnswer": "Tangan diletakkan di pangkuan dengan posisi telapak tangan kanan di atas telapak tangan kiri (posisi meditasi/dhyana mudra).",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c33"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p25::img-4.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berapa jumlah orang yang digambarkan dalam ilustrasi tersebut?",
+    "goldAnswer": "6 orang",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c161"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p97::img-9.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq2",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berapa jumlah anak yang memakai topi dalam gambar tersebut?",
+    "goldAnswer": "2 orang",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c234"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p117::img-10.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq3",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Angka berapakah yang tertulis pada bagian depan meja loket tersebut?",
+    "goldAnswer": "2",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c315"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p199::img-79.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q0::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Siapakah nama penulis dari Buku Panduan Guru Pendidikan Agama Hindu dan Budi Pekerti untuk SD Kelas III berdasarkan data publikasi tersebut?",
+    "goldAnswer": "Penulis buku tersebut adalah I Gusti Nyoman Suardeyasa.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q1::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa buku teks ini disebut sebagai dokumen hidup menurut bagian disclaimer dalam kutipan tersebut?",
+    "goldAnswer": "Buku ini disebut sebagai dokumen hidup karena senantiasa diperbaiki, diperbarui, dan dimutakhirkan sesuai dengan dinamika kebutuhan dan perubahan zaman.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q2::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Sebutkan lima indikator capaian pembelajaran yang harus dikuasai siswa dalam materi Hari Suci Agama Hindu berdasarkan kurikulum kelas III SD.",
+    "goldAnswer": "Indikatornya adalah menyebutkan pengertian hari suci, menyebutkan jenis-jenis hari suci, menyebutkan tujuan perayaan hari suci, menceritakan mitologi yang berkaitan dengan hari suci, dan melaksanakan hari suci agama Hindu sesuai daerah setempat.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c62"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q3::comparison",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "comparison",
+    "question": "Berdasarkan elemen capaian pembelajarannya, apa perbedaan fokus utama antara materi Tri Parartha dengan materi Hari Suci Agama Hindu?",
+    "goldAnswer": "Materi Tri Parartha berfokus pada elemen Akhlak Mulia/Karakter untuk mencapai keharmonisan hidup, sedangkan materi Hari Suci Agama Hindu berfokus pada elemen Ibadah untuk mengenal waktu-waktu suci dalam agama Hindu.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c62"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q4::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Sebutkan contoh pertanyaan yang diajukan guru kepada peserta didik secara klasikal pada aktivitas pemantik pertemuan pertama mengenai Kitab Purana.",
+    "goldAnswer": "Pertanyaan yang diajukan antara lain: “Pernahkah kalian melihat dan membaca Kitab Purana?”; “Apa isi dari Kitab Purāna?”; dan “Mengapa kita harus mempelajari Kitab Purana?”",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c121"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q5::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa peserta didik diminta untuk mengamati gambar dan menjawab pertanyaan pemantik pada awal pertemuan pertama?",
+    "goldAnswer": "Aktivitas pemantik tersebut bertujuan agar peserta didik dapat lebih mudah untuk memahami materi mengenai pengertian Purana.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c121"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q6::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Dalam ajaran Hindu, siapakah dewa yang memiliki fungsi khusus untuk memelihara alam semesta beserta isinya?",
+    "goldAnswer": "Dewa yang berfungsi memelihara alam semesta beserta isinya adalah Dewa Wisnu.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c184"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q7::comparison",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "comparison",
+    "question": "Jelaskan perbedaan peran antara Dewa Brahma dan Dewa Siwa terhadap alam semesta berdasarkan konsep Tri Murti!",
+    "goldAnswer": "Dewa Brahma berperan sebagai pencipta alam semesta (Utpeti), sedangkan Dewa Siwa berperan untuk melebur atau mempralina alam semesta agar tetap harmonis.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c184"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q8::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Sebutkan contoh hari suci agama Hindu yang dilaksanakan secara nasional berdasarkan materi pembelajaran tersebut!",
+    "goldAnswer": "Hari suci agama Hindu yang dilaksanakan secara nasional meliputi hari raya Nyepi, Galungan, Kuningan, Siwaratri, dan Saraswati.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c249"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p178::img-102.jpeg"
+    ]
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q9::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa guru disarankan untuk menggali upacara besar atau hari suci di daerah masing-masing dalam pembelajaran agama Hindu?",
+    "goldAnswer": "Guru disarankan menggali upacara di daerah masing-masing karena buku tersebut memberikan ruang untuk pengembangan materi sesuai dengan kearifan lokal masing-masing daerah dan untuk meluruskan kekeliruan bahwa hari suci tertentu hanya milik wilayah Bali dan Jawa saja.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c249"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p178::img-102.jpeg"
+    ]
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar tersebut, ajaran apa yang disebutkan untuk ditanamkan kepada setiap orang agar dapat diterapkan dalam kehidupan sosial?",
+    "goldAnswer": "Ajaran 'tri kaya' (berbuat yang baik).",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c20"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p14::img-17.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan bagan tersebut, sebutkan tiga kategori utama pembagian Purana yang masing-masing memiliki tiga kotak kosong di bawahnya.",
+    "goldAnswer": "Rajasika Purana, Sattwika Purana, dan Tamasika Purana.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c124"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p84::img-36.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq2",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar peta konsep tersebut, apa bunyi teks yang tertulis pada kotak paling bawah?",
+    "goldAnswer": "kti kepada Dewa Tri Murti",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c159"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p108::img-54.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq3",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar teka-teki silang tersebut, kata apa yang sudah ditemukan dan ditandai dengan garis merah diagonal?",
+    "goldAnswer": "BRAHMA",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c171"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p118::img-61.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq4",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar tersebut, kepada siapa sajakah perilaku 'Bhakti' harus ditujukan menurut lirik lagunya?",
+    "goldAnswer": "Kepada Hyang Widhi Wasa, orang tua, guru, dan pemerintah.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c194"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p138::img-84.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q0::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Siapakah nama penulis yang menyusun Buku Panduan Guru Pendidikan Agama Katolik dan Budi Pekerti untuk SD Kelas III tersebut?",
+    "goldAnswer": "Penulis buku tersebut adalah Susi Bonardy dan Yenny Suria.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q1::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa buku teks ini disebut sebagai dokumen hidup yang perlu senantiasa diperbaiki dan diperbarui?",
+    "goldAnswer": "Buku tersebut disebut sebagai dokumen hidup agar dapat terus dimutakhirkan sesuai dengan dinamika kebutuhan dan perubahan zaman, serta untuk meningkatkan kualitasnya melalui masukan dari berbagai kalangan.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q2::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Bagaimana rumus yang digunakan untuk menghitung nilai akhir peserta didik berdasarkan skor yang diperoleh dan skor maksimal?",
+    "goldAnswer": "Nilai dihitung dengan cara membagi skor yang diperoleh dengan skor maksimal, kemudian hasilnya dikalikan 100.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c72"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q3::comparison",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "comparison",
+    "question": "Apa perbedaan tindak lanjut yang diberikan guru kepada peserta didik yang sudah memahami pelajaran dibandingkan dengan peserta didik yang belum mencapai nilai KBM?",
+    "goldAnswer": "Peserta didik yang sudah memahami pelajaran diberikan kegiatan pengayaan berupa mencari contoh perbuatan baik warga sekolah, sedangkan peserta didik yang belum mencapai nilai KBM diberikan tugas remedial.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c72"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q4::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Apa saja langkah yang harus dilakukan peserta didik setelah melaksanakan tugas perbuatan rela berkorban di rumah?",
+    "goldAnswer": "Setelah tugas dilaksanakan, peserta didik harus menuliskan perbuatan tersebut di buku tugas, meminta tanda tangan orang tua, dan melaporkannya kepada guru.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c142"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q5::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Bagaimana cara guru membantu peserta didik untuk meneladani sikap Yesus yang rela berkorban berdasarkan kegiatan aksi di rumah?",
+    "goldAnswer": "Guru meminta peserta didik untuk menentukan dan melakukan tiga perbuatan rela berkorban di rumah dengan persetujuan orang tua, kemudian mendokumentasikannya sebagai bentuk pertanggungjawaban.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c142"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q6::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Melalui siapa sajakah Allah bersabda kepada manusia menurut kutipan doa tersebut?",
+    "goldAnswer": "Allah bersabda melalui Putra-Nya, melalui sesama yang dijumpai, dan melalui peristiwa-peristiwa yang dialami.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c209"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q7::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa seseorang memohon pertolongan agar dapat merasakan kehadiran Allah dalam segala hal?",
+    "goldAnswer": "Agar orang tersebut dapat sungguh-sungguh hidup dari iman.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c209"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q8::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Peristiwa bencana apa yang terjadi di lingkungan RT 11 berdasarkan kisah Ibu Maria?",
+    "goldAnswer": "Peristiwa yang terjadi di lingkungan RT 11 adalah bencana kebakaran.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c282"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q9::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa warga RT 11 memiliki rasa kagum dan kasih sayang kepada Ibu Maria sebagai pemimpin mereka?",
+    "goldAnswer": "Warga sangat kagum dan menyayangi Ibu Maria karena ia sangat memperhatikan warganya dan melayani masyarakat dengan tulus, terutama saat membantu warga yang kehilangan rumah akibat kebakaran.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c282"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Apa judul Bab 1 yang tertera pada gambar tersebut?",
+    "goldAnswer": "Aku Tumbuh Dan Berkembang Dalam Kebaikan",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c18"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::p12::img-1.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar tersebut, apa judul subbab yang sedang dibahas pada bagian A?",
+    "goldAnswer": "Kisah Yusuf",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c18"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::p13::img-3.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::fq2",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Siapakah dua sosok yang digambarkan saling berhadapan dalam ilustrasi tersebut?",
+    "goldAnswer": "Seorang wanita tua (biarawati) dan seorang bayi/anak kecil.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c341"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::p209::img-17.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::fq3",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Apa warna baju yang dikenakan oleh Yenny Suria dalam foto tersebut?",
+    "goldAnswer": "Merah muda (pink)",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c350"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::p218::img-20.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q0::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Siapakah nama penulis yang menyusun Buku Panduan Guru Pendidikan Agama Khonghucu dan Budi Pekerti untuk SD Kelas III tersebut?",
+    "goldAnswer": "Penulis buku tersebut adalah Sienny Vivi Irawati dan Rika Lisnia Putri.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q1::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Mengapa buku teks ini disebut sebagai dokumen hidup oleh Kementerian Pendidikan, Kebudayaan, Riset, dan Teknologi?",
+    "goldAnswer": "Buku ini disebut sebagai dokumen hidup karena senantiasa diperbaiki, diperbarui, dan dimutakhirkan sesuai dengan dinamika kebutuhan serta perubahan zaman.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c0"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q2::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Siapa sajakah nama tokoh utama yang beragama Khonghucu dalam buku tersebut dan berapa usia mereka masing-masing?",
+    "goldAnswer": "Tokoh utamanya adalah Wu Zhenhui yang berusia 9 tahun dan Wu Chunfang yang berusia 7 tahun.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c58"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q3::comparison",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "comparison",
+    "question": "Berdasarkan karakter tokoh yang diberikan, apa perbedaan sifat yang mencolok antara Yao Rongxin dan Yongki Cendana?",
+    "goldAnswer": "Yao Rongxin memiliki karakter yang pendiam dan pemikir, sedangkan Yongki Cendana memiliki karakter yang emosional, kurang sabar, namun pandai bergaul.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c58"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q4::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Apa tulisan yang terdapat di dalam Muduo yang merupakan jalan suci Nabi Kongzi?",
+    "goldAnswer": "Tulisan yang ada di dalam Muduo adalah Zhong (Satya) dan Shu (Tepa Salira).",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c126"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q5::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Bagaimana langkah alternatif yang dapat dilakukan guru untuk membantu peserta didik memahami konsep agar tidak melakukan hal yang tidak disukai orang lain?",
+    "goldAnswer": "Guru dapat mengajak peserta didik berpasangan untuk saling menanyakan perilaku yang tidak disukai, kemudian meminta mereka merenungkannya agar tidak melakukan hal tersebut kepada orang lain.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c126"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q6::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Apa sajakah media pembelajaran yang dapat digunakan guru berdasarkan panduan materi tersebut?",
+    "goldAnswer": "Media pembelajaran yang dapat digunakan adalah Kitab Suci, papan tulis, pemutar audio, atau media lain yang dibutuhkan.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c182"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q7::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Bagaimana cara menciptakan suasana bahagia di rumah menurut bagian renungan dalam teks tersebut?",
+    "goldAnswer": "Suasana bahagia di rumah dapat diciptakan dengan cara selalu bersikap baik, saling menyapa, saling tersenyum, dan saling melayani antaranggota keluarga.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c182"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q8::factual",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "factual",
+    "question": "Apa saja dua kata dalam aksara Hanzi yang harus dilatih penulisannya oleh peserta didik menurut materi Hanyu?",
+    "goldAnswer": "Peserta didik berlatih menulis hanzi Xiào (孝) dan Zēngzi (曾子).",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c244"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q9::explanatory",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "explanatory",
+    "question": "Bagaimana cara guru mengajarkan kegiatan melipat kertas perak (Yinzhi) jika guru belum mengetahui teknik melipatnya?",
+    "goldAnswer": "Guru dapat mencari cara melipat kertas perak di mesin pencarian web dengan menggunakan kata kunci 'Cara melipat kertas perak untuk sembahyang', lalu mengajarkan cara melipatnya kepada peserta didik menjadi bentuk uang Tiongkok kuno.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c244"
+    ],
+    "goldFigureIds": []
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan gambar tersebut, apa saja enam dimensi yang membentuk Profil Pelajar Pancasila?",
+    "goldAnswer": "Enam dimensi tersebut adalah Berakhlak Mulia, Berkebinekaan Global, Gotong royong, Kreatif, Bernalar kritis, dan Mandiri.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c14"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p13::img-1.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan diagram tersebut, apa istilah yang digunakan untuk menyebut sosok ideal yang berada di titik temu antara pendidikan di rumah, sekolah, dan tempat ibadah?",
+    "goldAnswer": "Junzi",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c27"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p20::img-4.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq2",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan bagan tersebut, apa saja tiga jenis perayaan atau waktu yang termasuk dalam kategori 'Sembahyang pada Leluhur'?",
+    "goldAnswer": "Qingming, Zhongyang, dan Jingheping",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c134"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p91::img-19.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq3",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berdasarkan bagan tersebut, apa saja dua jenis kategori sahabat yang disebutkan sebagai bagian dari penjelasan mengenai kesukaan bersahabat dengan orang bijaksana?",
+    "goldAnswer": "Sahabat yang baik membawa faedah dan sahabat yang tidak baik membawa celaka.",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c179"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p125::img-31.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  },
+  {
+    "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq4",
+    "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+    "type": "figure_dependent",
+    "question": "Berapa jumlah orang yang mengenakan seragam pramuka pada gambar tersebut?",
+    "goldAnswer": "3 orang",
+    "goldChunkIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c206"
+    ],
+    "goldFigureIds": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p143::img-34.jpeg"
+    ],
+    "adversaryAnswer": "TIDAK ADA DI TEKS"
+  }
+]
