@@ -55,3 +55,11 @@ site/out/
 site/tsconfig.tsbuildinfo
 .superpowers/
 services/mineru-server/__pycache__/
+
+# IKAT-Bench corpus artifacts: large OCR caches, figure crops and run outputs.
+# Regenerate with tests/bench-kb/src/ikat/extract-corpus.ts (idempotent).
+tests/bench-kb/corpus/raw/
+tests/bench-kb/corpus/figures/
+tests/bench-kb/corpus/built/
+tests/bench-kb/corpus/descriptions/
+tests/bench-kb/corpus/results/
