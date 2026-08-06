@@ -62,6 +62,8 @@ const LABEL: Record<string, string> = {
   anchor_hybrid: "S6 anchor + description retrieval (hybrid)",
   mramg_match: "S7 MRAMG bipartite matching (published)",
   vinqa_cite: "S8 VinQA citation-order (published)",
+  anchor_mramg_place: "A1 anchor selection + MRAMG placement",
+  anchor_vinqa_place: "A2 anchor selection + VinQA placement",
 }
 
 function main() {

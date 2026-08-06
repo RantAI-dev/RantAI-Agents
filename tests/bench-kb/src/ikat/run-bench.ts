@@ -66,6 +66,8 @@ const ALL_SYSTEMS: SystemId[] = [
   "anchor_hybrid",
   "mramg_match",
   "vinqa_cite",
+  "anchor_mramg_place",
+  "anchor_vinqa_place",
 ]
 /** Vision model used ONCE per figure at ingest, for S5. Not the judge's vendor. */
 const DESCRIBE_MODEL = process.env.IKAT_DESCRIBE_MODEL ?? "google/gemini-3-flash-preview"
@@ -157,7 +159,9 @@ async function main() {
     // the published baselines index figure descriptions too, so they get the
     // same evidence our system does — otherwise they lose on inputs, not method
     systems.includes("mramg_match") ||
-    systems.includes("vinqa_cite")
+    systems.includes("vinqa_cite") ||
+    systems.includes("anchor_mramg_place") ||
+    systems.includes("anchor_vinqa_place")
 
   // Figure records for every document: small (no vectors), needed throughout to
   // resolve metrics. The heavy per-document INDEXES are built one at a time
@@ -198,7 +202,9 @@ async function main() {
           system === "anchor_vlm" ||
           system === "anchor_hybrid" ||
           system === "mramg_match" ||
-          system === "vinqa_cite"
+          system === "vinqa_cite" ||
+          system === "anchor_mramg_place" ||
+          system === "anchor_vinqa_place"
             ? baseIdx
             : { ...baseIdx, descriptions: new Map() }
         const out = await runSystem(system, idx, q.question)
