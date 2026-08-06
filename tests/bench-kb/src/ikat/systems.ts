@@ -1,0 +1,358 @@
+/**
+ * IKAT-Bench step 4 — the systems under comparison.
+ *
+ * Every system shares the SAME corpus, chunker, embedder, generator, and top-k.
+ * Only the figure mechanism differs. That is the entire point: any difference in
+ * the results has exactly one cause, and no baseline can be accused of losing
+ * because it was given a worse retriever.
+ *
+ *   S0 text_only     no figures at all — the floor, and the instrument for C1
+ *   S1 caption_match our current production mechanism: caption keyword overlap
+ *   S2 co_embed      figure embedded on its own text, competing in one index
+ *   S4 anchor        ours: figure rides its anchor chunk, placed at that chunk's
+ *                    citation
+ *   S5 anchor_vlm    S4 plus a VLM description written once at ingest
+ *
+ * S3 (VLM-over-page) and S6 (fine-tuned VLM) are not implemented here: both need
+ * either per-query page images or a fine-tune, and are scoped separately. Their
+ * absence is stated in the paper rather than papered over.
+ */
+import * as fs from "node:fs"
+import * as path from "node:path"
+import { chat, embed, cosine, sleep } from "../lib"
+import { splitSentences } from "../placement-metrics"
+import type { BuiltDoc, Chunk, FigureRecord } from "./build-corpus"
+
+const BENCH_ROOT = path.resolve(import.meta.dirname, "../..")
+const FIG_DIR = path.join(BENCH_ROOT, "corpus", "figures")
+
+export const EMBED_MODEL = process.env.IKAT_EMBED_MODEL ?? "qwen/qwen3-embedding-8b"
+/** Not the judge's vendor — enforced by assertJudgeIndependence at run time. */
+export const GEN_MODEL = process.env.IKAT_GEN_MODEL ?? "google/gemini-3-flash-preview"
+export const TOP_K = 5
+
+export type SystemId = "text_only" | "caption_match" | "co_embed" | "anchor" | "anchor_vlm"
+
+/** One figure as the system chose to emit it. */
+export interface EmittedFigure {
+  figureId: string
+  /** Insertion slot in the answer: 0 = before sentence 1, j = after sentence j. */
+  slot: number
+}
+
+export interface SystemOutput {
+  answer: string
+  sentences: string[]
+  figures: EmittedFigure[]
+  retrievedChunkIds: string[]
+  ms: number
+  genTokens: number
+  /** Vision-model calls made while serving this query. Zero for S0/S1/S2/S4. */
+  vlmCalls: number
+}
+
+// ── Shared index ───────────────────────────────────────────────────────────
+
+export interface DocIndex {
+  doc: BuiltDoc
+  chunkVecs: Map<string, number[]>
+  /** Text embedded per figure for the co-embedding system (S2). */
+  figureVecs: Map<string, number[]>
+  /** VLM description per figure, for S5. Empty unless descriptions were built. */
+  descriptions: Map<string, string>
+}
+
+async function embedAll(texts: string[], batch = 16): Promise<number[][]> {
+  const out: number[][] = []
+  for (let i = 0; i < texts.length; i += batch) {
+    const r = await embed(EMBED_MODEL, texts.slice(i, i + batch))
+    out.push(...r.vectors)
+    await sleep(60)
+  }
+  return out
+}
+
+/**
+ * Text used to represent a figure in a retrieval index.
+ *
+ * This is deliberately the SAME function for S1 and S2 so the two differ only in
+ * how that text is used (keyword overlap vs. vector competition), not in what
+ * they know about the figure. Mirrors production: printed caption when the book
+ * has one, otherwise the page's prose stands in for it.
+ */
+export function figureIndexText(f: FigureRecord, description?: string): string {
+  if (description) return `[Gambar] ${description}`
+  if (f.caption) return `[Gambar] ${f.caption}`
+  return `[Gambar] Gambar halaman ${f.page + 1}: ${f.ctx.slice(0, 400)}`
+}
+
+export async function buildIndex(doc: BuiltDoc, descriptions?: Map<string, string>): Promise<DocIndex> {
+  const chunks = doc.chunks
+  const chunkVecs = new Map<string, number[]>()
+  const vecs = await embedAll(chunks.map((c) => c.text))
+  chunks.forEach((c, i) => chunkVecs.set(c.id, vecs[i]))
+
+  const figs = doc.figures.filter((f) => !f.decorative)
+  const figureVecs = new Map<string, number[]>()
+  if (figs.length) {
+    const fv = await embedAll(figs.map((f) => figureIndexText(f, descriptions?.get(f.id))))
+    figs.forEach((f, i) => figureVecs.set(f.id, fv[i]))
+  }
+
+  return { doc, chunkVecs, figureVecs, descriptions: descriptions ?? new Map() }
+}
+
+// ── Retrieval + generation ─────────────────────────────────────────────────
+
+/**
+ * The answer prompt is identical for every system. What differs is WHICH figure
+ * evidence gets appended to the passage list — that, and nothing else, is the
+ * independent variable.
+ */
+const ANSWER_PROMPT = `Anda adalah asisten belajar untuk siswa sekolah di Indonesia. Jawab pertanyaan HANYA berdasarkan kutipan buku di bawah.
+
+Setiap kutipan diberi nomor. Ketika Anda memakai isi sebuah kutipan, tuliskan penanda [n] di akhir kalimat tersebut.
+
+Jika kutipan tidak memuat jawabannya, katakan: "Tidak ada di buku."
+
+Pertanyaan: {Q}
+
+Kutipan:
+{CTX}
+
+Jawaban (bahasa Indonesia, ringkas dan jelas untuk siswa):`
+
+function retrieveChunks(idx: DocIndex, qVec: number[], k: number): Chunk[] {
+  return idx.doc.chunks
+    .map((c) => ({ c, s: cosine(qVec, idx.chunkVecs.get(c.id) ?? []) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, k)
+    .map((x) => x.c)
+}
+
+async function generate(
+  question: string,
+  chunks: Chunk[],
+  figureLines: string[],
+): Promise<{ text: string; ms: number; tokens: number }> {
+  const passages = chunks.map((c, i) => `[${i + 1}] ${c.text}`)
+  // Figure evidence continues the same numbering so the model can cite it.
+  figureLines.forEach((l, i) => passages.push(`[${chunks.length + i + 1}] ${l}`))
+  const res = await chat(
+    GEN_MODEL,
+    [{ role: "user", content: ANSWER_PROMPT.replace("{Q}", question).replace("{CTX}", passages.join("\n\n")) }],
+    900,
+  )
+  return { text: res.text.trim(), ms: res.ms, tokens: res.usage?.completion_tokens ?? 0 }
+}
+
+/**
+ * Index of the sentence carrying citation [n], or -1.
+ *
+ * This is the mechanism S4/S5 use for placement: the figure goes where its
+ * anchor chunk is actually cited, so placement is decided by the same evidence
+ * trail the reader can already see.
+ */
+export function sentenceCiting(sentences: string[], citationNo: number): number {
+  const re = new RegExp(`\\[${citationNo}\\]`)
+  for (let i = 0; i < sentences.length; i++) if (re.test(sentences[i])) return i
+  return -1
+}
+
+// ── Figure selection per system ────────────────────────────────────────────
+
+const STOP = new Set(
+  "yang dan atau dengan untuk pada dari ke di itu ini adalah akan tidak juga dalam sebagai oleh karena agar bisa dapat ada satu dua gambar tabel halaman".split(
+    " ",
+  ),
+)
+
+function keywords(s: string): string[] {
+  return Array.from(
+    new Set(
+      s
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 4 && !STOP.has(w)),
+    ),
+  )
+}
+
+/** Figures a system decides are relevant, BEFORE placement is worked out. */
+function selectFigures(
+  system: SystemId,
+  idx: DocIndex,
+  question: string,
+  qVec: number[],
+  retrieved: Chunk[],
+  limit: number,
+): FigureRecord[] {
+  const usable = idx.doc.figures.filter((f) => !f.decorative)
+
+  if (system === "text_only") return []
+
+  if (system === "caption_match") {
+    // Today's production behaviour: vocabulary overlap with the query (strong)
+    // or with the retrieved passages (weak).
+    const q = question.toLowerCase()
+    const body = retrieved.map((c) => c.text.toLowerCase()).join(" ")
+    const scored: Array<{ f: FigureRecord; score: number }> = []
+    for (const f of usable) {
+      const kws = keywords(figureIndexText(f, idx.descriptions.get(f.id)))
+      if (!kws.length) continue
+      const score = kws.some((k) => q.includes(k)) ? 2 : kws.some((k) => body.includes(k)) ? 1 : 0
+      if (score > 0) scored.push({ f, score })
+    }
+    return scored.sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.f)
+  }
+
+  if (system === "co_embed") {
+    const byId = new Map(usable.map((f) => [f.id, f]))
+    return Array.from(idx.figureVecs.entries())
+      .map(([id, v]) => ({ id, s: cosine(qVec, v) }))
+      .sort((a, b) => b.s - a.s)
+      .slice(0, limit)
+      .map((x) => byId.get(x.id))
+      .filter((f): f is FigureRecord => !!f)
+  }
+
+  // anchor / anchor_vlm: a figure is relevant exactly when the chunk it is
+  // anchored in was retrieved. No similarity, no keywords, no model.
+  const ids = new Set(retrieved.map((c) => c.id))
+  return usable.filter((f) => f.anchorChunkId && ids.has(f.anchorChunkId)).slice(0, limit)
+}
+
+/** Where each selected figure is emitted in the finished answer. */
+function placeFigures(
+  system: SystemId,
+  idx: DocIndex,
+  selected: FigureRecord[],
+  retrieved: Chunk[],
+  sentences: string[],
+): EmittedFigure[] {
+  if (system === "co_embed") {
+    // This design carries no positional signal at all, so figures land at the
+    // end — precisely the placement weakness the benchmark exists to expose.
+    return selected.map((f) => ({ figureId: f.id, slot: sentences.length }))
+  }
+
+  if (system === "caption_match") {
+    return selected.map((f) => {
+      const kws = keywords(figureIndexText(f, idx.descriptions.get(f.id)))
+      let best = sentences.length
+      let bestHits = 0
+      sentences.forEach((s, i) => {
+        const low = s.toLowerCase()
+        const hits = kws.filter((k) => low.includes(k)).length
+        if (hits > bestHits) {
+          bestHits = hits
+          best = i + 1
+        }
+      })
+      return { figureId: f.id, slot: best }
+    })
+  }
+
+  // anchor / anchor_vlm: emit at the sentence citing the figure's anchor chunk.
+  const citationOf = new Map(retrieved.map((c, i) => [c.id, i + 1]))
+  return selected.map((f) => {
+    const n = f.anchorChunkId ? citationOf.get(f.anchorChunkId) : undefined
+    const at = n ? sentenceCiting(sentences, n) : -1
+    // Uncited chunk: the generator did not visibly use it, so there is no anchor
+    // in the answer. Falling back to the end is honest, and the placement metric
+    // counts it against us exactly like any other misplacement.
+    return { figureId: f.id, slot: at >= 0 ? at + 1 : sentences.length }
+  })
+}
+
+// ── Runner ─────────────────────────────────────────────────────────────────
+
+export async function runSystem(
+  system: SystemId,
+  idx: DocIndex,
+  question: string,
+  maxFigures = 3,
+): Promise<SystemOutput> {
+  const t0 = Date.now()
+  const qVec = (await embed(EMBED_MODEL, question)).vectors[0]
+  const retrieved = retrieveChunks(idx, qVec, TOP_K)
+  const selected = selectFigures(system, idx, question, qVec, retrieved, maxFigures)
+
+  // Figure evidence handed to the generator. This is what makes C1 testable:
+  // only a system that actually tells the model what is IN the figure can answer
+  // a figure-dependent question. Caption/anchor systems can pass only the thin
+  // text the book gives them; S5 passes a real description.
+  const figureLines = selected.map((f) => figureIndexText(f, idx.descriptions.get(f.id)))
+
+  const gen = await generate(question, retrieved, figureLines)
+  const sentences = splitSentences(gen.text)
+  const figures = placeFigures(system, idx, selected, retrieved, sentences)
+
+  return {
+    answer: gen.text,
+    sentences,
+    figures,
+    retrievedChunkIds: retrieved.map((c) => c.id),
+    ms: Date.now() - t0,
+    genTokens: gen.tokens,
+    // Every implemented system serves without a vision model. S5's VLM cost is
+    // paid once at ingest, not per query — that is the deployment claim.
+    vlmCalls: 0,
+  }
+}
+
+// ── S5 ingest-time descriptions ────────────────────────────────────────────
+
+const DESCRIBE_PROMPT = `Gambar berikut diambil dari buku pelajaran sekolah dasar di Indonesia.
+
+Tulis deskripsi SATU-DUA kalimat dalam bahasa Indonesia yang menjelaskan: apa yang ditampilkan, bagian
+yang diberi label (jika ada), dan konsep yang diilustrasikan. Tulis untuk membantu siswa memahami,
+bukan sekadar menyebut objek. Jangan menyebut "gambar ini" — langsung isi.`
+
+/**
+ * Build the S5 descriptions once, cached to disk. This is the "pay at ingest,
+ * not per query" half of the cost argument, so it must be measured separately
+ * from serving and reported as such.
+ */
+export async function buildDescriptions(
+  doc: BuiltDoc,
+  model: string,
+  cacheFile: string,
+): Promise<Map<string, string>> {
+  const cache: Record<string, string> = fs.existsSync(cacheFile)
+    ? JSON.parse(fs.readFileSync(cacheFile, "utf-8"))
+    : {}
+  const figs = doc.figures.filter((f) => !f.decorative)
+
+  let made = 0
+  for (const f of figs) {
+    if (cache[f.id]) continue
+    const p = path.join(FIG_DIR, f.assetFile)
+    if (!fs.existsSync(p)) continue
+    try {
+      const url = `data:image/png;base64,${fs.readFileSync(p).toString("base64")}`
+      const res = await chat(
+        model,
+        [
+          {
+            role: "user",
+            content: [
+              { type: "image_url", image_url: { url } },
+              { type: "text", text: DESCRIBE_PROMPT },
+            ],
+          },
+        ],
+        300,
+      )
+      cache[f.id] = res.text.trim().slice(0, 400)
+      made++
+      if (made % 20 === 0) fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2))
+    } catch (err) {
+      console.warn(`[ikat] describe failed ${f.id}: ${err instanceof Error ? err.message : err}`)
+    }
+  }
+  fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2))
+  console.log(`[ikat] descriptions: ${Object.keys(cache).length} cached (${made} new) for ${doc.slug}`)
+  return new Map(Object.entries(cache))
+}

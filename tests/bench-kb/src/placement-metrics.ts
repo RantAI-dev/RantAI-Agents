@@ -119,15 +119,30 @@ export interface PRF {
   f1: number;
 }
 
-function prf(tp: number, nPred: number, nGold: number): PRF {
+/**
+ * Precision/recall/F1, or null when the case is VACUOUS — nothing expected and
+ * nothing emitted.
+ *
+ * This distinction is load-bearing. Most questions over a textbook corpus have
+ * no associated figure at all; scoring "correctly emitted nothing" as F1 = 0
+ * drags every system's macro-average toward zero in proportion to how many
+ * text-only questions the set happens to contain — which measures the question
+ * mix, not the system. Vacuous cases are skipped. Emitting a figure where none
+ * belongs still scores precision 0, so a false positive keeps costing.
+ */
+function prf(tp: number, nPred: number, nGold: number): PRF | null {
+  if (nPred === 0 && nGold === 0) return null;
   const precision = nPred ? tp / nPred : 0;
   const recall = nGold ? tp / nGold : 0;
   const f1 = precision + recall ? (2 * precision * recall) / (precision + recall) : 0;
   return { precision, recall, f1 };
 }
 
-/** Figure selection P/R/F1 against the gold figure set F*(q). */
-export function figureSelection(predicted: string[], gold: string[]): PRF {
+/**
+ * Figure selection P/R/F1 against the gold figure set F*(q).
+ * Null when nothing was expected and nothing emitted (see `prf`).
+ */
+export function figureSelection(predicted: string[], gold: string[]): PRF | null {
   const g = new Set(gold);
   const p = new Set(predicted);
   let tp = 0;
@@ -149,14 +164,14 @@ export function groundedFigureF1(
   predicted: PlacedFigure[],
   gold: string[],
   tolerance = 1,
-): PRF & { selection: PRF; placementAccuracy: number | null } {
+): { grounded: PRF | null; selection: PRF | null; placementAccuracy: number | null } {
   const g = new Set(gold);
   const selected = predicted.filter((f) => g.has(f.figureId));
   const hits = selected.filter(
     (f) => f.idealSlot >= 0 && f.predictedSlot >= 0 && Math.abs(displacement(f)) <= tolerance,
   );
   return {
-    ...prf(hits.length, predicted.length, g.size),
+    grounded: prf(hits.length, predicted.length, g.size),
     selection: figureSelection(
       predicted.map((f) => f.figureId),
       gold,
