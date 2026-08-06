@@ -49,6 +49,11 @@ export type SystemId =
   // exist rather than against strawmen
   | "mramg_match"
   | "vinqa_cite"
+  // Placement-only variants: OUR anchor selection, THEIR placement rule. These
+  // isolate the placement question by holding selection fixed, which neither the
+  // published baselines nor our own systems do on their own.
+  | "anchor_mramg_place"
+  | "anchor_vinqa_place"
 
 /** One figure as the system chose to emit it. */
 export interface EmittedFigure {
@@ -244,7 +249,10 @@ function selectFigures(
     return scored.sort((a, b) => b.score - a.score).slice(0, limit).map((x) => x.f)
   }
 
-  if (system === "co_embed") {
+  // co_embed and the two published baselines all select by similarity over the
+  // figure's own text. Only their PLACEMENT differs, which is the point: it lets
+  // the placement rules be compared without selection confounding them.
+  if (system === "co_embed" || system === "mramg_match" || system === "vinqa_cite") {
     const byId = new Map(usable.map((f) => [f.id, f]))
     return Array.from(idx.figureVecs.entries())
       .map(([id, v]) => ({ id, s: cosine(qVec, v) }))
@@ -351,7 +359,7 @@ function placeFigures(
   /** figure x sentence similarity, supplied only for the matching baseline */
   weights?: number[][],
 ): EmittedFigure[] {
-  if (system === "mramg_match") {
+  if (system === "mramg_match" || system === "anchor_mramg_place") {
     // MRAMG-Bench's rule: max-weight assignment, at most one figure per
     // sentence. Placement is "after" the assigned sentence, matching how every
     // other system here reports a slot.
@@ -362,7 +370,7 @@ function placeFigures(
     }))
   }
 
-  if (system === "vinqa_cite") {
+  if (system === "vinqa_cite" || system === "anchor_vinqa_place") {
     // VinQA's rule: the figure goes where the answer cites its identifier, and
     // document position is deliberately NOT used. This is the control that
     // isolates what the reading-order anchor contributes over citation alone.
@@ -449,7 +457,7 @@ export async function runSystem(
   // context — ctx is what defines ideal() in the metric, so using it would make
   // the baseline score |PD| = 0 by construction and mean nothing.
   let weights: number[][] | undefined
-  if (system === "mramg_match" && selected.length && sentences.length) {
+  if ((system === "mramg_match" || system === "anchor_mramg_place") && selected.length && sentences.length) {
     const sentVecs = (await embed(EMBED_MODEL, sentences)).vectors
     const figVecs = (await embed(EMBED_MODEL, figureLines)).vectors
     weights = figVecs.map((fv) => sentVecs.map((sv) => cosine(fv, sv)))
