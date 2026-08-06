@@ -59,6 +59,7 @@ const LABEL: Record<string, string> = {
   co_embed: "S2 co-embedding",
   anchor: "S4 anchor (ours)",
   anchor_vlm: "S5 anchor + VLM description",
+  anchor_hybrid: "S6 anchor + description retrieval (hybrid)",
 }
 
 function main() {
