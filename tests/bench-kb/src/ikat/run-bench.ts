@@ -57,7 +57,14 @@ const RESULTS_DIR = path.join(BENCH_ROOT, "corpus", "results")
 const QUESTIONS = path.join(BENCH_ROOT, "corpus", process.env.IKAT_QUESTIONS ?? "questions.json")
 const DESC_DIR = path.join(BENCH_ROOT, "corpus", "descriptions")
 
-const ALL_SYSTEMS: SystemId[] = ["text_only", "caption_match", "co_embed", "anchor", "anchor_vlm"]
+const ALL_SYSTEMS: SystemId[] = [
+  "text_only",
+  "caption_match",
+  "co_embed",
+  "anchor",
+  "anchor_vlm",
+  "anchor_hybrid",
+]
 /** Vision model used ONCE per figure at ingest, for S5. Not the judge's vendor. */
 const DESCRIBE_MODEL = process.env.IKAT_DESCRIBE_MODEL ?? "google/gemini-3-flash-preview"
 
@@ -141,7 +148,9 @@ async function main() {
 
   // Descriptions are needed only when S5 runs; building them is the ingest-time
   // cost of that system and is reported separately from serving.
-  const needDescriptions = systems.includes("anchor_vlm")
+  // Both description-using systems need the ingest-time descriptions: S5 passes
+  // them to the generator, S6 additionally indexes them for its recall arm.
+  const needDescriptions = systems.includes("anchor_vlm") || systems.includes("anchor_hybrid")
 
   const indexes = new Map<string, DocIndex>()
   const figuresById = new Map<string, FigureRecord>()
@@ -174,7 +183,9 @@ async function main() {
       try {
         // S5 differs from S4 only in having descriptions available.
         const idx: DocIndex =
-          system === "anchor_vlm" ? baseIdx : { ...baseIdx, descriptions: new Map() }
+          system === "anchor_vlm" || system === "anchor_hybrid"
+            ? baseIdx
+            : { ...baseIdx, descriptions: new Map() }
         const out = await runSystem(system, idx, q.question)
         const placed = await resolveIdealSlots(out, figuresById)
         scored.push({

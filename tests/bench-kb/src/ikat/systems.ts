@@ -12,6 +12,10 @@
  *   S4 anchor        ours: figure rides its anchor chunk, placed at that chunk's
  *                    citation
  *   S5 anchor_vlm    S4 plus a VLM description written once at ingest
+ *   S6 anchor_hybrid ours: anchor for precision, description-similarity for
+ *                    recall — built because S4 lost 3x to S2 on the questions
+ *                    only a figure can answer, and the cause was structural
+ *                    (anchoring inherits its recall from TEXT retrieval)
  *
  * S3 (VLM-over-page) and S6 (fine-tuned VLM) are not implemented here: both need
  * either per-query page images or a fine-tune, and are scoped separately. Their
@@ -34,7 +38,13 @@ export const EMBED_MODEL = process.env.IKAT_EMBED_MODEL ?? "qwen/qwen3-embedding
 export const GEN_MODEL = process.env.IKAT_GEN_MODEL ?? "google/gemini-3-flash-preview"
 export const TOP_K = 5
 
-export type SystemId = "text_only" | "caption_match" | "co_embed" | "anchor" | "anchor_vlm"
+export type SystemId =
+  | "text_only"
+  | "caption_match"
+  | "co_embed"
+  | "anchor"
+  | "anchor_vlm"
+  | "anchor_hybrid"
 
 /** One figure as the system chose to emit it. */
 export interface EmittedFigure {
@@ -120,6 +130,14 @@ export async function buildIndex(doc: BuiltDoc, descriptions?: Map<string, strin
  * The answer prompt is identical for every system. What differs is WHICH figure
  * evidence gets appended to the passage list — that, and nothing else, is the
  * independent variable.
+ *
+ * It asks for a 3-6 sentence explanation rather than a terse answer, for a reason
+ * independent of any result: the first scored run's generator produced answers
+ * with a MEDIAN OF ONE SENTENCE. A one-sentence answer offers two insertion
+ * slots, so |PD| cannot exceed 1 and PA@1 is ~1.0 for every system by
+ * construction — the placement dimension becomes unmeasurable while the numbers
+ * look like success. A one-sentence reply is also not the artifact this work is
+ * about: a tutor explains.
  */
 const ANSWER_PROMPT = `Anda adalah asisten belajar untuk siswa sekolah di Indonesia. Jawab pertanyaan HANYA berdasarkan kutipan buku di bawah.
 
@@ -132,7 +150,10 @@ Pertanyaan: {Q}
 Kutipan:
 {CTX}
 
-Jawaban (bahasa Indonesia, ringkas dan jelas untuk siswa):`
+Jelaskan seperti seorang guru kepada siswa: mulai dari jawabannya, lalu uraikan alasannya atau
+langkah-langkahnya dalam beberapa kalimat. Tulis 3-6 kalimat dalam bahasa Indonesia.
+
+Jawaban:`
 
 function retrieveChunks(idx: DocIndex, qVec: number[], k: number): Chunk[] {
   return idx.doc.chunks
@@ -232,7 +253,27 @@ function selectFigures(
   // anchor / anchor_vlm: a figure is relevant exactly when the chunk it is
   // anchored in was retrieved. No similarity, no keywords, no model.
   const ids = new Set(retrieved.map((c) => c.id))
-  return usable.filter((f) => f.anchorChunkId && ids.has(f.anchorChunkId)).slice(0, limit)
+  const anchored = usable.filter((f) => f.anchorChunkId && ids.has(f.anchorChunkId))
+
+  if (system !== "anchor_hybrid") return anchored.slice(0, limit)
+
+  // anchor_hybrid: anchoring is precise but its RECALL is inherited from text
+  // retrieval — a question answerable only from the picture may never surface the
+  // chunk that holds it. Fill the remaining slots from description similarity,
+  // which has no such dependency. Anchored figures keep priority, so precision is
+  // preserved and similarity only reaches for what anchoring could not see.
+  const out = anchored.slice(0, limit)
+  if (out.length >= limit) return out
+  const taken = new Set(out.map((f) => f.id))
+  const byId = new Map(usable.map((f) => [f.id, f]))
+  const extra = Array.from(idx.figureVecs.entries())
+    .filter(([id]) => !taken.has(id))
+    .map(([id, v]) => ({ id, s: cosine(qVec, v) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, limit - out.length)
+    .map((x) => byId.get(x.id))
+    .filter((f): f is FigureRecord => !!f)
+  return [...out, ...extra]
 }
 
 /** Where each selected figure is emitted in the finished answer. */
@@ -266,12 +307,27 @@ function placeFigures(
     })
   }
 
-  // anchor / anchor_vlm: emit at the sentence citing the figure's anchor chunk.
+  // anchor / anchor_vlm / anchor_hybrid: emit at the sentence citing the figure's
+  // anchor chunk.
+  //
+  // NOTE ON CIRCULARITY: placement deliberately does NOT use similarity between
+  // the answer's sentences and the figure's source context. That similarity is
+  // the definition of ideal() in the metric, so a system using it would score
+  // |PD| = 0 by construction and the number would mean nothing. Placement here
+  // uses only the citation trail, which is independent of the metric.
   const citationOf = new Map(retrieved.map((c, i) => [c.id, i + 1]))
-  return selected.map((f) => {
+  return selected.map((f, i) => {
     const n = f.anchorChunkId ? citationOf.get(f.anchorChunkId) : undefined
-    const at = n ? sentenceCiting(sentences, n) : -1
-    // Uncited chunk: the generator did not visibly use it, so there is no anchor
+    let at = n ? sentenceCiting(sentences, n) : -1
+
+    // Hybrid only: a figure pulled in by description similarity has no retrieved
+    // chunk to cite, but it IS handed to the generator as its own numbered
+    // passage — so look for a citation of that passage instead.
+    if (at < 0 && system === "anchor_hybrid") {
+      at = sentenceCiting(sentences, retrieved.length + i + 1)
+    }
+
+    // Nothing cited: the generator did not visibly use it, so there is no anchor
     // in the answer. Falling back to the end is honest, and the placement metric
     // counts it against us exactly like any other misplacement.
     return { figureId: f.id, slot: at >= 0 ? at + 1 : sentences.length }
