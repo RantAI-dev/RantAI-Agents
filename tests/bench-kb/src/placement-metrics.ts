@@ -51,7 +51,34 @@ export function splitSentences(text: string): string[] {
       if (s.trim()) parts.push(s.trim());
     }
   }
-  return parts.map((s) => s.split(DOT).join("."));
+  // Generators commonly emit the citation marker AFTER the full stop
+  // ("…meteran gulung. [1]"), which the sentence split above turns into a
+  // standalone "[1]" fragment. Left alone that inflates the slot count, shifts
+  // every displacement after it, and feeds a contentless token into the
+  // similarity that decides ideal(). Fold such fragments back onto the sentence
+  // they belong to.
+  const ONLY_CITES = /^(\s*\[\d+\]\s*)+$/;
+  const LEADING_CITES = /^((?:\s*\[\d+\])+)\s*/;
+  const merged: string[] = [];
+  for (const part of parts) {
+    // A fragment that is nothing but markers belongs to the sentence before it.
+    if (ONLY_CITES.test(part) && merged.length) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]} ${part.trim()}`;
+      continue;
+    }
+    // More common: the split leaves the marker at the START of the next
+    // sentence ("…penggaris." / "[1] Lalu meteran."). Move the leading markers
+    // back where the generator meant them.
+    const m = merged.length ? part.match(LEADING_CITES) : null;
+    if (m) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]} ${m[1].trim()}`;
+      const rest = part.slice(m[0].length).trim();
+      if (rest) merged.push(rest);
+      continue;
+    }
+    merged.push(part);
+  }
+  return merged.map((s) => s.split(DOT).join("."));
 }
 
 // ── Ideal slot ─────────────────────────────────────────────────────────────
