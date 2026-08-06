@@ -21,7 +21,7 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { loadEnv } from "./env"
-import { chat } from "../lib"
+import { genChat as chat } from "./providers"
 import { parseJsonLoose } from "../judge"
 import type { BuiltDoc, FigureRecord } from "./build-corpus"
 

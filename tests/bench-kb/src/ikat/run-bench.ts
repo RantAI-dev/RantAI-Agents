@@ -15,7 +15,8 @@
 import * as fs from "node:fs"
 import * as path from "node:path"
 import { loadEnv } from "./env"
-import { embed, cosine, sleep } from "../lib"
+import { cosine, sleep } from "../lib"
+import { genEmbed as embed, providerInfo } from "./providers"
 import {
   DEFAULT_JUDGE,
   assertJudgeIndependence,
@@ -124,7 +125,9 @@ async function main() {
 
   // Guard first, before spending anything: a same-vendor judge invalidates the
   // whole run, and finding out after the API bill is worse than failing now.
-  assertJudgeIndependence(DEFAULT_JUDGE, [GEN_MODEL, DESCRIBE_MODEL])
+  // Only meaningful when a judge actually runs; a judge-less structural run has
+  // no self-preference to guard against.
+  if (judgeN > 0) assertJudgeIndependence(DEFAULT_JUDGE, [GEN_MODEL, DESCRIBE_MODEL])
 
   fs.mkdirSync(RESULTS_DIR, { recursive: true })
   fs.mkdirSync(DESC_DIR, { recursive: true })
@@ -196,8 +199,16 @@ async function main() {
   // ── Judge: answer quality (sampled) ──
   const agreements: number[] = []
   const quality = new Map<SystemId, Array<{ c: number; f: number; h: number }>>()
-  const judgeTargets = raw.filter((_, i) => i % Math.max(1, Math.ceil(raw.length / judgeN)) === 0)
-  console.log(`[ikat] judging answer quality on ${judgeTargets.length} outputs…`)
+  // --judge 0 skips every judged measure. The structural metrics (GF-F1, PA@k,
+  // |PD|, selection F1) are model-free, so a judge-less run still produces the
+  // headline results; only answer quality and the validity study are deferred.
+  const judgeTargets =
+    judgeN > 0 ? raw.filter((_, i) => i % Math.max(1, Math.ceil(raw.length / judgeN)) === 0) : []
+  console.log(
+    judgeN > 0
+      ? `[ikat] judging answer quality on ${judgeTargets.length} outputs…`
+      : `[ikat] judging DISABLED (--judge 0): structural metrics only`,
+  )
   for (const t of judgeTargets) {
     try {
       const r = await judgeAnswerQuality(DEFAULT_JUDGE, t.q.question, t.q.goldAnswer, t.out.answer)
@@ -215,9 +226,12 @@ async function main() {
   // study that licenses the metric, so it is reported whatever it says.
   const validityJudge: number[] = []
   const validityGold: number[] = []
-  const validityTargets = raw
-    .filter((r) => (r.system === "anchor" || r.system === "anchor_vlm") && r.out.figures.length > 0)
-    .slice(0, judgeN)
+  const validityTargets =
+    judgeN > 0
+      ? raw
+          .filter((r) => (r.system === "anchor" || r.system === "anchor_vlm") && r.out.figures.length > 0)
+          .slice(0, judgeN)
+      : []
   console.log(`[ikat] placement-validity study on ${validityTargets.length} items…`)
   for (const t of validityTargets) {
     const ef = t.out.figures[0]
@@ -248,7 +262,13 @@ async function main() {
   const summary = {
     run: runName,
     generatedAt: new Date().toISOString(),
-    config: { generator: GEN_MODEL, embedder: EMBED_MODEL, judge: DEFAULT_JUDGE.model, topK: TOP_K },
+    config: {
+      generator: GEN_MODEL,
+      embedder: EMBED_MODEL,
+      judge: DEFAULT_JUDGE.model,
+      topK: TOP_K,
+      ...providerInfo(),
+    },
     corpus: { docs: docSlugs.length, questions: questions.length },
     systems: systems.map((system) => {
       const rows = scored.filter((s) => s.system === system)
