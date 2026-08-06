@@ -251,10 +251,25 @@ async function main() {
     all.push(...tq, ...fq)
   }
 
-  fs.writeFileSync(OUT, JSON.stringify(all, null, 2))
-  const byType = all.reduce<Record<string, number>>((a, q) => ({ ...a, [q.type]: (a[q.type] ?? 0) + 1 }), {})
-  console.log(`[ikat] wrote ${all.length} questions -> ${OUT}`)
+  // Deduplicate: the generator occasionally produces the same question from two
+  // overlapping spans. Duplicates would be scored twice and silently weight
+  // whatever they happen to test.
+  const seen = new Set<string>()
+  const deduped = all.filter((q) => {
+    const k = q.question.trim().toLowerCase()
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+
+  fs.writeFileSync(OUT, JSON.stringify(deduped, null, 2))
+  const byType = deduped.reduce<Record<string, number>>((a, q) => ({ ...a, [q.type]: (a[q.type] ?? 0) + 1 }), {})
+  const withGold = deduped.filter((q) => q.goldFigureIds.length).length
+  console.log(`[ikat] wrote ${deduped.length} questions (${all.length - deduped.length} duplicates dropped) -> ${OUT}`)
   console.log(`[ikat] by type:`, byType)
+  // The figure metrics can only be computed on questions that HAVE a gold
+  // figure, so this — not the total — is the benchmark's effective sample size.
+  console.log(`[ikat] questions with a gold figure (effective sample for figure metrics): ${withGold}`)
 }
 
 if (import.meta.main) {
