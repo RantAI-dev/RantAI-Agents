@@ -187,14 +187,104 @@ function oracleSelection(doc: BuiltDoc): { chunks: number; precision: number; re
   return { chunks: n, precision: n ? sp / n : 0, recall: n ? sr / n : 0, f1: n ? sf / n : 0 };
 }
 
+
+/**
+ * A5 — placement under an ORACLE ANSWER, with no model of any kind.
+ *
+ * Generation is what forces the benchmark to call an LLM. But placement can be
+ * isolated from generation entirely: take the figure's own anchor chunk as the
+ * "answer", and the true insertion slot is then known EXACTLY from the block
+ * sequence — it is where the book put the figure. No embedding, no similarity,
+ * no judge.
+ *
+ * This measures each mechanism's placement error under conditions as favourable
+ * as they can possibly be: perfect retrieval, perfect answer, and prose that is
+ * literally the source text. Whatever error remains here is intrinsic to the
+ * mechanism rather than inherited from a weak generator — which is exactly what
+ * claim C2 needs to separate placement failure from retrieval failure.
+ *
+ * The anchor mechanism is 0 by construction and is excluded from the comparison
+ * rather than reported as a win.
+ */
+function oraclePlacement(doc: BuiltDoc): {
+  figures: number
+  captionMeanAbsPD: number
+  captionExact: number
+  endMeanAbsPD: number
+  endExact: number
+} {
+  const figs = doc.figures.filter((f) => !f.decorative && f.anchorChunkId)
+  const byIndex = new Map(doc.blocks.map((b) => [b.index, b]))
+
+  let n = 0
+  let capPD = 0
+  let capExact = 0
+  let endPD = 0
+  let endExact = 0
+
+  for (const f of figs) {
+    const chunk = doc.chunks.find((c) => c.id === f.anchorChunkId)
+    if (!chunk) continue
+    // The "answer" is the chunk's own text blocks, in order.
+    const sentences: string[] = []
+    let ideal = -1
+    for (let i = chunk.fromBlock; i <= chunk.toBlock; i++) {
+      if (i === f.anchorIndex) {
+        // Slot j = after sentence j, so the figure belongs after however many
+        // text blocks precede it.
+        ideal = sentences.length
+        continue
+      }
+      const b = byIndex.get(i)
+      if (b?.kind === "text" && b.text) sentences.push(b.text)
+    }
+    if (ideal < 0 || sentences.length < 2) continue
+
+    // Caption mechanism: place next to the sentence sharing most vocabulary
+    // with the figure's index text.
+    const kws = keywords(indexText(f))
+    let best = sentences.length
+    let bestHits = 0
+    sentences.forEach((sent, i) => {
+      const low = sent.toLowerCase()
+      let hits = 0
+      for (const w of kws) if (low.includes(w)) hits++
+      if (hits > bestHits) {
+        bestHits = hits
+        best = i + 1
+      }
+    })
+    const capSlot = bestHits > 0 ? best : sentences.length
+
+    // Co-embedding mechanism carries no positional signal: always the end.
+    const endSlot = sentences.length
+
+    capPD += Math.abs(capSlot - ideal)
+    if (capSlot === ideal) capExact++
+    endPD += Math.abs(endSlot - ideal)
+    if (endSlot === ideal) endExact++
+    n++
+  }
+
+  return {
+    figures: n,
+    captionMeanAbsPD: n ? capPD / n : 0,
+    captionExact: n ? capExact / n : 0,
+    endMeanAbsPD: n ? endPD / n : 0,
+    endExact: n ? endExact / n : 0,
+  }
+}
+
 function main() {
   const files = fs.readdirSync(BUILT_DIR).filter((f) => f.endsWith(".json")).sort()
   const docs: DocAnalysis[] = []
   const oracle: Array<{ slug: string } & ReturnType<typeof oracleSelection>> = []
+  const placement: Array<{ slug: string } & ReturnType<typeof oraclePlacement>> = []
   for (const f of files) {
     const doc = JSON.parse(fs.readFileSync(path.join(BUILT_DIR, f), "utf-8")) as BuiltDoc
     docs.push(analyseDoc(doc))
     oracle.push({ slug: doc.slug, ...oracleSelection(doc) })
+    placement.push({ slug: doc.slug, ...oraclePlacement(doc) })
   }
   const oChunks = oracle.reduce((a, o) => a + o.chunks, 0)
   const wavg = (k: "precision" | "recall" | "f1") =>
@@ -231,6 +321,19 @@ function main() {
         "are the same predicate). Reported to make the tautology explicit, not as evidence.",
       perBook: oracle,
     },
+    // A5 — placement error under an oracle answer, no model involved
+    oraclePlacement: (() => {
+      const nf = placement.reduce((a, x) => a + x.figures, 0)
+      const w = (k: "captionMeanAbsPD" | "captionExact" | "endMeanAbsPD" | "endExact") =>
+        nf ? placement.reduce((a, x) => a + x[k] * x.figures, 0) / nf : 0
+      return {
+        figuresEvaluated: nf,
+        captionMechanism: { meanAbsPD: w("captionMeanAbsPD"), exact: w("captionExact") },
+        endOfAnswerMechanism: { meanAbsPD: w("endMeanAbsPD"), exact: w("endExact") },
+        anchorNote: "0 by construction; excluded from the comparison rather than reported as a win.",
+        perBook: placement,
+      }
+    })(),
     perBook: docs,
   }
 
@@ -252,6 +355,13 @@ function main() {
       `P=${wavg("precision").toFixed(3)} R=${wavg("recall").toFixed(3)} F1=${wavg("f1").toFixed(3)}`,
   )
   console.log(`    (anchor mechanism = 1.000 by construction — tautological, not evidence)`)
+  const op = summary.oraclePlacement
+  console.log(
+    `A5  oracle-answer placement (${op.figuresEvaluated} figures, no model): ` +
+      `caption |PD|=${op.captionMechanism.meanAbsPD.toFixed(2)} exact=${op.captionMechanism.exact.toFixed(3)} | ` +
+      `end-of-answer |PD|=${op.endOfAnswerMechanism.meanAbsPD.toFixed(2)} exact=${op.endOfAnswerMechanism.exact.toFixed(3)}`,
+  )
+  console.log(`    (anchor = 0.00 by construction — excluded, not a win)`)
   console.log(`\nwrote ${OUT}`)
 }
 
