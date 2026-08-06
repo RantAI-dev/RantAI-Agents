@@ -1,0 +1,131 @@
+{
+ "rows": [
+  {
+   "title": "Buku Panduan Guru Matematika untuk SD/MI Kelas III",
+   "pages": 240,
+   "chunks": 297,
+   "figs": 169,
+   "usable": 113,
+   "cap": 0,
+   "anc": 113
+  },
+  {
+   "title": "Buku Panduan Guru Pendidikan Agama Buddha dan Budi Pekerti untuk SD Kelas III",
+   "pages": 240,
+   "chunks": 403,
+   "figs": 88,
+   "usable": 16,
+   "cap": 1,
+   "anc": 16
+  },
+  {
+   "title": "Buku Panduan Guru Pendidikan Agama Hindu dan Budi Pekerti untuk SD Kelas III",
+   "pages": 232,
+   "chunks": 316,
+   "figs": 131,
+   "usable": 67,
+   "cap": 46,
+   "anc": 67
+  },
+  {
+   "title": "Buku Panduan Guru Pendidikan Agama Katolik dan Budi Pekerti untuk SD Kelas III",
+   "pages": 224,
+   "chunks": 354,
+   "figs": 26,
+   "usable": 15,
+   "cap": 0,
+   "anc": 15
+  },
+  {
+   "title": "Buku Panduan Guru Pendidikan Agama Khonghucu dan Budi Pekerti untuk SD Kelas III",
+   "pages": 224,
+   "chunks": 305,
+   "figs": 67,
+   "usable": 56,
+   "cap": 0,
+   "anc": 56
+  },
+  {
+   "title": "Buku Panduan Guru Pendidikan Agama Kristen dan Budi Pekerti untuk SD Kelas III",
+   "pages": 232,
+   "chunks": 402,
+   "figs": 157,
+   "usable": 131,
+   "cap": 0,
+   "anc": 131
+  },
+  {
+   "title": "Buku Panduan Guru Pendidikan Kepercayaan Terhadap Tuhan Yang Maha Esa dan Budi Pekerti untuk SD Kelas III",
+   "pages": 224,
+   "chunks": 246,
+   "figs": 99,
+   "usable": 91,
+   "cap": 2,
+   "anc": 91
+  },
+  {
+   "title": "Pendidikan Agama Buddha dan Budi Pekerti untuk SD Kelas III",
+   "pages": 224,
+   "chunks": 192,
+   "figs": 382,
+   "usable": 185,
+   "cap": 117,
+   "anc": 185
+  },
+  {
+   "title": "Pendidikan Agama Hindu dan Budi Pekerti untuk SD Kelas III",
+   "pages": 184,
+   "chunks": 153,
+   "figs": 292,
+   "usable": 155,
+   "cap": 117,
+   "anc": 155
+  },
+  {
+   "title": "Pendidikan Agama Katolik dan Budi Pekerti untuk SD Kelas III",
+   "pages": 184,
+   "chunks": 160,
+   "figs": 272,
+   "usable": 92,
+   "cap": 0,
+   "anc": 92
+  },
+  {
+   "title": "Pendidikan Agama Khonghucu dan Budi Pekerti untuk SD Kelas III",
+   "pages": 256,
+   "chunks": 121,
+   "figs": 442,
+   "usable": 276,
+   "cap": 0,
+   "anc": 276
+  },
+  {
+   "title": "Pendidikan Agama Kristen dan Budi Pekerti untuk SD Kelas III",
+   "pages": 208,
+   "chunks": 118,
+   "figs": 304,
+   "usable": 241,
+   "cap": 0,
+   "anc": 241
+  },
+  {
+   "title": "Pendidikan Kepercayaan Terhadap Tuhan Yang Maha Esa dan Budi Pekerti untuk SD Kelas III",
+   "pages": 144,
+   "chunks": 70,
+   "figs": 270,
+   "usable": 114,
+   "cap": 16,
+   "anc": 114
+  }
+ ],
+ "totals": {
+  "pages": 2816,
+  "blocks": 29897,
+  "chunks": 3137,
+  "figs": 2699,
+  "cap": 299,
+  "anc": 1552,
+  "dec": 1147,
+  "use": 1552
+ }
+}
