@@ -78,18 +78,30 @@ def build_blocks(pages_blocks, known_ids):
 #   "prefer" — break at a heading only once the chunk is reasonably full
 #   "off"    — headings are ordinary text; size is the only criterion
 #
-# Measured, all four on the same questions, embedder and top-k:
+# Measured on the same 109 gold-bearing questions, embedder and top-k, with
+# McNemar exact tests on the paired per-question outcomes:
 #
-#   baseline (no block types)                2,188 chunks   hit@5 51.8%
-#   furniture dropped + captions kept        2,108 chunks   hit@5 59.6%   <- default
-#   + heading break when chunk is half full  2,624 chunks   hit@5 56.0%
-#   + heading break at every heading         7,044 chunks   hit@5 40.4%
+#   variant                                   chunks   hit@5    vs control
+#   control: new extraction, no changes        2,187   52.3%    —
+#   furniture dropped only                     2,079   53.2%    p=1.000  n.s.
+#   captions kept only                         2,216   50.5%    p=0.815  n.s.
+#   both (default)                             2,108   59.6%    p=0.096  n.s.
+#   both + heading break when half full        2,624   56.0%    (not tested)
+#   both + heading break at every heading       7,044   40.4%    p=0.029  WORSE
 #
-# The block types help, but for CLEANING, not for splitting. Dropping running
-# headers/footers and keeping caption blocks lifts the ceiling that bounds every
-# figure mechanism by 7.8 points. Breaking on headings hurts monotonically with
-# how aggressively it is applied: it shrinks chunks, and the same top-5 then
-# covers less text. Default is "off" for that reason, not by preference.
+# Read this honestly. The cleaning variants look better and none of them clears
+# significance at this sample size: +7.3 points is eight questions out of 109.
+# Do NOT cite the cleaning gain as a result — it is a direction, not a finding,
+# and it needs a larger question set to settle.
+#
+# What IS significant is the negative result: breaking at every heading is worse
+# than the default (p=0.000), worse than furniture-removal alone (p=0.004), and
+# worse than the untouched control (p=0.029). Splitting shatters chunks — 7,044
+# against ~2,100 — so the same top-5 covers a third of the text. Structure helps
+# when it merges and hurts when it fragments.
+#
+# Default is "off" because the only statistically supported statement here is
+# that the aggressive variant is harmful.
 HEADING_MODE = os.environ.get("HEADING_MODE", "off")
 # A heading only justifies an early break once the chunk carries this much.
 HEADING_MIN_FILL = 0.5
