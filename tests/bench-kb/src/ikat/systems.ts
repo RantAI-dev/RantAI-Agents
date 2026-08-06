@@ -45,6 +45,10 @@ export type SystemId =
   | "anchor"
   | "anchor_vlm"
   | "anchor_hybrid"
+  // published baselines, implemented so the comparison is against methods that
+  // exist rather than against strawmen
+  | "mramg_match"
+  | "vinqa_cite"
 
 /** One figure as the system chose to emit it. */
 export interface EmittedFigure {
@@ -295,13 +299,79 @@ function selectFigures(
 }
 
 /** Where each selected figure is emitted in the finished answer. */
+/**
+ * Max-weight bipartite matching, sentences x figures, at most one figure per
+ * sentence — the placement rule published with MRAMG-Bench (SIGIR 2025).
+ *
+ * Sizes here are tiny (<=3 figures, a handful of sentences), so this enumerates
+ * assignments exactly rather than running Hungarian/Blossom. Exactness matters
+ * more than asymptotics at this scale, and a greedy approximation would make the
+ * baseline lose for the wrong reason.
+ */
+export function bipartiteAssign(weights: number[][], nSentences: number): number[] {
+  const nFig = weights.length
+  if (!nFig || !nSentences) return new Array<number>(nFig).fill(nSentences)
+  const best = { score: -Infinity, assign: new Array<number>(nFig).fill(nSentences) }
+  const used = new Set<number>()
+  const assign = new Array<number>(nFig).fill(nSentences)
+
+  const rec = (i: number, score: number) => {
+    if (i === nFig) {
+      if (score > best.score) {
+        best.score = score
+        best.assign = assign.slice()
+      }
+      return
+    }
+    for (let sIdx = 0; sIdx < nSentences; sIdx++) {
+      if (used.has(sIdx)) continue
+      used.add(sIdx)
+      assign[i] = sIdx
+      rec(i + 1, score + weights[i][sIdx])
+      used.delete(sIdx)
+    }
+    // Leaving a figure unplaced must be a legal move, not a dead end. With more
+    // figures than sentences the one-per-sentence constraint makes a complete
+    // matching impossible, and a recursion that only ever assigns would explore
+    // no valid branch at all and park EVERY figure — losing the placements it
+    // could have made. Unplaced contributes zero weight and renders at the end.
+    assign[i] = nSentences
+    rec(i + 1, score)
+  }
+  rec(0, 0)
+  return best.assign
+}
+
 function placeFigures(
   system: SystemId,
   idx: DocIndex,
   selected: FigureRecord[],
   retrieved: Chunk[],
   sentences: string[],
+  /** figure x sentence similarity, supplied only for the matching baseline */
+  weights?: number[][],
 ): EmittedFigure[] {
+  if (system === "mramg_match") {
+    // MRAMG-Bench's rule: max-weight assignment, at most one figure per
+    // sentence. Placement is "after" the assigned sentence, matching how every
+    // other system here reports a slot.
+    const assign = bipartiteAssign(weights ?? [], sentences.length)
+    return selected.map((f, i) => ({
+      figureId: f.id,
+      slot: (assign[i] ?? sentences.length) + 1 > sentences.length ? sentences.length : assign[i] + 1,
+    }))
+  }
+
+  if (system === "vinqa_cite") {
+    // VinQA's rule: the figure goes where the answer cites its identifier, and
+    // document position is deliberately NOT used. This is the control that
+    // isolates what the reading-order anchor contributes over citation alone.
+    return selected.map((f, i) => {
+      const at = sentenceCiting(sentences, retrieved.length + i + 1)
+      return { figureId: f.id, slot: at >= 0 ? at + 1 : sentences.length }
+    })
+  }
+
   if (system === "co_embed") {
     // This design carries no positional signal at all, so figures land at the
     // end — precisely the placement weakness the benchmark exists to expose.
@@ -373,7 +443,19 @@ export async function runSystem(
 
   const gen = await generate(question, retrieved, figureLines)
   const sentences = splitSentences(gen.text)
-  const figures = placeFigures(system, idx, selected, retrieved, sentences)
+
+  // The matching baseline needs figure x sentence similarity. It is computed
+  // from the figure's OWN text (description/caption), never from its source
+  // context — ctx is what defines ideal() in the metric, so using it would make
+  // the baseline score |PD| = 0 by construction and mean nothing.
+  let weights: number[][] | undefined
+  if (system === "mramg_match" && selected.length && sentences.length) {
+    const sentVecs = (await embed(EMBED_MODEL, sentences)).vectors
+    const figVecs = (await embed(EMBED_MODEL, figureLines)).vectors
+    weights = figVecs.map((fv) => sentVecs.map((sv) => cosine(fv, sv)))
+  }
+
+  const figures = placeFigures(system, idx, selected, retrieved, sentences, weights)
 
   return {
     answer: gen.text,

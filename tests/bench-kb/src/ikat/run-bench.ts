@@ -64,6 +64,8 @@ const ALL_SYSTEMS: SystemId[] = [
   "anchor",
   "anchor_vlm",
   "anchor_hybrid",
+  "mramg_match",
+  "vinqa_cite",
 ]
 /** Vision model used ONCE per figure at ingest, for S5. Not the judge's vendor. */
 const DESCRIBE_MODEL = process.env.IKAT_DESCRIBE_MODEL ?? "google/gemini-3-flash-preview"
@@ -150,7 +152,12 @@ async function main() {
   // cost of that system and is reported separately from serving.
   // Both description-using systems need the ingest-time descriptions: S5 passes
   // them to the generator, S6 additionally indexes them for its recall arm.
-  const needDescriptions = systems.includes("anchor_vlm") || systems.includes("anchor_hybrid")
+  const needDescriptions = systems.includes("anchor_vlm") ||
+    systems.includes("anchor_hybrid") ||
+    // the published baselines index figure descriptions too, so they get the
+    // same evidence our system does — otherwise they lose on inputs, not method
+    systems.includes("mramg_match") ||
+    systems.includes("vinqa_cite")
 
   // Figure records for every document: small (no vectors), needed throughout to
   // resolve metrics. The heavy per-document INDEXES are built one at a time
@@ -188,7 +195,10 @@ async function main() {
         // S5 differs from S4 only in having descriptions available.
         if (!baseIdx) continue
         const idx: DocIndex =
-          system === "anchor_vlm" || system === "anchor_hybrid"
+          system === "anchor_vlm" ||
+          system === "anchor_hybrid" ||
+          system === "mramg_match" ||
+          system === "vinqa_cite"
             ? baseIdx
             : { ...baseIdx, descriptions: new Map() }
         const out = await runSystem(system, idx, q.question)
