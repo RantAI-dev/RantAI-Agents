@@ -63,3 +63,7 @@ tests/bench-kb/corpus/figures/
 tests/bench-kb/corpus/built/
 tests/bench-kb/corpus/descriptions/
 tests/bench-kb/corpus/results/
+tests/bench-kb/corpus/embed-cache/
+tests/bench-kb/corpus/structural-analysis.json
+tests/bench-kb/corpus/corpus-stats.json
+tests/bench-kb/corpus/questions.json
