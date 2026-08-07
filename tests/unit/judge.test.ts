@@ -11,6 +11,7 @@ import {
   parseJsonLoose,
   selfConsistent,
   summarizeDiagnostics,
+  cohensKappa,
   DEFAULT_JUDGE,
   type PairResult,
 } from "../bench-kb/src/judge"
@@ -95,6 +96,18 @@ describe("selfConsistent", () => {
 })
 
 describe("summarizeDiagnostics", () => {
+  it("pins and reports the judge temperature", () => {
+    // A judge whose sampling temperature drifts makes cross-run comparison
+    // meaningless, so it is reported rather than assumed.
+    expect(summarizeDiagnostics(DEFAULT_JUDGE, [1]).temperature).toBe(0)
+  })
+
+  it("uses enough repeats for a majority vote to mean something", () => {
+    // Three repeats do not reliably reproduce a large-sample reference.
+    expect(DEFAULT_JUDGE.repeats).toBeGreaterThanOrEqual(11)
+    expect(DEFAULT_JUDGE.repeats % 2).toBe(1)
+  })
+
   it("reports mean agreement, unanimity and the position flip rate", () => {
     const pairs: PairResult[] = [
       { verdict: "A", inconsistent: false, forward: "A", reversed: "A" },
@@ -108,13 +121,39 @@ describe("summarizeDiagnostics", () => {
 
   it("always carries the human-spotcheck limitation into the output", () => {
     const d = summarizeDiagnostics(DEFAULT_JUDGE, [1])
-    // NB: the note is a wrapped multi-line string, so the assertion must not
-    // assume single spaces at the wrap points.
-    expect(d.note).toMatch(/claim the judge is a substitute for human/)
-    expect(d.note).toMatch(/human spot-check/)
+    // Assert the SUBSTANCE, not the phrasing: the note must keep saying that no
+    // human validation was done and that kappa is the bar. Pinning the exact
+    // wording just makes the test brittle when the caveat is strengthened.
+    expect(d.note).toMatch(/not\s+claim the judge is a substitute for human/)
+    expect(d.note).toMatch(/No human validation has been performed/)
+    expect(d.note).toMatch(/kappa/i)
   })
 
   it("omits the flip rate when no pairwise judging ran", () => {
     expect(summarizeDiagnostics(DEFAULT_JUDGE, [1]).positionFlipRate).toBeUndefined()
+  })
+})
+
+describe("cohensKappa", () => {
+  it("is 1 for perfect agreement", () => {
+    const r = cohensKappa([1, 1, 0, 0], [1, 1, 0, 0])
+    expect(r.kappa).toBeCloseTo(1)
+    expect(r.n).toBe(4)
+  })
+
+  it("is ~0 for agreement no better than chance", () => {
+    // Both raters say 1 half the time, but never on the same items.
+    const r = cohensKappa([1, 1, 0, 0], [0, 0, 1, 1])
+    expect(r.kappa).toBeLessThan(0)
+  })
+
+  it("exposes the 2x2 cells, because kappa alone is movable by protocol", () => {
+    const r = cohensKappa([1, 1, 0], [1, 0, 0])
+    expect([r.n11, r.n10, r.n01, r.n00]).toEqual([1, 1, 0, 1])
+  })
+
+  it("returns null kappa when agreement is degenerate rather than a fake 1.0", () => {
+    // Both raters constant: expected agreement is 1, kappa undefined.
+    expect(cohensKappa([1, 1, 1], [1, 1, 1]).kappa).toBeNull()
   })
 })
