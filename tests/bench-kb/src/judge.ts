@@ -39,9 +39,11 @@ import { chat, writeJson } from "./lib";
 /** Stated in the paper's limitations section, verbatim. Do not soften. */
 export const HUMAN_SPOTCHECK_NOTE = `Placement ground truth is structural (source-document reading order) and
 therefore independent of any model. The agreement study that licenses it, however, uses an LLM judge
-rather than human raters. We report judge self-consistency and position-bias diagnostics, but we do not
-claim the judge is a substitute for human pedagogical judgement. A human spot-check of >=150 items
-remains the correct validation and is left as future work.`;
+rather than human raters. We report judge self-consistency, position-bias and parse diagnostics, but we do
+not claim the judge is a substitute for human judgement: published agreement between LLM judges and humans
+is often low and occasionally negative, so judge validity cannot be assumed and must be demonstrated per
+task. No human validation has been performed here. A human study of >=100 items reporting Cohen's kappa
+with its 2x2 cells is the accepted bar and remains outstanding.`;
 
 // ── Configuration ──────────────────────────────────────────────────────────
 
@@ -55,8 +57,14 @@ export interface JudgeConfig {
 }
 
 export const DEFAULT_JUDGE: JudgeConfig = {
+  // Pinned, not floating: a judge that silently changes version invalidates
+  // every comparison made across runs.
   model: "anthropic/claude-sonnet-4.6",
-  repeats: 3,
+  // 11, not 3. Majority vote over 3 repeats does not reliably reproduce a
+  // large-sample reference; the reporting literature puts the requirement an
+  // order of magnitude higher, and repeats are the cheapest part of this
+  // pipeline. Temperature is pinned at 0 in `chat`.
+  repeats: 11,
   seed: 20260806,
 };
 
@@ -364,6 +372,33 @@ export async function judgePairwise(
 
 // ── 4. Run-level diagnostics ───────────────────────────────────────────────
 
+/**
+ * Cohen's kappa for two binary raters.
+ *
+ * Raw agreement is not reportable on its own: two judges can agree 80% of the
+ * time and still be twenty score-points apart, because agreement expected by
+ * chance depends on the marginals. Kappa is what a reviewer will ask for, and
+ * the 2x2 cells are reported alongside it because kappa alone can be moved a
+ * long way by protocol choices that change no verdict at all.
+ */
+export function cohensKappa(a: number[], b: number[]): { kappa: number | null; n11: number; n10: number; n01: number; n00: number; n: number } {
+  const n = Math.min(a.length, b.length)
+  let n11 = 0, n10 = 0, n01 = 0, n00 = 0
+  for (let i = 0; i < n; i++) {
+    const x = a[i] ? 1 : 0
+    const y = b[i] ? 1 : 0
+    if (x && y) n11++
+    else if (x && !y) n10++
+    else if (!x && y) n01++
+    else n00++
+  }
+  if (!n) return { kappa: null, n11, n10, n01, n00, n }
+  const po = (n11 + n00) / n
+  const pe = ((n11 + n10) * (n11 + n01) + (n01 + n00) * (n10 + n00)) / (n * n)
+  const kappa = pe === 1 ? null : (po - pe) / (1 - pe)
+  return { kappa, n11, n10, n01, n00, n }
+}
+
 export interface JudgeDiagnostics {
   judgeModel: string;
   repeats: number;
@@ -377,6 +412,8 @@ export interface JudgeDiagnostics {
   positionFlipRate?: number;
   /** Fraction of judge replies that failed to parse. */
   unparseableRate: number;
+  /** Judge sampling temperature, pinned and reported so runs stay comparable. */
+  temperature: number;
   note: string;
 }
 
@@ -400,6 +437,7 @@ export function summarizeDiagnostics(
       ? Number((pairs.filter((p) => p.inconsistent).length / pairs.length).toFixed(4))
       : undefined,
     unparseableRate: Number(((opts.unparseable ?? 0) / n).toFixed(4)),
+    temperature: 0,
     note: HUMAN_SPOTCHECK_NOTE,
   };
 }
