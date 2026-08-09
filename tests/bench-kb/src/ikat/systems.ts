@@ -55,7 +55,75 @@ export const TOP_K = 5
 export const FIG_K = 20
 
 /** Systems that draw figure candidates from the wider FIG_K pool. */
-const SELECTION_LADDER = new Set<SystemId>(["sel_wide", "sel_ranked", "sel_gated"])
+const SELECTION_LADDER = new Set<SystemId>(["sel_wide", "sel_ranked", "sel_gated", "sel_llm"])
+
+/**
+ * How many candidates the model is shown.
+ *
+ * Reranking depth matters more than model size: published ablations keep ~85% of
+ * the achievable gain going from a 100-deep pool to 20, and lose nearly half at
+ * 10. Twelve keeps the prompt small enough for an 8B model to attend to the last
+ * entry — the same work reports accuracy decaying for candidates late in the
+ * list, and that positional decay is worse for figures than for text.
+ */
+const LLM_SHORTLIST = Number(process.env.IKAT_LLM_SHORTLIST ?? 12)
+
+/**
+ * Ask a model which of the candidate figures actually belong with the answer.
+ *
+ * Written to make REFUSAL the easy path. The similarity rungs could not decline;
+ * they always returned their top-k, which is how 261 figures were emitted on
+ * questions that have no correct figure at all. Here an empty answer is named as
+ * legitimate, and the instruction is to include a figure only if it genuinely
+ * helps — because for a tutor a wrong diagram costs more than a missing one.
+ *
+ * Returns indices into `candidates`. An unparseable reply yields nothing, which
+ * fails toward silence rather than toward noise.
+ */
+const SELECT_PROMPT = `Anda membantu menyusun materi belajar untuk siswa sekolah dasar di Indonesia.
+
+Pertanyaan siswa: {Q}
+
+Berikut daftar gambar yang tersedia dari buku. Setiap gambar diberi nomor beserta keterangan isinya:
+
+{FIGS}
+
+Tugas Anda: pilih gambar yang BENAR-BENAR membantu menjawab pertanyaan di atas.
+
+Aturan:
+- Pilih paling banyak {MAX} gambar.
+- Gambar yang tidak berhubungan langsung dengan pertanyaan JANGAN dipilih.
+- Jika tidak ada satu pun gambar yang membantu, jawab: TIDAK ADA
+- Gambar yang salah lebih merugikan siswa daripada tidak ada gambar sama sekali.
+
+Jawab HANYA dengan nomor yang dipilih, dipisahkan koma (contoh: 2, 5). Jika tidak ada, tulis TIDAK ADA.
+
+Jawaban:`
+
+async function llmSelect(question: string, labels: string[], max: number): Promise<number[]> {
+  const listing = labels.map((l, i) => `${i + 1}. ${l}`).join("\n")
+  const res = await chat(
+    GEN_MODEL,
+    [
+      {
+        role: "user",
+        content: SELECT_PROMPT.replace("{Q}", question).replace("{FIGS}", listing).replace("{MAX}", String(max)),
+      },
+    ],
+    120,
+  )
+  const text = res.text.trim()
+  if (/tidak\s*ada/i.test(text)) return []
+  const picked: number[] = []
+  for (const m of text.matchAll(/\d+/g)) {
+    const n = parseInt(m[0], 10) - 1
+    // Out-of-range numbers are hallucinated indices, not choices; dropping them
+    // is safer than clamping, which would silently invent a selection.
+    if (n >= 0 && n < labels.length && !picked.includes(n)) picked.push(n)
+    if (picked.length >= max) break
+  }
+  return picked
+}
 
 export type SystemId =
   | "text_only"
@@ -86,6 +154,11 @@ export type SystemId =
   | "sel_wide"
   | "sel_ranked"
   | "sel_gated"
+  // MRAMG's actual selection mechanism, which the similarity rungs above are
+  // NOT: candidates are listed with their descriptions and a language model
+  // picks, with "none" a legal answer. On MRAMG's only discriminative subset
+  // this roughly doubled the embedding-similarity baseline.
+  | "sel_llm"
 
 /** One figure as the system chose to emit it. */
 export interface EmittedFigure {
@@ -272,11 +345,11 @@ export async function selectOnly(
   const qVec = (await embed(EMBED_MODEL, question)).vectors[0]
   const retrieved = retrieveChunks(idx, qVec, TOP_K)
   const wide = SELECTION_LADDER.has(system) ? retrieveChunks(idx, qVec, FIG_K) : retrieved
-  return selectFigures(system, idx, question, qVec, retrieved, maxFigures, wide).map((f) => f.id)
+  return (await selectFigures(system, idx, question, qVec, retrieved, maxFigures, wide)).map((f) => f.id)
 }
 
 /** Figures a system decides are relevant, BEFORE placement is worked out. */
-function selectFigures(
+async function selectFigures(
   system: SystemId,
   idx: DocIndex,
   question: string,
@@ -285,7 +358,7 @@ function selectFigures(
   limit: number,
   /** Wider pool used only by the selection ladder; see FIG_K. */
   wideRetrieved: Chunk[] = retrieved,
-): FigureRecord[] {
+): Promise<FigureRecord[]> {
   const usable = idx.doc.figures.filter((f) => !f.decorative)
 
   if (system === "text_only") return []
@@ -323,9 +396,24 @@ function selectFigures(
   // then TRUNCATES in document order — there is no scoring step at all. That is
   // the measured defect: retrieval surfaces the right figure 63% of the time and
   // we emit it 33% of the time, discarding half of what was already found.
-  if (system === "sel_wide" || system === "sel_ranked" || system === "sel_gated") {
+  if (system === "sel_wide" || system === "sel_ranked" || system === "sel_gated" || system === "sel_llm") {
     const wideIds = new Set(wideRetrieved.map((c) => c.id))
     const pool = usable.filter((f) => f.anchorChunkId && wideIds.has(f.anchorChunkId))
+
+    // The model-picked variant. Candidates are ordered by similarity purely to
+    // decide WHICH make the shortlist — the choice among them is the model's,
+    // and unlike every rung below it may choose none.
+    if (system === "sel_llm") {
+      const shortlist = pool
+        .map((f) => ({ f, s: cosine(qVec, idx.figureVecs.get(f.id) ?? []) }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, LLM_SHORTLIST)
+        .map((x) => x.f)
+      if (!shortlist.length) return []
+      const labels = shortlist.map((f) => figureIndexText(f, idx.descriptions.get(f.id)).replace(/^\[Gambar\]\s*/, ""))
+      const picked = await llmSelect(question, labels, limit)
+      return picked.map((i) => shortlist[i])
+    }
 
     // Rung 1: widen only. Still document order, still a blind truncation — this
     // exists to show how much comes from the wider pool alone, so the ranking
@@ -460,7 +548,8 @@ function placeFigures(
     // for placement reasons that have nothing to do with selection.
     system === "sel_wide" ||
     system === "sel_ranked" ||
-    system === "sel_gated"
+    system === "sel_gated" ||
+    system === "sel_llm"
   ) {
     // MRAMG-Bench's rule: max-weight assignment, at most one figure per
     // sentence. Placement is "after" the assigned sentence, matching how every
@@ -552,7 +641,7 @@ export async function runSystem(
   // Same ranking, deeper cut — costs one extra sort over vectors already in
   // memory, no extra embedding call and no change to what the generator sees.
   const wideRetrieved = SELECTION_LADDER.has(system) ? retrieveChunks(idx, qVec, FIG_K) : retrieved
-  const selected = selectFigures(system, idx, question, qVec, retrieved, maxFigures, wideRetrieved)
+  const selected = await selectFigures(system, idx, question, qVec, retrieved, maxFigures, wideRetrieved)
 
   // Figure evidence handed to the generator. This is what makes C1 testable:
   // only a system that actually tells the model what is IN the figure can answer
