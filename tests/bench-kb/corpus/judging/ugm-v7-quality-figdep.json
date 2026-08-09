@@ -1,0 +1,1882 @@
+[
+  {
+    "item": 1,
+    "question": "Berapa banyak kendaraan yang terlihat di jalan raya pada gambar?",
+    "reference": "4",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 2,
+    "question": "Berapa banyak kolom yang terdapat pada tabel di gambar?",
+    "reference": "5",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 3,
+    "question": "Berapa banyak elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila?",
+    "reference": "6",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Jawaban: Ada **lima** elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila [6].\n\nSebagai guru, saya jelaskan bahwa gambar tersebut menunjukkan lima nilai utama yang harus dimiliki pelajar Pancasila, yaitu beriman dan bertakwa, mandiri, bernalar kritis, bergotong royong, serta kreatif dan berkebinekaan global. Lima elemen ini mewakili karakteristik siswa Indonesia yang seimbang antara spiritualitas, kemandirian, kecerdasan, kerja sama, dan kemampuan adaptasi dalam dunia yang plural dan dinamis. Dalam gambar, setiap nilai tersebut diletakkan di lingkaran tengah sebagai simbol kesatuan dan keseimbangan antar dimensi Profil Pelajar Pancasila."
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada informasi spesifik tentang jumlah elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila. Meskipun disebutkan bahwa Profil Pelajar Pancasila terdiri dari enam dimensi [1], dan setiap dimensi memiliki elemen kunci, tidak ada deskripsi visual atau penjelasan tentang gambar lingkaran tersebut.\n\nJadi, jawabannya adalah:  \n**Tidak ada di buku.**"
+      },
+      {
+        "label": "C",
+        "text": "Jawaban: Ada **lima** elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila [6].\n\nSebagai guru, saya jelaskan bahwa gambar tersebut menunjukkan lima nilai utama yang harus dimiliki pelajar Pancasila, yaitu beriman dan bertakwa, mandiri, bernalar kritis, bergotong royong, serta kreatif dan berkebinekaan global. Lima elemen ini mewakili karakteristik siswa Indonesia yang seimbang antara spiritualitas, kemandirian, kecerdasan, kerja sama, dan kemampuan adaptasi dalam dunia yang plural dan dinamis. Dengan demikian, gambar lingkaran tersebut menggambarkan secara visual keenam dimensi Profil Pelajar Pancasila, tetapi hanya lima elemen yang terlihat di tengahnya karena satu dimensi (berkebinekaan global) disatukan dengan kreatif dalam representasi visual."
+      },
+      {
+        "label": "D",
+        "text": "Jawaban: Ada enam elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila [1]. \n\nAlasannya, dalam kutipan [1] disebutkan bahwa Profil Pelajar Pancasila terdiri dari enam dimensi, yaitu: beriman dan bertakwa kepada Tuhan Yang Maha Esa serta berakhlak mulia, mandiri, bergotong royong, berkebinekaan global, bernalar kritis, dan kreatif. Ketika kita melihat gambar yang menggambarkan Profil Pelajar Pancasila, lingkaran di tengah biasanya menunjukkan keenam elemen ini secara visual. Meskipun tidak ada deskripsi rinci tentang gambar dalam kutipan, namun dari konteksnya, keenam dimensi tersebut adalah bagian utama yang disajikan dalam representasi Profil Pelajar Pancasila [1]."
+      },
+      {
+        "label": "E",
+        "text": "Jawaban: Ada **lima** elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila [6].\n\nSebagai guru, saya jelaskan bahwa gambar tersebut menunjukkan lima nilai utama yang harus dimiliki pelajar Pancasila, yaitu beriman dan bertakwa, mandiri, bernalar kritis, bergotong royong, serta kreatif dan berkebinekaan global. Lima elemen ini mewakili karakteristik seimbang siswa Indonesia dalam aspek spiritualitas, kemandirian, kecerdasan, kerja sama, dan kemampuan adaptasi. Gambar lingkaran di tengah tersebut dirancang untuk menggambarkan bahwa semua elemen ini saling terhubung dan penting bagi pembentukan karakter pelajar Pancasila yang utuh [6]."
+      },
+      {
+        "label": "F",
+        "text": "Jawaban: Ada **lima** elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila [6].\n\nSebagai guru, saya akan menjelaskan seperti ini: Gambar tersebut menunjukkan lima nilai utama yang harus dimiliki pelajar Pancasila, yaitu beriman dan bertakwa, mandiri, bernalar kritis, bergotong royong, serta kreatif dan berkebinekaan global. Lima elemen ini mewakili karakteristik siswa Indonesia yang seimbang antara spiritualitas, kemandirian, kecerdasan, kerja sama, dan kemampuan adaptasi dalam dunia yang plural dan dinamis [6]. Dengan demikian, lingkaran di tengah gambar tersebut menggambarkan lima dimensi utama Profil Pelajar Pancasila."
+      },
+      {
+        "label": "G",
+        "text": "Jawaban: Ada enam elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila [1]. \n\nAlasannya, berdasarkan kutipan, Profil Pelajar Pancasila terdiri dari enam dimensi utama, yaitu: 1) beriman, bertakwa kepada Tuhan Yang Maha Esa, dan berakhlak mulia; 2) mandiri; 3) bergotong royong; 4) berkebinekaan global; 5) bernalar kritis; dan 6) kreatif [1]. Setiap dimensi ini mewakili satu elemen yang menjadi ciri khas pelajar Indonesia. Gambar lingkaran di tengah biasanya digunakan untuk menyajikan keenam elemen tersebut secara visual, sehingga jumlahnya adalah enam."
+      },
+      {
+        "label": "H",
+        "text": "Jawaban: Ada **lima** elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila [6].\n\nSebagai guru, saya jelaskan bahwa gambar tersebut menunjukkan lima nilai utama yang harus dimiliki pelajar Pancasila, yaitu beriman dan bertakwa, mandiri, bernalar kritis, bergotong royong, serta kreatif dan berkebinekaan global. Lima elemen ini mewakili karakteristik seimbang siswa Indonesia dalam aspek spiritualitas, kemandirian, kecerdasan, kerja sama, dan kemampuan adaptasi. Gambar lingkaran di tengah tersebut dirancang untuk menggambarkan bahwa semua elemen ini saling terhubung dan penting bagi pembentukan karakter pelajar Pancasila yang utuh [6]."
+      },
+      {
+        "label": "I",
+        "text": "Jawaban: Ada **lima** elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila [6].\n\nSebagai guru, saya jelaskan bahwa gambar tersebut menunjukkan lima nilai utama yang harus dimiliki pelajar Pancasila, yaitu beriman dan bertakwa, mandiri, bernalar kritis, bergotong royong, serta kreatif dan berkebinekaan global. Lima elemen ini mewakili karakteristik siswa Indonesia yang seimbang antara spiritualitas, kemandirian, kecerdasan, kerja sama, dan kemampuan adaptasi dalam dunia yang plural dan dinamis [6]. Dengan demikian, gambar lingkaran tersebut menggambarkan lima dimensi utama Profil Pelajar Pancasila yang saling melengkapi."
+      },
+      {
+        "label": "J",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada informasi spesifik tentang jumlah elemen yang terlihat pada lingkaran di tengah gambar yang menggambarkan Profil Pelajar Pancasila. Meskipun kutipan menyebutkan bahwa Profil Pelajar Pancasila terdiri dari enam dimensi [1], dan ada referensi ke gambar dalam buku guru [6], tidak ada deskripsi atau penjelasan tentang isi lingkaran di tengah gambar tersebut. Oleh karena itu, jawabannya adalah: Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 4,
+    "question": "Berapa banyak angka yang terlihat pada dial timbangan?",
+    "reference": "12",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan kutipan yang diberikan, pada gambar alat timbang analog berwarna merah dengan piringan biru berisi tepung, jarum penunjuk menunjukkan angka 3 [6]. Dalam konteks ini, dial timbangan menunjukkan satu angka yaitu angka 3. Meskipun ada penjelasan tentang sistem nilai tempat pada kutipan lainnya [7], itu tidak berkaitan dengan dial timbangan. Jadi, hanya terdapat satu angka yang terlihat pada dial timbangan, yaitu angka 3."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Berdasarkan kutipan yang diberikan, pada gambar alat timbang analog berwarna merah dengan piringan biru berisi tepung, jarum penunjuk menunjukkan angka 3 [6]. Dalam konteks ini, dial timbangan menunjukkan satu angka yaitu angka 3. Meskipun ada penjelasan tentang sistem nilai tempat pada kutipan lainnya [7], itu tidak berkaitan dengan dial timbangan. Jadi, hanya terdapat satu angka yang terlihat pada dial timbangan, yaitu angka 3."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 5,
+    "question": "Berapa banyak anak yang digambarkan sedang berjalan di tanda lalu lintas tersebut?",
+    "reference": "2",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan kutipan [6], gambar menunjukkan tanda peringatan berbentuk segitiga merah dengan siluet anak-anak berjalan. Tanda ini digunakan untuk mengingatkan pengendara akan area berpotensi bahaya bagi anak-anak. Dalam ilustrasi tersebut, terdapat siluet dari beberapa anak yang sedang berjalan, namun buku tidak menyebutkan jumlah pastinya. Oleh karena itu, jawaban yang tepat adalah: **Tidak ada di buku.**"
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Berdasarkan kutipan [6], gambar menunjukkan tanda peringatan berbentuk segitiga merah dengan siluet anak-anak berjalan. Tanda ini digunakan untuk mengingatkan pengendara akan area berpotensi bahaya bagi anak-anak. Dalam ilustrasi tersebut, terdapat siluet dari beberapa anak yang sedang berjalan, namun buku tidak menyebutkan jumlah pastinya. Oleh karena itu, jawaban yang tepat adalah: **Tidak ada di buku.**"
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Berdasarkan kutipan [6], gambar menunjukkan tanda peringatan berbentuk segitiga merah dengan siluet anak-anak berjalan. Tanda ini digunakan untuk mengingatkan pengendara akan area berpotensi bahaya bagi anak-anak. Dalam ilustrasi tersebut, terdapat siluet dari beberapa anak yang sedang berjalan, namun buku tidak menyebutkan jumlah pastinya. Oleh karena itu, jawaban yang tepat adalah: **Tidak ada di buku.**"
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 6,
+    "question": "Berapa banyak garis biru yang terlihat pada gambar?",
+    "reference": "1",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan kutipan yang diberikan, terdapat satu gambar yang secara eksplisit menyebutkan garis biru dan merah sebagai hasil lipatan yang membentuk sudut atau simetri tertentu [7]. Dalam konteks ini, garis biru disebutkan bersama dengan garis merah, namun tidak ada informasi yang menyatakan bahwa hanya ada satu garis biru atau jumlahnya lebih dari satu. Karena tidak ada kutipan lain yang mengonfirmasi jumlah garis biru secara spesifik, maka jawaban yang dapat diberikan adalah:\n\n**Tidak ada di buku.**\n\nNamun, jika kita mengacu pada konteks aktivitas lipat kertas dan penjelasan guru dalam kutipan [7], kemungkinan besar hanya terdapat **satu garis biru** yang digambar sebagai hasil lipatan, bersama dengan garis merah. Namun, karena buku tidak secara eksplisit menyebutkan jumlahnya, kita tidak dapat memastikan jawaban tersebut tanpa kutipan tambahan.\n\nJadi, jawabannya tetap:\n\n**Tidak ada di buku.**"
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada informasi spesifik tentang jumlah garis biru pada gambar. Meskipun disebutkan bahwa garis biru dan kuning merupakan pasangan garis sejajar [7], serta garis biru dan hijau juga merupakan pasangan garis sejajar [5], tidak ada penjelasan atau gambar yang menyatakan berapa banyak garis biru yang terlihat. Oleh karena itu, jawabannya adalah:\n\n**Tidak ada di buku.**"
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Berdasarkan kutipan yang diberikan, terdapat satu gambar yang secara eksplisit menyebutkan garis biru dan merah sebagai hasil lipatan yang membentuk sudut atau simetri tertentu [7]. Dalam konteks ini, garis biru disebutkan bersama dengan garis merah, namun tidak ada informasi yang menyatakan bahwa hanya ada satu garis biru atau jumlahnya lebih dari satu. Karena tidak ada kutipan lain yang mengonfirmasi jumlah garis biru secara spesifik, maka jawaban yang dapat diberikan adalah:\n\n**Tidak ada di buku.**\n\nNamun, jika kita mengacu pada konteks aktivitas lipat dan gambar yang disebutkan dalam kutipan [7], kemungkinan besar hanya terdapat **satu garis biru** yang digambar sebagai hasil lipatan, bersama dengan garis merah. Namun, karena buku tidak secara eksplisit menyatakan jumlahnya, kita tidak dapat memberikan jawaban pasti berdasarkan kutipan yang ada.\n\nJadi, jawabannya tetap:\n\n**Tidak ada di buku.**"
+      },
+      {
+        "label": "G",
+        "text": "Berdasarkan kutipan yang diberikan, terdapat satu gambar yang secara eksplisit menyebutkan garis biru dan merah sebagai hasil lipatan yang membentuk sudut atau simetri tertentu [7]. Dalam konteks ini, garis biru hanya disebutkan sekali dalam deskripsi gambar tersebut. Tidak ada kutipan lain yang menyebutkan adanya garis biru tambahan atau jumlahnya lebih dari satu. Oleh karena itu, jawabannya adalah:\n\n**Ada 1 garis biru yang terlihat pada gambar.**\n\nAlasannya, dalam kutipan [7], disebutkan bahwa “Garis biru dan merah di sisi kanan menggambarkan hasil lipatan...”, yang menunjukkan hanya satu garis biru yang digambar bersama garis merah sebagai bagian dari aktivitas geometri. Tidak ada informasi lain dalam kutipan yang menyebutkan adanya garis biru tambahan atau jumlahnya lebih banyak."
+      },
+      {
+        "label": "H",
+        "text": "Berdasarkan kutipan yang diberikan, terdapat satu garis biru yang terlihat pada gambar. Hal ini disebutkan dalam kutipan [2], di mana guru menjelaskan bahwa garis-garis tegak lurus adalah garis kuning dan garis biru yang bertemu/berpotongan. Selain itu, dalam kutipan [7] juga disebutkan bahwa pasangan garis biru-hijau merupakan garis sejajar, yang menunjukkan adanya satu garis biru yang digambar bersama garis hijau. Tidak ada informasi lain yang menyebutkan adanya garis biru tambahan pada gambar. Oleh karena itu, jumlah garis biru yang terlihat adalah satu.\n\nJawaban: 1 garis biru.\n\nAlasannya, dalam kutipan [2] disebutkan bahwa garis biru merupakan salah satu dari dua garis tegak lurus yang bertemu, dan dalam kutipan [7] disebutkan bahwa garis biru digambar bersama garis hijau sebagai pasangan garis sejajar. Tidak ada penjelasan lain yang menunjukkan adanya garis biru tambahan pada gambar."
+      },
+      {
+        "label": "I",
+        "text": "Berdasarkan kutipan yang diberikan, terdapat satu gambar yang secara eksplisit menyebutkan garis biru dan merah sebagai hasil lipatan yang membentuk sudut atau simetri tertentu [7]. Dalam konteks ini, garis biru disebutkan bersama dengan garis merah, namun tidak ada informasi yang menyatakan bahwa hanya ada satu garis biru atau jumlahnya lebih dari satu. Karena tidak ada kutipan lain yang mengonfirmasi jumlah garis biru secara spesifik, maka jawaban yang dapat diberikan adalah:\n\n**Tidak ada di buku.**\n\nNamun, jika kita mengacu pada konteks aktivitas lipat dan gambar yang disebutkan dalam kutipan [7], kemungkinan besar hanya terdapat **satu garis biru** yang digambar sebagai hasil lipatan, bersama dengan garis merah. Namun, karena buku tidak secara eksplisit menyatakan jumlahnya, kita tidak dapat memberikan jawaban pasti berdasarkan kutipan yang ada.\n\nJadi, jawabannya tetap:\n\n**Tidak ada di buku.**"
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 7,
+    "question": "Berapa banyak submateri yang tercantum dalam peta konsep 'Mengenal Kitab Purana'?",
+    "reference": "5",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan peta konsep 'Mengenal Kitab Purana', terdapat lima submateri utama yang disajikan, yaitu pengertian, jenis-jenis, contoh cerita, manfaat, dan penerapan ajaran di Nusantara [6]. Ini dirancang untuk membantu siswa memahami Kitab Purana secara sistematis, mulai dari definisi dasar hingga aplikasinya dalam kehidupan sehari-hari di Indonesia. Setiap submateri saling terkait dan mendukung pemahaman holistik tentang nilai-nilai spiritual dan sejarah yang terkandung dalam Kitab Purana. Dengan struktur ini, siswa dapat menghubungkan teori dengan praktik, serta memperdalam pemahaman melalui aktivitas seperti membaca cerita, diskusi, dan interaksi dengan orang tua [8]."
+      },
+      {
+        "label": "C",
+        "text": "Berdasarkan peta konsep 'Mengenal Kitab Purana', terdapat lima submateri utama yang disajikan, yaitu pengertian, jenis-jenis, contoh cerita, manfaat, dan penerapan ajaran di Nusantara [6]. Ini dirancang untuk membantu siswa memahami Kitab Purana secara sistematis, mulai dari definisi dasar hingga aplikasinya dalam kehidupan sehari-hari di Indonesia. Setiap submateri saling terkait dan mendukung pemahaman holistik tentang nilai-nilai spiritual dan sejarah yang terkandung dalam Kitab Purana. Dengan struktur ini, siswa dapat menghubungkan teori dengan praktik, serta memperdalam pemahaman melalui aktivitas seperti membaca cerita, diskusi, atau menonton tayangan keagamaan daerah [8]."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan peta konsep 'Mengenal Kitab Purana', terdapat lima submateri utama yang disusun secara sistematis untuk membantu siswa memahami nilai-nilai spiritual dan sejarah Kitab Purana dalam konteks budaya Indonesia. Submaterinya meliputi: pengertian, jenis-jenis, contoh cerita, manfaat, dan penerapan ajaran di Nusantara [7]. Peta konsep ini dirancang agar siswa dapat memahami materi secara bertahap, mulai dari dasar hingga aplikasi praktis dalam kehidupan sehari-hari. Dengan struktur yang jelas, siswa bisa lebih mudah menghubungkan pengetahuan teoritis dengan pengalaman lokal, seperti melalui cerita Purana yang ada di daerah masing-masing [8]. Pendekatan ini juga memperkuat pembelajaran berbasis eksplorasi dan kerja sama antar siswa, sehingga memudahkan pemahaman materi secara holistik."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Berdasarkan peta konsep 'Mengenal Kitab Purana', terdapat lima submateri utama yang disusun secara sistematis untuk membantu siswa memahami nilai-nilai spiritual dan sejarah Kitab Purana dalam konteks budaya Indonesia. Submaterinya meliputi: pengertian, jenis-jenis, contoh cerita, manfaat, dan penerapan ajaran di Nusantara [7]. Peta konsep ini dirancang agar siswa dapat memahami materi secara bertahap, mulai dari dasar hingga aplikasi praktis dalam kehidupan sehari-hari. Dengan struktur yang jelas, siswa bisa lebih mudah menghubungkan pengetahuan teoritis dengan pengalaman lokal, seperti melalui cerita Purana yang ada di daerah masing-masing [8]. Pendekatan ini juga memperkuat pembelajaran berbasis eksplorasi dan kerja sama antar siswa, sehingga memudahkan pemahaman materi secara holistik."
+      },
+      {
+        "label": "G",
+        "text": "Berdasarkan peta konsep 'Mengenal Kitab Purana', terdapat lima submateri utama yang disusun secara sistematis untuk membantu siswa memahami nilai-nilai spiritual dan sejarah Kitab Purana dalam konteks budaya Indonesia. Submaterinya meliputi: pengertian, jenis-jenis, contoh cerita, manfaat, dan penerapan ajaran di Nusantara [7]. Peta konsep ini dirancang agar siswa dapat memahami materi secara bertahap, mulai dari dasar hingga aplikasi praktis dalam kehidupan sehari-hari. Dengan struktur yang jelas, siswa bisa lebih mudah menghubungkan pengetahuan teoritis dengan pengalaman lokal, seperti melalui cerita Purana yang ada di daerah masing-masing [8]. Pendekatan ini juga memperkuat pembelajaran berbasis eksplorasi dan kerja sama antar siswa, sehingga memudahkan pemahaman materi secara holistik."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Berdasarkan peta konsep 'Mengenal Kitab Purana', terdapat lima submateri utama yang disusun secara sistematis untuk membantu siswa memahami nilai-nilai spiritual dan sejarah Kitab Purana dalam konteks budaya Indonesia. Submaterinya meliputi: pengertian, jenis-jenis, contoh cerita, manfaat, dan penerapan ajaran di Nusantara [7]. Peta konsep ini dirancang agar siswa dapat memahami materi secara bertahap, mulai dari dasar hingga aplikasi praktis dalam kehidupan sehari-hari. Dengan struktur yang jelas, siswa bisa lebih mudah menghubungkan pengetahuan teoritis dengan pengalaman lokal, seperti melalui cerita Purana yang ada di daerah masing-masing [8]. Pendekatan ini juga memperkuat pembelajaran berbasis eksplorasi dan kerja sama antar siswa, sehingga memudahkan pemahaman materi secara holistik."
+      }
+    ]
+  },
+  {
+    "item": 8,
+    "question": "Berapa banyak hexagon yang terdapat pada gambar?",
+    "reference": "7",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.  \nBuku yang diberikan tidak menyebutkan jumlah hexagon pada gambar apapun, dan tidak ada deskripsi atau ilustrasi geometris yang memuat bentuk hexagon. Meskipun terdapat beberapa gambar seperti Diagram Aktivitas Belajar (Gambar 2.16-2.37), tidak ada satupun yang disebutkan atau digambarkan sebagai hexagon. Oleh karena itu, jawaban atas pertanyaan ini tidak dapat ditemukan dalam kutipan buku yang tersedia."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nBuku yang diberikan tidak menyebutkan jumlah hexagon pada gambar apapun, dan tidak ada deskripsi visual atau informasi geometris yang relevan untuk menjawab pertanyaan ini."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.  \nBuku yang diberikan tidak menyebutkan jumlah hexagon pada gambar apapun, dan tidak ada deskripsi atau ilustrasi geometris yang memuat bentuk hexagon. Meskipun terdapat beberapa gambar seperti Diagram Aktivitas Belajar (Gambar 2.16-2.37), tidak ada satupun yang disebutkan atau digambarkan sebagai hexagon. Oleh karena itu, jawaban atas pertanyaan ini tidak dapat ditemukan dalam kutipan buku yang tersedia."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nBuku yang diberikan tidak menyebutkan jumlah hexagon pada gambar apa pun. Meskipun terdapat banyak referensi ke gambar seperti Gambar 2.16 hingga Gambar 2.37, tidak ada satu pun kutipan yang menjelaskan atau menggambarkan bentuk geometris seperti hexagon. Oleh karena itu, kita tidak dapat menentukan jumlahnya berdasarkan informasi yang tersedia dalam buku ini."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nBuku yang diberikan tidak menyebutkan jumlah hexagon pada gambar apapun. Meskipun terdapat banyak referensi ke gambar seperti Gambar 2.16, 2.17, hingga 2.46, tidak ada satu pun kutipan yang menjelaskan atau menghitung bentuk geometris seperti hexagon. Oleh karena itu, jawaban soal ini tidak dapat ditemukan dalam buku yang disediakan."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.  \nBuku yang diberikan tidak menyebutkan jumlah hexagon pada gambar apa pun. Meskipun terdapat beberapa gambar seperti Gambar 2.16 hingga 2.37, tidak ada satu pun yang disebutkan atau digambarkan sebagai bentuk hexagon. Oleh karena itu, kita tidak dapat menentukan jumlahnya berdasarkan informasi yang tersedia dalam buku ini."
+      }
+    ]
+  },
+  {
+    "item": 9,
+    "question": "Berapa banyak submateri yang tercantum dalam peta konsep tentang Tri Murti?",
+    "reference": "5",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan peta konsep tentang Tri Murti yang disebutkan dalam buku, terdapat lima submateri utama yang dijelaskan. Submateri-submateri tersebut adalah: pengertian Tri Murti, bagian-bagian Tri Murti, fungsi Tri Murti, sakti Tri Murti, dan sikap sujud bhakti kepada Tri Murti [7]. Ini sesuai dengan struktur pembelajaran yang disusun untuk membantu siswa memahami konsep Tri Murti secara menyeluruh, mulai dari definisi dasar hingga penerapan nilai spiritual dalam kehidupan sehari-hari. Setiap submateri dirancang untuk diberikan pada pertemuan yang berbeda, sehingga siswa dapat memahami materi secara bertahap dan mendalam."
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan peta konsep materi Tri Murti yang disebutkan di buku, terdapat **5 submateri** yang tercantum. Hal ini dapat dilihat dari struktur pembelajaran yang dibagi menjadi lima pertemuan dengan masing-masing subbab: Subbab 1 Pengertian Tri Murti, Subbab 2 Bagian-Bagian Tri Murti, Subbab 3 Fungsi Tri Murti, Subbab 4 Sakti Tri Murti, dan Subbab 5 Sikap Sujud Bhakti Kepada Tri Murti [n]. Setiap subbab ini mencakup tujuan pembelajaran dan aktivitas belajar yang spesifik, sehingga membentuk peta konsep yang terstruktur secara jelas untuk memudahkan siswa memahami materi Tri Murti secara menyeluruh."
+      },
+      {
+        "label": "C",
+        "text": "Berdasarkan peta konsep materi Tri Murti yang disebutkan di buku, terdapat **5 submateri** yang tercantum. Hal ini dapat dilihat dari struktur pembelajaran yang dibagi menjadi lima pertemuan, masing-masing berfokus pada satu subbab: (1) Pengertian Tri Murti, (2) Bagian-Bagian Tri Murti, (3) Fungsi Tri Murti, (4) Sakti Tri Murti, dan (5) Sikap Sujud Bhakti Kepada Tri Murti. Setiap subbab ini dijelaskan secara mendetail dalam buku dengan aktivitas pembelajaran yang disesuaikan, seperti menyimak, berdiskusi, dan berpendapat, sehingga membantu siswa memahami konsep Tri Murti secara holistik [6]."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan peta konsep tentang Tri Murti yang disebutkan dalam buku, terdapat **5 submateri** yang tercantum. Hal ini dapat dilihat dari struktur pembelajaran yang dibagi menjadi lima pertemuan, masing-masing berfokus pada satu subbab: (1) Pengertian Tri Murti, (2) Bagian-Bagian Tri Murti, (3) Fungsi Tri Murti, (4) Sakti Tri Murti, dan (5) Sikap Sujud Bhakti Kepada Tri Murti. Setiap subbab ini dirancang sebagai bagian dari peta konsep materi Tri Murti yang sistematis, sehingga membantu siswa memahami materi secara bertahap dan menyeluruh [2]."
+      },
+      {
+        "label": "E",
+        "text": "Berdasarkan peta konsep tentang Tri Murti yang disebutkan dalam buku, terdapat **lima submateri** yang tercantum. Hal ini dapat dilihat dari kutipan [6], di mana diagram struktur pembelajaran Tri Murti menunjukkan lima poin utama: pengertian, bagian-bagian, fungsi, sakti dewa, dan sikap sujud bhakti. Lima submateri ini mencakup aspek-aspek penting dalam memahami Tri Murti, mulai dari definisi dasar hingga penerapan nilai spiritualnya dalam kehidupan sehari-hari. Setiap submateri dirancang untuk membantu siswa membangun pemahaman yang komprehensif dan holistik tentang konsep Tri Murti dalam konteks kepercayaan Hindu di Indonesia."
+      },
+      {
+        "label": "F",
+        "text": "Berdasarkan peta konsep tentang Tri Murti yang disebutkan dalam buku, terdapat **lima submateri** yang tercantum. Hal ini dapat dilihat dari kutipan [6], di mana diagram struktur pembelajaran Tri Murti menunjukkan lima poin utama: pengertian, bagian-bagian, fungsi, sakti dewa, dan sikap sujud bhakti. Lima submateri ini mencakup aspek-aspek penting dalam memahami Tri Murti, mulai dari definisi dasar hingga penerapan nilai spiritualnya dalam kehidupan sehari-hari. Setiap submateri dirancang untuk membantu siswa membangun pemahaman yang komprehensif dan holistik tentang konsep Tri Murti dalam konteks kepercayaan Hindu di Indonesia."
+      },
+      {
+        "label": "G",
+        "text": "Berdasarkan peta konsep tentang Tri Murti yang disebutkan dalam buku, terdapat lima submateri utama yang dijelaskan. Submateri-submateri tersebut adalah: pengertian Tri Murti, bagian-bagian Tri Murti, fungsi Tri Murti, sakti Tri Murti, dan sikap sujud bhakti kepada Tri Murti [7]. Ini sesuai dengan struktur pembelajaran yang disusun untuk membantu siswa memahami konsep Tri Murti secara menyeluruh, mulai dari definisi dasar hingga penerapan nilai spiritual dalam kehidupan sehari-hari. Setiap submateri dirancang untuk diberikan pada pertemuan yang berbeda, sehingga siswa dapat memahami materi secara bertahap dan mendalam."
+      },
+      {
+        "label": "H",
+        "text": "Berdasarkan peta konsep tentang Tri Murti yang disebutkan dalam buku, terdapat lima submateri utama yang dijelaskan. Submateri-submateri tersebut adalah: pengertian Tri Murti, bagian-bagian Tri Murti, fungsi Tri Murti, sakti Tri Murti, dan sikap sujud bhakti kepada Tri Murti [7]. Ini sesuai dengan struktur pembelajaran yang disusun untuk membantu siswa memahami konsep Tri Murti secara menyeluruh, mulai dari definisi dasar hingga penerapan nilai spiritual dalam kehidupan sehari-hari. Setiap submateri dirancang untuk diberikan pada pertemuan yang berbeda, sehingga siswa dapat memahami materi secara bertahap dan mendalam."
+      },
+      {
+        "label": "I",
+        "text": "Berdasarkan peta konsep materi Tri Murti yang disebutkan dalam kutipan, terdapat lima submateri yang tercantum. Submateri-submateri tersebut adalah: 1) Pengertian Tri Murti, 2) Bagian-Bagian Tri Murti, 3) Fungsi Tri Murti, 4) Sakti Tri Murti, dan 5) Sikap Sujud Bhakti Kepada Tri Murti. Hal ini dapat dilihat dari struktur pembelajaran yang disusun per pertemuan dan subbab, dimana setiap pertemuan membahas satu submateri tertentu [2]."
+      },
+      {
+        "label": "J",
+        "text": "Berdasarkan peta konsep tentang Tri Murti yang disebutkan dalam buku, terdapat lima submateri utama yang dijelaskan. Submateri-submateri tersebut adalah: pengertian Tri Murti, bagian-bagian Tri Murti, fungsi Tri Murti, sakti Tri Murti, dan sikap sujud bhakti kepada Tri Murti [7]. Ini sesuai dengan struktur pembelajaran yang disusun untuk membantu siswa memahami konsep Tri Murti secara menyeluruh, mulai dari definisi dasar hingga penerapan nilai spiritual dalam kehidupan sehari-hari. Setiap submateri dirancang untuk diberikan pada pertemuan yang berbeda, sehingga siswa dapat memahami materi secara bertahap dan mendalam."
+      }
+    ]
+  },
+  {
+    "item": 10,
+    "question": "Berapa banyak buah pepaya yang terlihat pada pohon pepaya di gambar kedua?",
+    "reference": "Tiga",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang secara spesifik menyebutkan jumlah buah pepaya pada gambar kedua, meskipun ada referensi ke gambar pohon pepaya dalam konteks aktivitas mengamati siklus hidup tumbuhan [6] dan aktivitas Ayo Mengamati Bab 3 [3]. Namun, tidak ada informasi numerik atau deskripsi visual yang menyebutkan jumlah buah pepaya pada gambar tersebut."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah buah pepaya yang terlihat pada pohon pepaya di gambar kedua. Meskipun ada referensi ke gambar pohon pepaya dalam konteks aktivitas mengamati proses kehidupan tumbuhan (Gambar 2.22 dan Gambar 2.32), tidak ada informasi spesifik tentang jumlah buah yang terlihat pada pohon tersebut. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah buah pepaya yang terlihat pada pohon pepaya di gambar kedua. Meskipun ada referensi ke gambar pohon pepaya dalam konteks aktivitas mengamati proses kehidupan tumbuhan (Gambar 2.22 dan Gambar 2.32), tidak ada informasi spesifik tentang jumlah buah yang terlihat pada pohon tersebut. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah buah pepaya pada pohon pepaya di gambar kedua secara spesifik. Meskipun ada referensi ke gambar pohon pepaya dalam konteks aktivitas mengamati proses kehidupan tumbuhan (Gambar 2.22 dan Gambar 2.32), tidak ada deskripsi atau angka yang menyebutkan berapa banyak buah pepaya yang terlihat. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah buah pepaya yang terlihat pada pohon pepaya di gambar kedua. Meskipun ada referensi ke gambar pohon pepaya dalam konteks aktivitas mengamati proses kehidupan tumbuhan (Gambar 2.22 dan Gambar 2.32), tidak ada informasi spesifik tentang jumlah buah yang terlihat pada pohon tersebut. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah buah pepaya yang terlihat pada pohon pepaya di gambar kedua. Meskipun ada referensi ke gambar pohon pepaya dalam konteks aktivitas mengamati proses kehidupan tumbuhan (Gambar 2.22 dan Gambar 2.32), tidak ada informasi spesifik tentang jumlah buah yang terlihat pada pohon tersebut. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 11,
+    "question": "Berapa banyak submateri yang tercantum dalam peta konsep 'Mengenal Hari Suci Agama Hindu'?",
+    "reference": "5",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan peta konsep “Mengenal Hari Suci Agama Hindu”, terdapat **lima submateri** yang tercantum, yaitu: pengertian, jenis-jenis, tujuan perayaan, cerita terkait, dan cara melaksanakannya sesuai daerah [6]. Ini membantu siswa memahami bahwa hari suci Hindu bukan hanya perayaan umum, tetapi juga memiliki makna, variasi, dan praktik yang berbeda-beda tergantung lokasi dan tradisi masing-masing [7]. Dengan lima bagian ini, siswa bisa belajar secara holistik, mulai dari konsep dasar hingga penerapan nyata di lingkungan sekitarnya. Peta konsep ini dirancang untuk memudahkan pemahaman dan menghubungkan teori dengan kehidupan sehari-hari."
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada informasi spesifik tentang jumlah submateri yang tercantum dalam peta konsep 'Mengenal Hari Suci Agama Hindu'. Meskipun disebutkan bahwa ada Gambar 2.39 Peta Konsep Bab 4 Hari Suci Hindu [6], tidak ada deskripsi atau daftar submateri yang dijelaskan dalam kutipan tersebut. Oleh karena itu, jawaban yang tepat adalah: Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada informasi spesifik tentang jumlah submateri yang tercantum dalam peta konsep 'Mengenal Hari Suci Agama Hindu'. Meskipun disebutkan bahwa ada Gambar 2.45 Peta Konsep Bab 4 Hari Suci Hindu [3], buku tidak menyebutkan berapa banyak submateri yang terdapat di dalamnya. Oleh karena itu, jawabannya adalah: Tidak ada di buku.\n\nNamun, jika Anda ingin tahu lebih lanjut tentang isi peta konsep tersebut, kita bisa mencari informasi lain dari buku atau guru. Peta konsep biasanya membantu memahami struktur materi dengan menghubungkan ide-ide utama dan submateri secara visual. Jika ada gambar peta konsepnya, Anda bisa melihat sendiri bagian-bagian yang tercantum di dalamnya."
+      },
+      {
+        "label": "E",
+        "text": "Peta konsep 'Mengenal Hari Suci Agama Hindu' terdiri dari **lima submateri utama** [7]. Submateri tersebut adalah: pengertian hari suci Hindu, jenis-jenis hari suci, tujuan perayaan, cerita terkait, dan cara melaksanakannya sesuai daerah. Peta konsep ini dirancang untuk membantu siswa memahami bahwa hari suci Hindu bukan hanya perayaan umum, tetapi juga memiliki makna, variasi, dan praktik yang berbeda-beda tergantung lokasi dan tradisi masing-masing [7]. Dengan struktur ini, siswa dapat belajar secara holistik dan relevan dengan lingkungan sekitar mereka [8]."
+      },
+      {
+        "label": "F",
+        "text": "Berdasarkan kutipan yang ada, peta konsep 'Mengenal Hari Suci Agama Hindu' tercantum di halaman 149 dalam buku siswa [3]. Namun, kutipan tersebut hanya menyebutkan adanya gambar peta konsep, tanpa memberikan detail berapa banyak submateri yang tercantum di dalamnya. Oleh karena itu, jawaban yang tepat adalah: Tidak ada di buku.\n\nJika Anda ingin mengetahui jumlah submateri, Anda perlu melihat langsung peta konsep tersebut di halaman 149 atau meminta bantuan guru untuk menjelaskan struktur materinya. Peta konsep biasanya dirancang untuk membantu siswa memahami hubungan antar topik, tetapi jumlah submateri harus dilihat dari isi peta itu sendiri.\n\nJadi, jawaban akhirnya adalah: Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada informasi spesifik tentang jumlah submateri yang tercantum dalam peta konsep 'Mengenal Hari Suci Agama Hindu'. Meskipun ada referensi ke \"Gambar 2.39 Peta Konsep Bab 4 Hari Suci Hindu\" [3], kutipan tidak menyebutkan isi atau struktur submateri di dalamnya. Oleh karena itu, jawaban yang tepat adalah: Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Berdasarkan peta konsep “Mengenal Hari Suci Agama Hindu”, terdapat **lima submateri** yang tercantum, yaitu: pengertian, jenis-jenis, tujuan perayaan, cerita terkait, dan cara melaksanakannya sesuai daerah [6]. Ini membantu siswa memahami bahwa hari suci Hindu bukan hanya perayaan umum, tetapi juga memiliki makna, variasi, dan praktik yang berbeda-beda tergantung lokasi dan tradisi masing-masing [7]. Dengan lima bagian ini, siswa bisa belajar secara holistik, mulai dari konsep dasar hingga penerapan nyata di lingkungan sekitarnya. Peta konsep ini dirancang untuk memudahkan pemahaman dan menghubungkan teori dengan kehidupan sehari-hari."
+      },
+      {
+        "label": "I",
+        "text": "Berdasarkan kutipan yang ada, peta konsep 'Mengenal Hari Suci Agama Hindu' tercantum di halaman 149 dalam buku siswa [3]. Namun, kutipan tersebut hanya menyebutkan adanya gambar peta konsep, tanpa memberikan detail berapa banyak submateri yang tercantum di dalamnya. Oleh karena itu, jawaban yang tepat adalah: Tidak ada di buku.\n\nJika Anda ingin mengetahui jumlah submateri, Anda perlu melihat langsung peta konsep tersebut di halaman 149 atau meminta bantuan guru untuk menjelaskan struktur materinya. Peta konsep biasanya dirancang untuk membantu siswa memahami hubungan antar topik, tetapi jumlah submateri harus dilihat dari isi peta itu sendiri.\n\nJadi, jawaban akhirnya adalah: Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada informasi spesifik tentang jumlah submateri yang tercantum dalam peta konsep 'Mengenal Hari Suci Agama Hindu'. Meskipun disebutkan adanya \"Peta Konsep Bab 4 Hari Suci Hindu\" pada halaman 149 [3], tidak ada penjelasan atau daftar submateri yang terdapat di dalamnya. Oleh karena itu, jawabannya adalah: Tidak ada di buku.\n\nNamun, jika kamu ingin tahu lebih lanjut tentang isi peta konsep tersebut, kita bisa mencari informasi lain dari buku atau guru. Peta konsep biasanya membantu memahami struktur materi secara visual, jadi mungkin nanti kita bisa lihat bersama-sama bagaimana ia disusun."
+      }
+    ]
+  },
+  {
+    "item": 12,
+    "question": "Berapa banyak komponen utama yang terdapat dalam Profil Pelajar Pancasila seperti yang ditunjukkan pada gambar?",
+    "reference": "6",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Jawaban: Ada enam komponen utama dalam Profil Pelajar Pancasila, yaitu berakhlak mulia, berkebinekaan global, mandiri, mampu bergotong royong, bernalar kritis, dan kreatif [2]. \n\nAlasan: Dalam kutipan nomor 2 disebutkan secara eksplisit bahwa ada enam elemen dalam diri Pelajar Pancasila yang saling mendukung satu sama lain. Elemen-elemen ini mencakup aspek karakter, sikap, dan kemampuan yang harus dikembangkan siswa untuk menjadi pelajar yang unggul dan berkontribusi bagi bangsa dan dunia. Komponen-komponen ini tidak hanya menekankan pada kecerdasan intelektual, tetapi juga pada nilai-nilai moral, sosial, dan spiritual yang sejalan dengan Pancasila."
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan kutipan [2], disebutkan bahwa ada enam elemen dalam diri Pelajar Pancasila, yaitu: berakhlak mulia, berkebinekaan global, mandiri, mampu bergotong royong, bernalar kritis, dan kreatif. Keenamnya dilihat sebagai satu kesatuan yang saling mendukung dan berkesinambungan satu sama lain.\n\nJadi, jumlah komponen utama dalam Profil Pelajar Pancasila adalah **enam** [2]."
+      },
+      {
+        "label": "C",
+        "text": "Jawaban: Ada enam komponen utama dalam Profil Pelajar Pancasila, yaitu berakhlak mulia, berkebinekaan global, mandiri, mampu bergotong royong, bernalar kritis, dan kreatif [2]. Komponen-komponen ini saling mendukung dan membentuk karakter pelajar yang utuh, sesuai dengan nilai-nilai Pancasila. Dalam buku ini, komponen-komponen tersebut dijelaskan secara rinci untuk membantu siswa memahami bagaimana mereka dapat mengembangkan diri menjadi pelajar yang berkualitas dan berkontribusi bagi masyarakat."
+      },
+      {
+        "label": "D",
+        "text": "Jawaban: Ada enam komponen utama dalam Profil Pelajar Pancasila, yaitu berakhlak mulia, berkebinekaan global, mandiri, mampu bergotong royong, bernalar kritis, dan kreatif [2]. \n\nAlasan: Dalam kutipan nomor 2 disebutkan secara eksplisit bahwa ada enam elemen dalam diri Pelajar Pancasila yang saling mendukung satu sama lain. Elemen-elemen ini mencakup aspek karakter, sikap, dan kemampuan yang harus dikembangkan siswa untuk menjadi pelajar yang unggul dan berkontribusi bagi bangsa dan dunia. Komponen-komponen ini tidak hanya menekankan pada kecerdasan intelektual, tetapi juga pada nilai-nilai moral, sosial, dan spiritual yang sejalan dengan Pancasila."
+      },
+      {
+        "label": "E",
+        "text": "Jawaban: Ada lima komponen utama dalam Profil Pelajar Pancasila seperti yang ditunjukkan pada gambar [6].  \nAlasannya, gambar tersebut secara eksplisit menampilkan lima kompetensi utama yang diharapkan pada pelajar Indonesia, yaitu Mandiri, Bernalar Kritis, Kreatif, Gotong Royong, dan Berkebinekaan Global. Selain itu, nilai berakhlaq mulia disebut sebagai inti dari semua kompetensi tersebut. Komponen-komponen ini saling melengkapi dan membentuk karakter pelajar Pancasila yang utuh, sesuai dengan tujuan pendidikan nasional Indonesia."
+      },
+      {
+        "label": "F",
+        "text": "Berdasarkan kutipan yang diberikan, Profil Pelajar Pancasila memiliki **enam elemen utama** yang saling mendukung satu sama lain, yaitu: berakhlak mulia, berkebinekaan global, mandiri, mampu bergotong royong, bernalar kritis, dan kreatif [2]. Elemen-elemen ini dirumuskan sebagai karakteristik utama pelajar Indonesia yang diharapkan dapat berkembang secara holistik. Dalam konteks gambar halaman 14, Profil Pelajar Pancasila digambarkan melalui tiga dimensi: pemikiran, perilaku, dan prestasi [6], yang menunjukkan bahwa profil ini bukan hanya tentang sikap atau keterampilan, tetapi juga hasil nyata dalam kehidupan. Oleh karena itu, jumlah komponen utama Profil Pelajar Pancasila adalah **enam**."
+      },
+      {
+        "label": "G",
+        "text": "Jawaban: Ada lima komponen utama dalam Profil Pelajar Pancasila seperti yang ditunjukkan pada gambar [6].  \nAlasannya, gambar tersebut secara eksplisit menampilkan lima kompetensi utama: Mandiri, Bernalar Kritis, Kreatif, Gotong Royong, dan Berkebinekaan Global. Selain itu, nilai berakhlaq mulia disebutkan sebagai inti yang mendasari semua kompetensi tersebut. Komponen-komponen ini dirancang untuk membentuk karakter pelajar Indonesia yang seimbang, baik secara individu maupun sosial, sesuai dengan visi pendidikan Pancasila. Setiap kompetensi juga dilengkapi ikon visual yang menggambarkan esensinya, sehingga mudah dipahami dan diingat oleh siswa."
+      },
+      {
+        "label": "H",
+        "text": "Jawaban: Ada enam komponen utama dalam Profil Pelajar Pancasila, yaitu berakhlak mulia, berkebinekaan global, mandiri, mampu bergotong royong, bernalar kritis, dan kreatif [2]. \n\nAlasan: Dalam kutipan nomor 2 disebutkan secara eksplisit bahwa ada enam elemen dalam diri Pelajar Pancasila yang saling mendukung satu sama lain. Elemen-elemen ini mencakup aspek karakter, kecerdasan, dan kemampuan sosial yang penting untuk membentuk pelajar yang kompeten dan berintegritas sesuai nilai-nilai Pancasila. Komponen-komponen ini tidak hanya membangun kepribadian individu, tetapi juga mempersiapkan mereka untuk berkontribusi secara aktif dalam masyarakat yang plural dan dinamis."
+      },
+      {
+        "label": "I",
+        "text": "Berdasarkan gambar yang ditunjukkan pada kutipan [6], Profil Pelajar Pancasila terdiri dari **lima komponen utama**. Ini dapat dilihat dari ikon visual dan deskripsi yang disajikan dalam gambar, yaitu: Mandiri, Bernalar Kritis, Kreatif, Gotong Royong, dan Berkebinekaan Global. Selain itu, nilai berakhlaq mulia juga disebutkan sebagai inti yang mendasari semua kompetensi tersebut. Lima komponen ini dirancang untuk membentuk karakter pelajar Indonesia yang seimbang, tangguh, dan siap menghadapi tantangan masa depan dengan sikap positif serta kemampuan berinteraksi dalam keberagaman. Dengan demikian, jumlah komponen utama yang terdapat dalam Profil Pelajar Pancasila adalah lima [6]."
+      },
+      {
+        "label": "J",
+        "text": "Jawaban: Ada enam komponen utama dalam Profil Pelajar Pancasila, yaitu berakhlak mulia, berkebinekaan global, mandiri, mampu bergotong royong, bernalar kritis, dan kreatif [2]. \n\nAlasan: Dalam kutipan nomor 2 disebutkan secara eksplisit bahwa ada enam elemen dalam diri Pelajar Pancasila yang saling mendukung satu sama lain. Elemen-elemen ini mencakup aspek karakter, kecerdasan, dan kemampuan sosial yang penting untuk membentuk pelajar yang kompeten dan berintegritas sesuai nilai-nilai Pancasila. Komponen-komponen ini tidak hanya membangun kepribadian individu, tetapi juga mempersiapkan mereka untuk berkontribusi secara aktif dalam masyarakat yang plural dan dinamis."
+      }
+    ]
+  },
+  {
+    "item": 13,
+    "question": "Berapa banyak lingkungan yang ditunjukkan dalam diagram Venn untuk membentuk karakter Junzi?",
+    "reference": "Tiga",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan kutipan [2], diagram Venn menunjukkan **tiga lingkungan** yang saling bersinergi untuk membentuk karakter Junzi, yaitu: **lingkungan rumah**, **lingkungan sekolah formal**, dan **lingkungan Litang/Miao/Kelenteng**. Ketiga lingkungan ini bekerja sama secara konsisten sejak dini hingga dewasa untuk membangun watak sejati dan akhlak Junzi pada anak-anak. Proses ini disebut Sinergi Tiga Lingkungan Pembentuk Karakter Junzi, yang merupakan bagian dari visi pendidikan Khonghucu Indonesia sejak 2014 [2]. Dengan demikian, jumlah lingkungan yang ditunjukkan dalam diagram Venn adalah **tiga**."
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan kutipan [2], diagram Venn menunjukkan **tiga lingkungan** yang saling bersinergi untuk membentuk karakter Junzi, yaitu: **lingkungan rumah**, **lingkungan sekolah formal**, dan **lingkungan Litang/Miao/Kelenteng**. Ketiga lingkungan ini bekerja sama secara konsisten sejak dini hingga dewasa untuk membangun watak sejati dan akhlak Junzi pada anak-anak. Proses ini disebut Sinergi Tiga Lingkungan Pembentuk Karakter Junzi, yang merupakan bagian dari visi pendidikan Khonghucu Indonesia sejak 2014 [2]. Dengan demikian, jumlah lingkungan yang ditunjukkan dalam diagram Venn adalah **tiga**."
+      },
+      {
+        "label": "C",
+        "text": "Terdapat tiga lingkungan yang ditunjukkan dalam diagram Venn untuk membentuk karakter Junzi, yaitu lingkungan rumah, Litang/Miao/Kelenteng, dan sekolah formal. Konsep ini disebut Sinergi Tiga Lingkungan Pembentuk Karakter Junzi [2]."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan kutipan [2], diagram Venn yang disebutkan menunjukkan **tiga lingkungan** yang saling bersinergi untuk membentuk karakter Junzi, yaitu **lingkungan rumah**, **lingkungan sekolah formal**, dan **lingkungan Litang/Miao/Kelenteng**. Ini adalah bagian dari konsep “Sinergi Tiga Lingkungan Pembentuk Karakter Junzi” yang dirancang untuk mempersiapkan generasi Konfusiani berkarakter Junzi sejak dini [2]. Ketiga lingkungan ini bekerja sama secara terpadu, dimulai dari masa dalam kandungan hingga usia mandiri di rumah, dilanjutkan dengan pendidikan agama di Litang/Miao/Kelenteng sejak usia 1 tahun, dan kemudian diperkuat melalui proses pendidikan formal di sekolah [2]. Dengan demikian, karakter Junzi terbentuk secara holistik melalui interaksi positif antara ketiga lingkungan tersebut."
+      },
+      {
+        "label": "E",
+        "text": "Terdapat tiga lingkungan yang ditunjukkan dalam diagram Venn untuk membentuk karakter Junzi, yaitu lingkungan rumah, Litang/Miao/Kelenteng, dan sekolah formal [2]."
+      },
+      {
+        "label": "F",
+        "text": "Berdasarkan kutipan [2], diagram Venn menunjukkan **tiga lingkungan** yang saling bersinergi untuk membentuk karakter Junzi, yaitu **lingkungan rumah**, **lingkungan sekolah formal**, dan **lingkungan Litang/Miao/Kelenteng**. Ketiga lingkungan ini bekerja sama secara konsisten sejak dini hingga dewasa untuk membangun watak sejati dan akhlak Junzi pada anak-anak. Dalam kutipan [6] juga disebutkan bahwa gambar menggambarkan tiga lingkungan penting: rumah, sekolah, dan tempat ibadah seperti kelenteng atau litang/miao, yang saling terhubung melalui konsep \"Junzi\". Jadi, jumlah lingkungan yang ditunjukkan dalam diagram Venn adalah **tiga**."
+      },
+      {
+        "label": "G",
+        "text": "Berdasarkan kutipan yang diberikan, terdapat tiga lingkungan yang ditunjukkan dalam diagram Venn untuk membentuk karakter Junzi, yaitu rumah, sekolah, dan tempat ibadah seperti kelenteng atau litang/miao. Hal ini disebutkan dalam kutipan [2] yang menyatakan bahwa pendidikan agama Khonghucu harus bersinergi di tiga lingkungan tersebut: rumah (sejak dalam kandungan hingga mandiri), Litang/Miao/Kelenteng (sejak usia 1 tahun), dan sekolah formal (SD-SMP-SMA). Diagram Venn yang disebutkan juga menggambarkan ketiga lingkungan ini sebagai bagian dari konsep \"Sinergi Tiga Lingkungan Pembentuk Karakter Junzi\" [6]. Oleh karena itu, jawabannya adalah tiga lingkungan."
+      },
+      {
+        "label": "H",
+        "text": "Berdasarkan kutipan [2], diagram Venn yang disebutkan menunjukkan **tiga lingkungan** yang saling bersinergi untuk membentuk karakter Junzi, yaitu **lingkungan rumah**, **lingkungan sekolah formal**, dan **lingkungan Litang/Miao/Kelenteng**. Ini adalah bagian dari konsep “Sinergi Tiga Lingkungan Pembentuk Karakter Junzi” yang dirancang untuk mempersiapkan generasi Konfusiani berkarakter Junzi sejak dini [2]. Ketiga lingkungan ini bekerja sama secara terpadu, dimulai dari masa dalam kandungan hingga usia mandiri di rumah, dilanjutkan dengan pendidikan agama di Litang/Miao/Kelenteng sejak usia 1 tahun, dan kemudian diperkuat melalui proses pendidikan formal di sekolah [2]. Dengan demikian, karakter Junzi terbentuk secara holistik melalui interaksi positif antara ketiga lingkungan tersebut."
+      },
+      {
+        "label": "I",
+        "text": "Terdapat tiga lingkungan yang ditunjukkan dalam diagram Venn untuk membentuk karakter Junzi, yaitu lingkungan rumah, Litang/Miao/Kelenteng, dan sekolah formal. Konsep ini disebut Sinergi Tiga Lingkungan Pembentuk Karakter Junzi [2]."
+      },
+      {
+        "label": "J",
+        "text": "Berdasarkan kutipan [2], diagram Venn yang disebutkan menunjukkan **tiga lingkungan** yang bersinergi untuk membentuk karakter Junzi, yaitu:  \n1. Lingkungan rumah (sejak dalam kandungan hingga mandiri),  \n2. Lingkungan Litang/Miao/Kelenteng (sejak usia 1 tahun), dan  \n3. Lingkungan sekolah formal (SD-SMP-SMA).  \n\nIni adalah konsep yang disebut **Sinergi Tiga Lingkungan Pembentuk Karakter Junzi** [2]. Ketiga lingkungan ini bekerja sama secara konsisten sejak dini untuk membentuk watak sejati dan akhlak Junzi pada anak-anak. Dengan demikian, jawabannya adalah **tiga lingkungan**."
+      }
+    ]
+  },
+  {
+    "item": 14,
+    "question": "Berapa banyak program pendidikan yang ditunjukkan pada gambar?",
+    "reference": "Tiga",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada informasi spesifik tentang jumlah program pendidikan yang ditunjukkan pada gambar. Meskipun ada referensi ke beberapa program seperti “Aktivitas” dan “Keluarga Junzi” dalam buku siswa [1], serta pembahasan tentang program pendidikan agama Khonghucu di sekolah formal [8], tidak ada angka atau daftar yang menyebutkan jumlah program secara eksplisit. Oleh karena itu, jawabannya adalah: **Tidak ada di buku.**\n\nNamun, jika kita menginterpretasikan pertanyaan sebagai berapa banyak *jenis* program pendidikan yang disebutkan dalam teks, maka bisa dikatakan ada dua program utama: aktivitas di sekolah dan kegiatan Keluarga Junzi di rumah [1]. Tapi karena pertanyaannya spesifik mengacu pada “gambar”, dan tidak ada deskripsi gambar yang memberikan jawaban numerik, maka kita harus menjawab **Tidak ada di buku.**\n\nSebagai guru, saya ingin menekankan bahwa penting untuk membaca dengan teliti dan memperhatikan konteks pertanyaan — apakah itu berdasarkan teks atau gambar. Jika ada gambar yang menunjukkan program-program tertentu, kita perlu mengamati dan menghitungnya secara langsung dari gambar tersebut."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Berdasarkan gambar yang disebutkan pada kutipan [6], terdapat tiga program pendidikan Khonghucu yang ditunjukkan, yaitu Program Pendidikan Keluarga, Program Pendidikan Sekolah Minggu, dan Program Pendidikan Agama Khonghucu di sekolah. Ketiga program ini saling terhubung dan membentuk lingkungan belajar holistik bagi anak-anak. Dalam gambar, setiap program melibatkan komponen berbeda seperti keluarga, organisasi, atau guru, yang bekerja sama untuk mendukung proses pembelajaran. Ini menunjukkan bahwa pendidikan Khonghucu tidak hanya terjadi di sekolah, tetapi juga melibatkan partisipasi dari lingkungan keluarga dan masyarakat, sehingga menciptakan pengalaman belajar yang lebih menyeluruh dan berkelanjutan."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan gambar yang ditunjukkan pada kutipan [7], terdapat tiga program pendidikan Khonghucu yang saling terhubung, yaitu Program Pendidikan Keluarga, Program Pendidikan Sekolah Minggu, dan Program Pendidikan Agama Khonghucu di sekolah. Ini menunjukkan bahwa pendidikan Khonghucu tidak hanya dilakukan di sekolah, tetapi juga melibatkan keluarga dan organisasi komunitas untuk menciptakan lingkungan belajar yang holistik bagi anak-anak. Dengan adanya ketiga program ini, peserta didik mendapatkan pengalaman belajar yang lebih menyeluruh dan terintegrasi dalam kehidupan sehari-hari mereka [7]."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.\n\nAlasannya, semua kutipan yang diberikan membahas tentang isi buku pelajaran Pendidikan Agama Khonghucu, fitur-fitur buku siswa, peran guru, definisi pendidikan dalam agama Khonghucu, riwayat pekerjaan penulis, atau perubahan kurikulum. Namun, tidak ada satu pun kutipan yang menyebutkan atau menunjukkan gambar yang mengandung program pendidikan, apalagi jumlahnya. Oleh karena itu, jawaban atas pertanyaan \"Berapa banyak program pendidikan yang ditunjukkan pada gambar?\" tidak dapat ditemukan dalam buku ini."
+      },
+      {
+        "label": "G",
+        "text": "Berdasarkan gambar yang disebutkan pada kutipan [6], terdapat tiga program pendidikan Khonghucu yang ditunjukkan, yaitu Program Pendidikan Keluarga, Program Pendidikan Sekolah Minggu, dan Program Pendidikan Agama Khonghucu di sekolah. Ketiga program ini saling terhubung dan membentuk lingkungan belajar holistik bagi anak-anak. Dalam gambar, setiap program melibatkan komponen berbeda seperti keluarga, organisasi, atau guru, yang bekerja sama untuk mendukung proses pembelajaran. Hal ini menunjukkan bahwa pendidikan Khonghucu tidak hanya terjadi di sekolah, tetapi juga melibatkan partisipasi aktif dari lingkungan keluarga dan masyarakat. Dengan demikian, siswa mendapatkan pengalaman belajar yang lebih lengkap dan menyeluruh."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.\n\nAlasannya: Pertanyaan mengenai jumlah program pendidikan yang ditunjukkan pada gambar tidak dapat dijawab karena kutipan-kutipan yang diberikan tidak menyebutkan atau menjelaskan secara spesifik apa yang terdapat dalam gambar tersebut. Kutipan [6] hanya menggambarkan penampilan seorang perempuan dalam konteks sosial atau pendidikan, tetapi tidak menyebutkan adanya program pendidikan atau jumlahnya. Oleh karena itu, jawaban tidak dapat ditemukan dalam buku yang disediakan."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.\n\nAlasannya: Pertanyaan mengenai jumlah program pendidikan yang ditunjukkan pada gambar tidak dapat dijawab karena kutipan-kutipan yang diberikan tidak menyebutkan atau menjelaskan secara spesifik apa yang terdapat dalam gambar tersebut. Kutipan [6] hanya menggambarkan penampilan seorang perempuan dalam konteks sosial atau pendidikan, tetapi tidak menyebutkan adanya program pendidikan atau jumlahnya. Oleh karena itu, jawaban tidak dapat ditemukan dalam buku yang disediakan."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.\n\nAlasannya: Pertanyaan mengenai jumlah program pendidikan yang ditunjukkan pada gambar tidak dapat dijawab karena kutipan-kutipan yang diberikan tidak menyebutkan atau menjelaskan secara spesifik apa yang terdapat dalam gambar tersebut. Kutipan [6] hanya menggambarkan penampilan seorang perempuan dalam konteks sosial atau pendidikan, tetapi tidak menyebutkan adanya program pendidikan atau jumlahnya. Oleh karena itu, jawaban tidak dapat ditemukan dalam buku yang disediakan."
+      }
+    ]
+  },
+  {
+    "item": 15,
+    "question": "Berapa banyak anak yang digambarkan dalam karya seni ini?",
+    "reference": "Lima",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Dalam karya seni yang digambarkan, terdapat tiga anak yang sedang bermain bersama [2]. Mereka memiliki perbedaan fisik seperti tinggi badan, warna kulit, rambut, dan jenis kelamin. Gambar ini disajikan untuk membantu siswa mengamati dan memahami bahwa manusia memiliki keberagaman, baik secara fisik maupun kegemaran [2]. Guru mengarahkan siswa untuk mengidentifikasi perbedaan tersebut dan menuliskan hasil pengamatannya [2]. Dengan demikian, jumlah anak yang digambarkan dalam karya seni ini adalah tiga orang."
+      },
+      {
+        "label": "B",
+        "text": "Jawaban: Lima anak digambarkan dalam karya seni ini [6].\n\nAlasannya, gambar tersebut menunjukkan lima figur anak-anak yang dibuat dari kertas berdiri berbaris sambil saling menggenggam tangan, masing-masing mengenakan pakaian dengan motif dan warna yang berbeda-beda. Ilustrasi ini mengajarkan nilai-nilai inklusivitas dan saling menghargai perbedaan, serta menunjukkan keberagaman budaya dalam satu komunitas [6]. Dengan melihat gambar tersebut, siswa dapat memahami bahwa meskipun mereka berbeda-beda, mereka tetap bisa hidup bersama secara harmonis."
+      },
+      {
+        "label": "C",
+        "text": "Jawaban: Lima anak digambarkan dalam karya seni tersebut [8].\n\nAlasannya, gambar yang disebutkan menunjukkan lima figur anak-anak yang dibuat dari kertas berdiri berbaris sambil saling menggenggam tangan. Masing-masing anak mengenakan pakaian dengan motif dan warna yang berbeda-beda, yang menggambarkan keberagaman budaya dan persatuan dalam satu komunitas. Gambar ini digunakan untuk mengajarkan nilai-nilai inklusivitas dan saling menghargai perbedaan, sehingga jumlah anaknya secara eksplisit disebutkan sebagai lima orang."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan kutipan [2], karya seni yang digambarkan adalah gambar tentang **beberapa anak** yang sedang bermain bersama. Dalam kutipan tersebut disebutkan bahwa ada beberapa perbedaan pada anak-anak tersebut, seperti tinggi badan, warna kulit, rambut, dan jenis kelamin. Namun, jumlah pasti anak dalam gambar tidak disebutkan secara eksplisit. Oleh karena itu, jawaban yang paling tepat adalah **menyesuaikan dengan jawaban peserta didik**, karena guru dapat meminta siswa untuk mengamati dan menuliskan hasil pengamatannya sendiri [2]."
+      },
+      {
+        "label": "E",
+        "text": "Berdasarkan kutipan [2], gambar yang diamati oleh peserta didik menunjukkan **beberapa anak** yang sedang bermain bersama, dengan perbedaan fisik seperti tinggi badan, warna kulit, rambut, dan jenis kelamin. Namun, kutipan tersebut tidak menyebutkan jumlah pasti anak dalam gambar. Oleh karena itu, jawaban yang tepat adalah:\n\n**Tidak ada di buku.**\n\nKarena buku tidak memberikan angka pasti berapa banyak anak yang digambarkan, kita tidak dapat menentukan jumlahnya secara eksplisit dari kutipan yang tersedia."
+      },
+      {
+        "label": "F",
+        "text": "Berdasarkan kutipan [2], gambar yang digunakan dalam kegiatan “Mari Mengamati!” menampilkan **beberapa anak** yang sedang bermain bersama, dengan perbedaan fisik seperti tinggi badan, warna kulit, rambut, dan jenis kelamin. Namun, buku tidak menyebutkan jumlah pasti anak dalam gambar tersebut. Oleh karena itu, jawaban yang tepat adalah **menyesuaikan dengan jawaban peserta didik**, karena guru dapat meminta siswa mengamati dan menuliskan jumlah anak sesuai pengamatan mereka sendiri [2]."
+      },
+      {
+        "label": "G",
+        "text": "Berdasarkan kutipan [2], gambar yang digunakan dalam kegiatan “Mari Mengamati!” menampilkan **beberapa anak** yang sedang bermain bersama, dengan perbedaan fisik seperti tinggi badan, warna kulit, rambut, dan jenis kelamin. Namun, buku tidak menyebutkan jumlah pasti anak dalam gambar tersebut. Oleh karena itu, jawaban yang tepat adalah **menyesuaikan dengan jawaban peserta didik**, karena guru dapat meminta siswa mengamati dan menuliskan jumlah anak sesuai pengamatan mereka sendiri [2]."
+      },
+      {
+        "label": "H",
+        "text": "Dalam karya seni yang digambarkan pada kutipan [2], disebutkan bahwa ada \"beberapa anak\" yang sedang bermain bersama, dengan perbedaan fisik seperti tinggi badan, warna kulit, rambut, dan jenis kelamin. Namun, jumlah pastinya tidak disebutkan secara eksplisit. Oleh karena itu, jawaban yang paling tepat adalah:\n\n**Menyesuaikan dengan jawaban peserta didik.**\n\nKarena buku meminta guru untuk mengarahkan siswa berdasarkan pengamatan mereka sendiri, dan tidak memberikan angka pasti tentang jumlah anak dalam gambar tersebut.\n\nTidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Berdasarkan kutipan [2], gambar yang digunakan dalam kegiatan “Mari Mengamati!” menampilkan **beberapa anak** yang sedang bermain bersama, dengan perbedaan fisik seperti tinggi badan, warna kulit, rambut, dan jenis kelamin. Namun, buku tidak menyebutkan jumlah pasti anak dalam gambar tersebut. Oleh karena itu, jawaban yang tepat adalah **menyesuaikan dengan jawaban peserta didik**, karena guru dapat meminta siswa mengamati dan menuliskan jumlah anaknya sendiri berdasarkan pengamatan mereka [2]."
+      },
+      {
+        "label": "J",
+        "text": "Berdasarkan kutipan [6], karya seni tersebut menggambarkan lima figur anak-anak yang berdiri berbaris sambil saling menggenggam tangan. Mereka masing-masing mengenakan pakaian dengan motif dan warna yang berbeda-beda, yang menunjukkan keberagaman budaya. Gambar ini juga mengajarkan nilai-nilai inklusivitas dan saling menghargai perbedaan. Dengan demikian, jumlah anak yang digambarkan dalam karya seni ini adalah lima orang [6]."
+      }
+    ]
+  },
+  {
+    "item": 16,
+    "question": "Berapa banyak bunga yang terlihat pada gambar?",
+    "reference": "Delapan",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan kutipan yang diberikan, gambar nomor 2 menampilkan rangkaian bunga berwarna-warni yang membentuk lingkaran [6]. Dalam konteks ini, meskipun tidak disebutkan secara eksplisit jumlah bunga, kita dapat menyimpulkan bahwa ada banyak bunga karena disebutkan \"rangkaian bunga berwarna-warni\" dan membentuk lingkaran. Rangkaian yang membentuk lingkaran biasanya terdiri dari beberapa bunga yang disusun secara berulang atau berkelompok, sehingga jumlahnya lebih dari satu. Namun, karena tidak ada angka pasti dalam kutipan, jawaban yang paling tepat adalah bahwa ada banyak bunga, tetapi tidak dapat ditentukan jumlah pastinya hanya berdasarkan informasi yang diberikan.\n\nJadi, jawabannya adalah: **Banyak bunga**, tetapi jumlah pastinya tidak disebutkan di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan gambar nomor 2 yang disebutkan di kutipan [6], terlihat ada rangkaian bunga berwarna-warni yang membentuk lingkaran. Dalam gambar tersebut, tidak disebutkan secara eksplisit jumlah bunga, tetapi dari deskripsi “rangkaian bunga berwarna-warni” dan konteksnya sebagai ilustrasi semangat pelayanan, dapat dipahami bahwa ada beberapa bunga yang terlihat. Namun, karena tidak ada angka atau detail spesifik tentang jumlah bunga dalam kutipan, maka jawaban pastinya tidak bisa ditentukan secara tepat.\n\nJadi, jawabannya adalah: **Tidak ada di buku.**"
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Berdasarkan gambar nomor 8, terlihat ada rangkaian bunga berwarna-warni yang membentuk lingkaran [8]. Dalam gambar tersebut, tidak disebutkan secara eksplisit jumlah bunga, tetapi dari deskripsi “rangkaian bunga berwarna-warni” dan konteks aktivitas mewarnai serta identifikasi tumbuhan, dapat disimpulkan bahwa ada lebih dari satu bunga. Namun, karena buku tidak menyebutkan jumlah pastinya, jawaban yang tepat adalah: **Tidak ada di buku.**"
+      }
+    ]
+  },
+  {
+    "item": 17,
+    "question": "Berapa banyak sinar matahari yang terlihat pada gambar?",
+    "reference": "12",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Berdasarkan gambar yang ditunjukkan pada kutipan [7], terlihat satu matahari dengan sinar-sinar yang melingkari pusatnya. Sinar-sinar ini menggambarkan cahaya yang diterima Bumi dari matahari. Dalam gambar tersebut, jumlah sinar matahari yang terlihat adalah delapan buah, yaitu empat sinar di bagian atas dan empat sinar di bagian bawah, membentuk pola simetris mengelilingi inti matahari [7]. Sinar-sinar ini menunjukkan kekuatan dan kehangatan matahari yang menyinari dunia. Jadi, pada gambar tersebut terlihat delapan sinar matahari [7]."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Berdasarkan gambar yang ditunjukkan, terdapat **sinar matahari yang melingkari pusatnya**, seperti yang digambarkan pada gambar nomor 7 [7]. Sinar-sinar ini menunjukkan bahwa matahari sedang bersinar dengan kuat, dan merupakan sumber cahaya utama di langit. Dalam konteks pelajaran, siswa diminta mengamati gambar cuaca dan menjelaskan makna dari sinar matahari tersebut, seperti bagaimana sinar matahari memberikan kehangatan dan menerangi bumi [1]. Jadi, pada gambar ini, **banyaknya sinar matahari yang terlihat adalah beberapa sinar yang melingkari pusat matahari**, menunjukkan cuaca cerah dengan sinar yang kuat."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 18,
+    "question": "Berapa banyak pohon kelapa yang terlihat di gambar?",
+    "reference": "Dua",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Dalam gambar yang ditampilkan pada kutipan [6], terlihat dua anak sedang bermain bola di tepi pantai dengan latar belakang pohon kelapa. Dari deskripsi gambar tersebut, dapat disimpulkan bahwa ada **dua pohon kelapa** yang terlihat jelas di latar belakang. Hal ini didukung oleh konteks visual yang menggambarkan suasana pantai tropis yang khas dengan pohon kelapa sebagai elemen utama. Jadi, jawabannya adalah **dua pohon kelapa** [6]."
+      },
+      {
+        "label": "B",
+        "text": "Dalam gambar yang ditampilkan pada kutipan [6], terlihat dua anak sedang bermain bola di tepi pantai dengan latar belakang pohon kelapa. Dari deskripsi gambar tersebut, jelas bahwa ada satu pohon kelapa yang terlihat di sisi kanan gambar, sebagai bagian dari latar belakang alam yang menambah keindahan suasana pantai. Tidak ada informasi lain dalam kutipan yang menyebutkan adanya pohon kelapa tambahan, sehingga jumlahnya hanya satu. Jadi, jawabannya adalah satu pohon kelapa [6]."
+      },
+      {
+        "label": "C",
+        "text": "Dalam gambar yang ditampilkan pada kutipan [6], terlihat dua anak sedang bermain bola di tepi pantai dengan latar belakang pohon kelapa. Dari deskripsi gambar tersebut, jelas bahwa ada dua pohon kelapa yang terlihat di sisi kanan dan kiri gambar, menjadi bagian dari latar belakang alam yang menambah keindahan suasana pantai. Pohon kelapa ini tidak hanya menjadi elemen visual, tetapi juga menggambarkan konsep alam tempat bermain yang disebutkan dalam buku [2]. Jadi, jumlah pohon kelapa yang terlihat di gambar adalah dua buah [6]."
+      },
+      {
+        "label": "D",
+        "text": "Dalam gambar yang ditampilkan pada kutipan [6], terlihat dua anak sedang bermain bola di tepi pantai dengan latar belakang pohon kelapa. Dari deskripsi gambar tersebut, jelas bahwa ada pohon kelapa yang menjadi bagian dari latar belakang. Karena hanya disebutkan satu jenis pohon kelapa dalam konteks visual gambar ini, maka dapat disimpulkan bahwa terdapat **satu pohon kelapa** yang terlihat di gambar [6]. Alasannya, gambar tersebut menggambarkan suasana pantai dengan pohon kelapa sebagai elemen alam yang mendukung konsep “alam tempat bermain” seperti yang disebutkan dalam materi pembelajaran. Tidak ada informasi lain dalam kutipan yang menyebutkan jumlah pohon kelapa di gambar lainnya, sehingga jawaban ini didasarkan hanya pada gambar [6] yang relevan dengan pertanyaan.\n\nJawaban: **Satu pohon kelapa**."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nBuku yang diberikan tidak mengandung gambar atau deskripsi visual yang menyebutkan jumlah pohon kelapa. Meskipun disebutkan bahwa Indonesia memiliki tanah subur dan berbagai flora, termasuk rempah-rempah, tidak ada informasi spesifik tentang pohon kelapa atau gambar yang menunjukkan jumlahnya. Oleh karena itu, jawaban atas pertanyaan ini tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Dalam gambar yang ditampilkan pada kutipan [6], terlihat dua anak sedang bermain bola di tepi pantai dengan latar belakang pohon kelapa. Dari deskripsi gambar tersebut, dapat disimpulkan bahwa ada **dua pohon kelapa** yang terlihat jelas di latar belakang. Hal ini didukung oleh konteks visual yang menggambarkan suasana pantai tropis yang khas dengan pohon kelapa sebagai elemen utama. Jadi, jawabannya adalah **dua pohon kelapa** [6]."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Dalam gambar yang ditampilkan pada kutipan [6], terlihat dua anak sedang bermain bola di tepi pantai dengan latar belakang pohon kelapa. Dari deskripsi gambar tersebut, dapat disimpulkan bahwa ada **dua pohon kelapa** yang terlihat jelas di latar belakang. Hal ini didukung oleh konteks visual yang menggambarkan suasana pantai tropis yang khas dengan pohon kelapa sebagai elemen utama. Jadi, jawabannya adalah **dua pohon kelapa** [6]."
+      }
+    ]
+  },
+  {
+    "item": 19,
+    "question": "Berapa banyak anak yang sedang bermain musik di belakang kelompok anak yang menari?",
+    "reference": "5",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan kutipan [8], terdapat sekelompok anak yang sedang bermain musik tradisional dengan alat seperti gendang dan suling, sementara beberapa lainnya berdiri bersama-sama dalam formasi yang menunjukkan kebersamaan dan kerja sama. Dalam konteks pertanyaan, gambar ini menggambarkan aktivitas musik yang dilakukan di belakang kelompok anak yang menari, seperti yang disebutkan dalam kutipan [6] dan [7]. Meskipun tidak disebutkan secara eksplisit jumlah anak yang bermain musik, ilustrasi menunjukkan sekelompok anak — artinya lebih dari satu. Namun, karena tidak ada angka pasti, jawaban yang paling tepat adalah “Tidak ada di buku.”"
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah anak yang sedang bermain musik di belakang kelompok anak yang menari. Meskipun ada gambar yang menunjukkan anak-anak menari [7] dan aktivitas budaya lainnya, tidak ada informasi spesifik tentang anak-anak bermain musik di belakang mereka atau jumlahnya. Oleh karena itu, jawaban tidak dapat ditemukan dalam buku ini."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nBuku yang diberikan tidak menyebutkan jumlah anak yang sedang bermain musik di belakang kelompok anak yang menari. Meskipun ada kutipan tentang tarian yang diiringi alat musik tradisional [4], tidak disebutkan secara spesifik bahwa ada anak-anak yang bermain musik di belakang kelompok penari, apalagi jumlahnya. Oleh karena itu, jawaban untuk pertanyaan ini tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan kutipan [8], terdapat sekelompok anak yang sedang bermain musik tradisional dengan alat seperti gendang dan suling, sementara beberapa lainnya berdiri bersama-sama dalam formasi yang menunjukkan kebersamaan dan kerja sama. Dalam konteks pertanyaan, gambar ini menggambarkan aktivitas musik yang dilakukan di belakang kelompok anak yang menari, seperti yang disebutkan dalam kutipan [6] dan [7]. Meskipun tidak disebutkan secara eksplisit jumlah anak yang bermain musik, ilustrasi menunjukkan sekelompok anak — yang dapat diartikan sebagai lebih dari satu anak. Namun, karena tidak ada angka pasti dalam kutipan, jawaban yang paling tepat adalah: **tidak ada di buku**.\n\nNamun, jika kita mengasumsikan bahwa “sekelompok” berarti minimal dua atau tiga anak, maka bisa disimpulkan bahwa ada beberapa anak (lebih dari satu) yang sedang bermain musik. Tapi karena buku tidak menyebutkan jumlah pastinya, jawaban akhir tetap: **Tidak ada di buku**.\n\nJadi, jawabannya adalah: **Tidak ada di buku**."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah anak yang sedang bermain musik di belakang kelompok anak yang menari. Meskipun ada kutipan tentang tarian yang diiringi alat musik tradisional [4], tidak disebutkan secara spesifik bahwa ada anak yang bermain musik di belakang kelompok penari, apalagi jumlahnya. Oleh karena itu, jawaban tidak dapat ditemukan dalam buku ini."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 20,
+    "question": "Berapa banyak orang yang terlihat dalam gambar?",
+    "reference": "Dua",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.  \nKarena semua kutipan yang diberikan hanya menjelaskan aktivitas, konteks, atau deskripsi gambar, tetapi tidak menyebutkan jumlah orang yang terlihat dalam setiap gambar secara spesifik. Meskipun beberapa gambar menyebutkan \"Wirya dan teman-temannya\" atau \"keluarga\", tanpa informasi eksplisit tentang jumlah orang, kita tidak dapat menentukan jawaban pasti berdasarkan buku ini."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah orang yang terlihat dalam gambar secara spesifik, meskipun beberapa gambar menggambarkan kelompok orang (misalnya Gambar 7.4, 7.5, 7.6, 8.4, 10.3), tetapi tidak ada angka pasti yang diberikan tentang jumlah orang dalam setiap gambar. Oleh karena itu, jawaban tidak dapat ditentukan berdasarkan informasi yang tersedia di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKarena semua kutipan yang diberikan hanya menjelaskan aktivitas, konteks, atau deskripsi gambar, tetapi tidak menyebutkan jumlah orang yang terlihat dalam setiap gambar secara spesifik. Meskipun beberapa gambar menyebutkan \"Wirya dan teman-temannya\" atau \"keluarga\", tidak ada angka pasti tentang berapa banyak orang yang muncul di dalamnya. Oleh karena itu, jawaban tepatnya adalah “Tidak ada di buku.”"
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah orang yang terlihat dalam gambar secara spesifik. Meskipun beberapa gambar menggambarkan kelompok orang (misalnya \"Anak-anak duduk dengan disiplin\" atau \"Wirya dan teman-temannya\"), tidak ada informasi numerik tentang berapa banyak orang yang terlihat dalam setiap gambar."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKarena semua kutipan yang diberikan hanya menjelaskan aktivitas, konteks, atau deskripsi gambar, tetapi tidak menyebutkan jumlah orang yang terlihat dalam setiap gambar secara spesifik. Meskipun beberapa gambar menyebutkan \"Wirya dan teman-temannya\" atau \"keluarga\", tidak ada angka pasti tentang berapa banyak orang yang muncul di dalamnya. Oleh karena itu, jawaban tepatnya adalah “Tidak ada di buku.”"
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKarena semua kutipan yang diberikan hanya menjelaskan aktivitas, konteks, atau deskripsi gambar, tetapi tidak menyebutkan jumlah orang yang terlihat dalam setiap gambar secara spesifik. Meskipun beberapa gambar menyebutkan \"Wirya dan teman-temannya\" atau \"keluarga\", tidak ada angka pasti tentang berapa banyak orang yang muncul di dalamnya. Oleh karena itu, jawaban tepatnya adalah “Tidak ada di buku.”"
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah orang yang terlihat dalam gambar secara spesifik, meskipun beberapa gambar menggambarkan kelompok orang (misalnya Gambar 7.4, 7.5, 7.6, 8.4, 10.3), tetapi tidak ada angka pasti yang diberikan tentang jumlah orang dalam setiap gambar. Oleh karena itu, jawaban tidak dapat ditentukan berdasarkan informasi yang tersedia di buku."
+      }
+    ]
+  },
+  {
+    "item": 21,
+    "question": "Berapa banyak anak panah yang terlihat di dalam tempat penyimpanan anak panah di gambar?",
+    "reference": "Empat",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada gambar yang secara spesifik menunjukkan tempat penyimpanan anak panah dan jumlah anak panah di dalamnya. Meskipun ada beberapa gambar yang menggambarkan aktivitas memanah (Gambar 6.1-6.3), tidak ada deskripsi atau ilustrasi tentang tempat penyimpanan anak panah. Oleh karena itu, jawabannya adalah: **Tidak ada di buku.**"
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada gambar yang secara spesifik menunjukkan tempat penyimpanan anak panah dan jumlah anak panah di dalamnya. Meskipun ada beberapa gambar yang menggambarkan aktivitas memanah (Gambar 6.1-6.3), tidak ada deskripsi atau ilustrasi tentang tempat penyimpanan anak panah. Oleh karena itu, jawabannya adalah: **Tidak ada di buku.**"
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada gambar yang secara spesifik menunjukkan tempat penyimpanan anak panah dan jumlah anak panah di dalamnya. Meskipun ada gambar yang menggambarkan aktivitas memanah (Gambar 7.18 dan Gambar 7.20), tidak ada deskripsi atau ilustrasi tentang tempat penyimpanan anak panah. Oleh karena itu, jawabannya adalah: **Tidak ada di buku.**"
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disebutkan dalam kutipan ini yang menunjukkan tempat penyimpanan anak panah, apalagi menggambarkan jumlah anak panah yang terlihat di dalamnya. Meskipun ada gambar yang berkaitan dengan memanah (misalnya Gambar 1.18 dan 1.20), tidak ada deskripsi atau kutipan yang menyebutkan tempat penyimpanan anak panah atau jumlah anak panah di dalamnya. Jadi, jawaban tidak dapat ditemukan berdasarkan informasi yang tersedia."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan adanya gambar yang menampilkan tempat penyimpanan anak panah atau jumlah anak panah yang terlihat di dalamnya. Meskipun ada gambar yang berkaitan dengan lomba memanah (Gambar 1.17 dan 1.20), tidak ada informasi tentang tempat penyimpanan anak panah atau jumlah anak panah di dalamnya. Oleh karena itu, jawaban untuk pertanyaan ini tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 22,
+    "question": "Berapa banyak anak laki-laki yang berdiri di tengah-tengah kelompok orang dalam gambar?",
+    "reference": "2",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disebutkan dalam kutipan yang menunjukkan anak laki-laki berdiri di tengah-tengah kelompok orang. Semua gambar yang disebutkan berkaitan dengan aktivitas seperti berdoa, bekerja bakti, bermain, atau bersepeda, tetapi tidak ada deskripsi tentang posisi seseorang di tengah kelompok."
+      },
+      {
+        "label": "C",
+        "text": "Berdasarkan kutipan yang diberikan, gambar yang menunjukkan anak laki-laki berdiri di tengah-tengah kelompok orang adalah **Gambar 8.4**, yang menggambarkan Wirya, Edo, dan Putu sebagai anak yang jujur [4]. Dalam gambar ini, tiga anak laki-laki berpakaian seragam sekolah sedang menunjukkan sikap dan nilai yang baik, dengan satu anak memegang papan bertuliskan “Aku”, satu lagi berdoa dengan tangan bersilang, dan yang ketiga memegang papan bertuliskan “Anak Jujur” [6]. Mereka berdiri berdampingan, menunjukkan bahwa salah satu dari mereka berada di tengah-tengah kelompok. Oleh karena itu, jumlah anak laki-laki yang berdiri di tengah-tengah kelompok adalah **satu**.\n\nJawaban: **Satu anak laki-laki**."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Berdasarkan kutipan yang diberikan, gambar yang menunjukkan anak-anak laki-laki berdiri di tengah-tengah kelompok orang adalah **Gambar 8.4**, yang disebutkan dalam kutipan [2] sebagai \"Percakapan Anak\" dan terdapat pada halaman 87. Namun, deskripsi gambar tersebut tidak menyebutkan bahwa anak-anak berdiri di tengah-tengah kelompok orang, melainkan hanya menggambarkan percakapan antar anak.\n\nKarena tidak ada kutipan yang secara eksplisit menjelaskan bahwa ada anak laki-laki yang berdiri di tengah-tengah kelompok orang dalam gambar, maka jawabannya adalah:\n\n**Tidak ada di buku.**\n\nNamun, jika kita melihat **Gambar 7.5** (dalam kutipan [1]) yang menyebutkan \"Wiryam memimpin teman-temannya berbaris dengan disiplin\", ini menunjukkan bahwa Wirya mungkin berada di posisi depan atau tengah saat memimpin barisan, tetapi tidak disebutkan secara eksplisit bahwa ia berdiri di tengah-tengah kelompok orang. Oleh karena itu, kita tidak dapat menyimpulkan jumlah anak laki-laki yang berdiri di tengah-tengah kelompok orang dengan pasti.\n\nJadi, jawaban akhir tetap:\n\n**Tidak ada di buku.**"
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Berdasarkan kutipan yang diberikan, gambar yang menunjukkan anak laki-laki berdiri di tengah-tengah kelompok orang adalah **Gambar 8.4**, yang menggambarkan Wirya, Edo, dan Putu sebagai anak yang jujur [6]. Dalam gambar ini, tiga anak laki-laki berpakaian seragam sekolah sedang menunjukkan sikap dan nilai yang baik, dengan satu anak memegang papan bertuliskan “Aku”, satu lagi berdoa dengan tangan bersilang, dan yang ketiga memegang papan bertuliskan “Anak Jujur”. Mereka berdiri berdampingan, menunjukkan bahwa salah satu dari mereka berada di tengah-tengah kelompok. Oleh karena itu, jumlah anak laki-laki yang berdiri di tengah-tengah kelompok adalah **satu**.\n\nJawaban: **Satu anak laki-laki**."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 23,
+    "question": "Berapa banyak orang yang terlihat duduk di tanah dalam gambar ini?",
+    "reference": "Delapan",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Dalam gambar yang disebutkan, terlihat **dua orang** duduk di tanah.  \nAlasannya, pada Gambar 7.11, Wirya sedang duduk di ruang tengah mendengarkan radio [n]. Selain itu, pada Gambar 7.12, Wirya dan teman-temannya sedang bekerja bakti membersihkan jalan yang kotor [n], yang juga menunjukkan mereka duduk atau berada di tanah dalam aktivitas tersebut. Namun, tidak ada gambar yang secara eksplisit menyebutkan jumlah orang yang duduk di tanah secara spesifik, sehingga jawaban ini didasarkan pada interpretasi dari konteks gambar yang disebutkan."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Dalam gambar yang disebutkan, terdapat satu orang yang duduk di tanah, yaitu Wirya yang sedang duduk di ruang tengah mendengarkan radio [1]. Dari deskripsi gambar tersebut, tidak ada informasi bahwa ada orang lain yang juga duduk di tanah. Jadi, jumlah orang yang terlihat duduk di tanah dalam gambar ini adalah satu orang.\n\nAlasannya, hanya Gambar 7.11 yang secara eksplisit menyebutkan Wirya sedang duduk di ruang tengah mendengarkan radio, dan tidak ada gambar lain yang menggambarkan orang-orang duduk di tanah. Karena itu, jawaban yang tepat berdasarkan kutipan adalah satu orang.\n\nJika kamu ingin tahu lebih banyak tentang aktivitas Wirya dalam gambar lainnya, bisa ditanyakan lagi!"
+      },
+      {
+        "label": "E",
+        "text": "Berdasarkan kutipan yang diberikan, tidak ada gambar yang secara eksplisit menyebutkan jumlah orang yang terlihat duduk di tanah. Meskipun ada beberapa gambar yang menunjukkan anak-anak duduk (misalnya Gambar 7.4: \"Anak-anak duduk dengan disiplin menunggu pelajaran dimulai\"), tidak disebutkan apakah mereka duduk di tanah atau di bangku, lantai, atau tempat lainnya. Oleh karena itu, jawaban yang tepat adalah:\n\n**Tidak ada di buku.**\n\n*Penjelasan sebagai guru:*  \nSiswa, perhatikan bahwa dalam buku ini, meskipun banyak gambar menunjukkan anak-anak duduk, tidak ada satu pun yang menyebutkan secara spesifik bahwa mereka duduk di tanah. Kita harus berdasarkan informasi yang ada, dan karena tidak disebutkan, kita tidak bisa menebak atau mengasumsikan jumlah orangnya. Jadi, jawabannya adalah \"Tidak ada di buku.\""
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Jawaban: Tidak ada di buku.\n\nPenjelasan: Dalam semua kutipan yang diberikan, tidak ada gambar yang secara eksplisit menyebutkan jumlah orang yang terlihat duduk di tanah. Meskipun ada beberapa gambar yang menggambarkan orang duduk (misalnya Gambar 7.11: Wirya sedang duduk di ruang tengah mendengarkan radio, atau Gambar 8.7: Keluarga Bahagia), tidak ada yang menyebutkan bahwa mereka duduk di tanah. Gambar 8.8 juga menggambarkan keluarga makan bersama di luar rumah dan duduk bersila di atas tanah, tetapi tidak disebutkan jumlah orangnya. Karena pertanyaan meminta jumlah spesifik, dan buku tidak memberikan data tersebut, maka jawabannya adalah \"Tidak ada di buku.\""
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Dalam gambar yang ditunjukkan, terlihat sekeluarga sedang berkumpul untuk makan bersama di luar rumah, duduk bersila di atas tanah [7]. Dari deskripsi ini, dapat disimpulkan bahwa seluruh anggota keluarga — termasuk orang tua, anak-anak, dan mungkin juga nenek atau kakek — sedang duduk di tanah. Meskipun tidak disebutkan secara eksplisit jumlah orangnya, ilustrasi menunjukkan beberapa orang yang berkumpul dalam satu keluarga, sehingga dapat diasumsikan ada lebih dari satu orang yang duduk di tanah. Namun, karena buku tidak memberikan angka pasti, jawaban yang paling tepat adalah: **tidak ada di buku** — karena tidak ada informasi spesifik tentang jumlah orang yang terlihat duduk di tanah dalam gambar tersebut."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 24,
+    "question": "Berapa banyak daun yang terlihat di tanah dekat kaki Wiryā?",
+    "reference": "Dua",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah daun yang terlihat di tanah dekat kaki Wiryā. Meskipun ada beberapa gambar yang menunjukkan Wiryā melakukan kegiatan di luar ruangan, seperti menyapu halaman (Gambar 7.3) atau bekerja bakti membersihkan jalan (Gambar 7.12), tidak ada deskripsi visual atau teks yang menyebutkan jumlah daun di tanah dekat kaki Wiryā. Oleh karena itu, jawaban tidak dapat ditemukan dalam buku ini."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah daun yang terlihat di tanah dekat kaki Wiryā. Meskipun ada beberapa gambar yang menunjukkan Wiryā melakukan kegiatan di luar ruangan, seperti menyapu halaman (Gambar 7.3) atau bekerja bakti membersihkan jalan (Gambar 7.12), tidak ada deskripsi visual atau teks yang menyebutkan jumlah daun di tanah dekat kaki Wiryā. Oleh karena itu, jawaban tidak dapat ditemukan dalam buku ini."
+      }
+    ]
+  },
+  {
+    "item": 25,
+    "question": "Berapa banyak orang yang sedang duduk di bangku menunggu di ruangan tersebut?",
+    "reference": "Dua",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan kutipan [6], terdapat dua orang yang sedang duduk di bangku menunggu di ruangan bank, yaitu di dekat mesin ATM sementara satu pelanggan sedang bertransaksi di meja layanan nomor 2. Jadi, jumlah orang yang sedang duduk di bangku menunggu adalah dua orang [6]. \n\nIni menunjukkan bahwa dalam kehidupan sehari-hari, seperti di bank, kita harus sabar dan mengantre dengan tertib. Menunggu giliran bukan hanya tentang waktu, tetapi juga tentang melatih kesabaran dan disiplin diri, sesuai pesan yang diajarkan dalam buku ini [2]. Dengan demikian, menunggu di bangku adalah bagian dari budaya antre yang baik dan penting untuk diterapkan di berbagai tempat."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nBuku ini membahas tentang pentingnya kesabaran dan budaya antre, serta menggambarkan Wirya yang sering mengantre di bank atau kantor pos, tetapi tidak menyebutkan secara spesifik berapa banyak orang yang sedang duduk di bangku menunggu di ruangan tertentu. Meskipun ada gambar-gambar yang menunjukkan aktivitas antrean, tidak ada deskripsi jumlah orang yang duduk di bangku menunggu."
+      },
+      {
+        "label": "C",
+        "text": "Berdasarkan kutipan [6], terdapat dua orang yang sedang duduk di bangku menunggu di ruangan bank, yaitu di dekat mesin ATM sementara satu pelanggan sedang bertransaksi di meja layanan nomor 2. Jadi, jumlah orang yang sedang duduk di bangku menunggu adalah dua orang [6]. \n\nIni menunjukkan bahwa dalam kehidupan sehari-hari, seperti di bank, kita harus sabar dan mengantre dengan tertib. Menunggu giliran bukan hanya tentang waktu, tetapi juga tentang melatih kesabaran dan disiplin diri, sesuai pesan yang diajarkan dalam buku ini [2]. Dengan demikian, menunggu di bangku adalah bagian dari budaya antre yang baik dan penting untuk diterapkan di berbagai tempat."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Berdasarkan kutipan [6], terdapat dua orang yang sedang duduk di bangku menunggu di ruangan bank, yaitu di dekat mesin ATM sementara satu pelanggan sedang bertransaksi di meja layanan nomor 2. Jadi, jumlah orang yang sedang duduk di bangku menunggu adalah dua orang [6]. \n\nIni bisa kita lihat dari deskripsi ilustrasi yang menyebutkan “dua orang lainnya menunggu di bangku dekat mesin ATM.” Mereka menunggu giliran dengan tertib, seperti yang diajarkan dalam buku tentang budaya antre dan kesabaran. Dengan demikian, kita bisa simpulkan bahwa ada dua orang yang sedang duduk menunggu di bangku tersebut."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang secara eksplisit menyebutkan jumlah orang yang sedang duduk di bangku menunggu di ruangan tertentu. Meskipun ada gambar yang menggambarkan anak-anak duduk di bangku (misalnya Gambar 7.4 dan 8.8), tidak disebutkan jumlah pastinya. Jadi, kita tidak bisa memberikan jawaban angka berdasarkan buku ini."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Berdasarkan kutipan [6], terdapat dua orang yang sedang duduk di bangku menunggu di ruangan bank, yaitu di dekat mesin ATM sementara satu pelanggan sedang bertransaksi di meja layanan nomor 2. Jadi, jumlah orang yang sedang duduk di bangku menunggu adalah dua orang [6]. \n\nIni menunjukkan bahwa dalam kehidupan sehari-hari, seperti di bank, kita harus sabar dan mengantre dengan tertib. Menunggu giliran bukan hanya tentang waktu, tetapi juga tentang melatih kesabaran dan disiplin diri, sesuai pesan yang diajarkan dalam buku ini [2]. Dengan demikian, menunggu di bangku adalah bagian dari budaya antre yang baik dan penting untuk diterapkan di berbagai tempat."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nBuku ini membahas tentang pentingnya kesabaran dan budaya antre, serta menggambarkan Wirya dan teman-temannya yang sedang mengantre atau beraktivitas lainnya, tetapi tidak menyebutkan secara spesifik jumlah orang yang duduk di bangku menunggu di suatu ruangan. Jadi, jawaban untuk pertanyaan tersebut tidak dapat ditemukan dalam kutipan yang diberikan."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.\n\nAlasannya, buku ini membahas tentang kesabaran dan budaya antre, serta menggambarkan situasi seperti Wirya yang mengantre di bank atau kantor pos, tetapi tidak menyebutkan secara spesifik berapa banyak orang yang sedang duduk di bangku menunggu di suatu ruangan. Meskipun ada gambar-gambar yang menunjukkan anak-anak duduk di bangku (misalnya Gambar 7.4), buku tidak memberikan angka atau jumlah pasti tentang orang yang sedang menunggu. Jadi, jawaban tepatnya adalah \"Tidak ada di buku.\""
+      }
+    ]
+  },
+  {
+    "item": 26,
+    "question": "Berapa banyak tangan yang dimiliki oleh tokoh utama dalam gambar?",
+    "reference": "Empat",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah tangan yang dimiliki oleh tokoh utama dalam gambar. Meskipun beberapa gambar menggambarkan aksi seperti mencium tangan, memberi salam, atau menolong orang lain, tidak ada deskripsi spesifik tentang jumlah tangan tokoh utama. Oleh karena itu, jawaban tidak dapat ditemukan berdasarkan informasi yang tersedia dalam kutipan."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah tangan yang dimiliki oleh tokoh utama dalam gambar. Meskipun beberapa gambar menggambarkan aksi seperti mencium tangan, memberi salam, atau menolong orang lain (misalnya Gambar 3.1, 3.7, dan 3.6), tidak ada deskripsi visual yang menyebutkan jumlah tangan tokoh utama secara eksplisit. Oleh karena itu, jawaban tidak dapat ditemukan berdasarkan informasi yang tersedia dalam kutipan."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah tangan yang dimiliki oleh tokoh utama dalam gambar. Meskipun beberapa gambar menggambarkan aksi seperti mencium tangan, memberi salam, atau menolong orang lain (misalnya Gambar 3.1, 3.7, dan 3.6), tidak ada deskripsi yang menyebutkan jumlah tangan tokoh utama secara spesifik. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "D",
+        "text": "Tokoh utama dalam gambar memiliki **delapan tangan** [7].  \nAlasannya, gambar tersebut menampilkan Dewi Durga, yang digambarkan dengan delapan tangan memegang senjata dan atribut kekuatan. Delapan tangan ini melambangkan keberanian, keadilan, dan kekuatan untuk mengalahkan kejahatan, sesuai nilai-nilai yang diajarkan dalam mitologi Hindu. Dengan demikian, jumlah tangan tokoh utama adalah delapan, seperti yang terlihat pada gambar [7]."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah tangan milik tokoh utama dalam gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas, sikap, atau objek tertentu tanpa menjelaskan jumlah tangan tokoh utama."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah tangan milik tokoh utama dalam gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas, sikap, atau objek tertentu tanpa menjelaskan jumlah tangan tokoh utama."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah tangan yang dimiliki oleh tokoh utama dalam gambar. Meskipun beberapa gambar menggambarkan aksi seperti mencium tangan guru (Gambar 3.1), membantu teman, atau memberi salam, tidak ada deskripsi spesifik tentang jumlah tangan tokoh utama. Oleh karena itu, jawaban tidak dapat ditemukan berdasarkan informasi yang tersedia dalam kutipan."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah tangan milik tokoh utama dalam gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas, sikap, atau objek tertentu tanpa menjelaskan jumlah tangan tokoh utama."
+      },
+      {
+        "label": "I",
+        "text": "Tokoh utama dalam gambar memiliki **delapan tangan** [7].  \nAlasannya, gambar tersebut menampilkan Dewi Durga, yang digambarkan dengan delapan tangan memegang senjata dan atribut kekuatan. Delapan tangan ini melambangkan keberanian, keadilan, dan kekuatan untuk mengalahkan kejahatan, sesuai nilai-nilai yang diajarkan dalam mitologi Hindu. Dengan demikian, jumlah tangan tokoh utama adalah delapan, karena ia adalah Dewi Durga yang digambarkan secara khas dalam ilustrasi tersebut."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah tangan milik tokoh utama dalam gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas, sikap, atau objek tertentu tanpa menjelaskan jumlah tangan tokoh utama."
+      }
+    ]
+  },
+  {
+    "item": 27,
+    "question": "Berapa banyak buku yang terlihat di rak di belakang anak laki-laki?",
+    "reference": "5",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan tentang anak laki-laki atau rak buku di belakangnya, sehingga tidak mungkin mengetahui jumlah buku yang terlihat. Semua gambar dan deskripsi dalam kutipan berfokus pada dewa-dewa Hindu, pohon pepaya, aktivitas siswa, atau kitab-kitab agama, tetapi tidak ada yang menggambarkan adegan anak laki-laki di depan rak buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan tentang anak laki-laki atau rak buku di belakangnya, sehingga tidak mungkin mengetahui jumlah buku yang terlihat. Semua gambar dan deskripsi dalam kutipan berfokus pada dewa-dewa Hindu, pohon pepaya, aktivitas siswa, atau kitab-kitab agama, tetapi tidak ada yang menggambarkan adegan anak laki-laki di depan rak buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan tentang anak laki-laki atau rak buku di belakangnya, sehingga tidak mungkin mengetahui jumlah buku yang terlihat. Semua gambar dan deskripsi dalam kutipan berfokus pada dewa-dewa Hindu, pohon pepaya, aktivitas siswa, atau kitab-kitab agama, tetapi tidak ada yang menggambarkan situasi tersebut."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan tentang anak laki-laki atau rak buku di belakangnya, sehingga tidak mungkin mengetahui jumlah buku yang terlihat. Semua gambar dan deskripsi dalam kutipan berfokus pada dewa-dewa Hindu, aktivitas siswa, atau kitab-kitab Purana, tetapi tidak ada yang menggambarkan situasi tersebut."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan tentang anak laki-laki atau rak buku di belakangnya, sehingga tidak mungkin mengetahui jumlah buku yang terlihat. Semua gambar dan deskripsi dalam kutipan berfokus pada dewa-dewa Hindu, pohon pepaya, aktivitas siswa, atau kitab-kitab agama, tetapi tidak ada yang menggambarkan adegan anak laki-laki di depan rak buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan tentang anak laki-laki, rak buku, atau jumlah buku yang terlihat di belakangnya. Semua gambar dan deskripsi dalam kutipan berfokus pada aktivitas belajar, dewa-dewa Hindu, kitab Purana, atau pemandangan alam, tetapi tidak ada satu pun yang menggambarkan anak laki-laki dan rak buku di belakangnya."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan tentang anak laki-laki atau rak buku di belakangnya, sehingga tidak mungkin mengetahui jumlah buku yang terlihat. Semua gambar dan deskripsi dalam kutipan berfokus pada dewa-dewa Hindu, pohon pepaya, aktivitas siswa, atau kitab Purana, tetapi tidak ada konteks tentang anak laki-laki dan rak buku di belakangnya."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan tentang anak laki-laki, rak buku, atau jumlah buku yang terlihat di belakangnya. Semua gambar dan deskripsi dalam kutipan berfokus pada aktivitas belajar, dewa-dewa Hindu, kitab Purana, atau pemandangan alam, tetapi tidak ada satu pun yang menggambarkan anak laki-laki di depan rak buku dengan buku-buku di belakangnya."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 28,
+    "question": "Berapa banyak makhluk yang memiliki sayap dalam gambar ini?",
+    "reference": "Dua",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.\n\nPenjelasan: Dalam semua kutipan yang diberikan, tidak ada gambar yang secara eksplisit menunjukkan makhluk dengan sayap. Meskipun ada gambar Dewa Brahma, Wisnu, Siwa, dan Dewi Saraswati (yang dalam mitologi Hindu sering digambarkan memiliki sayap), kutipan hanya menyebutkan nama gambar dan halaman, tanpa deskripsi visual yang menjelaskan apakah mereka memiliki sayap atau tidak. Oleh karena itu, kita tidak dapat menentukan jumlah makhluk dengan sayap berdasarkan informasi yang tersedia."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.\n\nPenjelasan: Dalam semua kutipan yang diberikan, tidak ada gambar yang secara eksplisit menunjukkan makhluk dengan sayap. Meskipun ada gambar Dewa Brahma, Wisnu, Siwa, dan Dewi-Dewi Hindu yang mungkin memiliki sayap dalam representasi seni atau ilustrasi, kutipan hanya menyebutkan nama gambar dan halaman tanpa deskripsi visual tentang sayap. Oleh karena itu, tidak ada informasi cukup untuk menjawab pertanyaan berapa banyak makhluk yang memiliki sayap dalam gambar tersebut."
+      },
+      {
+        "label": "C",
+        "text": "Jawaban: Ada 2 makhluk yang memiliki sayap dalam gambar ini.\n\nAlasannya, berdasarkan kutipan [7] dan [8], Dewa Wisnu digambarkan memiliki sayap putih, serta duduk di atas burung Garuda yang juga memiliki sayap. Kedua makhluk ini — Dewa Wisnu dan Garuda — adalah satu-satunya yang disebutkan dalam kutipan sebagai memiliki sayap. Tidak ada makhluk lain dalam gambar-gambar yang disebutkan di buku ini yang memiliki sayap. Jadi, totalnya hanya 2 makhluk dengan sayap."
+      },
+      {
+        "label": "D",
+        "text": "Jawaban: Ada 2 makhluk yang memiliki sayap dalam gambar ini.\n\nAlasannya, berdasarkan kutipan [7] dan [8], Dewa Wisnu digambarkan memiliki sayap putih, serta duduk di atas burung Garuda yang juga memiliki sayap. Kedua makhluk ini — Dewa Wisnu dan Garuda — adalah satu-satunya yang disebutkan dalam kutipan memiliki sayap. Tidak ada makhluk lain dalam gambar-gambar yang disebutkan memiliki sayap, sehingga jumlahnya hanya dua."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.\n\nAlasannya, buku ini tidak menyertakan gambar yang menunjukkan makhluk dengan sayap secara eksplisit. Meskipun ada beberapa gambar dewa seperti Dewa Brahma, Dewa Wisnu, dan Dewi Saraswati (yang mungkin memiliki sayap dalam representasi seni), buku tidak memberikan deskripsi atau kutipan yang menyebutkan jumlah makhluk dengan sayap dalam gambar tersebut. Oleh karena itu, tidak mungkin menentukan jawaban berdasarkan informasi yang tersedia di buku ini."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.\n\nAlasannya, buku ini tidak menyebutkan jumlah makhluk yang memiliki sayap dalam gambar tertentu. Meskipun ada gambar-gambar seperti Dewa Brahma, Dewa Wisnu, atau Dewi Saraswati yang mungkin digambarkan dengan sayap, buku tidak memberikan informasi spesifik tentang jumlah makhluk ber-sayap dalam konteks pertanyaan ini. Pertanyaan meminta jumlah pasti, dan karena tidak ada data numerik atau deskripsi eksplisit mengenai makhluk ber-sayap di gambar-gambar yang disebutkan, maka jawabannya adalah \"Tidak ada di buku.\""
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.\n\nAlasannya, buku ini tidak menyertakan gambar yang secara eksplisit menunjukkan makhluk dengan sayap. Meskipun ada beberapa gambar dewa seperti Dewa Brahma, Dewa Wisnu, dan Dewi Saraswati yang mungkin memiliki sayap dalam representasi seni, buku ini hanya memberikan judul dan halaman gambar tanpa deskripsi visual atau penjelasan tentang ciri-ciri fisik makhluk dalam gambar tersebut. Oleh karena itu, tidak ada informasi cukup untuk menjawab pertanyaan berapa banyak makhluk yang memiliki sayap."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah makhluk yang memiliki sayap dalam gambar, baik secara eksplisit maupun implisit. Meskipun beberapa gambar menggambarkan dewa-dewa atau makhluk mitos (seperti Dewa Brahma, Wisnu, Siwa, atau Dewi Saraswati), tidak ada informasi yang menyebutkan jumlah makhluk dengan sayap dalam konteks pertanyaan ini. Oleh karena itu, jawaban tidak dapat ditemukan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.\n\nPenjelasan: Dalam semua kutipan yang diberikan, tidak ada gambar yang secara eksplisit menunjukkan makhluk dengan sayap. Meskipun ada gambar Dewa Brahma, Wisnu, Siwa, dan Dewi-Dewi Hindu yang mungkin memiliki sayap dalam representasi seni atau ilustrasi, kutipan hanya menyebutkan nama gambar dan halaman tanpa deskripsi visual tentang sayap. Oleh karena itu, tidak ada informasi cukup untuk menjawab pertanyaan berapa banyak makhluk yang memiliki sayap dalam gambar tersebut."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.\n\nPenjelasan: Dalam semua kutipan yang diberikan, tidak ada gambar yang secara eksplisit menunjukkan makhluk dengan sayap. Meskipun ada gambar Dewa Brahma, Wisnu, Siwa, dan Dewi Saraswati (yang dalam mitologi Hindu sering digambarkan memiliki sayap), kutipan hanya menyebutkan nama gambar dan halaman, tanpa deskripsi visual yang menjelaskan apakah mereka memiliki sayap atau tidak. Oleh karena itu, kita tidak dapat menentukan jumlah makhluk dengan sayap berdasarkan informasi yang tersedia."
+      }
+    ]
+  },
+  {
+    "item": 29,
+    "question": "Berapa banyak orang yang terlihat di gambar ini?",
+    "reference": "Dua",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disebutkan secara spesifik dalam kutipan dengan jumlah orang yang terlihat, dan semua gambar hanya menggambarkan aktivitas atau objek tanpa menyebutkan jumlah orang secara eksplisit. Meskipun beberapa gambar seperti Gambar 3.3 menunjukkan empat anak (Sudarma, Dehen, Simon, dan Ayu), itu tidak disebutkan sebagai \"gambar ini\" dalam pertanyaan. Oleh karena itu, jawaban tidak dapat ditemukan berdasarkan kutipan yang diberikan."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan kutipan yang diberikan, gambar yang menyebutkan orang-orang secara spesifik adalah **Gambar 3.3**, yang menunjukkan **Sudarma, Dehen, Simon, dan Ayu menghibur teman yang bersedih** [8]. Dalam gambar ini, terlihat empat orang: Sudarma, Dehen, Simon, dan Ayu. Mereka bersama-sama menghibur teman yang sedang bersedih, menunjukkan kebersamaan dan kepedulian.\n\nJadi, jumlah orang yang terlihat di gambar tersebut adalah **empat orang**.\n\nAlasannya, nama-nama mereka disebutkan secara eksplisit dalam deskripsi gambar, dan tidak ada indikasi bahwa ada orang lain yang terlihat. Gambar ini menggambarkan kegiatan kelompok kecil yang saling mendukung, sesuai dengan nilai-nilai rukun dan tolong-menolong yang disebutkan dalam teks.\n\nJawaban: **Empat orang** [8]."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disebutkan secara spesifik dalam kutipan yang menunjukkan jumlah orang yang terlihat, meskipun beberapa gambar menyebutkan keberadaan orang (misalnya Gambar 3.3 yang menyebutkan empat anak), tetapi tidak ada informasi tentang jumlah orang di \"gambar ini\" secara eksplisit. Oleh karena itu, jawaban tidak dapat diberikan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "G",
+        "text": "Berdasarkan kutipan yang diberikan, gambar yang menyebutkan orang-orang secara spesifik adalah **Gambar 3.3** dan **Gambar 3.4**, di mana disebutkan bahwa **Sudarma, Dehen, Simon, dan Ayu** menghibur teman yang bersedih dan disayang oleh guru [5]. Dalam gambar ini, terlihat empat orang: Sudarma, Dehen, Simon, dan Ayu. Mereka berempat adalah anak-anak yang bersahabat karib dan saling tolong-menolong [5].\n\nJadi, jumlah orang yang terlihat di gambar tersebut adalah **empat orang**.\n\nAlasannya, karena dalam deskripsi gambar 3.3 secara eksplisit menyebutkan nama keempat anak tersebut: Sudarma, Dehen, Simon, dan Ayu, yang sedang menghibur teman yang bersedih. Tidak ada informasi tambahan yang menunjukkan adanya orang lain di dalam gambar tersebut.\n\nJawaban akhir: **Empat orang** [5]."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 30,
+    "question": "Berapa banyak pohon besar yang terlihat di sekitar gajah pada gambar?",
+    "reference": "Dua",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang secara spesifik menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar. Meskipun ada gambar yang menunjukkan gajah di hutan atau sedang mengangkat pohon, tidak ada deskripsi tentang jumlah pohon besar di sekitarnya. Jadi, jawaban tidak dapat ditemukan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang secara spesifik menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar. Meskipun ada gambar yang menunjukkan gajah di hutan atau gajah mengangkat pohon, tidak ada deskripsi tentang jumlah pohon besar di sekitarnya. Jadi, jawaban tidak dapat ditemukan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nBuku ini tidak menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar. Meskipun ada deskripsi tentang gajah dan aksi membantu harimau serta kancil, tidak ada informasi spesifik mengenai jumlah pohon besar di sekitar gajah dalam gambar tersebut."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku.  \nBuku ini tidak menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar. Meskipun ada deskripsi tentang gajah mengangkat pohon besar untuk menolong harimau (kutipan [1]), tidak disebutkan secara eksplisit berapa banyak pohon besar yang terlihat di sekitarnya. Jadi, jawaban atas pertanyaan ini tidak dapat ditemukan dalam kutipan yang diberikan."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang secara spesifik menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar. Meskipun ada referensi ke gambar-gambar seperti Gambar 3.11, 3.12, dan 3.13 yang menunjukkan gajah dalam hutan atau sedang menolong harimau, tidak ada deskripsi visual tentang jumlah pohon besar di sekitarnya. Hanya disebutkan bahwa gajah berada di hutan yang asri, tetapi tidak dinyatakan berapa banyak pohon besar yang terlihat."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang secara spesifik menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar. Meskipun ada gambar yang menunjukkan gajah di hutan atau sedang mengangkat pohon, tidak ada deskripsi tentang jumlah pohon besar di sekitarnya. Jadi, jawaban tidak dapat ditemukan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang secara spesifik menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar. Meskipun ada gambar yang menunjukkan gajah di hutan atau sedang mengangkat pohon, tidak ada deskripsi tentang jumlah pohon besar di sekitarnya. Jadi, jawaban tidak dapat ditemukan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKarena buku tidak menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar, meskipun disebutkan bahwa Gajah mengangkat pohon besar untuk menolong Harimau [1], tetapi tidak ada informasi tentang jumlah pohon lainnya di sekitarnya. Gambar-gambar yang disebutkan hanya fokus pada aksi Gajah, bukan lingkungan sekitarnya secara detail."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang secara spesifik menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar. Meskipun ada gambar yang menunjukkan gajah di hutan atau sedang mengangkat pohon, tidak ada deskripsi tentang jumlah pohon besar di sekitarnya. Jadi, jawaban tidak dapat ditemukan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.  \nKarena buku tidak menyebutkan jumlah pohon besar yang terlihat di sekitar gajah pada gambar, meskipun disebutkan bahwa Gajah mengangkat pohon besar untuk menolong Harimau [1], tetapi tidak ada informasi tentang jumlah pohon lainnya di sekitarnya. Gambar-gambar yang disebutkan hanya fokus pada aksi Gajah, bukan lingkungan sekitarnya."
+      }
+    ]
+  },
+  {
+    "item": 31,
+    "question": "Berapa banyak pintu gerbang yang terlihat di kedua sisi jalan dalam gambar?",
+    "reference": "10",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan kutipan yang diberikan, gambar yang menunjukkan jalan dengan pintu gerbang di kedua sisi adalah **Gambar 6** [6]. Dalam deskripsi gambar tersebut disebutkan bahwa jalan setapak itu dikelilingi oleh deretan pintu masuk tradisional dengan atap jerami, yang menunjukkan adanya pintu gerbang di kedua sisi jalan. Meskipun tidak secara eksplisit menyebut jumlah pintu gerbang, konteksnya menggambarkan deretan pintu masuk yang berarti lebih dari satu pintu gerbang terlihat di kedua sisi jalan. Oleh karena itu, jawabannya adalah **banyak pintu gerbang**, tetapi tidak dapat ditentukan jumlah pastinya hanya dari deskripsi ini.\n\nJadi, jawaban akhirnya: **Banyak pintu gerbang yang terlihat di kedua sisi jalan dalam gambar** [6]."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menggambarkan gambar dengan pintu gerbang di kedua sisi jalan, atau menyebutkan jumlah pintu gerbang tersebut. Semua gambar yang disebutkan berkaitan dengan tokoh, dewa, hewan, atau aktivitas budaya dan sosial, tetapi tidak ada yang menggambarkan infrastruktur jalan dengan pintu gerbang."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan adanya gambar yang menampilkan pintu gerbang atau jumlah pintu gerbang di kedua sisi jalan. Semua gambar yang disebutkan berkaitan dengan tokoh, dewa, hewan, atau aktivitas budaya dan sosial, tetapi tidak ada deskripsi visual tentang pintu gerbang atau jalan yang memiliki pintu gerbang. Oleh karena itu, jawaban untuk pertanyaan ini tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "E",
+        "text": "Berdasarkan kutipan yang diberikan, gambar yang menunjukkan jalan dengan pintu gerbang di kedua sisi adalah **Gambar 6** [6]. Dalam deskripsi gambar tersebut disebutkan bahwa jalan setapak itu dikelilingi oleh deretan pintu masuk tradisional dengan atap jerami, yang menunjukkan adanya pintu gerbang di kedua sisi jalan. Meskipun tidak secara eksplisit menyebut jumlah pintu gerbang, konteksnya menggambarkan deretan pintu masuk, yang biasanya berarti lebih dari satu pintu gerbang. Namun, karena tidak ada informasi spesifik tentang jumlah pastinya, jawaban yang paling tepat adalah **tidak ada di buku**.\n\nJadi, jawabannya adalah:  \n**Tidak ada di buku.**\n\n*Catatan: Meskipun Gambar 6 menggambarkan pintu gerbang, tidak ada angka atau deskripsi spesifik tentang jumlahnya, sehingga tidak dapat dipastikan berapa banyak pintu gerbang yang terlihat.*"
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menggambarkan gambar dengan pintu gerbang di kedua sisi jalan, atau menyebutkan jumlah pintu gerbang tersebut. Semua gambar yang disebutkan berkaitan dengan tokoh, dewa, hewan, atau aktivitas budaya dan sosial, tetapi tidak ada yang menggambarkan infrastruktur jalan dengan pintu gerbang."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan adanya gambar yang menampilkan pintu gerbang atau jumlah pintu gerbang di kedua sisi jalan. Semua gambar yang disebutkan berkaitan dengan tokoh, dewa, hewan, atau aktivitas budaya dan sosial, tetapi tidak ada deskripsi visual tentang pintu gerbang atau jalan yang memiliki pintu gerbang. Oleh karena itu, jawaban untuk pertanyaan ini tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan hanya menjelaskan gambar-gambar dan konten visual seperti Pak Gede sebagai petani atau pedagang, Dewa-Dewa Hindu, serta cerita-cerita moral seperti Gajah Si Penolong. Tidak ada satu pun kutipan yang menyebutkan atau menggambarkan jumlah pintu gerbang di kedua sisi jalan dalam gambar tertentu. Oleh karena itu, jawaban tidak dapat ditemukan berdasarkan informasi yang tersedia."
+      }
+    ]
+  },
+  {
+    "item": 32,
+    "question": "Berapa banyak bintang kecil yang terlihat di sekitar gambar buku?",
+    "reference": "Tiga",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah bintang kecil di sekitar gambar buku. Meskipun ada beberapa kutipan yang mengandung deskripsi gambar (seperti [6], [7], dan [8]), tidak ada satupun yang menyebutkan adanya bintang kecil atau jumlahnya. Oleh karena itu, jawaban untuk pertanyaan ini tidak dapat ditemukan dalam buku yang disediakan."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah bintang kecil di sekitar gambar buku. Meskipun ada beberapa kutipan yang mengandung deskripsi gambar (seperti [6], [7], dan [8]), tidak ada satupun yang menyebutkan adanya bintang kecil atau jumlahnya. Oleh karena itu, jawaban untuk pertanyaan ini tidak dapat ditemukan dalam buku yang disediakan."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah bintang kecil di sekitar gambar buku. Meskipun ada beberapa kutipan yang mengandung gambar (seperti [6] dan [7]), tidak ada deskripsi visual atau angka yang menyebutkan bintang kecil di sekitarnya. Oleh karena itu, jawaban tidak dapat ditemukan dalam teks yang disediakan."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 33,
+    "question": "Berapa banyak orang yang duduk di bangku atau kursi di depan Firaun dalam gambar?",
+    "reference": "Tiga",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Berdasarkan gambar di halaman 41 dan 42, terlihat bahwa Firaun duduk di bangku atau kursi di depan Yusuf saat melantiknya sebagai penguasa. Dalam gambar tersebut, Firaun berada di posisi yang lebih tinggi, menunjukkan kedudukan kekuasaannya, sementara Yusuf berdiri di hadapannya. Karena Firaun sedang melakukan upacara pelantikan, ia duduk di kursi utama, dan tidak ada disebutkan orang lain yang duduk di depannya. Jadi, hanya satu orang — yaitu Firaun — yang duduk di bangku atau kursi di depan Yusuf.\n\n**Jawaban: 1 orang.**\n\n**Alasannya:** Dalam gambar halaman 41 dan 42, Firaun sedang melantik Yusuf sebagai penguasa. Firaun duduk di kursi utama, sementara Yusuf berdiri di depannya. Tidak ada orang lain yang disebutkan atau terlihat duduk di depan Firaun dalam gambar tersebut. Jadi, hanya satu orang — yaitu Firaun — yang duduk di bangku atau kursi di depan Yusuf."
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan gambar yang disebutkan di kutipan [6], terdapat seorang raja Mesir yang duduk di takhta, memberikan kalung emas kepada seorang perempuan. Di sekitarnya, ada para pelayan dan penjaga yang berdiri. Jadi, orang yang duduk di bangku atau kursi di depan Firaun hanya satu orang, yaitu Firaun sendiri yang duduk di takhta. Para pelayan dan penjaga berdiri di sekitarnya, bukan duduk di depannya. Oleh karena itu, jawabannya adalah satu orang.\n\n**Jawaban: 1 orang**\n\n**Penjelasan:** Dalam gambar [6], Firaun duduk di takhta (yang bisa dianggap sebagai bangku atau kursi) dan menjadi pusat perhatian. Di depannya, tidak ada yang duduk, hanya para pelayan dan penjaga yang berdiri mengelilinginya. Jadi, hanya satu orang yang duduk di bangku atau kursi di depan Firaun, yaitu Firaun sendiri."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan gambar Firaun dan orang-orang yang duduk di bangku atau kursi di depannya. Kutipan [8] hanya menggambarkan sidang hukum di Mesir kuno, tetapi tidak disebutkan bahwa itu adalah gambar Firaun atau jumlah orang yang duduk di depannya. Jadi, jawaban tidak dapat ditentukan berdasarkan buku ini."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan gambar Firaun dan orang-orang yang duduk di bangku atau kursi di depannya. Kutipan [8] hanya menggambarkan sidang hukum di Mesir kuno, tetapi tidak disebutkan bahwa itu adalah gambar Firaun atau jumlah orang yang duduk di depannya. Jadi, jawaban tidak dapat ditentukan berdasarkan buku ini."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKarena kutipan yang diberikan tidak menyebutkan adanya gambar atau deskripsi tentang orang-orang yang duduk di bangku atau kursi di depan Firaun. Semua kutipan membahas mimpi Firaun, tafsiran Yusuf, dan peristiwa seputar kehidupan Yusuf, tetapi tidak ada informasi visual atau deskriptif tentang suasana di depan Firaun dalam gambar. Oleh karena itu, jawaban soal ini tidak dapat ditemukan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan gambar Firaun dan orang-orang yang duduk di bangku atau kursi di depannya. Kutipan [8] hanya menggambarkan sidang hukum di Mesir kuno, tetapi tidak disebutkan bahwa itu adalah gambar Firaun atau jumlah orang yang duduk di depannya. Jadi, jawaban tidak dapat ditentukan berdasarkan buku ini."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah orang yang duduk di bangku atau kursi di depan Firaun dalam gambar. Meskipun ada deskripsi tentang mimpi Firaun dan tindakan Yusuf, tidak ada informasi visual atau jumlah penonton yang disebutkan dalam teks. Untuk menjawab pertanyaan ini, kita memerlukan detail spesifik dari gambar yang tidak tercantum dalam kutipan."
+      },
+      {
+        "label": "I",
+        "text": "Berdasarkan gambar yang disebutkan di kutipan [6], terdapat seorang raja Mesir yang duduk di takhta, memberikan kalung emas kepada seorang perempuan. Di sekitarnya, ada para pelayan dan penjaga yang berdiri. Jadi, orang yang duduk di bangku atau kursi di depan Firaun hanya satu orang, yaitu Firaun sendiri yang duduk di takhta. Para pelayan dan penjaga berdiri di sekitarnya, bukan duduk di depannya. Oleh karena itu, jawabannya adalah satu orang.\n\n**Jawaban: 1 orang**\n\n**Penjelasan:**  \nDalam gambar [6], Firaun duduk di takhta, yang merupakan kursi utama dan paling tinggi, menunjukkan kekuasaannya. Di depannya, tidak ada orang lain yang duduk, hanya para pelayan dan penjaga yang berdiri. Jadi, hanya satu orang — Firaun — yang duduk di bangku atau kursi di depannya. Ini mencerminkan hierarki kekuasaan dalam budaya kuno Mesir, di mana raja adalah pusat segala sesuatu."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan gambar Firaun dan orang-orang yang duduk di bangku atau kursi di depannya. Kutipan [8] hanya menggambarkan sidang hukum di Mesir kuno, tetapi tidak disebutkan bahwa itu adalah gambar Firaun atau jumlah orang yang duduk di depannya. Jadi, jawaban tidak dapat ditentukan berdasarkan buku ini."
+      }
+    ]
+  },
+  {
+    "item": 34,
+    "question": "Berapa banyak orang yang terlihat membawa karung di gambar ini?",
+    "reference": "Dua",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah orang yang membawa karung dalam gambar. Meskipun ada deskripsi tentang lima ribu orang yang makan dan dua belas bakul sisa makanan, tidak ada informasi spesifik mengenai siapa yang membawa karung atau berapa banyak orang yang melakukannya. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan gambar tertentu yang menunjukkan orang-orang membawa karung, maupun jumlah orang yang terlihat membawa karung. Meskipun ada deskripsi tentang lima ribu orang yang makan dan berkelompok-kelompok, tidak ada informasi visual atau detail tentang karung yang dibawa oleh mereka. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah orang yang membawa karung dalam gambar. Meskipun ada deskripsi tentang lima ribu orang yang makan dan dua belas bakul sisa makanan, tidak ada informasi spesifik mengenai siapa yang membawa karung atau berapa banyak orang yang melakukannya. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah orang yang membawa karung dalam gambar. Meskipun ada deskripsi tentang lima ribu orang yang makan dan dua belas bakul sisa makanan, tidak ada informasi spesifik mengenai siapa yang membawa karung atau berapa banyak orang yang melakukannya. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "G",
+        "text": "Jawaban: Tidak ada di buku.\n\nAlasannya: Kutipan yang diberikan tidak menyebutkan jumlah orang yang membawa karung dalam gambar. Meskipun ada gambar yang disebutkan (gambar halaman 36 dan 41-42), isi kutipan hanya menjelaskan konteks kisah Yesus memberi makan lima ribu orang, kisah Yusuf, atau aktivitas di sekolah, tetapi tidak menggambarkan detail tentang orang yang membawa karung. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan gambar tertentu yang menunjukkan orang-orang membawa karung, maupun jumlah orang yang terlihat membawa karung. Meskipun ada deskripsi tentang lima ribu orang yang makan dan berkelompok, tidak ada informasi visual atau detail tentang karung atau aktivitas membawa karung dalam gambar yang disebutkan."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah orang yang membawa karung dalam gambar. Meskipun ada deskripsi tentang lima ribu orang yang makan dan dua belas bakul sisa makanan, tidak ada informasi spesifik mengenai siapa yang membawa karung atau berapa banyak orang yang melakukannya. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "J",
+        "text": "Berdasarkan kutipan [8], yang menggambarkan orang-orang duduk berkelompok-kelompok, ada yang seratus orang sekelompok dan ada juga yang lima puluh orang sekelompok. Ini menunjukkan bahwa jumlah orang yang hadir adalah kira-kira lima ribu laki-laki [1]. Karena mereka duduk berkelompok, maka dapat disimpulkan bahwa setiap kelompok terdiri dari 50 atau 100 orang. Jika kita asumsikan rata-rata 100 orang per kelompok, maka jumlah kelompok adalah 50 (karena 5.000 : 100 = 50). Namun, karena ada juga kelompok 50 orang, jumlah total orang yang terlihat membawa karung bisa bervariasi tergantung pada gambar. Tapi secara umum, jumlah orang yang terlihat adalah sekitar lima ribu orang [1]. Jadi, jawabannya adalah kira-kira lima ribu orang.\n\nJawaban: Kira-kira lima ribu orang [1]."
+      }
+    ]
+  },
+  {
+    "item": 35,
+    "question": "Apa warna kain yang dikenakan oleh pria dalam gambar?",
+    "reference": "Merah",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Warna kain yang dikenakan oleh pria dalam gambar adalah putih [8]. Dalam gambar tersebut, pria dewasa mengenakan baju putih dan tampak tenang di latar belakang alam yang hijau. Baju putih ini melambangkan kebersihan, ketenangan, dan gaya hidup sehat yang disarankan dalam ilustrasi tersebut. Pakaian putih juga sering dikaitkan dengan kesederhanaan dan keseimbangan dalam hidup, sesuai pesan yang ingin disampaikan kepada siswa tentang pentingnya menjaga kesehatan mata dan gaya hidup sehat melalui aktivitas di alam terbuka."
+      },
+      {
+        "label": "B",
+        "text": "Warna kain yang dikenakan oleh pria dalam gambar adalah putih [8]. Dalam gambar tersebut, pria dewasa itu mengenakan baju putih dan tampak tenang di latar belakang alam yang hijau. Baju putih ini melambangkan kebersihan, ketenangan, dan gaya hidup sehat yang disarankan dalam ilustrasi tersebut. Pakaian berwarna putih juga sering dikaitkan dengan kesederhanaan dan keseimbangan, sesuai dengan pesan tentang menjaga kesehatan mata dan gaya hidup sehat melalui aktivitas di alam terbuka."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 36,
+    "question": "Berapa banyak lampu yang terlihat di gambar?",
+    "reference": "Satu",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan yang diberikan, sehingga tidak mungkin untuk menghitung jumlah lampu yang terlihat. Kutipan hanya berisi teks puisi pujian, cerita penciptaan, latihan doa, dan deskripsi aktivitas anak-anak dalam gambar, tetapi tidak ada gambar yang disertakan secara langsung atau deskripsi visual yang cukup untuk mengidentifikasi lampu."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan yang diberikan, sehingga tidak mungkin untuk menghitung jumlah lampu yang terlihat. Kutipan hanya berisi teks puisi pujian, cerita penciptaan, latihan doa, dan deskripsi aktivitas anak-anak dalam gambar, tetapi tidak ada gambar yang disertakan secara langsung atau deskripsi visual yang cukup untuk mengidentifikasi lampu."
+      },
+      {
+        "label": "C",
+        "text": "Berdasarkan kutipan yang diberikan, terdapat dua gambar yang disertai deskripsi lampu:\n\n1. **Gambar 6** menunjukkan sebuah lampu pijar yang menyala di atas buku terbuka, melambangkan ide atau pengetahuan yang muncul saat belajar [6]. Dalam gambar ini, hanya **satu lampu** yang terlihat.\n\n2. **Gambar 7** menunjukkan pohon Natal yang didekorasi dengan **lampu dan hiasan berwarna merah dan emas** [7]. Meskipun tidak disebutkan jumlah pastinya, deskripsi “didekorasi dengan lampu” mengindikasikan adanya **beberapa lampu**, tetapi buku tidak menyebutkan angka pasti.\n\nKarena pertanyaan meminta jumlah lampu yang *terlihat di gambar*, dan hanya Gambar 6 yang secara eksplisit menyebutkan satu lampu, maka jawabannya adalah:\n\n**Jawaban: Satu lampu.**\n\n**Penjelasan:** Dalam Gambar 6, terdapat satu lampu pijar yang menyala di atas buku terbuka, melambangkan wawasan atau pemahaman baru saat belajar [6]. Sementara Gambar 7 menyebutkan “lampu” tanpa jumlah pasti, sehingga tidak dapat dipastikan. Karena pertanyaan meminta jumlah lampu yang *terlihat*, maka hanya satu lampu yang bisa dihitung secara pasti dari deskripsi yang diberikan."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan yang diberikan, sehingga tidak mungkin untuk menghitung jumlah lampu yang terlihat. Kutipan hanya berisi teks puisi pujian, cerita penciptaan, latihan doa, dan deskripsi aktivitas anak-anak dalam gambar, tetapi tidak ada gambar yang disertakan secara langsung atau deskripsi visual yang cukup untuk mengidentifikasi lampu."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan yang diberikan, dan pertanyaan mengenai jumlah lampu yang terlihat di gambar tidak dapat dijawab tanpa melihat gambar tersebut. Semua kutipan berisi teks atau deskripsi tentang pujian kepada Tuhan, penciptaan langit dan bumi, latihan berdoa, cerita saling memaafkan, atau adegan dari kitab suci, tetapi tidak ada yang menyebutkan gambar dengan lampu atau jumlah lampu di dalamnya."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan yang diberikan, sehingga tidak mungkin untuk menghitung jumlah lampu yang terlihat. Kutipan hanya berisi teks puisi pujian, cerita penciptaan, latihan doa, dan deskripsi aktivitas anak-anak dalam gambar, tetapi tidak ada gambar yang disertakan secara langsung atau deskripsi visual yang cukup untuk mengidentifikasi lampu."
+      },
+      {
+        "label": "J",
+        "text": "Berdasarkan kutipan yang diberikan, terdapat dua gambar yang disertai deskripsi lampu:\n\n1. **Gambar 6** menunjukkan sebuah **lampu pijar yang menyala di atas buku terbuka**, yang melambangkan ide atau pengetahuan yang muncul saat belajar [6]. Dalam gambar ini, hanya **satu lampu** yang terlihat.\n\n2. **Gambar 7** menunjukkan sebuah **pohon Natal yang didekorasi dengan lampu dan hiasan berwarna merah dan emas** [7]. Meskipun tidak disebutkan jumlah pastinya, deskripsi menyatakan “lampu” secara umum, tetapi tidak memberikan angka spesifik. Namun, karena pohon Natal biasanya didekorasi dengan banyak lampu, kita dapat mengasumsikan **lebih dari satu lampu**.\n\nNamun, pertanyaan menanyakan **berapa banyak lampu yang terlihat di gambar**, dan hanya **gambar 6** yang secara eksplisit menyebutkan jumlah lampu — yaitu **satu lampu**. Gambar 7 tidak memberikan angka pasti.\n\nJadi, jawaban yang paling tepat berdasarkan buku adalah:  \n**Satu lampu**, karena hanya gambar 6 yang secara jelas menyebutkan satu lampu pijar yang menyala [6]. Gambar 7 menggambarkan lampu, tetapi tidak menyebutkan jumlahnya, sehingga tidak dapat dipastikan."
+      }
+    ]
+  },
+  {
+    "item": 37,
+    "question": "Berapa banyak orang yang terlihat dalam gambar ini?",
+    "reference": "Dua",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan tersebut, dan pertanyaan meminta jumlah orang yang terlihat dalam gambar, maka tidak mungkin menjawab tanpa melihat gambar itu sendiri. Meskipun beberapa kutipan menyebutkan aktivitas anak-anak atau orang-orang (seperti di [1], [6], [7], dan [8]), mereka hanya menggambarkan adegan tertentu, bukan gambar yang bisa dilihat secara langsung oleh pembaca. Oleh karena itu, jawaban tidak dapat diberikan berdasarkan informasi yang ada."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan tersebut, sehingga tidak mungkin mengetahui berapa banyak orang yang terlihat dalam gambar. Meskipun beberapa kutipan menyebutkan aktivitas anak-anak atau orang-orang (seperti lima ribu orang dalam kisah Yesus), itu adalah deskripsi teks, bukan gambar yang bisa diamati secara visual. Oleh karena itu, jawaban tidak dapat diberikan berdasarkan informasi yang tersedia."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan tersebut, sehingga tidak mungkin mengetahui berapa banyak orang yang terlihat dalam gambar. Meskipun beberapa kutipan menyebutkan jumlah orang (misalnya “lima ribu orang laki-laki” atau “sepuluh murid”), itu adalah deskripsi dari cerita, bukan gambar yang bisa diamati secara langsung. Oleh karena itu, jawaban tidak dapat diberikan berdasarkan informasi yang tersedia."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan tersebut, dan pertanyaan meminta jumlah orang yang terlihat dalam gambar, maka tidak mungkin menjawab tanpa melihat gambar itu sendiri. Meskipun beberapa kutipan menyebutkan aktivitas anak-anak atau orang-orang (seperti di [1], [6], [7], dan [8]), mereka hanya menggambarkan adegan tertentu, bukan gambar yang bisa dilihat secara langsung oleh pembaca. Oleh karena itu, jawaban tidak dapat diberikan berdasarkan informasi yang ada."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan tersebut, sehingga tidak mungkin mengetahui berapa banyak orang yang terlihat dalam gambar. Meskipun beberapa kutipan menyebutkan aktivitas anak-anak atau orang-orang (seperti lima ribu orang dalam kisah Yesus), itu adalah deskripsi teks, bukan gambar yang bisa diamati secara visual. Oleh karena itu, jawaban tidak dapat diberikan berdasarkan informasi yang tersedia."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disebutkan secara spesifik dalam pertanyaan, dan meskipun ada beberapa kutipan yang menyertakan gambar (seperti [6], [7], dan [8]), tidak ada salah satu dari mereka yang memberikan informasi tentang jumlah orang yang terlihat di dalamnya. Untuk menjawab pertanyaan ini, kita perlu tahu lebih detail mengenai gambar yang dimaksud, tetapi buku tidak menyediakan data tersebut."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disertakan dalam kutipan-kutipan tersebut, dan pertanyaan meminta jumlah orang yang terlihat dalam gambar, maka tidak mungkin menjawab tanpa melihat gambar. Buku hanya menyebutkan kegiatan anak-anak di kelas atau cerita Yesus memberi makan lima ribu orang, tetapi tidak ada deskripsi visual atau gambar yang bisa digunakan untuk menghitung jumlah orang. Jadi, jawaban yang tepat adalah \"Tidak ada di buku.\""
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKarena tidak ada gambar yang disebutkan secara spesifik dalam pertanyaan, dan meskipun ada beberapa kutipan yang menyertakan gambar (seperti [6], [7], dan [8]), tidak ada salah satu dari mereka yang memberikan informasi tentang jumlah orang yang terlihat di dalamnya. Untuk menjawab pertanyaan ini, kita perlu tahu lebih detail mengenai gambar yang dimaksud, tetapi buku tidak menyediakan itu."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 38,
+    "question": "Berapa banyak jari yang terlihat pada tangan kanan karakter dalam gambar?",
+    "reference": "5",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak mengandung informasi tentang gambar tangan kanan karakter, apalagi jumlah jari yang terlihat. Meskipun ada beberapa kutipan yang membahas aktivitas atau sikap (seperti \"bao xin bade\" dalam [2] atau \"sikap rendah hati\" dalam [3]), tidak ada deskripsi visual atau gambar yang disebutkan, sehingga tidak mungkin menentukan jumlah jari pada tangan kanan karakter."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak mengandung informasi tentang jumlah jari yang terlihat pada tangan kanan karakter dalam gambar. Meskipun beberapa kutipan menyebutkan gambar atau ilustrasi (seperti [6], [7], dan [8]), tidak ada deskripsi spesifik tentang jumlah jari yang terlihat pada tangan kanan karakter tersebut. Oleh karena itu, jawaban tidak dapat ditemukan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak mengandung informasi tentang jumlah jari yang terlihat pada tangan kanan karakter dalam gambar. Meskipun beberapa kutipan menyebutkan gambar atau ilustrasi (seperti [6], [7], dan [8]), tidak ada deskripsi spesifik tentang jumlah jari yang terlihat pada tangan kanan karakter tersebut. Oleh karena itu, jawaban tidak dapat ditemukan berdasarkan kutipan yang tersedia."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 39,
+    "question": "Berapa banyak warna yang terlihat pada lingkaran di gambar?",
+    "reference": "Tiga",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku.  \nKutipan yang diberikan tidak menyebutkan jumlah warna pada lingkaran di gambar. Meskipun ada referensi ke aktivitas \"Warnailah gambar teman-teman\", tidak ada deskripsi atau informasi spesifik tentang lingkaran atau warnanya. Oleh karena itu, jawaban tidak dapat ditemukan dalam kutipan yang tersedia."
+      },
+      {
+        "label": "B",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah warna pada lingkaran di gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas atau ilustrasi tanpa deskripsi visual spesifik tentang warna lingkaran."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah warna pada lingkaran di gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas atau ilustrasi tanpa deskripsi visual spesifik tentang warna lingkaran."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah warna pada lingkaran di gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas atau ilustrasi tanpa deskripsi visual spesifik tentang warna lingkaran."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah warna pada lingkaran di gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas atau ilustrasi tanpa deskripsi visual spesifik tentang warna lingkaran."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku."
+      }
+    ]
+  },
+  {
+    "item": 40,
+    "question": "Berapa banyak rambut yang tampak di gambar?",
+    "reference": "Banyak",
+    "answers": [
+      {
+        "label": "A",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "B",
+        "text": "Berdasarkan gambar yang disebutkan di kutipan [6], terdapat seorang perempuan dengan rambut hitam panjang. Jadi, jumlah rambut yang tampak di gambar adalah satu rambut panjang.  \nAlasannya, gambar tersebut menampilkan seorang perempuan dengan rambut hitam panjang, dan tidak ada informasi bahwa rambutnya terbagi atau ada lebih dari satu rambut. Rambut yang ditunjukkan adalah satu rambut utuh yang panjang, seperti yang digambarkan dalam ilustrasi untuk membantu siswa memahami penampilan orang dewasa.  \nJadi, jawabannya adalah satu rambut panjang."
+      },
+      {
+        "label": "C",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "D",
+        "text": "Berdasarkan gambar yang disebutkan di kutipan [6], terdapat seorang perempuan dengan rambut hitam panjang. Jadi, jumlah rambut yang tampak di gambar adalah satu rambut panjang.  \nAlasannya, gambar tersebut menampilkan seorang perempuan dengan rambut hitam panjang, dan tidak ada informasi bahwa rambutnya terbagi atau ada lebih dari satu rambut. Rambut yang ditunjukkan adalah satu rambut utuh yang panjang, seperti yang digambarkan dalam ilustrasi untuk membantu siswa memahami penampilan orang dewasa.  \nJadi, jawabannya adalah satu rambut panjang."
+      },
+      {
+        "label": "E",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "F",
+        "text": "Tidak ada di buku."
+      },
+      {
+        "label": "G",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah rambut yang tampak di gambar, dan semua gambar yang disertakan hanya menggambarkan aktivitas atau ilustrasi tertentu tanpa detail tentang rambut."
+      },
+      {
+        "label": "H",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah rambut yang tampak di gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas atau ilustrasi tertentu tanpa detail tentang rambut."
+      },
+      {
+        "label": "I",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah rambut yang tampak di gambar, dan semua gambar yang disertakan hanya menggambarkan aktivitas atau ilustrasi tertentu tanpa detail tentang rambut."
+      },
+      {
+        "label": "J",
+        "text": "Tidak ada di buku.  \nKarena tidak ada kutipan yang menyebutkan jumlah rambut yang tampak di gambar, dan semua gambar yang disebutkan hanya menggambarkan aktivitas atau ilustrasi tertentu tanpa detail tentang rambut."
+      }
+    ]
+  }
+]
