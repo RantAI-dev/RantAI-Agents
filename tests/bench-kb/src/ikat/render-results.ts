@@ -64,6 +64,7 @@ const LABEL: Record<string, string> = {
   vinqa_cite: "S8 VinQA citation-order (published)",
   anchor_mramg_place: "A1 anchor selection + MRAMG placement",
   anchor_vinqa_place: "A2 anchor selection + VinQA placement",
+  anchor_end: "A3 anchor selection + no placement rule",
 }
 
 function main() {

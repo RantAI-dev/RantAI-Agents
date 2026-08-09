@@ -68,6 +68,7 @@ const ALL_SYSTEMS: SystemId[] = [
   "vinqa_cite",
   "anchor_mramg_place",
   "anchor_vinqa_place",
+  "anchor_end",
 ]
 /** Vision model used ONCE per figure at ingest, for S5. Not the judge's vendor. */
 const DESCRIBE_MODEL = process.env.IKAT_DESCRIBE_MODEL ?? "google/gemini-3-flash-preview"
