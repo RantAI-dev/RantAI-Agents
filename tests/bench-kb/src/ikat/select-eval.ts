@@ -67,6 +67,12 @@ async function main() {
   }
 
   const acc = new Map<SystemId, Acc>(systems.map((s) => [s, blank()]))
+  // Per-question outcomes, so the comparison can be tested rather than eyeballed.
+  // Aggregates alone cannot support a claim that one selector beats another: the
+  // systems see the same questions, so the test has to be paired, and paired
+  // tests need the pairs. Claims have already been retracted here for want of
+  // exactly this.
+  const perQuestion: Array<Record<string, unknown>> = []
   const files = fs.readdirSync(CORPUS).filter((f) => f.endsWith(".json"))
   console.log(`corpus=${path.basename(CORPUS)} docs=${files.length} questions=${questions.length} maxFigures=${MAX_FIGURES}`)
   console.log(`descriptions cached: ${descriptions.size}\n`)
@@ -78,6 +84,7 @@ async function main() {
     const idx = await buildIndex(doc, descriptions)
     for (const q of dq) {
       const gold = new Set(q.goldFigureIds ?? [])
+      const row: Record<string, unknown> = { questionId: q.id, gold: [...gold] }
       for (const s of systems) {
         const emitted = new Set(await selectOnly(s, idx, q.question, MAX_FIGURES))
         const a = acc.get(s)!
@@ -87,7 +94,9 @@ async function main() {
         if (!gold.size) a.waste += emitted.size
         for (const e of emitted) (gold.has(e) ? a.tp++ : a.fp++)
         for (const g of gold) if (!emitted.has(g)) a.fn++
+        row[s] = [...emitted]
       }
+      perQuestion.push(row)
     }
     console.log(`[${n + 1}/${files.length}] ${doc.slug} (${dq.length} questions)`)
   }
@@ -111,7 +120,7 @@ async function main() {
 
   const out = path.join(BENCH_ROOT, "corpus", "results", `select-eval-${path.basename(CORPUS)}.json`)
   fs.mkdirSync(path.dirname(out), { recursive: true })
-  fs.writeFileSync(out, JSON.stringify(Object.fromEntries(acc), null, 2))
+  fs.writeFileSync(out, JSON.stringify({ totals: Object.fromEntries(acc), perQuestion }, null, 2))
   console.log(`\nwrote ${out}`)
 }
 
