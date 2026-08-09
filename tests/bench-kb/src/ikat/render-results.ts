@@ -65,6 +65,9 @@ const LABEL: Record<string, string> = {
   anchor_mramg_place: "A1 anchor selection + MRAMG placement",
   anchor_vinqa_place: "A2 anchor selection + VinQA placement",
   anchor_end: "A3 anchor selection + no placement rule",
+  sel_wide: "B1 wide pool, no ranking",
+  sel_ranked: "B2 wide pool + description ranking",
+  sel_gated: "B3 wide + ranking + admission floor",
 }
 
 function main() {

@@ -38,6 +38,25 @@ export const EMBED_MODEL = process.env.IKAT_EMBED_MODEL ?? "qwen/qwen3-embedding
 export const GEN_MODEL = process.env.IKAT_GEN_MODEL ?? "google/gemini-3-flash-preview"
 export const TOP_K = 5
 
+/**
+ * Chunks consulted when forming the FIGURE candidate pool, as opposed to the
+ * passages handed to the generator (TOP_K, unchanged).
+ *
+ * Measured on ugm3-built: every gold figure has an anchor chunk (417/417), and
+ * that chunk is in the top-5 for 63.3% of questions but the top-20 for 82.5%.
+ * Anchor selection inherits its recall from whichever pool it looks at, so
+ * widening this alone lifts the reachable ceiling by ~19 points before any
+ * scoring is involved.
+ *
+ * It is deliberately separate from TOP_K: enlarging the generator's context at
+ * the same time would change the answers too, and no gain could be attributed
+ * to selection.
+ */
+export const FIG_K = 20
+
+/** Systems that draw figure candidates from the wider FIG_K pool. */
+const SELECTION_LADDER = new Set<SystemId>(["sel_wide", "sel_ranked", "sel_gated"])
+
 export type SystemId =
   | "text_only"
   | "caption_match"
@@ -58,6 +77,15 @@ export type SystemId =
   // figures go at the end. Isolates how much the placement rule contributes
   // once selection is held fixed, which the headline table cannot show.
   | "anchor_end"
+  // Selection ladder. Placement is pinned to MRAMG for all three so the only
+  // moving part is HOW figures are chosen. Each rung adds exactly one thing on
+  // top of the rung below, so any gain is attributable.
+  //   sel_wide   — candidates drawn from FIG_K retrieved chunks, not TOP_K
+  //   sel_ranked — + ranked by question/description similarity
+  //   sel_gated  — + parameter-free admission floor (may emit nothing)
+  | "sel_wide"
+  | "sel_ranked"
+  | "sel_gated"
 
 /** One figure as the system chose to emit it. */
 export interface EmittedFigure {
@@ -225,6 +253,28 @@ function keywords(s: string): string[] {
   )
 }
 
+/**
+ * Selection in isolation — no generation, no placement.
+ *
+ * Selection is fully determined by the question and the index, so it can be
+ * evaluated without spending a single LLM token. Running the full bench over
+ * four systems costs ~16 GPU-hours; this costs an embedding pass. It answers
+ * precisely the question the selection ladder exists to answer, and nothing
+ * else, which is also why it is the honest instrument: no generator variance
+ * can leak into the comparison.
+ */
+export async function selectOnly(
+  system: SystemId,
+  idx: DocIndex,
+  question: string,
+  maxFigures = 3,
+): Promise<string[]> {
+  const qVec = (await embed(EMBED_MODEL, question)).vectors[0]
+  const retrieved = retrieveChunks(idx, qVec, TOP_K)
+  const wide = SELECTION_LADDER.has(system) ? retrieveChunks(idx, qVec, FIG_K) : retrieved
+  return selectFigures(system, idx, question, qVec, retrieved, maxFigures, wide).map((f) => f.id)
+}
+
 /** Figures a system decides are relevant, BEFORE placement is worked out. */
 function selectFigures(
   system: SystemId,
@@ -233,6 +283,8 @@ function selectFigures(
   qVec: number[],
   retrieved: Chunk[],
   limit: number,
+  /** Wider pool used only by the selection ladder; see FIG_K. */
+  wideRetrieved: Chunk[] = retrieved,
 ): FigureRecord[] {
   const usable = idx.doc.figures.filter((f) => !f.decorative)
 
@@ -264,6 +316,41 @@ function selectFigures(
       .slice(0, limit)
       .map((x) => byId.get(x.id))
       .filter((f): f is FigureRecord => !!f)
+  }
+
+  // ── Selection ladder ────────────────────────────────────────────────────
+  // Everything above inherits its figure recall from TOP_K text retrieval and
+  // then TRUNCATES in document order — there is no scoring step at all. That is
+  // the measured defect: retrieval surfaces the right figure 63% of the time and
+  // we emit it 33% of the time, discarding half of what was already found.
+  if (system === "sel_wide" || system === "sel_ranked" || system === "sel_gated") {
+    const wideIds = new Set(wideRetrieved.map((c) => c.id))
+    const pool = usable.filter((f) => f.anchorChunkId && wideIds.has(f.anchorChunkId))
+
+    // Rung 1: widen only. Still document order, still a blind truncation — this
+    // exists to show how much comes from the wider pool alone, so the ranking
+    // rung above it cannot take credit for it.
+    if (system === "sel_wide") return pool.slice(0, limit)
+
+    // Rung 2: actually choose. Score every candidate against the question using
+    // the figure's own indexed text — the VLM description when we have one. This
+    // is the "selection as a text task" the literature reports at roughly twice
+    // co-embedding, and the descriptions are already built and cached at ingest.
+    const scored = pool
+      .map((f) => ({ f, s: cosine(qVec, idx.figureVecs.get(f.id) ?? []) }))
+      .sort((a, b) => b.s - a.s)
+
+    if (system === "sel_ranked") return scored.slice(0, limit).map((x) => x.f)
+
+    // Rung 3: allow silence. Same parameter-free floor used by anchor_hybrid — a
+    // figure must score at least as high as the weakest passage the retriever
+    // itself accepted. Nothing to tune, and no fixed number of figures: when
+    // nothing clears the bar this emits none, which for a tutor is the right
+    // answer. A wrong diagram is worse than no diagram.
+    const floor = retrieved.length
+      ? Math.min(...retrieved.map((c) => cosine(qVec, idx.chunkVecs.get(c.id) ?? [])))
+      : 0
+    return scored.filter((x) => x.s >= floor).slice(0, limit).map((x) => x.f)
   }
 
   // anchor / anchor_vlm: a figure is relevant exactly when the chunk it is
@@ -363,7 +450,18 @@ function placeFigures(
   /** figure x sentence similarity, supplied only for the matching baseline */
   weights?: number[][],
 ): EmittedFigure[] {
-  if (system === "mramg_match" || system === "anchor_mramg_place") {
+  if (
+    system === "mramg_match" ||
+    system === "anchor_mramg_place" ||
+    // The selection ladder pins placement to MRAMG on purpose. The anchor
+    // placement rule cites a chunk's position in the GENERATOR's passage list,
+    // and a widened pool yields figures whose anchor sits outside that list —
+    // they would all fall back to end-of-answer and the widening would look bad
+    // for placement reasons that have nothing to do with selection.
+    system === "sel_wide" ||
+    system === "sel_ranked" ||
+    system === "sel_gated"
+  ) {
     // MRAMG-Bench's rule: max-weight assignment, at most one figure per
     // sentence. Placement is "after" the assigned sentence, matching how every
     // other system here reports a slot.
@@ -451,7 +549,10 @@ export async function runSystem(
   const t0 = Date.now()
   const qVec = (await embed(EMBED_MODEL, question)).vectors[0]
   const retrieved = retrieveChunks(idx, qVec, TOP_K)
-  const selected = selectFigures(system, idx, question, qVec, retrieved, maxFigures)
+  // Same ranking, deeper cut — costs one extra sort over vectors already in
+  // memory, no extra embedding call and no change to what the generator sees.
+  const wideRetrieved = SELECTION_LADDER.has(system) ? retrieveChunks(idx, qVec, FIG_K) : retrieved
+  const selected = selectFigures(system, idx, question, qVec, retrieved, maxFigures, wideRetrieved)
 
   // Figure evidence handed to the generator. This is what makes C1 testable:
   // only a system that actually tells the model what is IN the figure can answer
@@ -467,7 +568,11 @@ export async function runSystem(
   // context — ctx is what defines ideal() in the metric, so using it would make
   // the baseline score |PD| = 0 by construction and mean nothing.
   let weights: number[][] | undefined
-  if ((system === "mramg_match" || system === "anchor_mramg_place") && selected.length && sentences.length) {
+  if (
+    (system === "mramg_match" || system === "anchor_mramg_place" || SELECTION_LADDER.has(system)) &&
+    selected.length &&
+    sentences.length
+  ) {
     const sentVecs = (await embed(EMBED_MODEL, sentences)).vectors
     const figVecs = (await embed(EMBED_MODEL, figureLines)).vectors
     weights = figVecs.map((fv) => sentVecs.map((sv) => cosine(fv, sv)))
