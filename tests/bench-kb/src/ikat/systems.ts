@@ -54,6 +54,10 @@ export type SystemId =
   // published baselines nor our own systems do on their own.
   | "anchor_mramg_place"
   | "anchor_vinqa_place"
+  // Ablation: anchor selection with NO positional placement rule at all —
+  // figures go at the end. Isolates how much the placement rule contributes
+  // once selection is held fixed, which the headline table cannot show.
+  | "anchor_end"
 
 /** One figure as the system chose to emit it. */
 export interface EmittedFigure {
@@ -401,6 +405,12 @@ function placeFigures(
       })
       return { figureId: f.id, slot: best }
     })
+  }
+
+  if (system === "anchor_end") {
+    // No positional signal used. This is the floor for placement given correct
+    // selection, and the reference point for what any placement rule buys.
+    return selected.map((f) => ({ figureId: f.id, slot: sentences.length }))
   }
 
   // anchor / anchor_vlm / anchor_hybrid: emit at the sentence citing the figure's
