@@ -27,7 +27,7 @@ import { buildIndex, selectOnly, type SystemId } from "./systems"
 const BENCH_ROOT = path.resolve(import.meta.dirname, "../..")
 const CORPUS = path.join(BENCH_ROOT, "corpus", process.env.IKAT_CORPUS ?? "ugm3-built")
 const QFILE = path.join(BENCH_ROOT, "corpus", process.env.IKAT_QUESTIONS ?? "questions-ugm-large.json")
-const DESC_DIR = path.join(BENCH_ROOT, "corpus", "descriptions")
+const DESC_DIR = path.join(BENCH_ROOT, "corpus", process.env.IKAT_DESCRIPTIONS ?? "descriptions")
 const MAX_FIGURES = Number(process.env.IKAT_MAX_FIGURES ?? 3)
 
 interface Q {

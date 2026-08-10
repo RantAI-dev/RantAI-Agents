@@ -684,11 +684,48 @@ export async function runSystem(
 
 // ── S5 ingest-time descriptions ────────────────────────────────────────────
 
-const DESCRIBE_PROMPT = `Gambar berikut diambil dari buku pelajaran sekolah dasar di Indonesia.
+/**
+ * Two framings of the same ingest-time VLM call, selectable with
+ * IKAT_DESCRIBE_MODE. The vision model sees ONLY the crop in both cases — it is
+ * deliberately not shown the surrounding text, because a description written
+ * with the passage in view would encode the figure's position and any gain
+ * would belong to the anchor rather than to the description. Holding the
+ * information constant is what makes the two comparable.
+ *
+ *   content  what the picture SHOWS. The original, and the one measured so far.
+ *   purpose  what the picture is FOR — the questions a student could answer with
+ *            it. Motivated by a measured failure: description similarity
+ *            (P .060-.085) and a model reading descriptions (P .114) both lose
+ *            to an anchor rule that never looks at the picture (P .162), and
+ *            gold figures are indistinguishable from the rest in description
+ *            space (28.8% vs 28.6% diagram-like). Content answers "what is
+ *            this"; retrieval is asked "which figure answers this question".
+ *            Writing the description in the question's own vocabulary is the
+ *            cheapest way to test whether that mismatch is the cause.
+ */
+const DESCRIBE_PROMPTS: Record<string, string> = {
+  content: `Gambar berikut diambil dari buku pelajaran sekolah dasar di Indonesia.
 
 Tulis deskripsi SATU-DUA kalimat dalam bahasa Indonesia yang menjelaskan: apa yang ditampilkan, bagian
 yang diberi label (jika ada), dan konsep yang diilustrasikan. Tulis untuk membantu siswa memahami,
-bukan sekadar menyebut objek. Jangan menyebut "gambar ini" — langsung isi.`
+bukan sekadar menyebut objek. Jangan menyebut "gambar ini" — langsung isi.`,
+
+  purpose: `Gambar berikut diambil dari buku pelajaran sekolah dasar di Indonesia.
+
+Tulis dalam bahasa Indonesia, maksimal 4 baris:
+
+1. KONSEP: satu frasa — konsep atau materi pelajaran apa yang diajarkan gambar ini.
+2. PERTANYAAN: dua sampai tiga pertanyaan siswa yang bisa DIJAWAB dengan melihat gambar ini.
+   Tulis seperti pertanyaan siswa sungguhan, bukan judul.
+3. ISI PENTING: angka, label, nama, atau langkah yang terbaca pada gambar. Tulis "-" jika tidak ada.
+
+Jangan mendeskripsikan gaya gambar, warna, atau suasana. Jika gambar hanya hiasan dan tidak
+mengajarkan apa pun, tulis: HIASAN`,
+}
+
+const DESCRIBE_MODE = process.env.IKAT_DESCRIBE_MODE ?? "content"
+const DESCRIBE_MAX_CHARS = Number(process.env.IKAT_DESCRIBE_MAX ?? (DESCRIBE_MODE === "purpose" ? 700 : 400))
+const DESCRIBE_PROMPT = DESCRIBE_PROMPTS[DESCRIBE_MODE] ?? DESCRIBE_PROMPTS.content
 
 /**
  * Build the S5 descriptions once, cached to disk. This is the "pay at ingest,
@@ -725,7 +762,11 @@ export async function buildDescriptions(
         ],
         300,
       )
-      cache[f.id] = res.text.trim().slice(0, 400)
+      // The purpose framing is deliberately longer than the content one — the
+      // published comparison that motivated it reports detailed descriptions
+      // beating terse ones, and a 400-char cap would truncate the very part
+      // (the answerable questions) the framing exists to produce.
+      cache[f.id] = res.text.trim().slice(0, DESCRIBE_MAX_CHARS)
       made++
       if (made % 20 === 0) fs.writeFileSync(cacheFile, JSON.stringify(cache, null, 2))
     } catch (err) {
