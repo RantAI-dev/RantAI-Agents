@@ -1,0 +1,411 @@
+[
+  {
+    "questionId": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::fq3",
+    "type": "figure_dependent",
+    "humanGold": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p145-b12"
+    ],
+    "harnessGold": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p145-b12"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q9::explanatory",
+    "type": "explanatory",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::fq0",
+    "type": "figure_dependent",
+    "humanGold": [],
+    "harnessGold": [
+      "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p6-b5"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q20::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "type": "figure_dependent",
+    "humanGold": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p12-b0"
+    ],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p12-b0"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq9",
+    "type": "figure_dependent",
+    "humanGold": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p174-b3"
+    ],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p174-b3"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+    "type": "factual",
+    "humanGold": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p164-b4",
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p83-b6"
+    ],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq10",
+    "type": "figure_dependent",
+    "humanGold": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p188-b9"
+    ],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p188-b9"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p134-b6",
+      "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p134-b9"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+    "type": "figure_dependent",
+    "humanGold": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p20-b1"
+    ],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p20-b1"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "type": "figure_dependent",
+    "humanGold": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p13-b1"
+    ],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p13-b1"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "type": "figure_dependent",
+    "humanGold": [],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p154-b3"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+    "type": "figure_dependent",
+    "humanGold": [],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p187-b3"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p154-b3"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::fq0",
+    "type": "figure_dependent",
+    "humanGold": [],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::p60-b15"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::q30::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::p187-b3"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::fq1",
+    "type": "figure_dependent",
+    "humanGold": [],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::p92-b2"
+    ]
+  },
+  {
+    "questionId": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": [
+      "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::p132-b13"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "type": "figure_dependent",
+    "humanGold": [],
+    "harnessGold": [
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p12-b0"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q11::explanatory",
+    "type": "explanatory",
+    "humanGold": [
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p58-b2"
+    ],
+    "harnessGold": [
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p58-b2"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq10",
+    "type": "figure_dependent",
+    "humanGold": [
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p54-b5"
+    ],
+    "harnessGold": [
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p54-b5"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": [
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p130-b14",
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p130-b15",
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p130-b16",
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p130-b17",
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p130-b18",
+      "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p130-b19"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+    "type": "figure_dependent",
+    "humanGold": [
+      "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p24-b1"
+    ],
+    "harnessGold": [
+      "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p24-b1"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q32::explanatory",
+    "type": "explanatory",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq9",
+    "type": "figure_dependent",
+    "humanGold": [
+      "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p51-b1"
+    ],
+    "harnessGold": [
+      "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p38-b5"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q11::explanatory",
+    "type": "explanatory",
+    "humanGold": [
+      "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p19-b22"
+    ],
+    "harnessGold": [
+      "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p45-b1"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::fq5",
+    "type": "figure_dependent",
+    "humanGold": [
+      "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::p40-b3"
+    ],
+    "harnessGold": [
+      "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::p40-b3"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "type": "figure_dependent",
+    "humanGold": [],
+    "harnessGold": [
+      "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::p35-b11"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq10",
+    "type": "figure_dependent",
+    "humanGold": [
+      "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p125-b1"
+    ],
+    "harnessGold": [
+      "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p125-b1"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": []
+  },
+  {
+    "questionId": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq12",
+    "type": "figure_dependent",
+    "humanGold": [],
+    "harnessGold": [
+      "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p144-b0"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": [
+      "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p192-b2"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+    "type": "figure_dependent",
+    "humanGold": [
+      "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p25-b1"
+    ],
+    "harnessGold": [
+      "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p25-b1"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::q10::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": [
+      "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p48-b2",
+      "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p48-b5"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+    "type": "figure_dependent",
+    "humanGold": [
+      "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p30-b5"
+    ],
+    "harnessGold": [
+      "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p48-b5"
+    ]
+  },
+  {
+    "questionId": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": [
+      "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p132-b8"
+    ]
+  },
+  {
+    "questionId": "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::fq0",
+    "type": "figure_dependent",
+    "humanGold": [
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p38-b3"
+    ],
+    "harnessGold": [
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p38-b3"
+    ]
+  },
+  {
+    "questionId": "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::q30::factual",
+    "type": "factual",
+    "humanGold": [
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b6"
+    ],
+    "harnessGold": [
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p127-b4",
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b6",
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b7",
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b8",
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b9",
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b10",
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b11",
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b12",
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b13",
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b14"
+    ]
+  },
+  {
+    "questionId": "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::q22::factual",
+    "type": "factual",
+    "humanGold": [],
+    "harnessGold": [
+      "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p91-b5"
+    ]
+  }
+]
