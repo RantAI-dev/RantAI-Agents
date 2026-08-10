@@ -73,3 +73,10 @@ tests/bench-kb/corpus/ugm-built/
 tests/bench-kb/corpus/ugm-figures/
 tests/bench-kb/corpus/ugm-raw/
 tests/bench-kb/corpus/structural-analysis-*.json
+
+# Annotation package: 384 full-resolution crops plus the 11.5 MB self-contained
+# build. Regenerate with export-annotation.ts; the KEY and the task source are
+# tracked because those are what make a returned answer file scoreable.
+tests/bench-kb/corpus/annotation/images/
+tests/bench-kb/corpus/annotation/annotation-selfcontained.html
+tests/bench-kb/corpus/annotation/annotation.html
