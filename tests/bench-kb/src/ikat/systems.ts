@@ -93,7 +93,18 @@ const RERANK_BASE = process.env.IKAT_RERANK_BASE ?? "http://rantai-agents-tei-re
  * gold and 0.6 reaches P .500. That is an operating-point decision and should be
  * made against a larger annotation than 48 items, not fixed here.
  */
-const RERANK_MIN = Number(process.env.IKAT_RERANK_MIN ?? 0.01)
+const RERANK_MIN = Number(process.env.IKAT_RERANK_MIN ?? 0.1)
+/**
+ * How many figures the cross-encoder may emit.
+ *
+ * Grid over k x threshold on human gold (n=48). The best six cells cluster at
+ * F1 .320-.343 across k in {1,2} and thresholds .01-.2, and with 19 positive
+ * links those differences are inside the noise. k=2 at .1 sits in the middle of
+ * that plateau rather than on its peak (top-2 @.2 scored .343) — picking the
+ * maximum of a grid this small is fitting noise, which this project has already
+ * done twice today.
+ */
+const RERANK_TOP_K = Number(process.env.IKAT_RERANK_TOP_K ?? 2)
 
 /**
  * Cross-encoder scores for one query against many candidates.
@@ -456,7 +467,7 @@ export async function selectOnly(
 export async function rerankCandidates(
   idx: DocIndex,
   question: string,
-): Promise<Array<{ id: string; s: number }>> {
+): Promise<Array<{ id: string; s: number; anchored: boolean; cos: number }>> {
   const qVec = (await embed(EMBED_MODEL, question)).vectors[0]
   const wide = retrieveChunks(idx, qVec, FIG_K)
   const wideIds = new Set(wide.map((c) => c.id))
@@ -473,8 +484,18 @@ export async function rerankCandidates(
     question,
     list.map((f) => figureIndexText(f, idx.descriptions.get(f.id))),
   )
+  // The TOP_K set, not the wide one: "anchored" should mean the figure belongs
+  // to a passage the generator will actually see, which is the signal the
+  // production hybrid uses.
+  const topIds = new Set(retrieveChunks(idx, qVec, TOP_K).map((c) => c.id))
+  const cosOf = new Map(bySim.map((e) => [e.f.id, e.s]))
   return list
-    .map((f, i) => ({ id: f.id, s: scores[i] ?? 0 }))
+    .map((f, i) => ({
+      id: f.id,
+      s: scores[i] ?? 0,
+      anchored: !!(f.anchorChunkId && topIds.has(f.anchorChunkId)),
+      cos: cosOf.get(f.id) ?? 0,
+    }))
     .sort((a, b) => b.s - a.s)
 }
 
@@ -556,7 +577,12 @@ async function selectFigures(
         .map((f, i) => ({ f, s: scores[i] ?? 0 }))
         .filter((x) => x.s >= RERANK_MIN)
         .sort((a, b) => b.s - a.s)
-        .slice(0, limit)
+        // Capped BELOW the caller's limit on purpose. A top-k x threshold grid
+        // on human gold put every three-figure rule behind the one- and
+        // two-figure ones: the 2nd and especially 3rd pick are almost always
+        // wrong, so dropping them raises precision without losing the correct
+        // figure. Emitting fewer than asked is the right behaviour for a tutor.
+        .slice(0, Math.min(limit, RERANK_TOP_K))
         .map((x) => byId.get(x.f.id))
         .filter((f): f is FigureRecord => !!f)
     }
