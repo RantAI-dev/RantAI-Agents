@@ -820,6 +820,14 @@ export async function fetchMatchingFigures(
   retrievedText: string,
   alreadyPresent: Set<string>,
   limit: number,
+  /** `${documentId}::${chunkIndex}` for every text chunk actually retrieved.
+   *
+   *  A figure whose ANCHOR chunk is in this set belongs to a passage the
+   *  retriever already chose, which is a far stronger signal than caption
+   *  overlap — and it is the only signal available for the 19-34% of curriculum
+   *  figures that carry no printed caption at all. Optional: documents ingested
+   *  before anchors existed simply have none, and keep the caption path. */
+  anchoredChunkKeys?: Set<string>,
 ): Promise<HybridSearchResult[]> {
   if (!docIds.length || limit <= 0) return [];
   const q = query.toLowerCase();
@@ -849,18 +857,36 @@ export async function fetchMatchingFigures(
   const seenCaption = new Set<string>();
   for (const row of rows) {
     if (alreadyPresent.has(String(row.id))) continue;
-    const meta = row.metadata as { section?: string; assetKey?: string } | undefined;
+    const meta = row.metadata as
+      | { section?: string; assetKey?: string; anchorChunkIndex?: number }
+      | undefined;
     const caption = (meta?.section ?? row.content ?? "").replace(/^\[[^\]]*\]\s*/, "").trim();
-    if (!figCaptionMeaningful(caption)) continue;
     const assetKey = meta?.assetKey ?? null;
     if (!assetKey) continue;
+
+    // Anchored figures are admitted BEFORE the caption checks, deliberately.
+    // `figCaptionMeaningful` and the keyword extraction both require a printed
+    // caption, which is exactly what a third of curriculum figures do not have —
+    // gating the anchor behind them would reinstate the blindness this change
+    // exists to remove.
+    const anchored =
+      typeof meta?.anchorChunkIndex === "number" &&
+      anchoredChunkKeys?.has(`${row.document_id}::${meta.anchorChunkIndex}`);
+
     const capKey = caption.toLowerCase();
     if (seenCaption.has(capKey)) continue;
-    const kws = figCaptionKeywords(caption).map((k) => k.toLowerCase());
-    if (!kws.length) continue;
-    const score = kws.some((kw) => q.includes(kw)) ? 2 : kws.some((kw) => text.includes(kw)) ? 1 : 0;
-    if (score === 0) continue;
-    seenCaption.add(capKey);
+
+    let score = 0;
+    if (anchored) {
+      score = 3;
+    } else {
+      if (!figCaptionMeaningful(caption)) continue;
+      const kws = figCaptionKeywords(caption).map((k) => k.toLowerCase());
+      if (!kws.length) continue;
+      score = kws.some((kw) => q.includes(kw)) ? 2 : kws.some((kw) => text.includes(kw)) ? 1 : 0;
+      if (score === 0) continue;
+    }
+    if (capKey) seenCaption.add(capKey);
     scored.push({ score, row, caption, assetKey });
   }
   scored.sort((a, b) => b.score - a.score);

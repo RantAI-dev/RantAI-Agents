@@ -421,6 +421,9 @@ export async function createKnowledgeDocumentForDashboard(params: {
   let originalFilename: string | undefined
   let fileType: "markdown" | "pdf" | "image" = "markdown"
   let extractedFigures: import("@/lib/rag/extractors/types").ExtractedFigure[] | undefined
+  /** Reading-order blocks, carried alongside the figures so each one can be
+   *  anchored to the text chunk it belongs to rather than matched by caption. */
+  let extractedPagesBlocks: import("@/lib/rag/extractors/types").PageBlocks[][] | undefined
   let extractionPageMap: Array<{ page: number; text: string }> | undefined
   let usedOCR = false
 
@@ -497,6 +500,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
               content = result.text
               usedOCR = true
               if (result.figures?.length) extractedFigures = result.figures
+              if (result.pagesBlocks?.length) extractedPagesBlocks = result.pagesBlocks
               if (result.pageMap?.length) extractionPageMap = result.pageMap
               console.log(`[Knowledge] Layout extraction via ${name} (${result.figures?.length ?? 0} figures, ${result.pageMap?.length ?? 0} page blocks)`)
               break
@@ -873,6 +877,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
         // Page-tagged text chunks so caption-less figures borrow the prose around
         // them (findability + a real "keterangan" instead of "Tanpa keterangan").
         textChunks: chunks,
+        pagesBlocks: extractedPagesBlocks,
       })
       if (figChunks.length) {
         // Reindex chunkIndex across the combined set (figure chunks were -1).

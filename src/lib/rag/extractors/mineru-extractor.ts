@@ -107,7 +107,13 @@ export class MineruExtractor implements Extractor {
         bbox: [number, number, number, number];
         caption: string | null;
         image_b64: string;
+        /** Stable per-page handle, also emitted inline in pages_blocks. */
+        id?: string;
+        /** Position among the page's blocks in reading order — the anchor. */
+        block_index?: number;
       }>;
+      /** Reading-order blocks per page with figures inline. */
+      pages_blocks?: Array<Array<{ kind: string; id?: string; text?: string }>>;
     };
 
     const figures: ExtractedFigure[] | undefined = data.figures?.map((f) => ({
@@ -116,6 +122,10 @@ export class MineruExtractor implements Extractor {
       bbox: f.bbox,
       caption: f.caption,
       imageBase64: f.image_b64,
+      // The sidecar has emitted these all along; the Node side dropped them,
+      // which is why production had no anchor to place figures by.
+      ...(f.id ? { id: f.id } : {}),
+      ...(typeof f.block_index === "number" ? { blockIndex: f.block_index } : {}),
     }));
 
     // Build a pageMap from the per-page text so text chunks get "hal. N" and
@@ -131,6 +141,20 @@ export class MineruExtractor implements Extractor {
       model: "mineru-2.5-pro",
       ...(figures ? { figures } : {}),
       ...(pageMap ? { pageMap } : {}),
+      ...(data.pages_blocks
+        ? {
+            pagesBlocks: data.pages_blocks.map((page) =>
+              page.map((b) => ({
+                kind: (b.kind === "figure" || b.kind === "caption" ? b.kind : "text") as
+                  | "text"
+                  | "caption"
+                  | "figure",
+                ...(b.id ? { id: b.id } : {}),
+                ...(b.text ? { text: b.text } : {}),
+              })),
+            ),
+          }
+        : {}),
     };
   }
 }

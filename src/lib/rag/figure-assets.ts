@@ -72,6 +72,68 @@ function deriveLabel(context: string): string | null {
   return firstLine || context.slice(0, 100).trim() || null
 }
 
+/**
+ * Which text chunk does each figure belong to?
+ *
+ * Production has never had an answer to this. Figure chunks are appended at the
+ * END of a document's chunk_index with no positional link to their subject text,
+ * so the only route back was caption keyword overlap — structurally blind on the
+ * 19-34% of curriculum figures that carry no printed caption at all.
+ *
+ * The layout parser already knows: `pagesBlocks` lists each page's blocks in
+ * reading order with figures inline. We take the text block immediately BEFORE
+ * the figure and find the chunk that contains it. Preceding rather than
+ * following, because a figure in a textbook illustrates the passage that
+ * introduced it; the prose after it has usually moved on.
+ *
+ * Returns figure id -> chunkIndex. Figures whose neighbouring prose cannot be
+ * located are simply absent, and the caller falls back to today's behaviour —
+ * this must degrade quietly, since every document ingested before this change
+ * has no anchor and must keep working.
+ */
+export function resolveFigureAnchors(
+  pagesBlocks: Array<Array<{ kind: string; id?: string; text?: string }>> | undefined,
+  textChunks: Chunk[] | undefined,
+): Map<string, number> {
+  const out = new Map<string, number>()
+  if (!pagesBlocks?.length || !textChunks?.length) return out
+
+  const norm = (s: string) => s.toLowerCase().replace(/\s+/g, " ").trim()
+  const chunks = textChunks
+    .filter((c) => c.metadata.chunkType !== "figure")
+    .map((c) => ({ idx: c.metadata.chunkIndex, text: norm(c.content) }))
+
+  for (const page of pagesBlocks) {
+    for (const [i, b] of page.entries()) {
+      if (b.kind !== "figure" || !b.id) continue
+      // Walk backwards for the nearest prose. A caption block counts: it is the
+      // most specific text the book itself attached to this figure.
+      let words: string[] | undefined
+      for (let j = i - 1; j >= 0 && !words; j--) {
+        const t = page[j]?.text
+        if (t && t.trim().length >= 25) words = norm(t).split(" ").filter(Boolean)
+      }
+      if (!words || words.length < 4) continue
+
+      // Match on a WORD PREFIX, shortening until it hits, rather than on a fixed
+      // character slice. A parser block and a chunk rarely share an exact
+      // boundary — the chunker splits on its own separators, so a block ending
+      // "...gerak benda." lands inside a chunk reading "...gerak benda pada
+      // permukaan kasar." A 120-character substring test misses that; the
+      // opening words do not. Four words is the floor: shorter than that and a
+      // common phrase would anchor a figure to the wrong passage, which is worse
+      // than leaving it unanchored.
+      let hit: { idx: number } | undefined
+      for (let n = Math.min(10, words.length); n >= 4 && !hit; n--) {
+        const probe = words.slice(0, n).join(" ")
+        hit = chunks.find((c) => c.text.includes(probe))
+      }
+      if (hit) out.set(b.id, hit.idx)
+    }
+  }
+  return out
+}
+
 export async function storeFiguresAsChunks(params: {
   organizationId: string | null
   documentId: string
@@ -83,10 +145,15 @@ export async function storeFiguresAsChunks(params: {
    *  figures with the prose around them (see buildPageText). Optional — falls
    *  back to a positional label when absent. */
   textChunks?: Chunk[]
+  /** Reading-order blocks from the extractor, used to anchor each figure to the
+   *  chunk it belongs to. Absent for extractors without layout order, in which
+   *  case figures keep today's caption-only behaviour. */
+  pagesBlocks?: Array<Array<{ kind: string; id?: string; text?: string }>>
 }): Promise<{ chunks: Chunk[]; assets: FigureAsset[] }> {
   const chunks: Chunk[] = []
   const assets: FigureAsset[] = []
   const pageText = buildPageText(params.textChunks)
+  const anchors = resolveFigureAnchors(params.pagesBlocks, params.textChunks)
 
   let n = 0
   for (const fig of params.figures) {
@@ -145,6 +212,10 @@ export async function storeFiguresAsChunks(params: {
         assetKey: key,
         page: fig.page,
         section: caption,
+        // The anchor. Retrieval prefers figures whose anchor chunk was actually
+        // retrieved; absent, it falls back to caption matching so documents
+        // ingested before this change keep working unchanged.
+        ...(fig.id && anchors.has(fig.id) ? { anchorChunkIndex: anchors.get(fig.id) } : {}),
       },
     })
   }
