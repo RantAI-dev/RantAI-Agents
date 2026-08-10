@@ -466,7 +466,24 @@ export async function hybridRetrieve(
     const figDocIds = [...new Set(results.map((r) => r.documentId).filter(Boolean))];
     const present = new Set(results.map((r) => String(r.chunkId)));
     const retrievedText = results.map((r) => r.content).join("\n");
-    const matchedFigs = await fetchMatchingFigures(figDocIds, query, retrievedText, present, 3);
+    // Anchor keys for the text chunks we actually retrieved. This is what turns
+    // caption matching into the anchor-hybrid measured in the benchmark: figures
+    // belonging to a retrieved passage come first, caption overlap fills the
+    // rest. Against the one gold standard not derived from either mechanism —
+    // human annotation — the hybrid beat production on every split.
+    const anchoredChunkKeys = new Set(
+      results
+        .filter((r) => r.chunkType !== "figure")
+        .map((r) => `${r.documentId}::${r.chunkIndex}`),
+    );
+    const matchedFigs = await fetchMatchingFigures(
+      figDocIds,
+      query,
+      retrievedText,
+      present,
+      3,
+      anchoredChunkKeys,
+    );
     if (matchedFigs.length > 0) results = [...results, ...matchedFigs];
   } catch (err) {
     console.warn(`[RAG] figure co-retrieval failed (non-fatal): ${(err as Error).message?.slice(0, 120)}`);
