@@ -46,7 +46,10 @@ async function main() {
         descriptions.set(k, v)
 
   // qid -> ranked candidates with their cross-encoder score, scored once.
-  const scored = new Map<string, { gold: Set<string>; ranked: Array<{ id: string; s: number }> }>()
+  const scored = new Map<
+    string,
+    { gold: Set<string>; ranked: Array<{ id: string; s: number; anchored: boolean; cos: number }> }
+  >()
 
   const files = fs.readdirSync(CORPUS).filter((f) => f.endsWith(".json")).sort()
   for (const [n, file] of files.entries()) {
@@ -64,6 +67,72 @@ async function main() {
   }
 
   console.log(`\ngold=${path.basename(QFILE)}  questions=${scored.size}  maxFigures=${MAX_FIGURES}`)
+
+  // Fusion rules, evaluated over scores computed ONCE. The cross-encoder is the
+  // most precise selector measured and the anchor has the better recall, so the
+  // question is whether they compose or merely trade. Rules are deliberately
+  // simple and parameter-light — with 48 human-gold items, anything with a fitted
+  // weight would be fitting noise.
+  type Cand = { id: string; s: number; anchored: boolean; cos: number }
+  const RULES: Array<{ name: string; pick: (c: Cand[]) => string[] }> = [
+    { name: "rerank only @0.01", pick: (c) => c.filter((x) => x.s >= 0.01).slice(0, MAX_FIGURES).map((x) => x.id) },
+    { name: "rerank only @0.2", pick: (c) => c.filter((x) => x.s >= 0.2).slice(0, MAX_FIGURES).map((x) => x.id) },
+    {
+      // Union: anything the reranker likes, PLUS anchored figures it merely
+      // tolerates. Tests whether the anchor rescues recall the reranker drops.
+      name: "rerank@0.2 + anchored@0.001",
+      pick: (c) => {
+        const keep = c.filter((x) => x.s >= 0.2 || (x.anchored && x.s >= 0.001))
+        return keep.slice(0, MAX_FIGURES).map((x) => x.id)
+      },
+    },
+    {
+      // Intersection: the reranker must approve AND the figure must belong to a
+      // retrieved passage. Should be the most precise thing available.
+      name: "rerank@0.01 AND anchored",
+      pick: (c) => c.filter((x) => x.s >= 0.01 && x.anchored).slice(0, MAX_FIGURES).map((x) => x.id),
+    },
+    {
+      // Anchor as a tiebreak only — same admission as rerank-only, but anchored
+      // candidates sort first among survivors.
+      name: "rerank@0.01, anchored first",
+      pick: (c) =>
+        c
+          .filter((x) => x.s >= 0.01)
+          .slice()
+          .sort((a, b) => Number(b.anchored) - Number(a.anchored) || b.s - a.s)
+          .slice(0, MAX_FIGURES)
+          .map((x) => x.id),
+    },
+    // Top-k x threshold grid. The single best candidate at a low floor beat every
+    // three-figure rule, which says the 2nd and 3rd picks are almost always
+    // wrong: dropping them buys precision without costing the correct figure.
+    ...[1, 2, 3].flatMap((k) =>
+      [0.001, 0.01, 0.05, 0.1, 0.2, 0.4].map((t) => ({
+        name: `top-${k} @${t}`,
+        pick: (c: Cand[]) => c.filter((x) => x.s >= t).slice(0, k).map((x) => x.id),
+      })),
+    ),
+    { name: "anchored only (no reranker)", pick: (c) => c.filter((x) => x.anchored).slice(0, MAX_FIGURES).map((x) => x.id) },
+  ]
+
+  console.log(`\n${"fusion rule".padEnd(30)} ${"P".padStart(6)} ${"R".padStart(6)} ${"F1".padStart(6)} ${"fig/q".padStart(7)} ${"silent".padStart(7)}`)
+  const rows: Array<{ f: number; line: string }> = []
+  for (const r of RULES) {
+    let tp = 0, fp = 0, fn = 0, emitted = 0, silent = 0
+    for (const [, v] of scored) {
+      const picked = r.pick(v.ranked)
+      emitted += picked.length
+      if (!picked.length) silent++
+      for (const p of picked) (v.gold.has(p) ? tp++ : fp++)
+      for (const g of v.gold) if (!picked.includes(g)) fn++
+    }
+    const P = tp + fp ? tp / (tp + fp) : 0
+    const R = tp + fn ? tp / (tp + fn) : 0
+    const F = P + R ? (2 * P * R) / (P + R) : 0
+    rows.push({ f: F, line: `${r.name.padEnd(30)} ${P.toFixed(3).padStart(6)} ${R.toFixed(3).padStart(6)} ${F.toFixed(3).padStart(6)} ${(emitted / scored.size).toFixed(2).padStart(7)} ${((100 * silent) / scored.size).toFixed(0).padStart(6)}%` })
+  }
+  for (const r of rows.sort((a, b) => b.f - a.f)) console.log(r.line)
   console.log(`\n${"threshold".padEnd(10)} ${"P".padStart(6)} ${"R".padStart(6)} ${"F1".padStart(6)} ${"fig/q".padStart(7)} ${"silent".padStart(7)}`)
   for (const t of THRESHOLDS) {
     let tp = 0
