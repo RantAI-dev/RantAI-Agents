@@ -1,0 +1,589 @@
+[
+ {
+  "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::fq3",
+  "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak angka yang tertera pada dial timbangan duduk tersebut?",
+  "goldAnswer": "11",
+  "goldChunkIds": [
+   "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c122"
+  ],
+  "goldFigureIds": [
+   "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::p145-b12"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q9::explanatory",
+  "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+  "type": "explanatory",
+  "question": "Mengapa guru perlu mengingatkan kembali peserta didik tentang nilai tempat sebelum mempelajari membandingkan bilangan tiga angka?",
+  "goldAnswer": "Karena materi prasyarat yang perlu dikuasai peserta didik adalah materi tentang nilai tempat, dan untuk membandingkan bilangan tiga angka, pertama bandingkan angka pada nilai tempat ratusan, lalu puluhan, lalu satuan.",
+  "goldChunkIds": [
+   "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c46"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::fq0",
+  "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak kendaraan yang terlihat di jalan raya pada gambar?",
+  "goldAnswer": "4",
+  "goldChunkIds": [
+   "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c6"
+  ],
+  "goldFigureIds": [],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::q20::factual",
+  "docSlug": "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii",
+  "type": "factual",
+  "question": "Bagaimana guru mengarahkan peserta didik dalam bagian Ayo Berlatih?",
+  "goldAnswer": "Guru memberikan LKPD dari Buku Siswa, arahkan peserta didik untuk mengerjakan soal nomor 1 dengan menuliskan nama alat ukur dan satuan bakunya pada tabel yang telah disediakan, serta menentukan Benar atau Salah pada pernyataan di soal nomor 2 beserta alasannya.",
+  "goldChunkIds": [
+   "buku-panduan-guru-matematika-untuk-sdmi-kelas-iii::c115"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak nilai utama yang tercantum dalam Profil Pelajar Pancasila pada gambar tersebut?",
+  "goldAnswer": "6",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c13"
+  ],
+  "goldFigureIds": [
+   "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p12-b0"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Dalam kegiatan pendahuluan, apa yang dilakukan sebelum meminta peserta didik berdoa?",
+  "goldAnswer": "Mengucapkan salam.",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c151"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Dalam kegiatan pendahuluan, apa yang dilakukan guru sebelum meminta peserta didik mengamati Gambar 6.4?",
+  "goldAnswer": "Guru menanyakan bagaimana doa sebelum dan sesudah makan.",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c111"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq9",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Jari mana yang diberi label angka 3 pada gambar Teknik Lima Jari?",
+  "goldAnswer": "Jari tengah",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c178"
+  ],
+  "goldFigureIds": [
+   "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p174-b3"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Berapa banyak media pembelajaran yang disebutkan dalam kutipan untuk materi tokoh-tokoh Hindu pada masa kerajaan di Indonesia?",
+  "goldAnswer": "10",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c195"
+  ],
+  "goldFigureIds": [
+   "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p164-b4",
+   "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p83-b6"
+  ]
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq10",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak submateri yang tercantum dalam peta konsep 'Mengenal Hari Suci Agama Hindu'?",
+  "goldAnswer": "5",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c188"
+  ],
+  "goldFigureIds": [
+   "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p188-b9"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Apa yang harus dilakukan setelah menutup gelas air mineral dengan kertas penutup dan lubangl?",
+  "goldAnswer": "Taruh di tempat yang teduh.",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c143"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Apa yang dikatakan Allah pada hari kelima penciptaan menurut kutipan?",
+  "goldAnswer": "Hendaklah ikan berenang dalam air dan burung-burung beterbangan di atas bumi.",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c250"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Siapa yang menderita demam dalam cerita 'Anak yang Bertobat'?",
+  "goldAnswer": "Seorang anak yang sangat jahat.",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c185"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak lingkungan yang ditunjukkan dalam diagram Venn ini?",
+  "goldAnswer": "Tiga",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c20"
+  ],
+  "goldFigureIds": [
+   "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p20-b1"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Pada tanggal berapa D\u014dngzh\u00ec (\u51ac\u81f3) terjadi?",
+  "goldAnswer": "Tanggal 21/22 Desember.",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c135"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak komponen utama yang tercantum dalam Profil Pelajar Pancasila pada gambar tersebut?",
+  "goldAnswer": "6",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c13"
+  ],
+  "goldFigureIds": [
+   "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p13-b1"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Di mana Nabi Kongzi menerapkan Lima Laku Rendah Hati?",
+  "goldAnswer": "Di mana saja dalam perilaku hidup sehari-hari, saat bergaul bersama kawan dan sahabat.",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c99"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak bunga yang terlihat pada gambar?",
+  "goldAnswer": "8",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::c221"
+  ],
+  "goldFigureIds": [],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Apa yang harus dilakukan guru jika ada peserta didik yang tidak menyukai sayuran atau buah-buahan tertentu?",
+  "goldAnswer": "Guru dapat menanyakan alasannya dan membimbing peserta didik bahwa semua sayuran dan buah-buahan adalah baik dan bermanfaat bagi tubuh manusia.",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::c300"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak sinar matahari yang terlihat pada gambar?",
+  "goldAnswer": "12",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::c270"
+  ],
+  "goldFigureIds": [],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Apa yang harus dilakukan guru ketika peserta didik mengalami kesulitan dalam aktivitas?",
+  "goldAnswer": "Guru perlu membimbing peserta didik untuk mengikuti petunjuk pengerjaan dan menolong peserta didik jika mengalami kesulitan.",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::c221"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::fq0",
+  "docSlug": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p",
+  "type": "figure_dependent",
+  "question": "Berapa banyak pohon kelapa yang terlihat di gambar?",
+  "goldAnswer": "Dua",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::c41"
+  ],
+  "goldFigureIds": [],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::q30::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p",
+  "type": "factual",
+  "question": "Dalam buku pelajaran tersebut, teknik penilaian untuk keterampilan berdiskusi Likar dengan nilai 3 dikategorikan seperti apa?",
+  "goldAnswer": "Baik",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::c120"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::fq1",
+  "docSlug": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p",
+  "type": "figure_dependent",
+  "question": "Berapa banyak anak yang sedang bermain musik di belakang kelompok anak yang menari?",
+  "goldAnswer": "5",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::c62"
+  ],
+  "goldFigureIds": [],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::q22::factual",
+  "docSlug": "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p",
+  "type": "factual",
+  "question": "Berapa skor yang diberikan jika seseorang selalu melakukan sesuai pernyataan dalam penilaian sikap?",
+  "goldAnswer": "Skor 4",
+  "goldChunkIds": [
+   "buku-panduan-guru-pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-p::c88"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+  "docSlug": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak orang yang terlihat dalam gambar ini?",
+  "goldAnswer": "Dua",
+  "goldChunkIds": [
+   "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c13"
+  ],
+  "goldFigureIds": [],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q11::explanatory",
+  "docSlug": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "explanatory",
+  "question": "Mengapa Buddha Gotama dianggap sebagai guru yang penuh welas asih?",
+  "goldAnswer": "Karena cinta kasih Buddha sangat besar dan dia mengajarkan Dharma untuk kebahagiaan semua makhluk.",
+  "goldChunkIds": [
+   "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c45"
+  ],
+  "goldFigureIds": [
+   "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p58-b2"
+  ]
+ },
+ {
+  "id": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::fq10",
+  "docSlug": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak bunga yang terlihat di depan kaki Petapa Gotama?",
+  "goldAnswer": "Tiga",
+  "goldChunkIds": [
+   "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c40"
+  ],
+  "goldFigureIds": [
+   "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::p54-b5"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+  "docSlug": "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Dalam kutipan Dhammapada, apa sifat-sifat orang yang sebaiknya diikuti?",
+  "goldAnswer": "Pandai, bijaksana, terpelajar, tekun, patuh, dan mulia.",
+  "goldChunkIds": [
+   "pendidikan-agama-buddha-dan-budi-pekerti-untuk-sd-kelas-iii::c99"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+  "docSlug": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak daun teratai yang terlihat di permukaan air sungai pada gambar?",
+  "goldAnswer": "Tiga",
+  "goldChunkIds": [
+   "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c21"
+  ],
+  "goldFigureIds": [
+   "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p24-b1"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q32::explanatory",
+  "docSlug": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "explanatory",
+  "question": "Mengapa siswa diminta meneladani sifat-sifat baik tokoh kerajaan Hindu?",
+  "goldAnswer": "Karena sifat-sifat tersebut perlu diteladani dalam kehidupan sehari-hari, seperti yang disebutkan dalam bagian 'Ayo Renungkan'.",
+  "goldChunkIds": [
+   "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c105"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::fq9",
+  "docSlug": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak tangan yang terlihat sedang melakukan gerakan tertentu pada gambar?",
+  "goldAnswer": "Dua",
+  "goldChunkIds": [
+   "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c32"
+  ],
+  "goldFigureIds": [
+   "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p51-b1"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::q11::explanatory",
+  "docSlug": "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "explanatory",
+  "question": "Mengapa mempelajari kitab Purana dapat menumbuhkan sifat daiwi sampad?",
+  "goldAnswer": "Karena kitab Purana mengandung ajaran agama Hindu yang menceritakan kisah-kisah moral dan spiritual, sehingga membantu pembaca untuk berkembang menjadi pribadi yang berbhakti pada Hyang Widhi Wasa.",
+  "goldChunkIds": [
+   "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::c35"
+  ],
+  "goldFigureIds": [
+   "pendidikan-agama-hindu-dan-budi-pekerti-untuk-sd-kelas-iii::p19-b22"
+  ]
+ },
+ {
+  "id": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::fq5",
+  "docSlug": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak orang yang terlihat berdiri di belakang Firaun dalam gambar?",
+  "goldAnswer": "Tiga",
+  "goldChunkIds": [
+   "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c33"
+  ],
+  "goldFigureIds": [
+   "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::p40-b3"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+  "docSlug": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Apa saja contoh keindahan lingkungan alam yang disebutkan dalam teks?",
+  "goldAnswer": "Pohon-pohon, hewan, gunung, sungai, laut, lembah, dan lainnya.",
+  "goldChunkIds": [
+   "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c108"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+  "docSlug": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak sudut yang memiliki hiasan kotak kecil di gambar bingkai ini?",
+  "goldAnswer": "4",
+  "goldChunkIds": [
+   "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c30"
+  ],
+  "goldFigureIds": [],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+  "docSlug": "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Berapa banyak anak laki-laki yang dimiliki petani tua?",
+  "goldAnswer": "Tiga orang.",
+  "goldChunkIds": [
+   "pendidikan-agama-katolik-dan-budi-pekerti-untuk-sd-kelas-iii::c80"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq10",
+  "docSlug": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak siswa yang sedang menerima makanan dari penjaga kantin?",
+  "goldAnswer": "Tiga",
+  "goldChunkIds": [
+   "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c42"
+  ],
+  "goldFigureIds": [
+   "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::p125-b1"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q30::factual",
+  "docSlug": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Apa nama dinasti yang berkuasa pada masa kelahiran Nabi Kongzi?",
+  "goldAnswer": "Dinasti Zhou",
+  "goldChunkIds": [
+   "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c90"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::fq12",
+  "docSlug": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak anak yang terlihat sedang makan bersama di bangku tersebut?",
+  "goldAnswer": "Empat",
+  "goldChunkIds": [
+   "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c47"
+  ],
+  "goldFigureIds": [],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+  "docSlug": "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Siapa nama tokoh yang dikenal sebagai Zengzi dan menulis Kitab Ajaran Besar serta Kitab Bakti?",
+  "goldAnswer": "Zengzi",
+  "goldChunkIds": [
+   "pendidikan-agama-khonghucu-dan-budi-pekerti-untuk-sd-kelas-iii::c66"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::fq0",
+  "docSlug": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak anak yang ada di sekitar tokoh utama dalam gambar?",
+  "goldAnswer": "Tiga",
+  "goldChunkIds": [
+   "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::c16"
+  ],
+  "goldFigureIds": [
+   "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p25-b1"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::q10::factual",
+  "docSlug": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Siapa yang sangat menyayangi Yesus menurut kutipan?",
+  "goldAnswer": "Maria dan Yusuf",
+  "goldChunkIds": [
+   "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::c25"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::fq1",
+  "docSlug": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "figure_dependent",
+  "question": "Berapa banyak orang yang terlihat dalam gambar?",
+  "goldAnswer": "Dua",
+  "goldChunkIds": [
+   "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::c25"
+  ],
+  "goldFigureIds": [
+   "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::p30-b5"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::q22::factual",
+  "docSlug": "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii",
+  "type": "factual",
+  "question": "Siapa penulis buku Pendidikan Agama Kristen dan Budi Pekerti untuk SD Kelas III ini?",
+  "goldAnswer": "Poppy Febrina Purba",
+  "goldChunkIds": [
+   "pendidikan-agama-kristen-dan-budi-pekerti-untuk-sd-kelas-iii::c55"
+  ],
+  "goldFigureIds": []
+ },
+ {
+  "id": "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::fq0",
+  "docSlug": "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke",
+  "type": "figure_dependent",
+  "question": "Berapa banyak nada musik yang terlihat di sekitar mikrofon pada gambar?",
+  "goldAnswer": "Dua",
+  "goldChunkIds": [
+   "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::c15"
+  ],
+  "goldFigureIds": [
+   "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p38-b3"
+  ],
+  "adversaryAnswer": "TIDAK ADA DI TEKS"
+ },
+ {
+  "id": "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::q30::factual",
+  "docSlug": "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke",
+  "type": "factual",
+  "question": "Apa yang harus dilakukan siswa sebelum masuk kelas menurut teks?",
+  "goldAnswer": "Berjalan tertib dan tidak bersuara, serta berjabat tangan dengan ibu guru.",
+  "goldChunkIds": [
+   "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::c45"
+  ],
+  "goldFigureIds": [
+   "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::p128-b6"
+  ]
+ },
+ {
+  "id": "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::q22::factual",
+  "docSlug": "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke",
+  "type": "factual",
+  "question": "Siapa yang pertama sekali menjelaskan tentang Tuhan kepada Rahayu menurut teks?",
+  "goldAnswer": "Saudaraku",
+  "goldChunkIds": [
+   "pendidikan-kepercayaan-terhadap-tuhan-yang-maha-esa-dan-budi-pekerti-untuk-sd-ke::c33"
+  ],
+  "goldFigureIds": []
+ }
+]
