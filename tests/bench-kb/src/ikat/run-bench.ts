@@ -73,6 +73,7 @@ const ALL_SYSTEMS: SystemId[] = [
   "sel_ranked",
   "sel_gated",
   "sel_llm",
+  "sel_rerank",
 ]
 /** Vision model used ONCE per figure at ingest, for S5. Not the judge's vendor. */
 const DESCRIBE_MODEL = process.env.IKAT_DESCRIBE_MODEL ?? "google/gemini-3-flash-preview"

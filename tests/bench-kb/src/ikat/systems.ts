@@ -55,7 +55,7 @@ export const TOP_K = 5
 export const FIG_K = 20
 
 /** Systems that draw figure candidates from the wider FIG_K pool. */
-const SELECTION_LADDER = new Set<SystemId>(["sel_wide", "sel_ranked", "sel_gated", "sel_llm"])
+const SELECTION_LADDER = new Set<SystemId>(["sel_wide", "sel_ranked", "sel_gated", "sel_llm", "sel_rerank"])
 
 /**
  * How many candidates the model is shown.
@@ -67,6 +67,97 @@ const SELECTION_LADDER = new Set<SystemId>(["sel_wide", "sel_ranked", "sel_gated
  * list, and that positional decay is worse for figures than for text.
  */
 const LLM_SHORTLIST = Number(process.env.IKAT_LLM_SHORTLIST ?? 12)
+
+const RERANK_BASE = process.env.IKAT_RERANK_BASE ?? "http://rantai-agents-tei-rerank-1:80"
+/**
+ * Admission floor on the cross-encoder score.
+ *
+ * Swept rather than guessed (rerank-sweep.ts). The first value here was 0.1,
+ * chosen from a three-example probe, and the sweep shows it is not the best
+ * point on either gold standard:
+ *
+ *            human gold (n=48)        harness gold (n=486)
+ *   0        P .069 R .526 F1 .123    P .061 R .213 F1 .095
+ *   0.01     P .175 R .526 F1 .263    P .122 R .118 F1 .120
+ *   0.1      P .259 R .368 F1 .304    P .190 R .072 F1 .104
+ *   0.2      P .316 R .316 F1 .316    P .206 R .053 F1 .084
+ *   0.6      P .500 R .211 F1 .296    P .277 R .031 F1 .056
+ *
+ * 0.01 is the default because it is the one point BOTH golds endorse: it keeps
+ * recall identical to no threshold at all (.526) while multiplying precision
+ * 2.5x, and it is the reranker's best F1 on the harness gold. The scores it
+ * discards are pure noise — removing them costs no correct figure.
+ *
+ * Higher floors buy more precision and are the right product choice for a tutor,
+ * where a wrong diagram costs more than a missing one; 0.2 maximises F1 on human
+ * gold and 0.6 reaches P .500. That is an operating-point decision and should be
+ * made against a larger annotation than 48 items, not fixed here.
+ */
+const RERANK_MIN = Number(process.env.IKAT_RERANK_MIN ?? 0.01)
+
+/**
+ * Cross-encoder scores for one query against many candidates.
+ *
+ * Batched and truncated to a point measured, not guessed. The service returns
+ * `CublasError(CUBLAS_STATUS_INTERNAL_ERROR)` past its configured batch-token
+ * budget, and probing found TWO limits rather than one:
+ *
+ *   1 x 600  fails      4 x 300  works
+ *   8 x 300  fails      8 x 150  works
+ *  16 x 200  fails      1 x 100  works
+ *
+ * So each text must stay under ~300 characters AND batch x length under ~1200 —
+ * it is not a single token budget. 4 x 280 sits inside a verified-good point
+ * rather than on an interpolated edge. This truncates a median 305-character
+ * description slightly; the opening carries the subject, which is what the
+ * cross-encoder needs.
+ */
+async function rerank(query: string, texts: string[]): Promise<number[]> {
+  if (!texts.length) return []
+  const out = new Array(texts.length).fill(0)
+  const q = query.slice(0, Number(process.env.IKAT_RERANK_QMAX ?? 200))
+
+  // Score one group, shrinking on failure until the service accepts it. Two
+  // constants were fitted here and both were wrong, because the limit is not a
+  // property of the batch alone: a cross-encoder concatenates QUERY WITH EACH
+  // TEXT, so a longer question shifts the ceiling under an otherwise identical
+  // batch. Rather than fit a third constant to the questions we happen to have,
+  // back off — halve the batch, then halve the text, and only give up once a
+  // single 120-character pair still fails, which means the service is down
+  // rather than saturated.
+  async function score(items: string[], at: number, maxLen: number): Promise<void> {
+    const res = await fetch(`${RERANK_BASE}/rerank`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: q, texts: items.map((t) => t.slice(0, maxLen)) }),
+    }).catch(() => null)
+
+    if (res?.ok) {
+      const rows = (await res.json()) as Array<{ index: number; score: number }>
+      for (const r of rows) out[at + r.index] = r.score
+      return
+    }
+    if (items.length > 1) {
+      const mid = Math.ceil(items.length / 2)
+      await score(items.slice(0, mid), at, maxLen)
+      await score(items.slice(mid), at + mid, maxLen)
+      return
+    }
+    if (maxLen > 120) {
+      await score(items, at, Math.floor(maxLen / 2))
+      return
+    }
+    throw new Error(`rerank rejected a single 120-char pair (status ${res?.status ?? "network"})`)
+  }
+
+  const BATCH = Number(process.env.IKAT_RERANK_BATCH ?? 4)
+  const MAXLEN = Number(process.env.IKAT_RERANK_MAXLEN ?? 280)
+  for (let i = 0; i < texts.length; i += BATCH) {
+    await score(texts.slice(i, i + BATCH), i, MAXLEN)
+  }
+  return out
+}
+
 
 /**
  * Ask a model which of the candidate figures actually belong with the answer.
@@ -159,6 +250,13 @@ export type SystemId =
   // picks, with "none" a legal answer. On MRAMG's only discriminative subset
   // this roughly doubled the embedding-similarity baseline.
   | "sel_llm"
+  // Cross-encoder selection. The reranker has been running on the partner box
+  // the whole time — production uses it as a figure gate — and the benchmark
+  // never touched it: every system above ranks by cosine. A cross-encoder reads
+  // the question and the candidate TOGETHER instead of comparing two vectors
+  // built in isolation, which is the difference that matters when a dozen
+  // figures in a book are all "children learning".
+  | "sel_rerank"
 
 /** One figure as the system chose to emit it. */
 export interface EmittedFigure {
@@ -348,6 +446,38 @@ export async function selectOnly(
   return (await selectFigures(system, idx, question, qVec, retrieved, maxFigures, wide)).map((f) => f.id)
 }
 
+/**
+ * Cross-encoder scores for every candidate figure, ranked, WITHOUT a threshold.
+ *
+ * Exported so the operating point can be swept offline: the scores are what the
+ * model says, the threshold is a product decision, and conflating the two is how
+ * 0.1 ended up in the code on the strength of a three-example probe.
+ */
+export async function rerankCandidates(
+  idx: DocIndex,
+  question: string,
+): Promise<Array<{ id: string; s: number }>> {
+  const qVec = (await embed(EMBED_MODEL, question)).vectors[0]
+  const wide = retrieveChunks(idx, qVec, FIG_K)
+  const wideIds = new Set(wide.map((c) => c.id))
+  const usable = idx.doc.figures.filter((f) => !f.decorative)
+  const bySim = usable
+    .map((f) => ({ f, s: cosine(qVec, idx.figureVecs.get(f.id) ?? []) }))
+    .sort((a, b) => b.s - a.s)
+  const cand = new Map<string, FigureRecord>()
+  for (const f of usable) if (f.anchorChunkId && wideIds.has(f.anchorChunkId)) cand.set(f.id, f)
+  for (const e of bySim.slice(0, LLM_SHORTLIST)) cand.set(e.f.id, e.f)
+  const list = [...cand.values()]
+  if (!list.length) return []
+  const scores = await rerank(
+    question,
+    list.map((f) => figureIndexText(f, idx.descriptions.get(f.id))),
+  )
+  return list
+    .map((f, i) => ({ id: f.id, s: scores[i] ?? 0 }))
+    .sort((a, b) => b.s - a.s)
+}
+
 /** Figures a system decides are relevant, BEFORE placement is worked out. */
 async function selectFigures(
   system: SystemId,
@@ -396,9 +526,40 @@ async function selectFigures(
   // then TRUNCATES in document order — there is no scoring step at all. That is
   // the measured defect: retrieval surfaces the right figure 63% of the time and
   // we emit it 33% of the time, discarding half of what was already found.
-  if (system === "sel_wide" || system === "sel_ranked" || system === "sel_gated" || system === "sel_llm") {
+  if (
+    system === "sel_wide" ||
+    system === "sel_ranked" ||
+    system === "sel_gated" ||
+    system === "sel_llm" ||
+    system === "sel_rerank"
+  ) {
     const wideIds = new Set(wideRetrieved.map((c) => c.id))
     const pool = usable.filter((f) => f.anchorChunkId && wideIds.has(f.anchorChunkId))
+
+    // Cross-encoder. The candidate pool deliberately UNIONS the anchored figures
+    // with the best cosine matches: the anchor and the description have been
+    // measured to win on different question types, so handing the reranker only
+    // one family would cap it at that family's recall before it scores anything.
+    if (system === "sel_rerank") {
+      const byId = new Map(usable.map((f) => [f.id, f]))
+      const bySim = usable
+        .map((f) => ({ f, s: cosine(qVec, idx.figureVecs.get(f.id) ?? []) }))
+        .sort((a, b) => b.s - a.s)
+      const cand = new Map<string, FigureRecord>()
+      for (const f of pool) cand.set(f.id, f)
+      for (const e of bySim.slice(0, LLM_SHORTLIST)) cand.set(e.f.id, e.f)
+      const list = [...cand.values()]
+      if (!list.length) return []
+      const texts = list.map((f) => figureIndexText(f, idx.descriptions.get(f.id)))
+      const scores = await rerank(question, texts)
+      return list
+        .map((f, i) => ({ f, s: scores[i] ?? 0 }))
+        .filter((x) => x.s >= RERANK_MIN)
+        .sort((a, b) => b.s - a.s)
+        .slice(0, limit)
+        .map((x) => byId.get(x.f.id))
+        .filter((f): f is FigureRecord => !!f)
+    }
 
     // The model-picked variant. Candidates are ordered by similarity purely to
     // decide WHICH make the shortlist — the choice among them is the model's,

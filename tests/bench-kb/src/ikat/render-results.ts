@@ -69,6 +69,7 @@ const LABEL: Record<string, string> = {
   sel_ranked: "B2 wide pool + description ranking",
   sel_gated: "B3 wide + ranking + admission floor",
   sel_llm: "B4 wide + model-picked selection",
+  sel_rerank: "B5 cross-encoder reranked selection",
 }
 
 function main() {
