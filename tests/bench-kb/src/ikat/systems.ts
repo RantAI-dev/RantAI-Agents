@@ -123,6 +123,10 @@ const RERANK_TOP_K = Number(process.env.IKAT_RERANK_TOP_K ?? 2)
  * description slightly; the opening carries the subject, which is what the
  * cross-encoder needs.
  */
+export async function rerankTexts(query: string, texts: string[]): Promise<number[]> {
+  return rerank(query, texts)
+}
+
 async function rerank(query: string, texts: string[]): Promise<number[]> {
   if (!texts.length) return []
   const out = new Array(texts.length).fill(0)
