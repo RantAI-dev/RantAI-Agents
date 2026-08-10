@@ -1,4 +1,4 @@
-import type { Extractor, ExtractionResult, ExtractedFigure } from "./types"
+import type { Extractor, ExtractionResult, ExtractedFigure, PageBlocks } from "./types"
 
 /**
  * Client for the Mistral OCR API (api.mistral.ai/v1/ocr) — a hosted, EU-based,
@@ -25,6 +25,37 @@ interface MistralPage {
     image_base64?: string
   }>
   dimensions?: { dpi?: number; height?: number; width?: number }
+}
+
+/**
+ * Reading-order blocks for one page, from Mistral's own markdown.
+ *
+ * Mistral embeds each crop inline as `![id](id)` at the point in the page where
+ * it appears, so the markdown IS the reading order — the same fact the MinerU
+ * sidecar reports explicitly as `pages_blocks`. Splitting on those markers gives
+ * text and figure blocks in sequence, which is exactly what
+ * `resolveFigureAnchors` consumes.
+ *
+ * That makes Mistral anchor-capable without a second extraction pass or any
+ * change on the Mistral side: the information was already in the response and we
+ * were using it only to hunt for captions.
+ */
+export function blocksFromMarkdown(markdown: string, pageIndex: number): PageBlocks[] {
+  const out: PageBlocks[] = []
+  if (!markdown) return out
+  // Capture the id from ![id](...) — Mistral repeats the id as the alt text.
+  const re = /!\[([^\]]*)\]\([^)]*\)/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(markdown))) {
+    const before = markdown.slice(last, m.index).trim()
+    if (before) out.push({ kind: "text", text: before })
+    out.push({ kind: "figure", id: `p${pageIndex}-${m[1]}` })
+    last = m.index + m[0].length
+  }
+  const tail = markdown.slice(last).trim()
+  if (tail) out.push({ kind: "text", text: tail })
+  return out
 }
 
 /**
@@ -125,8 +156,10 @@ export class MistralOcrExtractor implements Extractor {
       .join("\n\n")
 
     let figures: ExtractedFigure[] | undefined
+    let pagesBlocks: PageBlocks[][] | undefined
     if (opts?.withFigures) {
       figures = []
+      pagesBlocks = []
       for (const p of pages) {
         const W = p.dimensions?.width || 0
         const H = p.dimensions?.height || 0
@@ -158,8 +191,13 @@ export class MistralOcrExtractor implements Extractor {
             bbox,
             caption,
             imageBase64: b64,
+            // Mistral's image ids are only unique within a page ("img-0.jpeg"
+            // recurs), so qualify them. The same id is used in pagesBlocks below,
+            // and the two must agree for anchoring to resolve.
+            id: `p${p.index}-${img.id}`,
           })
         }
+        pagesBlocks.push(blocksFromMarkdown(p.markdown ?? "", p.index))
       }
     }
 
@@ -169,6 +207,7 @@ export class MistralOcrExtractor implements Extractor {
       pages: pages.length,
       model: this.model,
       ...(figures ? { figures } : {}),
+      ...(pagesBlocks ? { pagesBlocks } : {}),
     }
   }
 }
