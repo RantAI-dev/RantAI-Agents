@@ -1,0 +1,43 @@
+{
+ "task": "figure relevance, identical protocol to the human annotation (48 items x 8 candidate crops)",
+ "human_reference": {
+  "annotators": 1,
+  "positives": 19,
+  "note": "too small to be gold; used only to calibrate judges"
+ },
+ "judges": [
+  {
+   "name": "harness gold (model-generated, pre-existing)",
+   "kappa": 0.092,
+   "positives": 48,
+   "note": "agreement at chance on 80% of links; the bar to clear"
+  },
+  {
+   "name": "Qwen-SEA-LION-v4-8B-VL (on-prem, free)",
+   "kappa": 0.358,
+   "positives": 55,
+   "cells": {
+    "both_yes": 15,
+    "human_only": 4,
+    "judge_only": 40
+   },
+   "note": "comprehension fine (15/19 of human positives found) but 2.9x too permissive"
+  },
+  {
+   "name": "claude-sonnet via subagent, images read directly",
+   "kappa": 0.552,
+   "positives": 26,
+   "cells": {
+    "both_yes": 13,
+    "human_only": 6,
+    "judge_only": 13
+   },
+   "note": "moderate agreement, 1.4x permissive; the usable instrument"
+  }
+ ],
+ "caveats": [
+  "One human annotator, so no inter-annotator bound exists: we cannot say how much of the residual disagreement is judge error versus annotator idiosyncrasy.",
+  "The analyst (Claude) and the best judge (Claude Sonnet) share a vendor. The systems being judged are not Claude, so classic self-preference does not apply, but the judge may align with the analyst's framing of the task more than a neutral judge would.",
+  "kappa 0.552 supports detecting large effects. It does not support fine distinctions, and every number derived from this gold must carry it."
+ ]
+}
