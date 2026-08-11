@@ -49,7 +49,22 @@ const JUDGE_MODEL = process.env.IKAT_JUDGE_MODEL ?? process.env.IKAT_GEN_MODEL ?
  *  NO on errors would look conservative when it is simply broken. */
 let failures = 0
 
-const PROMPT = `Kamu menilai apakah sebuah gambar dari buku pelajaran benar-benar membantu menjawab pertanyaan siswa.
+/**
+ * Two calibrations of the same judgement.
+ *
+ * `loose` scored kappa 0.358 against the human — four times better than our
+ * model-generated harness gold (0.092), but short of the 0.6-0.8 that people
+ * reach with each other. The 2x2 cells say precisely why, and it is not
+ * comprehension: it found 15 of the human's 19 positives, and then said yes 40
+ * more times. It agrees about what a helpful figure looks like and disagrees
+ * about how rare one is.
+ *
+ * `strict` therefore does not re-explain the task. It attacks permissiveness
+ * directly: the figure must be NECESSARY rather than merely related, the
+ * decorative case is named explicitly, and the base rate is stated as a number
+ * the judge can calibrate against.
+ */
+const PROMPT_LOOSE = `Kamu menilai apakah sebuah gambar dari buku pelajaran benar-benar membantu menjawab pertanyaan siswa.
 
 Pertanyaan siswa: {Q}
 
@@ -62,6 +77,30 @@ Kebanyakan gambar dalam buku TIDAK membantu menjawab pertanyaan tertentu — "TI
 yang sering benar. Jika ragu, jawab TIDAK.
 
 Jawab HANYA satu kata: YA atau TIDAK.`
+
+const PROMPT_STRICT = `Kamu menilai apakah sebuah gambar dari buku pelajaran WAJIB ditampilkan untuk menjawab pertanyaan siswa.
+
+Pertanyaan siswa: {Q}
+
+Lihat gambar di atas.
+
+Jawab "YA" HANYA jika gambar ini memuat informasi yang DIBUTUHKAN untuk menjawab pertanyaan itu —
+misalnya angka, bentuk, langkah, atau bagian berlabel yang tidak bisa dijelaskan dengan kata-kata saja.
+
+Jawab "TIDAK" untuk semua kasus lain, termasuk:
+- gambar yang topiknya berhubungan tetapi tidak dibutuhkan untuk menjawab
+- foto orang, suasana, atau kegiatan sebagai hiasan
+- gambar pembuka bab atau latar halaman
+- gambar yang hanya "cocok temanya"
+
+Patokan penting: dari setiap 20 gambar dalam buku, biasanya HANYA 1 yang benar-benar dibutuhkan
+untuk sebuah pertanyaan tertentu. Kalau kamu menjawab YA lebih sering dari itu, kamu terlalu longgar.
+
+Kalau ragu sedikit pun, jawab TIDAK.
+
+Jawab HANYA satu kata: YA atau TIDAK.`
+
+const PROMPT = (process.env.IKAT_JUDGE_PROMPT ?? "loose") === "strict" ? PROMPT_STRICT : PROMPT_LOOSE
 
 /** One judgement, majority over repeats. Returns the vote and its agreement. */
 async function judgePair(

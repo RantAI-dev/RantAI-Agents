@@ -1,0 +1,722 @@
+[
+ {
+  "item": 1,
+  "question": "Berapa banyak angka yang tertera pada dial timbangan duduk tersebut?",
+  "images": [
+   "serve/images/i1-0.jpg",
+   "serve/images/i1-1.jpg",
+   "serve/images/i1-2.jpg",
+   "serve/images/i1-3.jpg",
+   "serve/images/i1-4.jpg",
+   "serve/images/i1-5.jpg",
+   "serve/images/i1-6.jpg",
+   "serve/images/i1-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 2,
+  "question": "Mengapa guru perlu mengingatkan kembali peserta didik tentang nilai tempat sebelum mempelajari membandingkan bilangan tiga angka?",
+  "images": [
+   "serve/images/i2-0.jpg",
+   "serve/images/i2-1.jpg",
+   "serve/images/i2-2.jpg",
+   "serve/images/i2-3.jpg",
+   "serve/images/i2-4.jpg",
+   "serve/images/i2-5.jpg",
+   "serve/images/i2-6.jpg",
+   "serve/images/i2-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 3,
+  "question": "Berapa banyak kendaraan yang terlihat di jalan raya pada gambar?",
+  "images": [
+   "serve/images/i3-0.jpg",
+   "serve/images/i3-1.jpg",
+   "serve/images/i3-2.jpg",
+   "serve/images/i3-3.jpg",
+   "serve/images/i3-4.jpg",
+   "serve/images/i3-5.jpg",
+   "serve/images/i3-6.jpg",
+   "serve/images/i3-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 4,
+  "question": "Bagaimana guru mengarahkan peserta didik dalam bagian Ayo Berlatih?",
+  "images": [
+   "serve/images/i4-0.jpg",
+   "serve/images/i4-1.jpg",
+   "serve/images/i4-2.jpg",
+   "serve/images/i4-3.jpg",
+   "serve/images/i4-4.jpg",
+   "serve/images/i4-5.jpg",
+   "serve/images/i4-6.jpg",
+   "serve/images/i4-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 5,
+  "question": "Berapa banyak nilai utama yang tercantum dalam Profil Pelajar Pancasila pada gambar tersebut?",
+  "images": [
+   "serve/images/i5-0.jpg",
+   "serve/images/i5-1.jpg",
+   "serve/images/i5-2.jpg",
+   "serve/images/i5-3.jpg",
+   "serve/images/i5-4.jpg",
+   "serve/images/i5-5.jpg",
+   "serve/images/i5-6.jpg",
+   "serve/images/i5-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 6,
+  "question": "Dalam kegiatan pendahuluan, apa yang dilakukan sebelum meminta peserta didik berdoa?",
+  "images": [
+   "serve/images/i6-0.jpg",
+   "serve/images/i6-1.jpg",
+   "serve/images/i6-2.jpg",
+   "serve/images/i6-3.jpg",
+   "serve/images/i6-4.jpg",
+   "serve/images/i6-5.jpg",
+   "serve/images/i6-6.jpg",
+   "serve/images/i6-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 7,
+  "question": "Dalam kegiatan pendahuluan, apa yang dilakukan guru sebelum meminta peserta didik mengamati Gambar 6.4?",
+  "images": [
+   "serve/images/i7-0.jpg",
+   "serve/images/i7-1.jpg",
+   "serve/images/i7-2.jpg",
+   "serve/images/i7-3.jpg",
+   "serve/images/i7-4.jpg",
+   "serve/images/i7-5.jpg",
+   "serve/images/i7-6.jpg",
+   "serve/images/i7-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 8,
+  "question": "Jari mana yang diberi label angka 3 pada gambar Teknik Lima Jari?",
+  "images": [
+   "serve/images/i8-0.jpg",
+   "serve/images/i8-1.jpg",
+   "serve/images/i8-2.jpg",
+   "serve/images/i8-3.jpg",
+   "serve/images/i8-4.jpg",
+   "serve/images/i8-5.jpg",
+   "serve/images/i8-6.jpg",
+   "serve/images/i8-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 9,
+  "question": "Berapa banyak media pembelajaran yang disebutkan dalam kutipan untuk materi tokoh-tokoh Hindu pada masa kerajaan di Indonesia?",
+  "images": [
+   "serve/images/i9-0.jpg",
+   "serve/images/i9-1.jpg",
+   "serve/images/i9-2.jpg",
+   "serve/images/i9-3.jpg",
+   "serve/images/i9-4.jpg",
+   "serve/images/i9-5.jpg",
+   "serve/images/i9-6.jpg",
+   "serve/images/i9-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 10,
+  "question": "Berapa banyak submateri yang tercantum dalam peta konsep 'Mengenal Hari Suci Agama Hindu'?",
+  "images": [
+   "serve/images/i10-0.jpg",
+   "serve/images/i10-1.jpg",
+   "serve/images/i10-2.jpg",
+   "serve/images/i10-3.jpg",
+   "serve/images/i10-4.jpg",
+   "serve/images/i10-5.jpg",
+   "serve/images/i10-6.jpg",
+   "serve/images/i10-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 11,
+  "question": "Apa yang harus dilakukan setelah menutup gelas air mineral dengan kertas penutup dan lubangl?",
+  "images": [
+   "serve/images/i11-0.jpg",
+   "serve/images/i11-1.jpg",
+   "serve/images/i11-2.jpg",
+   "serve/images/i11-3.jpg",
+   "serve/images/i11-4.jpg",
+   "serve/images/i11-5.jpg",
+   "serve/images/i11-6.jpg",
+   "serve/images/i11-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 12,
+  "question": "Apa yang dikatakan Allah pada hari kelima penciptaan menurut kutipan?",
+  "images": [
+   "serve/images/i12-0.jpg",
+   "serve/images/i12-1.jpg",
+   "serve/images/i12-2.jpg",
+   "serve/images/i12-3.jpg",
+   "serve/images/i12-4.jpg",
+   "serve/images/i12-5.jpg",
+   "serve/images/i12-6.jpg",
+   "serve/images/i12-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 13,
+  "question": "Siapa yang menderita demam dalam cerita 'Anak yang Bertobat'?",
+  "images": [
+   "serve/images/i13-0.jpg",
+   "serve/images/i13-1.jpg",
+   "serve/images/i13-2.jpg",
+   "serve/images/i13-3.jpg",
+   "serve/images/i13-4.jpg",
+   "serve/images/i13-5.jpg",
+   "serve/images/i13-6.jpg",
+   "serve/images/i13-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 14,
+  "question": "Berapa banyak lingkungan yang ditunjukkan dalam diagram Venn ini?",
+  "images": [
+   "serve/images/i14-0.jpg",
+   "serve/images/i14-1.jpg",
+   "serve/images/i14-2.jpg",
+   "serve/images/i14-3.jpg",
+   "serve/images/i14-4.jpg",
+   "serve/images/i14-5.jpg",
+   "serve/images/i14-6.jpg",
+   "serve/images/i14-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 15,
+  "question": "Pada tanggal berapa D\u014dngzh\u00ec (\u51ac\u81f3) terjadi?",
+  "images": [
+   "serve/images/i15-0.jpg",
+   "serve/images/i15-1.jpg",
+   "serve/images/i15-2.jpg",
+   "serve/images/i15-3.jpg",
+   "serve/images/i15-4.jpg",
+   "serve/images/i15-5.jpg",
+   "serve/images/i15-6.jpg",
+   "serve/images/i15-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 16,
+  "question": "Berapa banyak komponen utama yang tercantum dalam Profil Pelajar Pancasila pada gambar tersebut?",
+  "images": [
+   "serve/images/i16-0.jpg",
+   "serve/images/i16-1.jpg",
+   "serve/images/i16-2.jpg",
+   "serve/images/i16-3.jpg",
+   "serve/images/i16-4.jpg",
+   "serve/images/i16-5.jpg",
+   "serve/images/i16-6.jpg",
+   "serve/images/i16-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 17,
+  "question": "Di mana Nabi Kongzi menerapkan Lima Laku Rendah Hati?",
+  "images": [
+   "serve/images/i17-0.jpg",
+   "serve/images/i17-1.jpg",
+   "serve/images/i17-2.jpg",
+   "serve/images/i17-3.jpg",
+   "serve/images/i17-4.jpg",
+   "serve/images/i17-5.jpg",
+   "serve/images/i17-6.jpg",
+   "serve/images/i17-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 18,
+  "question": "Berapa banyak bunga yang terlihat pada gambar?",
+  "images": [
+   "serve/images/i18-0.jpg",
+   "serve/images/i18-1.jpg",
+   "serve/images/i18-2.jpg",
+   "serve/images/i18-3.jpg",
+   "serve/images/i18-4.jpg",
+   "serve/images/i18-5.jpg",
+   "serve/images/i18-6.jpg",
+   "serve/images/i18-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 19,
+  "question": "Apa yang harus dilakukan guru jika ada peserta didik yang tidak menyukai sayuran atau buah-buahan tertentu?",
+  "images": [
+   "serve/images/i19-0.jpg",
+   "serve/images/i19-1.jpg",
+   "serve/images/i19-2.jpg",
+   "serve/images/i19-3.jpg",
+   "serve/images/i19-4.jpg",
+   "serve/images/i19-5.jpg",
+   "serve/images/i19-6.jpg",
+   "serve/images/i19-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 20,
+  "question": "Berapa banyak sinar matahari yang terlihat pada gambar?",
+  "images": [
+   "serve/images/i20-0.jpg",
+   "serve/images/i20-1.jpg",
+   "serve/images/i20-2.jpg",
+   "serve/images/i20-3.jpg",
+   "serve/images/i20-4.jpg",
+   "serve/images/i20-5.jpg",
+   "serve/images/i20-6.jpg",
+   "serve/images/i20-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 21,
+  "question": "Apa yang harus dilakukan guru ketika peserta didik mengalami kesulitan dalam aktivitas?",
+  "images": [
+   "serve/images/i21-0.jpg",
+   "serve/images/i21-1.jpg",
+   "serve/images/i21-2.jpg",
+   "serve/images/i21-3.jpg",
+   "serve/images/i21-4.jpg",
+   "serve/images/i21-5.jpg",
+   "serve/images/i21-6.jpg",
+   "serve/images/i21-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 22,
+  "question": "Berapa banyak pohon kelapa yang terlihat di gambar?",
+  "images": [
+   "serve/images/i22-0.jpg",
+   "serve/images/i22-1.jpg",
+   "serve/images/i22-2.jpg",
+   "serve/images/i22-3.jpg",
+   "serve/images/i22-4.jpg",
+   "serve/images/i22-5.jpg",
+   "serve/images/i22-6.jpg",
+   "serve/images/i22-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 23,
+  "question": "Dalam buku pelajaran tersebut, teknik penilaian untuk keterampilan berdiskusi Likar dengan nilai 3 dikategorikan seperti apa?",
+  "images": [
+   "serve/images/i23-0.jpg",
+   "serve/images/i23-1.jpg",
+   "serve/images/i23-2.jpg",
+   "serve/images/i23-3.jpg",
+   "serve/images/i23-4.jpg",
+   "serve/images/i23-5.jpg",
+   "serve/images/i23-6.jpg",
+   "serve/images/i23-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 24,
+  "question": "Berapa banyak anak yang sedang bermain musik di belakang kelompok anak yang menari?",
+  "images": [
+   "serve/images/i24-0.jpg",
+   "serve/images/i24-1.jpg",
+   "serve/images/i24-2.jpg",
+   "serve/images/i24-3.jpg",
+   "serve/images/i24-4.jpg",
+   "serve/images/i24-5.jpg",
+   "serve/images/i24-6.jpg",
+   "serve/images/i24-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 25,
+  "question": "Berapa skor yang diberikan jika seseorang selalu melakukan sesuai pernyataan dalam penilaian sikap?",
+  "images": [
+   "serve/images/i25-0.jpg",
+   "serve/images/i25-1.jpg",
+   "serve/images/i25-2.jpg",
+   "serve/images/i25-3.jpg",
+   "serve/images/i25-4.jpg",
+   "serve/images/i25-5.jpg",
+   "serve/images/i25-6.jpg",
+   "serve/images/i25-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 26,
+  "question": "Berapa banyak orang yang terlihat dalam gambar ini?",
+  "images": [
+   "serve/images/i26-0.jpg",
+   "serve/images/i26-1.jpg",
+   "serve/images/i26-2.jpg",
+   "serve/images/i26-3.jpg",
+   "serve/images/i26-4.jpg",
+   "serve/images/i26-5.jpg",
+   "serve/images/i26-6.jpg",
+   "serve/images/i26-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 27,
+  "question": "Mengapa Buddha Gotama dianggap sebagai guru yang penuh welas asih?",
+  "images": [
+   "serve/images/i27-0.jpg",
+   "serve/images/i27-1.jpg",
+   "serve/images/i27-2.jpg",
+   "serve/images/i27-3.jpg",
+   "serve/images/i27-4.jpg",
+   "serve/images/i27-5.jpg",
+   "serve/images/i27-6.jpg",
+   "serve/images/i27-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 28,
+  "question": "Berapa banyak bunga yang terlihat di depan kaki Petapa Gotama?",
+  "images": [
+   "serve/images/i28-0.jpg",
+   "serve/images/i28-1.jpg",
+   "serve/images/i28-2.jpg",
+   "serve/images/i28-3.jpg",
+   "serve/images/i28-4.jpg",
+   "serve/images/i28-5.jpg",
+   "serve/images/i28-6.jpg",
+   "serve/images/i28-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 29,
+  "question": "Dalam kutipan Dhammapada, apa sifat-sifat orang yang sebaiknya diikuti?",
+  "images": [
+   "serve/images/i29-0.jpg",
+   "serve/images/i29-1.jpg",
+   "serve/images/i29-2.jpg",
+   "serve/images/i29-3.jpg",
+   "serve/images/i29-4.jpg",
+   "serve/images/i29-5.jpg",
+   "serve/images/i29-6.jpg",
+   "serve/images/i29-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 30,
+  "question": "Berapa banyak daun teratai yang terlihat di permukaan air sungai pada gambar?",
+  "images": [
+   "serve/images/i30-0.jpg",
+   "serve/images/i30-1.jpg",
+   "serve/images/i30-2.jpg",
+   "serve/images/i30-3.jpg",
+   "serve/images/i30-4.jpg",
+   "serve/images/i30-5.jpg",
+   "serve/images/i30-6.jpg",
+   "serve/images/i30-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 31,
+  "question": "Mengapa siswa diminta meneladani sifat-sifat baik tokoh kerajaan Hindu?",
+  "images": [
+   "serve/images/i31-0.jpg",
+   "serve/images/i31-1.jpg",
+   "serve/images/i31-2.jpg",
+   "serve/images/i31-3.jpg",
+   "serve/images/i31-4.jpg",
+   "serve/images/i31-5.jpg",
+   "serve/images/i31-6.jpg",
+   "serve/images/i31-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 32,
+  "question": "Berapa banyak tangan yang terlihat sedang melakukan gerakan tertentu pada gambar?",
+  "images": [
+   "serve/images/i32-0.jpg",
+   "serve/images/i32-1.jpg",
+   "serve/images/i32-2.jpg",
+   "serve/images/i32-3.jpg",
+   "serve/images/i32-4.jpg",
+   "serve/images/i32-5.jpg",
+   "serve/images/i32-6.jpg",
+   "serve/images/i32-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 33,
+  "question": "Mengapa mempelajari kitab Purana dapat menumbuhkan sifat daiwi sampad?",
+  "images": [
+   "serve/images/i33-0.jpg",
+   "serve/images/i33-1.jpg",
+   "serve/images/i33-2.jpg",
+   "serve/images/i33-3.jpg",
+   "serve/images/i33-4.jpg",
+   "serve/images/i33-5.jpg",
+   "serve/images/i33-6.jpg",
+   "serve/images/i33-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 34,
+  "question": "Berapa banyak orang yang terlihat berdiri di belakang Firaun dalam gambar?",
+  "images": [
+   "serve/images/i34-0.jpg",
+   "serve/images/i34-1.jpg",
+   "serve/images/i34-2.jpg",
+   "serve/images/i34-3.jpg",
+   "serve/images/i34-4.jpg",
+   "serve/images/i34-5.jpg",
+   "serve/images/i34-6.jpg",
+   "serve/images/i34-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 35,
+  "question": "Apa saja contoh keindahan lingkungan alam yang disebutkan dalam teks?",
+  "images": [
+   "serve/images/i35-0.jpg",
+   "serve/images/i35-1.jpg",
+   "serve/images/i35-2.jpg",
+   "serve/images/i35-3.jpg",
+   "serve/images/i35-4.jpg",
+   "serve/images/i35-5.jpg",
+   "serve/images/i35-6.jpg",
+   "serve/images/i35-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 36,
+  "question": "Berapa banyak sudut yang memiliki hiasan kotak kecil di gambar bingkai ini?",
+  "images": [
+   "serve/images/i36-0.jpg",
+   "serve/images/i36-1.jpg",
+   "serve/images/i36-2.jpg",
+   "serve/images/i36-3.jpg",
+   "serve/images/i36-4.jpg",
+   "serve/images/i36-5.jpg",
+   "serve/images/i36-6.jpg",
+   "serve/images/i36-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 37,
+  "question": "Berapa banyak anak laki-laki yang dimiliki petani tua?",
+  "images": [
+   "serve/images/i37-0.jpg",
+   "serve/images/i37-1.jpg",
+   "serve/images/i37-2.jpg",
+   "serve/images/i37-3.jpg",
+   "serve/images/i37-4.jpg",
+   "serve/images/i37-5.jpg",
+   "serve/images/i37-6.jpg",
+   "serve/images/i37-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 38,
+  "question": "Berapa banyak siswa yang sedang menerima makanan dari penjaga kantin?",
+  "images": [
+   "serve/images/i38-0.jpg",
+   "serve/images/i38-1.jpg",
+   "serve/images/i38-2.jpg",
+   "serve/images/i38-3.jpg",
+   "serve/images/i38-4.jpg",
+   "serve/images/i38-5.jpg",
+   "serve/images/i38-6.jpg",
+   "serve/images/i38-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 39,
+  "question": "Apa nama dinasti yang berkuasa pada masa kelahiran Nabi Kongzi?",
+  "images": [
+   "serve/images/i39-0.jpg",
+   "serve/images/i39-1.jpg",
+   "serve/images/i39-2.jpg",
+   "serve/images/i39-3.jpg",
+   "serve/images/i39-4.jpg",
+   "serve/images/i39-5.jpg",
+   "serve/images/i39-6.jpg",
+   "serve/images/i39-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 40,
+  "question": "Berapa banyak anak yang terlihat sedang makan bersama di bangku tersebut?",
+  "images": [
+   "serve/images/i40-0.jpg",
+   "serve/images/i40-1.jpg",
+   "serve/images/i40-2.jpg",
+   "serve/images/i40-3.jpg",
+   "serve/images/i40-4.jpg",
+   "serve/images/i40-5.jpg",
+   "serve/images/i40-6.jpg",
+   "serve/images/i40-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 41,
+  "question": "Siapa nama tokoh yang dikenal sebagai Zengzi dan menulis Kitab Ajaran Besar serta Kitab Bakti?",
+  "images": [
+   "serve/images/i41-0.jpg",
+   "serve/images/i41-1.jpg",
+   "serve/images/i41-2.jpg",
+   "serve/images/i41-3.jpg",
+   "serve/images/i41-4.jpg",
+   "serve/images/i41-5.jpg",
+   "serve/images/i41-6.jpg",
+   "serve/images/i41-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 42,
+  "question": "Berapa banyak anak yang ada di sekitar tokoh utama dalam gambar?",
+  "images": [
+   "serve/images/i42-0.jpg",
+   "serve/images/i42-1.jpg",
+   "serve/images/i42-2.jpg",
+   "serve/images/i42-3.jpg",
+   "serve/images/i42-4.jpg",
+   "serve/images/i42-5.jpg",
+   "serve/images/i42-6.jpg",
+   "serve/images/i42-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 43,
+  "question": "Siapa yang sangat menyayangi Yesus menurut kutipan?",
+  "images": [
+   "serve/images/i43-0.jpg",
+   "serve/images/i43-1.jpg",
+   "serve/images/i43-2.jpg",
+   "serve/images/i43-3.jpg",
+   "serve/images/i43-4.jpg",
+   "serve/images/i43-5.jpg",
+   "serve/images/i43-6.jpg",
+   "serve/images/i43-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 44,
+  "question": "Berapa banyak orang yang terlihat dalam gambar?",
+  "images": [
+   "serve/images/i44-0.jpg",
+   "serve/images/i44-1.jpg",
+   "serve/images/i44-2.jpg",
+   "serve/images/i44-3.jpg",
+   "serve/images/i44-4.jpg",
+   "serve/images/i44-5.jpg",
+   "serve/images/i44-6.jpg",
+   "serve/images/i44-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 45,
+  "question": "Siapa penulis buku Pendidikan Agama Kristen dan Budi Pekerti untuk SD Kelas III ini?",
+  "images": [
+   "serve/images/i45-0.jpg",
+   "serve/images/i45-1.jpg",
+   "serve/images/i45-2.jpg",
+   "serve/images/i45-3.jpg",
+   "serve/images/i45-4.jpg",
+   "serve/images/i45-5.jpg",
+   "serve/images/i45-6.jpg",
+   "serve/images/i45-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 46,
+  "question": "Berapa banyak nada musik yang terlihat di sekitar mikrofon pada gambar?",
+  "images": [
+   "serve/images/i46-0.jpg",
+   "serve/images/i46-1.jpg",
+   "serve/images/i46-2.jpg",
+   "serve/images/i46-3.jpg",
+   "serve/images/i46-4.jpg",
+   "serve/images/i46-5.jpg",
+   "serve/images/i46-6.jpg",
+   "serve/images/i46-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 47,
+  "question": "Apa yang harus dilakukan siswa sebelum masuk kelas menurut teks?",
+  "images": [
+   "serve/images/i47-0.jpg",
+   "serve/images/i47-1.jpg",
+   "serve/images/i47-2.jpg",
+   "serve/images/i47-3.jpg",
+   "serve/images/i47-4.jpg",
+   "serve/images/i47-5.jpg",
+   "serve/images/i47-6.jpg",
+   "serve/images/i47-7.jpg"
+  ],
+  "ok": true
+ },
+ {
+  "item": 48,
+  "question": "Siapa yang pertama sekali menjelaskan tentang Tuhan kepada Rahayu menurut teks?",
+  "images": [
+   "serve/images/i48-0.jpg",
+   "serve/images/i48-1.jpg",
+   "serve/images/i48-2.jpg",
+   "serve/images/i48-3.jpg",
+   "serve/images/i48-4.jpg",
+   "serve/images/i48-5.jpg",
+   "serve/images/i48-6.jpg",
+   "serve/images/i48-7.jpg"
+  ],
+  "ok": true
+ }
+]
