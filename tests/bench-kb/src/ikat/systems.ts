@@ -468,9 +468,47 @@ export async function selectOnly(
  * model says, the threshold is a product decision, and conflating the two is how
  * 0.1 ended up in the code on the strength of a three-example probe.
  */
+/**
+ * What text stands in for a figure when the cross-encoder scores it.
+ *
+ * Not a detail — it may be the whole gap. On MRAMG-Bench, where the image is
+ * represented by the document prose around its placeholder, this selector
+ * reaches 67% precision. On our textbooks, where it is represented by a VLM
+ * description of the picture's CONTENTS, it reaches ~30%. Those were read as
+ * "our corpus is harder", but the text representation differs too and was never
+ * varied. A description answers "what is in this picture"; retrieval asks "which
+ * figure answers this question", and the surrounding prose is written in the
+ * question's own vocabulary.
+ *
+ *   desc      VLM description (what we have shipped and measured)
+ *   ctx       the figure's surrounding prose — the MRAMG-style representation
+ *   both      description followed by context
+ *   caption   printed caption only, where one exists
+ */
+export type FigureTextMode = "desc" | "ctx" | "both" | "caption"
+
+export function figureText(
+  f: FigureRecord,
+  description: string | undefined,
+  mode: FigureTextMode,
+): string {
+  const ctx = (f.ctx ?? "").slice(0, 600)
+  switch (mode) {
+    case "ctx":
+      return ctx || figureIndexText(f, description)
+    case "both":
+      return `${description ?? f.caption ?? ""} ${ctx}`.trim() || figureIndexText(f, description)
+    case "caption":
+      return f.caption || figureIndexText(f, description)
+    default:
+      return figureIndexText(f, description)
+  }
+}
+
 export async function rerankCandidates(
   idx: DocIndex,
   question: string,
+  mode: FigureTextMode = (process.env.IKAT_FIGTEXT as FigureTextMode) ?? "desc",
 ): Promise<Array<{ id: string; s: number; anchored: boolean; cos: number }>> {
   const qVec = (await embed(EMBED_MODEL, question)).vectors[0]
   const wide = retrieveChunks(idx, qVec, FIG_K)
@@ -486,7 +524,7 @@ export async function rerankCandidates(
   if (!list.length) return []
   const scores = await rerank(
     question,
-    list.map((f) => figureIndexText(f, idx.descriptions.get(f.id))),
+    list.map((f) => figureText(f, idx.descriptions.get(f.id), mode)),
   )
   // The TOP_K set, not the wide one: "anchored" should mean the figure belongs
   // to a passage the generator will actually see, which is the signal the
