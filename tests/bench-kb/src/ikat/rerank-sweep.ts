@@ -24,7 +24,7 @@
  */
 import * as fs from "node:fs"
 import * as path from "node:path"
-import { buildIndex, rerankCandidates } from "./systems"
+import { buildIndex, rerankCandidates, type FigureTextMode } from "./systems"
 
 const BENCH_ROOT = path.resolve(import.meta.dirname, "../..")
 const CORPUS = path.join(BENCH_ROOT, "corpus", process.env.IKAT_CORPUS ?? "ugm3-built")
@@ -46,9 +46,10 @@ async function main() {
         descriptions.set(k, v)
 
   // qid -> ranked candidates with their cross-encoder score, scored once.
+  const MODE = (process.env.IKAT_FIGTEXT as FigureTextMode) ?? "desc"
   const scored = new Map<
     string,
-    { gold: Set<string>; ranked: Array<{ id: string; s: number; anchored: boolean; cos: number }> }
+    { gold: Set<string>; ranked: Array<{ id: string; s: number; anchored: boolean; cos: number }>; type: string }
   >()
 
   const files = fs.readdirSync(CORPUS).filter((f) => f.endsWith(".json")).sort()
@@ -60,13 +61,35 @@ async function main() {
     for (const q of dq) {
       scored.set(q.id, {
         gold: new Set(q.goldFigureIds ?? []),
-        ranked: await rerankCandidates(idx, q.question),
+        ranked: await rerankCandidates(idx, q.question, MODE),
+        type: q.type ?? "",
       })
     }
     console.log(`[${n + 1}/${files.length}] ${doc.slug} (${dq.length} questions)`)
   }
 
-  console.log(`\ngold=${path.basename(QFILE)}  questions=${scored.size}  maxFigures=${MAX_FIGURES}`)
+  console.log(`\ngold=${path.basename(QFILE)}  questions=${scored.size}  figureText=${MODE}`)
+
+  // Split, because ctx-mode is circular on figure_dependent questions: those were
+  // WRITTEN from the figure's surrounding prose, so scoring that same prose
+  // against them is guaranteed to match. Only the non-figure_dependent half
+  // carries information about whether context beats description.
+  for (const [label, want] of [["figure_dependent (CIRCULAR for ctx)", true], ["other questions (clean)", false]] as const) {
+    const sub = [...scored.values()].filter((v) => (v.type === "figure_dependent") === want)
+    if (!sub.length) continue
+    for (const t of [0.05, 0.1, 0.2]) {
+      let tp = 0, fp = 0, fn = 0
+      for (const v of sub) {
+        const picked = v.ranked.filter((c) => c.s >= t).slice(0, 2).map((c) => c.id)
+        for (const p of picked) (v.gold.has(p) ? tp++ : fp++)
+        for (const g of v.gold) if (!picked.includes(g)) fn++
+      }
+      const P = tp + fp ? tp / (tp + fp) : 0
+      const R = tp + fn ? tp / (tp + fn) : 0
+      const F = P + R ? (2 * P * R) / (P + R) : 0
+      console.log(`  ${label.padEnd(36)} top-2 @${t}  P=${P.toFixed(3)} R=${R.toFixed(3)} F1=${F.toFixed(3)}  (n=${sub.length})`)
+    }
+  }
 
   // Fusion rules, evaluated over scores computed ONCE. The cross-encoder is the
   // most precise selector measured and the anchor has the better recall, so the
