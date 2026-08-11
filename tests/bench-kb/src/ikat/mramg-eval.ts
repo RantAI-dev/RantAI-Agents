@@ -134,14 +134,37 @@ async function main() {
   console.log(`Image Recall     ${(100 * R).toFixed(2)}`)
   console.log(`Image F1         ${(100 * F).toFixed(2)}`)
 
-  // Published Image Precision on MRAMG-Recipe, Table 4 of arXiv:2502.04176.
-  // Listed so the result is read against the field rather than in isolation.
-  console.log(`\npublished Image Precision on this subset:`)
-  console.log(`  LLM-based   Gemini-1.5-Pro 62.23 | Claude-3.5-Sonnet 59.83 | GPT-4o 47.48`)
-  console.log(`              DeepSeek-V3 45.71 | Llama-3.3-70B 35.29 | Llama-3.1-8B 11.71`)
-  console.log(`  Rule-based  Claude-3.5-Sonnet 50.32 | GPT-4o-mini 49.14 | DeepSeek-V3 27.07`)
-  console.log(`  MLLM-based  GPT-4o 43.77 | Gemini-1.5-Pro 38.59 | Qwen2-VL-72B 19.61`)
-  console.log(`              InternVL-2.5-78B 21.43 | Qwen2-VL-7B 9.66`)
+  // Published Image Precision, Table 4 of arXiv:2502.04176.
+  //
+  // The table reports by DOMAIN, not by subset — a distinction that nearly
+  // produced a wrong comparison here. Academic = arxiv alone; Lifestyle pools
+  // recipe AND manual, so neither of those may be compared to it on its own.
+  const PUBLISHED: Record<string, { domain: string; rows: string[] }> = {
+    arxiv: {
+      domain: "Academic Data (= arxiv alone)",
+      rows: [
+        "LLM-based   GPT-4o 65.28 | Claude-3.5-Sonnet 62.17 | Gemini-1.5-Pro 59.85",
+        "            DeepSeek-V3 46.57 | Llama-3.3-70B 38.78 | Llama-3.1-8B 1.50",
+        "MLLM-based  GPT-4o 60.39 | Gemini-1.5-Pro 58.13 | Claude-3.5-Sonnet 47.12",
+        "            InternVL-2.5-78B 36.62 | Qwen2-VL-72B 31.99 | Qwen2-VL-7B 1.63",
+        "Rule-based  DeepSeek-V3 56.12 | GPT-4o 55.42 | Claude-3.5-Sonnet 55.17",
+        "            Llama-3.3-70B 53.00 | InternVL-2.5-78B 52.21 | Qwen2-VL-7B 49.17",
+      ],
+    },
+    recipe: { domain: "Lifestyle Data (= recipe + manual POOLED — not comparable to one alone)", rows: [] },
+    manual: { domain: "Lifestyle Data (= recipe + manual POOLED — not comparable to one alone)", rows: [] },
+  }
+  const pub = PUBLISHED[SUBSET]
+  if (pub) {
+    console.log(`\npublished Image Precision — ${pub.domain}:`)
+    if (pub.rows.length) for (const r of pub.rows) console.log(`  ${r}`)
+    else
+      console.log(
+        `  Lifestyle: Gemini-1.5-Pro 62.23 | Claude-3.5-Sonnet 59.83 | GPT-4o 47.48 |\n` +
+          `             DeepSeek-V3 45.71 | Llama-3.3-70B 35.29 | Llama-3.1-8B 11.71\n` +
+          `  Pool this subset WITH the other before comparing.`,
+      )
+  }
 }
 
 if (import.meta.main) main()
