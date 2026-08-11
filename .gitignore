@@ -80,3 +80,10 @@ tests/bench-kb/corpus/structural-analysis-*.json
 tests/bench-kb/corpus/annotation/images/
 tests/bench-kb/corpus/annotation/annotation-selfcontained.html
 tests/bench-kb/corpus/annotation/annotation.html
+
+# Scaled annotation crops: 912 full-resolution PNGs plus their downscaled JPEGs.
+# Regenerate with export-annotation.ts; the KEY, the manifest and the judgements
+# are tracked because those are what make the gold reproducible.
+tests/bench-kb/corpus/annotation-big/images/
+tests/bench-kb/corpus/annotation-big/small/
+tests/bench-kb/corpus/annotation-big/annotation.html
