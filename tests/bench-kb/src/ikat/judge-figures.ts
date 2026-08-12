@@ -374,6 +374,114 @@ async function pipeline(topK: number) {
   console.log(`  cross-encoder   P=.304 R=.368 F1=.333`)
 }
 
+const CHATPICK_PROMPT = `Kamu adalah asisten belajar untuk siswa SD di Indonesia.
+
+Pertanyaan siswa: {Q}
+
+Di atas ada {N} gambar dari buku pelajaran, diberi nomor 1 sampai {N} sesuai urutan.
+
+Pilih gambar yang BENAR-BENAR membantu menjawab pertanyaan itu.
+
+Aturan:
+- Paling banyak 1 gambar.
+- Kebanyakan gambar di buku TIDAK membantu menjawab pertanyaan tertentu.
+- Kalau tidak ada yang benar-benar membantu, jawab: TIDAK ADA
+- Gambar yang salah lebih merugikan siswa daripada tidak ada gambar.
+
+Jawab HANYA satu nomor, atau TIDAK ADA.`
+
+/**
+ * One call, all candidates in view — the natural design, and the missing cell.
+ *
+ * Two variables were changed together in the earlier experiments and never
+ * crossed. Picking from a numbered list of DESCRIPTIONS scored .114; judging
+ * images ONE AT A TIME scored .283. This is the untested combination: the model
+ * sees every candidate image at once and picks.
+ *
+ * It is also the cheap one. Per-pair judging costs a call per candidate — roughly
+ * 14 seconds a question at six candidates — while this costs a single call whose
+ * prefill carries all six images. If quality holds, the latency objection to
+ * VLM selection disappears.
+ *
+ * The risk is named rather than assumed away: a list invites picking a winner
+ * when nothing fits, which is how an earlier system emitted 261 figures on
+ * questions that had no correct one. Hence "TIDAK ADA" first and a cap of one.
+ * Wall-clock per question is reported, because a quality win that costs ten
+ * seconds is not a win for chat.
+ */
+async function chatPick() {
+  const man = JSON.parse(fs.readFileSync(path.join(ANN_DIR, "judge-manifest.json"), "utf-8")) as Array<{
+    item: number
+    question: string
+  }>
+  const key = new Map(
+    (JSON.parse(fs.readFileSync(path.join(ANN_DIR, "annotation.KEY.json"), "utf-8")) as Array<{
+      item: number
+      questionId: string
+      docSlug: string
+      shownFigureIds: string[]
+    }>).map((k) => [k.item, k]),
+  )
+  const gold = new Map(
+    (JSON.parse(
+      fs.readFileSync(path.join(BENCH_ROOT, "corpus", process.env.IKAT_GOLD ?? "questions-sonnet-gold.json"), "utf-8"),
+    ) as Array<{ id: string; goldFigureIds: string[] }>).map((q) => [q.id, new Set(q.goldFigureIds)]),
+  )
+
+  let tp = 0, fp = 0, fn = 0, emitted = 0, silent = 0, n = 0, ms = 0
+  for (const [i, m] of man.entries()) {
+    const k = key.get(m.item)
+    const g = k ? gold.get(k.questionId) : undefined
+    if (!k || !g) continue
+
+    const parts: any[] = []
+    const ids: string[] = []
+    for (const fid of k.shownFigureIds) {
+      const p = figurePath(k.docSlug, fid)
+      if (!p) continue
+      parts.push({ type: "image_url", image_url: { url: `data:image/png;base64,${fs.readFileSync(p).toString("base64")}` } })
+      ids.push(fid)
+    }
+    if (!ids.length) continue
+    n++
+    parts.push({
+      type: "text",
+      text: CHATPICK_PROMPT.replace("{Q}", m.question).replace(/\{N\}/g, String(ids.length)),
+    })
+
+    const t0 = Date.now()
+    let text = ""
+    try {
+      text = (await chat(JUDGE_MODEL, [{ role: "user", content: parts }], 12)).text.trim().toUpperCase()
+    } catch {
+      failures++
+    }
+    ms += Date.now() - t0
+
+    const picked: string[] = []
+    if (!/TIDAK\s*ADA/.test(text)) {
+      const mm = text.match(/\d+/)
+      const idx = mm ? parseInt(mm[0], 10) - 1 : -1
+      if (idx >= 0 && idx < ids.length) picked.push(ids[idx])
+    }
+
+    emitted += picked.length
+    if (!picked.length) silent++
+    for (const x of picked) (g.has(x) ? tp++ : fp++)
+    for (const x of g) if (!picked.includes(x)) fn++
+    if ((i + 1) % 20 === 0) console.log(`  ${i + 1}/${man.length}…`)
+  }
+  const P = tp + fp ? tp / (tp + fp) : 0
+  const R = tp + fn ? tp / (tp + fn) : 0
+  console.log(`\n=== CHAT-STYLE PICK: all candidates in one call — ${n} questions ===`)
+  console.log(`gold: ${process.env.IKAT_GOLD ?? "questions-sonnet-gold.json"}   model: ${JUDGE_MODEL}`)
+  console.log(`P=${P.toFixed(3)}  R=${R.toFixed(3)}  F1=${(P + R ? (2 * P * R) / (P + R) : 0).toFixed(3)}`)
+  console.log(`fig/q=${(emitted / n).toFixed(2)}  silent=${((100 * silent) / n).toFixed(0)}%`)
+  console.log(`LATENCY: ${(ms / n / 1000).toFixed(1)}s per question (one call)`)
+  if (failures) console.log(`[warn] ${failures} calls failed`)
+  console.log(`\ncompare — per-pair VLM then rerank: P=.542 R=.684 (human gold), ~14s/question at 6 calls`)
+}
+
 async function main() {
   const mode = process.argv[2]
   if (!JUDGE_MODEL) {
@@ -383,8 +491,9 @@ async function main() {
   if (mode === "validate") await validate(parseInt(process.argv[3] ?? "1", 10))
   else if (mode === "select") await selectAndScore(parseInt(process.argv[3] ?? "1", 10))
   else if (mode === "pipeline") await pipeline(parseInt(process.argv[3] ?? "1", 10))
+  else if (mode === "chatpick") await chatPick()
   else {
-    console.error("usage: judge-figures.ts validate|select|pipeline [n]")
+    console.error("usage: judge-figures.ts validate|select|pipeline|chatpick [n]")
     process.exit(1)
   }
 }
