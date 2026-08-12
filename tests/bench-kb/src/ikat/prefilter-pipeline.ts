@@ -43,7 +43,7 @@ const DESC_DIR = path.join(BENCH_ROOT, "corpus", process.env.IKAT_DESCRIPTIONS ?
 const JUDGE_MODEL = process.env.IKAT_JUDGE_MODEL ?? process.env.IKAT_GEN_MODEL ?? ""
 const NS = (process.env.IKAT_PREFILTER_NS ?? "1,2,3,4,99").split(",").map(Number)
 
-const PROMPT = `Kamu menilai apakah sebuah gambar dari buku pelajaran benar-benar membantu menjawab pertanyaan siswa.
+const PROMPT_LOOSE = `Kamu menilai apakah sebuah gambar dari buku pelajaran benar-benar membantu menjawab pertanyaan siswa.
 
 Pertanyaan siswa: {Q}
 
@@ -56,6 +56,30 @@ Kebanyakan gambar dalam buku TIDAK membantu menjawab pertanyaan tertentu — "TI
 yang sering benar. Jika ragu, jawab TIDAK.
 
 Jawab HANYA satu kata: YA atau TIDAK.`
+
+const PROMPT_STRICT = `Kamu menilai apakah sebuah gambar dari buku pelajaran WAJIB ditampilkan untuk menjawab pertanyaan siswa.
+
+Pertanyaan siswa: {Q}
+
+Lihat gambar di atas.
+
+Jawab "YA" HANYA jika gambar ini memuat informasi yang DIBUTUHKAN untuk menjawab pertanyaan itu —
+misalnya angka, bentuk, langkah, atau bagian berlabel yang tidak bisa dijelaskan dengan kata-kata saja.
+
+Jawab "TIDAK" untuk semua kasus lain, termasuk:
+- gambar yang topiknya berhubungan tetapi tidak dibutuhkan untuk menjawab
+- foto orang, suasana, atau kegiatan sebagai hiasan
+- gambar pembuka bab atau latar halaman
+- gambar yang hanya "cocok temanya"
+
+Patokan penting: dari setiap 20 gambar dalam buku, biasanya HANYA 1 yang benar-benar dibutuhkan
+untuk sebuah pertanyaan tertentu. Kalau kamu menjawab YA lebih sering dari itu, kamu terlalu longgar.
+
+Kalau ragu sedikit pun, jawab TIDAK.
+
+Jawab HANYA satu kata: YA atau TIDAK.`
+
+const PROMPT = (process.env.IKAT_JUDGE_PROMPT ?? "loose") === "strict" ? PROMPT_STRICT : PROMPT_LOOSE
 
 function figurePath(docSlug: string, figureId: string): string | null {
   const p = path.join(FIG_DIR, docSlug, `${figureId.split("::").pop()}.png`)
@@ -74,7 +98,7 @@ async function judgePair(question: string, imagePath: string): Promise<{ yes: bo
       const res = await chat(
         JUDGE_MODEL,
         [{ role: "user", content: [{ type: "image_url", image_url: { url } }, { type: "text", text: PROMPT.replace("{Q}", question) }] }],
-        6,
+        8,
       )
       t = res.text.trim().toUpperCase()
       break
@@ -82,7 +106,7 @@ async function judgePair(question: string, imagePath: string): Promise<{ yes: bo
       if (attempt === 1) failures++
     }
   }
-  return { yes: /\bYA\b/.test(t) && !/TIDAK/.test(t), ms: Date.now() - t0 }
+  return { yes: /\bYA\b/.test(t) && !/\bTIDAK\b/.test(t), ms: Date.now() - t0 }
 }
 
 async function main() {
