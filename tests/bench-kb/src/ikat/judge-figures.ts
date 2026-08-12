@@ -41,7 +41,7 @@ import { genChat as chat } from "./providers"
 import { cohensKappa } from "../judge"
 
 const BENCH_ROOT = path.resolve(import.meta.dirname, "../..")
-const ANN_DIR = path.join(BENCH_ROOT, "corpus", "annotation")
+const ANN_DIR = path.join(BENCH_ROOT, "corpus", process.env.IKAT_ANNDIR ?? "annotation")
 const FIG_DIR = path.join(BENCH_ROOT, "corpus", process.env.IKAT_FIGURES ?? "ugm3-figures")
 const CORPUS = path.join(BENCH_ROOT, "corpus", process.env.IKAT_CORPUS ?? "ugm3-built")
 const JUDGE_MODEL = process.env.IKAT_JUDGE_MODEL ?? process.env.IKAT_GEN_MODEL ?? ""
@@ -216,6 +216,78 @@ async function validate(repeats: number) {
   )
 }
 
+/**
+ * Use the VLM as a SELECTOR, not a judge, and score it against the scaled gold.
+ *
+ * The asymmetry this tests: our judge looks at the picture and agrees with a
+ * human at kappa 0.552, while our selector reads a 300-character description and
+ * never sees the image at all. Every selection method measured so far has been
+ * text over descriptions. If sight is what the description throws away, a VLM
+ * asked keep/drop per candidate should beat the cross-encoder — and if it does
+ * not, the description is not the bottleneck and we can stop looking there.
+ *
+ * Non-circular by construction: the gold came from Sonnet, the selector here is
+ * the on-prem SEA-LION VL. Different model, different protocol (per-pair, no
+ * candidate list), so it cannot simply reproduce the gold's idiosyncrasies.
+ */
+async function selectAndScore(repeats: number) {
+  // Images are resolved from the ORIGINAL crops already on the box, via the
+  // key's docSlug + figure id — not from the downscaled copies used for the
+  // subagent judging. Shipping those 32 MB over the tunnel failed twice and was
+  // never necessary: the crops have been here since extraction.
+  const man = JSON.parse(fs.readFileSync(path.join(ANN_DIR, "judge-manifest.json"), "utf-8")) as Array<{
+    item: number
+    question: string
+    images: string[]
+  }>
+  const key = new Map(
+    (JSON.parse(fs.readFileSync(path.join(ANN_DIR, "annotation.KEY.json"), "utf-8")) as Array<{
+      item: number
+      questionId: string
+      docSlug: string
+      shownFigureIds: string[]
+    }>).map((k) => [k.item, k]),
+  )
+  // Which gold to score against. The default is the Sonnet-built one, but that
+  // shares a modality with this selector — both are VLMs looking at pictures —
+  // so a VLM selector could agree with it for reasons that have nothing to do
+  // with being right. IKAT_GOLD points this at the human annotation instead,
+  // which is the only non-circular check available.
+  const gold = new Map(
+    (JSON.parse(
+      fs.readFileSync(path.join(BENCH_ROOT, "corpus", process.env.IKAT_GOLD ?? "questions-sonnet-gold.json"), "utf-8"),
+    ) as Array<{ id: string; goldFigureIds: string[] }>).map((q) => [q.id, new Set(q.goldFigureIds)]),
+  )
+
+  let tp = 0, fp = 0, fn = 0, emitted = 0, silent = 0, n = 0
+  for (const [i, m] of man.entries()) {
+    const k = key.get(m.item)
+    const g = k ? gold.get(k.questionId) : undefined
+    if (!k || !g) continue
+    n++
+    const picked: string[] = []
+    for (const fid of k.shownFigureIds) {
+      const p = figurePath(k.docSlug, fid)
+      if (!p) continue
+      const r = await judgePair(m.question, p, repeats)
+      if (r.yes) picked.push(fid)
+    }
+    emitted += picked.length
+    if (!picked.length) silent++
+    for (const x of picked) (g.has(x) ? tp++ : fp++)
+    for (const x of g) if (!picked.includes(x)) fn++
+    if ((i + 1) % 20 === 0) console.log(`  ${i + 1}/${man.length}…`)
+  }
+  const P = tp + fp ? tp / (tp + fp) : 0
+  const R = tp + fn ? tp / (tp + fn) : 0
+  console.log(`\n=== VLM AS SELECTOR vs scaled gold — ${n} questions ===`)
+  console.log(`model: ${JUDGE_MODEL}`)
+  console.log(`P=${P.toFixed(3)}  R=${R.toFixed(3)}  F1=${(P + R ? (2 * P * R) / (P + R) : 0).toFixed(3)}`)
+  console.log(`fig/q=${(emitted / n).toFixed(2)}  silent=${((100 * silent) / n).toFixed(0)}%`)
+  if (failures) console.log(`[warn] ${failures} judge calls failed twice, recorded as NO`)
+  console.log(`\ncross-encoder on the same gold: P=0.269 R=0.309 F1=0.288 (0.47 fig/q, 68% silent)`)
+}
+
 async function main() {
   const mode = process.argv[2]
   if (!JUDGE_MODEL) {
@@ -223,8 +295,9 @@ async function main() {
     process.exit(1)
   }
   if (mode === "validate") await validate(parseInt(process.argv[3] ?? "1", 10))
+  else if (mode === "select") await selectAndScore(parseInt(process.argv[3] ?? "1", 10))
   else {
-    console.error("usage: judge-figures.ts validate [repeats]")
+    console.error("usage: judge-figures.ts validate|select [repeats]")
     process.exit(1)
   }
 }
