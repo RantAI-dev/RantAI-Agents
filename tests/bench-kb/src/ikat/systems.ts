@@ -130,7 +130,9 @@ export async function rerankTexts(query: string, texts: string[]): Promise<numbe
 async function rerank(query: string, texts: string[]): Promise<number[]> {
   if (!texts.length) return []
   const out = new Array(texts.length).fill(0)
-  const q = query.slice(0, Number(process.env.IKAT_RERANK_QMAX ?? 200))
+  // Qwen3-Reranker is trained to read an instruction ahead of the query; bge is
+  // not. Prefix supplied by the caller so one code path serves both.
+  const q = (process.env.IKAT_RERANK_INSTRUCT ?? "") + query.slice(0, Number(process.env.IKAT_RERANK_QMAX ?? 200))
 
   // Score one group, shrinking on failure until the service accepts it. Two
   // constants were fitted here and both were wrong, because the limit is not a
@@ -141,14 +143,27 @@ async function rerank(query: string, texts: string[]): Promise<number[]> {
   // single 120-character pair still fails, which means the service is down
   // rather than saturated.
   async function score(items: string[], at: number, maxLen: number): Promise<void> {
+    // Two wire formats for the same operation. TEI answers `{query, texts}` with a
+    // bare array; vLLM's OpenAI server answers `{model, query, documents}` with
+    // `{results: [{index, relevance_score}]}`. Setting IKAT_RERANK_MODEL selects
+    // the second, because only the caller knows which server it pointed at.
+    const vllmModel = process.env.IKAT_RERANK_MODEL
+    const docs = items.map((t) => t.slice(0, maxLen))
     const res = await fetch(`${RERANK_BASE}/rerank`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: q, texts: items.map((t) => t.slice(0, maxLen)) }),
+      body: JSON.stringify(
+        vllmModel ? { model: vllmModel, query: q, documents: docs } : { query: q, texts: docs },
+      ),
     }).catch(() => null)
 
     if (res?.ok) {
-      const rows = (await res.json()) as Array<{ index: number; score: number }>
+      const body = (await res.json()) as
+        | Array<{ index: number; score: number }>
+        | { results: Array<{ index: number; relevance_score: number }> }
+      const rows = Array.isArray(body)
+        ? body
+        : body.results.map((r) => ({ index: r.index, score: r.relevance_score }))
       for (const r of rows) out[at + r.index] = r.score
       return
     }
