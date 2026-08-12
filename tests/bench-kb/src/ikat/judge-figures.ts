@@ -39,6 +39,7 @@ import * as fs from "node:fs"
 import * as path from "node:path"
 import { genChat as chat } from "./providers"
 import { cohensKappa } from "../judge"
+import { rerankTexts, figureIndexText } from "./systems"
 
 const BENCH_ROOT = path.resolve(import.meta.dirname, "../..")
 const ANN_DIR = path.join(BENCH_ROOT, "corpus", process.env.IKAT_ANNDIR ?? "annotation")
@@ -288,6 +289,91 @@ async function selectAndScore(repeats: number) {
   console.log(`\ncross-encoder on the same gold: P=0.269 R=0.309 F1=0.288 (0.47 fig/q, 68% silent)`)
 }
 
+/**
+ * VLM filter, then cross-encoder rank, then take the best.
+ *
+ * The two methods are strong on opposite axes and neither dominates. Against the
+ * human annotation the VLM recovers .789 recall to the cross-encoder's .368 —
+ * seeing the picture finds figures a 300-character description loses — while the
+ * cross-encoder is marginally the more precise of the two (.304 vs .283). Neither
+ * alone is good enough, so this asks whether they compose: let sight decide what
+ * is *possible*, and let the cross-encoder decide what is *best* among those.
+ *
+ * The failure mode to watch for is that the VLM's recall is bought with volume
+ * (1.10 figures per question against the cross-encoder's 0.47). If its survivors
+ * are mostly noise, ranking them will not help and top-1 will simply pick a
+ * confident wrong answer.
+ */
+async function pipeline(topK: number) {
+  const man = JSON.parse(fs.readFileSync(path.join(ANN_DIR, "judge-manifest.json"), "utf-8")) as Array<{
+    item: number
+    question: string
+  }>
+  const key = new Map(
+    (JSON.parse(fs.readFileSync(path.join(ANN_DIR, "annotation.KEY.json"), "utf-8")) as Array<{
+      item: number
+      questionId: string
+      docSlug: string
+      shownFigureIds: string[]
+    }>).map((k) => [k.item, k]),
+  )
+  const gold = new Map(
+    (JSON.parse(
+      fs.readFileSync(path.join(BENCH_ROOT, "corpus", process.env.IKAT_GOLD ?? "questions-sonnet-gold.json"), "utf-8"),
+    ) as Array<{ id: string; goldFigureIds: string[] }>).map((q) => [q.id, new Set(q.goldFigureIds)]),
+  )
+  const DESC = path.join(BENCH_ROOT, "corpus", process.env.IKAT_DESCRIPTIONS ?? "descriptions")
+  const desc = new Map<string, string>()
+  if (fs.existsSync(DESC))
+    for (const f of fs.readdirSync(DESC).filter((x) => x.endsWith(".json")))
+      for (const [k2, v] of Object.entries(JSON.parse(fs.readFileSync(path.join(DESC, f), "utf-8")) as Record<string, string>))
+        desc.set(k2, v)
+
+  let tp = 0, fp = 0, fn = 0, emitted = 0, silent = 0, n = 0, survived = 0
+  for (const [i, m] of man.entries()) {
+    const k = key.get(m.item)
+    const g = k ? gold.get(k.questionId) : undefined
+    if (!k || !g) continue
+    n++
+
+    // Stage 1 — sight. Keep whatever the VLM will not rule out.
+    const kept: string[] = []
+    for (const fid of k.shownFigureIds) {
+      const p = figurePath(k.docSlug, fid)
+      if (!p) continue
+      if ((await judgePair(m.question, p, 1)).yes) kept.push(fid)
+    }
+    survived += kept.length
+
+    // Stage 2 — discrimination. Rank the survivors on their indexed text.
+    let picked: string[] = []
+    if (kept.length) {
+      const texts = kept.map((fid) => `[Gambar] ${desc.get(fid) ?? ""}`.trim())
+      const scores = await rerankTexts(m.question, texts)
+      picked = kept
+        .map((fid, j) => ({ fid, s: scores[j] ?? 0 }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, topK)
+        .map((x) => x.fid)
+    }
+
+    emitted += picked.length
+    if (!picked.length) silent++
+    for (const x of picked) (g.has(x) ? tp++ : fp++)
+    for (const x of g) if (!picked.includes(x)) fn++
+    if ((i + 1) % 20 === 0) console.log(`  ${i + 1}/${man.length}…`)
+  }
+  const P = tp + fp ? tp / (tp + fp) : 0
+  const R = tp + fn ? tp / (tp + fn) : 0
+  console.log(`\n=== VLM FILTER -> CROSS-ENCODER RANK -> top-${topK} — ${n} questions ===`)
+  console.log(`gold: ${process.env.IKAT_GOLD ?? "questions-sonnet-gold.json"}`)
+  console.log(`P=${P.toFixed(3)}  R=${R.toFixed(3)}  F1=${(P + R ? (2 * P * R) / (P + R) : 0).toFixed(3)}`)
+  console.log(`fig/q=${(emitted / n).toFixed(2)}  silent=${((100 * silent) / n).toFixed(0)}%  VLM survivors/q=${(survived / n).toFixed(2)}`)
+  console.log(`\nfor comparison on the HUMAN gold:`)
+  console.log(`  VLM alone       P=.283 R=.789 F1=.417`)
+  console.log(`  cross-encoder   P=.304 R=.368 F1=.333`)
+}
+
 async function main() {
   const mode = process.argv[2]
   if (!JUDGE_MODEL) {
@@ -296,8 +382,9 @@ async function main() {
   }
   if (mode === "validate") await validate(parseInt(process.argv[3] ?? "1", 10))
   else if (mode === "select") await selectAndScore(parseInt(process.argv[3] ?? "1", 10))
+  else if (mode === "pipeline") await pipeline(parseInt(process.argv[3] ?? "1", 10))
   else {
-    console.error("usage: judge-figures.ts validate|select [repeats]")
+    console.error("usage: judge-figures.ts validate|select|pipeline [n]")
     process.exit(1)
   }
 }
