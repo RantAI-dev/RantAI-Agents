@@ -14,6 +14,7 @@
 import { getSurrealClient, SurrealDBClient } from "../surrealdb";
 import { generateEmbedding } from "./embeddings";
 import { getDefaultReranker } from "./rerankers";
+import { gateConfig, gateFigures } from "./figure-gate";
 import { Entity } from "../document-intelligence/types";
 import { prisma } from "../prisma";
 
@@ -934,6 +935,30 @@ export async function fetchMatchingFigures(
       final = gated.map((x) => x.s);
     } catch (err) {
       console.warn(`[RAG] figure rerank failed (non-fatal): ${(err as Error).message?.slice(0, 100)}`);
+    }
+  }
+
+  // Sight. Everything above this line reasons about a figure from a caption
+  // written before anyone knew the question, which is why the shipped selector
+  // is right 2.8% of the time against human annotation. A vision model that
+  // actually looks at the crop takes that to 54.2%, and the ordering above is
+  // what makes it affordable: only the top few are ever judged.
+  //
+  // Deliberately last. The gate can only REMOVE figures, so if it is off,
+  // misconfigured, slow, or broken, this function behaves exactly as it did
+  // before — the worst case is the old output, never a worse one.
+  const gateCfg = gateConfig();
+  if (gateCfg && final.length) {
+    try {
+      const kept = await gateFigures(
+        query,
+        final.map((s) => ({ id: String(s.row.id), assetKey: s.assetKey, caption: s.caption })),
+        gateCfg,
+      );
+      const keptIds = new Set(kept.map((k) => k.id));
+      final = final.filter((s) => keptIds.has(String(s.row.id)));
+    } catch (err) {
+      console.warn(`[RAG] figure gate failed (non-fatal): ${(err as Error).message?.slice(0, 100)}`);
     }
   }
 
