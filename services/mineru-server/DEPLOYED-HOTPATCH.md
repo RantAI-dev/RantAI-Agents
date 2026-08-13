@@ -1,4 +1,33 @@
-# MinerU sidecar — live hot-patch on the UGM box (2026-08-06)
+# MinerU sidecar — hot-patch, then the rebuild that made it durable
+
+## Resolved (2026-08-13): baked into the image
+
+`shirologic/mineru-server:gb10-blocks` (arm64) now contains revision 2 at build
+time. UGM stack 28 runs it.
+
+The warning below was not hypothetical — **the hot-patch was already gone.** By
+the time this was checked, the live `/app/server.py` was 7003 bytes with zero
+occurrences of `pages_blocks` or `block_index`, and both `.bak-*` backups had
+vanished with the container that held them. The sidecar had been silently back
+on an anchor-incapable build for an unknown period, which is why UGM's 12,466
+figure chunks carry no `anchorChunkIndex` at all: re-ingesting would not have
+helped, because the extractor was not producing reading order to anchor to.
+
+Verified on the box after deploying the rebuilt image:
+
+- `/app/server.py` is 17,592 bytes, sha256 `7cb62215…` — byte-identical to this repo
+- `pages_blocks` ×5, `block_index` ×6
+- vLLM engine loads on arm64 Blackwell at the default `MINERU_MEM_UTIL=0.25`
+  (the 0.38 used during earlier experiments turned out not to be needed)
+- `POST /extract` with `structured=true` returns
+  `pages_blocks: [[{"kind":"text","type":"title","text":…}]]` — block **type**
+  present, which is revision 2's addition
+- warm single-page extraction: 272 ms (first call 146 s, engine load)
+
+Still unproven: figure cropping and inline figure placement on a real textbook
+page. The verification PDF carries no figures.
+
+## Revision 2 (2026-08-07) — original hot-patch record
 
 ## Revision 2 (2026-08-07)
 
@@ -83,6 +112,9 @@ Or simply recreate the container from the image, which restores the July build.
 
 ## Still to do
 
-- Rebuild `shirologic/mineru-server:gb10` (arm64, on the GB10 box) from
-  `portainer/build-mineru/` so the change is durable.
-- Spot-check UGM's own figure extraction after the filter changes.
+- ~~Rebuild the image so the change is durable.~~ Done 2026-08-13, see top.
+- Spot-check UGM's own figure extraction after the filter changes — still open,
+  and best done on the first re-ingested book rather than in the abstract.
+- `dpi` is a per-request field defaulting to 300 and the Node extractor does not
+  send one, so the 180 used during the GB10 experiments is NOT in effect. Whether
+  300 is a problem on dense textbook pages is untested; watch the first book.
