@@ -23,7 +23,13 @@ export async function POST(request: Request) {
   }
 
   const result = await loginMobile(body.email, body.password)
-  if (!result) {
+  if ("error" in result) {
+    if (result.error === "suspended") {
+      return NextResponse.json(
+        { error: "Akun Anda ditangguhkan. Hubungi administrator." },
+        { status: 403 }
+      )
+    }
     return NextResponse.json(
       { error: "Email atau password salah" },
       { status: 401 }

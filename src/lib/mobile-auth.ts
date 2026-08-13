@@ -34,16 +34,34 @@ export async function signMobileToken(user: {
     .sign(secret)
 }
 
-/** Verifikasi email+password lalu kembalikan token + data user, atau null. */
+/**
+ * Verifikasi email+password lalu kembalikan token + data user.
+ * `{ error: "invalid" }` = kredensial salah; `{ error: "suspended" }` = akun
+ * ditangguhkan admin (mirror pengecekan `suspendedAt` di web auth — akun suspend
+ * tidak boleh login di klien mana pun).
+ */
 export async function loginMobile(
   email: string,
   password: string
-): Promise<{ token: string; user: MobileUser } | null> {
+): Promise<
+  | { token: string; user: MobileUser }
+  | { error: "invalid" }
+  | { error: "suspended" }
+> {
   const user = await prisma.user.findUnique({ where: { email } })
-  if (!user) return null
+  if (!user) return { error: "invalid" }
 
   const isValid = await compare(password, user.passwordHash)
-  if (!isValid) return null
+  if (!isValid) return { error: "invalid" }
+
+  // Admin-suspended accounts cannot log in (mirror web auth authorize()).
+  if (user.suspendedAt) return { error: "suspended" }
+
+  // Fire-and-forget: keep lastActiveAt fresh so the admin console reflects
+  // mobile logins too (matches the web login path).
+  prisma.user
+    .update({ where: { id: user.id }, data: { lastActiveAt: new Date() } })
+    .catch(() => {})
 
   const token = await signMobileToken(user)
   return {
