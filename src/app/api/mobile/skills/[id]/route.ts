@@ -3,7 +3,6 @@ import { NextResponse } from "next/server"
 import { UpdateDashboardSkillSchema } from "@/features/skills/schema"
 import {
   deleteDashboardSkillRecord,
-  getDashboardSkillById,
   updateDashboardSkillRecord,
 } from "@/features/skills/service"
 import { getMobileContext } from "@/lib/mobile-org"
@@ -20,26 +19,7 @@ function isServiceError(
   return typeof candidate.status === "number" && typeof candidate.error === "string"
 }
 
-/**
- * Loads a skill and verifies it belongs to the caller's org (the base service
- * doesn't org-scope by id, so guard here). Returns null if OK, else a response.
- */
-async function guardOwnership(
-  id: string,
-  organizationId: string | null
-): Promise<NextResponse | null> {
-  const skill = await getDashboardSkillById(id)
-  if (isServiceError(skill)) {
-    return NextResponse.json({ error: skill.error }, { status: skill.status })
-  }
-  const skillOrg = (skill as { organizationId?: string | null }).organizationId ?? null
-  if (skillOrg !== organizationId) {
-    return NextResponse.json({ error: "Skill not found" }, { status: 404 })
-  }
-  return null
-}
-
-/** PUT /api/mobile/skills/[id] — update a custom skill. */
+/** PUT /api/mobile/skills/[id] — update a custom skill (org-scoped in service). */
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
     const ctx = await getMobileContext(request)
@@ -47,14 +27,15 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const { id } = await params
-    const denied = await guardOwnership(id, ctx.organizationId)
-    if (denied) return denied
-
     const parsed = UpdateDashboardSkillSchema.safeParse(await request.json())
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid request payload" }, { status: 400 })
     }
-    const result = await updateDashboardSkillRecord({ id, input: parsed.data })
+    const result = await updateDashboardSkillRecord({
+      id,
+      organizationId: ctx.organizationId,
+      input: parsed.data,
+    })
     if (isServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
@@ -65,7 +46,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 }
 
-/** DELETE /api/mobile/skills/[id] — delete a custom skill. */
+/** DELETE /api/mobile/skills/[id] — delete a custom skill (org-scoped in service). */
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const ctx = await getMobileContext(request)
@@ -73,10 +54,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
     const { id } = await params
-    const denied = await guardOwnership(id, ctx.organizationId)
-    if (denied) return denied
-
-    const result = await deleteDashboardSkillRecord(id)
+    const result = await deleteDashboardSkillRecord(id, ctx.organizationId)
     if (isServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
