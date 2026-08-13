@@ -72,6 +72,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const workflow = await updateDashboardWorkflow({
       id: parsedParams.data.id,
+      organizationId: ctx.organizationId,
       input: { status: parsedBody.data.status },
     })
     if (isHttpServiceError(workflow)) {
@@ -103,7 +104,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: auth.error }, { status: auth.status })
     }
 
-    const result = await deleteDashboardWorkflow(parsedParams.data.id)
+    const result = await deleteDashboardWorkflow(parsedParams.data.id, ctx.organizationId)
     if (isHttpServiceError(result)) {
       return NextResponse.json({ error: result.error }, { status: result.status })
     }
