@@ -896,17 +896,32 @@ export async function fetchMatchingFigures(
   // appears in the retrieved TEXT, score=1) surfaces off-topic pictures, because
   // figure captions are thin and borrow their page's prose. Rerank the keyword
   // candidates against the QUERY itself and keep only those the reranker scores
-  // above KB_FIGURE_MIN_RERANK. Env-tunable (no rebuild): unset = gate off (keeps
-  // old keyword behaviour); the per-query figure scores are logged so the right
-  // floor can be picked from real traffic.
+  // above KB_FIGURE_MIN_RERANK. Env-tunable without a rebuild; the per-query
+  // scores AND how many survived are logged, so the floor can be judged from
+  // real traffic rather than assumed.
   let final: Scored[] = scored;
   const reranker = getDefaultReranker();
   const rawMin = process.env.KB_FIGURE_MIN_RERANK;
-  // Default floor 0.2: bge-reranker-v2-m3 (TEI, sigmoid) scores relevant
-  // figures ~0.5–0.8 and off-topic ones ~0.00002, so 0.2 cleanly cuts noise
-  // while keeping weaker-but-real matches. Override via KB_FIGURE_MIN_RERANK
-  // (set to 0 to disable the floor).
-  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : 0.2;
+  // Default floor 0.001, not the 0.2 this used to carry.
+  //
+  // The 0.2 came with a note claiming bge-reranker-v2-m3 scores relevant figures
+  // 0.5–0.8 and off-topic ones ~0.00002. That is what it does on the DESCRIPTIONS
+  // the benchmark ranks. Production ranks the printed CAPTION — twenty-odd
+  // characters, often truncated — and the whole score distribution collapses:
+  // measured on a live UGM question about the digestive system, the correct
+  // figure ("Gambar 1.15 Posisi usus") scored 0.016 and everything else fell
+  // below that. At 0.2 the floor discarded EVERY candidate on every query.
+  //
+  // That is how production reached 0.028 precision against human annotation: not
+  // by choosing wrong figures, but by almost never emitting one — and it starved
+  // the VLM gate below, which never ran a single time in production until this
+  // was found by watching one real chat.
+  //
+  // The floor predates that gate, when it was the only thing standing between a
+  // keyword match and a student. The gate now looks at the actual image and is
+  // far better at the same job, so admitting more here and letting it decide is
+  // strictly the better division of labour. Override via KB_FIGURE_MIN_RERANK.
+  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : 0.001;
   if (reranker && scored.length > 0) {
     try {
       const ranked = await reranker.rerank(
@@ -927,7 +942,7 @@ export async function fetchMatchingFigures(
         })
         .filter((x): x is { s: Scored; score: number } => x !== null);
       console.log(
-        `[RAG] figure rerank (floor=${rawMin ?? "off"}): [${rr
+        `[RAG] figure rerank (floor=${figMin}, kept ${rr.filter((x) => x.score >= figMin).length}/${rr.length}): [${rr
           .map((x) => `${x.score.toFixed(3)}:${x.s.caption.slice(0, 22)}`)
           .join(" | ")}]`,
       );
