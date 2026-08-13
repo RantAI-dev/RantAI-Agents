@@ -29,8 +29,6 @@ page. The verification PDF carries no figures.
 
 ## Revision 2 (2026-08-07) — original hot-patch record
 
-## Revision 2 (2026-08-07)
-
 `pages_blocks` now carries **MinerU's own block type** on every entry, and
 caption blocks are no longer dropped.
 
