@@ -24,7 +24,6 @@ import {
   SendHorizontal,
   Square,
   Trash2,
-  User,
   X,
 } from "@/lib/icons"
 import type { ChatSession } from "@/hooks/use-chat-sessions"
@@ -33,7 +32,6 @@ import { cn } from "@/lib/utils"
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso"
 import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
-import { useProfileStore } from "@/hooks/use-profile"
 import { ToastAction } from "@/components/ui/toast"
 import { MarkdownContent } from "./markdown-content"
 import { ReasoningBox } from "./reasoning-box"
@@ -428,7 +426,6 @@ function MessagesArea({
   artifacts: Map<string, Artifact>
   digitalEmployeeId?: string
 }) {
-  const { avatarUrl: userAvatarUrl, name: userName } = useProfileStore()
 
   // Viewport-relative atBottomThreshold so the "near bottom" zone (which
   // gates the floating scroll-to-bottom button's visibility) feels the
@@ -553,32 +550,22 @@ function MessagesArea({
                 <div
                   className={cn(
                     "group flex gap-3",
-                    isUser ? "flex-row-reverse" : ""
+                    isUser ? "justify-end" : ""
                   )}
                 >
                   {/* Avatar */}
-                  <div
+                  {!isUser && <div
                     className={cn(
                       "flex shrink-0 items-center justify-center rounded-full overflow-hidden",
-                      isUser
-                        ? "h-8 w-8 bg-neutral-300 text-neutral-700 dark:bg-neutral-600 dark:text-white shadow-sm"
-                        : "h-8 w-8 bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-sm"
+                      "h-8 w-8 bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-sm"
                     )}
                   >
-                    {isUser ? (
-                      userAvatarUrl ? (
-                        <img src={userAvatarUrl} alt={userName || "User"} className="h-8 w-8 object-cover" />
-                      ) : userName ? (
-                        <span className="text-xs font-medium">{userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}</span>
-                      ) : (
-                        <User className="h-3.5 w-3.5" />
-                      )
-                    ) : assistant.emoji ? (
+                    {assistant.emoji ? (
                       <span className="text-base">{assistant.emoji}</span>
                     ) : (
                       <Bot className="h-3.5 w-3.5" />
                     )}
-                  </div>
+                  </div>}
 
                   {/* Message content */}
                   <div
@@ -594,7 +581,7 @@ function MessagesArea({
                       className={cn(
                         "text-sm",
                         isUser
-                          ? "rounded-2xl py-2.5 px-4 bg-neutral-200 text-neutral-900 dark:bg-neutral-700 dark:text-neutral-100"
+                          ? "rounded-2xl border border-primary/10 bg-primary/10 px-4 py-2.5 text-foreground"
                           : ""
                       )}
                     >
@@ -3831,7 +3818,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                       </div>
                     )}
 
-                    <div className="rounded-2xl border border-border/60 bg-muted/30 shadow-sm transition-all focus-within:border-foreground/20 focus-within:shadow-md focus-within:bg-muted/40">
+                    <div className="rounded-2xl border border-border/60 bg-muted/30 transition-colors focus-within:border-foreground/20 focus-within:bg-muted/40">
                       <div className="relative">
                         <Textarea
                           ref={textareaRef}
@@ -4065,7 +4052,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
           />
 
           {/* Unified input container */}
-          <div className="rounded-2xl border border-border/60 bg-muted/30 shadow-sm transition-all focus-within:border-foreground/20 focus-within:shadow-md focus-within:bg-muted/40">
+          <div className="rounded-2xl border border-border/60 bg-muted/30 transition-colors focus-within:border-foreground/20 focus-within:bg-muted/40">
             <div className="relative">
               <Textarea
                 ref={textareaRef}

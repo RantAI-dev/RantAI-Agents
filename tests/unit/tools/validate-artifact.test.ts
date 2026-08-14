@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest"
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest"
 import { validateArtifactContent } from "@/lib/tools/builtin/_validate-artifact"
 
 vi.mock("@/lib/unsplash/client", () => ({
@@ -1714,6 +1714,19 @@ describe("validateArtifactContent — application/react — aesthetic directive"
 }
 export default App`
 
+  // @aesthetic is auto-defaulted (a warning, not a hard error) by default — see
+  // the retry-loop fix in _validate-artifact.ts. The "hard-errors" cases below
+  // assert strict-mode enforcement, so enable the flag for this block.
+  const ORIG_AESTHETIC_REQUIRED = process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
+  beforeEach(() => {
+    process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = "true"
+  })
+  afterEach(() => {
+    if (ORIG_AESTHETIC_REQUIRED === undefined)
+      delete process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
+    else process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = ORIG_AESTHETIC_REQUIRED
+  })
+
   it("accepts a valid @aesthetic directive", async () => {
     const code = `// @aesthetic: editorial\n${MINIMAL_BODY}`
     const r = await validateArtifactContent("application/react", code)
@@ -1889,10 +1902,11 @@ describe("validateArtifactContent — application/react — rollback flag", () =
     else process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED = orig
   })
 
-  it("hard-errors on missing directive by default (flag unset)", async () => {
+  it("passes with a warning on missing directive by default (flag unset)", async () => {
     delete process.env.ARTIFACT_REACT_AESTHETIC_REQUIRED
     const r = await validateArtifactContent("application/react", BODY_WITHOUT_DIRECTIVE)
-    expect(r.ok).toBe(false)
+    expect(r.ok).toBe(true)
+    expect(r.warnings.join("\n")).toMatch(/@aesthetic.*missing/i)
   })
 
   it("hard-errors on missing directive when flag='true' (explicit)", async () => {
