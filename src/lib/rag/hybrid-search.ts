@@ -292,13 +292,15 @@ export class HybridSearch {
 
       const whereClause = conditions.length > 0 ? conditions.join(" AND ") : "true";
 
-      // NOTE: this is a full-scan cosine over `document_chunk`. The MTREE
-      // index (schema.surql:29) is defined, but the KNN operator
-      // `<|N,COSINE|>` measured WORSE on this 4096-dim corpus, likely because
-      // MTREE degenerates in high dimensions. The structural fix is a smaller
-      // embedding model (e.g. 768-1024 dim) — see PROBABLE LATENCY ROOT CAUSE
-      // discussion. Until then, full scan is the lesser evil here.
-      const sql = `
+      // Default: full-scan cosine over `document_chunk`. Historically the MTREE
+      // KNN operator measured WORSE on the 4096-dim corpus (MTREE degenerates in
+      // high dimensions), so full scan was the lesser evil. With a smaller
+      // embedding (KB_EMBEDDING_DIM=1024) an HNSW index makes the KNN operator a
+      // big win, so it's opt-in via KB_VECTOR_KNN=true. Only taken when the query
+      // is UNSCOPED (no user/file/document filters): the operator returns the
+      // global K nearest by index, which can't honor an extra WHERE filter, so
+      // any scoped (multi-tenant) query stays on the proven full scan.
+      const fullScanSql = `
         SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity
         FROM document_chunk
         WHERE ${whereClause}
@@ -306,12 +308,38 @@ export class HybridSearch {
         LIMIT $limit;
       `;
 
-      const result = await client.query<ChunkResult & { similarity: number }>(
-        sql,
-        vars
-      );
-
-      const chunks = result[0]?.result || [];
+      const knnEnabled = process.env.KB_VECTOR_KNN === "true";
+      let chunks: Array<ChunkResult & { similarity: number }> = [];
+      if (knnEnabled) {
+        const limit = Math.max(1, Math.min(2000, Math.trunc(Number(this.config.vectorTopK) || 20)));
+        const scoped = conditions.length > 0;
+        // When a scope filter is present, over-fetch index candidates so enough
+        // survive the post-filter; unscoped just fetches `limit`. K and ef are
+        // validated integers, safe to inline (the operator needs literals).
+        const k = scoped ? Math.min(2000, Math.max(limit * 5, 100)) : limit;
+        const ef = Math.max(64, k * 2);
+        const filter = scoped ? ` AND ${whereClause}` : "";
+        const knnSql = `
+          SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity
+          FROM document_chunk
+          WHERE embedding <|${k},${ef}|> $embedding${filter}
+          ORDER BY similarity DESC
+          LIMIT $limit;
+        `;
+        try {
+          const r = await client.query<ChunkResult & { similarity: number }>(knnSql, vars);
+          chunks = r[0]?.result || [];
+        } catch (err) {
+          console.warn(
+            `[Hybrid] KNN operator failed, falling back to full scan: ${(err as Error).message.slice(0, 120)}`
+          );
+          const r = await client.query<ChunkResult & { similarity: number }>(fullScanSql, vars);
+          chunks = r[0]?.result || [];
+        }
+      } else {
+        const r = await client.query<ChunkResult & { similarity: number }>(fullScanSql, vars);
+        chunks = r[0]?.result || [];
+      }
 
       return chunks.map((chunk) => ({
         chunk: {

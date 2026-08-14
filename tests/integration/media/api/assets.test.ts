@@ -133,7 +133,7 @@ describe("DELETE /api/dashboard/media/assets/[id]", () => {
 })
 
 describe("GET /api/dashboard/media/assets/[id]/download", () => {
-  it("returns a presigned URL", async () => {
+  it("returns a same-origin proxy URL (inline=0)", async () => {
     const { user, org } = await setup()
     const asset = await seedAsset(org.id, user.id)
     const res = await downloadAsset(
@@ -142,7 +142,10 @@ describe("GET /api/dashboard/media/assets/[id]/download", () => {
     )
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.url).toBe("https://signed.example/k.png")
-    expect(presignMock).toHaveBeenCalled()
+    // The route now streams bytes through the app (RustFS is internal-only, so a
+    // presigned S3 URL isn't browser-resolvable): ?inline=0 returns a
+    // same-origin /download URL and never calls presign.
+    expect(body.url).toBe(`/api/dashboard/media/assets/${asset.id}/download`)
+    expect(presignMock).not.toHaveBeenCalled()
   })
 })

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { getRequestUserId } from "@/lib/mobile-auth"
 import {
   DashboardChatSessionIdParamsSchema,
   DashboardChatSessionMessageDeleteBodySchema,
@@ -18,8 +19,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getRequestUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -36,7 +37,7 @@ export async function POST(
       )
     }
     const result = await addDashboardChatSessionMessages({
-      userId: session.user.id,
+      userId,
       sessionId: parsedParams.data.id,
       input: parsedBody.data,
     })
@@ -96,8 +97,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const userId = await getRequestUserId(req)
+    if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -114,7 +115,7 @@ export async function DELETE(
       )
     }
     const result = await deleteDashboardChatSessionMessages({
-      userId: session.user.id,
+      userId,
       sessionId: parsedParams.data.id,
       input: parsedBody.data,
     })
