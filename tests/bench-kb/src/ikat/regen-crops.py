@@ -63,7 +63,15 @@ def match_pdf(slug: str, pdfs: dict):
     return best
 
 
+# The corpus numbers pages from zero; pdftoppm numbers from one. Getting this
+# wrong does not fail — it crops the right rectangle from the wrong page, and the
+# result looks like a perfectly normal figure. It cost a full rebuild to find,
+# and an aspect-ratio check could never have caught it.
+PAGE_OFFSET = int(os.environ.get("IKAT_PAGE_OFFSET", "1"))
+
+
 def render_page(pdf: str, page: int, dpi: int, tmp: str):
+    page = page + PAGE_OFFSET
     stem = os.path.join(tmp, f"p{page}")
     subprocess.run(
         ["pdftoppm", "-png", "-r", str(dpi), "-f", str(page), "-l", str(page), pdf, stem],
@@ -151,9 +159,12 @@ def main():
 def verify():
     """Compare rebuilt crops against the copies the annotator was shown.
 
-    Aspect ratio is the check, not bytes: the surviving copies were downscaled
-    and re-encoded for the annotation page, so pixels cannot match, but a crop
-    taken from the wrong rectangle changes shape.
+    This compares PIXELS, not shape. An earlier version compared aspect ratio and
+    reported 384 of 384 agreeing while every crop was taken from the wrong page —
+    the rectangle was right, so the shape matched, and the check was blind to the
+    only thing that mattered. Both images are normalised to a common small size
+    and greyscaled first, because the surviving copies were downscaled and
+    re-encoded, then compared by RMSE.
     """
     ann = os.path.abspath(os.path.join(BENCH, "corpus", "annotation"))
     key = json.load(open(os.path.join(ann, "annotation.KEY.json")))
@@ -164,12 +175,25 @@ def verify():
             if f.get("assetFile"):
                 figmap[f["id"]] = os.path.join(OUT, doc["slug"], os.path.basename(f["assetFile"]))
 
-    def ratio(p):
-        s = subprocess.run(["magick", "identify", "-format", "%w %h", p],
-                           capture_output=True, text=True).stdout.split()
-        return int(s[0]) / int(s[1]) if len(s) == 2 and int(s[1]) else None
+    def rmse(a: str, b: str):
+        """Normalised RMSE in [0,1]; below ~0.15 is the same picture."""
+        r = subprocess.run(
+            ["magick", "compare", "-metric", "RMSE",
+             "(", a, "-colorspace", "Gray", "-resize", "64x64!", ")",
+             "(", b, "-colorspace", "Gray", "-resize", "64x64!", ")",
+             "null:"],
+            capture_output=True, text=True,
+        )
+        out = (r.stderr or "").strip()
+        if "(" in out and ")" in out:
+            try:
+                return float(out[out.index("(") + 1:out.index(")")])
+            except ValueError:
+                return None
+        return None
 
     checked = agree = 0
+    worst = []
     for k in key:
         for j, fid in enumerate(k["shownFigureIds"]):
             orig = None
@@ -181,14 +205,19 @@ def verify():
             new = figmap.get(fid)
             if not orig or not new or not os.path.exists(new):
                 continue
-            a, b = ratio(orig), ratio(new)
-            if a and b:
-                checked += 1
-                if abs(a - b) / max(a, b) < 0.02:
-                    agree += 1
+            d = rmse(orig, new)
+            if d is None:
+                continue
+            checked += 1
+            if d < 0.15:
+                agree += 1
+            else:
+                worst.append((d, fid))
     if checked:
-        print(f"\nverify: {agree}/{checked} rebuilt crops match the annotator's copy in aspect ratio "
+        print(f"\nverify: {agree}/{checked} rebuilt crops match the annotator's copy pixel-wise "
               f"({100 * agree / checked:.1f}%)")
+        for d, fid in sorted(worst, reverse=True)[:5]:
+            print(f"  mismatch RMSE {d:.3f}  {fid}")
     else:
         print("\nverify: no comparable pairs found")
 
