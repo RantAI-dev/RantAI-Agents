@@ -75,6 +75,11 @@ interface SubsetResult {
   // Raw counts, because the published comparison is by DOMAIN and domains pool
   // subsets. Pooling precision means summing tp/fp, never averaging P.
   tp: number; fp: number; fn: number
+  /** Questions where every candidate is already a gold image, so there is
+   *  nothing to select and precision is forced to 1 whenever anything is
+   *  emitted. A high value means the subset does not test selection at all. */
+  degeneratePct: number
+  perQ: Array<{ tp: number; emitted: number; gold: number }>
 }
 
 async function evalSubset(SUBSET: string, limit: number): Promise<SubsetResult> {
@@ -96,6 +101,11 @@ async function evalSubset(SUBSET: string, limit: number): Promise<SubsetResult> 
   let silent = 0
   let candTotal = 0
   let skipped = 0
+  let degenerate = 0
+  // Per-question outcomes, so the margin against a published comparator can be
+  // given an interval instead of being quoted bare. A difference of a few points
+  // on 200 questions is exactly the claim a reviewer asks to see bounded.
+  const perQ: Array<{ tp: number; emitted: number; gold: number }> = []
 
   for (const [n, q] of qa.entries()) {
     const cands: Array<{ id: string; text: string }> = []
@@ -120,10 +130,15 @@ async function evalSubset(SUBSET: string, limit: number): Promise<SubsetResult> 
       .map((x) => x.id)
 
     const gold = new Set(q.images_list ?? [])
+    // No wrong answer is available here: every candidate is gold, so emitting
+    // anything scores perfect precision. Counted, not silently enjoyed.
+    if (cands.every((c) => gold.has(c.id))) degenerate++
     emitted += picked.length
     if (!picked.length) silent++
-    for (const p of picked) (gold.has(p) ? tp++ : fp++)
+    let qtp = 0
+    for (const p of picked) (gold.has(p) ? (tp++, qtp++) : fp++)
     for (const g of gold) if (!picked.includes(g)) fn++
+    perQ.push({ tp: qtp, emitted: picked.length, gold: gold.size })
 
     if ((n + 1) % 50 === 0) console.log(`  ${n + 1}/${qa.length}…`)
   }
@@ -135,12 +150,15 @@ async function evalSubset(SUBSET: string, limit: number): Promise<SubsetResult> 
   const result: SubsetResult = {
     subset: SUBSET, n, skipped, P: 100 * P, R: 100 * R, F: 100 * F,
     emitted, silentPct: (100 * silent) / (n || 1), meanCands: candTotal / (n || 1),
-    tp, fp, fn,
+    tp, fp, fn, degeneratePct: (100 * degenerate) / (n || 1), perQ,
   }
 
   console.log(`\nscored ${n} questions (${skipped} skipped: provenance doc missing)`)
   console.log(`mean candidates per question: ${(candTotal / (n || 1)).toFixed(1)}`)
-  console.log(`emitted ${emitted} images, silent on ${((100 * silent) / (n || 1)).toFixed(0)}% of questions\n`)
+  console.log(`emitted ${emitted} images, silent on ${((100 * silent) / (n || 1)).toFixed(0)}% of questions`)
+  const degPct = (100 * degenerate) / (n || 1)
+  console.log(`questions where EVERY candidate is gold: ${degPct.toFixed(1)}%` +
+    (degPct > 50 ? "  <-- precision is forced here; this subset does not test selection" : "") + "\n")
   console.log(`Image Precision  ${(100 * P).toFixed(2)}`)
   console.log(`Image Recall     ${(100 * R).toFixed(2)}`)
   console.log(`Image F1         ${(100 * F).toFixed(2)}`)
@@ -201,12 +219,20 @@ async function main() {
 
   if (all.length > 1) {
     console.log(`\n${"=".repeat(66)}\nALL SUBSETS — Image Precision / Recall / F1\n`)
-    console.log(`subset    n     cands  silent%   IP      IR      IF1`)
+    console.log(`subset    n     cands  silent%  all-gold%  IP      IR      IF1`)
     for (const r of all)
       console.log(
         `${r.subset.padEnd(9)} ${String(r.n).padEnd(5)} ${r.meanCands.toFixed(1).padEnd(6)} ` +
-          `${r.silentPct.toFixed(0).padEnd(8)} ${r.P.toFixed(2).padEnd(7)} ${r.R.toFixed(2).padEnd(7)} ${r.F.toFixed(2)}`,
+          `${r.silentPct.toFixed(0).padEnd(8)} ${r.degeneratePct.toFixed(1).padEnd(10)} ` +
+          `${r.P.toFixed(2).padEnd(7)} ${r.R.toFixed(2).padEnd(7)} ${r.F.toFixed(2)}`,
       )
+    console.log(
+      `\n"all-gold%" is the share of questions where every candidate is already a gold\n` +
+        `image. Where it is high, precision is arithmetic rather than earned and the\n` +
+        `subset does not test selection under this candidate construction. That is a\n` +
+        `property of how WE build candidates — the images of the question's provenance\n` +
+        `document — not a defect in the benchmark.`,
+    )
     // Published comparators are reported per DOMAIN. Pool the raw counts —
     // averaging per-subset precision would weight a 200-question subset the same
     // as a 2360-question one and is simply a different quantity.

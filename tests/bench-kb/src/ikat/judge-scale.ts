@@ -120,6 +120,7 @@ function imagePart(p: string) {
 async function main() {
   const args = process.argv.slice(2)
   const dry = args.includes("--dry")
+  const manifest = args.includes("--manifest")
   const li = args.indexOf("--limit")
   const limit = li >= 0 ? parseInt(args[li + 1] ?? "0", 10) : 0
 
@@ -182,6 +183,20 @@ async function main() {
   console.log(`universe ${scored.length} scored questions -> ${items.length} judgeable (${skipped} skipped: missing question, figures or crops)`)
   console.log(`  ${nLab} carry human labels (pool reused verbatim), ${items.length - nLab} do not`)
   console.log(`  judge: ${JUDGE_MODEL}, ${N_CAND} candidates per item`)
+  if (manifest) {
+    // Pools and image paths only, no inference. Written so a judge that is not
+    // an HTTP endpoint — a human, or an agent reading the files directly — can
+    // run the identical protocol and have its verdicts scored the same way.
+    fs.mkdirSync(OUT, { recursive: true })
+    const f = path.join(OUT, "manifest.json")
+    fs.writeFileSync(f, JSON.stringify(
+      items.map((it, i) => ({
+        item: i + 1, questionId: it.questionId, question: it.question,
+        labelled: it.labelled, shownFigureIds: it.shownFigureIds, images: it.images,
+      })), null, 2))
+    console.log(`wrote ${f}`)
+    return
+  }
   if (dry) {
     const bytes = items.reduce((a, i) => a + i.images.reduce((b, p) => b + fs.statSync(p).size, 0), 0)
     console.log(`  dry run: would send ${items.reduce((a, i) => a + i.images.length, 0)} images, ${(bytes / 1048576).toFixed(1)} MB of source crops`)
