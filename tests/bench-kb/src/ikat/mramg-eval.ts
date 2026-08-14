@@ -39,7 +39,6 @@ import * as path from "node:path"
 import { rerankTexts } from "./systems"
 
 const DIR = process.env.MRAMG_DIR ?? "/ikat/mramg"
-const SUBSET = process.env.MRAMG_SUBSET ?? "recipe"
 const TOP_K = Number(process.env.IKAT_RERANK_TOP_K ?? 2)
 const MIN = Number(process.env.IKAT_RERANK_MIN ?? 0.1)
 /** Characters of preceding prose used to represent an image. */
@@ -47,7 +46,7 @@ const CTX = Number(process.env.MRAMG_CTX ?? 400)
 
 interface QA { id: string; question: string; provenance: number[]; images_list: string[] }
 
-function loadDocs(): Map<number, { text: string; images: string[] }> {
+function loadDocs(SUBSET: string): Map<number, { text: string; images: string[] }> {
   const out = new Map<number, { text: string; images: string[] }>()
   for (const line of fs.readFileSync(path.join(DIR, `doc_${SUBSET}.jsonl`), "utf-8").trim().split("\n")) {
     const d = JSON.parse(line) as Record<string, unknown>
@@ -70,9 +69,16 @@ function imageContexts(text: string, images: string[]): Map<string, string> {
   return out
 }
 
-async function main() {
-  const limit = Number(process.argv[2] ?? process.env.MRAMG_LIMIT ?? 300)
-  const docs = loadDocs()
+interface SubsetResult {
+  subset: string; n: number; skipped: number; P: number; R: number; F: number
+  emitted: number; silentPct: number; meanCands: number
+  // Raw counts, because the published comparison is by DOMAIN and domains pool
+  // subsets. Pooling precision means summing tp/fp, never averaging P.
+  tp: number; fp: number; fn: number
+}
+
+async function evalSubset(SUBSET: string, limit: number): Promise<SubsetResult> {
+  const docs = loadDocs(SUBSET)
   const qa = fs
     .readFileSync(path.join(DIR, `${SUBSET}_mqa.jsonl`), "utf-8")
     .trim()
@@ -126,6 +132,11 @@ async function main() {
   const R = tp + fn ? tp / (tp + fn) : 0
   const F = P + R ? (2 * P * R) / (P + R) : 0
   const n = qa.length - skipped
+  const result: SubsetResult = {
+    subset: SUBSET, n, skipped, P: 100 * P, R: 100 * R, F: 100 * F,
+    emitted, silentPct: (100 * silent) / (n || 1), meanCands: candTotal / (n || 1),
+    tp, fp, fn,
+  }
 
   console.log(`\nscored ${n} questions (${skipped} skipped: provenance doc missing)`)
   console.log(`mean candidates per question: ${(candTotal / (n || 1)).toFixed(1)}`)
@@ -164,6 +175,73 @@ async function main() {
           `             DeepSeek-V3 45.71 | Llama-3.3-70B 35.29 | Llama-3.1-8B 11.71\n` +
           `  Pool this subset WITH the other before comparing.`,
       )
+  }
+  return result
+}
+
+/**
+ * Reporting every subset, not the one that flatters us.
+ *
+ * The paper previously reported Academic alone. One subset chosen from six reads
+ * as selection whether or not it was, and the only way to answer that is to run
+ * the rest and publish them at the same time — including the ones we lose.
+ */
+async function main() {
+  const limit = Number(process.argv[2] ?? process.env.MRAMG_LIMIT ?? 300)
+  const requested = process.env.MRAMG_SUBSET ?? "recipe"
+  const subsets = requested === "all"
+    ? ["arxiv", "wit", "wiki", "web", "recipe", "manual"]
+    : [requested]
+
+  const all: SubsetResult[] = []
+  for (const s of subsets) {
+    console.log(`\n${"=".repeat(66)}`)
+    all.push(await evalSubset(s, limit))
+  }
+
+  if (all.length > 1) {
+    console.log(`\n${"=".repeat(66)}\nALL SUBSETS — Image Precision / Recall / F1\n`)
+    console.log(`subset    n     cands  silent%   IP      IR      IF1`)
+    for (const r of all)
+      console.log(
+        `${r.subset.padEnd(9)} ${String(r.n).padEnd(5)} ${r.meanCands.toFixed(1).padEnd(6)} ` +
+          `${r.silentPct.toFixed(0).padEnd(8)} ${r.P.toFixed(2).padEnd(7)} ${r.R.toFixed(2).padEnd(7)} ${r.F.toFixed(2)}`,
+      )
+    // Published comparators are reported per DOMAIN. Pool the raw counts —
+    // averaging per-subset precision would weight a 200-question subset the same
+    // as a 2360-question one and is simply a different quantity.
+    const DOMAINS: Record<string, string[]> = {
+      "Web Data": ["wit", "wiki", "web"],
+      "Academic Data": ["arxiv"],
+      "Lifestyle Data": ["recipe", "manual"],
+    }
+    const PUB_DOMAIN: Record<string, string> = {
+      "Web Data": "best published 93.63 (Gemini-1.5-Pro, LLM-based)",
+      "Academic Data": "best published 65.28 (GPT-4o, LLM-based)",
+      "Lifestyle Data": "best published 62.23 (Gemini-1.5-Pro, LLM-based)",
+    }
+    console.log(`\npooled by domain — the unit the published table uses\n`)
+    console.log(`domain            n      IP      IR      IF1     comparator`)
+    for (const [dom, subs] of Object.entries(DOMAINS)) {
+      const rows = all.filter((r) => subs.includes(r.subset))
+      if (rows.length !== subs.length) continue
+      const tp = rows.reduce((a, r) => a + r.tp, 0)
+      const fp = rows.reduce((a, r) => a + r.fp, 0)
+      const fn = rows.reduce((a, r) => a + r.fn, 0)
+      const n = rows.reduce((a, r) => a + r.n, 0)
+      const P = tp + fp ? (100 * tp) / (tp + fp) : 0
+      const R = tp + fn ? (100 * tp) / (tp + fn) : 0
+      const F = P + R ? (2 * P * R) / (P + R) : 0
+      console.log(
+        `${dom.padEnd(17)} ${String(n).padEnd(6)} ${P.toFixed(2).padEnd(7)} ${R.toFixed(2).padEnd(7)} ` +
+          `${F.toFixed(2).padEnd(7)} ${PUB_DOMAIN[dom] ?? ""}`,
+      )
+    }
+
+    const out = path.join(DIR, "..", "results", "mramg-all-subsets.json")
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    fs.writeFileSync(out, JSON.stringify({ topK: TOP_K, min: MIN, ctx: CTX, results: all }, null, 2))
+    console.log(`\nwrote ${out}`)
   }
 }
 
