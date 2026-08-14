@@ -29,6 +29,7 @@ import { ParameterForm } from "./parameter-form"
 import { MediaPreviewDialog, type PreviewableAsset } from "./media-preview-dialog"
 import { useMediaStudioStore, type StoreJob } from "@/features/media/store"
 import { getCapability, referenceRoleLabel } from "@/features/media/model-capabilities"
+import { useFreePlan } from "@/features/media/use-free-plan"
 import {
   GeneratingOverlay,
   MODALITY_META,
@@ -66,14 +67,9 @@ export function MediaStudioPanel({ modality, models }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Cloud: media generation is a paid feature. Detect free plan to gate the
-  // generate action + show an upsell (the API also enforces this).
-  const [isFreePlan, setIsFreePlan] = useState(false)
-  useEffect(() => {
-    fetch("/api/dashboard/usage/free-limits", { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setIsFreePlan(!!d?.isFree))
-      .catch(() => {})
-  }, [])
+  // generate action + show an upsell (the API also enforces this). The probe
+  // lives in a hook so this component stays free of direct data-effects.
+  const isFreePlan = useFreePlan()
 
   const {
     jobs,
