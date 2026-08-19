@@ -35,7 +35,10 @@ let started = false
 
 async function runOne(job: ClaimedIngestJob): Promise<void> {
   const startedAt = new Date()
-  const enhanced = !!(job.params as { useEnhanced?: boolean } | null)?.useEnhanced
+  const { resolveIngestPolicy, parseFigureMode } = await import("./pipeline-policy")
+  const jp = (job.params ?? {}) as { figureMode?: string; forceOCR?: boolean }
+  const policy = resolveIngestPolicy(job.filename, parseFigureMode(jp.figureMode, jp.forceOCR))
+  const flags = { entities: policy.entities, figures: policy.figures }
   let outcome: "ready" | "failed" = "failed"
   let error: string | null = null
   try {
@@ -47,7 +50,7 @@ async function runOne(job: ClaimedIngestJob): Promise<void> {
         jobId: job.id,
         organizationId: job.organizationId,
         documentId: job.documentId,
-        enhanced,
+        flags,
         startedAt,
         progress: sp,
       })

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { computeOverallProgress, computeEtaSeconds, type IngestStep, type StepProgress } from "./progress"
+import { computeOverallProgress, computeEtaSeconds, type IngestStep, type StepProgress, type ProgressFlags } from "./progress"
 
 /**
  * IngestJob helpers — the durable record + progress state behind background
@@ -103,11 +103,11 @@ export async function updateIngestJobProgress(args: {
   jobId: string
   organizationId: string | null
   documentId: string | null
-  enhanced: boolean
+  flags: ProgressFlags
   startedAt: Date | null
   progress: StepProgress
 }): Promise<void> {
-  const overall = computeOverallProgress(args.progress, args.enhanced)
+  const overall = computeOverallProgress(args.progress, args.flags)
   const etaSeconds = computeEtaSeconds(overall, args.startedAt, Date.now())
 
   const prev = lastEmit.get(args.jobId)
