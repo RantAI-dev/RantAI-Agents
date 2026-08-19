@@ -19,6 +19,7 @@
     "test:integration": "vitest run tests/integration",
     "test:watch": "vitest watch",
     "check:thin-routes": "bun scripts/check-thin-routes.ts",
+    "check:kb-boundary": "bun scripts/check-kb-boundary.ts",
     "check:domain-imports": "bun scripts/check-domain-imports.ts",
     "check:frontend-compliance": "bun scripts/check-frontend-compliance.ts",
     "check:release-compat": "bun scripts/check-release-compat.ts",
