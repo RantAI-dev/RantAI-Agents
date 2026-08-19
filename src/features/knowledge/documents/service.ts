@@ -444,7 +444,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
     // Validation + quota already ran at enqueue for the background path — skip
     // to avoid a second quota charge (the file is already stored).
     if (!isBackground) {
-      const validation = validateUpload("document", file.size, file.type)
+      const validation = validateUpload("document", file.size, file.type, file.name)
       if (!validation.valid) {
         return { status: 400, error: validation.error }
       }
@@ -1010,7 +1010,7 @@ export async function enqueueFileIngest(params: {
   }
 
   const file = params.input.file as File
-  const validation = validateUpload("document", file.size, file.type)
+  const validation = validateUpload("document", file.size, file.type, file.name)
   if (!validation.valid) {
     return { status: 400, error: validation.error }
   }

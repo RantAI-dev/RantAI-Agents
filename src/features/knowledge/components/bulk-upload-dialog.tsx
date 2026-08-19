@@ -34,6 +34,7 @@ import { Loader2, Upload, FileText, Folder, Check, Plus, Sparkles, ChevronsUpDow
 import { CategoryDialog, Category } from "./category-dialog"
 import { xhrUpload } from "./upload-xhr"
 import { cn } from "@/lib/utils"
+import { KB_ACCEPTED_EXTENSIONS, KB_MAX_FILE_BYTES } from "@/lib/files/mime-types"
 
 interface BulkUploadDialogProps {
   open: boolean
@@ -76,13 +77,10 @@ function truncateTitle(title: string): string {
   return title.slice(0, TITLE_PREVIEW_MAX - 1).trimEnd() + "…"
 }
 
-const VALID_EXTENSIONS = [
-  ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".rtf", ".epub", ".odt",
-  ".xlsx", ".xls", ".ods", ".csv", ".tsv", ".json", ".jsonl",
-  ".md", ".txt", ".log", ".html", ".xml", ".yaml", ".toml", ".ini", ".env",
-  ".gltf", ".glb",
-  ".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".php", ".pl", ".sh", ".bat", ".ps1",
-]
+// Accepted extensions + size cap come from the shared registry so the client
+// list can never drift from what the server actually accepts (this local copy
+// used to include .hpp/.cs/.bat that the server rejected, and missed images).
+const VALID_EXTENSIONS = KB_ACCEPTED_EXTENSIONS
 
 function FileStatusBadge({ status, error }: { status: FileStatus; error?: string }) {
   switch (status) {
@@ -168,6 +166,10 @@ export function BulkUploadDialog({
         setError(`Unsupported file type: ${file.name}`)
         continue
       }
+      if (file.size > KB_MAX_FILE_BYTES) {
+        setError(`"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the limit is ${Math.round(KB_MAX_FILE_BYTES / (1024 * 1024))}MB.`)
+        continue
+      }
       newEntries.push({
         id: generateUUID(),
         file,
@@ -199,6 +201,10 @@ export function BulkUploadDialog({
       const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."))
       if (!VALID_EXTENSIONS.includes(ext)) {
         setError(`Unsupported file type: ${file.name}`)
+        continue
+      }
+      if (file.size > KB_MAX_FILE_BYTES) {
+        setError(`"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the limit is ${Math.round(KB_MAX_FILE_BYTES / (1024 * 1024))}MB.`)
         continue
       }
       newEntries.push({

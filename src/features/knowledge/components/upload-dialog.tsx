@@ -33,6 +33,7 @@ import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkl
 import { CategoryDialog, Category } from "./category-dialog"
 import { xhrUpload } from "./upload-xhr"
 import { cn } from "@/lib/utils"
+import { KB_ACCEPTED_EXTENSIONS, KB_MAX_FILE_BYTES } from "@/lib/files/mime-types"
 
 class UpgradeRequiredError extends Error {
   constructor(message: string, public upgradeType: string) {
@@ -167,22 +168,9 @@ function SupportedFormatsDialog({ open, onOpenChange }: { open: boolean; onOpenC
   )
 }
 
-// ─── All accepted extensions (for validation + input accept attr) ─────────────
-const VALID_EXTENSIONS = [
-  // Documents
-  ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".rtf", ".epub", ".odt",
-  // Spreadsheets & data
-  ".xlsx", ".xls", ".ods", ".csv", ".tsv", ".json", ".jsonl",
-  // Text & markup
-  ".md", ".markdown", ".txt", ".log", ".html", ".htm", ".xml", ".yaml", ".yml", ".toml", ".ini", ".env",
-  // Code
-  ".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java",
-  ".c", ".cpp", ".h", ".rb", ".php", ".sh", ".sql", ".r", ".swift", ".kt",
-  // Images
-  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic",
-  // 3D Models
-  ".gltf", ".glb",
-]
+// Accepted extensions + size cap come from the shared registry so the client
+// list can never drift from what the server actually accepts.
+const VALID_EXTENSIONS = KB_ACCEPTED_EXTENSIONS
 
 interface KnowledgeBase {
   id: string
@@ -293,6 +281,11 @@ export function UploadDialog({
 
     if (!VALID_EXTENSIONS.includes(ext)) {
       setError("Unsupported file type. Click \"Supported formats\" to see what's accepted.")
+      return
+    }
+    if (file.size > KB_MAX_FILE_BYTES) {
+      const maxMB = Math.round(KB_MAX_FILE_BYTES / (1024 * 1024))
+      setError(`"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the limit is ${maxMB}MB.`)
       return
     }
 

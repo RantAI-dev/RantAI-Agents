@@ -122,6 +122,13 @@ export const EXT_TO_MIME: Record<string, string> = {
   ".kt": "text/plain",
 }
 
+// ─── Knowledge base upload limits ────────────────────────────────────────────
+export const KB_MAX_FILE_BYTES = 50 * 1024 * 1024
+
+/** Every extension the KB accepts — clients build their accept lists from
+ *  this instead of hand-maintained copies (which drifted apart). */
+export const KB_ACCEPTED_EXTENSIONS = Object.keys(EXT_TO_MIME)
+
 // ─── MIME → canonical extension (first-match wins) ───────────────────────────
 export const MIME_TO_EXT: Record<string, string> = Object.entries(EXT_TO_MIME).reduce<
   Record<string, string>
