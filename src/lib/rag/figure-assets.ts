@@ -6,7 +6,7 @@
  * with the crop's object key. Retrieval then surfaces the figure like any other
  * chunk, and the answer can render the original image.
  */
-import { uploadFile, S3Paths } from "@/lib/s3"
+import { kb } from "@/lib/kb-runtime/runtime"
 import type { Chunk } from "./chunker"
 import type { ExtractedFigure } from "./extractors/types"
 
@@ -159,10 +159,10 @@ export async function storeFiguresAsChunks(params: {
   for (const fig of params.figures) {
     n++
     const filename = `fig-p${fig.page}-${n}.png`
-    const key = S3Paths.documentAsset(params.organizationId, params.documentId, filename)
+    const key = kb("blob").assetPath(params.organizationId, params.documentId, filename)
     try {
       const buffer = Buffer.from(fig.imageBase64, "base64")
-      await uploadFile(key, buffer, "image/png", {
+      await kb("blob").upload(key, buffer, "image/png", {
         documentId: params.documentId,
         page: String(fig.page),
         kind: "figure",

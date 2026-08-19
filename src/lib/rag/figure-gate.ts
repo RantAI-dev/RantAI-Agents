@@ -29,7 +29,7 @@
  * the answer path (~1.0 s each on the partner's GPU), so switching it on is an
  * operator's decision about latency, not a default.
  */
-import { downloadFile } from "@/lib/s3"
+import { kb } from "@/lib/kb-runtime/runtime"
 
 /** A figure the reranker has already ranked; `text` is what it ranked on. */
 export interface GateCandidate {
@@ -170,7 +170,7 @@ export async function gateFigures(
     seen.map(async (c) => {
       let b64: string
       try {
-        b64 = (await downloadFile(c.assetKey)).toString("base64")
+        b64 = (await kb("blob").download(c.assetKey)).toString("base64")
       } catch (err) {
         // A figure we cannot fetch cannot be shown anyway.
         console.warn(`[RAG] figure gate: fetch failed for ${c.assetKey}: ${(err as Error).message?.slice(0, 80)}`)

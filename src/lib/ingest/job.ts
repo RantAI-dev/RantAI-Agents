@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { kb } from "@/lib/kb-runtime/runtime"
 import { computeOverallProgress, computeEtaSeconds, type IngestStep, type StepProgress, type ProgressFlags } from "./progress"
 
 /**
@@ -262,8 +263,7 @@ export async function reapFailedJobUploads(maxAgeDays = 7): Promise<number> {
   let reaped = 0
   for (const job of jobs) {
     try {
-      const { deleteFile } = await import("@/lib/s3")
-      await deleteFile(job.s3Key!)
+      await kb("blob").delete(job.s3Key!)
       await prisma.ingestJob.update({ where: { id: job.id }, data: { s3Key: null } })
       reaped++
     } catch (err) {
