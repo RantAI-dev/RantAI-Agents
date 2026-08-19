@@ -4,15 +4,15 @@ import { createTestUser, createTestOrg } from "../../helpers/fixtures"
 
 vi.mock("@/lib/prisma", () => ({ prisma: testPrisma }))
 
-const { pollMock, fetchBytesMock, uploadMock } = vi.hoisted(() => ({
+const { pollMock, uploadMock } = vi.hoisted(() => ({
   pollMock: vi.fn(),
-  fetchBytesMock: vi.fn(),
   uploadMock: vi.fn(),
 }))
 
+// The service polls via pollVideoJobAlpha, which returns the downloaded video
+// bytes embedded in `video` (no separate fetchVideoBytes step anymore).
 vi.mock("@/features/media/provider/openrouter", () => ({
-  pollVideoJob: pollMock,
-  fetchVideoBytes: fetchBytesMock,
+  pollVideoJobAlpha: pollMock,
 }))
 
 vi.mock("@/features/media/storage", () => ({
@@ -31,7 +31,6 @@ beforeAll(async () => {
 })
 beforeEach(() => {
   pollMock.mockReset()
-  fetchBytesMock.mockReset()
   uploadMock.mockReset()
 })
 afterEach(async () => await cleanupDatabase())
@@ -79,11 +78,10 @@ describe("pollPendingVideoJobs", () => {
 
     pollMock.mockResolvedValueOnce({
       status: "succeeded",
-      videoUrl: "https://example.com/v.mp4",
+      video: { bytes: new Uint8Array([10, 20, 30]), mimeType: "video/mp4" },
       actualCostCents: 47,
       rawResponse: {},
     })
-    fetchBytesMock.mockResolvedValueOnce(new Uint8Array([10, 20, 30]))
     uploadMock.mockResolvedValueOnce({ s3Key: "media/x/video/y.mp4", sizeBytes: 3 })
 
     const result = await pollPendingVideoJobs()

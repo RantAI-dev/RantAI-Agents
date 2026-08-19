@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { CohereReranker } from "@/lib/rag/rerankers/cohere-reranker";
+// Static import so the module's load-time side effects (which seed some
+// KB_RERANK_* env defaults) run ONCE, before any test manipulates env.
+// getDefaultReranker reads env lazily at call time, so per-test env changes win.
+import {
+  getDefaultReranker,
+  CohereReranker as C,
+  LlmReranker,
+} from "@/lib/rag/rerankers";
 
 describe("CohereReranker", () => {
   const originalFetch = global.fetch;
@@ -133,39 +141,55 @@ describe("CohereReranker", () => {
 });
 
 describe("getDefaultReranker (cohere provider)", () => {
-  const originalEnv = { ...process.env };
-  afterEach(() => {
-    process.env = { ...originalEnv };
+  // Save/restore each KB_RERANK_* key individually. Reassigning
+  // `process.env = {...}` replaces Node's special env object with a plain one,
+  // which breaks later reads and cross-test isolation — restore per key instead.
+  const RERANK_KEYS = [
+    "KB_RERANK_ENABLED",
+    "KB_RERANK_PROVIDER",
+    "KB_RERANK_MODEL",
+    "KB_RERANK_API_KEY",
+    "COHERE_API_KEY",
+  ];
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const k of RERANK_KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
   });
 
-  it("returns CohereReranker when KB_RERANK_PROVIDER=cohere", async () => {
+  afterEach(() => {
+    for (const k of RERANK_KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it("returns CohereReranker when KB_RERANK_PROVIDER=cohere", () => {
     process.env.KB_RERANK_ENABLED = "true";
     process.env.KB_RERANK_PROVIDER = "cohere";
     process.env.KB_RERANK_API_KEY = "cohere-test-key";
-    delete process.env.KB_RERANK_MODEL;
+    // KB_RERANK_MODEL cleared by beforeEach → cohere default applies.
 
-    const { getDefaultReranker, CohereReranker: C } = await import("@/lib/rag/rerankers");
     const r = getDefaultReranker();
     expect(r).toBeInstanceOf(C);
     expect(r?.name).toBe("rerank-v4.0-pro");
   });
 
-  it("falls back to COHERE_API_KEY when KB_RERANK_API_KEY is unset", async () => {
+  it("falls back to COHERE_API_KEY when KB_RERANK_API_KEY is unset", () => {
     process.env.KB_RERANK_ENABLED = "true";
     process.env.KB_RERANK_PROVIDER = "cohere";
-    delete process.env.KB_RERANK_API_KEY;
     process.env.COHERE_API_KEY = "fallback-key";
 
-    const { getDefaultReranker } = await import("@/lib/rag/rerankers");
     const r = getDefaultReranker();
     expect(r).not.toBeNull();
   });
 
-  it("still returns LlmReranker when KB_RERANK_PROVIDER is absent", async () => {
+  it("still returns LlmReranker when KB_RERANK_PROVIDER is absent", () => {
     process.env.KB_RERANK_ENABLED = "true";
-    delete process.env.KB_RERANK_PROVIDER;
     process.env.KB_RERANK_MODEL = "openai/gpt-4.1-nano";
-    const { getDefaultReranker, LlmReranker } = await import("@/lib/rag/rerankers");
     expect(getDefaultReranker()).toBeInstanceOf(LlmReranker);
   });
 });

@@ -45,6 +45,7 @@ function toListItem(skill: {
   icon: string | null
   metadata: Prisma.JsonValue | null
   enabled: boolean
+  organizationId: string | null
   _count: { assistantSkills: number }
   installedSkill?: { icon: string | null } | null
   createdAt: Date
@@ -67,6 +68,9 @@ function toListItem(skill: {
     metadata: skill.metadata,
     relatedToolIds: toolIds,
     enabled: skill.enabled,
+    // Global (null-org) platform skills are read-only; only org-owned skills
+    // can be toggled/edited/deleted (see updateDashboardSkill scoping).
+    editable: skill.organizationId !== null,
     assistantCount: skill._count.assistantSkills,
     createdAt: skill.createdAt.toISOString(),
   }

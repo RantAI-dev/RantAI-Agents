@@ -192,43 +192,21 @@ function ChatNavigationItem({
   active: boolean
   onMobileNavigate?: () => void
 }) {
-  const router = useRouter()
-  const handleNewChat = () => {
-    router.push(`/dashboard/chat?new=${crypto.randomUUID()}`)
-    onMobileNavigate?.()
-  }
-
   return (
-    <div
+    <Link
+      href="/dashboard/chat"
+      aria-current={active ? "page" : undefined}
+      onClick={onMobileNavigate}
       className={cn(
-        "group flex items-center rounded-lg text-sm transition-all",
+        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all",
         active
           ? "bg-sidebar-accent text-sidebar-foreground font-medium"
           : "text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground"
       )}
     >
-      <Link
-        href="/dashboard/chat"
-        aria-current={active ? "page" : undefined}
-        className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2"
-      >
-        <MessageSquare className="h-5 w-5 shrink-0" />
-        <span>Chat</span>
-      </Link>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={handleNewChat}
-            className="mr-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-hover hover:text-sidebar-foreground"
-            aria-label="Start new chat"
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right">Start new chat</TooltipContent>
-      </Tooltip>
-    </div>
+      <MessageSquare className="h-5 w-5 shrink-0" />
+      <span>Chat</span>
+    </Link>
   )
 }
 

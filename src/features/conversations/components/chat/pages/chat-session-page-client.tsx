@@ -133,7 +133,7 @@ export default function ChatSessionPageClient({
   }, [updateSession, syncMessages])
 
   const handleNewChat = useCallback(() => {
-    router.push(`/dashboard/chat?new=${crypto.randomUUID()}`)
+    router.push("/dashboard/chat")
   }, [router])
 
   // Session not found (possibly deleted) - redirect to chat home.

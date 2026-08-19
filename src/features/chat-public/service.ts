@@ -1548,7 +1548,12 @@ export async function uploadChatAttachment(params: {
   sessionId?: string | null
 }) {
   try {
-    if (!ALLOWED_TYPES.includes(params.file.type)) {
+    // Buang parameter media-type (mis. "text/plain;charset=utf-8" -> "text/plain").
+    // Klien yang sah (browser, React Native, curl) kerap menyertakan charset,
+    // dan tanpa normalisasi ini file yang sebenarnya diizinkan ikut ditolak.
+    const mimeType = params.file.type.split(";")[0].trim().toLowerCase()
+
+    if (!ALLOWED_TYPES.includes(mimeType)) {
       return {
         status: 400,
         error: `File type not allowed. Allowed: ${ALLOWED_TYPES.join(", ")}`,
@@ -1568,10 +1573,10 @@ export async function uploadChatAttachment(params: {
     const buffer = Buffer.from(arrayBuffer)
     const storedFileName = await saveChatAttachment({
       buffer,
-      mimeType: params.file.type,
+      mimeType,
     })
 
-    const result = await processChatFile(buffer, params.file.type, params.file.name, {
+    const result = await processChatFile(buffer, mimeType, params.file.name, {
       sessionId: params.sessionId || undefined,
       userId: params.userId,
     })

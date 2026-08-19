@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/lib/auth"
+import { getRequestUserId } from "@/lib/mobile-auth"
 import { ChatUploadFormSchema } from "@/features/chat-public/schema"
 import {
   isChatPublicServiceError,
@@ -7,8 +7,8 @@ import {
 } from "@/features/chat-public/service"
 
 export async function POST(req: Request) {
-  const session = await auth()
-  if (!session?.user?.id) {
+  const userId = await getRequestUserId(req)
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   const result = await uploadChatAttachment({
     file: parsedForm.data.file,
     sessionId: parsedForm.data.sessionId,
-    userId: session.user.id,
+    userId,
   })
 
   if (isChatPublicServiceError(result)) {
