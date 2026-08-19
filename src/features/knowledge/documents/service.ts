@@ -1,19 +1,12 @@
-import "@/lib/kb-runtime" // binds the KB engine ports
 import path from "path"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
-  smartChunkDocument,
-  generateEmbeddings,
   detectFileType,
-  storeChunks,
-  deleteChunksByDocumentId,
   getDocumentChunkCount,
   getDocumentChunkCounts,
   type Chunk,
 } from "@/lib/rag"
-import { assignChunkPages } from "@/lib/rag/page-map"
-import { extractEntities, extractEntitiesAndRelations } from "@/lib/document-intelligence"
 import { getSurrealClient } from "@/lib/surrealdb"
 import { uploadFile, S3Paths, validateUpload, deleteFile } from "@/lib/s3"
 import { processDocumentOCR, isPDFScanned } from "@/lib/ocr"
@@ -21,7 +14,6 @@ import { canEdit, canManage } from "@/lib/organization"
 import {
   countKnowledgeDocumentsForScope,
   createKnowledgeDocument,
-  updateKnowledgeDocumentMetadata,
   deleteKnowledgeDocument,
   findKnowledgeDocumentAccessById,
   findKnowledgeDocumentById,
@@ -462,157 +454,22 @@ export async function createKnowledgeDocumentForDashboard(params: {
 
     originalFilename = file.name
     mimeType = file.type
-    const detectedType = detectFileType(file.name)
     fileBuffer = Buffer.from(await file.arrayBuffer())
     await emit?.("extracting")
 
-    // Extraction failures used to fall back to a literal placeholder string
-    // ("Failed to OCR PDF.") which then got chunked + embedded + indexed. RAG
-    // hits would surface those placeholder strings as "results". Now: any
-    // extraction failure aborts ingest with a 422; the caller can retry with
-    // different settings (forceOCR, different documentType) instead of silently
-    // poisoning the knowledge base.
-    let extractionError: string | null = null
-
-    if (detectedType === "pdf") {
-      fileType = "pdf"
-      const isScanned = policy.forceLayout || (await isPDFScanned(fileBuffer))
-
-      if (isScanned) {
-        // Layout extractors (MinerU/Mistral) — purpose-built for scanned/
-        // table-heavy PDFs and return cropped figures. Build an ordered CHAIN
-        // from whatever is configured and try each until one yields text, so a
-        // provider outage/quota falls through to the next rather than dropping
-        // to the (figure-less) legacy OCR pipeline:
-        //   1. on-prem MinerU sidecar  (KB_EXTRACT_MINERU_BASE_URL) — GPU, private
-        //   2. hosted MinerU API       (KB_MINERU_API_KEY)          — free tier
-        //   3. Mistral OCR             (KB_MISTRAL_OCR_KEY)         — payable, EU
-        // Override the order with KB_LAYOUT_EXTRACTOR_ORDER (csv of
-        // sidecar,mineru-api,mistral). Legacy OCR remains the final fallback.
-        const { getRagConfig } = await import("@/lib/rag/config")
-        const mineruBaseUrl = getRagConfig().extractMineruBaseUrl
-        const available: Record<string, () => Promise<import("@/lib/rag/extractors/types").Extractor>> = {
-          sidecar: mineruBaseUrl
-            ? async () => new (await import("@/lib/rag/extractors/mineru-extractor")).MineruExtractor(mineruBaseUrl)
-            : undefined as never,
-          "mineru-api": process.env.KB_MINERU_API_KEY
-            ? async () => new (await import("@/lib/rag/extractors/mineru-api-extractor")).MineruApiExtractor()
-            : undefined as never,
-          mistral: process.env.KB_MISTRAL_OCR_KEY
-            ? async () => new (await import("@/lib/rag/extractors/mistral-ocr-extractor")).MistralOcrExtractor()
-            : undefined as never,
-        }
-        const defaultOrder = ["sidecar", "mineru-api", "mistral"]
-        const order = (process.env.KB_LAYOUT_EXTRACTOR_ORDER?.split(",").map((x) => x.trim()) || defaultOrder)
-          .filter((name) => typeof available[name] === "function")
-        for (const name of order) {
-          try {
-            const extractor = await available[name]()
-            const result = await extractor.extract(fileBuffer, { withFigures: policy.figures })
-            if (result.text?.trim()) {
-              content = result.text
-              usedOCR = true
-              if (policy.figures && result.figures?.length) extractedFigures = result.figures
-              if (result.pagesBlocks?.length) extractedPagesBlocks = result.pagesBlocks
-              if (result.pageMap?.length) extractionPageMap = result.pageMap
-              console.log(`[Knowledge] Layout extraction via ${name} (${result.figures?.length ?? 0} figures, ${result.pageMap?.length ?? 0} page blocks)`)
-              break
-            }
-            console.warn(`[Knowledge] ${name} returned no text, trying next extractor`)
-          } catch (error) {
-            console.warn(
-              `[Knowledge] ${name} extraction failed, trying next: ${error instanceof Error ? error.message : error}`
-            )
-          }
-        }
-
-        if (!usedOCR) try {
-          const ocrResult = await processDocumentOCR(fileBuffer, "application/pdf", {
-            outputFormat: "markdown",
-            documentType: params.input.documentType as
-              | "printed_text"
-              | "handwritten"
-              | "table"
-              | "form"
-              | "figure"
-              | "mixed"
-              | undefined,
-          })
-          content = "combinedText" in ocrResult ? ocrResult.combinedText : ocrResult.text
-          usedOCR = true
-        } catch (error) {
-          console.error("OCR processing error:", error)
-          extractionError = `OCR failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
-        }
-      } else {
-        try {
-          const { extractText, getDocumentProxy } = await import("unpdf")
-          const pdf = await getDocumentProxy(new Uint8Array(fileBuffer))
-          // Per-page extraction (mergePages:false → string[]) so we can build a
-          // pageMap and tag every text chunk with its source page, then join
-          // for the chunker input.
-          const { text } = await extractText(pdf, { mergePages: false })
-          const pages = Array.isArray(text) ? text : [text]
-          content = pages.join("\n\n")
-          extractionPageMap = pages
-            .map((t, i) => ({ page: i, text: (t || "").trim() }))
-            .filter((p) => p.text.length > 0)
-        } catch (error) {
-          console.error("PDF parsing error:", error)
-          extractionError = `PDF parse failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
-        }
-      }
-    } else if (detectedType === "image") {
-      fileType = "image"
-      try {
-        const ext = path.extname(file.name).toLowerCase() as SupportedImageExt | string
-        const mimeTypes: Record<string, string> = {
-          ".png": "image/png",
-          ".jpg": "image/jpeg",
-          ".jpeg": "image/jpeg",
-          ".gif": "image/gif",
-          ".webp": "image/webp",
-          ".heic": "image/heic",
-        }
-        const imgMimeType = mimeTypes[ext] || "image/png"
-
-        const ocrResult = await processDocumentOCR(fileBuffer, imgMimeType, {
-          outputFormat: "markdown",
-          documentType: params.input.documentType as
-            | "printed_text"
-            | "handwritten"
-            | "table"
-            | "form"
-            | "figure"
-            | "mixed"
-            | undefined,
-        })
-        const text = "combinedText" in ocrResult ? ocrResult.combinedText : ocrResult.text
-        content = `[Image: ${file.name}]\n\n${text}`
-        usedOCR = true
-      } catch (error) {
-        console.error("OCR processing error:", error)
-        extractionError = `Image OCR failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
-      }
-    } else if (detectedType === "document" || detectedType === "text") {
-      fileType = "markdown"
-      try {
-        const { EXT_TO_MIME } = await import("@/lib/files/mime-types")
-        const { extractTextFromBuffer } = await import("@/lib/files/parsers")
-        const detectedMime = EXT_TO_MIME[path.extname(file.name).toLowerCase()] || file.type || "text/plain"
-        content = await extractTextFromBuffer(fileBuffer, detectedMime, file.name)
-      } catch (error) {
-        console.error("File extraction error:", error)
-        extractionError = `Text extraction failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
-      }
-    } else {
-      fileType = "markdown"
-      content = fileBuffer.toString("utf-8")
+    const { extractDocumentText } = await import("@/lib/ingest/extract")
+    const extraction = await extractDocumentText(file, fileBuffer, policy, {
+      documentType: params.input.documentType,
+    })
+    if (extraction.error) {
+      return { status: 422, error: extraction.error }
     }
-
-    if (extractionError) {
-      return { status: 422, error: extractionError }
-    }
+    content = extraction.content
+    fileType = extraction.fileType
+    usedOCR = extraction.usedOCR
+    extractedFigures = extraction.figures
+    extractedPagesBlocks = extraction.pagesBlocks
+    extractionPageMap = extraction.pageMap
 
     if (!title) {
       title = file.name.replace(/\.[^/.]+$/, "")
@@ -725,209 +582,32 @@ export async function createKnowledgeDocumentForDashboard(params: {
             : undefined,
       })
 
+  // Indexing (chunk → entities → figures → embed → store) lives in the engine.
+  // Embed/store failures throw; the catch below owns the app-side recovery
+  // (mark failed for retry, or roll the synchronous path back).
   let chunks: Chunk[] = []
   let entityCount = 0
-
-  await emit?.("chunking")
-
-  // Always the table/code-aware chunker: the naive fixed-size splitter shredded
-  // spreadsheet rows and code blocks (the old failure mode when the "enhanced"
-  // toggle was off). Policy decides the optional steps below, not the chunker.
-  chunks = await smartChunkDocument(content, title, categories[0], params.input.subcategory || undefined, {
-    maxChunkSize: 800,
-    overlapSize: 200,
-    preserveCodeBlocks: true,
-    respectHeadingBoundaries: true,
-  })
-
-  if (policy.entities) {
-    // Entity/relation extraction is an expensive per-chunk LLM pass. On-prem KBs
-    // that only need vector retrieval can disable it with
-    // KB_ENTITY_EXTRACTION_ENABLED=false — it otherwise competes with the mineru
-    // sidecar for the shared GPU and slows figure/table OCR (pushing dense books
-    // past the extractor timeout, which drops them to text-only).
-    if (process.env.KB_ENTITY_EXTRACTION_ENABLED === "false") {
-      console.log("[Knowledge] entity extraction disabled (KB_ENTITY_EXTRACTION_ENABLED=false)")
-    } else try {
-      await emit?.("extracting_entities")
-      const surrealClient = await getSurrealClient()
-      if (useCombined) {
-        const { entities, relations } = await extractEntitiesAndRelations(content, document.id, params.context.userId)
-        entityCount = entities.length
-
-        const entityIdMap = new Map<string, string>()
-        let entityIdx = 0
-        for (const entity of entities) {
-          await emit?.("extracting_entities", ++entityIdx, entities.length)
-          const sanitizedName = entity.name.toLowerCase().replace(/[^a-z0-9]/g, "_")
-          const entityId = `entity:${document.id}_${sanitizedName}`
-
-          try {
-            await surrealClient.query(
-              `UPSERT entity:\`${document.id}_${sanitizedName}\` CONTENT {
-                name: $name,
-                type: $type,
-                confidence: $confidence,
-                document_id: $document_id,
-                file_id: $file_id,
-                metadata: $metadata,
-                updated_at: time::now()
-              }`,
-              {
-                name: entity.name,
-                type: entity.type,
-                confidence: entity.confidence,
-                document_id: document.id,
-                file_id: document.id,
-                metadata: entity.metadata,
-              }
-            )
-          } catch (error) {
-            console.warn(`[Knowledge API] Failed to upsert entity ${entityId}:`, error)
-          }
-
-          entityIdMap.set(entity.name.toLowerCase(), entityId)
-        }
-
-        if (relations.length > 0) {
-          let storedCount = 0
-          let skippedCount = 0
-          for (const relation of relations) {
-            const sourceName = (relation.metadata?.source_entity as string || "").toLowerCase()
-            const targetName = (relation.metadata?.target_entity as string || "").toLowerCase()
-            const sourceId = entityIdMap.get(sourceName)
-            const targetId = entityIdMap.get(targetName)
-
-            if (!sourceId || !targetId) {
-              skippedCount++
-              continue
-            }
-
-            // Sanitize relation type to valid SurrealDB table name
-            const relType = (relation.relation_type || "RELATED_TO")
-              .toUpperCase()
-              .replace(/[^A-Z0-9_]/g, "_")
-              .replace(/^_+|_+$/g, "")
-              || "RELATED_TO"
-
-            try {
-              await surrealClient.relate(sourceId, relType, targetId, {
-                confidence: relation.confidence,
-                document_id: document.id,
-                context: relation.metadata?.context,
-                created_at: new Date().toISOString(),
-              })
-              storedCount++
-            } catch (error) {
-              console.warn(`[Knowledge API] Failed to create relation ${sourceId} ->${relType}-> ${targetId}:`, error)
-            }
-          }
-          console.log(`[Knowledge API] Relations: ${storedCount} stored, ${skippedCount} skipped (no matching entity), ${relations.length} total`)
-        }
-      } else {
-        const entities = await extractEntities(content, document.id, undefined, {
-          useLLM: true,
-          usePatterns: true,
-        })
-        entityCount = entities.length
-
-        for (const entity of entities) {
-          const sanitizedName = entity.name.toLowerCase().replace(/[^a-z0-9]/g, "_")
-          const entityId = `entity:${document.id}_${sanitizedName}`
-
-          try {
-            await surrealClient.query(
-              `UPSERT entity:\`${document.id}_${sanitizedName}\` CONTENT {
-                name: $name,
-                type: $type,
-                confidence: $confidence,
-                document_id: $document_id,
-                file_id: $file_id,
-                metadata: $metadata,
-                updated_at: time::now()
-              }`,
-              {
-                name: entity.name,
-                type: entity.type,
-                confidence: entity.confidence,
-                document_id: document.id,
-                file_id: document.id,
-                metadata: entity.metadata,
-              }
-            )
-          } catch (error) {
-            console.warn(`[Knowledge API] Failed to upsert entity ${entityId}:`, error)
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Entity/Relation extraction failed:", error)
-    }
-  }
-
-  // Tag text chunks with their source page (from the layout parser's page map)
-  // so retrieval sources can show "hal. N". Best-effort; no-op without a map.
-  if (extractionPageMap?.length) {
-    chunks = assignChunkPages(chunks, extractionPageMap)
-  }
-
-  // ── Figure asset layer (multimodal RAG): upload crops + append searchable
-  // figure chunks so retrieval can surface + render the original image. ──
-  if (extractedFigures?.length) {
-    await emit?.("processing_figures", 0, extractedFigures.length)
-    try {
-      const { storeFiguresAsChunks } = await import("@/lib/rag/figure-assets")
-      const { chunks: figChunks, assets } = await storeFiguresAsChunks({
-        organizationId: params.context.organizationId || null,
-        documentId: document.id,
-        documentTitle: title,
-        category: categories[0] ?? "general",
-        subcategory: params.input.subcategory || undefined,
-        figures: extractedFigures,
-        // Page-tagged text chunks so caption-less figures borrow the prose around
-        // them (findability + a real "keterangan" instead of "Tanpa keterangan").
-        textChunks: chunks,
-        pagesBlocks: extractedPagesBlocks,
-      })
-      if (figChunks.length) {
-        // Reindex chunkIndex across the combined set (figure chunks were -1).
-        chunks = [...chunks, ...figChunks].map((c, i) => ({
-          ...c,
-          metadata: { ...c.metadata, chunkIndex: i },
-        }))
-      }
-      if (assets.length) {
-        await updateKnowledgeDocumentMetadata(document.id, { figures: assets })
-      }
-      console.log(`[Knowledge API] Figures: ${assets.length} stored for document ${document.id}`)
-    } catch (err) {
-      console.warn(`[Knowledge API] Figure asset ingest failed (non-fatal): ${err instanceof Error ? err.message : err}`)
-    }
-  }
-
-  // Embed + store atomically: if either step fails, the Document row in
-  // Postgres is already created (above) but has zero chunks in SurrealDB →
-  // user sees the doc in the file list but RAG returns nothing for it.
-  // Roll back the half-ingested document (Prisma + S3) and re-throw so the
-  // API route surfaces a real failure to the caller.
-  const chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)
   try {
-    await emit?.("embedding", 0, chunks.length)
-    const embeddings = await generateEmbeddings(chunkTexts, {
-      onProgress: (done, total) => void emit?.("embedding", done, total),
-    })
-    const { getRagConfig } = await import("@/lib/rag/config")
-    const embeddingModel = getRagConfig().embeddingModel
-    await emit?.("storing", 0, chunks.length)
-    // Idempotency guard: storeChunks CREATEs chunks under the deterministic id
-    // `${documentId}_${i}`, which throws on a pre-existing id. Clearing any
-    // stale chunks first makes this step safe to re-run for the same
-    // document.id — the precondition a future ingest-retry endpoint/cron needs
-    // to recover a half-processed doc (e.g. a request killed by a deploy after
-    // some chunks were written). No-op on the happy path (fresh random id →
-    // zero existing chunks).
-    await deleteChunksByDocumentId(document.id)
-    await storeChunks(document.id, chunks, embeddings, embeddingModel)
+    const { indexDocumentContent } = await import("@/lib/ingest/index-document")
+    const indexed = await indexDocumentContent(
+      {
+        documentId: document.id,
+        title,
+        content,
+        categories,
+        subcategory: params.input.subcategory,
+        organizationId: params.context.organizationId,
+        userId: params.context.userId,
+        policy,
+        useCombined,
+        figures: extractedFigures,
+        pagesBlocks: extractedPagesBlocks,
+        pageMap: extractionPageMap,
+      },
+      emit
+    )
+    chunks = indexed.chunks
+    entityCount = indexed.entityCount
   } catch (err) {
     console.error(
       `[Knowledge API] Ingest failed for document ${document.id} (${chunks.length} chunks):`,
