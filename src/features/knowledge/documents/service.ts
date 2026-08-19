@@ -1,3 +1,4 @@
+import "@/lib/kb-runtime" // binds the KB engine ports
 import path from "path"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"

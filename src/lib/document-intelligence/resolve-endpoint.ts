@@ -1,4 +1,4 @@
-import { getProviderRegistry } from "@/lib/llm/provider-registry"
+import { kb } from "@/lib/kb-runtime/runtime"
 
 /**
  * Where should an entity/relation-extraction chat call go?
@@ -24,13 +24,7 @@ export function resolveExtractionEndpoint(
       apiKey: process.env.ENTITY_EXTRACTION_LLM_API_KEY || fallbackApiKey,
     }
   }
-  const registry = getProviderRegistry()
-  const providerId = registry.modelProvider.get(modelId)
-  if (providerId) {
-    const provider = registry.providers.get(providerId)
-    if (provider?.type === "openai_compatible" && provider.baseUrl) {
-      return { baseUrl: provider.baseUrl, apiKey: provider.apiKey || "" }
-    }
-  }
+  const managed = kb("endpoints").resolveModel(modelId)
+  if (managed) return managed
   return { baseUrl: fallbackBaseUrl, apiKey: fallbackApiKey }
 }

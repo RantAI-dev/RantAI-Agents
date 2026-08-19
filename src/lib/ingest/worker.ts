@@ -1,3 +1,4 @@
+import { kb } from "@/lib/kb-runtime/runtime"
 import {
   claimNextPendingJob,
   reclaimStaleJobs,
@@ -47,10 +48,9 @@ async function runOne(job: ClaimedIngestJob): Promise<void> {
   // same document re-claimed while still running here.
   const heartbeat = setInterval(() => void touchIngestJob(job.id), 60_000)
   try {
-    // Imported lazily to keep the worker module free of the heavy service graph
-    // until a job actually runs.
-    const { processIngestJob } = await import("@/features/knowledge/documents/service")
-    outcome = await processIngestJob(job, (sp) =>
+    // The processor is a port: the app binds it to the knowledge service, and
+    // a standalone KB service would bind its own pipeline.
+    outcome = await kb("processor").process(job, (sp) =>
       updateIngestJobProgress({
         jobId: job.id,
         organizationId: job.organizationId,
@@ -70,8 +70,7 @@ async function runOne(job: ClaimedIngestJob): Promise<void> {
       const { recordIngestJobFailure } = await import("./job")
       await recordIngestJobFailure(job.id, error)
       if (job.documentId) {
-        const { prisma } = await import("@/lib/prisma")
-        await prisma.document.update({ where: { id: job.documentId }, data: { status: "failed" } }).catch(() => {})
+        await kb("documents").setStatus(job.documentId, "failed")
       }
     } catch {
       /* best effort */

@@ -12,6 +12,7 @@
 //
 // BEFORE RUNNING: confirm SURREAL_DB_URL points at the DB you want to mutate.
 
+import "../src/lib/kb-runtime" // binds the KB engine ports
 import { getSurrealClient } from "@/lib/surrealdb";
 import { generateEmbeddings } from "@/lib/rag/embeddings";
 import { prepareChunkForEmbedding } from "@/lib/rag/chunker";

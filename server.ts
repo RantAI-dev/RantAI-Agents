@@ -24,6 +24,7 @@ import { readFileSync, existsSync } from "fs"
 import { join } from "path"
 import next from "next"
 import { initSocketServer } from "./src/lib/socket"
+import "./src/lib/kb-runtime" // binds KB engine ports before the worker starts
 import { startIngestWorker } from "./src/lib/ingest/worker"
 
 const dev = process.env.NODE_ENV !== "production"

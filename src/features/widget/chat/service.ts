@@ -1,3 +1,4 @@
+import "@/lib/kb-runtime" // binds the KB engine ports
 import { NextRequest, NextResponse } from "next/server"
 import { streamText, convertToModelMessages, tool, zodSchema } from "ai"
 import { z } from "zod"

@@ -8,6 +8,7 @@
 //
 // Usage: KB_CONTEXTUAL_RETRIEVAL_ENABLED=true bun run kb:backfill-contextual
 
+import "../src/lib/kb-runtime" // binds the KB engine ports
 import { prisma } from "@/lib/prisma";
 import { getSurrealClient } from "@/lib/surrealdb";
 import { generateContextualPrefixes } from "@/lib/rag/contextual-retrieval";

@@ -1,3 +1,4 @@
+import "@/lib/kb-runtime" // binds the KB engine ports
 import { streamText, convertToModelMessages, tool, zodSchema, stepCountIs } from "ai"
 import { z } from "zod"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
