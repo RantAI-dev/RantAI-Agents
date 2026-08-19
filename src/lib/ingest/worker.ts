@@ -3,6 +3,7 @@ import {
   reclaimStaleJobs,
   updateIngestJobProgress,
   emitIngestTerminal,
+  touchIngestJob,
   type ClaimedIngestJob,
 } from "./job"
 
@@ -41,6 +42,10 @@ async function runOne(job: ClaimedIngestJob): Promise<void> {
   const flags = { entities: policy.entities, figures: policy.figures }
   let outcome: "ready" | "failed" = "failed"
   let error: string | null = null
+  // Heartbeat: long emit-less steps (a 20-min MinerU extraction, a large
+  // embedding batch) would otherwise trip the 5-min stale-reclaim and get the
+  // same document re-claimed while still running here.
+  const heartbeat = setInterval(() => void touchIngestJob(job.id), 60_000)
   try {
     // Imported lazily to keep the worker module free of the heavy service graph
     // until a job actually runs.
@@ -63,7 +68,7 @@ async function runOne(job: ClaimedIngestJob): Promise<void> {
     error = (err as Error)?.message ?? "ingest crashed"
     try {
       const { recordIngestJobFailure } = await import("./job")
-      recordIngestJobFailure(job.id, error)
+      await recordIngestJobFailure(job.id, error)
       if (job.documentId) {
         const { prisma } = await import("@/lib/prisma")
         await prisma.document.update({ where: { id: job.documentId }, data: { status: "failed" } }).catch(() => {})
@@ -72,6 +77,7 @@ async function runOne(job: ClaimedIngestJob): Promise<void> {
       /* best effort */
     }
   } finally {
+    clearInterval(heartbeat)
     active--
     // Tell the client the stream ended (progress emits only carry "processing").
     void emitIngestTerminal({

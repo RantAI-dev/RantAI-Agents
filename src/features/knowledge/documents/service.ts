@@ -259,7 +259,11 @@ export async function listKnowledgeDocumentsForDashboard(params: {
 
   // For docs still being ingested, attach the latest job's progress snapshot so
   // the card renders its bar on first load (the socket only carries deltas).
-  const processingIds = documents.filter((d) => d.status === "processing").map((d) => d.id)
+  // Include failed docs so the card keeps its error + Retry button (with the
+  // jobId it needs) across reloads — not just while processing.
+  const processingIds = documents
+    .filter((d) => d.status === "processing" || d.status === "failed")
+    .map((d) => d.id)
   const ingestByDoc = new Map<string, KnowledgeDocumentListItem["ingest"]>()
   if (processingIds.length > 0) {
     const jobs = await prisma.ingestJob.findMany({
@@ -944,7 +948,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
     // IngestJob row carries the s3Key for that replay; orphaned S3 objects
     // for never-retried jobs are reaped by a separate sweep keyed on
     // IngestJob.status = "failed" + age.
-    recordIngestJobFailure(ingestJobId, (err as Error).message ?? "ingest failed")
+    await recordIngestJobFailure(ingestJobId, (err as Error).message ?? "ingest failed")
     throw err
   }
 
@@ -967,7 +971,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
     await emit?.("done")
   }
 
-  recordIngestJobSuccess(ingestJobId, document.id)
+  await recordIngestJobSuccess(ingestJobId, document.id)
 
   return {
     id: document.id,
@@ -1121,7 +1125,7 @@ export async function processIngestJob(
   const { recordIngestJobFailure } = await import("@/lib/ingest/job")
 
   const markFailed = async (reason: string) => {
-    recordIngestJobFailure(job.id, reason)
+    await recordIngestJobFailure(job.id, reason)
     if (job.documentId) {
       await prisma.document.update({ where: { id: job.documentId }, data: { status: "failed" } }).catch(() => {})
     }

@@ -144,26 +144,46 @@ export async function updateIngestJobProgress(args: {
   }
 }
 
-export function recordIngestJobSuccess(jobId: string | null, documentId: string): void {
-  if (!jobId) return
-  lastEmit.delete(jobId)
-  void prisma.ingestJob
-    .update({
-      where: { id: jobId },
-      data: { status: "success", documentId, error: null, step: "done", progress: 100, etaSeconds: 0 },
-    })
-    .catch((err) => console.warn("[ingest-job] success update failed:", err))
+// Terminal-state writes must land: if they are lost to a DB blip the job stays
+// "processing" and the stale-reclaim later re-runs a document that already
+// finished (or double-reports a failure). One retry after a short delay.
+async function updateJobDurably(jobId: string, data: Record<string, unknown>, label: string): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await prisma.ingestJob.update({ where: { id: jobId }, data })
+      return
+    } catch (err) {
+      if (attempt === 0) {
+        await new Promise((r) => setTimeout(r, 500))
+        continue
+      }
+      console.warn(`[ingest-job] ${label} update failed:`, err)
+    }
+  }
 }
 
-export function recordIngestJobFailure(jobId: string | null, error: string): void {
+export async function recordIngestJobSuccess(jobId: string | null, documentId: string): Promise<void> {
   if (!jobId) return
   lastEmit.delete(jobId)
-  void prisma.ingestJob
-    .update({
-      where: { id: jobId },
-      data: { status: "failed", error: error.slice(0, 1000) },
-    })
-    .catch((err) => console.warn("[ingest-job] failure update failed:", err))
+  await updateJobDurably(
+    jobId,
+    { status: "success", documentId, error: null, step: "done", progress: 100, etaSeconds: 0 },
+    "success"
+  )
+}
+
+export async function recordIngestJobFailure(jobId: string | null, error: string): Promise<void> {
+  if (!jobId) return
+  lastEmit.delete(jobId)
+  await updateJobDurably(jobId, { status: "failed", error: error.slice(0, 1000) }, "failure")
+}
+
+/** Touch updatedAt so reclaimStaleJobs never eats a live job during a long,
+ *  emit-less step (MinerU can block 20 min inside one extractor call). */
+export async function touchIngestJob(jobId: string): Promise<void> {
+  await prisma.ingestJob
+    .update({ where: { id: jobId }, data: { updatedAt: new Date() } })
+    .catch(() => {})
 }
 
 /**
