@@ -1,21 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest"
-
-const { findUniqueMock, executeRawMock } = vi.hoisted(() => ({
-  findUniqueMock: vi.fn(),
-  executeRawMock: vi.fn(),
-}))
-
-// D-2: markRagStatus uses prisma.$executeRaw (jsonb_set) instead of
-// findUnique + update. Test mirrors the live shape.
-vi.mock("@/lib/prisma", () => ({
-  prisma: {
-    document: {
-      findUnique: findUniqueMock,
-    },
-    $executeRaw: executeRawMock,
-  },
-}))
+import { configureKb } from "@/lib/kb-runtime/runtime"
 
 const { storeChunksMock, deleteChunksMock, embeddingsMock } = vi.hoisted(() => ({
   storeChunksMock: vi.fn(),
@@ -34,18 +19,34 @@ vi.mock("@/lib/rag/embeddings", () => ({
 
 import { indexArtifactContent } from "@/lib/rag/artifact-indexer"
 
+// markRagStatus writes the flag through the DocumentStore port (the adapter
+// keeps the atomic jsonb_set), so the test asserts on the port.
+const setMetadataFlag = vi.fn(async () => {})
+
 beforeEach(() => {
-  findUniqueMock.mockReset()
-  executeRawMock.mockReset()
   storeChunksMock.mockReset()
   deleteChunksMock.mockReset()
   embeddingsMock.mockReset()
+  setMetadataFlag.mockReset()
+  configureKb({
+    documents: {
+      findAliveIdsByFilter: vi.fn(async () => []),
+      findAliveMetaByIds: vi.fn(async () => []),
+      findById: vi.fn(async () => null),
+      filterVisibleIds: vi.fn(async (ids: string[]) => ids),
+      listAll: vi.fn(async () => []),
+      deleteById: vi.fn(async () => {}),
+      deleteAll: vi.fn(async () => {}),
+      setStatus: vi.fn(async () => {}),
+      updateMetadata: vi.fn(async () => {}),
+      setMetadataFlag,
+      recordRetrievalHits: vi.fn(async () => {}),
+    },
+  })
 })
 
 describe("indexArtifactContent — non-fatal failure", () => {
   it("does not rethrow when storeChunks fails (caller should not need to .catch)", async () => {
-    findUniqueMock.mockResolvedValue({ metadata: null })
-    executeRawMock.mockResolvedValue(1)
     embeddingsMock.mockResolvedValue([[0.1], [0.2]])
     storeChunksMock.mockRejectedValue(new Error("vector store down"))
 
@@ -56,7 +57,7 @@ describe("indexArtifactContent — non-fatal failure", () => {
       indexArtifactContent("doc-1", "Doc", "x".repeat(2000)),
     ).resolves.toBeUndefined()
 
-    // Failure path writes ragIndexed=false via jsonb_set.
-    expect(executeRawMock).toHaveBeenCalled()
+    // Failure path still records ragIndexed=false.
+    expect(setMetadataFlag).toHaveBeenCalledWith("doc-1", "ragIndexed", false)
   })
 })

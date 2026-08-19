@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma"
+import { kb } from "@/lib/kb-runtime/runtime"
 import { getSurrealClient } from "@/lib/surrealdb"
 import { getRagConfig } from "./config"
 import { generateEmbeddings } from "./embeddings"
@@ -40,10 +40,7 @@ const DEFAULT_CONCURRENCY = 2
  */
 async function reEmbedOneDocument(documentId: string, embeddingModel: string): Promise<ReEmbedResult> {
   const start = Date.now()
-  const doc = await prisma.document.findUnique({
-    where: { id: documentId },
-    select: { id: true, title: true, deletedAt: true },
-  })
+  const doc = await kb("documents").findById(documentId)
   if (!doc || doc.deletedAt) {
     return {
       documentId,
@@ -200,17 +197,8 @@ export async function bulkReEmbed(params: {
 
   if (params.organizationId !== undefined) {
     // Restrict to docs visible to the org (own + null/global).
-    const visible = await prisma.document.findMany({
-      where: {
-        id: { in: targets },
-        deletedAt: null,
-        ...(params.organizationId !== null
-          ? { OR: [{ organizationId: params.organizationId }, { organizationId: null }] }
-          : { organizationId: null }),
-      },
-      select: { id: true },
-    })
-    const visibleSet = new Set(visible.map((d) => d.id))
+    const visibleIds = await kb("documents").filterVisibleIds(targets, params.organizationId)
+    const visibleSet = new Set(visibleIds)
     targets = targets.filter((id) => visibleSet.has(id))
   }
 

@@ -12,15 +12,20 @@ import type { KbRuntime } from "./ports"
  * than failing as a null-deref three frames deeper.
  */
 
-let current: Partial<KbRuntime> = {}
+// Held on globalThis, not in a module-level `let`, for the same reason
+// lib/prisma does it: Next.js can instantiate the same module more than once
+// across bundles/route graphs, and vitest's `vi.resetModules()` drops module
+// state outright. Either would silently hand back an unconfigured registry.
+const globalForKb = globalThis as unknown as { __kbRuntime?: Partial<KbRuntime> }
+globalForKb.__kbRuntime ??= {}
 
 /** Register adapters. Merges, so partial overrides in tests are fine. */
 export function configureKb(runtime: Partial<KbRuntime>): void {
-  current = { ...current, ...runtime }
+  globalForKb.__kbRuntime = { ...globalForKb.__kbRuntime, ...runtime }
 }
 
 export function kb<K extends keyof KbRuntime>(port: K): KbRuntime[K] {
-  const value = current[port]
+  const value = globalForKb.__kbRuntime?.[port]
   if (!value) {
     throw new Error(
       `[kb-runtime] port "${String(port)}" is not configured — ` +
@@ -33,10 +38,10 @@ export function kb<K extends keyof KbRuntime>(port: K): KbRuntime[K] {
 
 /** True when a port is available without throwing. */
 export function hasKbPort(port: keyof KbRuntime): boolean {
-  return Boolean(current[port])
+  return Boolean(globalForKb.__kbRuntime?.[port])
 }
 
 /** Test seam — drops all registered adapters. */
 export function resetKbRuntime(): void {
-  current = {}
+  globalForKb.__kbRuntime = {}
 }

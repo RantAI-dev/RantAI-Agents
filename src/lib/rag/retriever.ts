@@ -1,3 +1,4 @@
+import { kb } from "@/lib/kb-runtime/runtime";
 import { searchWithThreshold, SearchResult } from "./vector-store";
 import {
   HybridSearch,
@@ -229,9 +230,7 @@ export async function retrieveContext(
 
   // Coverage analytics: fire-and-forget bump retrievalCount + lastRetrievedAt
   // on every doc that surfaced. Async, never blocks the chat path.
-  void import("@/features/knowledge/documents/repository").then(({ recordRetrievalHits }) => {
-    recordRetrievalHits(chunks.map((c) => c.documentId));
-  }).catch(() => {});
+  void kb("documents").recordRetrievalHits(chunks.map((c) => c.documentId)).catch(() => {});
 
   // Format context for LLM. When a contextual_prefix was generated at ingest
   // (KB_CONTEXTUAL_RETRIEVAL_ENABLED=true; ~1 sentence per chunk locating it
@@ -490,9 +489,7 @@ export async function hybridRetrieve(
   }
 
   // Coverage analytics: fire-and-forget bump on every doc surfaced.
-  void import("@/features/knowledge/documents/repository").then(({ recordRetrievalHits }) => {
-    recordRetrievalHits(results.map((r) => r.documentId));
-  }).catch(() => {});
+  void kb("documents").recordRetrievalHits(results.map((r) => r.documentId)).catch(() => {});
 
   // Number sources first (first-seen order), then label each excerpt with its
   // source's [N] — keeps excerpt / Sources-list / UI-card numbering in lockstep

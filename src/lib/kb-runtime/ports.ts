@@ -97,6 +97,8 @@ export interface DocumentStore {
   deleteAll(): Promise<void>
   setStatus(documentId: string, status: string): Promise<void>
   updateMetadata(documentId: string, patch: Record<string, unknown>): Promise<void>
+  /** Atomic single-key metadata write (no read-modify-write race). */
+  setMetadataFlag(documentId: string, key: string, value: boolean): Promise<void>
   /** Fire-and-forget retrieval analytics. */
   recordRetrievalHits(documentIds: string[]): Promise<void>
 }

@@ -7,7 +7,7 @@ import { createHash } from "node:crypto"
 import { chunkDocument } from "./chunker"
 import { generateEmbeddings } from "./embeddings"
 import { storeChunks, deleteChunksByDocumentId } from "./vector-store"
-import { prisma } from "@/lib/prisma"
+import { kb } from "@/lib/kb-runtime/runtime"
 
 /**
  * Index artifact content: chunk, embed, and store in SurrealDB.
@@ -142,18 +142,5 @@ async function resolveTextToEmbed(
  * returns NULL when the source is NULL, which would wipe the field).
  */
 async function markRagStatus(documentId: string, indexed: boolean) {
-  try {
-    await prisma.$executeRaw`
-      UPDATE "Document"
-      SET "metadata" = jsonb_set(
-        COALESCE("metadata", '{}'::jsonb),
-        '{ragIndexed}',
-        to_jsonb(${indexed}::boolean),
-        true
-      )
-      WHERE "id" = ${documentId}
-    `
-  } catch (err) {
-    console.error("[ArtifactIndexer] Failed to write ragIndexed flag:", err)
-  }
+  await kb("documents").setMetadataFlag(documentId, "ragIndexed", indexed)
 }

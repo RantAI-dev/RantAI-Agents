@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { kb } from "@/lib/kb-runtime/runtime";
 import { getSurrealClient } from "@/lib/surrealdb";
 import { generateEmbedding, generateEmbeddings } from "./embeddings";
 import { Chunk } from "./chunker";
@@ -72,12 +72,10 @@ export async function searchSimilar(
       };
     }
 
-    const filteredDocs = await prisma.document.findMany({
-      where: { ...whereClause, deletedAt: null },
-      select: { id: true },
+    documentIds = await kb("documents").findAliveIdsByFilter({
+      category: categoryFilter ?? undefined,
+      groupIds: groupIds ?? undefined,
     });
-
-    documentIds = filteredDocs.map((d) => d.id);
 
     // If no documents match the filter, return empty results
     if (documentIds.length === 0) {
@@ -135,15 +133,7 @@ export async function searchSimilar(
   // Fetch document metadata from PostgreSQL — skip soft-deleted so their
   // chunks effectively drop out of retrieval until the retention sweep cleans
   // SurrealDB rows.
-  const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds }, deletedAt: null },
-    select: {
-      id: true,
-      title: true,
-      categories: true,
-      subcategory: true,
-    },
-  });
+  const documents = await kb("documents").findAliveMetaByIds(resultDocIds);
 
   // Create a map for quick lookup
   const docMap = new Map(documents.map((d) => [d.id, d]));
@@ -212,9 +202,7 @@ export async function deleteDocument(documentId: string): Promise<void> {
   await deleteChunksByDocumentId(documentId);
 
   // Delete document from PostgreSQL (cascades to groups)
-  await prisma.document.delete({
-    where: { id: documentId },
-  });
+  await kb("documents").deleteById(documentId);
 
   console.log(`[VectorStore] Deleted document ${documentId} and its chunks`);
 }
@@ -224,15 +212,7 @@ export async function deleteDocument(documentId: string): Promise<void> {
  */
 export async function listDocuments() {
   // Get documents from PostgreSQL
-  const documents = await prisma.document.findMany({
-    select: {
-      id: true,
-      title: true,
-      categories: true,
-      subcategory: true,
-      createdAt: true,
-    },
-  });
+  const documents = await kb("documents").listAll();
 
   // Get chunk counts from SurrealDB
   const surrealClient = await getSurrealClient();
@@ -266,7 +246,7 @@ export async function clearAllDocuments(): Promise<void> {
   await surrealClient.query(`DELETE document_chunk`);
 
   // Clear documents from PostgreSQL (cascades to groups)
-  await prisma.document.deleteMany();
+  await kb("documents").deleteAll();
 
   console.log("[VectorStore] Cleared all documents and chunks");
 }
@@ -361,10 +341,7 @@ export async function searchByDocumentIds(
 
   // Fetch document metadata from PostgreSQL
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
-  const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds }, deletedAt: null },
-    select: { id: true, title: true, categories: true, subcategory: true },
-  });
+  const documents = await kb("documents").findAliveMetaByIds(resultDocIds);
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
   return chunks
@@ -410,11 +387,10 @@ export async function searchByVector(
     if (groupIds && groupIds.length > 0) {
       whereClause.groups = { some: { groupId: { in: groupIds } } };
     }
-    const filteredDocs = await prisma.document.findMany({
-      where: { ...whereClause, deletedAt: null },
-      select: { id: true },
+    documentIds = await kb("documents").findAliveIdsByFilter({
+      category: categoryFilter ?? undefined,
+      groupIds: groupIds ?? undefined,
     });
-    documentIds = filteredDocs.map((d) => d.id);
     if (documentIds.length === 0) return [];
   }
 
@@ -448,10 +424,7 @@ export async function searchByVector(
   if (chunks.length === 0) return [];
 
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
-  const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds }, deletedAt: null },
-    select: { id: true, title: true, categories: true, subcategory: true },
-  });
+  const documents = await kb("documents").findAliveMetaByIds(resultDocIds);
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
   return chunks

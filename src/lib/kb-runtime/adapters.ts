@@ -241,6 +241,25 @@ const documents: DocumentStore = {
     await prisma.document.update({ where: { id: documentId }, data: { metadata: merged as object } })
   },
 
+  async setMetadataFlag(documentId, key, value) {
+    // jsonb_set keeps this a single atomic statement — a read-modify-write here
+    // would drop concurrent metadata writes (figures, ragIndexed).
+    try {
+      await prisma.$executeRaw`
+        UPDATE "Document"
+        SET "metadata" = jsonb_set(
+          COALESCE("metadata", '{}'::jsonb),
+          ${`{${key}}`}::text[],
+          to_jsonb(${value}::boolean),
+          true
+        )
+        WHERE "id" = ${documentId}
+      `
+    } catch (err) {
+      console.error("[kb-adapter] setMetadataFlag failed:", err)
+    }
+  },
+
   async recordRetrievalHits(documentIds) {
     if (documentIds.length === 0) return
     const { recordRetrievalHits } = await import("@/features/knowledge/documents/repository")

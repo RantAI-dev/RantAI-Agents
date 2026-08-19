@@ -24,7 +24,7 @@ export default defineConfig({
     // transitively import @/lib/icons (registry.ts, create-artifact.ts, etc.)
     // only need icon symbols to exist as truthy objects — they never render
     // the components.
-    setupFiles: ["./tests/setup-icons-stub.ts"],
+    setupFiles: ["./tests/setup-icons-stub.ts", "./tests/setup-kb-runtime.ts"],
     // Keep default environment as node; tests that need jsdom declare it
     // per-file via `// @vitest-environment jsdom` (vitest 4 idiom).
   },
