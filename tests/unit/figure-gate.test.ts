@@ -10,13 +10,26 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { parseVerdict, gateConfig, gateFigures, type GateConfig } from "../../src/lib/rag/figure-gate"
+import { configureKb, resetKbRuntime } from "@/lib/kb-runtime/runtime"
+import type { BlobStore } from "@/lib/kb-runtime/ports"
 
-vi.mock("@/lib/s3", () => ({
-  downloadFile: vi.fn(async (key: string) => {
+// The gate reaches storage through the KB BlobStore port, so the test supplies
+// an in-memory one instead of mocking the app's S3 module.
+const fakeBlob: BlobStore = {
+  async download(key: string) {
     if (key.includes("missing")) throw new Error("no such key")
     return Buffer.from("png-bytes")
-  }),
-}))
+  },
+  upload: async () => ({ size: 0 }),
+  delete: async () => {},
+  documentPath: (_o, d, f) => `${d}/${f}`,
+  assetPath: (_o, d, f) => `${d}/assets/${f}`,
+}
+
+beforeEach(() => {
+  resetKbRuntime()
+  configureKb({ blob: fakeBlob })
+})
 
 const cfg: GateConfig = { base: "http://vlm/v1", model: "m", topN: 2, maxKeep: 2, timeoutMs: 1000 }
 const cand = (id: string, assetKey = `k/${id}.png`) => ({ id, assetKey, caption: `cap ${id}` })
