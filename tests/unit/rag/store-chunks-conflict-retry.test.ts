@@ -21,9 +21,10 @@ function mockSurreal(query: ReturnType<typeof vi.fn>) {
       relate: vi.fn(async () => {}),
       cleanupDocumentIntelligence: vi.fn(async () => ({
         deletedRelationTables: 0,
-        entitiesDeleted: 0,
-        chunksDeleted: 0,
+        entitiesDeleted: false,
+        chunksDeleted: false,
       })),
+      healthCheck: vi.fn(async () => true),
     },
   })
   vi.doMock("@/lib/rag/config", () => ({

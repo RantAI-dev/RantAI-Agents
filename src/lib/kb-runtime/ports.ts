@@ -1,7 +1,11 @@
+import type { StepProgress } from "@/lib/ingest/progress"
+
 /**
  * KB engine ports.
  *
- * Interfaces ONLY — this file must never import anything. The engine
+ * Interfaces only, plus one type-only import from the (pure, dependency-free)
+ * progress model — that module travels with the engine, so the contract stays
+ * self-contained. The engine
  * (lib/rag, lib/ingest, lib/ocr, lib/document-intelligence, lib/files) talks
  * to the outside world exclusively through these, so it can be lifted into its
  * own repo/service without dragging the app along. The bindings to prisma /
@@ -105,14 +109,24 @@ export interface DocumentStore {
 
 // ─── Vector / graph store ────────────────────────────────────────────────────
 
+/** One statement's result inside a multi-statement response. */
+export interface VectorQueryResult<T = unknown> {
+  result?: T[]
+  status?: string
+  time?: string
+}
+
 export interface VectorStore {
-  query<T = unknown>(sql: string, vars?: Record<string, unknown>): Promise<T>
+  /** Returns one entry per statement in `sql` — callers read `[0].result`. */
+  query<T = unknown>(sql: string, vars?: Record<string, unknown>): Promise<VectorQueryResult<T>[]>
   relate(from: string, relation: string, to: string, props: Record<string, unknown>): Promise<void>
   cleanupDocumentIntelligence(documentId: string): Promise<{
     deletedRelationTables: number
-    entitiesDeleted: number
-    chunksDeleted: number
+    entitiesDeleted: boolean
+    chunksDeleted: boolean
   }>
+  /** Connectivity probe used by the document-intelligence pipeline. */
+  healthCheck(): Promise<boolean>
 }
 
 // ─── Runtime configuration overrides ─────────────────────────────────────────
@@ -142,7 +156,7 @@ export interface EndpointResolver {
 export interface JobProcessor {
   process(
     job: JobRecord,
-    onProgress: (progress: { step: string; current?: number; total?: number }) => void | Promise<void>
+    onProgress: (progress: StepProgress) => void | Promise<void>
   ): Promise<"ready" | "failed">
 }
 

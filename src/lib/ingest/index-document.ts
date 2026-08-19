@@ -78,7 +78,7 @@ export async function indexDocumentContent(
       await emit?.("extracting_entities")
       const surrealClient = kb("vectors")
       if (input.useCombined) {
-        const { entities, relations } = await extractEntitiesAndRelations(content, input.documentId, input.userId)
+        const { entities, relations } = await extractEntitiesAndRelations(content, input.documentId, input.userId ?? undefined)
         entityCount = entities.length
 
         const entityIdMap = new Map<string, string>()

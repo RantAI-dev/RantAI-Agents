@@ -270,9 +270,9 @@ const documents: DocumentStore = {
 // ─── Vector store ────────────────────────────────────────────────────────────
 
 const vectors: VectorStore = {
-  async query<T = unknown>(sql: string, vars?: Record<string, unknown>): Promise<T> {
+  async query<T = unknown>(sql: string, vars?: Record<string, unknown>) {
     const client = await getSurrealClient()
-    return client.query(sql, vars) as Promise<T>
+    return client.query<T>(sql, vars)
   },
   async relate(from, relation, to, props) {
     const client = await getSurrealClient()
@@ -281,6 +281,10 @@ const vectors: VectorStore = {
   async cleanupDocumentIntelligence(documentId) {
     const client = await getSurrealClient()
     return client.cleanupDocumentIntelligence(documentId)
+  },
+  async healthCheck() {
+    const client = await getSurrealClient()
+    return client.healthCheck()
   },
 }
 

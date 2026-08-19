@@ -352,7 +352,7 @@ export function BulkUploadDialog({
       setSelectedCategories([])
       setSubcategory("")
       setSelectedKBIds([])
-      setEnableEnhanced(true)
+      setFigureMode("auto")
       setError("")
       onOpenChange(false)
     } else {

@@ -48,9 +48,10 @@ export function makeFakeKbRuntime(overrides: Partial<KbRuntime> = {}): KbRuntime
       relate: vi.fn(async () => {}),
       cleanupDocumentIntelligence: vi.fn(async () => ({
         deletedRelationTables: 0,
-        entitiesDeleted: 0,
-        chunksDeleted: 0,
+        entitiesDeleted: false,
+        chunksDeleted: false,
       })),
+      healthCheck: vi.fn(async () => true),
     },
     config: {
       readKbSetting: vi.fn(async () => null),
