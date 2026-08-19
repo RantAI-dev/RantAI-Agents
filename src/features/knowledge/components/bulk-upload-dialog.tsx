@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import { Progress } from "@/components/ui/progress"
 import {
   Popover,
@@ -30,7 +29,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Loader2, Upload, FileText, Folder, Check, Plus, Sparkles, ChevronsUpDown, X, FileCode, FileSpreadsheet, Box, AlertCircle, RefreshCw } from "@/lib/icons"
+import { Loader2, Upload, FileText, Folder, Check, Plus, ChevronsUpDown, X, FileCode, FileSpreadsheet, Box, AlertCircle, RefreshCw } from "@/lib/icons"
 import { CategoryDialog, Category } from "./category-dialog"
 import { xhrUpload } from "./upload-xhr"
 import { cn } from "@/lib/utils"
@@ -129,7 +128,8 @@ export function BulkUploadDialog({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [subcategory, setSubcategory] = useState("")
   const [selectedKBIds, setSelectedKBIds] = useState<string[]>([])
-  const [enableEnhanced, setEnableEnhanced] = useState(true)
+  // PDF-only knob, applied to every PDF in the batch (see pipeline-policy).
+  const [figureMode, setFigureMode] = useState<"auto" | "force" | "skip">("auto")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [showResults, setShowResults] = useState(false)
@@ -238,9 +238,7 @@ export function BulkUploadDialog({
 
     const sharedCategoriesJson = JSON.stringify(selectedCategories)
     const sharedGroupsJson = JSON.stringify(selectedKBIds)
-    const url = enableEnhanced
-      ? "/api/dashboard/files?enhanced=true"
-      : "/api/dashboard/files"
+    const url = "/api/dashboard/files"
 
     const worker = async () => {
       while (true) {
@@ -257,6 +255,9 @@ export function BulkUploadDialog({
         if (selectedCategories.length > 0) formData.append("categories", sharedCategoriesJson)
         if (subcategory) formData.append("subcategory", subcategory)
         if (selectedKBIds.length > 0) formData.append("groupIds", sharedGroupsJson)
+        if (figureMode !== "auto" && entry.file.name.toLowerCase().endsWith(".pdf")) {
+          formData.append("figures", figureMode)
+        }
 
         try {
           const res = await xhrUpload(url, formData, (frac) => {
@@ -292,7 +293,7 @@ export function BulkUploadDialog({
     }
 
     await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()))
-  }, [selectedCategories, selectedKBIds, subcategory, enableEnhanced, updateEntry])
+  }, [selectedCategories, selectedKBIds, subcategory, figureMode, updateEntry])
 
   const handleSubmit = async () => {
     if (files.length === 0) {
@@ -599,16 +600,34 @@ export function BulkUploadDialog({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-chart-1" />
-                    <div>
-                      <Label htmlFor="bulk-enhanced" className="text-sm font-medium cursor-pointer">Enhanced Processing</Label>
-                      <p className="text-xs text-muted-foreground">Extract entities for knowledge graph</p>
+                {/* Figures & charts — applies to every PDF in the batch; other
+                    types are fully automatic and never crop figures. */}
+                {files.some((f) => f.file.name.toLowerCase().endsWith(".pdf")) && (
+                  <div className="space-y-2 rounded-lg border p-3 bg-muted/30">
+                    <Label className="text-sm font-medium">Figures &amp; charts (PDFs)</Label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {([["auto", "Auto"], ["force", "Always extract"], ["skip", "Text only"]] as const).map(([value, label]) => (
+                        <Button
+                          key={value}
+                          type="button"
+                          size="sm"
+                          variant={figureMode === value ? "default" : "outline"}
+                          onClick={() => setFigureMode(value)}
+                        >
+                          {label}
+                        </Button>
+                      ))}
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      {figureMode === "auto" &&
+                        "Scanned PDFs get figure extraction automatically; text PDFs are processed fast without it."}
+                      {figureMode === "force" &&
+                        "Runs the layout parser on every PDF — captures charts & figures, but slower to process."}
+                      {figureMode === "skip" &&
+                        "Fastest — text only, no figure images even for scanned PDFs."}
+                    </p>
                   </div>
-                  <Switch id="bulk-enhanced" checked={enableEnhanced} onCheckedChange={setEnableEnhanced} />
-                </div>
+                )}
               </>
             )}
 

@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import { Progress } from "@/components/ui/progress"
 import {
   Popover,
@@ -29,7 +28,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, Sparkles, ChevronsUpDown, X, FileCode, FileSpreadsheet, BookOpen, Info, Box } from "@/lib/icons"
+import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, ChevronsUpDown, X, FileCode, FileSpreadsheet, BookOpen, Info, Box } from "@/lib/icons"
 import { CategoryDialog, Category } from "./category-dialog"
 import { xhrUpload } from "./upload-xhr"
 import { cn } from "@/lib/utils"
@@ -233,10 +232,10 @@ export function UploadDialog({
   const [error, setError] = useState("")
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [dragOver, setDragOver] = useState(false)
-  const [enableEnhanced, setEnableEnhanced] = useState(true)
-  // Opt-in: force the layout parser (MinerU) so figures/charts/tables are
-  // cropped even from text-layer PDFs (slower + heavier, so off by default).
-  const [extractFigures, setExtractFigures] = useState(false)
+  // PDF-only knob. "auto": scanned PDFs get the layout parser (with figures),
+  // text PDFs get the fast text path. "force": layout parser even with a text
+  // layer (text book full of charts). "skip": text only, never crop figures.
+  const [figureMode, setFigureMode] = useState<"auto" | "force" | "skip">("auto")
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [formatsDialogOpen, setFormatsDialogOpen] = useState(false)
@@ -254,7 +253,7 @@ export function UploadDialog({
     setSelectedKBIds(defaultKBIds)
     setSelectedFile(null)
     setError("")
-    setEnableEnhanced(true)
+    setFigureMode("auto")
     setUploadProgress(0)
     setPhase("idle")
   }
@@ -324,14 +323,9 @@ export function UploadDialog({
       formData.append("categories", JSON.stringify(selectedCategories))
       if (subcategory) formData.append("subcategory", subcategory)
       if (selectedKBIds.length > 0) formData.append("groupIds", JSON.stringify(selectedKBIds))
-      // Force the layout parser (figures/tables) when the user opts in.
-      if (extractFigures) formData.append("forceOCR", "true")
+      if (figureMode !== "auto") formData.append("figures", figureMode)
 
-      const url = enableEnhanced
-        ? "/api/dashboard/files?enhanced=true"
-        : "/api/dashboard/files"
-
-      const res = await xhrUpload(url, formData, (frac) => {
+      const res = await xhrUpload("/api/dashboard/files", formData, (frac) => {
         setUploadProgress(frac)
         if (frac >= 1) setPhase("processing")
       })
@@ -642,45 +636,36 @@ export function UploadDialog({
             </div>
           )}
 
-          {/* Enhanced Processing Toggle */}
-          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-chart-1" />
-              <div>
-                <Label htmlFor="enhanced" className="text-sm font-medium cursor-pointer">
-                  Enhanced Processing
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Extract entities for knowledge graph
-                </p>
+          {/* Figures & charts — PDF only; every other type is fully automatic */}
+          {selectedFile?.name.toLowerCase().endsWith(".pdf") && (
+            <div className="space-y-2 rounded-lg border p-3 bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Image className="h-4 w-4 text-chart-1" />
+                <Label className="text-sm font-medium">Figures &amp; charts</Label>
               </div>
-            </div>
-            <Switch
-              id="enhanced"
-              checked={enableEnhanced}
-              onCheckedChange={setEnableEnhanced}
-            />
-          </div>
-
-          {/* Extract figures & tables (layout parser) — opt-in for PDFs */}
-          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
-            <div className="flex items-center gap-2">
-              <Image className="h-4 w-4 text-chart-1" />
-              <div>
-                <Label htmlFor="extract-figures" className="text-sm font-medium cursor-pointer">
-                  Extract figures &amp; tables
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  Uses the layout parser to pull charts, figures &amp; tables — slower, best for figure-rich or scanned PDFs
-                </p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([["auto", "Auto"], ["force", "Always extract"], ["skip", "Text only"]] as const).map(([value, label]) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="sm"
+                    variant={figureMode === value ? "default" : "outline"}
+                    onClick={() => setFigureMode(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
               </div>
+              <p className="text-xs text-muted-foreground">
+                {figureMode === "auto" &&
+                  "Scanned PDFs get figure extraction automatically; text PDFs are processed fast without it."}
+                {figureMode === "force" &&
+                  "Runs the layout parser even on text PDFs — captures charts & figures, but slower to process."}
+                {figureMode === "skip" &&
+                  "Fastest — text only, no figure images even for scanned PDFs."}
+              </p>
             </div>
-            <Switch
-              id="extract-figures"
-              checked={extractFigures}
-              onCheckedChange={setExtractFigures}
-            />
-          </div>
+          )}
 
           {error && (
             <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
