@@ -70,6 +70,23 @@ for (const dir of ENGINE_DIRS) {
       const spec = m[1]
       if (DENY.some((d) => spec === d || spec.startsWith(d)) || DENY_EXACT.includes(spec)) {
         violations.push(`${file}:${i + 1} → ${spec}`)
+        return
+      }
+
+      // Relative imports that climb out of the engine are the same violation
+      // wearing a disguise (`../surrealdb` hurts exactly as much as
+      // `@/lib/surrealdb` once the engine lives in another repo).
+      if (spec.startsWith(".")) {
+        const resolved = path.normalize(path.join(path.dirname(file), spec))
+        const insideEngine = ENGINE_DIRS.some(
+          (d) => resolved === d || resolved.startsWith(d + path.sep)
+        )
+        const allowedOutside =
+          resolved.startsWith(path.join("src", "lib", "kb-runtime", "ports")) ||
+          resolved.startsWith(path.join("src", "lib", "kb-runtime", "runtime"))
+        if (!insideEngine && !allowedOutside) {
+          violations.push(`${file}:${i + 1} → ${spec}  (escapes the engine)`)
+        }
       }
     })
   }

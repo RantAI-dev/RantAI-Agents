@@ -11,12 +11,13 @@
  * - Optional reranking for improved relevance
  */
 
-import { getSurrealClient, SurrealDBClient } from "../surrealdb";
+import { kb } from "@/lib/kb-runtime/runtime";
+import type { VectorStore } from "@/lib/kb-runtime/ports";
 import { generateEmbedding } from "./embeddings";
 import { getDefaultReranker } from "./rerankers";
 import { gateConfig, gateFigures } from "./figure-gate";
 import { Entity } from "../document-intelligence/types";
-import { prisma } from "../prisma";
+
 
 /**
  * Search configuration
@@ -172,7 +173,7 @@ const DEFAULT_CONFIG: Required<HybridSearchConfig> = {
  */
 export class HybridSearch {
   private config: Required<HybridSearchConfig>;
-  private dbClient: SurrealDBClient | null = null;
+  private dbClient: VectorStore | null = null;
 
   constructor(config: HybridSearchConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -181,9 +182,9 @@ export class HybridSearch {
   /**
    * Initialize database client
    */
-  private async getClient(): Promise<SurrealDBClient> {
+  private async getClient(): Promise<VectorStore> {
     if (!this.dbClient) {
-      this.dbClient = await getSurrealClient();
+      this.dbClient = kb("vectors");
     }
     return this.dbClient;
   }
@@ -382,12 +383,10 @@ export class HybridSearch {
       };
     }
 
-    const documents = await prisma.document.findMany({
-      where: { ...where, deletedAt: null },
-      select: { id: true },
+    return kb("documents").findAliveIdsByFilter({
+      category: this.config.categoryFilter ?? undefined,
+      groupIds: this.config.groupIds.length > 0 ? this.config.groupIds : undefined,
     });
-
-    return documents.map((document) => document.id);
   }
 
   /**
@@ -733,7 +732,7 @@ export async function fetchNeighborChunks(
   const allIndices = [...new Set([...wantByDoc.values()].flatMap((s) => [...s]))];
   if (!docIds.length || !allIndices.length) return [];
 
-  const client = await getSurrealClient();
+  const client = kb("vectors");
   // Over-fetch the (docIds × indices) cross-product, then keep only the exact
   // (doc, index) pairs we asked for. Anchor counts are small, so this is cheap.
   const res = await client.query<ChunkResult & { contextual_prefix?: string | null }>(
@@ -834,7 +833,7 @@ export async function fetchMatchingFigures(
   const q = query.toLowerCase();
   const text = retrievedText.toLowerCase();
 
-  const client = await getSurrealClient();
+  const client = kb("vectors");
   const res = await client.query<ChunkResult & { contextual_prefix?: string | null }>(
     `SELECT id, document_id, file_id, content, chunk_index, metadata, contextual_prefix
      FROM document_chunk
@@ -844,10 +843,9 @@ export async function fetchMatchingFigures(
   const rows = res[0]?.result || [];
   if (!rows.length) return [];
 
-  const docs = await prisma.document.findMany({
-    where: { id: { in: [...new Set(rows.map((r) => r.document_id))] }, deletedAt: null },
-    select: { id: true, title: true },
-  });
+  const docs = await kb("documents").findAliveMetaByIds([
+    ...new Set(rows.map((r) => r.document_id)),
+  ]);
   const titleById = new Map(docs.map((d) => [d.id, d.title]));
 
   // Score each meaningful figure: a caption keyword in the QUERY (2) beats one

@@ -3,7 +3,7 @@
 //
 // Usage: bun run kb:apply-fts-schema
 //
-// Keep STATEMENTS in sync with the Phase 7 section of src/lib/surrealdb/schema.surql.
+// Keep STATEMENTS in sync with the Phase 7 section of src/lib/rag/store/schema.surql.
 import { getSurrealClient } from "@/lib/surrealdb";
 
 const STATEMENTS = [

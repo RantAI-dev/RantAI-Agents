@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { configureKb } from "@/lib/kb-runtime/runtime"
 import type { Chunk } from "@/lib/rag/chunker"
 
 function makeChunk(overrides?: Partial<Chunk["metadata"]>): Chunk {
@@ -23,9 +24,7 @@ describe("storeChunks — SurrealDB option<string> field handling", () => {
 
   it("omits contextual_prefix and embedding_model from the SET clause when both are absent", async () => {
     const surrealQuery = vi.fn().mockResolvedValue([{ status: "OK", result: [] }])
-    vi.doMock("@/lib/surrealdb", () => ({
-      getSurrealClient: async () => ({ query: surrealQuery }),
-    }))
+    configureKb({ vectors: { query: surrealQuery, relate: vi.fn(async () => {}), cleanupDocumentIntelligence: vi.fn(async () => ({ deletedRelationTables: 0, entitiesDeleted: 0, chunksDeleted: 0 })) } })
     vi.doMock("@/lib/rag/config", () => ({
       getRagConfig: () => ({ embeddingDim: 4 }),
     }))
@@ -44,9 +43,7 @@ describe("storeChunks — SurrealDB option<string> field handling", () => {
 
   it("includes contextual_prefix in the SET clause when the chunk metadata carries one", async () => {
     const surrealQuery = vi.fn().mockResolvedValue([{ status: "OK", result: [] }])
-    vi.doMock("@/lib/surrealdb", () => ({
-      getSurrealClient: async () => ({ query: surrealQuery }),
-    }))
+    configureKb({ vectors: { query: surrealQuery, relate: vi.fn(async () => {}), cleanupDocumentIntelligence: vi.fn(async () => ({ deletedRelationTables: 0, entitiesDeleted: 0, chunksDeleted: 0 })) } })
     vi.doMock("@/lib/rag/config", () => ({
       getRagConfig: () => ({ embeddingDim: 4 }),
     }))
@@ -66,9 +63,7 @@ describe("storeChunks — SurrealDB option<string> field handling", () => {
 
   it("includes embedding_model in the SET clause when the caller passes one", async () => {
     const surrealQuery = vi.fn().mockResolvedValue([{ status: "OK", result: [] }])
-    vi.doMock("@/lib/surrealdb", () => ({
-      getSurrealClient: async () => ({ query: surrealQuery }),
-    }))
+    configureKb({ vectors: { query: surrealQuery, relate: vi.fn(async () => {}), cleanupDocumentIntelligence: vi.fn(async () => ({ deletedRelationTables: 0, entitiesDeleted: 0, chunksDeleted: 0 })) } })
     vi.doMock("@/lib/rag/config", () => ({
       getRagConfig: () => ({ embeddingDim: 4 }),
     }))
@@ -84,9 +79,7 @@ describe("storeChunks — SurrealDB option<string> field handling", () => {
 
   it("treats empty-string contextual_prefix as absent", async () => {
     const surrealQuery = vi.fn().mockResolvedValue([{ status: "OK", result: [] }])
-    vi.doMock("@/lib/surrealdb", () => ({
-      getSurrealClient: async () => ({ query: surrealQuery }),
-    }))
+    configureKb({ vectors: { query: surrealQuery, relate: vi.fn(async () => {}), cleanupDocumentIntelligence: vi.fn(async () => ({ deletedRelationTables: 0, entitiesDeleted: 0, chunksDeleted: 0 })) } })
     vi.doMock("@/lib/rag/config", () => ({
       getRagConfig: () => ({ embeddingDim: 4 }),
     }))

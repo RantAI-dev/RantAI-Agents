@@ -1,5 +1,4 @@
 import { kb } from "@/lib/kb-runtime/runtime"
-import { getSurrealClient } from "@/lib/surrealdb"
 import { getRagConfig } from "./config"
 import { generateEmbeddings } from "./embeddings"
 
@@ -52,7 +51,7 @@ async function reEmbedOneDocument(documentId: string, embeddingModel: string): P
     }
   }
 
-  const client = await getSurrealClient()
+  const client = kb("vectors")
   const chunkRes = await client.query<ChunkRow>(
     `SELECT id, content, chunk_index FROM document_chunk WHERE document_id = $documentId ORDER BY chunk_index`,
     { documentId }
@@ -186,7 +185,7 @@ export async function bulkReEmbed(params: {
 
   let targets: string[] = params.documentIds ?? []
   if (params.onlyStale) {
-    const client = await getSurrealClient()
+    const client = kb("vectors")
     const res = await client.query<string>(
       `SELECT VALUE document_id FROM document_chunk WHERE embedding_model IS NONE OR embedding_model != $current`,
       { current: embeddingModel }

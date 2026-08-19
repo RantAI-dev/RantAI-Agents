@@ -1,5 +1,4 @@
 import { kb } from "@/lib/kb-runtime/runtime";
-import { getSurrealClient } from "@/lib/surrealdb";
 import { generateEmbedding, generateEmbeddings } from "./embeddings";
 import { Chunk } from "./chunker";
 
@@ -48,7 +47,7 @@ export async function searchSimilar(
   const queryEmbedding = await generateEmbedding(query);
 
   // Get SurrealDB client
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   // First, get document IDs that match the filters (if any)
   let documentIds: string[] | null = null;
@@ -185,7 +184,7 @@ export async function searchWithThreshold(
  * Useful for re-indexing artifact content without destroying the Document row.
  */
 export async function deleteChunksByDocumentId(documentId: string): Promise<void> {
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
   await surrealClient.query(
     `DELETE document_chunk WHERE document_id = $document_id`,
     { document_id: documentId }
@@ -215,7 +214,7 @@ export async function listDocuments() {
   const documents = await kb("documents").listAll();
 
   // Get chunk counts from SurrealDB
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   const docsWithCounts = await Promise.all(
     documents.map(async (doc) => {
@@ -242,7 +241,7 @@ export async function listDocuments() {
  */
 export async function clearAllDocuments(): Promise<void> {
   // Clear chunks from SurrealDB
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
   await surrealClient.query(`DELETE document_chunk`);
 
   // Clear documents from PostgreSQL (cascades to groups)
@@ -255,7 +254,7 @@ export async function clearAllDocuments(): Promise<void> {
  * Get chunk count for a specific document
  */
 export async function getDocumentChunkCount(documentId: string): Promise<number> {
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
   const result = await surrealClient.query<{ count: number }>(
     `SELECT count() as count FROM document_chunk WHERE document_id = $document_id GROUP ALL`,
     { document_id: documentId }
@@ -277,7 +276,7 @@ export async function getDocumentChunkCounts(
   // SurrealDB is unavailable/uninitialized, degrade to 0 rather than throwing —
   // a vector-store hiccup must not crash the whole documents page.
   try {
-    const surrealClient = await getSurrealClient();
+    const surrealClient = kb("vectors");
     const result = await surrealClient.query<{ document_id: string; count: number }>(
       `SELECT document_id, count() AS count FROM document_chunk WHERE document_id IN $ids GROUP BY document_id`,
       { ids: documentIds }
@@ -314,7 +313,7 @@ export async function searchByDocumentIds(
   if (documentIds.length === 0) return [];
 
   const queryEmbedding = await generateEmbedding(query);
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   const sql = `
     SELECT
@@ -375,7 +374,7 @@ export async function searchByVector(
   categoryFilter?: string,
   groupIds?: string[]
 ): Promise<SearchResult[]> {
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   let documentIds: string[] | null = null;
   if (categoryFilter || (groupIds && groupIds.length > 0)) {
@@ -583,7 +582,7 @@ export async function storeChunks(
     }
   }
 
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   // Process chunks in bounded-concurrency batches. Order doesn't matter
   // for storage (each chunk has its own deterministic id); we wait for
