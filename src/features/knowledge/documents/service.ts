@@ -2,7 +2,6 @@ import path from "path"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
-  chunkDocument,
   smartChunkDocument,
   generateEmbeddings,
   detectFileType,
@@ -410,8 +409,17 @@ export async function createKnowledgeDocumentForDashboard(params: {
     return { status: 403, error: "Insufficient permissions" }
   }
 
-  const useEnhanced = params.input.useEnhanced
   const useCombined = params.input.useCombined !== false
+  // Per-type pipeline policy: what runs is decided by file type (+ the PDF-only
+  // figureMode knob), not by the legacy useEnhanced toggle (accepted, ignored).
+  const { resolveIngestPolicy, parseFigureMode } = await import("@/lib/ingest/pipeline-policy")
+  const policy =
+    params.input.kind === "file" && params.input.file
+      ? resolveIngestPolicy(
+          (params.input.file as File).name,
+          parseFigureMode(params.input.figureMode, params.input.forceOCR)
+        )
+      : { entities: true, figures: false, forceLayout: false }
   const groupIds = toStringList(params.input.groupIds)
   const categories = toCategoryList(params.input.categories)
   let title = params.input.title || ""
@@ -463,7 +471,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
 
     if (detectedType === "pdf") {
       fileType = "pdf"
-      const isScanned = params.input.forceOCR || (await isPDFScanned(fileBuffer))
+      const isScanned = policy.forceLayout || (await isPDFScanned(fileBuffer))
 
       if (isScanned) {
         // Layout extractors (MinerU/Mistral) — purpose-built for scanned/
@@ -495,11 +503,11 @@ export async function createKnowledgeDocumentForDashboard(params: {
         for (const name of order) {
           try {
             const extractor = await available[name]()
-            const result = await extractor.extract(fileBuffer, { withFigures: true })
+            const result = await extractor.extract(fileBuffer, { withFigures: policy.figures })
             if (result.text?.trim()) {
               content = result.text
               usedOCR = true
-              if (result.figures?.length) extractedFigures = result.figures
+              if (policy.figures && result.figures?.length) extractedFigures = result.figures
               if (result.pagesBlocks?.length) extractedPagesBlocks = result.pagesBlocks
               if (result.pageMap?.length) extractionPageMap = result.pageMap
               console.log(`[Knowledge] Layout extraction via ${name} (${result.figures?.length ?? 0} figures, ${result.pageMap?.length ?? 0} page blocks)`)
@@ -651,9 +659,8 @@ export async function createKnowledgeDocumentForDashboard(params: {
       s3Key: s3Key ?? null,
       documentId,
       params: {
-        useEnhanced,
         useCombined,
-        forceOCR: params.input.forceOCR,
+        figureMode: parseFigureMode(params.input.figureMode, params.input.forceOCR),
         documentType: params.input.documentType,
         title,
         categories: params.input.categories,
@@ -718,14 +725,17 @@ export async function createKnowledgeDocumentForDashboard(params: {
 
   await emit?.("chunking")
 
-  if (useEnhanced) {
-    chunks = await smartChunkDocument(content, title, categories[0], params.input.subcategory || undefined, {
-      maxChunkSize: 800,
-      overlapSize: 200,
-      preserveCodeBlocks: true,
-      respectHeadingBoundaries: true,
-    })
+  // Always the table/code-aware chunker: the naive fixed-size splitter shredded
+  // spreadsheet rows and code blocks (the old failure mode when the "enhanced"
+  // toggle was off). Policy decides the optional steps below, not the chunker.
+  chunks = await smartChunkDocument(content, title, categories[0], params.input.subcategory || undefined, {
+    maxChunkSize: 800,
+    overlapSize: 200,
+    preserveCodeBlocks: true,
+    respectHeadingBoundaries: true,
+  })
 
+  if (policy.entities) {
     // Entity/relation extraction is an expensive per-chunk LLM pass. On-prem KBs
     // that only need vector retrieval can disable it with
     // KB_ENTITY_EXTRACTION_ENABLED=false — it otherwise competes with the mineru
@@ -848,11 +858,6 @@ export async function createKnowledgeDocumentForDashboard(params: {
     } catch (error) {
       console.error("Entity/Relation extraction failed:", error)
     }
-  } else {
-    chunks = chunkDocument(content, title, categories[0], params.input.subcategory || undefined, {
-      chunkSize: 1000,
-      chunkOverlap: 200,
-    })
   }
 
   // Tag text chunks with their source page (from the layout parser's page map)
@@ -974,8 +979,8 @@ export async function createKnowledgeDocumentForDashboard(params: {
     s3Key,
     fileUrl,
     chunkCount: chunks.length,
-    entityCount: useEnhanced ? entityCount : undefined,
-    enhanced: useEnhanced,
+    entityCount: policy.entities ? entityCount : undefined,
+    enhanced: policy.entities,
     usedOCR,
   }
 }
@@ -1064,9 +1069,11 @@ export async function enqueueFileIngest(params: {
     s3Key,
     documentId,
     params: {
-      useEnhanced: params.input.useEnhanced,
       useCombined: params.input.useCombined !== false,
-      forceOCR: params.input.forceOCR,
+      figureMode: (await import("@/lib/ingest/pipeline-policy")).parseFigureMode(
+        params.input.figureMode,
+        params.input.forceOCR
+      ),
       documentType: params.input.documentType,
       title,
       categories: params.input.categories,
@@ -1086,7 +1093,7 @@ export async function enqueueFileIngest(params: {
     fileSize,
     s3Key,
     fileUrl: appFileUrl(s3Key),
-    enhanced: params.input.useEnhanced,
+    enhanced: (await import("@/lib/ingest/pipeline-policy")).resolveIngestPolicy(file.name).entities,
   }
 }
 
@@ -1129,6 +1136,7 @@ export async function processIngestJob(
     useEnhanced?: boolean
     useCombined?: boolean
     forceOCR?: boolean
+    figureMode?: string
     documentType?: string
     title?: string
     categories?: string[]
@@ -1162,6 +1170,7 @@ export async function processIngestJob(
       useEnhanced: !!p.useEnhanced,
       useCombined: p.useCombined !== false,
       forceOCR: p.forceOCR,
+      figureMode: p.figureMode,
       documentType: p.documentType,
     } as KnowledgeDocumentCreateInput,
     documentId: job.documentId,
