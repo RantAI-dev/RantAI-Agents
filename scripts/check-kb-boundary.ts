@@ -92,6 +92,34 @@ for (const dir of ENGINE_DIRS) {
   }
 }
 
+// ─── The composition root must stay cheap to import ─────────────────────────
+//
+// apps/cloud/server.ts imports lib/kb-runtime to bind the ports before the
+// ingest worker starts, so anything statically imported by adapters.ts lands
+// in the server's entry graph, unbundled. `@/lib/llm/provider-registry` pulls
+// in `server-only`, which only resolves through Next's bundler — that
+// crash-looped staging at boot while the deploy still reported success.
+// Infrastructure belongs behind `await import(...)` inside the methods.
+const ADAPTERS = "src/lib/kb-runtime/adapters.ts"
+const ADAPTER_STATIC_ALLOW = ["@/lib/prisma", "./ports"]
+
+try {
+  readFileSync(ADAPTERS, "utf-8")
+    .split("\n")
+    .forEach((line, i) => {
+      const m = line.match(/^\s*import\s+(?!type\b)[^"']*["']([^"']+)["']/)
+      if (!m) return
+      const spec = m[1]
+      if (spec.startsWith("@/") && !ADAPTER_STATIC_ALLOW.includes(spec)) {
+        violations.push(
+          `${ADAPTERS}:${i + 1} → ${spec}  (composition root must import infrastructure lazily)`
+        )
+      }
+    })
+} catch {
+  /* adapters.ts is optional — the service repo has its own */
+}
+
 if (violations.length > 0) {
   console.error(`\n✗ KB boundary: ${violations.length} forbidden import(s)\n`)
   for (const v of violations) console.error("  " + v)

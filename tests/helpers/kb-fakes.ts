@@ -57,7 +57,7 @@ export function makeFakeKbRuntime(overrides: Partial<KbRuntime> = {}): KbRuntime
       readKbSetting: vi.fn(async () => null),
       resolveProvider: vi.fn(async () => null),
     },
-    endpoints: { resolveModel: vi.fn(() => null) },
+    endpoints: { resolveModel: vi.fn(async () => null) },
     processor: { process: vi.fn(async () => "ready" as const) },
   }
   return { ...base, ...overrides }

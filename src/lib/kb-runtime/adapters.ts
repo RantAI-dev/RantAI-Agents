@@ -11,11 +11,6 @@
  */
 
 import { prisma } from "@/lib/prisma"
-import { uploadFile, downloadFile, deleteFile, S3Paths } from "@/lib/s3"
-import { emitToOrgRoom } from "@/lib/socket"
-import { getSurrealClient } from "@/lib/surrealdb"
-import { decryptCredential } from "@/lib/workflow/credentials"
-import { getProviderRegistry } from "@/lib/llm/provider-registry"
 import type {
   BlobStore,
   ConfigProvider,
@@ -31,23 +26,59 @@ import type {
 
 const KB_CONFIG_SETTING_KEY = "kb_config"
 
+/**
+ * Everything below `prisma` is loaded on first use, not at import.
+ *
+ * The custom server (`apps/cloud/server.ts`) imports this module to bind the
+ * ports before starting the ingest worker. A static import here therefore ends
+ * up in the server's entry graph, unbundled — and `@/lib/llm/provider-registry`
+ * pulls in `server-only`, which only resolves through Next's bundler. That
+ * crash-looped the container at boot with "Cannot find package 'server-only'"
+ * while the deploy still reported success. Lazy imports keep the composition
+ * root cheap and make that class of failure impossible.
+ */
+const lazy = {
+  s3: () => import("@/lib/s3"),
+  socket: () => import("@/lib/socket"),
+  surreal: () => import("@/lib/surrealdb"),
+  credentials: () => import("@/lib/workflow/credentials"),
+  providerRegistry: () => import("@/lib/llm/provider-registry"),
+}
+
 // ─── Blob ────────────────────────────────────────────────────────────────────
 
 const blob: BlobStore = {
   async upload(key, body, contentType, meta) {
+    const { uploadFile } = await lazy.s3()
     const result = await uploadFile(key, body, contentType, meta)
     return { size: result.size }
   },
-  download: (key) => downloadFile(key),
-  delete: (key) => deleteFile(key),
-  documentPath: (orgId, docId, filename) => S3Paths.document(orgId, docId, filename),
-  assetPath: (orgId, docId, filename) => S3Paths.documentAsset(orgId, docId, filename),
+  async download(key) {
+    const { downloadFile } = await lazy.s3()
+    return downloadFile(key)
+  },
+  async delete(key) {
+    const { deleteFile } = await lazy.s3()
+    await deleteFile(key)
+  },
+  // Path builders are pure string maths, duplicated here rather than imported
+  // so key construction stays synchronous. Keep in sync with lib/s3#S3Paths.
+  documentPath: (orgId, docId, filename) =>
+    `documents/${orgId || "global"}/${docId}/${sanitizeKeySegment(filename)}`,
+  assetPath: (orgId, docId, filename) =>
+    `documents/${orgId || "global"}/${docId}/assets/${sanitizeKeySegment(filename)}`,
+}
+
+/** Mirrors lib/s3's sanitizeFilename. */
+function sanitizeKeySegment(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_")
 }
 
 // ─── Progress ────────────────────────────────────────────────────────────────
 
 const progress: ProgressSink = {
   async emit(organizationId, event, payload) {
+    const { emitToOrgRoom } = await lazy.socket()
     emitToOrgRoom(organizationId, event, payload)
   },
 }
@@ -271,18 +302,22 @@ const documents: DocumentStore = {
 
 const vectors: VectorStore = {
   async query<T = unknown>(sql: string, vars?: Record<string, unknown>) {
+    const { getSurrealClient } = await lazy.surreal()
     const client = await getSurrealClient()
     return client.query<T>(sql, vars)
   },
   async relate(from, relation, to, props) {
+    const { getSurrealClient } = await lazy.surreal()
     const client = await getSurrealClient()
     await client.relate(from, relation, to, props)
   },
   async cleanupDocumentIntelligence(documentId) {
+    const { getSurrealClient } = await lazy.surreal()
     const client = await getSurrealClient()
     return client.cleanupDocumentIntelligence(documentId)
   },
   async healthCheck() {
+    const { getSurrealClient } = await lazy.surreal()
     const client = await getSurrealClient()
     return client.healthCheck()
   },
@@ -302,6 +337,7 @@ const config: ConfigProvider = {
     let apiKey: string | null = null
     if (provider.encryptedApiKey) {
       try {
+        const { decryptCredential } = await lazy.credentials()
         const decrypted = decryptCredential(provider.encryptedApiKey).apiKey
         if (typeof decrypted === "string") apiKey = decrypted
       } catch (err) {
@@ -317,7 +353,8 @@ const config: ConfigProvider = {
 // ─── Endpoint resolution ─────────────────────────────────────────────────────
 
 const endpoints: EndpointResolver = {
-  resolveModel(modelId) {
+  async resolveModel(modelId) {
+    const { getProviderRegistry } = await lazy.providerRegistry()
     const registry = getProviderRegistry()
     const providerId = registry.modelProvider.get(modelId)
     if (!providerId) return null

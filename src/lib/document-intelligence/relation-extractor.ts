@@ -130,7 +130,7 @@ export class LLMRelationExtractor {
     try {
       const prompt = this.buildPrompt(text, batchEntities);
 
-      const response = await fetch(`${resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey).baseUrl}/chat/completions`, {
+      const response = await fetch(`${(await resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey)).baseUrl}/chat/completions`, {
         body: JSON.stringify({
           max_tokens: this.config.maxTokens,
           messages: [
@@ -143,7 +143,7 @@ export class LLMRelationExtractor {
           temperature: this.config.temperature,
         }),
         headers: {
-          Authorization: `Bearer ${resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey).apiKey}`,
+          Authorization: `Bearer ${(await resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey)).apiKey}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://rantai.dev",
           "X-Title": "RantAI Document Intelligence",

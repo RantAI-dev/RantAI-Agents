@@ -147,8 +147,10 @@ export interface ConfigProvider {
 // ─── LLM endpoint resolution ─────────────────────────────────────────────────
 
 export interface EndpointResolver {
-  /** Synchronous by contract — callers resolve endpoints inline. */
-  resolveModel(modelId: string): { baseUrl: string; apiKey: string } | null
+  /** Async so the adapter can load the host's provider registry lazily — a
+   *  static import of it dragged the application module graph into the server
+   *  entry point and crashed the container at boot. */
+  resolveModel(modelId: string): Promise<{ baseUrl: string; apiKey: string } | null>
 }
 
 // ─── Ingest job execution ────────────────────────────────────────────────────

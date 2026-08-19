@@ -12,11 +12,11 @@ import { kb } from "@/lib/kb-runtime/runtime"
  *      just setting ENTITY_EXTRACTION_LLM_MODEL to a managed model id.
  *   3. The extractor's configured default (OpenRouter + OPENROUTER_API_KEY).
  */
-export function resolveExtractionEndpoint(
+export async function resolveExtractionEndpoint(
   modelId: string,
   fallbackBaseUrl: string,
   fallbackApiKey: string
-): { baseUrl: string; apiKey: string } {
+): Promise<{ baseUrl: string; apiKey: string }> {
   const envBase = process.env.ENTITY_EXTRACTION_LLM_BASE_URL
   if (envBase) {
     return {
@@ -24,7 +24,7 @@ export function resolveExtractionEndpoint(
       apiKey: process.env.ENTITY_EXTRACTION_LLM_API_KEY || fallbackApiKey,
     }
   }
-  const managed = kb("endpoints").resolveModel(modelId)
+  const managed = await kb("endpoints").resolveModel(modelId)
   if (managed) return managed
   return { baseUrl: fallbackBaseUrl, apiKey: fallbackApiKey }
 }
