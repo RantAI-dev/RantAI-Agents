@@ -110,7 +110,9 @@ function quantile(xs: number[], q: number): number {
  * enrichment disappears by construction rather than by luck.
  */
 function loadJudge(): { source: string; labels: Map<string, { pool: string[]; pos: Set<string> }> } {
-  const scaled = path.join(C, "annotation-scale", "judge-labels.json")
+  // Override to score a different judge's labels (same schema) against the
+  // same human gold — e.g. judge-labels-minimax.json for the cross-vendor kappa.
+  const scaled = process.env.IKAT_JUDGE_LABELS ?? path.join(C, "annotation-scale", "judge-labels.json")
   const out = new Map<string, { pool: string[]; pos: Set<string> }>()
   if (fs.existsSync(scaled)) {
     const d = JSON.parse(fs.readFileSync(scaled, "utf-8")) as {
