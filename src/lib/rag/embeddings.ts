@@ -193,7 +193,14 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  * unfinished batch index from a shared counter. Results are indexed by batch
  * position so output order always matches input order.
  */
-export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
+export async function generateEmbeddings(
+  texts: string[],
+  options?: {
+    /** Called with cumulative embedded count after each completed batch —
+     *  drives the ingest progress bar instead of a single 0/N emit. */
+    onProgress?: (done: number, total: number) => void
+  }
+): Promise<number[][]> {
   if (texts.length === 0) return [];
 
   const cfg = getRagConfig();
@@ -210,6 +217,16 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
 
   // Results indexed by batch position so output order matches input order.
   const results: number[][][] = new Array(batches.length);
+
+  let embedded = 0;
+  const reportBatchDone = (count: number) => {
+    embedded += count;
+    try {
+      options?.onProgress?.(embedded, texts.length);
+    } catch {
+      /* progress must never fail the embed */
+    }
+  };
 
   let nextIdx = 0;
   async function worker(): Promise<void> {
@@ -263,6 +280,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
               throw new Error(`Invalid MiniMax embedding response: ${JSON.stringify(data).slice(0, 300)}`);
             }
             results[idx] = data.vectors;
+            reportBatchDone(batch.length);
             lastError = null;
             break;
           }
@@ -281,6 +299,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
             return item.embedding;
           });
           results[idx] = embeddings;
+          reportBatchDone(batch.length);
           lastError = null;
           break;
         } catch (error) {

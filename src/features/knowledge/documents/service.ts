@@ -912,7 +912,9 @@ export async function createKnowledgeDocumentForDashboard(params: {
   const chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)
   try {
     await emit?.("embedding", 0, chunks.length)
-    const embeddings = await generateEmbeddings(chunkTexts)
+    const embeddings = await generateEmbeddings(chunkTexts, {
+      onProgress: (done, total) => void emit?.("embedding", done, total),
+    })
     const { getRagConfig } = await import("@/lib/rag/config")
     const embeddingModel = getRagConfig().embeddingModel
     await emit?.("storing", 0, chunks.length)
