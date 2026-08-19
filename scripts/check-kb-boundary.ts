@@ -35,7 +35,13 @@ const DENY = [
   "@/hooks/",
   "@/components/",
   "@/features/",
+  // The engine may use lib/kb-runtime/{ports,runtime} but never the app-facing
+  // barrel or the adapters — those pull infra back in transitively.
+  "@/lib/kb-runtime/adapters",
 ]
+
+/** Bare "@/lib/kb-runtime" (the app-facing barrel) is forbidden too. */
+const DENY_EXACT = ["@/lib/kb-runtime"]
 
 function walk(dir: string): string[] {
   const out: string[] = []
@@ -62,7 +68,7 @@ for (const dir of ENGINE_DIRS) {
       const m = line.match(/(?:from\s+|import\(\s*)["']([^"']+)["']/)
       if (!m) return
       const spec = m[1]
-      if (DENY.some((d) => spec === d || spec.startsWith(d))) {
+      if (DENY.some((d) => spec === d || spec.startsWith(d)) || DENY_EXACT.includes(spec)) {
         violations.push(`${file}:${i + 1} → ${spec}`)
       }
     })
