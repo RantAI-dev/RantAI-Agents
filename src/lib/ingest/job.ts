@@ -245,5 +245,33 @@ export async function reclaimStaleJobs(staleMs: number, maxAttempts: number): Pr
   return stale.length
 }
 
+/**
+ * Reap stored files of failed jobs nobody retried. After `maxAgeDays` the
+ * replay window closes: delete the S3 object and null the key — the retry
+ * route then answers "re-upload" instead of replaying a vanished object.
+ * (Referenced by the DLQ design comments in documents/service.ts; this is
+ * the sweep that used to not exist.)
+ */
+export async function reapFailedJobUploads(maxAgeDays = 7): Promise<number> {
+  const cutoff = new Date(Date.now() - maxAgeDays * 86_400_000)
+  const jobs = await prisma.ingestJob.findMany({
+    where: { status: "failed", updatedAt: { lt: cutoff }, s3Key: { not: null } },
+    select: { id: true, s3Key: true },
+    take: 100,
+  })
+  let reaped = 0
+  for (const job of jobs) {
+    try {
+      const { deleteFile } = await import("@/lib/s3")
+      await deleteFile(job.s3Key!)
+      await prisma.ingestJob.update({ where: { id: job.id }, data: { s3Key: null } })
+      reaped++
+    } catch (err) {
+      console.warn(`[ingest-job] reap failed for ${job.id}:`, err)
+    }
+  }
+  return reaped
+}
+
 // Re-export for callers that build a StepProgress inline.
 export type { IngestStep, StepProgress }

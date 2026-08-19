@@ -126,4 +126,16 @@ export function startIngestWorker(): void {
   reclaim() // sweep on boot (recovers jobs stranded by the last restart)
   setInterval(reclaim, RECLAIM_MS)
   setInterval(() => void tick().catch((err) => console.warn("[ingest-worker] tick error:", err)), POLL_MS)
+
+  // Orphan reaper: failed jobs keep their S3 upload for retry; after the
+  // replay window nobody used, delete the object so storage doesn't leak.
+  const reap = () =>
+    void import("./job")
+      .then(({ reapFailedJobUploads }) => reapFailedJobUploads())
+      .then((n) => {
+        if (n > 0) console.log(`[ingest-worker] reaped ${n} orphaned upload(s)`)
+      })
+      .catch((err) => console.warn("[ingest-worker] reap failed:", err))
+  reap()
+  setInterval(reap, 3_600_000)
 }
