@@ -73,6 +73,29 @@ export async function listKnowledgeGroupsForDashboard(organizationId: string | n
 /**
  * Creates a dashboard knowledge group.
  */
+/**
+ * Documents belonging to any of the given knowledge bases, capped.
+ *
+ * The public way for other features (agent API, public chat, widget) to ask
+ * "what is in these KBs?" — they used to import the repository's Prisma query
+ * directly, which leaked storage internals across a feature boundary and
+ * blocked extracting the KB.
+ */
+/**
+ * KB name + alive-document count for an org, for pickers (Agent Builder).
+ * Replaces outside features importing the `aliveDocumentRelation` Prisma
+ * fragment and hand-rolling the query.
+ */
+export async function listKnowledgeGroupSummaries(organizationId: string | null) {
+  const { findKnowledgeGroupSummaries } = await import("./repository")
+  return findKnowledgeGroupSummaries(organizationId)
+}
+
+export async function listDocumentsInKnowledgeGroups(groupIds: string[], cap = 200) {
+  const { findDocumentsByGroups } = await import("./repository")
+  return findDocumentsByGroups(groupIds, cap)
+}
+
 export async function createKnowledgeGroupForDashboard(params: {
   organizationId: string | null
   role: string | null | undefined

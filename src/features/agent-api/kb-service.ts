@@ -6,7 +6,7 @@
  */
 import { prisma } from "@/lib/prisma"
 import { authenticateV1Request } from "./service"
-import { findDocumentsByGroups } from "@/features/knowledge/groups/repository"
+import { listDocumentsInKnowledgeGroups } from "@/features/knowledge/groups/service"
 import { getKnowledgeDocumentIntelligence } from "@/features/knowledge/documents/service"
 
 export interface KbAuth {
@@ -44,7 +44,7 @@ export async function authenticateKbRequest(
 /** Documents available in the assistant's KB groups. */
 export async function listKbDocuments(a: KbAuth) {
   if (!a.groupIds.length) return []
-  const docs = await findDocumentsByGroups(a.groupIds, 500)
+  const docs = await listDocumentsInKnowledgeGroups(a.groupIds, 500)
   return docs.map((d) => ({
     id: d.id,
     title: d.title,

@@ -97,3 +97,19 @@ export async function findDocumentsByGroups(groupIds: string[], cap = 200) {
     take: cap,
   })
 }
+
+/**
+ * KB id/name + count of alive (non-soft-deleted) documents, org-scoped.
+ * Owns the Prisma shape so callers never need `aliveDocumentRelation`.
+ */
+export async function findKnowledgeGroupSummaries(organizationId: string | null) {
+  const groups = await prisma.knowledgeBaseGroup.findMany({
+    where: { organizationId },
+    select: {
+      id: true,
+      name: true,
+      _count: { select: { documents: aliveDocumentRelation } },
+    },
+  })
+  return groups.map((g) => ({ id: g.id, name: g.name, docCount: g._count.documents }))
+}

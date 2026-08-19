@@ -171,8 +171,8 @@ export async function runV1ChatCompletion(
       // inventory for enumerate-style queries without burning chunks on it.
       if (groupIds && groupIds.length > 0) {
         try {
-          const { findDocumentsByGroups } = await import("@/features/knowledge/groups/repository")
-          const directory = await findDocumentsByGroups(groupIds, 200)
+          const { listDocumentsInKnowledgeGroups } = await import("@/features/knowledge/groups/service")
+          const directory = await listDocumentsInKnowledgeGroups(groupIds, 200)
           if (directory.length > 0 && directory.length < 200) {
             const lines = directory.map((d) => {
               const cats = d.categories?.length ? ` [${d.categories.join(", ")}]` : ""
