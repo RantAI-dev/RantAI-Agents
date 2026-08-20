@@ -44,6 +44,11 @@ export const KB_ENV_SURFACE: KbEnvVar[] = [
   { name: "KB_VECTOR_KNN", purpose: "Use the HNSW KNN operator instead of a full cosine scan", default: "false" },
   { name: "KB_HYBRID_BM25_ENABLED", purpose: "Run BM25 alongside vector search", default: "true" },
   { name: "KB_ENTITY_SEARCH_ENABLED", purpose: "Include the entity/graph arm in retrieval", default: "true" },
+  {
+    name: "KB_ENTITY_NAME_CACHE_TTL_MS",
+    purpose: "How long the per-document entity-name list is reused before refetching",
+    default: "300000",
+  },
   { name: "KB_STANDALONE_QUERY_ENABLED", purpose: "Rewrite follow-ups into standalone queries", default: "false" },
   { name: "KB_INTENT_CLASSIFIER_ENABLED", purpose: "Classify intent before retrieval", default: "false" },
   { name: "KB_QUERY_EXPANSION_ENABLED", purpose: "Expand the query into paraphrases", default: "false" },

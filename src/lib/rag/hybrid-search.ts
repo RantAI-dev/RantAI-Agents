@@ -172,6 +172,16 @@ const DEFAULT_CONFIG: Required<HybridSearchConfig> = {
  * Hybrid Search class
  */
 export class HybridSearch {
+  /** Entity names per document set — see entityNamesFor. */
+  private static entityNameCache = new Map<string, { names: string[]; at: number }>();
+  private static readonly ENTITY_NAME_TTL_MS = Number(process.env.KB_ENTITY_NAME_CACHE_TTL_MS) || 5 * 60 * 1000;
+  private static readonly ENTITY_NAME_CACHE_MAX = 64;
+
+  /** Test seam: drop cached entity names. */
+  static resetEntityNameCache(): void {
+    HybridSearch.entityNameCache.clear();
+  }
+
   private config: Required<HybridSearchConfig>;
   private dbClient: VectorStore | null = null;
 
@@ -303,8 +313,13 @@ export class HybridSearch {
       // is UNSCOPED (no user/file/document filters): the operator returns the
       // global K nearest by index, which can't honor an extra WHERE filter, so
       // any scoped (multi-tenant) query stays on the proven full scan.
+      // OMIT embedding: the vector is needed for the similarity computation but
+      // never read from the result — ChunkResult has no embedding field. Without
+      // the OMIT every candidate row ships its full vector back (4096 floats by
+      // default), which is hundreds of KB per query serialised, transferred and
+      // parsed only to be discarded.
       const fullScanSql = `
-        SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity
+        SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity OMIT embedding
         FROM document_chunk
         WHERE ${whereClause}
         ORDER BY similarity DESC
@@ -323,7 +338,7 @@ export class HybridSearch {
         const ef = Math.max(64, k * 2);
         const filter = scoped ? ` AND ${whereClause}` : "";
         const knnSql = `
-          SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity
+          SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity OMIT embedding
           FROM document_chunk
           WHERE embedding <|${k},${ef}|> $embedding${filter}
           ORDER BY similarity DESC
@@ -336,6 +351,21 @@ export class HybridSearch {
           console.warn(
             `[Hybrid] KNN operator failed, falling back to full scan: ${(err as Error).message.slice(0, 120)}`
           );
+          chunks = [];
+        }
+
+        // An exception is NOT the only failure mode, and it is not even the
+        // common one. `<|k,ef|>` is the HNSW form: against an MTREE index — which
+        // is what rag/store/schema.surql still defines — or against no vector
+        // index at all, SurrealDB answers `status: "OK"` with ZERO rows rather
+        // than erroring. The catch above therefore never fires, and enabling
+        // KB_VECTOR_KNN on a stock schema silently turns vector retrieval off:
+        // answers come back sourceless with nothing in the logs.
+        //
+        // So treat empty as "the index could not serve this" and re-run the
+        // scan. When the corpus really is empty the scan returns empty too, at
+        // the cost of one cheap query.
+        if (chunks.length === 0) {
           const r = await client.query<ChunkResult & { similarity: number }>(fullScanSql, vars);
           chunks = r[0]?.result || [];
         }
@@ -393,6 +423,45 @@ export class HybridSearch {
    * Entity-based search
    * Find chunks that share entities mentioned in the query or top vector results
    */
+  /**
+   * Entity names for a set of documents, cached.
+   *
+   * The name list only changes when a document is ingested, but the entity arm
+   * consults it on every chat turn. Caching turns a 2000-row fetch per turn
+   * into one fetch per document set per TTL window.
+   *
+   * The query filters on `document_id` alone. It used to read
+   * `document_id IN $fileIds OR file_id IN $fileIds`, but `file_id` is not a
+   * field on the SCHEMAFULL `entity` table (see rag/store/schema.surql), so the
+   * second half could never match — while the OR was enough to stop SurrealDB
+   * using `entity_document_id_idx`, turning a lookup into a scan.
+   */
+  private async entityNamesFor(
+    fileIds: string[],
+    client: { query: <T>(sql: string, vars?: Record<string, unknown>) => Promise<Array<{ result?: T[] }>> },
+  ): Promise<string[]> {
+    const key = [...fileIds].sort().join("|");
+    const hit = HybridSearch.entityNameCache.get(key);
+    if (hit && Date.now() - hit.at < HybridSearch.ENTITY_NAME_TTL_MS) return hit.names;
+
+    const entityResult = await client.query<{ name: string }>(
+      `SELECT name FROM entity WHERE document_id IN $fileIds LIMIT 2000;`,
+      { fileIds },
+    );
+    const names = (entityResult[0]?.result || [])
+      .map((e) => e.name?.toLowerCase())
+      .filter((n): n is string => Boolean(n));
+
+    // Bounded: a busy instance serves a handful of knowledge bases, and a stale
+    // entry costs at most one TTL window of missing entity hits.
+    if (HybridSearch.entityNameCache.size >= HybridSearch.ENTITY_NAME_CACHE_MAX) {
+      const oldest = HybridSearch.entityNameCache.keys().next().value
+      if (oldest !== undefined) HybridSearch.entityNameCache.delete(oldest)
+    }
+    HybridSearch.entityNameCache.set(key, { names, at: Date.now() });
+    return names;
+  }
+
   private async entitySearch(
     query: string,
     vectorResults: Array<{ chunk: ChunkResult; score: number }>
@@ -415,24 +484,15 @@ export class HybridSearch {
       // — e.g. "Raja Mulawarman" sits at rank ~440/577, far past 20, and entity/
       // graph search silently returned nothing. Fetch a generous slice (entity
       // rows are tiny) and let the name-match below pick the relevant ones.
-      const entitySql = `
-        SELECT name, type, document_id, file_id, confidence
-        FROM entity
-        WHERE document_id IN $fileIds OR file_id IN $fileIds
-        LIMIT 2000;
-      `;
+      //
+      // Cached per document set: entity names change only at ingest, but this
+      // arm runs on EVERY chat turn, and the vast majority of turns name no
+      // entity at all — so the fetch was paid in full and the result thrown
+      // away. A 34-minute soak at 15 VUs measured p95 10.3s against a 1-VU
+      // baseline of 5.0s; this is one of the repeated costs behind that.
+      const entityNames = await this.entityNamesFor(topFileIds, client);
 
-      const entityResult = await client.query<Entity & { id: string }>(
-        entitySql,
-        { fileIds: topFileIds }
-      );
-
-      const entities = entityResult[0]?.result || [];
-
-      if (entities.length === 0) return [];
-
-      // Extract entity names for matching
-      const entityNames = entities.map((e) => e.name.toLowerCase());
+      if (entityNames.length === 0) return [];
 
       // Check if query mentions any of these entities
       const queryLower = query.toLowerCase();
@@ -443,10 +503,13 @@ export class HybridSearch {
       if (matchedEntities.length === 0) return [];
 
       // Find chunks from documents that contain matched entities
+      // `file_id` is not a field on document_chunk (see rag/store/schema.surql),
+      // so the OR half could never match — it only stopped document_id_idx being
+      // used. And the embedding is dead weight here, as above.
       const chunkSql = `
-        SELECT *
+        SELECT * OMIT embedding
         FROM document_chunk
-        WHERE document_id IN $fileIds OR file_id IN $fileIds
+        WHERE document_id IN $fileIds
         LIMIT $limit;
       `;
 
