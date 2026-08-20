@@ -89,7 +89,8 @@ export const KB_ENV_SURFACE: KbEnvVar[] = [
   { name: "KB_VLM_AT_ANSWER_ENABLED", purpose: "Attach figure crops to the answer call", default: "false" },
   { name: "KB_VLM_AT_ANSWER_TYPES", purpose: "Figure kinds eligible for VLM", default: "chart,diagram" },
   { name: "KB_VLM_AT_ANSWER_MAX_IMAGES", purpose: "Max images per answer", default: "2" },
-  { name: "KB_FIGURE_MIN_RERANK", purpose: "Rerank score a figure must clear", default: "0.3" },
+  { name: "KB_FIGURE_REL_ALPHA", purpose: "Admit figures scoring >= this share of the query's best figure score (scale-free; needs no per-corpus tuning)", default: "0.2" },
+  { name: "KB_FIGURE_MIN_RERANK", purpose: "Escape hatch: replaces the relative rule with an absolute score floor. Absolute floors do not transfer between corpora — leave unset unless pinning old behaviour", default: "unset (relative rule)" },
   { name: "KB_FIGURE_MAX_PER_ANSWER", purpose: "Figures surfaced per answer", default: "3" },
 
   // ── Document intelligence ─────────────────────────────────────────────────

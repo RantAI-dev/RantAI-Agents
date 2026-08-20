@@ -675,6 +675,8 @@ export async function runChat(params: {
               assetKey: s.assetKey ?? null,
               page: s.page ?? null,
               chunkType: s.chunkType ?? null,
+              chunkIndex: s.chunkIndex ?? null,
+              anchorChunkIndex: s.anchorChunkIndex ?? null,
             }))
             vlmResults = hybridResult.results
 
@@ -716,6 +718,8 @@ export async function runChat(params: {
                 assetKey: s.assetKey ?? null,
                 page: s.page ?? null,
                 chunkType: s.chunkType ?? null,
+                chunkIndex: s.chunkIndex ?? null,
+                anchorChunkIndex: s.anchorChunkIndex ?? null,
               }))
               vlmResults = retrievalResult.chunks
 

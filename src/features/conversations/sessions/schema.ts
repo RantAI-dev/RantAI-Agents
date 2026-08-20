@@ -17,6 +17,12 @@ export const PersistedSourceSchema = z.object({
   chunkType: z.string().nullable().optional(),
   content: z.string().optional(),
   similarity: z.number().optional(),
+  /** Reading-order position of the chunk, and — for a figure — the position of
+   *  the chunk it follows. Together they let the client place a figure beside
+   *  the prose it belongs to, which is the only route available for the
+   *  majority of figures that carry no printed caption to match on. */
+  chunkIndex: z.number().nullable().optional(),
+  anchorChunkIndex: z.number().nullable().optional(),
 })
 
 export const DashboardChatSessionIdParamsSchema = z.object({

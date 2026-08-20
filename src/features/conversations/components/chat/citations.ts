@@ -48,6 +48,10 @@ export interface EmbeddableFigure {
    *  caption and to place the figure next to the prose that discusses it. */
   caption?: string | null
   page?: number | null
+  /** Index of the chunk this figure follows in the document's reading order.
+   *  Present for anchored figures; the route by which a caption-less figure
+   *  still lands beside the right sentence. */
+  anchorChunkIndex?: number | null
 }
 
 /** Object key of every figure the model chose to embed inline in `content`. */
@@ -171,6 +175,59 @@ export function autoPlaceFigures(
     const nextBreak = out.indexOf("\n\n", idx)
     const insertAt = nextBreak === -1 ? out.length : nextBreak
     out = out.slice(0, insertAt) + figureMarkdown(f) + out.slice(insertAt)
+  }
+  return out
+}
+
+/**
+ * Place a figure beside the prose it ACTUALLY belongs to, using its anchor.
+ *
+ * This is the rung the other two cannot reach. `autoEmbedFigures` needs the
+ * model to have cited the figure; `autoPlaceFigures` needs the figure's printed
+ * caption to share a distinctive word with the answer. Both are unavailable for
+ * the majority of curriculum figures, which carry no printed caption at all —
+ * their "caption" is a synthetic label built from nearby prose, so matching it
+ * against the answer is close to matching noise.
+ *
+ * The anchor is not a guess: it is the position the figure occupied in the
+ * document's own reading order, recorded at ingest. If the text chunk it
+ * follows is one of the answer's cited sources, then the sentence citing that
+ * source is where the figure goes — no caption required, and the placement is
+ * traceable to a source position rather than inferred from wording.
+ *
+ * Runs after the citation and caption rungs and before the Figures strip, so it
+ * only ever places figures the earlier rules left homeless. A figure whose
+ * anchor was not cited is left alone for the caption rung / strip to handle.
+ */
+export function autoPlaceByAnchor(
+  content: string,
+  figures: EmbeddableFigure[],
+  alreadyInlined: Set<number>,
+  /** Citation number → the chunk it came from, as `documentId::chunkIndex`. */
+  citedChunkKeys: Map<number, string>,
+): string {
+  if (!content || !figures?.length || !citedChunkKeys.size) return content
+  let out = content
+  for (const f of figures) {
+    if (alreadyInlined.has(f.n)) continue
+    if (f.anchorChunkIndex == null) continue
+    const anchorKey = `${f.documentId}::${f.anchorChunkIndex}`
+    // Which citation number carries this figure's anchor chunk?
+    let anchorN: number | null = null
+    for (const [n, key] of citedChunkKeys) {
+      if (key === anchorKey) {
+        anchorN = n
+        break
+      }
+    }
+    if (anchorN === null) continue
+    const m = new RegExp(`\\[${anchorN}\\](?!\\()`).exec(out)
+    if (!m) continue // the anchor's source was retrieved but never cited in prose
+    const after = m.index + m[0].length
+    const nextBreak = out.indexOf("\n\n", after)
+    const insertAt = nextBreak === -1 ? out.length : nextBreak
+    out = out.slice(0, insertAt) + figureMarkdown(f) + out.slice(insertAt)
+    alreadyInlined.add(f.n)
   }
   return out
 }

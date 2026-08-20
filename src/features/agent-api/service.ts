@@ -205,7 +205,7 @@ export async function runV1ChatCompletion(
       if (hybridResult.context) {
         const formattedContext = formatHybridContextForPrompt(hybridResult)
         systemPrompt = `${systemPrompt}\n\n${formattedContext}`
-        ragSources = hybridResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null }))
+        ragSources = hybridResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null, chunkIndex: s.chunkIndex ?? null, anchorChunkIndex: s.anchorChunkIndex ?? null }))
         vlmResults = hybridResult.results
         console.log(`[V1 API] RAG hybrid: ${hybridResult.results.length} chunks`)
       } else {
@@ -216,7 +216,7 @@ export async function runV1ChatCompletion(
         if (retrievalResult.context) {
           const formattedContext = formatContextForPrompt(retrievalResult)
           systemPrompt = `${systemPrompt}\n\n${formattedContext}`
-          ragSources = retrievalResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null }))
+          ragSources = retrievalResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null, chunkIndex: s.chunkIndex ?? null, anchorChunkIndex: s.anchorChunkIndex ?? null }))
           vlmResults = retrievalResult.chunks
           console.log(`[V1 API] RAG vector: ${retrievalResult.chunks.length} chunks`)
         }

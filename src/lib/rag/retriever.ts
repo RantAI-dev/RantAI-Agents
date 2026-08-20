@@ -10,6 +10,7 @@ import {
 } from "./hybrid-search";
 import { getRagConfig } from "./config";
 import { getDefaultReranker } from "./rerankers";
+import { admissionRule, admit, describeRule } from "./figure-admission";
 
 /**
  * RAG Retriever — retrieves relevant context for user queries.
@@ -33,6 +34,8 @@ export interface HybridRetrievalResult {
     assetKey?: string | null;
     page?: number | null;
     chunkType?: string | null;
+    chunkIndex?: number | null;
+    anchorChunkIndex?: number | null;
   }>;
   results: HybridSearchResult[];
   stats: HybridSearchStats;
@@ -48,6 +51,8 @@ export interface RetrievalResult {
     assetKey?: string | null;
     page?: number | null;
     chunkType?: string | null;
+    chunkIndex?: number | null;
+    anchorChunkIndex?: number | null;
   }>;
   chunks: SearchResult[];
 }
@@ -61,50 +66,44 @@ export interface RetrievalResult {
  * loosely matches — even when the picture itself is off-topic. Text chunks are
  * always kept; figures are gated by their rerank score and capped in number.
  *
- * Tunable via env (no rebuild needed to adjust):
- *   KB_FIGURE_MIN_RERANK      absolute rerank-score floor a figure must clear
- *                             (unset = disabled; bge-reranker score scale is
- *                             logged below so the right value can be picked).
- *   KB_FIGURE_MAX_PER_ANSWER  max figures kept per retrieval (default 3).
+ * Admission is shared with the figure-join path — see figure-admission.ts for
+ * why the rule is relative to the query's own best score rather than an
+ * absolute constant. Tunable via env, no rebuild:
+ *   KB_FIGURE_REL_ALPHA       share of the best figure score required (0.2)
+ *   KB_FIGURE_MIN_RERANK      escape hatch: absolute floor instead
+ *   KB_FIGURE_MAX_PER_ANSWER  max figures kept per retrieval (default 3)
+ *
+ * This path used to carry its OWN absolute floor, defaulting to 0.2 — the value
+ * measured to discard every candidate on every query once figures are ranked by
+ * printed caption. Worse, it logged `floor=off` whenever the env var was unset,
+ * while 0.2 was in force: the log actively denied the thing that was happening.
+ * Both the default and the misleading log are gone.
  */
 function applyFigurePolicy(
   chunks: SearchResult[],
   scoreById: Map<string, number>,
 ): SearchResult[] {
-  const rawMin = process.env.KB_FIGURE_MIN_RERANK;
-  // Default 0.2 — see fetchMatchingFigures (bge-reranker sigmoid scale).
-  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : 0.2;
-  const figMax = Number(process.env.KB_FIGURE_MAX_PER_ANSWER) || 3;
+  const rule = admissionRule();
 
-  let kept = 0;
-  const dropped: Array<{ score: number; label: string }> = [];
-  const out = chunks.filter((c) => {
-    if (c.chunkType !== "figure") return true; // text always kept
-    const score = scoreById.get(c.id);
-    const belowFloor = !Number.isNaN(figMin) && score !== undefined && score < figMin;
-    const overCap = kept >= figMax;
-    if (belowFloor || overCap) {
-      dropped.push({
-        score: score ?? NaN,
-        label: `${(c.section ?? c.content ?? "").slice(0, 40)}${overCap ? " [over-cap]" : ""}`,
-      });
-      return false;
-    }
-    kept++;
-    return true;
-  });
+  const figures = chunks.filter((c) => c.chunkType === "figure");
+  if (!figures.length) return chunks;
 
-  // Log figure scores (kept + dropped) so KB_FIGURE_MIN_RERANK can be tuned to
-  // the reranker's actual scale from real queries.
-  const figScores = chunks
-    .filter((c) => c.chunkType === "figure")
-    .map((c) => `${(scoreById.get(c.id) ?? NaN).toFixed(3)}:${(c.section ?? "").slice(0, 24)}`);
-  if (figScores.length) {
-    console.log(
-      `[RAG] figure policy: kept ${kept}/${figScores.length} (floor=${rawMin ?? "off"} cap=${figMax}) scores=[${figScores.join(" | ")}]`,
-    );
-  }
-  return out;
+  // Figures with no score yet are scored 0; `admit` keeps them only when the
+  // whole field is unscored, which is the "ranker told us nothing" case.
+  const admitted = admit(
+    figures.map((c) => ({ item: c, score: scoreById.get(c.id) ?? 0 })),
+    rule,
+  );
+  const keepIds = new Set(admitted.map((a) => a.item.id));
+
+  const scores = figures
+    .map((c) => `${(scoreById.get(c.id) ?? NaN).toFixed(3)}:${(c.section ?? "").slice(0, 24)}`)
+    .join(" | ");
+  console.log(
+    `[RAG] figure policy: kept ${keepIds.size}/${figures.length} (${describeRule(rule)}) scores=[${scores}]`,
+  );
+
+  return chunks.filter((c) => c.chunkType !== "figure" || keepIds.has(c.id));
 }
 
 /**
@@ -241,7 +240,7 @@ export async function retrieveContext(
   // otherwise the model cites excerpt positions the deduped card list lacks.
   const sourceMap = new Map<
     string,
-    { documentId: string | null; documentTitle: string; section: string | null; categories: string[]; assetKey?: string | null; page?: number | null; chunkType?: string | null }
+    { documentId: string | null; documentTitle: string; section: string | null; categories: string[]; assetKey?: string | null; page?: number | null; chunkType?: string | null; chunkIndex?: number | null; anchorChunkIndex?: number | null }
   >();
   for (const chunk of chunks) {
     const key = sourceDedupeKey(chunk);
@@ -254,6 +253,8 @@ export async function retrieveContext(
         assetKey: chunk.assetKey ?? null,
         page: chunk.page ?? null,
         chunkType: chunk.chunkType ?? null,
+        chunkIndex: chunk.chunkIndex ?? null,
+        anchorChunkIndex: chunk.anchorChunkIndex ?? null,
       });
     }
   }
@@ -496,7 +497,7 @@ export async function hybridRetrieve(
   // so the model's inline [N] citations always resolve to a real source card.
   const sourceMap = new Map<
     string,
-    { documentId: string | null; documentTitle: string; section: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }
+    { documentId: string | null; documentTitle: string; section: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null; chunkIndex?: number | null; anchorChunkIndex?: number | null }
   >();
   for (const result of results) {
     const key = sourceDedupeKey({
@@ -512,6 +513,8 @@ export async function hybridRetrieve(
         assetKey: result.assetKey ?? null,
         page: result.page ?? null,
         chunkType: result.chunkType ?? null,
+        chunkIndex: result.chunkIndex ?? null,
+        anchorChunkIndex: result.anchorChunkIndex ?? null,
       });
     }
   }

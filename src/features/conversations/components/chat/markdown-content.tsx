@@ -10,7 +10,14 @@ interface MarkdownContentProps {
   className?: string
   /** RAG citation wiring — turns `[n]` into clickable source chips and embeds
    *  `[figure:N]` figures inline. */
-  citations?: { messageId: string; count: number; figures?: EmbeddableFigure[] }
+  citations?: {
+    messageId: string
+    count: number
+    figures?: EmbeddableFigure[]
+    /** Citation number → `documentId::chunkIndex` of the chunk it came from,
+     *  so an anchored figure can be placed beside the sentence citing it. */
+    citedChunkKeys?: Map<number, string>
+  }
 }
 
 // Pace character delivery into Streamdown via requestAnimationFrame so

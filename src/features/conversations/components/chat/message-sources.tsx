@@ -14,6 +14,11 @@ export interface Source {
   assetKey?: string | null
   page?: number | null
   chunkType?: string | null
+  /** Reading-order position of this chunk, and — for a figure — the position of
+   *  the chunk it follows (its anchor). The anchor is how a figure with no
+   *  printed caption still lands next to the prose it illustrates. */
+  chunkIndex?: number | null
+  anchorChunkIndex?: number | null
 }
 
 interface MessageSourcesProps {
