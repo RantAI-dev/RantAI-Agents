@@ -52,7 +52,8 @@ describe("cron workflows service", () => {
     ] as never)
 
     const executeWorkflow = vi.fn(async () => "run_1")
-    const now = new Date("2026-03-23T12:30:00.000Z")
+    // Local time, for the same reason as the matchesCron cases below.
+    const now = new Date(2026, 2, 23, 12, 30, 0)
 
     const result = await runWorkflowCron(
       {
@@ -74,14 +75,20 @@ describe("cron workflows service", () => {
 })
 
 describe("matchesCron", () => {
+  // Cron fields are evaluated against the SERVER'S LOCAL TIME (matchesCron
+  // reads getHours/getDate/getDay, not their UTC counterparts). These dates are
+  // therefore built in local time: written as a UTC instant, the suite passed
+  // only on a UTC machine and failed anywhere else — CI is UTC, so the gap
+  // stayed invisible. Behaviour is unchanged here; the semantics are just no
+  // longer implicit.
   it("supports wildcard and exact values", () => {
-    const date = new Date("2026-03-23T12:30:00.000Z")
+    const date = new Date(2026, 2, 23, 12, 30, 0)
     expect(matchesCron("30 12 * * *", date)).toBe(true)
     expect(matchesCron("0 12 * * *", date)).toBe(false)
   })
 
   it("supports step, list, and range", () => {
-    const date = new Date("2026-03-23T12:30:00.000Z")
+    const date = new Date(2026, 2, 23, 12, 30, 0)
     expect(matchesCron("*/15 12 * * *", date)).toBe(true)
     expect(matchesCron("0,30 12 * * *", date)).toBe(true)
     expect(matchesCron("25-35 12 * * *", date)).toBe(true)
