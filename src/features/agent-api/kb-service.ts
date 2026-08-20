@@ -5,6 +5,7 @@
  * `kb:read` scope. Read-only, scoped to the key's assistant's KB groups.
  */
 import { prisma } from "@/lib/prisma"
+import { expandGroupIds } from "@/features/knowledge/groups/tree"
 import { authenticateV1Request } from "./service"
 import { listDocumentsInKnowledgeGroups } from "@/features/knowledge/groups/service"
 import { getKnowledgeDocumentIntelligence } from "@/features/knowledge/documents/service"
@@ -57,8 +58,14 @@ export async function listKbDocuments(a: KbAuth) {
  *  belongs to the assistant's KB groups. Returns null if not found/authorized. */
 export async function getKbDocumentGraph(a: KbAuth, documentId: string) {
   if (!a.groupIds.length) return null
+  // Subtree-expanded: an assistant scoped to a parent KB can retrieve from its
+  // children, so the graph endpoint has to accept the same set of documents
+  // retrieval does — otherwise it 404s on a document the assistant just cited.
   const owned = await prisma.document.findFirst({
-    where: { id: documentId, groups: { some: { groupId: { in: a.groupIds } } } },
+    where: {
+      id: documentId,
+      groups: { some: { groupId: { in: await expandGroupIds(a.groupIds) } } },
+    },
     select: { id: true, title: true },
   })
   if (!owned) return null

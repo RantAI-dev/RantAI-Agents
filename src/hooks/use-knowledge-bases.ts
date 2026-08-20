@@ -15,6 +15,8 @@ export interface KnowledgeBase {
   id: string
   name: string
   color: string | null
+  /** null = top-level. Present so pickers can render the KB tree. */
+  parentId?: string | null
   documentCount: number
 }
 

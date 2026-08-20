@@ -319,6 +319,22 @@ model KnowledgeBaseGroup {
   color       String? // Hex color for UI display
   documents   DocumentGroup[]
 
+  // ── Nesting ────────────────────────────────────────────────────────────────
+  // A KB may sit inside another KB, so a library can be organised the way its
+  // owner thinks about it ("Kurikulum Merdeka" > "Kelas VII" > "IPA") instead
+  // of as one flat list. Selecting a KB for retrieval selects its whole
+  // subtree; selecting a child selects only that child. Depth is capped in
+  // application code (see features/knowledge/groups/tree.ts) — the database
+  // only enforces that a parent exists.
+  //
+  // onDelete: Restrict, deliberately. Cascade would delete a whole subtree of
+  // KBs (and their document links) on one click, and SetNull would silently
+  // promote children to the root where they'd appear alongside unrelated KBs.
+  // The API asks for an explicit cascade instead.
+  parentId String?
+  parent   KnowledgeBaseGroup?  @relation("KnowledgeBaseTree", fields: [parentId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  children KnowledgeBaseGroup[] @relation("KnowledgeBaseTree")
+
   // Organization scope (null = global/shared)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -328,6 +344,7 @@ model KnowledgeBaseGroup {
   updatedAt DateTime @updatedAt
 
   @@index([organizationId])
+  @@index([parentId])
 }
 
 // Junction table for many-to-many Document <-> KnowledgeBaseGroup

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { downloadFile } from "@/lib/s3"
 import { findEnabledWidgetEmbedKey, findWidgetAssistantById } from "@/features/widget/chat/repository"
+import { expandGroupIds } from "@/features/knowledge/groups/tree"
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -44,9 +45,15 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "No knowledge base for this key" }, { status: 403, headers: CORS })
     }
 
-    // Access guard: the document must be in one of the assistant's KB groups.
+    // Access guard: the document must be in one of the assistant's KB groups,
+    // or in a KB nested under one. Retrieval expands the same way, so without
+    // this an assistant scoped to a parent KB would happily cite a figure from
+    // a child KB and then 403 the request for the image itself.
     const inScope = await prisma.documentGroup.findFirst({
-      where: { documentId, groupId: { in: assistant.knowledgeBaseGroupIds } },
+      where: {
+        documentId,
+        groupId: { in: await expandGroupIds(assistant.knowledgeBaseGroupIds) },
+      },
       select: { id: true },
     })
     if (!inScope) {

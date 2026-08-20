@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import type { Prisma } from "@prisma/client"
 import { aliveDocumentRelation, aliveDocumentWhere } from "@/features/knowledge/documents/where-alive"
+import { expandGroupIds } from "@/features/knowledge/groups/tree"
 
 export async function listKnowledgeGroupsByOrganization(organizationId: string | null) {
   return prisma.knowledgeBaseGroup.findMany({
@@ -9,6 +10,8 @@ export async function listKnowledgeGroupsByOrganization(organizationId: string |
           OR: [{ organizationId }, { organizationId: null }],
         }
       : { organizationId: null },
+    // Name order within the whole list; the tree builder re-nests, and siblings
+    // keep this order because it preserves input order among children.
     orderBy: { name: "asc" },
     include: {
       _count: {
@@ -82,10 +85,15 @@ export async function deleteKnowledgeGroup(id: string) {
  */
 export async function findDocumentsByGroups(groupIds: string[], cap = 200) {
   if (!groupIds.length) return []
+  // Expanded for the same reason retrieval expands: a selected KB stands for
+  // its whole subtree. If this directory listed only the directly-attached
+  // documents, the prompt would tell the model a nested document does not
+  // exist while retrieval was busy quoting it.
+  const scope = await expandGroupIds(groupIds)
   return prisma.document.findMany({
     where: {
       ...aliveDocumentWhere,
-      groups: { some: { groupId: { in: groupIds } } },
+      groups: { some: { groupId: { in: scope } } },
     },
     select: {
       id: true,
@@ -108,8 +116,14 @@ export async function findKnowledgeGroupSummaries(organizationId: string | null)
     select: {
       id: true,
       name: true,
+      parentId: true,
       _count: { select: { documents: aliveDocumentRelation } },
     },
   })
-  return groups.map((g) => ({ id: g.id, name: g.name, docCount: g._count.documents }))
+  return groups.map((g) => ({
+    id: g.id,
+    name: g.name,
+    parentId: g.parentId,
+    docCount: g._count.documents,
+  }))
 }
