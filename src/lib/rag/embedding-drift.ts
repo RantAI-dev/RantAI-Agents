@@ -1,4 +1,4 @@
-import { getSurrealClient } from "@/lib/surrealdb"
+import { kb } from "@/lib/kb-runtime/runtime"
 import { getRagConfig } from "./config"
 
 export interface DriftReport {
@@ -21,7 +21,7 @@ export interface DriftReport {
  */
 export async function checkEmbeddingDrift(): Promise<DriftReport> {
   const cfg = getRagConfig()
-  const client = await getSurrealClient()
+  const client = kb("vectors")
 
   const result = await client.query<{ model: string | null; chunkCount: number }>(
     `SELECT embedding_model AS model, count() AS chunkCount FROM document_chunk GROUP BY model`

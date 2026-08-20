@@ -10,6 +10,7 @@ import {
 } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
 import { getArtifactRegistryEntry } from "@/features/conversations/components/chat/artifacts/registry"
+import { DOCUMENT_MIME_TYPES, EXT_TO_MIME, KB_MAX_FILE_BYTES } from "@/lib/files/mime-types"
 
 // S3 configuration from environment variables
 const S3_CONFIG = {
@@ -401,49 +402,11 @@ export async function getFileUrl(key: string, expiresIn?: number): Promise<strin
  */
 export const UPLOAD_LIMITS = {
   document: {
-    maxSize: 50 * 1024 * 1024, // 50MB
-    allowedTypes: [
-      // Existing
-      "application/pdf",
-      "image/png",
-      "image/jpeg",
-      "image/gif",
-      "image/webp",
-      "image/heic",
-      "text/markdown",
-      "text/plain",
-      // Office (Tier 1)
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-      // Structured data (Tier 1)
-      "text/csv",
-      "text/tab-separated-values",
-      "application/json",
-      "application/x-ndjson",
-      "text/html",
-      "application/xml",
-      "text/xml",
-      // Rich text & ebooks (Tier 2)
-      "application/rtf",
-      "application/epub+zip",
-      // Config / code (Tier 2)
-      "text/yaml",
-      "application/toml",
-      "text/x-python",
-      "text/javascript",
-      "text/typescript",
-      // Legacy Office (Tier 3)
-      "application/msword",
-      "application/vnd.ms-excel",
-      "application/vnd.ms-powerpoint",
-      // OpenDocument (Tier 3)
-      "application/vnd.oasis.opendocument.text",
-      "application/vnd.oasis.opendocument.spreadsheet",
-      // 3D models (Tier 3)
-      "model/gltf+json",
-      "model/gltf-binary",
-    ],
+    // Single source of truth: the KB registry in lib/files/mime-types.ts.
+    // This list used to be a hand-maintained copy that drifted from the
+    // client extension whitelist and the registry.
+    maxSize: KB_MAX_FILE_BYTES,
+    allowedTypes: [...DOCUMENT_MIME_TYPES] as string[],
   },
   logo: {
     maxSize: 5 * 1024 * 1024, // 5MB
@@ -507,17 +470,33 @@ export type UploadType = keyof typeof UPLOAD_LIMITS
 export function validateUpload(
   type: UploadType,
   size: number,
-  mimeType: string
+  mimeType: string,
+  filename?: string
 ): { valid: boolean; error?: string } {
   const limits = UPLOAD_LIMITS[type]
+  const label = filename ? `"${filename}" ` : "File "
 
   if (size > limits.maxSize) {
     const maxMB = Math.round(limits.maxSize / (1024 * 1024))
-    return { valid: false, error: `File size exceeds ${maxMB}MB limit` }
+    const sizeMB = (size / (1024 * 1024)).toFixed(1)
+    return { valid: false, error: `${label}is too large (${sizeMB}MB) — the limit is ${maxMB}MB.` }
   }
 
-  if (!limits.allowedTypes.includes(mimeType)) {
-    return { valid: false, error: `File type ${mimeType} is not allowed` }
+  // Browsers send an empty or generic MIME for many code/config files; fall
+  // back to the extension registry so a whitelisted .py/.env/.log upload
+  // isn't rejected for a missing content type.
+  let effective = mimeType
+  if (filename && !(limits.allowedTypes as string[]).includes(effective)) {
+    const dot = filename.lastIndexOf(".")
+    const mapped = dot >= 0 ? EXT_TO_MIME[filename.slice(dot).toLowerCase()] : undefined
+    if (mapped) effective = mapped
+  }
+
+  if (!(limits.allowedTypes as string[]).includes(effective)) {
+    return {
+      valid: false,
+      error: `${label}has an unsupported type (${mimeType || "unknown"}). See "Supported formats" for the accepted list.`,
+    }
   }
 
   return { valid: true }

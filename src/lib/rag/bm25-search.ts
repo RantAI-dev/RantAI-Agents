@@ -1,4 +1,4 @@
-import { getSurrealClient } from "../surrealdb";
+import { kb } from "@/lib/kb-runtime/runtime";
 
 export interface Bm25Result {
   id: string;
@@ -12,11 +12,11 @@ type Row = { id: string; document_id: string; content: string; score: number };
 /**
  * BM25 full-text search over document_chunk.content via SurrealDB SEARCH index.
  * Relies on the `content_search_idx` index + `kb_en` analyzer defined in
- * src/lib/surrealdb/schema.surql (Phase 7 additions).
+ * src/lib/rag/store/schema.surql (Phase 7 additions).
  */
 export async function bm25Search(query: string, limit: number): Promise<Bm25Result[]> {
   if (!query.trim()) return [];
-  const surreal = await getSurrealClient();
+  const surreal = kb("vectors");
   // `limit` is interpolated (not $-bound) after number-sanitization — SurrealDB's
   // LIMIT clause binds inconsistently across versions, and Math.max/floor prevents
   // anything non-numeric from reaching the query string.

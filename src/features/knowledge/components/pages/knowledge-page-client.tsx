@@ -205,7 +205,19 @@ export default function KnowledgePageClient({
                           etaSeconds: e.etaSeconds,
                           error: e.error ?? null,
                         }
-                      : null,
+                      : e.status === "failed"
+                        ? {
+                            // Keep the jobId + error so the failed card can
+                            // offer Retry without waiting for a refetch.
+                            jobId: e.jobId,
+                            step: e.step,
+                            progress: e.progress,
+                            stepCurrent: null,
+                            stepTotal: null,
+                            etaSeconds: null,
+                            error: e.error ?? null,
+                          }
+                        : null,
                 }
               : d
           )

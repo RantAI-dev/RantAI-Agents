@@ -11,6 +11,7 @@
  *
  * Gated by config: vlmAtAnswerEnabled, vlmAtAnswerTypes, vlmAtAnswerMaxImages.
  */
+import { kb } from "@/lib/kb-runtime/runtime"
 
 /** Minimal shape of a retrieved chunk this selector needs. */
 export interface FigureCandidate {
@@ -95,11 +96,11 @@ export type FigurePart = { type: "text"; text: string } | { type: "image"; image
  */
 export async function buildFigureParts(selected: SelectedFigure[]): Promise<FigurePart[]> {
   if (!selected.length) return []
-  const { downloadFile } = await import("@/lib/s3")
+  const blob = kb("blob")
   const parts: FigurePart[] = []
   for (const fig of selected) {
     try {
-      const buf = await downloadFile(fig.assetKey)
+      const buf = await blob.download(fig.assetKey)
       parts.push({
         type: "text",
         text: `Gambar untuk sumber [${fig.sourceNumber}] (${fig.caption.replace(/\s+/g, " ").slice(0, 120)}). Baca isi gambar ini untuk menjawab, dan kutip sebagai [${fig.sourceNumber}].`,

@@ -9,7 +9,7 @@ export default defineConfig({
       // component imports it. In vitest there is no "react-server" resolver
       // condition, so we alias it to the empty shim the package provides
       // for exactly this case.
-      "server-only": path.resolve(__dirname, "node_modules/server-only/empty.js"),
+      "server-only": path.resolve(__dirname, "tests/stubs/server-only.ts"),
     },
   },
   test: {
@@ -24,7 +24,7 @@ export default defineConfig({
     // transitively import @/lib/icons (registry.ts, create-artifact.ts, etc.)
     // only need icon symbols to exist as truthy objects — they never render
     // the components.
-    setupFiles: ["./tests/setup-icons-stub.ts"],
+    setupFiles: ["./tests/setup-icons-stub.ts", "./tests/setup-kb-runtime.ts"],
     // Keep default environment as node; tests that need jsdom declare it
     // per-file via `// @vitest-environment jsdom` (vitest 4 idiom).
   },

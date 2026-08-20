@@ -25,31 +25,27 @@ export interface StepProgress {
   total?: number
 }
 
-// Step weights sum to 100. Enhanced mode runs entity extraction; basic does
-// not, so its weight is redistributed to the remaining steps.
-const WEIGHTS_ENHANCED: Record<IngestStep, number> = {
+/** Which optional pipeline steps the resolved per-type policy runs. Skipped
+ *  steps carry zero weight so the bar never reserves space for work that will
+ *  not happen (an xlsx used to "jump" the 10% figure slice instantly). */
+export interface ProgressFlags {
+  entities: boolean
+  figures: boolean
+}
+
+// Relative step costs; skipped steps are zeroed and the rest normalized to 100.
+const BASE_COSTS: Record<IngestStep, number> = {
   queued: 0,
   extracting: 45,
-  chunking: 3,
+  chunking: 4,
   extracting_entities: 22,
   processing_figures: 10,
   embedding: 12,
-  storing: 8,
+  storing: 7,
   done: 0,
 }
 
-const WEIGHTS_BASIC: Record<IngestStep, number> = {
-  queued: 0,
-  extracting: 55,
-  chunking: 5,
-  extracting_entities: 0,
-  processing_figures: 10,
-  embedding: 18,
-  storing: 12,
-  done: 0,
-}
-
-const ORDER_ENHANCED: IngestStep[] = [
+const ORDER: IngestStep[] = [
   "queued",
   "extracting",
   "chunking",
@@ -60,15 +56,14 @@ const ORDER_ENHANCED: IngestStep[] = [
   "done",
 ]
 
-const ORDER_BASIC: IngestStep[] = [
-  "queued",
-  "extracting",
-  "chunking",
-  "processing_figures",
-  "embedding",
-  "storing",
-  "done",
-]
+function weightsFor(flags: ProgressFlags): Record<IngestStep, number> {
+  const w = { ...BASE_COSTS }
+  if (!flags.entities) w.extracting_entities = 0
+  if (!flags.figures) w.processing_figures = 0
+  const sum = ORDER.reduce((a, s) => a + w[s], 0)
+  for (const s of ORDER) w[s] = (w[s] / sum) * 100
+  return w
+}
 
 export const STEP_LABELS: Record<IngestStep, string> = {
   queued: "Queued",
@@ -88,17 +83,16 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
  * Returns 100 only for `done`; every other step caps at 99 so the bar never
  * shows "complete" before the job actually finishes.
  */
-export function computeOverallProgress(sp: StepProgress, enhanced: boolean): number {
+export function computeOverallProgress(sp: StepProgress, flags: ProgressFlags): number {
   if (sp.step === "done") return 100
 
-  const order = enhanced ? ORDER_ENHANCED : ORDER_BASIC
-  const weights = enhanced ? WEIGHTS_ENHANCED : WEIGHTS_BASIC
+  const weights = weightsFor(flags)
 
-  const idx = order.indexOf(sp.step)
+  const idx = ORDER.indexOf(sp.step)
   if (idx < 0) return 0
 
   let completed = 0
-  for (let i = 0; i < idx; i++) completed += weights[order[i]]
+  for (let i = 0; i < idx; i++) completed += weights[ORDER[i]]
 
   const fraction =
     sp.current != null && sp.total != null && sp.total > 0 ? clamp(sp.current / sp.total, 0, 1) : 0

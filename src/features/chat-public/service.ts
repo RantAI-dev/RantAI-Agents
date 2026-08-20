@@ -599,8 +599,8 @@ export async function runChat(params: {
       // prompt and the model would ignore it anyway.
       if (knowledgeBaseGroupIds && knowledgeBaseGroupIds.length > 0) {
         try {
-          const { findDocumentsByGroups } = await import("@/features/knowledge/groups/repository")
-          const directory = await findDocumentsByGroups(knowledgeBaseGroupIds, 200)
+          const { listDocumentsInKnowledgeGroups } = await import("@/features/knowledge/groups/service")
+          const directory = await listDocumentsInKnowledgeGroups(knowledgeBaseGroupIds, 200)
           if (directory.length > 0 && directory.length < 200) {
             const lines = directory.map((d) => {
               const cats = d.categories?.length ? ` [${d.categories.join(", ")}]` : ""

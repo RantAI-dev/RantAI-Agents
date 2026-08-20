@@ -1,5 +1,4 @@
-import { prisma } from "@/lib/prisma"
-import { decryptCredential } from "@/lib/workflow/credentials"
+import { kb } from "@/lib/kb-runtime/runtime"
 import type { RagConfig } from "./config"
 
 /**
@@ -55,32 +54,22 @@ export async function refreshKbOverrides(): Promise<void> {
   if (refreshing) return refreshing
   refreshing = (async () => {
     try {
-      const row = await prisma.platformSetting.findUnique({
-        where: { key: KB_CONFIG_SETTING_KEY },
-      })
-      const next = row ? sanitize(row.value) : {}
+      const raw = await kb("config").readKbSetting()
+      const next = raw ? sanitize(raw) : {}
       // "Use a managed provider" mode: kb_config.embeddingProviderId points at
       // an LlmProvider row; endpoint + key are derived from it here so the
       // admin configures the server once (provider) instead of re-pasting
       // URL/key. Explicit manual embeddingBaseUrl/ApiKey overrides never mix
       // in — the provider wins while set.
-      const raw = row?.value as Record<string, unknown> | undefined
       const providerId = raw && typeof raw.embeddingProviderId === "string" ? raw.embeddingProviderId : null
       if (providerId) {
-        const provider = await prisma.llmProvider.findUnique({ where: { id: providerId } })
+        // The adapter owns the LlmProvider lookup and key decryption — the
+        // engine never handles ciphertext.
+        const provider = await kb("config").resolveProvider(providerId)
         if (provider?.enabled) {
           const base = (provider.baseUrl ?? "https://openrouter.ai/api/v1").replace(/\/+$/, "")
           next.embeddingBaseUrl = `${base}/embeddings`
-          if (provider.encryptedApiKey) {
-            try {
-              const key = decryptCredential(provider.encryptedApiKey).apiKey
-              if (typeof key === "string") next.embeddingApiKey = key
-            } catch (err) {
-              console.warn(
-                `[kb-config] could not decrypt embedding provider key: ${err instanceof Error ? err.message : err}`
-              )
-            }
-          }
+          if (provider.apiKey) next.embeddingApiKey = provider.apiKey
         } else {
           console.warn(
             `[kb-config] embeddingProviderId "${providerId}" missing or disabled — falling back to manual/env embedding config`

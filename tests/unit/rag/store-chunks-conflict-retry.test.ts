@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { configureKb } from "@/lib/kb-runtime/runtime"
 import type { Chunk } from "@/lib/rag/chunker"
 
 function makeChunk(overrides?: Partial<Chunk["metadata"]>): Chunk {
@@ -14,9 +15,18 @@ function makeChunk(overrides?: Partial<Chunk["metadata"]>): Chunk {
 }
 
 function mockSurreal(query: ReturnType<typeof vi.fn>) {
-  vi.doMock("@/lib/surrealdb", () => ({
-    getSurrealClient: async () => ({ query }),
-  }))
+  configureKb({
+    vectors: {
+      query,
+      relate: vi.fn(async () => {}),
+      cleanupDocumentIntelligence: vi.fn(async () => ({
+        deletedRelationTables: 0,
+        entitiesDeleted: false,
+        chunksDeleted: false,
+      })),
+      healthCheck: vi.fn(async () => true),
+    },
+  })
   vi.doMock("@/lib/rag/config", () => ({
     getRagConfig: () => ({ embeddingDim: 4 }),
   }))

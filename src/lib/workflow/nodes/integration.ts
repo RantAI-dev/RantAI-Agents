@@ -3,7 +3,7 @@ import type { ExecutionContext } from "../engine"
 import { buildTemplateContext } from "../engine"
 import { resolveTemplate } from "../template-engine"
 import { prisma } from "@/lib/prisma"
-import { smartRetrieve } from "@/lib/rag/retriever"
+import { retrieveKnowledge } from "@/lib/kb-client/facade"
 import { getS3Client, getBucket } from "@/lib/s3"
 import { GetObjectCommand, ListObjectsV2Command } from "@aws-sdk/client-s3"
 
@@ -30,7 +30,7 @@ export async function executeIntegration(
         query = extractSearchQuery(input, context)
       }
 
-      const result = await smartRetrieve(query, {
+      const result = await retrieveKnowledge(query, {
         maxChunks: ragData.topK || 5,
         groupIds: ragData.knowledgeBaseGroupIds?.length > 0
           ? ragData.knowledgeBaseGroupIds

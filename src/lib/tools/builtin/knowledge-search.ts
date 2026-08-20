@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { smartRetrieve } from "@/lib/rag/retriever"
+import { retrieveKnowledge } from "@/lib/kb-client/facade"
 import type { ToolDefinition } from "../types"
 
 export const knowledgeSearchTool: ToolDefinition = {
@@ -17,7 +17,9 @@ export const knowledgeSearchTool: ToolDefinition = {
       .describe("Maximum number of results to return"),
   }),
   execute: async (params) => {
-    const result = await smartRetrieve(params.query as string, {
+    // Routes to the standalone KB service when KB_SERVICE_URL is set,
+    // otherwise runs the engine in-process.
+    const result = await retrieveKnowledge(params.query as string, {
       maxChunks: (params.maxResults as number) || 5,
     })
     return {

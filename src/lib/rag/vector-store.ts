@@ -1,5 +1,4 @@
-import { prisma } from "@/lib/prisma";
-import { getSurrealClient } from "@/lib/surrealdb";
+import { kb } from "@/lib/kb-runtime/runtime";
 import { generateEmbedding, generateEmbeddings } from "./embeddings";
 import { Chunk } from "./chunker";
 
@@ -48,7 +47,7 @@ export async function searchSimilar(
   const queryEmbedding = await generateEmbedding(query);
 
   // Get SurrealDB client
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   // First, get document IDs that match the filters (if any)
   let documentIds: string[] | null = null;
@@ -72,12 +71,10 @@ export async function searchSimilar(
       };
     }
 
-    const filteredDocs = await prisma.document.findMany({
-      where: { ...whereClause, deletedAt: null },
-      select: { id: true },
+    documentIds = await kb("documents").findAliveIdsByFilter({
+      category: categoryFilter ?? undefined,
+      groupIds: groupIds ?? undefined,
     });
-
-    documentIds = filteredDocs.map((d) => d.id);
 
     // If no documents match the filter, return empty results
     if (documentIds.length === 0) {
@@ -135,15 +132,7 @@ export async function searchSimilar(
   // Fetch document metadata from PostgreSQL — skip soft-deleted so their
   // chunks effectively drop out of retrieval until the retention sweep cleans
   // SurrealDB rows.
-  const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds }, deletedAt: null },
-    select: {
-      id: true,
-      title: true,
-      categories: true,
-      subcategory: true,
-    },
-  });
+  const documents = await kb("documents").findAliveMetaByIds(resultDocIds);
 
   // Create a map for quick lookup
   const docMap = new Map(documents.map((d) => [d.id, d]));
@@ -195,7 +184,7 @@ export async function searchWithThreshold(
  * Useful for re-indexing artifact content without destroying the Document row.
  */
 export async function deleteChunksByDocumentId(documentId: string): Promise<void> {
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
   await surrealClient.query(
     `DELETE document_chunk WHERE document_id = $document_id`,
     { document_id: documentId }
@@ -212,9 +201,7 @@ export async function deleteDocument(documentId: string): Promise<void> {
   await deleteChunksByDocumentId(documentId);
 
   // Delete document from PostgreSQL (cascades to groups)
-  await prisma.document.delete({
-    where: { id: documentId },
-  });
+  await kb("documents").deleteById(documentId);
 
   console.log(`[VectorStore] Deleted document ${documentId} and its chunks`);
 }
@@ -224,18 +211,10 @@ export async function deleteDocument(documentId: string): Promise<void> {
  */
 export async function listDocuments() {
   // Get documents from PostgreSQL
-  const documents = await prisma.document.findMany({
-    select: {
-      id: true,
-      title: true,
-      categories: true,
-      subcategory: true,
-      createdAt: true,
-    },
-  });
+  const documents = await kb("documents").listAll();
 
   // Get chunk counts from SurrealDB
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   const docsWithCounts = await Promise.all(
     documents.map(async (doc) => {
@@ -262,11 +241,11 @@ export async function listDocuments() {
  */
 export async function clearAllDocuments(): Promise<void> {
   // Clear chunks from SurrealDB
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
   await surrealClient.query(`DELETE document_chunk`);
 
   // Clear documents from PostgreSQL (cascades to groups)
-  await prisma.document.deleteMany();
+  await kb("documents").deleteAll();
 
   console.log("[VectorStore] Cleared all documents and chunks");
 }
@@ -275,7 +254,7 @@ export async function clearAllDocuments(): Promise<void> {
  * Get chunk count for a specific document
  */
 export async function getDocumentChunkCount(documentId: string): Promise<number> {
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
   const result = await surrealClient.query<{ count: number }>(
     `SELECT count() as count FROM document_chunk WHERE document_id = $document_id GROUP ALL`,
     { document_id: documentId }
@@ -297,7 +276,7 @@ export async function getDocumentChunkCounts(
   // SurrealDB is unavailable/uninitialized, degrade to 0 rather than throwing —
   // a vector-store hiccup must not crash the whole documents page.
   try {
-    const surrealClient = await getSurrealClient();
+    const surrealClient = kb("vectors");
     const result = await surrealClient.query<{ document_id: string; count: number }>(
       `SELECT document_id, count() AS count FROM document_chunk WHERE document_id IN $ids GROUP BY document_id`,
       { ids: documentIds }
@@ -334,7 +313,7 @@ export async function searchByDocumentIds(
   if (documentIds.length === 0) return [];
 
   const queryEmbedding = await generateEmbedding(query);
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   const sql = `
     SELECT
@@ -361,10 +340,7 @@ export async function searchByDocumentIds(
 
   // Fetch document metadata from PostgreSQL
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
-  const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds }, deletedAt: null },
-    select: { id: true, title: true, categories: true, subcategory: true },
-  });
+  const documents = await kb("documents").findAliveMetaByIds(resultDocIds);
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
   return chunks
@@ -398,7 +374,7 @@ export async function searchByVector(
   categoryFilter?: string,
   groupIds?: string[]
 ): Promise<SearchResult[]> {
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   let documentIds: string[] | null = null;
   if (categoryFilter || (groupIds && groupIds.length > 0)) {
@@ -410,11 +386,10 @@ export async function searchByVector(
     if (groupIds && groupIds.length > 0) {
       whereClause.groups = { some: { groupId: { in: groupIds } } };
     }
-    const filteredDocs = await prisma.document.findMany({
-      where: { ...whereClause, deletedAt: null },
-      select: { id: true },
+    documentIds = await kb("documents").findAliveIdsByFilter({
+      category: categoryFilter ?? undefined,
+      groupIds: groupIds ?? undefined,
     });
-    documentIds = filteredDocs.map((d) => d.id);
     if (documentIds.length === 0) return [];
   }
 
@@ -448,10 +423,7 @@ export async function searchByVector(
   if (chunks.length === 0) return [];
 
   const resultDocIds = [...new Set(chunks.map((c) => c.document_id))];
-  const documents = await prisma.document.findMany({
-    where: { id: { in: resultDocIds }, deletedAt: null },
-    select: { id: true, title: true, categories: true, subcategory: true },
-  });
+  const documents = await kb("documents").findAliveMetaByIds(resultDocIds);
   const docMap = new Map(documents.map((d) => [d.id, d]));
 
   return chunks
@@ -503,10 +475,15 @@ export async function searchSimilarBatch(
  * The previous implementation issued one CREATE per chunk sequentially —
  * a 128KB artifact produces ~140 chunks at the default 1000-char split,
  * so indexing serialized into ~140 round-trips back-to-back. Parallelism
- * is bounded so the surreal connection isn't flooded; 8 concurrent
- * inserts keeps the throughput up without saturating a single connection.
+ * is bounded so the surreal connection isn't flooded. Was 8, but the MTREE
+ * (embedding ANN) index takes a table-level write lock, so 8 concurrent
+ * CREATEs on a figure-heavy doc (600+ chunks) produced a storm of
+ * optimistic-lock "read or write conflict" retries that could exhaust the
+ * retry budget → 500 "Failed to create document". 3 keeps useful throughput
+ * while cutting index contention. Env-tunable so it can be adjusted without
+ * a rebuild (set KB_STORE_CHUNKS_CONCURRENCY in the stack).
  */
-const STORE_CHUNKS_CONCURRENCY = 8
+const STORE_CHUNKS_CONCURRENCY = Number(process.env.KB_STORE_CHUNKS_CONCURRENCY) || 3
 
 /**
  * SurrealDB's MTREE index (used on document_chunk.embedding for cosine ANN)
@@ -605,7 +582,7 @@ export async function storeChunks(
     }
   }
 
-  const surrealClient = await getSurrealClient();
+  const surrealClient = kb("vectors");
 
   // Process chunks in bounded-concurrency batches. Order doesn't matter
   // for storage (each chunk has its own deterministic id); we wait for

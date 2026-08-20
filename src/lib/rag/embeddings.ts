@@ -24,6 +24,21 @@ const parsePositiveInt = (raw: string | undefined, fallback: number): number => 
 const BATCH_SIZE = parsePositiveInt(process.env.KB_EMBED_BATCH_SIZE, 128);
 const EMBED_CONCURRENCY = parsePositiveInt(process.env.KB_EMBED_CONCURRENCY, 4);
 
+// Some providers reject a batch outright once it exceeds their per-request cap,
+// and the error is a hard 400 (not retryable) — every oversized batch is lost,
+// so a book-sized document ends up with almost no embedded chunks. Gemini's
+// BatchEmbedContents allows at most 100 items; OpenRouter forwards that error
+// verbatim. Clamp per model so the 128 default can't silently break ingest.
+const PROVIDER_BATCH_LIMITS: ReadonlyArray<[RegExp, number]> = [
+  [/(^|\/)(google\/)?gemini-embedding/i, 100],
+  [/(^|\/)(google\/)?text-embedding-00\d/i, 100],
+];
+
+export function resolveEmbedBatchSize(model: string, requested: number = BATCH_SIZE): number {
+  const limit = PROVIDER_BATCH_LIMITS.find(([re]) => re.test(model))?.[1];
+  return limit ? Math.min(requested, limit) : requested;
+}
+
 // Single-query embedding cache (hits common: same user retries the same Q,
 // follow-up rewrites converging on the same standalone query, etc). ~8 MB
 // of vector data at 4096-dim Float64 with 256 entries. Bypassed by the batch
@@ -178,7 +193,14 @@ export async function generateEmbedding(text: string): Promise<number[]> {
  * unfinished batch index from a shared counter. Results are indexed by batch
  * position so output order always matches input order.
  */
-export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
+export async function generateEmbeddings(
+  texts: string[],
+  options?: {
+    /** Called with cumulative embedded count after each completed batch —
+     *  drives the ingest progress bar instead of a single 0/N emit. */
+    onProgress?: (done: number, total: number) => void
+  }
+): Promise<number[][]> {
   if (texts.length === 0) return [];
 
   const cfg = getRagConfig();
@@ -186,14 +208,25 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
   if (!apiKey) throw new Error("No API key configured: set KB_EMBEDDING_API_KEY or OPENROUTER_API_KEY");
   const minimax = isMiniMaxEmbed(cfg.embeddingBaseUrl);
 
-  // Split into batches.
+  // Split into batches, never exceeding the provider's per-request cap.
+  const batchSize = resolveEmbedBatchSize(cfg.embeddingModel);
   const batches: string[][] = [];
-  for (let i = 0; i < texts.length; i += BATCH_SIZE) {
-    batches.push(texts.slice(i, i + BATCH_SIZE));
+  for (let i = 0; i < texts.length; i += batchSize) {
+    batches.push(texts.slice(i, i + batchSize));
   }
 
   // Results indexed by batch position so output order matches input order.
   const results: number[][][] = new Array(batches.length);
+
+  let embedded = 0;
+  const reportBatchDone = (count: number) => {
+    embedded += count;
+    try {
+      options?.onProgress?.(embedded, texts.length);
+    } catch {
+      /* progress must never fail the embed */
+    }
+  };
 
   let nextIdx = 0;
   async function worker(): Promise<void> {
@@ -247,6 +280,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
               throw new Error(`Invalid MiniMax embedding response: ${JSON.stringify(data).slice(0, 300)}`);
             }
             results[idx] = data.vectors;
+            reportBatchDone(batch.length);
             lastError = null;
             break;
           }
@@ -265,6 +299,7 @@ export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
             return item.embedding;
           });
           results[idx] = embeddings;
+          reportBatchDone(batch.length);
           lastError = null;
           break;
         } catch (error) {

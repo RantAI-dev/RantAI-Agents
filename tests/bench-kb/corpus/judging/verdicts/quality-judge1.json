@@ -1,0 +1,2602 @@
+[
+ {
+  "item": 1,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 2,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 3,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 3,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 1,
+    "helpfulness": 1
+   },
+   {
+    "label": "D",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 3,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 4,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 1
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 1
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 5,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 6,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 2,
+    "faithfulness": 4,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 2,
+    "faithfulness": 4,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 4
+   },
+   {
+    "label": "H",
+    "completeness": 5,
+    "faithfulness": 3,
+    "helpfulness": 4
+   },
+   {
+    "label": "I",
+    "completeness": 2,
+    "faithfulness": 4,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 7,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "D",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "G",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   }
+  ]
+ },
+ {
+  "item": 8,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 9,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "B",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "D",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "E",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "F",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "G",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "H",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "I",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "J",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   }
+  ]
+ },
+ {
+  "item": 10,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 11,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "E",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 12,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "B",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "D",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 4
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   }
+  ]
+ },
+ {
+  "item": 13,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "B",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 4
+   },
+   {
+    "label": "D",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "E",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 4
+   },
+   {
+    "label": "F",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "G",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "H",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "I",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 4
+   },
+   {
+    "label": "J",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   }
+  ]
+ },
+ {
+  "item": 14,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 3,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "D",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 15,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   }
+  ]
+ },
+ {
+  "item": 16,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 2,
+    "faithfulness": 3,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 17,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 1,
+    "helpfulness": 1
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 18,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 5,
+    "faithfulness": 3,
+    "helpfulness": 4
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 3,
+    "helpfulness": 4
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 5,
+    "faithfulness": 3,
+    "helpfulness": 4
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 5,
+    "faithfulness": 3,
+    "helpfulness": 4
+   }
+  ]
+ },
+ {
+  "item": 19,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 20,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 21,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 22,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 23,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 1
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 1
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 24,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 25,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 5,
+    "faithfulness": 5,
+    "helpfulness": 5
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 26,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 27,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 28,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "D",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 29,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 30,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 31,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 2,
+    "faithfulness": 3,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 4,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 32,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 33,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 1
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 1
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 1
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ },
+ {
+  "item": 34,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 1,
+    "helpfulness": 1
+   }
+  ]
+ },
+ {
+  "item": 35,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 36,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 5,
+    "faithfulness": 4,
+    "helpfulness": 5
+   }
+  ]
+ },
+ {
+  "item": 37,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 38,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 39,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   }
+  ]
+ },
+ {
+  "item": 40,
+  "scores": [
+   {
+    "label": "A",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "B",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 1
+   },
+   {
+    "label": "C",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "D",
+    "completeness": 1,
+    "faithfulness": 2,
+    "helpfulness": 1
+   },
+   {
+    "label": "E",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "F",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 2
+   },
+   {
+    "label": "G",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "H",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "I",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   },
+   {
+    "label": "J",
+    "completeness": 1,
+    "faithfulness": 5,
+    "helpfulness": 3
+   }
+  ]
+ }
+]

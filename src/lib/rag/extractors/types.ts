@@ -6,6 +6,26 @@ export interface ExtractedFigure {
   caption: string | null;
   /** base64-encoded PNG crop (no data: prefix). */
   imageBase64: string;
+  /** Stable per-page handle ("p12-b3"), matching the id used in `pagesBlocks`. */
+  id?: string;
+  /** Position among the page's blocks in READING ORDER.
+   *
+   *  This is the anchor. Curriculum books print no caption for 19-34% of their
+   *  figures, so caption matching is structurally blind on a third of them —
+   *  but the layout model always knows where on the page a figure sits relative
+   *  to the prose. Extraction knew this all along and the Node side discarded
+   *  it, forcing placement to be re-guessed from caption keywords at query
+   *  time. */
+  blockIndex?: number;
+}
+
+/** One page's blocks in reading order, with figures inline at their position. */
+export interface PageBlocks {
+  kind: "text" | "caption" | "figure";
+  /** Set when kind === "figure"; matches ExtractedFigure.id. */
+  id?: string;
+  /** Set for text/caption blocks. */
+  text?: string;
 }
 
 export interface ExtractionResult {
@@ -21,6 +41,14 @@ export interface ExtractionResult {
    * extractors without page info omit it and chunk pages stay null.
    */
   pageMap?: Array<{ page: number; text: string }>;
+  /**
+   * Per-page reading-order block sequences, figures inline at their own
+   * position. Present only from extractors that expose layout order (the
+   * on-prem MinerU sidecar does). This is what lets a figure be attached to the
+   * text chunk it actually belongs to rather than to whatever caption keyword
+   * happened to match.
+   */
+  pagesBlocks?: PageBlocks[][];
   usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;

@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Switch } from "@/components/ui/switch"
 import { Progress } from "@/components/ui/progress"
 import {
   Popover,
@@ -30,10 +29,11 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Loader2, Upload, FileText, Folder, Check, Plus, Sparkles, ChevronsUpDown, X, FileCode, FileSpreadsheet, Box, AlertCircle, RefreshCw } from "@/lib/icons"
+import { Loader2, Upload, FileText, Folder, Check, Plus, ChevronsUpDown, X, FileCode, FileSpreadsheet, Box, AlertCircle, RefreshCw } from "@/lib/icons"
 import { CategoryDialog, Category } from "./category-dialog"
 import { xhrUpload } from "./upload-xhr"
 import { cn } from "@/lib/utils"
+import { KB_ACCEPTED_EXTENSIONS, KB_MAX_FILE_BYTES } from "@/lib/files/mime-types"
 
 interface BulkUploadDialogProps {
   open: boolean
@@ -76,13 +76,10 @@ function truncateTitle(title: string): string {
   return title.slice(0, TITLE_PREVIEW_MAX - 1).trimEnd() + "…"
 }
 
-const VALID_EXTENSIONS = [
-  ".pdf", ".docx", ".doc", ".pptx", ".ppt", ".rtf", ".epub", ".odt",
-  ".xlsx", ".xls", ".ods", ".csv", ".tsv", ".json", ".jsonl",
-  ".md", ".txt", ".log", ".html", ".xml", ".yaml", ".toml", ".ini", ".env",
-  ".gltf", ".glb",
-  ".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".php", ".pl", ".sh", ".bat", ".ps1",
-]
+// Accepted extensions + size cap come from the shared registry so the client
+// list can never drift from what the server actually accepts (this local copy
+// used to include .hpp/.cs/.bat that the server rejected, and missed images).
+const VALID_EXTENSIONS = KB_ACCEPTED_EXTENSIONS
 
 function FileStatusBadge({ status, error }: { status: FileStatus; error?: string }) {
   switch (status) {
@@ -131,7 +128,8 @@ export function BulkUploadDialog({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [subcategory, setSubcategory] = useState("")
   const [selectedKBIds, setSelectedKBIds] = useState<string[]>([])
-  const [enableEnhanced, setEnableEnhanced] = useState(true)
+  // PDF-only knob, applied to every PDF in the batch (see pipeline-policy).
+  const [figureMode, setFigureMode] = useState<"auto" | "force" | "skip">("auto")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [showResults, setShowResults] = useState(false)
@@ -168,6 +166,10 @@ export function BulkUploadDialog({
         setError(`Unsupported file type: ${file.name}`)
         continue
       }
+      if (file.size > KB_MAX_FILE_BYTES) {
+        setError(`"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the limit is ${Math.round(KB_MAX_FILE_BYTES / (1024 * 1024))}MB.`)
+        continue
+      }
       newEntries.push({
         id: generateUUID(),
         file,
@@ -201,6 +203,10 @@ export function BulkUploadDialog({
         setError(`Unsupported file type: ${file.name}`)
         continue
       }
+      if (file.size > KB_MAX_FILE_BYTES) {
+        setError(`"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the limit is ${Math.round(KB_MAX_FILE_BYTES / (1024 * 1024))}MB.`)
+        continue
+      }
       newEntries.push({
         id: generateUUID(),
         file,
@@ -232,9 +238,7 @@ export function BulkUploadDialog({
 
     const sharedCategoriesJson = JSON.stringify(selectedCategories)
     const sharedGroupsJson = JSON.stringify(selectedKBIds)
-    const url = enableEnhanced
-      ? "/api/dashboard/files?enhanced=true"
-      : "/api/dashboard/files"
+    const url = "/api/dashboard/files"
 
     const worker = async () => {
       while (true) {
@@ -251,6 +255,9 @@ export function BulkUploadDialog({
         if (selectedCategories.length > 0) formData.append("categories", sharedCategoriesJson)
         if (subcategory) formData.append("subcategory", subcategory)
         if (selectedKBIds.length > 0) formData.append("groupIds", sharedGroupsJson)
+        if (figureMode !== "auto" && entry.file.name.toLowerCase().endsWith(".pdf")) {
+          formData.append("figures", figureMode)
+        }
 
         try {
           const res = await xhrUpload(url, formData, (frac) => {
@@ -286,7 +293,7 @@ export function BulkUploadDialog({
     }
 
     await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()))
-  }, [selectedCategories, selectedKBIds, subcategory, enableEnhanced, updateEntry])
+  }, [selectedCategories, selectedKBIds, subcategory, figureMode, updateEntry])
 
   const handleSubmit = async () => {
     if (files.length === 0) {
@@ -345,7 +352,7 @@ export function BulkUploadDialog({
       setSelectedCategories([])
       setSubcategory("")
       setSelectedKBIds([])
-      setEnableEnhanced(true)
+      setFigureMode("auto")
       setError("")
       onOpenChange(false)
     } else {
@@ -593,16 +600,34 @@ export function BulkUploadDialog({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/30">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-chart-1" />
-                    <div>
-                      <Label htmlFor="bulk-enhanced" className="text-sm font-medium cursor-pointer">Enhanced Processing</Label>
-                      <p className="text-xs text-muted-foreground">Extract entities for knowledge graph</p>
+                {/* Figures & charts — applies to every PDF in the batch; other
+                    types are fully automatic and never crop figures. */}
+                {files.some((f) => f.file.name.toLowerCase().endsWith(".pdf")) && (
+                  <div className="space-y-2 rounded-lg border p-3 bg-muted/30">
+                    <Label className="text-sm font-medium">Figures &amp; charts (PDFs)</Label>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {([["auto", "Auto"], ["force", "Always extract"], ["skip", "Text only"]] as const).map(([value, label]) => (
+                        <Button
+                          key={value}
+                          type="button"
+                          size="sm"
+                          variant={figureMode === value ? "default" : "outline"}
+                          onClick={() => setFigureMode(value)}
+                        >
+                          {label}
+                        </Button>
+                      ))}
                     </div>
+                    <p className="text-xs text-muted-foreground">
+                      {figureMode === "auto" &&
+                        "Scanned PDFs get figure extraction automatically; text PDFs are processed fast without it."}
+                      {figureMode === "force" &&
+                        "Runs the layout parser on every PDF — captures charts & figures, but slower to process."}
+                      {figureMode === "skip" &&
+                        "Fastest — text only, no figure images even for scanned PDFs."}
+                    </p>
                   </div>
-                  <Switch id="bulk-enhanced" checked={enableEnhanced} onCheckedChange={setEnableEnhanced} />
-                </div>
+                )}
               </>
             )}
 

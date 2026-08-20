@@ -22,7 +22,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ job
 
     const job = await prisma.ingestJob.findUnique({
       where: { id: jobId },
-      select: { id: true, organizationId: true, status: true, s3Key: true, documentId: true },
+      select: { id: true, organizationId: true, status: true, s3Key: true, documentId: true, attempt: true },
     })
 
     if (!job || job.organizationId !== (orgContext?.organizationId ?? null)) {
@@ -34,10 +34,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ job
     if (!job.s3Key || !job.documentId) {
       return NextResponse.json({ error: "Job is missing its stored file; re-upload instead" }, { status: 422 })
     }
+    // Bounded: attempt used to reset to 1 here, which let a permanently-bad
+    // file be retried forever. Cap total attempts and tell the user plainly.
+    const MAX_USER_RETRIES = 5
+    if ((job.attempt ?? 1) >= MAX_USER_RETRIES) {
+      return NextResponse.json(
+        { error: "Retry limit reached for this file — please re-upload it." },
+        { status: 409 }
+      )
+    }
 
     await prisma.ingestJob.update({
       where: { id: job.id },
-      data: { status: "pending", attempt: 1, error: null, step: "queued", progress: 0, startedAt: null, etaSeconds: null },
+      data: { status: "pending", attempt: { increment: 1 }, error: null, step: "queued", progress: 0, startedAt: null, etaSeconds: null },
     })
     await prisma.document.update({ where: { id: job.documentId }, data: { status: "processing" } })
 

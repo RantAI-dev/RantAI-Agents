@@ -107,10 +107,10 @@ export class LLMEntityExtractor {
     try {
       const prompt = this.buildPrompt(text);
 
-      const response = await fetch(`${resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey).baseUrl}/chat/completions`, {
+      const response = await fetch(`${(await resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey)).baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey).apiKey}`,
+          Authorization: `Bearer ${(await resolveExtractionEndpoint(this.config.model, this.config.baseUrl, this.config.apiKey)).apiKey}`,
           "Content-Type": "application/json",
           "HTTP-Referer": "https://rantai.com",
           "X-Title": "RantAI Document Intelligence",

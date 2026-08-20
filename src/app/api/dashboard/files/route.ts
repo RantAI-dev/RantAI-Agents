@@ -100,6 +100,7 @@ export async function POST(request: Request) {
       const forceOCRParam = searchParams.get("forceOCR")
       const forceOCRField = formData.get("forceOCR") as string | null
       const forceOCR = forceOCRParam === "true" || forceOCRField === "true"
+      const figureMode = (formData.get("figures") as string | null) || searchParams.get("figures") || undefined
       const documentType = (formData.get("documentType") as string | null) || searchParams.get("documentType") || undefined
 
       // File uploads run in the background: enqueue (store bytes + placeholder
@@ -121,6 +122,7 @@ export async function POST(request: Request) {
           useEnhanced,
           useCombined,
           forceOCR,
+          figureMode,
           documentType,
         },
       })

@@ -11,10 +11,13 @@
  * - Optional reranking for improved relevance
  */
 
-import { getSurrealClient, SurrealDBClient } from "../surrealdb";
+import { kb } from "@/lib/kb-runtime/runtime";
+import type { VectorStore } from "@/lib/kb-runtime/ports";
 import { generateEmbedding } from "./embeddings";
+import { getDefaultReranker } from "./rerankers";
+import { gateConfig, gateFigures } from "./figure-gate";
 import { Entity } from "../document-intelligence/types";
-import { prisma } from "../prisma";
+
 
 /**
  * Search configuration
@@ -170,7 +173,7 @@ const DEFAULT_CONFIG: Required<HybridSearchConfig> = {
  */
 export class HybridSearch {
   private config: Required<HybridSearchConfig>;
-  private dbClient: SurrealDBClient | null = null;
+  private dbClient: VectorStore | null = null;
 
   constructor(config: HybridSearchConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -179,9 +182,9 @@ export class HybridSearch {
   /**
    * Initialize database client
    */
-  private async getClient(): Promise<SurrealDBClient> {
+  private async getClient(): Promise<VectorStore> {
     if (!this.dbClient) {
-      this.dbClient = await getSurrealClient();
+      this.dbClient = kb("vectors");
     }
     return this.dbClient;
   }
@@ -380,12 +383,10 @@ export class HybridSearch {
       };
     }
 
-    const documents = await prisma.document.findMany({
-      where: { ...where, deletedAt: null },
-      select: { id: true },
+    return kb("documents").findAliveIdsByFilter({
+      category: this.config.categoryFilter ?? undefined,
+      groupIds: this.config.groupIds.length > 0 ? this.config.groupIds : undefined,
     });
-
-    return documents.map((document) => document.id);
   }
 
   /**
@@ -731,7 +732,7 @@ export async function fetchNeighborChunks(
   const allIndices = [...new Set([...wantByDoc.values()].flatMap((s) => [...s]))];
   if (!docIds.length || !allIndices.length) return [];
 
-  const client = await getSurrealClient();
+  const client = kb("vectors");
   // Over-fetch the (docIds × indices) cross-product, then keep only the exact
   // (doc, index) pairs we asked for. Anchor counts are small, so this is cheap.
   const res = await client.query<ChunkResult & { contextual_prefix?: string | null }>(
@@ -819,12 +820,20 @@ export async function fetchMatchingFigures(
   retrievedText: string,
   alreadyPresent: Set<string>,
   limit: number,
+  /** `${documentId}::${chunkIndex}` for every text chunk actually retrieved.
+   *
+   *  A figure whose ANCHOR chunk is in this set belongs to a passage the
+   *  retriever already chose, which is a far stronger signal than caption
+   *  overlap — and it is the only signal available for the 19-34% of curriculum
+   *  figures that carry no printed caption at all. Optional: documents ingested
+   *  before anchors existed simply have none, and keep the caption path. */
+  anchoredChunkKeys?: Set<string>,
 ): Promise<HybridSearchResult[]> {
   if (!docIds.length || limit <= 0) return [];
   const q = query.toLowerCase();
   const text = retrievedText.toLowerCase();
 
-  const client = await getSurrealClient();
+  const client = kb("vectors");
   const res = await client.query<ChunkResult & { contextual_prefix?: string | null }>(
     `SELECT id, document_id, file_id, content, chunk_index, metadata, contextual_prefix
      FROM document_chunk
@@ -834,10 +843,9 @@ export async function fetchMatchingFigures(
   const rows = res[0]?.result || [];
   if (!rows.length) return [];
 
-  const docs = await prisma.document.findMany({
-    where: { id: { in: [...new Set(rows.map((r) => r.document_id))] }, deletedAt: null },
-    select: { id: true, title: true },
-  });
+  const docs = await kb("documents").findAliveMetaByIds([
+    ...new Set(rows.map((r) => r.document_id)),
+  ]);
   const titleById = new Map(docs.map((d) => [d.id, d.title]));
 
   // Score each meaningful figure: a caption keyword in the QUERY (2) beats one
@@ -848,23 +856,126 @@ export async function fetchMatchingFigures(
   const seenCaption = new Set<string>();
   for (const row of rows) {
     if (alreadyPresent.has(String(row.id))) continue;
-    const meta = row.metadata as { section?: string; assetKey?: string } | undefined;
+    const meta = row.metadata as
+      | { section?: string; assetKey?: string; anchorChunkIndex?: number }
+      | undefined;
     const caption = (meta?.section ?? row.content ?? "").replace(/^\[[^\]]*\]\s*/, "").trim();
-    if (!figCaptionMeaningful(caption)) continue;
     const assetKey = meta?.assetKey ?? null;
     if (!assetKey) continue;
+
+    // Anchored figures are admitted BEFORE the caption checks, deliberately.
+    // `figCaptionMeaningful` and the keyword extraction both require a printed
+    // caption, which is exactly what a third of curriculum figures do not have —
+    // gating the anchor behind them would reinstate the blindness this change
+    // exists to remove.
+    const anchored =
+      typeof meta?.anchorChunkIndex === "number" &&
+      anchoredChunkKeys?.has(`${row.document_id}::${meta.anchorChunkIndex}`);
+
     const capKey = caption.toLowerCase();
     if (seenCaption.has(capKey)) continue;
-    const kws = figCaptionKeywords(caption).map((k) => k.toLowerCase());
-    if (!kws.length) continue;
-    const score = kws.some((kw) => q.includes(kw)) ? 2 : kws.some((kw) => text.includes(kw)) ? 1 : 0;
-    if (score === 0) continue;
-    seenCaption.add(capKey);
+
+    let score = 0;
+    if (anchored) {
+      score = 3;
+    } else {
+      if (!figCaptionMeaningful(caption)) continue;
+      const kws = figCaptionKeywords(caption).map((k) => k.toLowerCase());
+      if (!kws.length) continue;
+      score = kws.some((kw) => q.includes(kw)) ? 2 : kws.some((kw) => text.includes(kw)) ? 1 : 0;
+      if (score === 0) continue;
+    }
+    if (capKey) seenCaption.add(capKey);
     scored.push({ score, row, caption, assetKey });
   }
   scored.sort((a, b) => b.score - a.score);
 
-  return scored.slice(0, limit).map(({ row, assetKey }) => {
+  // Relevance gate: keyword overlap alone (esp. a caption keyword that only
+  // appears in the retrieved TEXT, score=1) surfaces off-topic pictures, because
+  // figure captions are thin and borrow their page's prose. Rerank the keyword
+  // candidates against the QUERY itself and keep only those the reranker scores
+  // above KB_FIGURE_MIN_RERANK. Env-tunable without a rebuild; the per-query
+  // scores AND how many survived are logged, so the floor can be judged from
+  // real traffic rather than assumed.
+  let final: Scored[] = scored;
+  const reranker = getDefaultReranker();
+  const rawMin = process.env.KB_FIGURE_MIN_RERANK;
+  // Default floor 0.001, not the 0.2 this used to carry.
+  //
+  // The 0.2 came with a note claiming bge-reranker-v2-m3 scores relevant figures
+  // 0.5–0.8 and off-topic ones ~0.00002. That is what it does on the DESCRIPTIONS
+  // the benchmark ranks. Production ranks the printed CAPTION — twenty-odd
+  // characters, often truncated — and the whole score distribution collapses:
+  // measured on a live UGM question about the digestive system, the correct
+  // figure ("Gambar 1.15 Posisi usus") scored 0.016 and everything else fell
+  // below that. At 0.2 the floor discarded EVERY candidate on every query.
+  //
+  // That is how production reached 0.028 precision against human annotation: not
+  // by choosing wrong figures, but by almost never emitting one — and it starved
+  // the VLM gate below, which never ran a single time in production until this
+  // was found by watching one real chat.
+  //
+  // The floor predates that gate, when it was the only thing standing between a
+  // keyword match and a student. The gate now looks at the actual image and is
+  // far better at the same job, so admitting more here and letting it decide is
+  // strictly the better division of labour. Override via KB_FIGURE_MIN_RERANK.
+  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : 0.001;
+  if (reranker && scored.length > 0) {
+    try {
+      const ranked = await reranker.rerank(
+        query,
+        scored.map((s, i) => ({
+          id: String(s.row.id),
+          text: s.caption,
+          originalRank: i,
+          originalScore: s.score,
+        })),
+        scored.length,
+      );
+      const byId = new Map(scored.map((s) => [String(s.row.id), s]));
+      const rr = ranked
+        .map((r) => {
+          const s = byId.get(r.id);
+          return s ? { s, score: r.score } : null;
+        })
+        .filter((x): x is { s: Scored; score: number } => x !== null);
+      console.log(
+        `[RAG] figure rerank (floor=${figMin}, kept ${rr.filter((x) => x.score >= figMin).length}/${rr.length}): [${rr
+          .map((x) => `${x.score.toFixed(3)}:${x.s.caption.slice(0, 22)}`)
+          .join(" | ")}]`,
+      );
+      const gated = Number.isNaN(figMin) ? rr : rr.filter((x) => x.score >= figMin);
+      final = gated.map((x) => x.s);
+    } catch (err) {
+      console.warn(`[RAG] figure rerank failed (non-fatal): ${(err as Error).message?.slice(0, 100)}`);
+    }
+  }
+
+  // Sight. Everything above this line reasons about a figure from a caption
+  // written before anyone knew the question, which is why the shipped selector
+  // is right 2.8% of the time against human annotation. A vision model that
+  // actually looks at the crop takes that to 54.2%, and the ordering above is
+  // what makes it affordable: only the top few are ever judged.
+  //
+  // Deliberately last. The gate can only REMOVE figures, so if it is off,
+  // misconfigured, slow, or broken, this function behaves exactly as it did
+  // before — the worst case is the old output, never a worse one.
+  const gateCfg = gateConfig();
+  if (gateCfg && final.length) {
+    try {
+      const kept = await gateFigures(
+        query,
+        final.map((s) => ({ id: String(s.row.id), assetKey: s.assetKey, caption: s.caption })),
+        gateCfg,
+      );
+      const keptIds = new Set(kept.map((k) => k.id));
+      final = final.filter((s) => keptIds.has(String(s.row.id)));
+    } catch (err) {
+      console.warn(`[RAG] figure gate failed (non-fatal): ${(err as Error).message?.slice(0, 100)}`);
+    }
+  }
+
+  return final.slice(0, limit).map(({ row, assetKey }) => {
     const meta = row.metadata as
       | { documentTitle?: string; section?: string; page?: number }
       | undefined;

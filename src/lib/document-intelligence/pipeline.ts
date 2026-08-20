@@ -9,7 +9,8 @@
  * 5. Store in SurrealDB (chunks, embeddings, entities)
  */
 
-import { getSurrealClient, SurrealDBClient } from "../surrealdb";
+import { kb } from "@/lib/kb-runtime/runtime";
+import type { VectorStore } from "@/lib/kb-runtime/ports";
 import { SmartChunker, SmartChunkingOptions } from "../rag/smart-chunker";
 import { generateEmbeddings } from "../rag/embeddings";
 import { processFile, ProcessedFile } from "../rag/file-processor";
@@ -100,7 +101,7 @@ const DEFAULT_CONFIG: Required<PipelineConfig> = {
  */
 export class DocumentPipeline {
   private config: Required<PipelineConfig>;
-  private dbClient: SurrealDBClient | null = null;
+  private dbClient: VectorStore | null = null;
 
   constructor(config: PipelineConfig = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -109,9 +110,9 @@ export class DocumentPipeline {
   /**
    * Initialize database client
    */
-  private async getClient(): Promise<SurrealDBClient> {
+  private async getClient(): Promise<VectorStore> {
     if (!this.dbClient) {
-      this.dbClient = await getSurrealClient();
+      this.dbClient = kb("vectors");
     }
     return this.dbClient;
   }
@@ -319,7 +320,7 @@ export class DocumentPipeline {
    * Store results in SurrealDB
    */
   private async storeResults(
-    client: SurrealDBClient,
+    client: VectorStore,
     documentId: string,
     chunks: Array<{ text: string; chunkIndex: number; metadata: unknown }>,
     embeddings: number[][],

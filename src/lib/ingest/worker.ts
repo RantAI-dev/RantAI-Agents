@@ -1,8 +1,10 @@
+import { kb } from "@/lib/kb-runtime/runtime"
 import {
   claimNextPendingJob,
   reclaimStaleJobs,
   updateIngestJobProgress,
   emitIngestTerminal,
+  touchIngestJob,
   type ClaimedIngestJob,
 } from "./job"
 
@@ -35,19 +37,25 @@ let started = false
 
 async function runOne(job: ClaimedIngestJob): Promise<void> {
   const startedAt = new Date()
-  const enhanced = !!(job.params as { useEnhanced?: boolean } | null)?.useEnhanced
+  const { resolveIngestPolicy, parseFigureMode } = await import("./pipeline-policy")
+  const jp = (job.params ?? {}) as { figureMode?: string; forceOCR?: boolean }
+  const policy = resolveIngestPolicy(job.filename, parseFigureMode(jp.figureMode, jp.forceOCR))
+  const flags = { entities: policy.entities, figures: policy.figures }
   let outcome: "ready" | "failed" = "failed"
   let error: string | null = null
+  // Heartbeat: long emit-less steps (a 20-min MinerU extraction, a large
+  // embedding batch) would otherwise trip the 5-min stale-reclaim and get the
+  // same document re-claimed while still running here.
+  const heartbeat = setInterval(() => void touchIngestJob(job.id), 60_000)
   try {
-    // Imported lazily to keep the worker module free of the heavy service graph
-    // until a job actually runs.
-    const { processIngestJob } = await import("@/features/knowledge/documents/service")
-    outcome = await processIngestJob(job, (sp) =>
+    // The processor is a port: the app binds it to the knowledge service, and
+    // a standalone KB service would bind its own pipeline.
+    outcome = await kb("processor").process(job, (sp) =>
       updateIngestJobProgress({
         jobId: job.id,
         organizationId: job.organizationId,
         documentId: job.documentId,
-        enhanced,
+        flags,
         startedAt,
         progress: sp,
       })
@@ -60,15 +68,15 @@ async function runOne(job: ClaimedIngestJob): Promise<void> {
     error = (err as Error)?.message ?? "ingest crashed"
     try {
       const { recordIngestJobFailure } = await import("./job")
-      recordIngestJobFailure(job.id, error)
+      await recordIngestJobFailure(job.id, error)
       if (job.documentId) {
-        const { prisma } = await import("@/lib/prisma")
-        await prisma.document.update({ where: { id: job.documentId }, data: { status: "failed" } }).catch(() => {})
+        await kb("documents").setStatus(job.documentId, "failed")
       }
     } catch {
       /* best effort */
     }
   } finally {
+    clearInterval(heartbeat)
     active--
     // Tell the client the stream ended (progress emits only carry "processing").
     void emitIngestTerminal({
@@ -117,4 +125,16 @@ export function startIngestWorker(): void {
   reclaim() // sweep on boot (recovers jobs stranded by the last restart)
   setInterval(reclaim, RECLAIM_MS)
   setInterval(() => void tick().catch((err) => console.warn("[ingest-worker] tick error:", err)), POLL_MS)
+
+  // Orphan reaper: failed jobs keep their S3 upload for retry; after the
+  // replay window nobody used, delete the object so storage doesn't leak.
+  const reap = () =>
+    void import("./job")
+      .then(({ reapFailedJobUploads }) => reapFailedJobUploads())
+      .then((n) => {
+        if (n > 0) console.log(`[ingest-worker] reaped ${n} orphaned upload(s)`)
+      })
+      .catch((err) => console.warn("[ingest-worker] reap failed:", err))
+  reap()
+  setInterval(reap, 3_600_000)
 }

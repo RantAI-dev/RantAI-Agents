@@ -1,6 +1,10 @@
 -- =====================================================
 -- SurrealDB Schema for RantAI Knowledge Base
 -- =====================================================
+-- Owned by the KB engine (moved here from lib/surrealdb): the store schema
+-- travels with the code that depends on it, so extracting the engine into its
+-- own repo/service takes its vector schema along. Applied by
+-- `bun run kb:apply-fts-schema`.
 -- This schema defines tables and indexes for:
 -- - Document chunks with vector embeddings for RAG
 -- =====================================================

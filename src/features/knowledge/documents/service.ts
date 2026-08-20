@@ -2,18 +2,11 @@ import path from "path"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
-  chunkDocument,
-  smartChunkDocument,
-  generateEmbeddings,
   detectFileType,
-  storeChunks,
-  deleteChunksByDocumentId,
   getDocumentChunkCount,
   getDocumentChunkCounts,
   type Chunk,
 } from "@/lib/rag"
-import { assignChunkPages } from "@/lib/rag/page-map"
-import { extractEntities, extractEntitiesAndRelations } from "@/lib/document-intelligence"
 import { getSurrealClient } from "@/lib/surrealdb"
 import { uploadFile, S3Paths, validateUpload, deleteFile } from "@/lib/s3"
 import { processDocumentOCR, isPDFScanned } from "@/lib/ocr"
@@ -21,7 +14,6 @@ import { canEdit, canManage } from "@/lib/organization"
 import {
   countKnowledgeDocumentsForScope,
   createKnowledgeDocument,
-  updateKnowledgeDocumentMetadata,
   deleteKnowledgeDocument,
   findKnowledgeDocumentAccessById,
   findKnowledgeDocumentById,
@@ -34,353 +26,21 @@ import {
 import { recordKnowledgeAudit } from "@/lib/audit/knowledge"
 import type { KnowledgeDocumentCreateInput, KnowledgeDocumentUpdateInput } from "./schema"
 
-export interface ServiceError {
-  status: number
-  error: string
-}
 
-export interface KnowledgeDocumentContext {
-  userId: string
-  organizationId: string | null
-  role?: string | null
-}
+import {
+  appFileUrl,
+  hasDocumentAccess,
+  toCategoryList,
+  toStringList,
+  type KnowledgeDocumentContext,
+  type ServiceError,
+} from "./service-shared"
 
-export interface KnowledgeDocumentListItem {
-  id: string
-  title: string
-  categories: string[]
-  subcategory: string | null
-  fileType: string
-  artifactType: string | null
-  fileSize: number | null
-  hasS3File: boolean
-  thumbnailUrl?: string
-  chunkCount: number
-  groups: Array<{ id: string; name: string; color: string | null }>
-  createdAt: string
-  updatedAt: string
-  // Ingest lifecycle: "ready" (default) | "processing" | "failed".
-  status: string
-  // Live progress snapshot for a doc still being ingested (null otherwise) —
-  // lets the card render its bar on first load / reload without the socket.
-  ingest?: {
-    jobId: string
-    step: string | null
-    progress: number
-    stepCurrent: number | null
-    stepTotal: number | null
-    etaSeconds: number | null
-    error: string | null
-  } | null
-}
-
-export interface KnowledgeDocumentDetail {
-  id: string
-  title: string
-  content: string
-  categories: string[]
-  subcategory: string | null
-  groups: Array<{ id: string; name: string; color: string | null }>
-  metadata: Prisma.JsonValue | null
-  fileType: string
-  artifactType: string | null
-  fileSize: number | null
-  mimeType: string | null
-  s3Key: string | null
-  fileUrl?: string
-  chunks: Array<{ id: string; content: string; chunkIndex: number; chunkType: string | null; createdAt: string }>
-  createdAt: string
-  updatedAt: string
-}
-
-export interface KnowledgeDocumentIntelligenceResponse {
-  entities: Array<{
-    id: string
-    name: string
-    type: string
-    confidence: number
-    document_id: string
-    chunk_id?: string
-    metadata?: { context?: string; source?: "pattern" | "llm" }
-  }>
-  relations: Array<{
-    id: string
-    in: string
-    out: string
-    relation_type: string
-    confidence: number
-    metadata?: { context?: string; description?: string }
-  }>
-  status: "completed"
-  stats: {
-    totalEntities: number
-    totalRelations: number
-    entityTypes: number
-    relationTypes: number
-  }
-}
-
-type SupportedImageExt = ".png" | ".jpg" | ".jpeg" | ".gif" | ".webp" | ".heic"
-
-function mapFileType(document: {
-  fileType?: string | null
-  metadata?: Prisma.JsonValue | null
-}) {
-  return document.fileType || (document.metadata as { fileType?: string } | null)?.fileType || "markdown"
-}
-
-function mapGroups(groups: Array<{ group: { id: string; name: string; color: string | null } }>) {
-  return groups.map((entry) => entry.group)
-}
-
-function normalizeSurrealId(value: unknown): string {
-  if (typeof value === "string") {
-    return value
-  }
-
-  if (value && typeof value === "object") {
-    const record = value as { tb?: unknown; id?: unknown }
-    if (typeof record.tb === "string" && typeof record.id === "string") {
-      return `${record.tb}:${record.id}`
-    }
-    if (typeof record.id === "string") {
-      return record.id
-    }
-  }
-
-  return String(value)
-}
-
-function toJsonValue(value: unknown): Prisma.InputJsonValue {
-  return value as Prisma.InputJsonValue
-}
-
-function toCategoryList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
-  }
-
-  if (typeof value === "string" && value.length > 0) {
-    return [value]
-  }
-
-  return []
-}
-
-function toStringList(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)
-  }
-
-  return []
-}
-
-function hasDocumentAccess(documentOrganizationId: string | null, organizationId: string | null) {
-  // Org-scoped doc: caller must be in the same org.
-  if (documentOrganizationId) {
-    return organizationId !== null && documentOrganizationId === organizationId
-  }
-  // Null-org (personal/global) doc: any caller in any org context can access.
-  // This matches the listing query's permissiveness at repository.ts:16-18,
-  // which surfaces null-org docs to org-active callers via the OR clause.
-  // Previously this branch returned `organizationId === null`, which meant
-  // null-org docs were visible-but-unmutable from any org context — Files
-  // page DELETE returned 404 even though the row appeared in the list.
-  return true
-}
-
-function mapListItem(document: {
-  id: string
-  title: string
-  categories: string[]
-  subcategory: string | null
-  fileType?: string | null
-  metadata?: Prisma.JsonValue | null
-  artifactType?: string | null
-  fileSize: number | null
-  s3Key: string | null
-  status?: string | null
-  groups: Array<{ group: { id: string; name: string; color: string | null } }>
-  createdAt: Date
-  updatedAt: Date
-}) {
-  return {
-    id: document.id,
-    title: document.title,
-    categories: document.categories,
-    subcategory: document.subcategory,
-    fileType: mapFileType(document),
-    artifactType: document.artifactType || null,
-    fileSize: document.fileSize,
-    hasS3File: Boolean(document.s3Key),
-    status: document.status || "ready",
-    groups: mapGroups(document.groups),
-    createdAt: document.createdAt.toISOString(),
-    updatedAt: document.updatedAt.toISOString(),
-  }
-}
-
-/**
- * Same-origin streaming URL for a stored file. RustFS is internal-only (no
- * published port), so a presigned `http://rustfs:9000/...` URL is unreachable
- * from the browser — hand it `/api/files/[...key]` instead, which streams the
- * bytes through the (auth + org-scoped) app route.
- */
-function appFileUrl(s3Key: string): string {
-  const encoded = s3Key.split("/").map(encodeURIComponent).join("/")
-  return `/api/files/${encoded}`
-}
-
-function resolveImageThumbnail(s3Key: string | null | undefined) {
-  if (!s3Key) return undefined
-  return appFileUrl(s3Key)
-}
-
-/**
- * Returns a total document count for the dashboard groups index sidebar.
- * Org-scoped callers see org + global; orgless callers see everything.
- */
-export async function countKnowledgeDocumentsForDashboard(
-  organizationId: string | null
-): Promise<number> {
-  return countKnowledgeDocumentsForScope(organizationId)
-}
-
-/**
- * Lists dashboard knowledge documents in the current scope.
- */
-export async function listKnowledgeDocumentsForDashboard(params: {
-  organizationId: string | null
-  groupId: string | null
-}): Promise<KnowledgeDocumentListItem[]> {
-  const documents = await listKnowledgeDocumentsByScope(params)
-
-  // One SurrealDB query for all chunk counts instead of one-per-document (was N+1).
-  const chunkCounts = await getDocumentChunkCounts(documents.map((d) => d.id))
-
-  // For docs still being ingested, attach the latest job's progress snapshot so
-  // the card renders its bar on first load (the socket only carries deltas).
-  const processingIds = documents.filter((d) => d.status === "processing").map((d) => d.id)
-  const ingestByDoc = new Map<string, KnowledgeDocumentListItem["ingest"]>()
-  if (processingIds.length > 0) {
-    const jobs = await prisma.ingestJob.findMany({
-      where: { documentId: { in: processingIds } },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        documentId: true,
-        step: true,
-        progress: true,
-        stepCurrent: true,
-        stepTotal: true,
-        etaSeconds: true,
-        error: true,
-      },
-    })
-    for (const job of jobs) {
-      if (!job.documentId || ingestByDoc.has(job.documentId)) continue // keep newest per doc
-      ingestByDoc.set(job.documentId, {
-        jobId: job.id,
-        step: job.step,
-        progress: job.progress,
-        stepCurrent: job.stepCurrent,
-        stepTotal: job.stepTotal,
-        etaSeconds: job.etaSeconds,
-        error: job.error,
-      })
-    }
-  }
-
-  // Thumbnails still need per-image S3 presigning, but only for actual images;
-  // run those in parallel rather than awaiting sequentially per row.
-  return Promise.all(
-    documents.map(async (document) => {
-      const fileType = mapFileType(document)
-      const thumbnailUrl =
-        fileType === "image" ? await resolveImageThumbnail(document.s3Key) : undefined
-
-      return {
-        ...mapListItem(document),
-        chunkCount: chunkCounts.get(document.id) ?? 0,
-        thumbnailUrl,
-        ingest: ingestByDoc.get(document.id) ?? null,
-      }
-    })
-  )
-}
-
-/**
- * Loads a single dashboard knowledge document.
- */
-export async function getKnowledgeDocumentForDashboard(params: {
-  documentId: string
-  organizationId: string | null
-}): Promise<KnowledgeDocumentDetail | ServiceError> {
-  const document = await findKnowledgeDocumentById(params.documentId)
-  if (!document) {
-    return { status: 404, error: "Document not found" }
-  }
-
-  if (!hasDocumentAccess(document.organizationId, params.organizationId)) {
-    return { status: 404, error: "Document not found" }
-  }
-
-  const surrealClient = await getSurrealClient()
-  const chunkResults = await surrealClient.query<{
-    id: unknown
-    content: string
-    chunk_index: number
-    created_at: string
-    chunk_type: string | null
-  }>(
-    `SELECT id, content, chunk_index, created_at, metadata.chunkType AS chunk_type FROM document_chunk WHERE document_id = $document_id ORDER BY chunk_index ASC`,
-    { document_id: params.documentId }
-  )
-
-  const rawResult = chunkResults[0]
-  const chunks = (Array.isArray(rawResult) ? rawResult : (rawResult as { result?: Array<{
-    id: unknown
-    content: string
-    chunk_index: number
-    created_at: string
-    chunk_type: string | null
-  }> })?.result || []) as Array<{
-    id: unknown
-    content: string
-    chunk_index: number
-    created_at: string
-    chunk_type: string | null
-  }>
-
-  // Stream through the app route (RustFS is internal-only) so the browser can
-  // actually load the preview instead of a dead presigned rustfs:9000 URL.
-  const fileUrl = document.s3Key ? appFileUrl(document.s3Key) : undefined
-
-  return {
-    id: document.id,
-    title: document.title,
-    content: document.content,
-    categories: document.categories,
-    subcategory: document.subcategory,
-    groups: mapGroups(document.groups),
-    metadata: document.metadata,
-    fileType: mapFileType(document),
-    artifactType: document.artifactType || null,
-    fileSize: document.fileSize,
-    mimeType: document.mimeType,
-    s3Key: document.s3Key,
-    fileUrl,
-    chunks: chunks.map((chunk) => ({
-      id: normalizeSurrealId(chunk.id),
-      content: chunk.content,
-      chunkIndex: chunk.chunk_index,
-      chunkType: chunk.chunk_type ?? null,
-      createdAt: chunk.created_at,
-    })),
-    createdAt: document.createdAt.toISOString(),
-    updatedAt: document.updatedAt.toISOString(),
-  }
-}
+// Read and write paths live in sibling modules; re-exported here so every
+// existing consumer keeps importing "./service".
+export * from "./service-shared"
+export * from "./service-read"
+export * from "./service-write"
 
 /**
  * Creates a dashboard knowledge document from JSON or a file upload.
@@ -410,8 +70,17 @@ export async function createKnowledgeDocumentForDashboard(params: {
     return { status: 403, error: "Insufficient permissions" }
   }
 
-  const useEnhanced = params.input.useEnhanced
   const useCombined = params.input.useCombined !== false
+  // Per-type pipeline policy: what runs is decided by file type (+ the PDF-only
+  // figureMode knob), not by the legacy useEnhanced toggle (accepted, ignored).
+  const { resolveIngestPolicy, parseFigureMode } = await import("@/lib/ingest/pipeline-policy")
+  const policy =
+    params.input.kind === "file" && params.input.file
+      ? resolveIngestPolicy(
+          (params.input.file as File).name,
+          parseFigureMode(params.input.figureMode, params.input.forceOCR)
+        )
+      : { entities: true, figures: false, forceLayout: false }
   const groupIds = toStringList(params.input.groupIds)
   const categories = toCategoryList(params.input.categories)
   let title = params.input.title || ""
@@ -421,6 +90,9 @@ export async function createKnowledgeDocumentForDashboard(params: {
   let originalFilename: string | undefined
   let fileType: "markdown" | "pdf" | "image" = "markdown"
   let extractedFigures: import("@/lib/rag/extractors/types").ExtractedFigure[] | undefined
+  /** Reading-order blocks, carried alongside the figures so each one can be
+   *  anchored to the text chunk it belongs to rather than matched by caption. */
+  let extractedPagesBlocks: import("@/lib/rag/extractors/types").PageBlocks[][] | undefined
   let extractionPageMap: Array<{ page: number; text: string }> | undefined
   let usedOCR = false
 
@@ -429,7 +101,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
     // Validation + quota already ran at enqueue for the background path — skip
     // to avoid a second quota charge (the file is already stored).
     if (!isBackground) {
-      const validation = validateUpload("document", file.size, file.type)
+      const validation = validateUpload("document", file.size, file.type, file.name)
       if (!validation.valid) {
         return { status: 400, error: validation.error }
       }
@@ -446,156 +118,22 @@ export async function createKnowledgeDocumentForDashboard(params: {
 
     originalFilename = file.name
     mimeType = file.type
-    const detectedType = detectFileType(file.name)
     fileBuffer = Buffer.from(await file.arrayBuffer())
     await emit?.("extracting")
 
-    // Extraction failures used to fall back to a literal placeholder string
-    // ("Failed to OCR PDF.") which then got chunked + embedded + indexed. RAG
-    // hits would surface those placeholder strings as "results". Now: any
-    // extraction failure aborts ingest with a 422; the caller can retry with
-    // different settings (forceOCR, different documentType) instead of silently
-    // poisoning the knowledge base.
-    let extractionError: string | null = null
-
-    if (detectedType === "pdf") {
-      fileType = "pdf"
-      const isScanned = params.input.forceOCR || (await isPDFScanned(fileBuffer))
-
-      if (isScanned) {
-        // Layout extractors (MinerU/Mistral) — purpose-built for scanned/
-        // table-heavy PDFs and return cropped figures. Build an ordered CHAIN
-        // from whatever is configured and try each until one yields text, so a
-        // provider outage/quota falls through to the next rather than dropping
-        // to the (figure-less) legacy OCR pipeline:
-        //   1. on-prem MinerU sidecar  (KB_EXTRACT_MINERU_BASE_URL) — GPU, private
-        //   2. hosted MinerU API       (KB_MINERU_API_KEY)          — free tier
-        //   3. Mistral OCR             (KB_MISTRAL_OCR_KEY)         — payable, EU
-        // Override the order with KB_LAYOUT_EXTRACTOR_ORDER (csv of
-        // sidecar,mineru-api,mistral). Legacy OCR remains the final fallback.
-        const { getRagConfig } = await import("@/lib/rag/config")
-        const mineruBaseUrl = getRagConfig().extractMineruBaseUrl
-        const available: Record<string, () => Promise<import("@/lib/rag/extractors/types").Extractor>> = {
-          sidecar: mineruBaseUrl
-            ? async () => new (await import("@/lib/rag/extractors/mineru-extractor")).MineruExtractor(mineruBaseUrl)
-            : undefined as never,
-          "mineru-api": process.env.KB_MINERU_API_KEY
-            ? async () => new (await import("@/lib/rag/extractors/mineru-api-extractor")).MineruApiExtractor()
-            : undefined as never,
-          mistral: process.env.KB_MISTRAL_OCR_KEY
-            ? async () => new (await import("@/lib/rag/extractors/mistral-ocr-extractor")).MistralOcrExtractor()
-            : undefined as never,
-        }
-        const defaultOrder = ["sidecar", "mineru-api", "mistral"]
-        const order = (process.env.KB_LAYOUT_EXTRACTOR_ORDER?.split(",").map((x) => x.trim()) || defaultOrder)
-          .filter((name) => typeof available[name] === "function")
-        for (const name of order) {
-          try {
-            const extractor = await available[name]()
-            const result = await extractor.extract(fileBuffer, { withFigures: true })
-            if (result.text?.trim()) {
-              content = result.text
-              usedOCR = true
-              if (result.figures?.length) extractedFigures = result.figures
-              if (result.pageMap?.length) extractionPageMap = result.pageMap
-              console.log(`[Knowledge] Layout extraction via ${name} (${result.figures?.length ?? 0} figures, ${result.pageMap?.length ?? 0} page blocks)`)
-              break
-            }
-            console.warn(`[Knowledge] ${name} returned no text, trying next extractor`)
-          } catch (error) {
-            console.warn(
-              `[Knowledge] ${name} extraction failed, trying next: ${error instanceof Error ? error.message : error}`
-            )
-          }
-        }
-
-        if (!usedOCR) try {
-          const ocrResult = await processDocumentOCR(fileBuffer, "application/pdf", {
-            outputFormat: "markdown",
-            documentType: params.input.documentType as
-              | "printed_text"
-              | "handwritten"
-              | "table"
-              | "form"
-              | "figure"
-              | "mixed"
-              | undefined,
-          })
-          content = "combinedText" in ocrResult ? ocrResult.combinedText : ocrResult.text
-          usedOCR = true
-        } catch (error) {
-          console.error("OCR processing error:", error)
-          extractionError = `OCR failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
-        }
-      } else {
-        try {
-          const { extractText, getDocumentProxy } = await import("unpdf")
-          const pdf = await getDocumentProxy(new Uint8Array(fileBuffer))
-          // Per-page extraction (mergePages:false → string[]) so we can build a
-          // pageMap and tag every text chunk with its source page, then join
-          // for the chunker input.
-          const { text } = await extractText(pdf, { mergePages: false })
-          const pages = Array.isArray(text) ? text : [text]
-          content = pages.join("\n\n")
-          extractionPageMap = pages
-            .map((t, i) => ({ page: i, text: (t || "").trim() }))
-            .filter((p) => p.text.length > 0)
-        } catch (error) {
-          console.error("PDF parsing error:", error)
-          extractionError = `PDF parse failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
-        }
-      }
-    } else if (detectedType === "image") {
-      fileType = "image"
-      try {
-        const ext = path.extname(file.name).toLowerCase() as SupportedImageExt | string
-        const mimeTypes: Record<string, string> = {
-          ".png": "image/png",
-          ".jpg": "image/jpeg",
-          ".jpeg": "image/jpeg",
-          ".gif": "image/gif",
-          ".webp": "image/webp",
-          ".heic": "image/heic",
-        }
-        const imgMimeType = mimeTypes[ext] || "image/png"
-
-        const ocrResult = await processDocumentOCR(fileBuffer, imgMimeType, {
-          outputFormat: "markdown",
-          documentType: params.input.documentType as
-            | "printed_text"
-            | "handwritten"
-            | "table"
-            | "form"
-            | "figure"
-            | "mixed"
-            | undefined,
-        })
-        const text = "combinedText" in ocrResult ? ocrResult.combinedText : ocrResult.text
-        content = `[Image: ${file.name}]\n\n${text}`
-        usedOCR = true
-      } catch (error) {
-        console.error("OCR processing error:", error)
-        extractionError = `Image OCR failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
-      }
-    } else if (detectedType === "document" || detectedType === "text") {
-      fileType = "markdown"
-      try {
-        const { EXT_TO_MIME } = await import("@/lib/files/mime-types")
-        const { extractTextFromBuffer } = await import("@/lib/files/parsers")
-        const detectedMime = EXT_TO_MIME[path.extname(file.name).toLowerCase()] || file.type || "text/plain"
-        content = await extractTextFromBuffer(fileBuffer, detectedMime, file.name)
-      } catch (error) {
-        console.error("File extraction error:", error)
-        extractionError = `Text extraction failed for "${file.name}": ${(error as Error).message?.slice(0, 200) ?? "unknown error"}`
-      }
-    } else {
-      fileType = "markdown"
-      content = fileBuffer.toString("utf-8")
+    const { extractDocumentText } = await import("@/lib/ingest/extract")
+    const extraction = await extractDocumentText(file, fileBuffer, policy, {
+      documentType: params.input.documentType,
+    })
+    if (extraction.error) {
+      return { status: 422, error: extraction.error }
     }
-
-    if (extractionError) {
-      return { status: 422, error: extractionError }
-    }
+    content = extraction.content
+    fileType = extraction.fileType
+    usedOCR = extraction.usedOCR
+    extractedFigures = extraction.figures
+    extractedPagesBlocks = extraction.pagesBlocks
+    extractionPageMap = extraction.pageMap
 
     if (!title) {
       title = file.name.replace(/\.[^/.]+$/, "")
@@ -647,9 +185,8 @@ export async function createKnowledgeDocumentForDashboard(params: {
       s3Key: s3Key ?? null,
       documentId,
       params: {
-        useEnhanced,
         useCombined,
-        forceOCR: params.input.forceOCR,
+        figureMode: parseFigureMode(params.input.figureMode, params.input.forceOCR),
         documentType: params.input.documentType,
         title,
         categories: params.input.categories,
@@ -709,198 +246,32 @@ export async function createKnowledgeDocumentForDashboard(params: {
             : undefined,
       })
 
+  // Indexing (chunk → entities → figures → embed → store) lives in the engine.
+  // Embed/store failures throw; the catch below owns the app-side recovery
+  // (mark failed for retry, or roll the synchronous path back).
   let chunks: Chunk[] = []
   let entityCount = 0
-
-  await emit?.("chunking")
-
-  if (useEnhanced) {
-    chunks = await smartChunkDocument(content, title, categories[0], params.input.subcategory || undefined, {
-      maxChunkSize: 800,
-      overlapSize: 200,
-      preserveCodeBlocks: true,
-      respectHeadingBoundaries: true,
-    })
-
-    try {
-      await emit?.("extracting_entities")
-      const surrealClient = await getSurrealClient()
-      if (useCombined) {
-        const { entities, relations } = await extractEntitiesAndRelations(content, document.id, params.context.userId)
-        entityCount = entities.length
-
-        const entityIdMap = new Map<string, string>()
-        let entityIdx = 0
-        for (const entity of entities) {
-          await emit?.("extracting_entities", ++entityIdx, entities.length)
-          const sanitizedName = entity.name.toLowerCase().replace(/[^a-z0-9]/g, "_")
-          const entityId = `entity:${document.id}_${sanitizedName}`
-
-          try {
-            await surrealClient.query(
-              `UPSERT entity:\`${document.id}_${sanitizedName}\` CONTENT {
-                name: $name,
-                type: $type,
-                confidence: $confidence,
-                document_id: $document_id,
-                file_id: $file_id,
-                metadata: $metadata,
-                updated_at: time::now()
-              }`,
-              {
-                name: entity.name,
-                type: entity.type,
-                confidence: entity.confidence,
-                document_id: document.id,
-                file_id: document.id,
-                metadata: entity.metadata,
-              }
-            )
-          } catch (error) {
-            console.warn(`[Knowledge API] Failed to upsert entity ${entityId}:`, error)
-          }
-
-          entityIdMap.set(entity.name.toLowerCase(), entityId)
-        }
-
-        if (relations.length > 0) {
-          let storedCount = 0
-          let skippedCount = 0
-          for (const relation of relations) {
-            const sourceName = (relation.metadata?.source_entity as string || "").toLowerCase()
-            const targetName = (relation.metadata?.target_entity as string || "").toLowerCase()
-            const sourceId = entityIdMap.get(sourceName)
-            const targetId = entityIdMap.get(targetName)
-
-            if (!sourceId || !targetId) {
-              skippedCount++
-              continue
-            }
-
-            // Sanitize relation type to valid SurrealDB table name
-            const relType = (relation.relation_type || "RELATED_TO")
-              .toUpperCase()
-              .replace(/[^A-Z0-9_]/g, "_")
-              .replace(/^_+|_+$/g, "")
-              || "RELATED_TO"
-
-            try {
-              await surrealClient.relate(sourceId, relType, targetId, {
-                confidence: relation.confidence,
-                document_id: document.id,
-                context: relation.metadata?.context,
-                created_at: new Date().toISOString(),
-              })
-              storedCount++
-            } catch (error) {
-              console.warn(`[Knowledge API] Failed to create relation ${sourceId} ->${relType}-> ${targetId}:`, error)
-            }
-          }
-          console.log(`[Knowledge API] Relations: ${storedCount} stored, ${skippedCount} skipped (no matching entity), ${relations.length} total`)
-        }
-      } else {
-        const entities = await extractEntities(content, document.id, undefined, {
-          useLLM: true,
-          usePatterns: true,
-        })
-        entityCount = entities.length
-
-        for (const entity of entities) {
-          const sanitizedName = entity.name.toLowerCase().replace(/[^a-z0-9]/g, "_")
-          const entityId = `entity:${document.id}_${sanitizedName}`
-
-          try {
-            await surrealClient.query(
-              `UPSERT entity:\`${document.id}_${sanitizedName}\` CONTENT {
-                name: $name,
-                type: $type,
-                confidence: $confidence,
-                document_id: $document_id,
-                file_id: $file_id,
-                metadata: $metadata,
-                updated_at: time::now()
-              }`,
-              {
-                name: entity.name,
-                type: entity.type,
-                confidence: entity.confidence,
-                document_id: document.id,
-                file_id: document.id,
-                metadata: entity.metadata,
-              }
-            )
-          } catch (error) {
-            console.warn(`[Knowledge API] Failed to upsert entity ${entityId}:`, error)
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Entity/Relation extraction failed:", error)
-    }
-  } else {
-    chunks = chunkDocument(content, title, categories[0], params.input.subcategory || undefined, {
-      chunkSize: 1000,
-      chunkOverlap: 200,
-    })
-  }
-
-  // Tag text chunks with their source page (from the layout parser's page map)
-  // so retrieval sources can show "hal. N". Best-effort; no-op without a map.
-  if (extractionPageMap?.length) {
-    chunks = assignChunkPages(chunks, extractionPageMap)
-  }
-
-  // ── Figure asset layer (multimodal RAG): upload crops + append searchable
-  // figure chunks so retrieval can surface + render the original image. ──
-  if (extractedFigures?.length) {
-    await emit?.("processing_figures", 0, extractedFigures.length)
-    try {
-      const { storeFiguresAsChunks } = await import("@/lib/rag/figure-assets")
-      const { chunks: figChunks, assets } = await storeFiguresAsChunks({
-        organizationId: params.context.organizationId || null,
-        documentId: document.id,
-        documentTitle: title,
-        category: categories[0] ?? "general",
-        subcategory: params.input.subcategory || undefined,
-        figures: extractedFigures,
-      })
-      if (figChunks.length) {
-        // Reindex chunkIndex across the combined set (figure chunks were -1).
-        chunks = [...chunks, ...figChunks].map((c, i) => ({
-          ...c,
-          metadata: { ...c.metadata, chunkIndex: i },
-        }))
-      }
-      if (assets.length) {
-        await updateKnowledgeDocumentMetadata(document.id, { figures: assets })
-      }
-      console.log(`[Knowledge API] Figures: ${assets.length} stored for document ${document.id}`)
-    } catch (err) {
-      console.warn(`[Knowledge API] Figure asset ingest failed (non-fatal): ${err instanceof Error ? err.message : err}`)
-    }
-  }
-
-  // Embed + store atomically: if either step fails, the Document row in
-  // Postgres is already created (above) but has zero chunks in SurrealDB →
-  // user sees the doc in the file list but RAG returns nothing for it.
-  // Roll back the half-ingested document (Prisma + S3) and re-throw so the
-  // API route surfaces a real failure to the caller.
-  const chunkTexts = chunks.map((chunk) => `${title}\n\n${chunk.content}`)
   try {
-    await emit?.("embedding", 0, chunks.length)
-    const embeddings = await generateEmbeddings(chunkTexts)
-    const { getRagConfig } = await import("@/lib/rag/config")
-    const embeddingModel = getRagConfig().embeddingModel
-    await emit?.("storing", 0, chunks.length)
-    // Idempotency guard: storeChunks CREATEs chunks under the deterministic id
-    // `${documentId}_${i}`, which throws on a pre-existing id. Clearing any
-    // stale chunks first makes this step safe to re-run for the same
-    // document.id — the precondition a future ingest-retry endpoint/cron needs
-    // to recover a half-processed doc (e.g. a request killed by a deploy after
-    // some chunks were written). No-op on the happy path (fresh random id →
-    // zero existing chunks).
-    await deleteChunksByDocumentId(document.id)
-    await storeChunks(document.id, chunks, embeddings, embeddingModel)
+    const { indexDocumentContent } = await import("@/lib/ingest/index-document")
+    const indexed = await indexDocumentContent(
+      {
+        documentId: document.id,
+        title,
+        content,
+        categories,
+        subcategory: params.input.subcategory,
+        organizationId: params.context.organizationId,
+        userId: params.context.userId,
+        policy,
+        useCombined,
+        figures: extractedFigures,
+        pagesBlocks: extractedPagesBlocks,
+        pageMap: extractionPageMap,
+      },
+      emit
+    )
+    chunks = indexed.chunks
+    entityCount = indexed.entityCount
   } catch (err) {
     console.error(
       `[Knowledge API] Ingest failed for document ${document.id} (${chunks.length} chunks):`,
@@ -924,7 +295,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
     // IngestJob row carries the s3Key for that replay; orphaned S3 objects
     // for never-retried jobs are reaped by a separate sweep keyed on
     // IngestJob.status = "failed" + age.
-    recordIngestJobFailure(ingestJobId, (err as Error).message ?? "ingest failed")
+    await recordIngestJobFailure(ingestJobId, (err as Error).message ?? "ingest failed")
     throw err
   }
 
@@ -947,7 +318,7 @@ export async function createKnowledgeDocumentForDashboard(params: {
     await emit?.("done")
   }
 
-  recordIngestJobSuccess(ingestJobId, document.id)
+  await recordIngestJobSuccess(ingestJobId, document.id)
 
   return {
     id: document.id,
@@ -959,8 +330,8 @@ export async function createKnowledgeDocumentForDashboard(params: {
     s3Key,
     fileUrl,
     chunkCount: chunks.length,
-    entityCount: useEnhanced ? entityCount : undefined,
-    enhanced: useEnhanced,
+    entityCount: policy.entities ? entityCount : undefined,
+    enhanced: policy.entities,
     usedOCR,
   }
 }
@@ -986,7 +357,7 @@ export async function enqueueFileIngest(params: {
   }
 
   const file = params.input.file as File
-  const validation = validateUpload("document", file.size, file.type)
+  const validation = validateUpload("document", file.size, file.type, file.name)
   if (!validation.valid) {
     return { status: 400, error: validation.error }
   }
@@ -1049,9 +420,11 @@ export async function enqueueFileIngest(params: {
     s3Key,
     documentId,
     params: {
-      useEnhanced: params.input.useEnhanced,
       useCombined: params.input.useCombined !== false,
-      forceOCR: params.input.forceOCR,
+      figureMode: (await import("@/lib/ingest/pipeline-policy")).parseFigureMode(
+        params.input.figureMode,
+        params.input.forceOCR
+      ),
       documentType: params.input.documentType,
       title,
       categories: params.input.categories,
@@ -1071,7 +444,7 @@ export async function enqueueFileIngest(params: {
     fileSize,
     s3Key,
     fileUrl: appFileUrl(s3Key),
-    enhanced: params.input.useEnhanced,
+    enhanced: (await import("@/lib/ingest/pipeline-policy")).resolveIngestPolicy(file.name).entities,
   }
 }
 
@@ -1099,7 +472,7 @@ export async function processIngestJob(
   const { recordIngestJobFailure } = await import("@/lib/ingest/job")
 
   const markFailed = async (reason: string) => {
-    recordIngestJobFailure(job.id, reason)
+    await recordIngestJobFailure(job.id, reason)
     if (job.documentId) {
       await prisma.document.update({ where: { id: job.documentId }, data: { status: "failed" } }).catch(() => {})
     }
@@ -1114,6 +487,7 @@ export async function processIngestJob(
     useEnhanced?: boolean
     useCombined?: boolean
     forceOCR?: boolean
+    figureMode?: string
     documentType?: string
     title?: string
     categories?: string[]
@@ -1147,6 +521,7 @@ export async function processIngestJob(
       useEnhanced: !!p.useEnhanced,
       useCombined: p.useCombined !== false,
       forceOCR: p.forceOCR,
+      figureMode: p.figureMode,
       documentType: p.documentType,
     } as KnowledgeDocumentCreateInput,
     documentId: job.documentId,
@@ -1163,219 +538,6 @@ export async function processIngestJob(
     return "failed"
   }
   return "ready"
-}
-
-/**
- * Updates a dashboard knowledge document.
- */
-export async function updateKnowledgeDocumentForDashboard(params: {
-  documentId: string
-  organizationId: string | null
-  role: string | null | undefined
-  /** Acting user id — written to AuditLog so we can answer "who did this?". */
-  userId: string | null
-  input: KnowledgeDocumentUpdateInput
-}): Promise<Record<string, unknown> | ServiceError> {
-  const existing = await findKnowledgeDocumentAccessById(params.documentId)
-  if (!existing) {
-    return { status: 404, error: "Document not found" }
-  }
-
-  if (!hasDocumentAccess(existing.organizationId, params.organizationId)) {
-    return { status: 404, error: "Document not found" }
-  }
-
-  if (existing.organizationId && params.role && !canEdit(params.role)) {
-    return { status: 403, error: "Insufficient permissions" }
-  }
-
-  const groupIds = params.input.groupIds === undefined ? undefined : toStringList(params.input.groupIds)
-
-  const document = await updateKnowledgeDocumentWithGroups(
-    params.documentId,
-    {
-      ...(params.input.title && { title: params.input.title }),
-      ...(params.input.categories !== undefined && { categories: toCategoryList(params.input.categories) }),
-      ...(params.input.subcategory !== undefined && {
-        subcategory: params.input.subcategory || null,
-      }),
-    },
-    groupIds
-  )
-
-  if (!document) {
-    return { status: 404, error: "Document not found" }
-  }
-
-  recordKnowledgeAudit({
-    organizationId: params.organizationId,
-    userId: params.userId,
-    action: "document.update",
-    entityType: "document",
-    entityId: params.documentId,
-    detail: {
-      title: params.input.title,
-      categories: params.input.categories,
-      subcategory: params.input.subcategory,
-      groupIds,
-    },
-  })
-
-  return {
-    id: document.id,
-    title: document.title,
-    categories: document.categories,
-    subcategory: document.subcategory,
-    groups: mapGroups(document.groups),
-  }
-}
-
-/**
- * Soft-deletes a knowledge document by default (recoverable for `retentionDays`
- * before the retention sweep hard-deletes). Pass `hard: true` for the legacy
- * permanent-delete path that also cleans up S3 + SurrealDB chunks immediately.
- */
-export async function deleteKnowledgeDocumentForDashboard(params: {
-  documentId: string
-  organizationId: string | null
-  role: string | null | undefined
-  userId: string | null
-  hard?: boolean
-}): Promise<{ success: true; mode: "soft" | "hard" } | ServiceError> {
-  const existing = await findKnowledgeDocumentAccessById(params.documentId)
-  if (!existing) {
-    return { status: 404, error: "Document not found" }
-  }
-
-  if (!hasDocumentAccess(existing.organizationId, params.organizationId)) {
-    return { status: 404, error: "Document not found" }
-  }
-
-  if (existing.organizationId && params.role && !canManage(params.role)) {
-    return { status: 403, error: "Insufficient permissions" }
-  }
-
-  if (!params.hard) {
-    // Soft delete: row stays, deletedAt timestamp filters it out everywhere.
-    // Chunks in SurrealDB stay until the retention sweep — retrieval skips
-    // them because the Postgres join filters deletedAt: null.
-    await softDeleteKnowledgeDocument(params.documentId)
-    recordKnowledgeAudit({
-      organizationId: params.organizationId,
-      userId: params.userId,
-      action: "document.delete",
-      entityType: "document",
-      entityId: params.documentId,
-      detail: { mode: "soft" },
-    })
-    console.log(`Soft-deleted document ${params.documentId}`)
-    return { success: true, mode: "soft" }
-  }
-
-  // Hard-delete order (postgres-first):
-  //   1. delete Document row in Postgres — this is the only step we can do
-  //      atomically. If it fails, nothing changes; user retries.
-  //   2. cleanup SurrealDB chunks + entities — best-effort. If it fails, the
-  //      chunks are now orphans (no parent Document.id in Postgres) and will
-  //      be filtered out at retrieval (vector-store.ts uses an inner join +
-  //      deletedAt:null filter, so missing doc → chunk dropped from results).
-  //      A retention sweep can hard-drop the orphan chunks later.
-  //   3. delete S3 file — best-effort, same logic; orphan S3 objects are
-  //      cheap and recoverable by a periodic scan of S3 vs Document.s3Key.
-  //
-  // Old order (surreal → s3 → postgres) had the failure mode: if Postgres
-  // delete failed AFTER surreal+s3 cleared, the doc stayed visible in the UI
-  // but RAG silently returned zero chunks. New order avoids that by leaving
-  // the doc fully present if its row delete fails.
-  let cleanupStats: { deletedRelationTables: number; entitiesDeleted: boolean; chunksDeleted: boolean } = {
-    deletedRelationTables: 0,
-    entitiesDeleted: false,
-    chunksDeleted: false,
-  }
-  try {
-    await deleteKnowledgeDocument(params.documentId)
-  } catch (err) {
-    console.error(`[Knowledge API] Hard delete: Postgres delete failed for ${params.documentId}:`, err)
-    return {
-      status: 500,
-      error: `Failed to delete document row: ${(err as Error).message?.slice(0, 200) ?? "unknown"}`,
-    }
-  }
-
-  try {
-    const surrealClient = await getSurrealClient()
-    cleanupStats = await surrealClient.cleanupDocumentIntelligence(params.documentId)
-  } catch (err) {
-    console.error(
-      `[Knowledge API] Hard delete: SurrealDB cleanup failed for ${params.documentId} (Postgres row already deleted; chunks orphan and will be filtered at retrieval). Manual sweep needed:`,
-      err
-    )
-  }
-
-  if (existing.s3Key) {
-    try {
-      await deleteFile(existing.s3Key)
-    } catch (error) {
-      console.error(
-        `[Knowledge API] Hard delete: S3 delete failed for ${existing.s3Key} (Postgres row already deleted; file orphan). Manual sweep needed:`,
-        error
-      )
-    }
-  }
-
-  recordKnowledgeAudit({
-    organizationId: params.organizationId,
-    userId: params.userId,
-    action: "document.hard_delete",
-    entityType: "document",
-    entityId: params.documentId,
-    detail: {
-      mode: "hard",
-      relationTablesCleaned: cleanupStats.deletedRelationTables,
-      entitiesDeleted: cleanupStats.entitiesDeleted,
-      chunksDeleted: cleanupStats.chunksDeleted,
-    },
-    riskLevel: "high",
-  })
-  console.log(
-    `Hard-deleted document ${params.documentId}: cleaned up relations from ${cleanupStats.deletedRelationTables} tables, entities: ${cleanupStats.entitiesDeleted}, chunks: ${cleanupStats.chunksDeleted}`
-  )
-
-  return { success: true, mode: "hard" }
-}
-
-/**
- * Restore a previously soft-deleted document.
- */
-export async function restoreKnowledgeDocumentForDashboard(params: {
-  documentId: string
-  organizationId: string | null
-  role: string | null | undefined
-  userId: string | null
-}): Promise<{ success: true } | ServiceError> {
-  const existing = await findKnowledgeDocumentAccessById(params.documentId)
-  if (!existing) {
-    return { status: 404, error: "Document not found" }
-  }
-
-  if (!hasDocumentAccess(existing.organizationId, params.organizationId)) {
-    return { status: 404, error: "Document not found" }
-  }
-
-  if (existing.organizationId && params.role && !canManage(params.role)) {
-    return { status: 403, error: "Insufficient permissions" }
-  }
-
-  await restoreKnowledgeDocument(params.documentId)
-  recordKnowledgeAudit({
-    organizationId: params.organizationId,
-    userId: params.userId,
-    action: "document.restore",
-    entityType: "document",
-    entityId: params.documentId,
-  })
-  console.log(`Restored document ${params.documentId}`)
-  return { success: true }
 }
 
 /**
@@ -1486,122 +648,5 @@ export async function replaceKnowledgeDocumentContentForDashboard(params: {
     fileSize: newRow.fileSize,
     s3Key: newRow.s3Key,
     chunkCount: newRow.chunkCount,
-  }
-}
-
-/**
- * Returns the document intelligence view for a knowledge document.
- */
-export async function getKnowledgeDocumentIntelligence(params: {
-  documentId: string
-}): Promise<KnowledgeDocumentIntelligenceResponse> {
-  const client = await getSurrealClient()
-
-  const entityResults = await client.query<{
-    id: string
-    name: string
-    type: string
-    confidence: number
-    document_id: string
-    chunk_id?: string
-    metadata?: {
-      context?: string
-      source?: "pattern" | "llm"
-    }
-  }>(`SELECT * FROM entity WHERE document_id = $document_id ORDER BY confidence DESC`, {
-    document_id: params.documentId,
-  })
-  const rawEntities = entityResults[0]
-  const entities = (Array.isArray(rawEntities) ? rawEntities : (rawEntities as { result?: Array<{
-    id: string
-    name: string
-    type: string
-    confidence: number
-    document_id: string
-    chunk_id?: string
-    metadata?: {
-      context?: string
-      source?: "pattern" | "llm"
-    }
-  }> })?.result || []) as Array<{
-    id: string
-    name: string
-    type: string
-    confidence: number
-    document_id: string
-    chunk_id?: string
-    metadata?: {
-      context?: string
-      source?: "pattern" | "llm"
-    }
-  }>
-
-  let relations: KnowledgeDocumentIntelligenceResponse["relations"] = []
-
-  try {
-    const dbInfo = await client.query<Record<string, unknown>>(`INFO FOR DB`)
-    const rawInfo = dbInfo[0]
-    // normalizeQueryResult wraps the INFO object as { result: [{ tables: {...}, ... }] }
-    const info = ((rawInfo as { result?: unknown[] })?.result?.[0] ?? rawInfo) as Record<string, unknown>
-    const tables = (info?.tables ?? {}) as Record<string, unknown>
-
-    if (tables && typeof tables === "object") {
-      const excludedTables = ["entity", "document_chunk", "conversation_memory"]
-      const relationTables = Object.keys(tables).filter((t) => !excludedTables.includes(t))
-
-      for (const relType of relationTables) {
-        try {
-          const typeResults = await client.query<{
-            id: string
-            in: string
-            out: string
-            confidence?: number
-            context?: string
-            document_id?: string
-          }>(`SELECT * FROM \`${relType}\` WHERE document_id = $document_id`, {
-            document_id: params.documentId,
-          })
-          const typeData = typeResults[0]
-          const typeRelations = ((typeData as { result?: unknown[] })?.result ?? (Array.isArray(typeData) ? typeData : [])) as Array<{
-            id: string
-            in: string
-            out: string
-            confidence?: number
-            context?: string
-          }>
-
-          relations.push(
-            ...typeRelations.map((relation) => ({
-              id: relation.id,
-              in: relation.in,
-              out: relation.out,
-              relation_type: relType,
-              confidence: relation.confidence ?? 0.8,
-              metadata: {
-                context: relation.context,
-              },
-            }))
-          )
-        } catch {
-          // Skip relation tables that cannot be queried
-        }
-      }
-    }
-  } catch (error) {
-    console.error("Failed to get DB info for relation discovery:", error)
-  }
-
-  console.log(`[Intelligence API] Document ${params.documentId}: ${entities.length} entities, ${relations.length} relations`)
-
-  return {
-    entities,
-    relations,
-    status: "completed",
-    stats: {
-      totalEntities: entities.length,
-      totalRelations: relations.length,
-      entityTypes: [...new Set(entities.map((entity) => entity.type))].length,
-      relationTypes: [...new Set(relations.map((relation) => relation.relation_type))].length,
-    },
   }
 }

@@ -15,6 +15,10 @@ export interface Chunk {
     chunkType?: "text" | "table" | "list" | "code" | "heading" | "figure";  // structure-aware retrieval/render
     assetKey?: string;   // object-store key of the figure crop (chunkType "figure")
     page?: number;       // source page index for the figure/chunk
+    /** chunk_index of the text chunk this figure belongs to, by the layout
+     *  parser's reading order. Only set on chunkType "figure", and only when the
+     *  extractor exposed block order. */
+    anchorChunkIndex?: number;
   };
 }
 

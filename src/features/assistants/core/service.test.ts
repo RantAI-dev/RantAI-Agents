@@ -19,6 +19,9 @@ vi.mock("./repository", () => ({
 vi.mock("@/lib/models", () => ({
   DEFAULT_MODEL_ID: "model-default",
   isValidModel: vi.fn(),
+  // The service moved to the async check; the mock never followed, so the
+  // whole file failed to load once it could be resolved at all.
+  isValidModelAsync: vi.fn(async () => true),
 }))
 
 describe("assistants service", () => {

@@ -7,35 +7,43 @@ import {
 
 // ─── computeOverallProgress ──────────────────────────────────────────────────
 
+const FULL = { entities: true, figures: true }
+const LEAN = { entities: false, figures: false } // e.g. xlsx/csv policy
+
 describe("computeOverallProgress", () => {
   it("is 0 at queued and 100 only at done", () => {
-    expect(computeOverallProgress({ step: "queued" }, true)).toBe(0)
-    expect(computeOverallProgress({ step: "done" }, true)).toBe(100)
-    expect(computeOverallProgress({ step: "done" }, false)).toBe(100)
+    expect(computeOverallProgress({ step: "queued" }, FULL)).toBe(0)
+    expect(computeOverallProgress({ step: "done" }, FULL)).toBe(100)
+    expect(computeOverallProgress({ step: "done" }, LEAN)).toBe(100)
   })
 
   it("never reports 100 before done, even at a step's end", () => {
     // storing fully complete but not yet flipped to done
-    expect(computeOverallProgress({ step: "storing", current: 400, total: 400 }, true)).toBeLessThan(100)
-    expect(computeOverallProgress({ step: "storing", current: 400, total: 400 }, true)).toBe(99)
+    expect(computeOverallProgress({ step: "storing", current: 400, total: 400 }, FULL)).toBeLessThan(100)
+    expect(computeOverallProgress({ step: "storing", current: 400, total: 400 }, FULL)).toBe(99)
   })
 
-  it("weights extraction as the dominant early cost (enhanced)", () => {
+  it("weights extraction as the dominant early cost (full pipeline)", () => {
     // start of extracting = 0% completed weight; mid-extraction fills its slice
-    expect(computeOverallProgress({ step: "extracting" }, true)).toBe(0)
-    expect(computeOverallProgress({ step: "extracting", current: 1, total: 2 }, true)).toBe(23) // ~45/2
-    // entity step starts after extracting(45)+chunking(3) = 48
-    expect(computeOverallProgress({ step: "extracting_entities" }, true)).toBe(48)
+    expect(computeOverallProgress({ step: "extracting" }, FULL)).toBe(0)
+    expect(computeOverallProgress({ step: "extracting", current: 1, total: 2 }, FULL)).toBe(23) // ~45/2
+    // entity step starts after extracting(45)+chunking(4) = 49
+    expect(computeOverallProgress({ step: "extracting_entities" }, FULL)).toBe(49)
   })
 
-  it("redistributes the entity weight in basic mode (no entity step)", () => {
-    // basic extracting weight is 55 → embedding starts later than enhanced
-    expect(computeOverallProgress({ step: "extracting", current: 1, total: 2 }, false)).toBe(28) // ~55/2
-    // embedding starts after extracting(55)+chunking(5)+figures(10) = 70
-    expect(computeOverallProgress({ step: "embedding" }, false)).toBe(70)
+  it("zeroes skipped steps and renormalizes the rest", () => {
+    // With entities+figures skipped, remaining costs 45+4+12+7=68 scale to 100:
+    // embedding starts after (45+4)/68 ≈ 72%.
+    expect(computeOverallProgress({ step: "embedding" }, LEAN)).toBe(72)
+    // A skipped step never adds weight: figures start == embedding start point
+    expect(computeOverallProgress({ step: "processing_figures" }, LEAN)).toBe(
+      computeOverallProgress({ step: "embedding" }, LEAN)
+    )
+    // mid-extraction fills the (larger) normalized slice: (45/68)/2 ≈ 33%
+    expect(computeOverallProgress({ step: "extracting", current: 1, total: 2 }, LEAN)).toBe(33)
   })
 
-  it("advances monotonically across the enhanced pipeline", () => {
+  it("advances monotonically across the full pipeline", () => {
     const order = [
       { step: "queued" as const },
       { step: "extracting" as const },
@@ -46,15 +54,17 @@ describe("computeOverallProgress", () => {
       { step: "storing" as const },
       { step: "done" as const },
     ]
-    const values = order.map((s) => computeOverallProgress(s, true))
-    for (let i = 1; i < values.length; i++) {
-      expect(values[i]).toBeGreaterThanOrEqual(values[i - 1])
+    for (const flags of [FULL, LEAN, { entities: true, figures: false }]) {
+      const values = order.map((s) => computeOverallProgress(s, flags))
+      for (let i = 1; i < values.length; i++) {
+        expect(values[i]).toBeGreaterThanOrEqual(values[i - 1])
+      }
     }
   })
 
   it("ignores a malformed in-step fraction", () => {
-    expect(computeOverallProgress({ step: "embedding", current: 5, total: 0 }, true)).toBe(
-      computeOverallProgress({ step: "embedding" }, true)
+    expect(computeOverallProgress({ step: "embedding", current: 5, total: 0 }, FULL)).toBe(
+      computeOverallProgress({ step: "embedding" }, FULL)
     )
   })
 })

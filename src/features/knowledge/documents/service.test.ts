@@ -15,14 +15,20 @@ vi.mock("./repository", () => ({
   findKnowledgeDocumentAccessById: vi.fn(),
   findKnowledgeDocumentById: vi.fn(),
   listKnowledgeDocumentsByScope: vi.fn(),
+  replaceKnowledgeDocumentContent: vi.fn(),
+  restoreKnowledgeDocument: vi.fn(),
+  softDeleteKnowledgeDocument: vi.fn(),
+  countKnowledgeDocumentsForScope: vi.fn(),
+  updateKnowledgeDocumentMetadata: vi.fn(),
   updateKnowledgeDocumentWithGroups: vi.fn(),
 }))
 
 vi.mock("@/lib/rag", () => ({
-  chunkDocument: vi.fn(),
   detectFileType: vi.fn(),
   generateEmbeddings: vi.fn(),
   getDocumentChunkCount: vi.fn(),
+  getDocumentChunkCounts: vi.fn(async () => new Map<string, number>()),
+  deleteChunksByDocumentId: vi.fn(),
   smartChunkDocument: vi.fn(),
   storeChunks: vi.fn(),
 }))
@@ -73,7 +79,9 @@ describe("dashboard knowledge documents service", () => {
         updatedAt: new Date("2024-01-02T00:00:00.000Z"),
       },
     ] as never)
-    vi.mocked((await import("@/lib/rag")).getDocumentChunkCount).mockResolvedValue(3)
+    vi.mocked((await import("@/lib/rag")).getDocumentChunkCounts).mockResolvedValue(
+      new Map([["doc_1", 3]])
+    )
 
     const result = await listKnowledgeDocumentsForDashboard({
       organizationId: null,
@@ -105,8 +113,13 @@ describe("dashboard knowledge documents service", () => {
       categories: ["FAQ"],
       groups: [{ group: { id: "group_1", name: "Guides", color: "#fff" } }],
     } as never)
-    vi.mocked((await import("@/lib/rag")).chunkDocument).mockReturnValue([{ content: "chunk" }] as never)
+    // JSON content now always goes through the smart chunker + entity policy.
+    vi.mocked((await import("@/lib/rag")).smartChunkDocument).mockResolvedValue([{ content: "chunk" }] as never)
     vi.mocked((await import("@/lib/rag")).generateEmbeddings).mockResolvedValue([[1, 2, 3]] as never)
+    vi.mocked((await import("@/lib/document-intelligence")).extractEntitiesAndRelations).mockResolvedValue({
+      entities: [],
+      relations: [],
+    } as never)
 
     const result = await createKnowledgeDocumentForDashboard({
       context: { userId: "user_1", organizationId: null, role: null },
@@ -125,7 +138,8 @@ describe("dashboard knowledge documents service", () => {
       id: "doc_1",
       title: "Doc",
       chunkCount: 1,
-      enhanced: false,
+      // JSON/prose runs the entity step under the per-type policy.
+      enhanced: true,
     })
   })
 

@@ -21,6 +21,37 @@ CUDA_VISIBLE_DEVICES=0 FLASHINFER_DISABLE_VERSION_CHECK=1 \
 First request triggers model load (~30 s warm, ~210 s cold). Subsequent requests
 hit the hot vLLM engine at ~1-4 s per page.
 
+## Building the image (single source of truth)
+
+`server.py` **in this directory** is the only copy. It is what runs in
+production — verify with a hash before shipping any change:
+
+```bash
+sha256sum services/mineru-server/server.py
+# must match /app/server.py inside the running rantai-agents-mineru-1 container
+```
+
+Build from the **repo root** of agents-cloud, which holds the Dockerfile:
+
+```bash
+docker build -f portainer/Dockerfile.mineru-server -t mineru-server:gb10 .
+```
+
+The Dockerfile's `SERVER_PY` arg already defaults to this file; do not override
+it to point somewhere else.
+
+> **Why this warning exists.** Until 2026-08-09 there were two `server.py` copies
+> (198 vs 406 lines) and two Dockerfiles with different defaults. The documented
+> build command produced an image *silently missing* the anchor and figure-filter
+> work — extraction still ran, anchors just vanished. Anything that reintroduces
+> a second copy reintroduces that failure.
+
+Note also that the deployed container has at times been **hot-patched** by
+swapping `/app/server.py` directly. That survives `docker restart` but is
+destroyed by `docker compose up --force-recreate`, which happens on every stack
+update. See `DEPLOYED-HOTPATCH.md`. The fix is to rebuild the image from this
+file rather than to keep patching.
+
 ## Point the KB pipeline at it
 
 ```
