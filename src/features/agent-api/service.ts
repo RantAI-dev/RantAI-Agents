@@ -32,11 +32,59 @@ async function loadAssistantFull(assistantId: string) {
       model: true,
       useKnowledgeBase: true,
       knowledgeBaseGroupIds: true,
+      organizationId: true,
       modelConfig: true,
       guardRails: true,
       memoryConfig: true,
     },
   })
+}
+
+/**
+ * Resolve which knowledge bases a request may read.
+ *
+ * Precedence: an explicit `knowledge_base_ids` wins over the assistant's
+ * configured set, `["*"]` means every knowledge base the organisation owns, and
+ * omitting the field keeps the assistant's own configuration.
+ *
+ * Whatever is asked for, the result is intersected with the organisation that
+ * owns the API key. An id belonging to another tenant is dropped rather than
+ * refused, so a caller cannot use this field to probe which ids exist elsewhere
+ * — the answer to a guessed id is identical to the answer for one that was
+ * never valid.
+ *
+ * Returns `{ ids }` on success, or `{ error }` when the caller asked for
+ * knowledge bases and none of them resolved — silently answering from the whole
+ * corpus after being asked for one subject would be worse than an error.
+ */
+export async function resolveRequestedGroupIds(
+  organizationId: string | null,
+  assistantGroupIds: string[],
+  requested: string[] | undefined,
+): Promise<{ ids: string[] | undefined } | { error: string }> {
+  if (!requested || requested.length === 0) {
+    return { ids: assistantGroupIds.length > 0 ? assistantGroupIds : undefined }
+  }
+  const owned = await prisma.knowledgeBaseGroup.findMany({
+    where: { organizationId },
+    select: { id: true },
+  })
+  const ownedIds = new Set(owned.map((g) => g.id))
+
+  if (requested.includes("*")) {
+    if (ownedIds.size === 0) return { error: "No knowledge bases are available for this organization" }
+    return { ids: [...ownedIds] }
+  }
+
+  const ids = requested.filter((id) => ownedIds.has(id))
+  if (ids.length === 0) {
+    return {
+      error:
+        "None of the requested knowledge_base_ids exist for this organization. " +
+        "Call GET /api/v1/knowledge-bases to list the ids you may use.",
+    }
+  }
+  return { ids }
 }
 
 export async function authenticateV1Request(
@@ -163,9 +211,18 @@ export async function runV1ChatCompletion(
   let vlmResults: import("@/lib/rag/vlm-figures").FigureCandidate[] = []
   if (assistant.useKnowledgeBase && rawUserQuery) {
     try {
-      const groupIds = assistant.knowledgeBaseGroupIds.length > 0
-        ? assistant.knowledgeBaseGroupIds
-        : undefined
+      const resolved = await resolveRequestedGroupIds(
+        assistant.organizationId,
+        assistant.knowledgeBaseGroupIds,
+        input.knowledge_base_ids,
+      )
+      if ("error" in resolved) {
+        return new Response(
+          JSON.stringify({ error: { message: resolved.error, type: "invalid_request_error" } }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        )
+      }
+      const groupIds = resolved.ids
 
       // Directory listing — same as chat-public; gives the model the full doc
       // inventory for enumerate-style queries without burning chunks on it.
