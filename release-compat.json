@@ -2,6 +2,21 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "rantai_agents_version": "v0.5.0",
+      "date": "2026-08-20",
+      "notes": "Nested knowledge bases: a KB can sit inside another, and selecting one searches its whole subtree. Guards against cycles, cross-org parents and unbounded depth; deletes refuse a parent with children unless cascade is requested.",
+      "submodules": {
+        "rantaiclaw": {
+          "sha": "1e1d16a93a3233c3a2ba1dbdf4e27a7ef58577f5",
+          "tag": "v0.6.51-alpha"
+        },
+        "community_skills": {
+          "sha": "338da00eca10f971d3430e59a9e14aad4fe79a54",
+          "tag": "v0.1.0"
+        }
+      }
+    },
+    {
       "rantai_agents_version": "v0.4.0",
       "date": "2026-08-20",
       "notes": "KB extracted behind an 8-port engine boundary with a CI-enforced check, production-ready async ingest with per-document-type policy, mobile Bearer-JWT API, and retrieval fixes including a cross-organisation BM25 leak and a KNN path that could silently return no sources. Soak thresholds not re-validated for this release.",
