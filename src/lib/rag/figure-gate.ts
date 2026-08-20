@@ -44,6 +44,9 @@ export interface GateCandidate {
 export interface GateConfig {
   base: string
   model: string
+  /** Bearer token, when the endpoint is a hosted API rather than a sidecar.
+   *  Optional: an on-prem ollama/vLLM needs none. */
+  apiKey?: string
   /** How many of the ranked candidates the model is allowed to see. */
   topN: number
   /** How many survivors may actually be shown. One, in the measured design:
@@ -93,6 +96,7 @@ export function gateConfig(env: NodeJS.ProcessEnv = process.env): GateConfig | n
   return {
     base,
     model,
+    apiKey: env.KB_FIGURE_VLM_API_KEY || undefined,
     topN: Number.isFinite(topN) && topN > 0 ? topN : 2,
     maxKeep: Number.isFinite(maxKeep) && maxKeep > 0 ? maxKeep : 1,
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 4000,
@@ -111,18 +115,35 @@ export function parseVerdict(reply: string): boolean {
   return /\bYA\b/.test(t) && !/\bTIDAK\b/.test(t)
 }
 
-/** One judgement. Resolves false on any failure; never throws. */
+/**
+ * One judgement: true = keep, false = the model rejected it, null = NO VERDICT.
+ *
+ * The three-way return is the whole point. An earlier version returned `false`
+ * for a timeout, a transport error and a rejection alike, which inverted the
+ * stage's contract: a gate that cannot reach its model rejected every candidate
+ * and the answer lost every figure. The comment above `gateFigures` promised the
+ * opposite — "if it is off, misconfigured, slow, or broken … the worst case is
+ * the old output, never a worse one" — and that promise was not implemented.
+ *
+ * It matters because the failure is invisible from inside: the deployed 4B VL on
+ * a CPU-bound host answers this prompt in ~57 s against an 8 s budget, so every
+ * call aborted, every figure was dropped, and nothing in the logs said so.
+ * Never throws.
+ */
 async function judge(
   cfg: GateConfig,
   query: string,
   imageBase64: string,
-): Promise<boolean> {
+): Promise<boolean | null> {
   const ctl = new AbortController()
   const timer = setTimeout(() => ctl.abort(), cfg.timeoutMs)
   try {
     const res = await fetch(`${cfg.base}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}),
+      },
       signal: ctl.signal,
       body: JSON.stringify({
         model: cfg.model,
@@ -138,11 +159,25 @@ async function judge(
         ],
       }),
     })
-    if (!res.ok) return false
+    if (!res.ok) {
+      console.warn(`[RAG] figure gate: ${cfg.model} returned ${res.status} — no verdict, candidate kept`)
+      return null
+    }
     const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
-    return parseVerdict(body.choices?.[0]?.message?.content ?? "")
-  } catch {
-    return false
+    const reply = body.choices?.[0]?.message?.content ?? ""
+    // An empty reply is not a "no": it is a model that answered nothing.
+    if (!reply.trim()) {
+      console.warn(`[RAG] figure gate: ${cfg.model} returned an empty reply — no verdict, candidate kept`)
+      return null
+    }
+    return parseVerdict(reply)
+  } catch (err) {
+    const aborted = (err as Error)?.name === "AbortError"
+    console.warn(
+      `[RAG] figure gate: ${aborted ? `timed out after ${cfg.timeoutMs}ms` : `call failed (${(err as Error).message?.slice(0, 80)})`}` +
+        ` — no verdict, candidate kept. Raise KB_FIGURE_VLM_TIMEOUT_MS or point KB_FIGURE_VLM_BASE at a faster endpoint.`,
+    )
+    return null
   } finally {
     clearTimeout(timer)
   }
@@ -172,7 +207,8 @@ export async function gateFigures(
       try {
         b64 = (await kb("blob").download(c.assetKey)).toString("base64")
       } catch (err) {
-        // A figure we cannot fetch cannot be shown anyway.
+        // A figure whose bytes we cannot fetch genuinely cannot be shown, so
+        // this one IS a rejection rather than a missing verdict.
         console.warn(`[RAG] figure gate: fetch failed for ${c.assetKey}: ${(err as Error).message?.slice(0, 80)}`)
         return false
       }
@@ -180,11 +216,19 @@ export async function gateFigures(
     }),
   )
 
-  const kept = seen.filter((_, i) => verdicts[i]).slice(0, cfg.maxKeep)
+  // `null` means the gate never got an answer. Keeping those candidates is what
+  // makes this stage safe to deploy: a gate that is down, slow or misconfigured
+  // degrades to the cross-encoder's ranking instead of silently emptying every
+  // answer of its figures.
+  const kept = seen.filter((_, i) => verdicts[i] !== false).slice(0, cfg.maxKeep)
+  const unjudged = verdicts.filter((v) => v === null).length
   console.log(
     `[RAG] figure gate (${cfg.model}, topN=${cfg.topN}): ` +
-      seen.map((c, i) => `${verdicts[i] ? "YA" : "no"}:${c.caption.slice(0, 22)}`).join(" | ") +
-      ` -> ${kept.length}/${candidates.length}`,
+      seen
+        .map((c, i) => `${verdicts[i] === null ? "??" : verdicts[i] ? "YA" : "no"}:${c.caption.slice(0, 22)}`)
+        .join(" | ") +
+      ` -> ${kept.length}/${candidates.length}` +
+      (unjudged ? ` [${unjudged} UNJUDGED — gate not answering, figures passed through]` : ""),
   )
   return kept
 }
