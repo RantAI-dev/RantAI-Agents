@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useKnowledgeBases, type KnowledgeBase } from "@/hooks/use-knowledge-bases"
+import { buildTree, flattenTree, expandSelectionLocally } from "@/features/knowledge/groups/tree"
 
 interface TabKnowledgeProps {
   useKnowledgeBase: boolean
@@ -33,13 +34,37 @@ export function TabKnowledge({
     groups: initialKnowledgeGroups,
   })
 
+  const flat = groups.map((g) => ({ ...g, parentId: g.parentId ?? null }))
+  const rows = flattenTree(buildTree(flat))
+
+  /**
+   * Only the ticked KBs are stored, never their descendants.
+   *
+   * The server expands a selection to its subtree on every retrieval, so
+   * storing the expansion here would freeze the tree as it looked the day the
+   * assistant was saved: a KB added under a selected parent tomorrow would
+   * silently not be searched. Storing the intent and expanding late keeps the
+   * assistant correct as the library changes.
+   */
   const toggleGroup = (groupId: string) => {
     const current = knowledgeBaseGroupIds || []
     if (current.includes(groupId)) {
       onKnowledgeBaseGroupIdsChange(current.filter((id) => id !== groupId))
     } else {
-      onKnowledgeBaseGroupIdsChange([...current, groupId])
+      // Ticking a parent makes any separately-ticked descendant redundant —
+      // drop them so the saved list says what the user means, not more.
+      const covered = new Set(expandSelectionLocally(flat, [groupId]))
+      covered.delete(groupId)
+      onKnowledgeBaseGroupIdsChange([...current.filter((id) => !covered.has(id)), groupId])
     }
+  }
+
+  const selectedIds = knowledgeBaseGroupIds || []
+  // What retrieval will actually search, previewed locally.
+  const searchedIds = new Set(expandSelectionLocally(flat, selectedIds))
+  const docsFor = (id: string) => {
+    const scope = new Set(expandSelectionLocally(flat, [id]))
+    return flat.reduce((sum, g) => (scope.has(g.id) ? sum + g.documentCount : sum), 0)
   }
 
   return (
@@ -67,7 +92,9 @@ export function TabKnowledge({
       {useKnowledgeBase && (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
-            Select which document groups the agent can search. Leave empty to search all.
+            Select which knowledge bases the agent can search. Leave empty to search all.
+            Choosing one also searches everything nested inside it — pick a nested knowledge
+            base on its own to limit the agent to just that one.
           </p>
 
           {groups.length === 0 ? (
@@ -83,27 +110,34 @@ export function TabKnowledge({
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-2">
-              {groups.map((group) => {
-                const isSelected = (knowledgeBaseGroupIds || []).includes(group.id)
+              {rows.map((group) => {
+                const isSelected = selectedIds.includes(group.id)
+                // Covered by an ancestor the user ticked: shown as included but
+                // not itself stored, which is why it reads differently.
+                const isInherited = !isSelected && searchedIds.has(group.id)
+                const nested = docsFor(group.id)
                 return (
                   <button
                     key={group.id}
                     type="button"
                     onClick={() => toggleGroup(group.id)}
+                    style={{ marginLeft: `${group.depth * 20}px` }}
                     className={cn(
                       "flex items-center gap-3 p-3 rounded-lg text-left transition-colors",
                       isSelected
                         ? "bg-primary/10 border border-primary"
-                        : "border border-border hover:bg-muted/50"
+                        : isInherited
+                          ? "border border-primary/30 bg-primary/5"
+                          : "border border-border hover:bg-muted/50"
                     )}
                   >
                     <div
                       className={cn(
                         "h-5 w-5 rounded flex items-center justify-center shrink-0",
-                        isSelected ? "bg-primary" : "bg-muted"
+                        isSelected ? "bg-primary" : isInherited ? "bg-primary/40" : "bg-muted"
                       )}
                     >
-                      {isSelected ? (
+                      {isSelected || isInherited ? (
                         <Check className="h-3 w-3 text-white" />
                       ) : (
                         <Folder className="h-3 w-3 text-muted-foreground" />
@@ -112,7 +146,10 @@ export function TabKnowledge({
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium">{group.name}</span>
                       <p className="text-xs text-muted-foreground">
-                        {group.documentCount} document{group.documentCount !== 1 ? "s" : ""}
+                        {nested !== group.documentCount
+                          ? `${group.documentCount} here · ${nested} with nested`
+                          : `${group.documentCount} document${group.documentCount !== 1 ? "s" : ""}`}
+                        {isInherited ? " · included via parent" : ""}
                       </p>
                     </div>
                     {group.color && (

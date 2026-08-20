@@ -80,7 +80,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-// DELETE - Delete a group (documents will have groupId set to null)
+// DELETE - Delete a group. Nested KBs block the delete unless ?cascade=true.
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth()
   if (!session?.user?.id) {
@@ -94,11 +94,15 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     }
 
     const orgContext = await resolveActiveOrg(request, session.user.id)
+    // Deleting a KB that has KBs nested inside it is refused with a 409 unless
+    // the caller opts in, so a stray click cannot take out a whole branch.
+    const cascade = new URL(request.url).searchParams.get("cascade") === "true"
     const group = await deleteKnowledgeGroupForDashboard({
       groupId: parsedParams.data.id,
       organizationId: orgContext?.organizationId ?? null,
       role: orgContext?.role ?? null,
       userId: session.user.id,
+      cascade,
     })
 
     if (isHttpServiceError(group)) {

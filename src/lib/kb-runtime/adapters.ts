@@ -43,6 +43,7 @@ const lazy = {
   surreal: () => import("@/lib/surrealdb"),
   credentials: () => import("@/lib/workflow/credentials"),
   providerRegistry: () => import("@/lib/llm/provider-registry"),
+  kbTree: () => import("@/features/knowledge/groups/tree"),
 }
 
 // ─── Blob ────────────────────────────────────────────────────────────────────
@@ -209,7 +210,14 @@ const documents: DocumentStore = {
     const where: Record<string, unknown> = { deletedAt: null }
     if (filter.category) where.categories = { has: filter.category }
     if (filter.groupIds && filter.groupIds.length > 0) {
-      where.groups = { some: { groupId: { in: filter.groupIds } } }
+      // Knowledge bases nest, and selecting one means selecting its subtree —
+      // so "Kurikulum Merdeka" has to match documents filed under its children
+      // too. This is the single choke point where a KB selection becomes a set
+      // of document ids for retrieval, which is why the expansion lives here:
+      // chat, the widget, the agent API and mobile all reach retrieval through
+      // it and inherit the behaviour without each remembering to ask.
+      const { expandGroupIds } = await lazy.kbTree()
+      where.groups = { some: { groupId: { in: await expandGroupIds(filter.groupIds) } } }
     }
     const rows = await prisma.document.findMany({ where, select: { id: true } })
     return rows.map((r) => r.id)
