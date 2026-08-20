@@ -9,7 +9,7 @@ export default defineConfig({
       // component imports it. In vitest there is no "react-server" resolver
       // condition, so we alias it to the empty shim the package provides
       // for exactly this case.
-      "server-only": path.resolve(__dirname, "node_modules/server-only/empty.js"),
+      "server-only": path.resolve(__dirname, "tests/stubs/server-only.ts"),
     },
   },
   test: {

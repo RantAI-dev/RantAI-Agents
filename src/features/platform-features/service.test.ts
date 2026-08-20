@@ -11,9 +11,14 @@ describe("dashboard-features service", () => {
     vi.clearAllMocks()
   })
 
-  it("defaults AGENT to enabled when config is missing", async () => {
+  it("defaults a feature to enabled when no config row exists", async () => {
     vi.mocked(repository.findDashboardFeatureConfigs).mockResolvedValue([])
 
-    await expect(getDashboardFeatures()).resolves.toEqual({ AGENT: true })
+    const features = await getDashboardFeatures()
+
+    // Assert the rule, not the current feature list: an exact-equality check
+    // here broke every time a feature was added (DIGITAL_EMPLOYEES, MEDIA).
+    expect(features.AGENT).toBe(true)
+    expect(Object.values(features).every((enabled) => enabled === true)).toBe(true)
   })
 })
