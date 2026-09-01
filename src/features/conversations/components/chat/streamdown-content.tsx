@@ -17,6 +17,7 @@ import {
   embedFigures,
   autoEmbedFigures,
   autoPlaceFigures,
+  autoPlaceByAnchor,
   embeddedFigureNumbers,
   citedFigureNumbers,
   type EmbeddableFigure,
@@ -132,7 +133,14 @@ interface StreamdownContentProps {
   /** When set, `[n]` markers become clickable chips scrolling to the matching
    *  source card (RAG answers). count = number of sources for this message.
    *  figures = figure sources the model may embed inline via `[figure:N]`. */
-  citations?: { messageId: string; count: number; figures?: EmbeddableFigure[] }
+  citations?: {
+    messageId: string
+    count: number
+    figures?: EmbeddableFigure[]
+    /** Citation number → `documentId::chunkIndex` of the chunk it came from,
+     *  so an anchored figure can be placed beside the sentence citing it. */
+    citedChunkKeys?: Map<number, string>
+  }
 }
 
 /** Renders an inline figure the model embedded via `[figure:N]` (its src points
@@ -229,6 +237,12 @@ export function StreamdownContent({
     if (!isStreaming) {
       out = autoEmbedFigures(out, figs, explicit)
       const inlined = new Set<number>([...explicit, ...citedFigureNumbers(content, figs)])
+      // Anchor placement runs BEFORE caption matching: the anchor is recorded
+      // from the document's own reading order, while a caption match is an
+      // inference — and for the majority of figures, which carry no printed
+      // caption, there is nothing to match. `autoPlaceByAnchor` mutates
+      // `inlined` so the caption rung never double-places a figure.
+      out = autoPlaceByAnchor(out, figs, inlined, citations.citedChunkKeys ?? new Map())
       out = autoPlaceFigures(out, figs, inlined)
     }
     return linkifyCitations(out, citations.messageId, citations.count)

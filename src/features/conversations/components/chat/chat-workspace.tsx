@@ -513,11 +513,31 @@ function MessagesArea({
             // Figure sources the model can embed inline via [figure:N], numbered
             // to match the Sources list. Those it DID embed are dropped from the
             // Figures card row (below) so they don't render twice.
-            const embeddableFigures: EmbeddableFigure[] = sources
-              .map((s, i) => ({ ...s, n: i + 1 }))
-              // Only real book figures (caption "Gambar 1.1 …") can be inlined —
-              // never decorative page ornaments Mistral cropped.
-              .filter((s) => s.assetKey && s.documentId && isMeaningfulFigureCaption(s.section))
+            const numbered = sources.map((s, i) => ({ ...s, n: i + 1 }))
+
+            // Citation number → the chunk behind it, so an anchored figure can
+            // be placed beside the sentence that cites its anchor.
+            const citedChunkKeys = new Map<number, string>(
+              numbered
+                .filter((s) => s.documentId && s.chunkIndex != null)
+                .map((s) => [s.n, `${s.documentId}::${s.chunkIndex}`] as const),
+            )
+
+            const embeddableFigures: EmbeddableFigure[] = numbered
+              // A figure may be inlined if it is a real book figure — either it
+              // carries a printed caption ("Gambar 1.1 …"), or it is ANCHORED,
+              // meaning ingest recorded the prose it follows in the document's
+              // reading order. The caption test alone excluded the 66–81% of
+              // curriculum figures that have no printed caption: precisely the
+              // figures anchoring exists to reach, admitted by the retriever and
+              // then discarded here, one step from the screen. Decorative crops
+              // are still filtered — they are neither captioned nor anchored.
+              .filter(
+                (s) =>
+                  s.assetKey &&
+                  s.documentId &&
+                  (isMeaningfulFigureCaption(s.section) || s.anchorChunkIndex != null),
+              )
               .map((s) => ({
                 n: s.n,
                 documentId: s.documentId as string,
@@ -525,6 +545,7 @@ function MessagesArea({
                 title: s.title,
                 caption: s.section,
                 page: s.page,
+                anchorChunkIndex: s.anchorChunkIndex ?? null,
               }))
             // Every meaningful figure is rendered inline in the answer (next to
             // its citation or the prose its caption matches), so ALL of them are
@@ -828,6 +849,7 @@ function MessagesArea({
                                       messageId: message.id,
                                       count: sources.length,
                                       figures: embeddableFigures,
+                                      citedChunkKeys,
                                     }
                                   : undefined
                               }

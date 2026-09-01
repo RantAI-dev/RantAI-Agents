@@ -22,6 +22,13 @@ export interface SearchResult {
   assetKey?: string | null;
   page?: number | null;
   chunkType?: string | null;
+  /** Position of this chunk in its document's reading order. */
+  chunkIndex?: number | null;
+  /** For a figure: the index of the chunk holding the prose it follows.
+   *  This is the anchor — the only signal that says where the figure BELONGS,
+   *  and the one that lets an answer place a caption-less figure beside the
+   *  sentence it illustrates instead of guessing from caption keywords. */
+  anchorChunkIndex?: number | null;
 }
 
 interface SurrealChunk {
@@ -95,6 +102,7 @@ export async function searchSimilar(
         id,
         document_id,
         content,
+        chunk_index,
         metadata,
         contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
@@ -110,6 +118,7 @@ export async function searchSimilar(
         id,
         document_id,
         content,
+        chunk_index,
         metadata,
         contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
@@ -157,6 +166,9 @@ export async function searchSimilar(
         assetKey: (chunk.metadata as { assetKey?: string } | null)?.assetKey ?? null,
         page: (chunk.metadata as { page?: number } | null)?.page ?? null,
         chunkType: (chunk.metadata as { chunkType?: string } | null)?.chunkType ?? null,
+        chunkIndex: chunk.chunk_index ?? null,
+        anchorChunkIndex:
+          (chunk.metadata as { anchorChunkIndex?: number } | null)?.anchorChunkIndex ?? null,
       };
     });
 
@@ -320,6 +332,7 @@ export async function searchByDocumentIds(
       id,
       document_id,
       content,
+      chunk_index,
       metadata,
       contextual_prefix,
       vector::similarity::cosine(embedding, $embedding) AS similarity
@@ -360,6 +373,9 @@ export async function searchByDocumentIds(
         assetKey: (chunk.metadata as { assetKey?: string } | null)?.assetKey ?? null,
         page: (chunk.metadata as { page?: number } | null)?.page ?? null,
         chunkType: (chunk.metadata as { chunkType?: string } | null)?.chunkType ?? null,
+        chunkIndex: chunk.chunk_index ?? null,
+        anchorChunkIndex:
+          (chunk.metadata as { anchorChunkIndex?: number } | null)?.anchorChunkIndex ?? null,
       };
     });
 }
@@ -400,7 +416,7 @@ export async function searchByVector(
   };
   if (documentIds) {
     sql = `
-      SELECT id, document_id, content, metadata, contextual_prefix,
+      SELECT id, document_id, content, chunk_index, metadata, contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       WHERE document_id IN $document_ids
@@ -410,7 +426,7 @@ export async function searchByVector(
     vars.document_ids = documentIds;
   } else {
     sql = `
-      SELECT id, document_id, content, metadata, contextual_prefix,
+      SELECT id, document_id, content, chunk_index, metadata, contextual_prefix,
         vector::similarity::cosine(embedding, $embedding) AS similarity
       FROM document_chunk
       ORDER BY similarity DESC
@@ -444,6 +460,8 @@ export async function searchByVector(
       assetKey: (md.assetKey as string | undefined) ?? null,
       page: (md.page as number | undefined) ?? null,
       chunkType: (md.chunkType as string | undefined) ?? null,
+      chunkIndex: chunk.chunk_index ?? null,
+      anchorChunkIndex: (md.anchorChunkIndex as number | undefined) ?? null,
     };
   });
 }
@@ -507,7 +525,19 @@ const TRANSIENT_CONFLICT_PATTERNS: readonly RegExp[] = [
 
 function isTransientConflict(err: unknown): boolean {
   if (!(err instanceof Error)) return false
-  return TRANSIENT_CONFLICT_PATTERNS.some((p) => p.test(err.message))
+  if (TRANSIENT_CONFLICT_PATTERNS.some((p) => p.test(err.message))) return true
+  // Message-less store errors are transient too, and this is not a guess: under
+  // concurrent writes the driver surfaces `ResponseError: undefined` — an error
+  // whose message never arrived. The old classifier tested that empty message
+  // against the patterns, found no match, called it permanent, and killed the
+  // whole ingest after the sibling retries had been working correctly. A
+  // 20 MB textbook lost 150 stored chunks to one unlabelled error.
+  //
+  // Retrying an unclassifiable error is only safe because the write above is an
+  // idempotent UPSERT under a deterministic id; the attempt cap still bounds it.
+  const name = (err as { name?: string }).name ?? ""
+  const msg = (err.message ?? "").trim()
+  return (!msg || msg === "undefined") && /response|surreal|query/i.test(`${name}`)
 }
 
 async function withConflictRetry<T>(
@@ -631,9 +661,17 @@ export async function storeChunks(
           vars.embedding_model = embeddingModel
         }
 
-        return withConflictRetry(`CREATE document_chunk:${chunkId}`, () =>
+        // UPSERT, not CREATE. The id is deterministic, so a write that
+        // actually landed before its acknowledgement was lost would make the
+        // retry fail with "already exists" — a permanent error raised for a
+        // successful write, which is the worst way to lose a document. UPSERT
+        // makes every attempt idempotent, which is what licenses the wider
+        // retry classification below.
+        return withConflictRetry(`UPSERT document_chunk:${chunkId}`, () =>
           surrealClient.query(
-            `CREATE document_chunk SET ${setClauses.join(", ")}`,
+            `UPSERT type::thing('document_chunk', $id) SET ${setClauses
+              .filter((c) => c !== "id = $id")
+              .join(", ")}`,
             vars,
           ),
         )

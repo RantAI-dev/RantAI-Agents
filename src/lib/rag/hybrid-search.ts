@@ -16,6 +16,7 @@ import type { VectorStore } from "@/lib/kb-runtime/ports";
 import { generateEmbedding } from "./embeddings";
 import { getDefaultReranker } from "./rerankers";
 import { gateConfig, gateFigures } from "./figure-gate";
+import { admissionRule, admit, describeRule } from "./figure-admission";
 import { Entity } from "../document-intelligence/types";
 
 
@@ -92,6 +93,8 @@ export interface HybridSearchResult {
   assetKey?: string | null;
   page?: number | null;
   chunkType?: string | null;
+  /** For a figure: index of the chunk holding the prose it follows (its anchor). */
+  anchorChunkIndex?: number | null;
   /** Vector similarity score (0-1) */
   vectorScore: number;
   /** Entity/Graph match score (0-1) */
@@ -962,8 +965,11 @@ export async function fetchMatchingFigures(
   // real traffic rather than assumed.
   let final: Scored[] = scored;
   const reranker = getDefaultReranker();
-  const rawMin = process.env.KB_FIGURE_MIN_RERANK;
-  // Default floor 0.001, not the 0.2 this used to carry.
+  const rule = admissionRule();
+  // Admission is now RELATIVE to the best score of this query by default; see
+  // figure-admission.ts for the measurements that forced that change. The
+  // history below is kept because it explains why an absolute floor of any
+  // value is the wrong instrument, not merely why 0.2 was the wrong number.
   //
   // The 0.2 came with a note claiming bge-reranker-v2-m3 scores relevant figures
   // 0.5–0.8 and off-topic ones ~0.00002. That is what it does on the DESCRIPTIONS
@@ -981,8 +987,8 @@ export async function fetchMatchingFigures(
   // The floor predates that gate, when it was the only thing standing between a
   // keyword match and a student. The gate now looks at the actual image and is
   // far better at the same job, so admitting more here and letting it decide is
-  // strictly the better division of labour. Override via KB_FIGURE_MIN_RERANK.
-  const figMin = rawMin !== undefined && rawMin !== "" ? Number(rawMin) : 0.001;
+  // strictly the better division of labour. Override via KB_FIGURE_MIN_RERANK
+  // (which also restores the old absolute-floor semantics wholesale).
   if (reranker && scored.length > 0) {
     try {
       const ranked = await reranker.rerank(
@@ -1002,13 +1008,19 @@ export async function fetchMatchingFigures(
           return s ? { s, score: r.score } : null;
         })
         .filter((x): x is { s: Scored; score: number } => x !== null);
+      const admitted = admit(
+        rr.map((x) => ({ item: x.s, score: x.score })),
+        rule,
+      );
+      // Log the rule that actually ran, not the env var that was read: the
+      // previous version printed "floor=off" while 0.2 was silently in force,
+      // and that mismatch hid the starved gate for weeks.
       console.log(
-        `[RAG] figure rerank (floor=${figMin}, kept ${rr.filter((x) => x.score >= figMin).length}/${rr.length}): [${rr
+        `[RAG] figure admission (${describeRule(rule)}, kept ${admitted.length}/${rr.length}): [${rr
           .map((x) => `${x.score.toFixed(3)}:${x.s.caption.slice(0, 22)}`)
           .join(" | ")}]`,
       );
-      const gated = Number.isNaN(figMin) ? rr : rr.filter((x) => x.score >= figMin);
-      final = gated.map((x) => x.s);
+      final = admitted.map((x) => x.item);
     } catch (err) {
       console.warn(`[RAG] figure rerank failed (non-fatal): ${(err as Error).message?.slice(0, 100)}`);
     }
@@ -1040,7 +1052,7 @@ export async function fetchMatchingFigures(
 
   return final.slice(0, limit).map(({ row, assetKey }) => {
     const meta = row.metadata as
-      | { documentTitle?: string; section?: string; page?: number }
+      | { documentTitle?: string; section?: string; page?: number; anchorChunkIndex?: number }
       | undefined;
     return {
       chunkId: row.id,
@@ -1053,6 +1065,9 @@ export async function fetchMatchingFigures(
       assetKey,
       page: meta?.page ?? null,
       chunkType: "figure",
+      // Carried to the client so the answer can place this figure beside the
+      // prose it belongs to, rather than guessing from its caption.
+      anchorChunkIndex: meta?.anchorChunkIndex ?? null,
       vectorScore: 0,
       entityScore: 0,
       graphScore: 0,

@@ -393,6 +393,10 @@ export async function handleWidgetChat(req: NextRequest) {
       documentId: string | null
       page: number | null
       chunkType: string | null
+      /** Reading-order position, and for a figure the position of the chunk it
+       *  follows — enough for a client to place the figure beside its prose. */
+      chunkIndex: number | null
+      anchorChunkIndex: number | null
       assetKey: string | null
       imageUrl: string | null
     }
@@ -402,6 +406,8 @@ export async function handleWidgetChat(req: NextRequest) {
       section: string | null
       page?: number | null
       chunkType?: string | null
+      chunkIndex?: number | null
+      anchorChunkIndex?: number | null
       assetKey?: string | null
     }): WidgetSource => ({
       title: s.documentTitle,
@@ -409,6 +415,8 @@ export async function handleWidgetChat(req: NextRequest) {
       documentId: s.documentId ?? null,
       page: s.page ?? null,
       chunkType: s.chunkType ?? null,
+      chunkIndex: s.chunkIndex ?? null,
+      anchorChunkIndex: s.anchorChunkIndex ?? null,
       assetKey: s.assetKey ?? null,
       imageUrl:
         s.chunkType === "figure" && s.assetKey && s.documentId

@@ -87,3 +87,16 @@ tests/bench-kb/corpus/annotation/annotation.html
 tests/bench-kb/corpus/annotation-big/images/
 tests/bench-kb/corpus/annotation-big/small/
 tests/bench-kb/corpus/annotation-big/annotation.html
+
+# Bench corpus images are extraction output, never source — always regenerable
+# via tests/bench-kb/src/ikat/extract-corpus.ts. The per-directory rules above
+# enumerate directories by name, so they missed `ugm3-figures/`, `mmdocrag/` and
+# `annotation-scale/`; 16.5k crops (~4.7 GB) were then swept into a commit whose
+# stated purpose was a two-file vector-store fix. Matching by extension means a
+# new corpus directory cannot reintroduce this. No image under corpus/ has ever
+# been tracked, so this ignores nothing that was source.
+tests/bench-kb/corpus/**/*.jpg
+tests/bench-kb/corpus/**/*.jpeg
+tests/bench-kb/corpus/**/*.png
+tests/bench-kb/corpus/**/*.webp
+tests/bench-kb/corpus/**/*.zip

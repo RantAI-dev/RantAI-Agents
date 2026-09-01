@@ -136,15 +136,42 @@ describe("gateFigures", () => {
     expect(out.map((c) => c.id)).toEqual(["first", "second"])
   })
 
-  it("fails closed when the model errors", async () => {
-    globalThis.fetch = vi.fn(async () => ({ ok: false, json: async () => ({}) })) as unknown as typeof fetch
-    expect(await gateFigures("q", [cand("a")], cfg)).toEqual([])
+  // These two used to assert the opposite — that an unreachable model drops
+  // every figure. That is what production actually did, and it is a worse
+  // outcome than not having the gate at all: on the deployed host the 4B VL
+  // answers in ~57 s against an 8 s budget, so every call aborted and every
+  // answer silently lost its figures. A verdict that never arrived is not a
+  // rejection; the stage degrades to the ranking it was handed.
+  it("passes candidates through when the model errors — an HTTP error is not a 'no'", async () => {
+    globalThis.fetch = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })) as unknown as typeof fetch
+    expect((await gateFigures("q", [cand("a")], cfg)).map((c) => c.id)).toEqual(["a"])
   })
 
-  it("fails closed when the call throws or times out", async () => {
+  it("passes candidates through when the call throws or times out", async () => {
     globalThis.fetch = vi.fn(async () => {
       throw new Error("ECONNREFUSED")
     }) as unknown as typeof fetch
+    expect((await gateFigures("q", [cand("a")], cfg)).map((c) => c.id)).toEqual(["a"])
+  })
+
+  it("still respects maxKeep when verdicts are missing", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new Error("ECONNREFUSED")
+    }) as unknown as typeof fetch
+    const out = await gateFigures("q", [cand("a"), cand("b")], { ...cfg, topN: 2, maxKeep: 1 })
+    expect(out.map((c) => c.id)).toEqual(["a"])
+  })
+
+  it("treats an empty reply as no verdict rather than a rejection", async () => {
+    globalThis.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "" } }] }),
+    })) as unknown as typeof fetch
+    expect((await gateFigures("q", [cand("a")], cfg)).map((c) => c.id)).toEqual(["a"])
+  })
+
+  it("still removes a figure the model actually rejected", async () => {
+    globalThis.fetch = stubReplies(["TIDAK"])
     expect(await gateFigures("q", [cand("a")], cfg)).toEqual([])
   })
 
