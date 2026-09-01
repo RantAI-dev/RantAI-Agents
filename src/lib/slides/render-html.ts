@@ -1,4 +1,4 @@
-import type { PresentationData, SlideData } from "./types"
+import type { PresentationData, SlideData, SlideTheme } from "./types"
 import { chartToSvg, inferChartTheme } from "@/lib/rendering/chart-to-svg"
 import { cleanMarkdown, darkenColor, CHART_DIMENSIONS } from "./utils"
 import { resolveIconsInText, getIconSvg } from "./icons"
@@ -40,7 +40,11 @@ function renderText(text: string): string {
   return resolveIconsInText(escaped)
 }
 
-function renderSlideContent(slide: SlideData, index: number, total: number): string {
+// `theme` is threaded in rather than read from an outer scope: the chart
+// layouts below colour their SVG from it, and reaching for a `slidesToHtml`
+// local here threw "ReferenceError: theme is not defined" at render time —
+// crashing the whole artifact panel for any deck containing a chart.
+function renderSlideContent(slide: SlideData, index: number, total: number, theme: SlideTheme): string {
   const parts: string[] = []
 
   switch (slide.layout) {
@@ -390,9 +394,9 @@ export function slidesToHtml(data: PresentationData): string {
         const overlay = slide.overlay || "dark"
         const overlayClass = overlay === "none" ? " overlay-none" : overlay === "light" ? " overlay-light" : ""
         const bgStyle = bgImage ? ` style="background-image: url('${bgImage.replace(/'/g, "\\'")}')"` : ""
-        return `<section class="slide hero${overlayClass}"${bgStyle} data-index="${i}">${renderSlideContent(slide, i, total)}</section>`
+        return `<section class="slide hero${overlayClass}"${bgStyle} data-index="${i}">${renderSlideContent(slide, i, total, theme)}</section>`
       }
-      return `<section class="slide ${slide.layout}${dark ? " dark" : ""}" data-index="${i}">${renderSlideContent(slide, i, total)}</section>`
+      return `<section class="slide ${slide.layout}${dark ? " dark" : ""}" data-index="${i}">${renderSlideContent(slide, i, total, theme)}</section>`
     })
     .join("\n")
 

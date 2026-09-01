@@ -22,6 +22,65 @@ interface AuthResult {
   assistant: { id: string; name: string; emoji: string | null }
 }
 
+/**
+ * Context-window budget, in tokens, for everything we send upstream.
+ *
+ * A self-hosted model has a hard ceiling (`--max-model-len`), and a prompt that
+ * approaches it does NOT fail loudly — it leaves no room to answer in, so the
+ * model emits a handful of tokens and stops. In production that surfaced as
+ * confident half-sentences cut mid-word: an 8192-token server receiving an
+ * ~8100-token prompt of retrieved chunks. Past the ceiling it is a 400 the
+ * client sees as a 500.
+ *
+ * So retrieval is trimmed to fit, and output room is always reserved. Both are
+ * env-tunable because the ceiling belongs to the deployment, not the code.
+ */
+const PROMPT_TOKEN_BUDGET = Number(process.env.LLM_PROMPT_TOKEN_BUDGET || 6000)
+const RESERVED_OUTPUT_TOKENS = Number(process.env.LLM_RESERVED_OUTPUT_TOKENS || 1024)
+
+/** Rough token estimate. Deliberately pessimistic: over-estimating costs a few
+ *  dropped excerpts, under-estimating costs the whole answer. */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 3.4)
+}
+
+/**
+ * Trim a formatted RAG block so prompt + reserved output stays inside budget.
+ *
+ * Excerpts are cut from the end, which is the right end to lose: retrieval
+ * returns them ranked, so the tail is the least relevant. The `Sources:` footer
+ * is kept whatever happens — dropping it would leave inline `[n]` citations
+ * pointing at a list that is not there.
+ */
+export function fitContext(formattedContext: string, promptSoFar: string): string {
+  const available =
+    PROMPT_TOKEN_BUDGET - RESERVED_OUTPUT_TOKENS - estimateTokens(promptSoFar)
+  if (available <= 0) {
+    console.warn("[V1 API] prompt already exceeds budget before RAG — context dropped")
+    return ""
+  }
+  if (estimateTokens(formattedContext) <= available) return formattedContext
+
+  const sourcesAt = formattedContext.lastIndexOf("\nSources:")
+  const head = sourcesAt === -1 ? formattedContext : formattedContext.slice(0, sourcesAt)
+  const footer = sourcesAt === -1 ? "" : formattedContext.slice(sourcesAt)
+
+  const parts = head.split("\n\n---\n\n")
+  const kept: string[] = []
+  let used = estimateTokens(footer)
+  for (const part of parts) {
+    const cost = estimateTokens(part)
+    if (used + cost > available) break
+    kept.push(part)
+    used += cost
+  }
+  if (kept.length === 0) kept.push(parts[0].slice(0, Math.max(0, available * 3)))
+  console.warn(
+    `[V1 API] context trimmed to fit: ${parts.length} → ${kept.length} excerpts`
+  )
+  return kept.join("\n\n---\n\n") + footer
+}
+
 async function loadAssistantFull(assistantId: string) {
   return prisma.assistant.findUnique({
     where: { id: assistantId },
@@ -260,7 +319,7 @@ export async function runV1ChatCompletion(
       })
 
       if (hybridResult.context) {
-        const formattedContext = formatHybridContextForPrompt(hybridResult)
+        const formattedContext = fitContext(formatHybridContextForPrompt(hybridResult), systemPrompt)
         systemPrompt = `${systemPrompt}\n\n${formattedContext}`
         ragSources = hybridResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null, chunkIndex: s.chunkIndex ?? null, anchorChunkIndex: s.anchorChunkIndex ?? null }))
         vlmResults = hybridResult.results
@@ -271,7 +330,7 @@ export async function runV1ChatCompletion(
           groupIds,
         })
         if (retrievalResult.context) {
-          const formattedContext = formatContextForPrompt(retrievalResult)
+          const formattedContext = fitContext(formatContextForPrompt(retrievalResult), systemPrompt)
           systemPrompt = `${systemPrompt}\n\n${formattedContext}`
           ragSources = retrievalResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null, chunkIndex: s.chunkIndex ?? null, anchorChunkIndex: s.anchorChunkIndex ?? null }))
           vlmResults = retrievalResult.chunks
@@ -358,10 +417,13 @@ export async function runV1ChatCompletion(
     ...(abortSignal && { abortSignal }),
     ...(input.temperature != null && { temperature: input.temperature }),
     ...(input.top_p != null && { topP: input.top_p }),
-    ...(input.max_tokens != null && { maxTokens: input.max_tokens }),
+    // `maxOutputTokens` is the SDK's name for this. It was previously spelled
+    // `maxTokens`, which the SDK silently ignores — so a client sending
+    // max_tokens got no cap at all, and nothing reserved room for the answer.
+    maxOutputTokens: input.max_tokens ?? RESERVED_OUTPUT_TOKENS,
     ...(modelConfig?.temperature != null && input.temperature == null && { temperature: Number(modelConfig.temperature) }),
     ...(modelConfig?.topP != null && input.top_p == null && { topP: Number(modelConfig.topP) }),
-    ...(modelConfig?.maxTokens != null && input.max_tokens == null && { maxTokens: Number(modelConfig.maxTokens) }),
+    ...(modelConfig?.maxTokens != null && input.max_tokens == null && { maxOutputTokens: Number(modelConfig.maxTokens) }),
   })
 
   if (wantStream) {
@@ -405,6 +467,13 @@ function createSSEStreamResponse(
         // Final chunk with finish_reason. `sources` is a custom top-level field
         // (OpenAI clients ignore unknown keys) carrying the KB references so a
         // frontend can render reference cards.
+        //
+        // finish_reason is read from the SDK rather than hardcoded: a stream cut
+        // short by a dead upstream must not be reported as a clean "stop", or the
+        // client renders a half-sentence as a finished answer.
+        const finishReason = toOpenAIFinishReason(
+          await Promise.resolve(result.finishReason).catch(() => undefined)
+        )
         const finalData = JSON.stringify({
           id: requestId,
           object: "chat.completion.chunk",
@@ -414,9 +483,16 @@ function createSSEStreamResponse(
             {
               index: 0,
               delta: {},
-              finish_reason: "stop",
+              finish_reason: finishReason,
             },
           ],
+          ...(finishReason === "error" && {
+            error: {
+              message:
+                "Generation did not complete — the model backend ended the stream early. The text above may be truncated.",
+              type: "server_error",
+            },
+          }),
           sources,
         })
         controller.enqueue(encoder.encode(`data: ${finalData}\n\n`))
@@ -465,6 +541,34 @@ function createSSEStreamResponse(
   })
 }
 
+/**
+ * Map the SDK's finish reason onto the OpenAI wire value.
+ *
+ * The point of this function is the failure case. When the upstream dies
+ * mid-generation the SDK resolves with `error`/`other`/`unknown` and whatever
+ * text arrived before the break — previously both response builders hardcoded
+ * `"stop"`, so a half-sentence produced by a dead gateway was indistinguishable
+ * from a complete answer. That is the worst possible shape for a classroom
+ * client: it renders truncated nonsense as if the tutor meant it.
+ *
+ * `length` and `tool-calls` are legitimate OpenAI values and pass through.
+ * Everything else becomes `"error"`, which no client mistakes for success.
+ */
+function toOpenAIFinishReason(reason: string | undefined): string {
+  switch (reason) {
+    case "stop":
+      return "stop"
+    case "length":
+      return "length"
+    case "content-filter":
+      return "content_filter"
+    case "tool-calls":
+      return "tool_calls"
+    default:
+      return "error"
+  }
+}
+
 async function createJsonResponse(
   result: ReturnType<typeof streamText>,
   requestId: string,
@@ -473,6 +577,9 @@ async function createJsonResponse(
 ): Promise<Response> {
   const text = await result.text
   const usage = await result.totalUsage
+  const finishReason = toOpenAIFinishReason(
+    await Promise.resolve(result.finishReason).catch(() => undefined)
+  )
 
   const body = {
     id: requestId,
@@ -483,9 +590,16 @@ async function createJsonResponse(
       {
         index: 0,
         message: { role: "assistant", content: text },
-        finish_reason: "stop",
+        finish_reason: finishReason,
       },
     ],
+    ...(finishReason === "error" && {
+      error: {
+        message:
+          "Generation did not complete — the model backend ended the stream early. The text above may be truncated.",
+        type: "server_error",
+      },
+    }),
     usage: {
       prompt_tokens: usage.inputTokens ?? 0,
       completion_tokens: usage.outputTokens ?? 0,

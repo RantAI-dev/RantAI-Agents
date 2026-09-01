@@ -81,12 +81,28 @@ export function createStripThinkTransform<TOOLS extends ToolSet>() {
         keepLooping = false
         if (!inThink) {
           const openIdx = buffer.indexOf(OPEN_TAG)
+          // A closer with no matching opener. Some chat templates emit the
+          // `<think>` opener themselves as part of the prompt, so the model only
+          // ever produces the CLOSING tag — the state machine never enters
+          // thinking mode and the tag lands in the answer (seen in production on
+          // SEA-LION v3.5-R via the vLLM gateway). Drop the stray tag and, if
+          // nothing has been emitted yet, discard the text before it: that text
+          // is the reasoning block this closer terminates.
+          const strayClose = buffer.indexOf(CLOSE_TAG)
+          if (strayClose !== -1 && (openIdx === -1 || strayClose < openIdx)) {
+            if (emittedAnything) output += buffer.slice(0, strayClose)
+            buffer = buffer.slice(strayClose + CLOSE_TAG.length)
+            const ws = buffer.match(/^\s+/)
+            if (ws) buffer = buffer.slice(ws[0].length)
+            keepLooping = true
+            continue
+          }
           if (openIdx === -1) {
-            // No opener found. Emit all but the last OPEN_PEEK chars — those
-            // could be the start of a tag we'll see complete in the next chunk.
-            if (buffer.length > OPEN_PEEK) {
-              output += buffer.slice(0, buffer.length - OPEN_PEEK)
-              buffer = buffer.slice(buffer.length - OPEN_PEEK)
+            // No opener found. Emit all but the last CLOSE_PEEK chars — those
+            // could be the start of either tag arriving in the next chunk.
+            if (buffer.length > CLOSE_PEEK) {
+              output += buffer.slice(0, buffer.length - CLOSE_PEEK)
+              buffer = buffer.slice(buffer.length - CLOSE_PEEK)
             }
           } else {
             // Emit everything before the opener.

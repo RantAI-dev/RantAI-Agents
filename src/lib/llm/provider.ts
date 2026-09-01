@@ -47,11 +47,80 @@ function createOpenRouterClient(apiKey?: string) {
   return createOpenRouter({ apiKey: apiKey || process.env.OPENROUTER_API_KEY || "" })
 }
 
+/**
+ * Extra fields merged into every chat request sent to a managed
+ * openai_compatible endpoint, as JSON in `LLM_EXTRA_BODY`.
+ *
+ * This exists for hybrid reasoning models served through a pass-through proxy.
+ * SEA-LION v3.5-R decides whether to "think" from a chat-template flag, and when
+ * thinking is on it spends its output budget narrating its plan — which our
+ * answer path then has to strip, and which shows up as a truncated non-answer if
+ * the stream is cut before the real reply starts. Turning it off upstream is
+ * strictly better than deleting it downstream: no wasted tokens, nothing to leak.
+ *
+ * Set per deployment, e.g.
+ *   LLM_EXTRA_BODY={"chat_template_kwargs":{"thinking_mode":"off"}}
+ * Unset (the default) means the request body is untouched.
+ */
+function managedExtraBody(): Record<string, unknown> | null {
+  const raw = process.env.LLM_EXTRA_BODY
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null
+  } catch {
+    console.warn("[provider] LLM_EXTRA_BODY is not valid JSON — ignored")
+    return null
+  }
+}
+
+/**
+ * Merge `extra` into a JSON request body, respecting per-field legality.
+ *
+ * Exported for tests: the stream-only rule below is the kind of thing that
+ * silently turns every non-streaming call into a 400 if it regresses.
+ * Returns the original string unchanged when there is nothing to do or the
+ * body is not parseable JSON.
+ */
+export function mergeExtraBody(
+  bodyStr: string,
+  extra: Record<string, unknown> | null
+): string {
+  if (!extra) return bodyStr
+  let body: Record<string, unknown>
+  try {
+    const parsed = JSON.parse(bodyStr)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return bodyStr
+    body = parsed as Record<string, unknown>
+  } catch {
+    return bodyStr
+  }
+  const add = { ...extra }
+  // `stream_options` is only legal alongside `stream: true` — vLLM rejects the
+  // pair outright ("Stream options can only be defined when stream=True").
+  // Injecting it blindly would turn every non-streaming call through this
+  // provider into a 400, so it is dropped unless this request really streams.
+  if (body.stream !== true) delete add.stream_options
+  return JSON.stringify({ ...body, ...add })
+}
+
 function createManagedClient(p: ManagedProvider) {
+  const extra = managedExtraBody()
+
+  // The SDK has no per-provider "extra body" hook, so merge at the transport
+  // seam. Only JSON bodies are touched; anything else passes through untouched.
+  const fetchWithExtraBody: typeof fetch = async (input, init) => {
+    if (!extra || !init?.body || typeof init.body !== "string") {
+      return fetch(input, init)
+    }
+    return fetch(input, { ...init, body: mergeExtraBody(init.body, extra) })
+  }
+
   return createOpenAICompatible({
     name: p.name,
     baseURL: p.baseUrl || "",
     apiKey: p.apiKey || "",
+    ...(extra && { fetch: fetchWithExtraBody }),
   })
 }
 

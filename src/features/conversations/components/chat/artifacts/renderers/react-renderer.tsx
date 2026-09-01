@@ -57,13 +57,33 @@ const REACT_PRE_DESTRUCTURED = new Set([
 ])
 
 /**
+ * Rewrite an import clause's names into object-destructuring syntax.
+ *
+ * `import { Menu as MenuIcon }` is valid ES module syntax, but `as` is import
+ * grammar only — pasting it straight into `const { … } = LucideReact` produces
+ * `const { Menu as MenuIcon }`, which Babel rejects with "Unexpected token,
+ * expected ,". Destructuring spells the same rename `Menu: MenuIcon`.
+ */
+export function toDestructuringList(names: string): string {
+  return names
+    .split(",")
+    .map((raw) => raw.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const alias = entry.match(/^(\w+)\s+as\s+(\w+)$/)
+      return alias ? `${alias[1]}: ${alias[2]}` : entry
+    })
+    .join(", ")
+}
+
+/**
  * Transform ES module imports → global destructuring and strip exports.
  * Returns processed code + detected component name.
  *
  * NOTE: React hooks/APIs are already destructured in the iframe template,
  * so we skip generating preamble for 'react' imports entirely.
  */
-function preprocessCode(code: string): {
+export function preprocessCode(code: string): {
   processedCode: string
   componentName: string
   unsupportedImports: string[]
@@ -164,14 +184,14 @@ function preprocessCode(code: string): {
       const mixedMatch = trimmed.match(/^(\w+)\s*,\s*\{([^}]+)\}$/)
       if (mixedMatch) {
         if (mixedMatch[1] !== global) preamble.push(`const ${mixedMatch[1]} = ${global};`)
-        preamble.push(`const {${mixedMatch[2]}} = ${global};`)
+        preamble.push(`const {${toDestructuringList(mixedMatch[2])}} = ${global};`)
         return ""
       }
 
       // import { named1, named2 } from '...'
       const namedMatch = trimmed.match(/^\{([^}]+)\}$/)
       if (namedMatch) {
-        preamble.push(`const {${namedMatch[1]}} = ${global};`)
+        preamble.push(`const {${toDestructuringList(namedMatch[1])}} = ${global};`)
         return ""
       }
 
