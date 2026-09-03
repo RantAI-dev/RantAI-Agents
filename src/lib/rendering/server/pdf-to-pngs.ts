@@ -53,7 +53,19 @@ export async function pdfToPngs(pdf: Buffer): Promise<Buffer[]> {
       .filter((x): x is { name: string; idx: number } => x !== null)
       .sort((a, b) => a.idx - b.idx)
 
-    return Promise.all(files.map((f) => readFile(join(dir, f.name))))
+    // `return await`, not `return`. Without the await the try block completes
+    // as soon as the promise is *created*, so the finally below starts deleting
+    // the directory while these reads are still in flight — the pages race the
+    // rm and a loser surfaces as
+    //
+    //   ENOENT: no such file or directory, open '/tmp/pdf2png-XXXXXX/page-14.png'
+    //
+    // for a file readdir had just listed. It also arrives as an
+    // `unhandledRejection` rather than an error the pipeline can report,
+    // because nothing is attached to the returned promise while the finally is
+    // suspended on its own await. docx-to-pdf.ts already has the await; this
+    // was the one that did not.
+    return await Promise.all(files.map((f) => readFile(join(dir, f.name))))
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {})
   }
