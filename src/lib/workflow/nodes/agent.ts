@@ -10,6 +10,7 @@ import type { ExecutionContext } from "../engine"
 import { buildTemplateContext } from "../engine"
 import { resolveTemplate } from "../template-engine"
 import { extractPrompt } from "./llm"
+import { orgScope } from "./tool"
 import { reportWorkflowUsage } from "../usage-hook"
 
 /**
@@ -29,8 +30,8 @@ export async function executeAgent(
   }
 
   // Load assistant config
-  const assistant = await prisma.assistant.findUnique({
-    where: { id: nodeData.assistantId },
+  const assistant = await prisma.assistant.findFirst({
+    where: { id: nodeData.assistantId, ...orgScope(context) },
   })
 
   if (!assistant) {

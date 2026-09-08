@@ -55,12 +55,29 @@ async function fetchWithTimeout(
 }
 
 /**
+ * Org filter for resources referenced from tenant-authored node data: the
+ * run's own org, or global (null-org) rows. A run with no org sees global only.
+ */
+export function orgScope(context: Pick<ExecutionContext, "organizationId">) {
+  return context.organizationId
+    ? { OR: [{ organizationId: context.organizationId }, { organizationId: null }] }
+    : { organizationId: null }
+}
+
+/**
  * Resolve credential headers for a node with an optional credentialId.
  */
-async function resolveCredentialHeaders(credentialId?: string): Promise<Record<string, string>> {
+async function resolveCredentialHeaders(
+  credentialId: string | undefined,
+  context: ExecutionContext
+): Promise<Record<string, string>> {
   if (!credentialId) return {}
   try {
-    const credential = await prisma.credential.findUnique({ where: { id: credentialId } })
+    // Tenant-authored node data: only credentials owned by the run's org (or
+    // global, null-org ones) may be resolved.
+    const credential = await prisma.credential.findFirst({
+      where: { id: credentialId, ...orgScope(context) },
+    })
     if (!credential) return {}
     const data = decryptCredential(credential.encryptedData)
     return credentialToHeaders(credential.type as CredentialType, data)
@@ -122,7 +139,7 @@ export async function executeTool(
         ? resolveObjectTemplates(httpData.headers, tctx) as Record<string, string>
         : {}
 
-      const credHeaders = await resolveCredentialHeaders(httpData.credentialId)
+      const credHeaders = await resolveCredentialHeaders(httpData.credentialId, context)
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",

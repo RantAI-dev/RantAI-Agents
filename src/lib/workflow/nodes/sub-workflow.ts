@@ -3,6 +3,7 @@ import type { WorkflowNodeData, SubWorkflowNodeData } from "../types"
 import type { ExecutionContext } from "../engine"
 import { resolveTemplate } from "../template-engine"
 import { buildTemplateContext } from "../engine"
+import { orgScope } from "./tool"
 
 /**
  * SUB_WORKFLOW node handler — executes another workflow as a child.
@@ -22,8 +23,8 @@ export async function executeSubWorkflow(
   }
 
   // Verify the target workflow exists and is active
-  const targetWorkflow = await prisma.workflow.findUnique({
-    where: { id: nodeData.workflowId },
+  const targetWorkflow = await prisma.workflow.findFirst({
+    where: { id: nodeData.workflowId, ...orgScope(context) },
   })
 
   if (!targetWorkflow) {

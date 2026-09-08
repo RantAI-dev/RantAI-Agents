@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { WorkflowResumeSchema, WorkflowRunIdParamsSchema } from "@/features/workflows/schema"
 import { resumeWorkflowRun } from "@/features/workflows/service"
 import { isHttpServiceError } from "@/features/shared/http-service-error"
@@ -26,8 +27,10 @@ export async function POST(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid request payload", details: parsedBody.error.flatten() }, { status: 400 })
     }
 
+    const orgContext = await resolveActiveOrg(req, session.user.id)
     const result = await resumeWorkflowRun({
       runId: parsedParams.data.runId,
+      organizationId: orgContext?.organizationId ?? null,
       stepId: parsedBody.data.stepId,
       data: parsedBody.data.data,
     })

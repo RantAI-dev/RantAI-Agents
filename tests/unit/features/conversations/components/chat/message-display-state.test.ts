@@ -124,4 +124,14 @@ describe("getMessageDisplayState", () => {
     )
     expect(result.showTypingIndicator).toBe(true)
   })
+
+  it("hides the typing indicator when the ordered timeline already holds a tool part", () => {
+    const result = getMessageDisplayState(
+      input({
+        isLoading: true,
+        metadata: { parts: [{ type: "tool", toolCallId: "c1", toolName: "create_artifact", state: "input-streaming" }] },
+      })
+    )
+    expect(result.showTypingIndicator).toBe(false)
+  })
 })

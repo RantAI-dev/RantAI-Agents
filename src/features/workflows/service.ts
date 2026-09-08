@@ -254,15 +254,15 @@ export async function exportDashboardWorkflow(
 /**
  * Lists runs for a workflow.
  */
-export async function listWorkflowRuns(workflowId: string) {
-  return findWorkflowRunsByWorkflowId(workflowId, 50)
+export async function listWorkflowRuns(workflowId: string, organizationId: string | null) {
+  return findWorkflowRunsByWorkflowId(workflowId, organizationId, 50)
 }
 
 /**
  * Loads a single workflow run for dashboard inspection.
  */
-export async function getWorkflowRun(runId: string) {
-  const run = await findWorkflowRunById(runId)
+export async function getWorkflowRun(runId: string, organizationId: string | null) {
+  const run = await findWorkflowRunById(runId, organizationId)
   if (!run) {
     return { status: 404, error: "Run not found" } satisfies ServiceError
   }
@@ -274,11 +274,12 @@ export async function getWorkflowRun(runId: string) {
  */
 export async function resumeWorkflowRun(params: {
   runId: string
+  organizationId: string | null
   stepId?: string
   data?: unknown
   deps?: { workflowEngine?: WorkflowEngine }
 }): Promise<unknown | ServiceError> {
-  const run = await findWorkflowRunById(params.runId)
+  const run = await findWorkflowRunById(params.runId, params.organizationId)
   if (!run) {
     return { status: 404, error: "Run not found" }
   }
@@ -290,7 +291,7 @@ export async function resumeWorkflowRun(params: {
   const deps = params.deps?.workflowEngine ?? workflowEngine
   await deps.resume(params.runId, params.stepId as string, params.data)
 
-  return findWorkflowRunById(params.runId)
+  return findWorkflowRunById(params.runId, params.organizationId)
 }
 
 /**
@@ -470,7 +471,9 @@ export async function executeDashboardWorkflow(params: {
   }
   )
 
-  const run = await findWorkflowRunById(runId)
+  // The workflow was already org-verified above; scope by its own org so a
+  // global (null-org) workflow's run is still returned.
+  const run = await findWorkflowRunById(runId, workflow.organizationId)
   return {
     kind: "json",
     status: 201,

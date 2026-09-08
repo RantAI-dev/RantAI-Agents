@@ -46,6 +46,17 @@ import {
 import { CHAT_ATTACHMENT_MIME_TYPES } from "@/lib/files/mime-types"
 import { processChatFile } from "@/lib/chat/file-processor"
 import type { ChatRequestInput } from "./schema"
+import { detectArtifactInText } from "./artifact-recovery"
+import { consumeSseChunk } from "@/features/conversations/components/chat/transports/sse"
+import {
+  applyUiStreamEvent,
+  timelineToPersisted,
+  timelineText,
+  timelineTools,
+  stripRecoveredFence,
+  type TimelinePart,
+  type ToolPart,
+} from "@/features/conversations/components/chat/message-timeline"
 import {
   createConversation,
   findActiveChatflowByAssistantId,
@@ -115,17 +126,29 @@ export function isChatPublicServiceError(
 function appendSourcesEventToUiStreamResponse(
   response: Response,
   ragSources: Array<{ title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }>,
-  traceId: string | null = null
+  traceId: string | null = null,
+  hooks?: {
+    /** Sees every UI-stream event as it is forwarded to the client. */
+    onEvent?: (event: Record<string, unknown>) => void
+    /**
+     * Runs once the model stream has fully drained (or the client went away);
+     * whatever UI-stream events it returns are appended before the response
+     * closes. Used by artifact recovery to emit a synthetic create_artifact
+     * call after the fact.
+     */
+    afterStream?: (ended: "drained" | "cancelled") => Promise<Array<Record<string, unknown>>>
+  },
 ) {
   const needsSources = ragSources.length > 0 && response.body
-  if (!needsSources && !traceId) {
+  const needsTrailer = Boolean(response.body && (hooks?.afterStream || hooks?.onEvent))
+  if (!needsSources && !traceId && !needsTrailer) {
     return response
   }
 
   const headers = new Headers(response.headers)
   if (traceId) headers.set("X-RAG-Trace", traceId)
 
-  if (!needsSources) {
+  if (!needsSources && !needsTrailer) {
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
@@ -135,19 +158,49 @@ function appendSourcesEventToUiStreamResponse(
 
   const reader = response.body!.getReader()
   const encoder = new TextEncoder()
+  const decoder = new TextDecoder()
+  let sseBuffer = ""
+  let finished = false
   const stream = new ReadableStream({
     async start(controller) {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         controller.enqueue(value)
+        if (hooks?.onEvent && value) {
+          const consumed = consumeSseChunk(sseBuffer, decoder.decode(value, { stream: true }))
+          sseBuffer = consumed.buffer
+          for (const event of consumed.parts) hooks.onEvent(event)
+        }
+      }
+      finished = true
+
+      if (hooks?.afterStream) {
+        try {
+          for (const event of await hooks.afterStream("drained")) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+          }
+        } catch (err) {
+          console.error("[Chat API] afterStream hook failed:", err)
+        }
       }
 
-      // Structured metadata event for sources (SSE protocol line)
-      controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "sources", sources: ragSources })}\n\n`)
-      )
+      if (needsSources) {
+        // Structured metadata event for sources (SSE protocol line)
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: "sources", sources: ragSources })}\n\n`)
+        )
+      }
       controller.close()
+    },
+    cancel() {
+      // Client disconnected mid-stream. Let the persistence path settle on
+      // whatever was forwarded so far instead of waiting forever.
+      reader.cancel().catch(() => {})
+      if (!finished && hooks?.afterStream) {
+        finished = true
+        hooks.afterStream("cancelled").catch(() => {})
+      }
     },
   })
 
@@ -156,6 +209,36 @@ function appendSourcesEventToUiStreamResponse(
     statusText: response.statusText,
     headers,
   })
+}
+
+/**
+ * Title for a recovered artifact: the first markdown heading or bold line in
+ * the reply, else the user's request trimmed, else a type label. Must pass
+ * `validateArtifactTitle` (3+ chars, not generic).
+ */
+function deriveArtifactTitle(text: string, userQuery: string, type: string, content?: string): string {
+  const clean = (s: string) => s.replace(/[`*_#]/g, "").replace(/[:：]\s*$/, "").trim()
+  const trim = (s: string) => (s.length > 60 ? s.slice(0, 57).trimEnd() + "…" : s)
+  // A slides deck names itself on its title slide.
+  if (type === "application/slides" && content) {
+    try {
+      const deck = JSON.parse(content) as { slides?: Array<{ title?: unknown }> }
+      const t = deck.slides?.[0]?.title
+      if (typeof t === "string" && clean(t).length >= 3) return trim(clean(t))
+    } catch {
+      // fall through to prose heuristics
+    }
+  }
+  const heading = text.match(/^\s*#{1,3}\s+(.+?)\s*$/m)?.[1]
+    ?? text.match(/^\s*\*\*(.+?)\*\*\s*$/m)?.[1]
+  if (heading && clean(heading).length >= 3) return trim(clean(heading))
+  // First prose line before any fence ("Berikut deck slides tentang kopi:").
+  const firstLine = text.split("\n").map((l) => l.trim()).find((l) => l && !l.startsWith("```") && !l.startsWith("{"))
+  if (firstLine && clean(firstLine).length >= 3 && clean(firstLine).length <= 120) return trim(clean(firstLine))
+  const query = clean(userQuery)
+  if (query.length >= 3 && query.length <= 120) return trim(query)
+  const label = type.split("/").pop() || "artifact"
+  return `Generated ${label}`
 }
 
 export async function runChat(params: {
@@ -1453,6 +1536,111 @@ export async function runChat(params: {
     // same final value either way. Best-effort: log and swallow errors so
     // a DB hiccup doesn't fail the streaming response that's already in
     // flight on the wire.
+    // ===== FINAL TIMELINE + ARTIFACT RECOVERY =====
+    // One lazily-computed view of the finished turn, shared by the SSE
+    // trailer (synthetic tool events) and the persistence path below, so
+    // both see the same ordered parts and the same recovered artifact.
+    //
+    // Recovery: when the model wrote artifact source as chat text instead of
+    // calling create_artifact (weaker models obey "content must be raw JSON"
+    // in the reply rather than in the tool argument), promote that text into
+    // a real artifact. Only when the tool was actually offered this turn.
+    const artifactToolAvailable = Boolean(resolvedTools.create_artifact)
+    const artifactToolContext = {
+      userId: session?.user?.id,
+      assistantId: assistantId ?? undefined,
+      organizationId: effectiveOrgId ?? undefined,
+      sessionId: body.sessionId || undefined,
+      canvasMode: body.canvasMode ?? undefined,
+    }
+    // The timeline is built from the UI-stream events actually forwarded to
+    // the client, not from `result.steps` — that promise rejects whenever the
+    // provider stream ends in an error (idle timeout after the full answer
+    // had already streamed is the common case), and the turn would then be
+    // neither recovered nor persisted.
+    let observedTimeline: TimelinePart[] = []
+    let resolveStreamEnd!: () => void
+    const streamEnded = new Promise<void>((resolve) => {
+      resolveStreamEnd = resolve
+    })
+    let finalTurnPromise: Promise<{
+      timeline: TimelinePart[]
+      text: string
+      recoveryEvents: Array<Record<string, unknown>>
+    }> | null = null
+    const getFinalTurn = () => {
+      if (finalTurnPromise) return finalTurnPromise
+      finalTurnPromise = (async () => {
+        await streamEnded
+        let timeline = observedTimeline
+        const text = timelineText(timeline)
+        const recoveryEvents: Array<Record<string, unknown>> = []
+
+        const artifactSucceeded = timelineTools(timeline).some((t) => {
+          if (t.toolName !== "create_artifact" && t.toolName !== "update_artifact") return false
+          const out = t.output as Record<string, unknown> | null | undefined
+          return Boolean(out && (out.persisted === true || out.updated === true))
+        })
+        if (!artifactSucceeded && !params.abortSignal?.aborted) {
+          const detected = detectArtifactInText(text, {
+            canvasMode: body.canvasMode ?? null,
+            toolAvailable: artifactToolAvailable,
+          })
+          if (detected) {
+            try {
+              const { BUILTIN_TOOLS } = await import("@/lib/tools/builtin")
+              const createTool = BUILTIN_TOOLS.create_artifact
+              const title = deriveArtifactTitle(text, userQuery, detected.type, detected.content)
+              const input = {
+                title,
+                type: detected.type,
+                content: detected.content,
+                ...(detected.language ? { language: detected.language } : {}),
+              }
+              const toolCallId = `recovered-${crypto.randomUUID()}`
+              const startedAt = Date.now()
+              const rawOutput = await createTool.execute(input, artifactToolContext)
+              const output: Record<string, unknown> = {
+                ...(rawOutput as Record<string, unknown>),
+                recoveredFromText: true,
+              }
+              const part: ToolPart = {
+                type: "tool",
+                toolCallId,
+                toolName: "create_artifact",
+                state: "done",
+                input,
+                output,
+                startedAt,
+                endedAt: Date.now(),
+              }
+              // Only when the artifact actually persisted do we drop the
+              // duplicated source from the text — on a validation failure
+              // the fence is the only copy the user has.
+              if (output.persisted === true) {
+                timeline = timeline.map((p) =>
+                  p.type === "text" ? { ...p, text: stripRecoveredFence(p.text, detected.content) } : p,
+                )
+              }
+              timeline = [...timeline, part]
+              recoveryEvents.push(
+                { type: "tool-input-start", toolCallId, toolName: "create_artifact" },
+                { type: "tool-input-available", toolCallId, toolName: "create_artifact", input },
+                { type: "tool-output-available", toolCallId, output },
+              )
+              console.log(
+                `[Chat API] artifact recovery: promoted ${detected.type} from text (${detected.content.length} chars, persisted=${String(output.persisted)})`,
+              )
+            } catch (err) {
+              console.error("[Chat API] artifact recovery failed:", err)
+            }
+          }
+        }
+        return { timeline, text: timelineText(timeline), recoveryEvents }
+      })()
+      return finalTurnPromise
+    }
+
     const persistAssistantMessageId = params.body.assistantMessageId
     if (persistAssistantMessageId && validatedSessionId) {
       const lastUserMessage = [...rawMessages].reverse().find(
@@ -1460,20 +1648,23 @@ export async function runChat(params: {
       )
       void (async () => {
         try {
-          const finalText = await result.text
-          if (!finalText) {
-            // Nothing useful to write — model produced no text. Skip
-            // rather than overwriting whatever placeholder the client may
-            // have already persisted.
+          const finalTurn = await getFinalTurn()
+          const finalText = finalTurn.text
+          const tools = timelineTools(finalTurn.timeline)
+          if (!finalText && tools.length === 0) {
+            // Nothing useful to write — model produced no text and called
+            // no tool. Skip rather than overwriting whatever placeholder
+            // the client may have already persisted.
             return
           }
-          let reasoningText: string | undefined
-          try {
-            const r = await result.reasoningText
-            if (typeof r === "string" && r.length > 0) reasoningText = r
-          } catch {
-            // result.reasoningText can reject on aborted streams; non-fatal.
-          }
+          const reasoningText = finalTurn.timeline
+            .filter((p): p is Extract<TimelinePart, { type: "reasoning" }> => p.type === "reasoning")
+            .map((p) => p.text)
+            .join("\n")
+          const artifactIds = tools
+            .map((t) => t.output as Record<string, unknown> | null | undefined)
+            .filter((o) => o && typeof o.id === "string" && (o.persisted === true || o.updated === true))
+            .map((o) => o!.id as string)
           const { createDashboardMessages } = await import(
             "@/features/conversations/sessions/repository"
           )
@@ -1489,14 +1680,29 @@ export async function runChat(params: {
               content: lastUserMessage.content,
             })
           }
+          // Full metadata every time. Prisma replaces the JSON column, so a
+          // partial write here ({ reasoning } only) used to clobber the
+          // client's toolCalls/artifactIds when it landed second.
           rowsToPersist.push({
             id: persistAssistantMessageId,
             sessionId: validatedSessionId,
             role: "assistant",
             content: finalText,
-            ...(reasoningText && {
-              metadata: { reasoning: reasoningText },
-            }),
+            metadata: {
+              parts: timelineToPersisted(finalTurn.timeline),
+              ...(tools.length > 0 && {
+                toolCalls: tools.map((t) => ({
+                  toolCallId: t.toolCallId,
+                  toolName: t.toolName,
+                  state: t.state === "error" ? "error" : "done",
+                  input: t.input,
+                  output: t.output,
+                  errorText: t.errorText,
+                })),
+              }),
+              ...(artifactIds.length > 0 && { artifactIds }),
+              ...(reasoningText && { reasoning: reasoningText }),
+            },
           })
           await createDashboardMessages(rowsToPersist)
         } catch (err) {
@@ -1536,7 +1742,23 @@ export async function runChat(params: {
         return "The model didn't return a response. Please try again or switch models."
       },
     })
-    return appendSourcesEventToUiStreamResponse(uiResponse, ragSources, ragTrace?.traceId ?? null)
+    return appendSourcesEventToUiStreamResponse(
+      uiResponse,
+      ragSources,
+      ragTrace?.traceId ?? null,
+      {
+        onEvent: (event) => {
+          observedTimeline = applyUiStreamEvent(observedTimeline, event)
+        },
+        afterStream: async (ended) => {
+          resolveStreamEnd()
+          if (ended === "cancelled") return []
+          // Only pay for recovery when it can apply.
+          if (!artifactToolAvailable && !body.canvasMode) return []
+          return (await getFinalTurn()).recoveryEvents
+        },
+      },
+    )
   } catch (error) {
     console.error("[Chat API] Error:", error)
     return {

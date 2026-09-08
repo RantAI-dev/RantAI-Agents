@@ -164,7 +164,7 @@ Skip charts for simple lookup tables, dictionaries, or one-off snapshots.
 - ❌ Unknown \`style\` name (typos)
 - ❌ More than 8 sheets / 500 cells per sheet / 200 formulas / 64 named ranges
 - ❌ Using Shape A or B when the user's intent requires Shape C (formulas, formatting, multi-sheet)
-- ❌ Markdown fences wrapping the JSON (\`\`\`json ... \`\`\`) — emit raw JSON only
+- ❌ Markdown fences wrapping the JSON (\`\`\`json ... \`\`\`) inside \`content\` — the tool argument is raw JSON only
 - ❌ Placeholder data (\`"John Doe"\`, \`"Company A"\`, \`foo\`, \`bar\`) — use realistic names, companies, amounts`,
   examples: [
     {

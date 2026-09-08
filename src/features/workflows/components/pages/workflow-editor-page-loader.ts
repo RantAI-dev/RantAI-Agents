@@ -154,7 +154,7 @@ export async function loadWorkflowEditorPageHydration(workflowId: string): Promi
     getDashboardWorkflow(workflowId, orgContext?.organizationId ?? null).catch(
       () => ({ status: 404, error: "Workflow not found" } as const)
     ),
-    listWorkflowRuns(workflowId).catch(() => [] as Awaited<ReturnType<typeof listWorkflowRuns>>),
+    listWorkflowRuns(workflowId, orgContext?.organizationId ?? null).catch(() => [] as Awaited<ReturnType<typeof listWorkflowRuns>>),
     listDashboardCredentials({
       organizationId: orgContext?.organizationId ?? null,
       userId: session.user.id,

@@ -14,7 +14,7 @@ export interface MessageDisplayInput {
   role: string
   content: string
   parts?: Array<{ type?: string; state?: string; text?: string }>
-  metadata?: { reasoning?: unknown }
+  metadata?: { reasoning?: unknown; parts?: unknown }
 }
 
 export interface MessageDisplayState {
@@ -36,8 +36,13 @@ export function getMessageDisplayState(
   const reasoning =
     typeof metadata?.reasoning === "string" ? metadata.reasoning : ""
   const hasReasoning = reasoning.length > 0
-  const hasToolInvocation = Array.isArray(parts)
-    && parts.some((p) => p?.type === "tool-invocation")
+  const hasToolInvocation =
+    (Array.isArray(parts) &&
+      parts.some((p) => p?.type === "tool-invocation" || p?.type === "tool")) ||
+    (Array.isArray(metadata?.parts) &&
+      (metadata!.parts as Array<{ type?: string; text?: string }>).some(
+        (p) => p?.type === "tool" || (p?.type === "reasoning" && Boolean(p.text)),
+      ))
 
   const streamInFlight = isLoading && isLastMessage
   const bubbleHasOutput = hasContent || hasReasoning || hasToolInvocation
