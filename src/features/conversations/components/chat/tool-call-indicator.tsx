@@ -113,6 +113,17 @@ interface ToolCallIndicatorProps {
   result?: unknown
   errorText?: string
   employeeId?: string
+  /** Wall-clock time the call took, shown in the collapsed header. */
+  durationMs?: number
+}
+
+/** "0.8s" / "12s" / "1m 04s" — short enough to sit in a one-line header. */
+export function formatToolDuration(ms: number): string {
+  if (ms < 1000) return `${(ms / 1000).toFixed(1)}s`
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`
+  const m = Math.floor(ms / 60_000)
+  const s = Math.round((ms % 60_000) / 1000)
+  return `${m}m ${s.toString().padStart(2, "0")}s`
 }
 
 // Extract domain from URL
@@ -764,6 +775,7 @@ function GenericToolIndicator({
   args,
   result,
   errorText,
+  durationMs,
 }: ToolCallIndicatorProps) {
   const [expanded, setExpanded] = useState(false)
   const [showRaw, setShowRaw] = useState(false)
@@ -838,6 +850,11 @@ function GenericToolIndicator({
               {inputSummary && (
                 <span className="text-foreground/70 truncate max-w-[200px]" title={inputSummary}>
                   &ldquo;{inputSummary.length > 40 ? inputSummary.slice(0, 40) + "..." : inputSummary}&rdquo;
+                </span>
+              )}
+              {typeof durationMs === "number" && (
+                <span className="text-muted-foreground/60 tabular-nums shrink-0">
+                  · {formatToolDuration(durationMs)}
                 </span>
               )}
             </>

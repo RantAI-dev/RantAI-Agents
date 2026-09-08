@@ -28,7 +28,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: auth.error }, { status: auth.status })
     }
 
-    const run = await getWorkflowRun(parsedParams.data.runId)
+    const run = await getWorkflowRun(
+      parsedParams.data.runId,
+      (auth as { organizationId?: string | null }).organizationId ?? null
+    )
     if (isHttpServiceError(run)) {
       return NextResponse.json({ error: run.error }, { status: run.status })
     }

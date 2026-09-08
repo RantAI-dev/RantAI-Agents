@@ -3,6 +3,7 @@
 import { useMemo, useEffect, useState, useCallback, useRef } from "react"
 import { AlertTriangle, RotateCcw, Code, Loader2 } from "@/lib/icons"
 import { IFRAME_NAV_BLOCKER_SCRIPT } from "./_iframe-nav-blocker"
+import { dedupeGlobalDestructure } from "./_dedupe-global-destructure"
 import {
   parseDirectives,
   buildFontLinks,
@@ -83,6 +84,7 @@ export function toDestructuringList(names: string): string {
  * NOTE: React hooks/APIs are already destructured in the iframe template,
  * so we skip generating preamble for 'react' imports entirely.
  */
+
 export function preprocessCode(code: string): {
   processedCode: string
   componentName: string
@@ -108,6 +110,10 @@ export function preprocessCode(code: string): {
     }
     processed = lines.join("\n")
   }
+
+  // `const { useState } = React;` on top of the prelude's own destructure is
+  // a redeclaration SyntaxError. Drop the names the prelude already binds.
+  processed = dedupeGlobalDestructure(processed, "React", REACT_PRE_DESTRUCTURED)
 
   // Hide template literal contents to avoid matching imports inside strings
   const tplStore: string[] = []
@@ -273,7 +279,7 @@ export function preprocessCode(code: string): {
 
 /* ── HTML template for the sandboxed iframe ─────────────────── */
 
-function buildSrcdoc(
+export function buildSrcdoc(
   code: string,
   componentName: string,
   directives: ParsedDirectives
@@ -288,6 +294,11 @@ function buildSrcdoc(
   const aesthetic: AestheticDirection = directives.aesthetic ?? "editorial"
   const fontLinks = buildFontLinks(aesthetic, directives.fonts)
 
+  // Babel standalone is PINNED. The unpinned URL started serving Babel 8,
+  // whose React preset defaults to the automatic JSX runtime and injects
+  // `import { jsx } from "react/jsx-runtime"` into a classic <script> —
+  // every artifact then died with "Cannot use import statement outside a
+  // module". 7.26.10 matches the R3F renderer.
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -297,7 +308,7 @@ function buildSrcdoc(
 ${fontLinks}
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
-<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+<script crossorigin src="https://unpkg.com/@babel/standalone@7.26.10/babel.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"><\/script>
 <script crossorigin src="https://unpkg.com/recharts@2/umd/Recharts.js"><\/script>
 <script>window.react = window.React;<\/script>

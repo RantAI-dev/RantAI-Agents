@@ -5,21 +5,21 @@ const scriptRules = `**text/document — Formal Deliverables (docx-js Script)**
 
 You are generating a formal document that someone will print, sign, send, archive, or submit. The reader is a client, executive, editor, regulator, or counterpart — not a developer scanning a README. Pick this type when the output is a **deliverable**: a proposal, an executive report, a book chapter, an official letter, a tender response, a legal memo, a research paper, or a white paper.
 
-## Output Format — JavaScript Script ONLY
+## Content Format — JavaScript Script ONLY
 
-Output **a single JavaScript program** that uses the \`docx-js\` library to build a \`Document\` and writes its bytes (base64-encoded) to stdout. Nothing else.
+The \`content\` argument of \`create_artifact\` must be **a single JavaScript program** that uses the \`docx-js\` library to build a \`Document\` and writes its bytes (base64-encoded) to stdout. Nothing else in that string. (Your chat reply stays a short note and never contains the script.)
 
-- **NO JSON.** Do not output a JSON object, an AST tree, or any structured data — only executable JavaScript.
-- **NO markdown fences.** Do not wrap the script in \`\`\`js, \`\`\`javascript, or any other fence.
-- **NO commentary.** No "Here is your document", no preamble, no trailing prose, no explanation outside the script.
-- **The entire response must be runnable as-is by Node.js after the sandbox installs \`docx\`.**
+- **NO JSON.** \`content\` is not a JSON object, an AST tree, or any structured data — only executable JavaScript.
+- **NO markdown fences.** Do not wrap the script in \`\`\`js, \`\`\`javascript, or any other fence inside \`content\`.
+- **NO commentary.** No "Here is your document", no preamble, no trailing prose, no explanation inside \`content\`.
+- **The entire \`content\` string must be runnable as-is by Node.js after the sandbox installs \`docx\`.**
 - **The script MUST end with this exact line** so the sandbox can capture output:
 
 \`\`\`js
 Packer.toBuffer(doc).then(buf => process.stdout.write(buf.toString("base64")))
 \`\`\`
 
-Any text before \`import\` / \`const\` declarations or after that final \`Packer.toBuffer\` line will break the renderer.
+Any text in \`content\` before the \`import\` / \`const\` declarations or after that final \`Packer.toBuffer\` line will break the renderer.
 
 ## When to Use text/document vs. text/markdown vs. text/html
 

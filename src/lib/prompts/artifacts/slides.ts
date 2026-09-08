@@ -7,9 +7,9 @@ export const slidesArtifact = {
 
 You are generating a complete slide deck as a JSON object that will render in an iframe with arrow-key navigation, dot pagination, and a "Download PPTX" button. The deck must look professional out of the box — title and section slides get a dark gradient background with white text; content/two-column/quote slides get a clean white background with dark text. **Both previews and PPTX export are driven from the same JSON, so what you write is exactly what the user gets.**
 
-## Output Format — JSON ONLY
+## Content Format — JSON ONLY
 
-Output **a single JSON object**. No markdown, no fences, no explanation, no leading/trailing prose. The renderer parses raw JSON; anything else will be rejected by the validator.
+The \`content\` argument you pass to \`create_artifact\` must be **a single JSON object**: no markdown, no fences, no explanation, no leading/trailing prose inside it. The renderer parses that string as raw JSON; anything else is rejected by the validator. (Your chat reply is separate — keep it to a short note and never paste the deck there.)
 
 \`\`\`json
 {

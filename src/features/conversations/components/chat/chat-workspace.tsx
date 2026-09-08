@@ -34,7 +34,6 @@ import { formatDistanceToNow } from "date-fns"
 import { useToast } from "@/hooks/use-toast"
 import { ToastAction } from "@/components/ui/toast"
 import { MarkdownContent } from "./markdown-content"
-import { ReasoningBox } from "./reasoning-box"
 import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
@@ -57,10 +56,18 @@ import { VisionAttachmentHint } from "./vision-attachment-hint"
 import { ChatInputToolbar, ALL_DOCS_GROUP_ID, type AssistantToolInfo, type AssistantSkillInfo, type CanvasMode, type KBGroup, type ToolMode, type SkillMode } from "./chat-input-toolbar"
 import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
 import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } from "./edit-version-indicator"
-import { ToolCallIndicator } from "./tool-call-indicator"
+import { MessageTimelineView } from "./message-timeline-view"
+import {
+  applyUiStreamEvent,
+  timelineFromMessage,
+  timelineToPersisted,
+  timelineTools,
+  stripRecoveredFence,
+  stripRecoveredFromTimeline,
+  type TimelinePart,
+} from "./message-timeline"
 import { useArtifacts } from "./artifacts/use-artifacts"
 import { ArtifactIndicator } from "./artifacts/artifact-indicator"
-import { isPersistedArtifactToolCall, getEffectiveToolState } from "./artifact-tool-result"
 import { ArtifactPanel } from "./artifacts/artifact-panel"
 import { isValidArtifactType, type Artifact, type ArtifactType } from "./artifacts/types"
 import { collectAutoAttachments, type ChatAttachment } from "@/lib/notebook/chat-attachment"
@@ -181,42 +188,6 @@ function getMessageContent(message: {
       .join("")
   }
   return ""
-}
-
-// Extract tool call parts from UIMessage parts array
-interface ToolCallPart {
-  toolName: string
-  toolCallId: string
-  state: "input-streaming" | "input-available" | "execution-started" | "done" | "error"
-  input?: Record<string, unknown>
-  output?: unknown
-  errorText?: string
-}
-
-function getToolCallParts(message: {
-  parts?: Array<Record<string, unknown>>
-}): ToolCallPart[] {
-  if (!message.parts) return []
-  return message.parts
-    .filter((part) => part.type === "tool-invocation")
-    .map((part) => {
-      // Map SDK states to our indicator states
-      const rawState = part.state as string
-      let state: ToolCallPart["state"] = "done"
-      if (rawState === "partial-call") state = "input-streaming"
-      else if (rawState === "call") state = "execution-started"
-      else if (rawState === "result") state = "done"
-      else if (rawState === "error") state = "error"
-
-      return {
-        toolName: (part.toolName as string) || "unknown",
-        toolCallId: (part.toolCallId as string) || "",
-        state,
-        input: part.args as Record<string, unknown> | undefined,
-        output: part.output,
-        errorText: part.errorText as string | undefined,
-      }
-    })
 }
 
 // Normalize role from useChat (may include "system") to ChatMessage.role
@@ -510,6 +481,24 @@ function MessagesArea({
               ? getVersionContent(rawContent, msgEditHistory, currentViewingVersion)
               : rawContent
 
+            // Ordered reasoning/text/tool timeline for assistant turns. Live
+            // messages carry it on metadata.parts (set by the stream consumer);
+            // persisted ones either have metadata.parts or fall back to the
+            // legacy tools-then-text layout inside timelineFromMessage.
+            const timeline: TimelinePart[] = isUser
+              ? []
+              : timelineFromMessage(
+                  message as unknown as {
+                    content?: string
+                    parts?: Array<Record<string, unknown>>
+                    metadata?: Record<string, unknown> | null
+                  },
+                ).map((part) =>
+                  part.type === "text"
+                    ? { ...part, text: part.text.replace(AGENT_HANDOFF_MARKER, "") }
+                    : part,
+                )
+
             // Figure sources the model can embed inline via [figure:N], numbered
             // to match the Sources list. Those it DID embed are dropped from the
             // Figures card row (below) so they don't render twice.
@@ -623,30 +612,6 @@ function MessagesArea({
                         )
                       })()}
 
-                      {/* Reasoning box renders whenever metadata.reasoning is set,
-                          including BEFORE the first text-delta arrives. Without
-                          this, reasoning that streams ahead of the answer (the
-                          common MiniMax `<think>...</think>` pattern) would be
-                          hidden behind the TypingIndicator because content is
-                          still empty. Sits above the bubble body for both the
-                          loading state and the rendered-content state. */}
-                      {!isUser && (() => {
-                        const meta = (message as unknown as { metadata?: Record<string, unknown> }).metadata
-                        const reasoning = typeof meta?.reasoning === "string" ? meta.reasoning : ""
-                        if (!reasoning) return null
-                        const durationMs =
-                          typeof meta?.reasoningDurationMs === "number"
-                            ? meta.reasoningDurationMs
-                            : null
-                        return (
-                          <ReasoningBox
-                            content={reasoning}
-                            isStreaming={isStreamingMessage}
-                            durationMs={durationMs}
-                          />
-                        )
-                      })()}
-
                       {isEditing ? (
                         <div className="space-y-2">
                           <Textarea
@@ -671,58 +636,34 @@ function MessagesArea({
                         </div>
                       ) : (
                         <>
-                          {/* Tool call indicators (live during streaming) */}
-                          {!isUser && (() => {
-                            const toolParts = getToolCallParts(message as unknown as { parts?: Array<Record<string, unknown>> })
-                            if (toolParts.length > 0) {
-                              return (
-                                <div className="space-y-0.5 mb-1">
-                                  {toolParts.map((tp) => {
-                                    if (isPersistedArtifactToolCall(tp)) {
-                                      const out = tp.output as Record<string, unknown>
-                                      const artifactId = out.id as string
-                                      const existing = artifactId ? artifacts.get(artifactId) : undefined
-                                      return (
-                                        <ArtifactIndicator
-                                          key={tp.toolCallId}
-                                          title={
-                                            tp.toolName === "update_artifact"
-                                              ? `Updated: ${(out.title as string) || existing?.title || "Artifact"}`
-                                              : (out.title as string) || "Artifact"
-                                          }
-                                          type={existing?.type || (out.type as ArtifactType) || "text/html"}
-                                          content={existing?.content || (out.content as string | undefined)}
-                                          onClick={() => {
-                                            if (artifactId) openArtifact(artifactId)
-                                          }}
-                                        />
-                                      )
+                          {/* Assistant turn: reasoning, text and tool calls in
+                              the order the model produced them. */}
+                          {!isUser && (
+                            <MessageTimelineView
+                              timeline={timeline}
+                              isStreaming={isStreamingMessage}
+                              artifacts={artifacts}
+                              openArtifact={openArtifact}
+                              digitalEmployeeId={digitalEmployeeId}
+                              citations={
+                                sources.length > 0
+                                  ? {
+                                      messageId: message.id,
+                                      count: sources.length,
+                                      figures: embeddableFigures,
+                                      citedChunkKeys,
                                     }
-                                    // Failed artifact tool calls (validation rejected, concurrent
-                                    // update conflict, missing artifact) fall through to the regular
-                                    // tool-call indicator. getEffectiveToolState rewrites the state
-                                    // to "error" so the pill renders red instead of green.
-                                    const effective = getEffectiveToolState(tp)
-                                    return (
-                                      <ToolCallIndicator
-                                        key={tp.toolCallId}
-                                        toolName={tp.toolName}
-                                        state={effective.state}
-                                        args={tp.input}
-                                        result={tp.output}
-                                        errorText={effective.errorText}
-                                        employeeId={digitalEmployeeId}
-                                      />
-                                    )
-                                  })}
-                                </div>
-                              )
-                            }
-                            // Fallback: render tool calls + artifact indicators from persisted metadata (after session switch/refresh)
+                                  : undefined
+                              }
+                            />
+                          )}
+                          {/* Legacy fallback: artifacts recorded only as ids /
+                              snapshots (pre-timeline rows) with no tool call
+                              carrying them. */}
+                          {!isUser && (() => {
                             const msgMeta = (message as unknown as {
                               metadata?: {
                                 artifactIds?: string[]
-                                toolCalls?: ToolCallPart[]
                                 artifacts?: Array<{
                                   id: string
                                   title?: string
@@ -730,97 +671,45 @@ function MessagesArea({
                                 }>
                               }
                             }).metadata
-                            const persistedTCs = msgMeta?.toolCalls
-                            const persistedIds = msgMeta?.artifactIds
-                            const persistedArtifacts = msgMeta?.artifacts
-                            if (
-                              (persistedTCs && persistedTCs.length > 0) ||
-                              (persistedIds && persistedIds.length > 0) ||
-                              (persistedArtifacts && persistedArtifacts.length > 0)
-                            ) {
-                              return (
-                                <div className="space-y-0.5 mb-1">
-                                  {persistedTCs?.map((tc) => {
-                                    if (isPersistedArtifactToolCall(tc)) {
-                                      const out = tc.output as Record<string, unknown>
-                                      const artifactId = out.id as string
-                                      const existing = artifactId ? artifacts.get(artifactId) : undefined
-                                      return (
-                                        <ArtifactIndicator
-                                          key={tc.toolCallId}
-                                          title={
-                                            tc.toolName === "update_artifact"
-                                              ? `Updated: ${(out.title as string) || existing?.title || "Artifact"}`
-                                              : (out.title as string) || "Artifact"
-                                          }
-                                          type={existing?.type || (out.type as ArtifactType) || "text/html"}
-                                          content={existing?.content || (out.content as string | undefined)}
-                                          onClick={() => {
-                                            if (artifactId) openArtifact(artifactId)
-                                          }}
-                                        />
-                                      )
-                                    }
-                                    // Failed artifact tool calls fall through to the tool-call
-                                    // indicator with state rewritten to "error" so the user can
-                                    // tell the LLM's attempt didn't take.
-                                    const effective = getEffectiveToolState(tc)
-                                    return (
-                                      <ToolCallIndicator
-                                        key={tc.toolCallId}
-                                        toolName={tc.toolName}
-                                        state={effective.state}
-                                        args={tc.input}
-                                        result={tc.output}
-                                        errorText={effective.errorText}
-                                        employeeId={digitalEmployeeId}
-                                      />
-                                    )
-                                  })}
-                                  {/* Artifact IDs without matching tool call (legacy/fallback) */}
-                                  {persistedIds?.filter((aid) => !persistedTCs?.some((tc) => {
-                                    const out = tc.output as Record<string, unknown> | undefined
-                                    return out?.id === aid
-                                  })).map((aid) => {
-                                    const art = artifacts.get(aid)
-                                    if (!art) return null
-                                    return (
-                                      <ArtifactIndicator
-                                        key={aid}
-                                        title={art.title}
-                                        type={art.type}
-                                        content={art.content}
-                                        onClick={() => openArtifact(aid)}
-                                      />
-                                    )
-                                  })}
-                                  {/* Fallback snapshot artifacts (post-refresh when only metadata.artifacts is present) */}
-                                  {persistedArtifacts
-                                    ?.filter((artifact) => {
-                                      const aid = artifact.id
-                                      const seenInToolCalls = persistedTCs?.some((tc) => {
-                                        const out = tc.output as Record<string, unknown> | undefined
-                                        return out?.id === aid
-                                      })
-                                      const seenInIds = persistedIds?.includes(aid)
-                                      return !seenInToolCalls && !seenInIds
-                                    })
-                                    .map((artifact) => {
-                                      const inMemory = artifacts.get(artifact.id)
-                                      return (
-                                        <ArtifactIndicator
-                                          key={`snapshot-${artifact.id}`}
-                                          title={inMemory?.title || artifact.title || "Artifact"}
-                                          type={inMemory?.type || (artifact.artifactType as ArtifactType) || "application/code"}
-                                          content={inMemory?.content}
-                                          onClick={() => openArtifact(artifact.id)}
-                                        />
-                                      )
-                                    })}
-                                </div>
-                              )
-                            }
-                            return null
+                            const seen = new Set(
+                              timelineTools(timeline)
+                                .map((t) => (t.output as Record<string, unknown> | undefined)?.id)
+                                .filter((id): id is string => typeof id === "string"),
+                            )
+                            const persistedIds = (msgMeta?.artifactIds ?? []).filter((aid) => !seen.has(aid))
+                            const persistedArtifacts = (msgMeta?.artifacts ?? []).filter(
+                              (a) => !seen.has(a.id) && !persistedIds.includes(a.id),
+                            )
+                            if (persistedIds.length === 0 && persistedArtifacts.length === 0) return null
+                            return (
+                              <div className="space-y-0.5 mb-1">
+                                {persistedIds.map((aid) => {
+                                  const art = artifacts.get(aid)
+                                  if (!art) return null
+                                  return (
+                                    <ArtifactIndicator
+                                      key={aid}
+                                      title={art.title}
+                                      type={art.type}
+                                      content={art.content}
+                                      onClick={() => openArtifact(aid)}
+                                    />
+                                  )
+                                })}
+                                {persistedArtifacts.map((artifact) => {
+                                  const inMemory = artifacts.get(artifact.id)
+                                  return (
+                                    <ArtifactIndicator
+                                      key={`snapshot-${artifact.id}`}
+                                      title={inMemory?.title || artifact.title || "Artifact"}
+                                      type={inMemory?.type || (artifact.artifactType as ArtifactType) || "application/code"}
+                                      content={inMemory?.content}
+                                      onClick={() => openArtifact(artifact.id)}
+                                    />
+                                  )
+                                })}
+                              </div>
+                            )
                           })()}
                           {/* Attachment badges for user messages */}
                           {isUser && messageAttachments?.[message.id]?.map((att, i) => {
@@ -839,21 +728,8 @@ function MessagesArea({
                               </button>
                             )
                           })}
-                          {content.length > 0 && (
-                            <MarkdownContent
-                              content={content}
-                              isStreaming={isStreamingMessage}
-                              citations={
-                                !isUser && sources.length > 0
-                                  ? {
-                                      messageId: message.id,
-                                      count: sources.length,
-                                      figures: embeddableFigures,
-                                      citedChunkKeys,
-                                    }
-                                  : undefined
-                              }
-                            />
+                          {isUser && content.length > 0 && (
+                            <MarkdownContent content={content} />
                           )}
                           {display.showTypingIndicator && <TypingIndicator />}
                         </>
@@ -2229,6 +2105,9 @@ export function ChatWorkspace({
         let reasoningStartedAt: number | null = null
         let reasoningDurationMs: number | null = null
         const toolCalls: TransportToolCallMap = new Map()
+        // Ordered reasoning/text/tool parts for this turn — the shape the
+        // bubble renders and what gets persisted as metadata.parts.
+        let timeline: TimelinePart[] = []
         // preStreamSnapshots / createdStreamingIds declared above the try
         // so the catch block can clean them up. preStreamSnapshots holds
         // the pre-stream state of any artifact mutated by an
@@ -2289,8 +2168,10 @@ export function ChatWorkspace({
               events,
               assistantContent,
               toolCalls,
+              timeline,
             })
             assistantContent = pollReduced.assistantContent
+            timeline = pollReduced.timeline
 
             // Update message with current content + tool parts
             const parts: Array<Record<string, unknown>> = []
@@ -2307,14 +2188,18 @@ export function ChatWorkspace({
             }
 
             const displayContent = assistantContent.replace(AGENT_HANDOFF_MARKER, "").trim()
+            const pollTimeline = timeline
             chat.setMessages((prev) => {
               const updated = [...prev]
               const lastIdx = updated.length - 1
               if (updated[lastIdx]?.role === "assistant") {
+                const prevMeta =
+                  ((updated[lastIdx] as { metadata?: Record<string, unknown> }).metadata) ?? {}
                 updated[lastIdx] = {
                   ...updated[lastIdx],
                   content: displayContent,
                   ...(parts.length > 0 && { parts }),
+                  metadata: { ...prevMeta, parts: pollTimeline },
                 } as unknown as typeof updated[number]
               }
               return updated
@@ -2407,6 +2292,7 @@ export function ChatWorkspace({
             const consumeResult = consumeSseChunk(sseBuffer, chunk)
             sseBuffer = consumeResult.buffer
             for (const part of consumeResult.parts) {
+              timeline = applyUiStreamEvent(timeline, part)
               switch (part.type) {
                 case "thinking":
                 case "reasoning-start":
@@ -2553,6 +2439,20 @@ export function ChatWorkspace({
                         typeof out.content === "string" &&
                         out.content.length > 0 &&
                         isValidArtifactType(out.type)
+
+                      // Server-side recovery: the model wrote the artifact
+                      // source as chat text and the server promoted it. Drop
+                      // the duplicated fence from the text so the answer
+                      // reads as prose + artifact card, not prose + JSON wall.
+                      if (
+                        out.recoveredFromText === true &&
+                        out.persisted === true &&
+                        typeof tc.args?.content === "string"
+                      ) {
+                        const recovered = tc.args.content
+                        timeline = stripRecoveredFromTimeline(timeline, toolCallId, recovered)
+                        assistantContent = stripRecoveredFence(assistantContent, recovered)
+                      }
 
                       if (out.persisted === true && isValidContent) {
                         // SUCCESS — replace placeholder with real, DB-backed artifact.
@@ -2705,14 +2605,18 @@ export function ChatWorkspace({
 
             // Update message with content + tool parts (strip handoff marker from display)
             const sseDisplayContent = assistantContent.replace(AGENT_HANDOFF_MARKER, "").trim()
+            const sseTimeline = timeline
             chat.setMessages((prev) => {
               const updated = [...prev]
               const lastIdx = updated.length - 1
               if (updated[lastIdx]?.role === "assistant") {
+                const prevMeta =
+                  ((updated[lastIdx] as { metadata?: Record<string, unknown> }).metadata) ?? {}
                 updated[lastIdx] = {
                   ...updated[lastIdx],
                   content: sseDisplayContent,
                   parts,
+                  metadata: { ...prevMeta, parts: sseTimeline },
                 } as unknown as typeof updated[number]
               }
               return updated
@@ -2720,6 +2624,7 @@ export function ChatWorkspace({
           } else {
             // Plain text stream (no tools)
             assistantContent += chunk
+            timeline = applyUiStreamEvent(timeline, { type: "text-delta", delta: chunk })
             let displayContent = assistantContent
 
             // Strip handoff marker from live display
@@ -2835,8 +2740,18 @@ export function ChatWorkspace({
             errorText: tc.errorText,
           }))
 
-        // Save to session
-        if (session && onUpdateSession && finalContent) {
+        // Persisted, ordered timeline — text parts carry the handoff-marker-
+        // stripped content so the bubble reads the same after a reload.
+        const persistedParts = timelineToPersisted(
+          timeline.map((p) =>
+            p.type === "text" ? { ...p, text: p.text.replace(AGENT_HANDOFF_MARKER, "").trim() } : p,
+          ),
+        )
+
+        // Save to session. A turn that is only a tool call (create_artifact
+        // with no prose) has no text but must still be saved — otherwise the
+        // artifact card vanishes on reload.
+        if (session && onUpdateSession && (finalContent || persistedToolCalls.length > 0)) {
           onUpdateSession(session.id, {
             messages: [
               ...baseMessages.map((m) => {
@@ -2857,8 +2772,9 @@ export function ChatWorkspace({
                 content: finalContent,
                 createdAt: new Date(),
                 ...(sources.length > 0 && { sources }),
-                ...((artifactIds.length > 0 || persistedToolCalls.length > 0 || reasoningContent) && {
+                ...((artifactIds.length > 0 || persistedToolCalls.length > 0 || reasoningContent || persistedParts.length > 0) && {
                   metadata: {
+                    ...(persistedParts.length > 0 && { parts: persistedParts }),
                     ...(artifactIds.length > 0 && { artifactIds }),
                     ...(artifactSnapshots.length > 0 && { artifacts: artifactSnapshots }),
                     ...(persistedToolCalls.length > 0 && { toolCalls: persistedToolCalls }),

@@ -82,17 +82,21 @@ export async function deleteWorkflowById(id: string, organizationId: string | nu
   })
 }
 
-export async function findWorkflowRunsByWorkflowId(workflowId: string, take = 50) {
+export async function findWorkflowRunsByWorkflowId(
+  workflowId: string,
+  organizationId: string | null,
+  take = 50
+) {
   return prisma.workflowRun.findMany({
-    where: { workflowId },
+    where: { workflowId, workflow: { organizationId } },
     orderBy: { startedAt: "desc" },
     take,
   })
 }
 
-export async function findWorkflowRunById(runId: string) {
-  return prisma.workflowRun.findUnique({
-    where: { id: runId },
+export async function findWorkflowRunById(runId: string, organizationId: string | null) {
+  return prisma.workflowRun.findFirst({
+    where: { id: runId, workflow: { organizationId } },
   })
 }
 

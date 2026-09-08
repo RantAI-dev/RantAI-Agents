@@ -7,9 +7,9 @@ export const pythonArtifact = {
 
 You are generating a notebook that will RUN in the user's browser via Pyodide (Python 3.12 in WebAssembly, executed in a Web Worker). The user runs cells independently and sees per-cell output: stdout, errors, plots, and DataFrame tables. Kernel globals persist across cells so cell N can use variables defined in cell N-1.
 
-## Output Format — STRICT
+## Content Format — STRICT
 
-You MUST emit a JSON object with this exact shape:
+The \`content\` argument of \`create_artifact\` MUST be a JSON object with this exact shape (never paste it into the chat reply):
 
 \`\`\`json
 {
@@ -24,8 +24,8 @@ You MUST emit a JSON object with this exact shape:
 - **Top-level key MUST be \`cells\`** — an array of objects.
 - Each cell has \`type\` (\`"code"\` or \`"markdown"\`) and \`source\` (string).
 - Do NOT include \`outputs\`, \`executionCount\`, or \`id\` — those are runtime fields.
-- Do NOT wrap the JSON in markdown fences.
-- Do NOT include any prose outside the JSON.
+- Do NOT wrap the JSON in markdown fences inside \`content\`.
+- Do NOT include any prose outside the JSON inside \`content\`.
 
 ## Cell-Splitting Rules
 

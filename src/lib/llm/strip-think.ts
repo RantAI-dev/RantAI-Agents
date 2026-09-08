@@ -200,6 +200,26 @@ export function createExtractThinkTransform<TOOLS extends ToolSet>() {
           return
         }
 
+        // The UI-stream serializer closes every open reasoning part at the
+        // end of a step. A reasoning id that outlives a tool call would make
+        // each later reasoning-delta fail with "reasoning part <id> not
+        // found" and drop the post-tool thinking entirely. End it here; the
+        // next <think> opens a fresh id, giving one reasoning part per step
+        // — which is also what the ordered message timeline wants.
+        if (chunk.type === "finish-step") {
+          if (reasoningId) {
+            controller.enqueue({
+              type: "reasoning-end",
+              id: reasoningId,
+            } as unknown as TextStreamPart<TOOLS>)
+            reasoningId = null
+          }
+          inThink = false
+          buffer = ""
+          controller.enqueue(chunk)
+          return
+        }
+
         if (chunk.type !== "text-delta") {
           controller.enqueue(chunk)
           return

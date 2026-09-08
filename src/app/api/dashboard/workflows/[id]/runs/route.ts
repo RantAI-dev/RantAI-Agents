@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/lib/auth"
+import { resolveActiveOrg } from "@/lib/org-context"
 import { WorkflowIdParamsSchema } from "@/features/workflows/schema"
 import { listWorkflowRuns } from "@/features/workflows/service"
 
@@ -20,7 +21,11 @@ export async function GET(req: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid workflow id" }, { status: 400 })
     }
 
-    const runs = await listWorkflowRuns(parsedParams.data.id)
+    const orgContext = await resolveActiveOrg(req, session.user.id)
+    const runs = await listWorkflowRuns(
+      parsedParams.data.id,
+      orgContext?.organizationId ?? null
+    )
 
     return NextResponse.json(runs)
   } catch (error) {

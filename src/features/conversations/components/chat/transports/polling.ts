@@ -1,4 +1,5 @@
 import type { TransportToolCallMap } from "./types"
+import { applyUiStreamEvent, type TimelinePart } from "../message-timeline"
 
 export interface EmployeePollEvent {
   seq: number
@@ -10,11 +11,15 @@ export function reduceEmployeePollEvents(params: {
   events: EmployeePollEvent[]
   assistantContent: string
   toolCalls: TransportToolCallMap
-}): { assistantContent: string; receivedAgentDone: boolean } {
+  /** Ordered reasoning/text/tool parts; returned updated. */
+  timeline?: TimelinePart[]
+}): { assistantContent: string; receivedAgentDone: boolean; timeline: TimelinePart[] } {
   let nextAssistantContent = params.assistantContent
   let receivedAgentDone = false
+  let timeline = params.timeline ?? []
 
   for (const evt of params.events) {
+    timeline = applyUiStreamEvent(timeline, { ...evt.data, type: evt.type })
     switch (evt.type) {
       case "thinking":
       case "thinking-done":
@@ -54,6 +59,7 @@ export function reduceEmployeePollEvents(params: {
       }
       case "error":
         nextAssistantContent += `Error: ${evt.data.message}`
+        timeline = applyUiStreamEvent(timeline, { type: "text-delta", delta: `Error: ${evt.data.message}` })
         break
       case "agent-done":
         receivedAgentDone = true
@@ -61,5 +67,5 @@ export function reduceEmployeePollEvents(params: {
     }
   }
 
-  return { assistantContent: nextAssistantContent, receivedAgentDone }
+  return { assistantContent: nextAssistantContent, receivedAgentDone, timeline }
 }

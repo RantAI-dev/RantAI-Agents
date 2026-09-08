@@ -28,7 +28,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: auth.error }, { status: auth.status })
     }
 
-    const runs = await listWorkflowRuns(parsedParams.data.id)
+    const runs = await listWorkflowRuns(
+      parsedParams.data.id,
+      (auth as { organizationId?: string | null }).organizationId ?? null
+    )
     return NextResponse.json(runs)
   } catch (error) {
     console.error("[Mobile Workflows API] runs error:", error)

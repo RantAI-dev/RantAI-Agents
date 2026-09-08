@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useEffect, useCallback } from "react"
 import { AlertTriangle, Wand2, Copy, Check, MonitorCog } from "@/lib/icons"
+import { dedupeGlobalDestructure } from "./_dedupe-global-destructure"
 
 /* ── Sanitize AI-generated scene code ──────────────────────── */
 
@@ -102,6 +103,11 @@ function sanitizeSceneCode(code: string): string {
     s = s.replace(/^import\s+[\s\S]*?from\s+['"].*?['"];?\s*$/gm, "")
     s = s.replace(/^import\s+['"].*?['"];?\s*$/gm, "")
 
+    // `const { useState } = React;` would redeclare a function parameter
+    // (deps are injected as params) — a SyntaxError that kills the scene.
+    s = dedupeGlobalDestructure(s, "React", R3F_PROVIDED_NAMES)
+    s = dedupeGlobalDestructure(s, "THREE", R3F_PROVIDED_NAMES)
+
     // Strip "export default" but keep the declaration
     s = s.replace(/export\s+default\s+/g, "")
 
@@ -142,6 +148,9 @@ function detectComponentName(code: string): string {
     return "Scene"
 }
 
+const TIMEOUT_MESSAGE =
+    "Scene timed out loading. Check browser console (F12) for details. ESM imports may be blocked."
+
 /* ── Dep names passed to new Function() ────────────────────── */
 
 const DEP_NAMES = [
@@ -153,6 +162,9 @@ const DEP_NAMES = [
     "Text", "Sphere", "RoundedBox", "MeshTransmissionMaterial",
     "Stars", "Trail", "Center", "Billboard", "Grid", "Html", "Line", "GradientTexture",
 ]
+
+/** Names bound as parameters of the scene factory — see DEP_NAMES. */
+const R3F_PROVIDED_NAMES: ReadonlySet<string> = new Set(DEP_NAMES)
 
 /* ── Build iframe srcdoc ──────────────────────────────────── */
 
@@ -560,6 +572,11 @@ export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
                     }
                 } else if (event.data?.type === "r3f-ready") {
                     didReadyRef.current = true
+                    // esm.sh can take longer than the timeout on a slow link
+                    // while the scene still mounts fine afterwards. A late
+                    // ready must clear the timeout notice, otherwise the user
+                    // sees an error overlay on top of a working scene.
+                    setError((prev) => (prev?.startsWith(TIMEOUT_MESSAGE) ? null : prev))
                 }
             } catch {
                 /* ignore */
@@ -567,12 +584,12 @@ export function R3FRenderer({ content, onFixWithAI }: R3FRendererProps) {
         }
         window.addEventListener("message", handler)
 
-        // If no ready signal after 20s, show a timeout hint
+        // If no ready signal after 30s, show a timeout hint
         const timeout = setTimeout(() => {
             if (!didReadyRef.current) {
-                setError("Scene timed out loading. Check browser console (F12) for details. ESM imports may be blocked.")
+                setError(TIMEOUT_MESSAGE)
             }
-        }, 20000)
+        }, 30000)
 
         return () => {
             window.removeEventListener("message", handler)

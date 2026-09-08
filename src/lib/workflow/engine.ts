@@ -172,7 +172,10 @@ export class WorkflowEngine {
       stepOutputs: new Map(),
       flow,
       userId: options?.userId,
-      organizationId: options?.organizationId,
+      // Fall back to the workflow's own org so node handlers can scope the
+      // resources they load (credentials, assistants, sub-workflows) even on
+      // paths that do not pass options (cron, public API, sub-workflow).
+      organizationId: options?.organizationId ?? workflow.organizationId ?? undefined,
     }
 
     return {
@@ -289,6 +292,7 @@ export class WorkflowEngine {
       variables: inputVars,
       stepOutputs: new Map(),
       flow,
+      organizationId: workflow.organizationId ?? undefined,
     }
 
     for (const step of existingSteps) {
