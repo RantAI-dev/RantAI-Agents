@@ -12,7 +12,7 @@ import { Reveal } from "./reveal"
 
 type Billing = "monthly" | "annual"
 
-const enterpriseContactHref = `mailto:${brand.supportEmail}?subject=${encodeURIComponent(
+const enterpriseContactHref = `mailto:contact@rantai.dev?subject=${encodeURIComponent(
   `${brand.productName} Enterprise inquiry`
 )}`
 
