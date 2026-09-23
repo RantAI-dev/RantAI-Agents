@@ -90,9 +90,18 @@ function cleanModelName(rawName: string): string {
   return rawName
 }
 
+/**
+ * OpenRouter lists `:batch` variants of many models (71 across tracked labs as
+ * of 2026-09). They are the same model behind a batch endpoint, so syncing them
+ * only doubles the picker with near-duplicates.
+ */
+function isBatchVariant(model: OpenRouterModel): boolean {
+  return model.id.endsWith(":batch")
+}
+
 /** Determine if a model should be included in our sync. */
 function shouldIncludeModel(model: OpenRouterModel): { include: boolean; reason: "tracked_lab" | "free_with_tools" | null } {
-  if (!isSupportedModel(model)) return { include: false, reason: null }
+  if (!isSupportedModel(model) || isBatchVariant(model)) return { include: false, reason: null }
 
   const slug = extractProviderSlug(model.id)
   if (isTrackedProvider(slug)) {

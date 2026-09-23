@@ -59,3 +59,56 @@ describe("syncModelsFromOpenRouter — modality fields", () => {
     expect(call.update.inputModalities).toEqual(["text", "image"])
   })
 })
+
+describe("syncModelsFromOpenRouter — model selection", () => {
+  beforeEach(() => {
+    upsertMock.mockReset()
+    upsertMock.mockResolvedValue({})
+    fetchMock.mockReset()
+  })
+
+  const paidTextModel = (id: string) => ({
+    id,
+    name: id,
+    context_length: 1_000_000,
+    architecture: { input_modalities: ["text"], output_modalities: ["text"] },
+    pricing: { prompt: "0.000001", completion: "0.000002" },
+    supported_parameters: ["tools"],
+  })
+
+  function serve(ids: string[]) {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      statusText: "OK",
+      status: 200,
+      json: async () => ({ data: ids.map(paidTextModel) }),
+    })
+  }
+
+  const syncedIds = () => upsertMock.mock.calls.map((c) => c[0].where.id)
+
+  it("skips :batch variants but keeps the base model", async () => {
+    serve(["openai/gpt-6-luna", "openai/gpt-6-luna:batch"])
+
+    const result = await syncModelsFromOpenRouter()
+
+    expect(syncedIds()).toEqual(["openai/gpt-6-luna"])
+    expect(result.trackedLab).toBe(1)
+  })
+
+  it("syncs paid models from the MiniMax, Xiaomi, Meta and NVIDIA labs", async () => {
+    const ids = [
+      "minimax/minimax-m3",
+      "xiaomi/mimo-v2.6-flash",
+      "meta/muse-spark-1.3",
+      "nvidia/nemotron-3.5-lightning",
+    ]
+    serve([...ids, "some-untracked-lab/paid-model"])
+
+    await syncModelsFromOpenRouter()
+
+    expect(syncedIds()).toEqual(ids)
+    const providers = upsertMock.mock.calls.map((c) => c[0].create.provider)
+    expect(providers).toEqual(["MiniMax", "Xiaomi", "Meta", "NVIDIA"])
+  })
+})

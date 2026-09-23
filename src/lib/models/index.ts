@@ -1,7 +1,7 @@
 /**
  * Available LLM models for chat assistants
  * Models are sourced from OpenRouter
- * Updated: February 2026
+ * Updated: September 2026 (prices + context windows from the OpenRouter catalog)
  */
 
 import { isHouseModel, getHouseModel } from "@/lib/llm/house-models"
@@ -36,23 +36,32 @@ export interface LLMModel {
 export const AVAILABLE_MODELS: LLMModel[] = [
   // Default Free Model
   {
-    id: "xiaomi/mimo-v2.5",
-    name: "MiMo V2.5",
-    provider: "Xiaomi",
-    description: "Fast and efficient for general chat",
-    contextWindow: 32768,
+    id: "openrouter/free",
+    name: "Free Models Router",
+    provider: "OpenRouter",
+    description: "Routes to an available free model",
+    contextWindow: 200000,
     pricing: { input: 0, output: 0 },
-    capabilities: { vision: false, functionCalling: false, streaming: true },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
   },
 
   // OpenAI Models
   {
-    id: "openai/gpt-5.2",
-    name: "GPT-5.2",
+    id: "openai/gpt-6-sol",
+    name: "GPT-6 Sol",
     provider: "OpenAI",
-    description: "Latest and most capable OpenAI model",
-    contextWindow: 256000,
-    pricing: { input: 5, output: 15 },
+    description: "Flagship GPT-6 model for complex work",
+    contextWindow: 1050000,
+    pricing: { input: 2, output: 10 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
+  },
+  {
+    id: "openai/gpt-6-luna",
+    name: "GPT-6 Luna",
+    provider: "OpenAI",
+    description: "Fast, low-cost GPT-6 for everyday tasks",
+    contextWindow: 1050000,
+    pricing: { input: 0.1, output: 0.5 },
     capabilities: { vision: true, functionCalling: true, streaming: true },
   },
   {
@@ -60,27 +69,36 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     name: "GPT-5 Mini",
     provider: "OpenAI",
     description: "Fast and affordable, great for most tasks",
-    contextWindow: 256000,
-    pricing: { input: 0.5, output: 1.5 },
+    contextWindow: 400000,
+    pricing: { input: 0.25, output: 2 },
     capabilities: { vision: true, functionCalling: true, streaming: true },
-  },
-  {
-    id: "openai/o3-mini",
-    name: "O3 Mini",
-    provider: "OpenAI",
-    description: "Advanced reasoning model",
-    contextWindow: 200000,
-    pricing: { input: 1.1, output: 4.4 },
-    capabilities: { vision: false, functionCalling: true, streaming: true },
   },
 
   // Anthropic Models
   {
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    provider: "Anthropic",
+    description: "Most capable Claude model",
+    contextWindow: 1000000,
+    pricing: { input: 4, output: 20 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
+  },
+  {
+    id: "anthropic/claude-sonnet-5",
+    name: "Claude Sonnet 5",
+    provider: "Anthropic",
+    description: "Balanced Claude for coding and agents",
+    contextWindow: 1000000,
+    pricing: { input: 2, output: 10 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
+  },
+  {
     id: "anthropic/claude-sonnet-4.5",
     name: "Claude Sonnet 4.5",
     provider: "Anthropic",
-    description: "Latest Claude with superior reasoning",
-    contextWindow: 200000,
+    description: "Previous-generation Sonnet",
+    contextWindow: 1000000,
     pricing: { input: 3, output: 15 },
     capabilities: { vision: true, functionCalling: true, streaming: true },
   },
@@ -90,92 +108,152 @@ export const AVAILABLE_MODELS: LLMModel[] = [
     provider: "Anthropic",
     description: "Fast and affordable Claude model",
     contextWindow: 200000,
-    pricing: { input: 0.8, output: 4 },
+    pricing: { input: 1, output: 5 },
     capabilities: { vision: true, functionCalling: true, streaming: true },
   },
 
   // Google Models
   {
-    id: "google/gemini-3-pro-preview",
-    name: "Gemini 3 Pro",
+    id: "google/gemini-3.8-flash",
+    name: "Gemini 3.8 Flash",
     provider: "Google",
-    description: "Most advanced Gemini model",
-    contextWindow: 2000000,
-    pricing: { input: 1.25, output: 5 },
+    description: "Latest Gemini, fast multimodal",
+    contextWindow: 1048576,
+    pricing: { input: 0.75, output: 3.75 },
     capabilities: { vision: true, functionCalling: true, streaming: true },
   },
   {
-    id: "google/gemini-3-flash-preview",
-    name: "Gemini 3 Flash",
+    id: "google/gemini-3.5-flash-lite",
+    name: "Gemini 3.5 Flash Lite",
     provider: "Google",
-    description: "Fast multimodal model, great value",
-    contextWindow: 1000000,
-    pricing: { input: 0.1, output: 0.4 },
+    description: "Cheapest current Gemini",
+    contextWindow: 1048576,
+    pricing: { input: 0.3, output: 2.5 },
     capabilities: { vision: true, functionCalling: true, streaming: true },
   },
 
   // DeepSeek Models
   {
-    id: "deepseek/deepseek-v3",
-    name: "DeepSeek V3",
+    id: "deepseek/deepseek-v4.1-flash",
+    name: "DeepSeek V4.1 Flash",
     provider: "DeepSeek",
-    description: "Powerful open model, excellent value",
-    contextWindow: 131072,
-    pricing: { input: 0.14, output: 0.28 },
-    capabilities: { vision: false, functionCalling: true, streaming: true },
+    description: "Very low-cost open model with vision",
+    contextWindow: 1048576,
+    pricing: { input: 0.04, output: 0.64 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
   },
   {
-    id: "deepseek/deepseek-r1",
-    name: "DeepSeek R1",
+    id: "deepseek/deepseek-v4-pro",
+    name: "DeepSeek V4 Pro",
     provider: "DeepSeek",
-    description: "Advanced reasoning model",
-    contextWindow: 65536,
-    pricing: { input: 0.55, output: 2.19 },
-    capabilities: { vision: false, functionCalling: false, streaming: true },
+    description: "Stronger DeepSeek for hard tasks",
+    contextWindow: 1048576,
+    pricing: { input: 0.9553, output: 1.9105 },
+    capabilities: { vision: false, functionCalling: true, streaming: true },
+  },
+
+  // xAI Models
+  {
+    id: "x-ai/grok-4.7",
+    name: "Grok 4.7",
+    provider: "xAI",
+    description: "Latest Grok model",
+    contextWindow: 500000,
+    pricing: { input: 1.6, output: 4.8 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
   },
 
   // Z.AI (formerly Zhipu) Models
   {
-    id: "z-ai/glm-4.7",
-    name: "GLM 4.7",
+    id: "z-ai/glm-5.3",
+    name: "GLM 5.3",
     provider: "Z.AI",
-    description: "Latest GLM model with strong capabilities",
-    contextWindow: 128000,
-    pricing: { input: 0.5, output: 1 },
+    description: "Latest GLM flagship",
+    contextWindow: 1310720,
+    pricing: { input: 0.84, output: 2.64 },
+    capabilities: { vision: false, functionCalling: true, streaming: true },
+  },
+  {
+    id: "z-ai/glm-5.3-flash",
+    name: "GLM 5.3 Flash",
+    provider: "Z.AI",
+    description: "Fast, low-cost GLM with vision",
+    contextWindow: 1310720,
+    pricing: { input: 0.15, output: 0.5 },
     capabilities: { vision: true, functionCalling: true, streaming: true },
   },
 
   // Moonshot Models
   {
-    id: "moonshotai/kimi-k2.5",
-    name: "Kimi K2.5",
+    id: "moonshotai/kimi-k3",
+    name: "Kimi K3",
     provider: "Moonshot",
-    description: "Advanced Chinese AI model",
-    contextWindow: 200000,
-    pricing: { input: 0.6, output: 1.2 },
-    capabilities: { vision: true, functionCalling: true, streaming: true },
-  },
-
-  // Meta Models
-  {
-    id: "meta-llama/llama-4-maverick",
-    name: "Llama 4 Maverick",
-    provider: "Meta",
-    description: "Latest open-source Llama model",
-    contextWindow: 131072,
-    pricing: { input: 0.2, output: 0.6 },
+    description: "Latest Kimi model",
+    contextWindow: 1048576,
+    pricing: { input: 3, output: 15 },
     capabilities: { vision: true, functionCalling: true, streaming: true },
   },
 
   // Qwen Models
   {
-    id: "qwen/qwen3-32b",
-    name: "Qwen3 32B",
-    provider: "Alibaba",
-    description: "Strong multilingual support",
-    contextWindow: 131072,
-    pricing: { input: 0.15, output: 0.15 },
-    capabilities: { vision: false, functionCalling: true, streaming: true },
+    id: "qwen/qwen3.8-flash",
+    name: "Qwen3.8 Flash",
+    provider: "Qwen",
+    description: "Fast multilingual Qwen with vision",
+    contextWindow: 1000000,
+    pricing: { input: 0.15, output: 0.47 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
+  },
+  {
+    id: "qwen/qwen3.8-max-0902",
+    name: "Qwen3.8 Max",
+    provider: "Qwen",
+    description: "Most capable Qwen",
+    contextWindow: 1000000,
+    pricing: { input: 2, output: 6 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
+  },
+
+  // MiniMax Models
+  {
+    id: "minimax/minimax-m3",
+    name: "MiniMax M3",
+    provider: "MiniMax",
+    description: "Long-context agentic model",
+    contextWindow: 1048576,
+    pricing: { input: 0.3, output: 1.2 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
+  },
+
+  // Xiaomi Models
+  {
+    id: "xiaomi/mimo-v2.6-flash",
+    name: "MiMo V2.6 Flash",
+    provider: "Xiaomi",
+    description: "Fast and efficient for general chat",
+    contextWindow: 1048576,
+    pricing: { input: 0.14, output: 0.28 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
+  },
+
+  // Meta Models
+  {
+    id: "meta/muse-spark-1.3",
+    name: "Muse Spark 1.3",
+    provider: "Meta",
+    description: "Latest Meta model",
+    contextWindow: 1048576,
+    pricing: { input: 1.25, output: 4.25 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
+  },
+  {
+    id: "meta-llama/llama-4-maverick",
+    name: "Llama 4 Maverick",
+    provider: "Meta",
+    description: "Open-weight Llama model",
+    contextWindow: 1048576,
+    pricing: { input: 0.1875, output: 0.6525 },
+    capabilities: { vision: true, functionCalling: true, streaming: true },
   },
 ]
 

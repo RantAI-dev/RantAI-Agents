@@ -155,7 +155,7 @@ Guidelines:
 - Provide citations and source references for claims
 - Suggest follow-up research directions when appropriate
 - Use document analysis to extract insights from uploaded files`,
-    model: "google/gemini-3-pro-preview",
+    model: "google/gemini-3.8-flash",
     suggestedToolNames: ["web_search", "knowledge_search", "document_analysis"],
     useKnowledgeBase: true,
     knowledgeBaseGroupIds: [],

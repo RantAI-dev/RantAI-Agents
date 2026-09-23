@@ -15,6 +15,11 @@ export const TRACKED_PROVIDERS = [
   { slug: "cohere", name: "Cohere" },
   { slug: "x-ai", name: "xAI" },
   { slug: "microsoft", name: "Microsoft" },
+  { slug: "minimax", name: "MiniMax" },
+  { slug: "xiaomi", name: "Xiaomi" },
+  // Meta publishes its newer models (Muse) under `meta/`, not `meta-llama/`.
+  { slug: "meta", name: "Meta" },
+  { slug: "nvidia", name: "NVIDIA" },
 ] as const
 
 export type TrackedProviderSlug = (typeof TRACKED_PROVIDERS)[number]["slug"]
