@@ -175,6 +175,15 @@ export async function getKnowledgeDocumentForDashboard(params: {
 /**
  * Returns the document intelligence view for a knowledge document.
  */
+/**
+ * Entities and relations for one document.
+ *
+ * DOES NOT CHECK OWNERSHIP. SurrealDB rows carry a document_id and no
+ * organization, so this returns any document's graph to anyone who asks.
+ * Every caller must authorise the document first — see the mobile route and
+ * features/agent-api/kb-service.ts. The dashboard route once skipped that step
+ * and exposed every organization's graph to every signed-in user.
+ */
 export async function getKnowledgeDocumentIntelligence(params: {
   documentId: string
 }): Promise<KnowledgeDocumentIntelligenceResponse> {
