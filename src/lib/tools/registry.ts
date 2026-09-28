@@ -14,6 +14,7 @@ import {
 import type { CommunityToolContext } from "@/lib/skill-sdk"
 import { workflowEngine } from "@/lib/workflow"
 import type { WorkflowVariables } from "@/lib/workflow/types"
+import { readJsonOrText } from "@/lib/tools/utils"
 
 // The shared lookup, not a local copy: the copy here searched only the DB
 // catalogue and the static list, so the white-labelled house models
@@ -169,7 +170,7 @@ export async function resolveToolsForAssistant(
                 const errText = await res.text().catch(() => "Unknown")
                 throw new Error(`HTTP ${res.status}: ${errText.substring(0, 500)}`)
               }
-              const result = await res.json().catch(() => res.text())
+              const result = await readJsonOrText(res)
               logToolExecution(toolDef.name, toolDef.id, params, result, context, Date.now() - startTime).catch(() => {})
               return result
             } catch (err) {
@@ -529,7 +530,7 @@ export async function resolveToolsByNames(
                 const errText = await res.text().catch(() => "Unknown")
                 throw new Error(`HTTP ${res.status}: ${errText.substring(0, 500)}`)
               }
-              const result = await res.json().catch(() => res.text())
+              const result = await readJsonOrText(res)
               logToolExecution(toolDef.name, toolDef.id, params, result, context, Date.now() - startTime).catch(() => {})
               return result
             } catch (err) {

@@ -1,4 +1,5 @@
-import { streamText, convertToModelMessages, tool, zodSchema, stepCountIs } from "ai"
+import { streamText, generateText, convertToModelMessages, tool, zodSchema, stepCountIs } from "ai"
+import { createModelScriptRepair, createScriptGuardTransform, shouldGuardScript } from "@/lib/llm/script-guard"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import {
   smartRetrieve,
@@ -1252,7 +1253,24 @@ export async function runChat(params: {
       // a collapsible "Thinking" disclosure above the answer. Chatflow and
       // the public v1 API still use the strip variant because their consumers
       // don't render reasoning.
-      experimental_transform: createExtractThinkTransform(),
+      // Think extraction first, then the foreign-script guard on the answer
+      // text only (QA INC-002 — see script-guard.ts).
+      experimental_transform: shouldGuardScript(userQuery)
+        ? [
+            createExtractThinkTransform(),
+            createScriptGuardTransform(
+              createModelScriptRepair(async (prompt, abortSignal) => {
+                const { text } = await generateText({
+                  model: getChatProvider()(resolveModelId(modelId)),
+                  prompt,
+                  abortSignal,
+                  maxOutputTokens: 400,
+                })
+                return text
+              }),
+            ),
+          ]
+        : createExtractThinkTransform(),
       // Forward the request abort signal — when the client disconnects mid-
       // stream, streamText cancels its in-flight LLM call and result.text
       // rejects, which the background memory IIFE then catches and skips.
