@@ -1260,8 +1260,10 @@ export async function runChat(params: {
             createExtractThinkTransform(),
             createScriptGuardTransform(
               createModelScriptRepair(async (prompt, abortSignal) => {
+                // A small non-reasoning model: the reasoning house models
+                // spend ~400 tokens / 5s thinking before a 3-word answer.
                 const { text } = await generateText({
-                  model: getChatProvider()(resolveModelId(modelId)),
+                  model: getChatProvider()(resolveModelId(process.env.SCRIPT_REPAIR_MODEL || "openai/gpt-4o-mini")),
                   prompt,
                   abortSignal,
                   maxOutputTokens: 400,
