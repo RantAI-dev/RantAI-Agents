@@ -11,6 +11,7 @@ import type { HybridSearchStats } from "@/lib/rag/hybrid-search"
 import { retrieveR3FContext } from "@/lib/rag/r3f-retriever"
 import { searchByDocumentIds } from "@/lib/rag/vector-store"
 import { isLikelyOutOfScope } from "@/lib/rag/oos-gate"
+import { withTimeout } from "@/lib/async/with-timeout"
 import { DEFAULT_MODEL_ID, isValidModelAsync, getModelByIdAsync } from "@/lib/models"
 import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import { resolveToolsForAssistant, resolveToolsByNames } from "@/lib/tools"
@@ -74,6 +75,7 @@ const debug = process.env.NODE_ENV !== "production"
 // RAG_TRACE=1 emits a single structured trace per request for end-to-end timing
 // + chunk-score stats. Off by default. Read once at module load.
 const RAG_TRACE_ENABLED = process.env.RAG_TRACE === "1"
+const SEMANTIC_RECALL_TIMEOUT_MS = Number(process.env.SEMANTIC_RECALL_TIMEOUT_MS) || 2_000
 
 interface RagTrace {
   traceId: string
@@ -827,48 +829,43 @@ export async function runChat(params: {
         console.log("[Memory] Memory disabled for this assistant, skipping all memory operations");
       }
 
-      // 1. Load working memory for current session
-      if (assistantMemoryConfig.enabled) {
-        workingMemory = await loadWorkingMemory(threadId);
-        console.log(`[Memory] Loaded working memory for thread ${threadId}: ${workingMemory.entities.size} entities, ${workingMemory.facts.size} facts`);
-      }
-
-      // 2. Semantic recall of relevant past messages (only for logged-in users)
-      if (assistantMemoryConfig.enabled && assistantMemoryConfig.semanticRecall && userId !== 'anonymous' && userQuery) {
+      // Load working memory, semantic recall and the profile in parallel —
+      // they are independent. Sequentially they sat in front of every
+      // response: a local 30-VU run with a stubbed model spent a median
+      // 3.7s / p95 43s here before the first token (QA CHAT-057/058).
+      const memoryOn = assistantMemoryConfig.enabled
+      const signedIn = userId !== 'anonymous'
+      // Recall is scoped to THIS thread. When the request already carries the
+      // thread's earlier turns (the dashboard always sends full history),
+      // everything recall could return is already in the prompt — and it was
+      // the most expensive per-request operation: SurrealDB saturated one core
+      // at ~44 recalls/s under the 30-VU run. It only adds anything for
+      // clients that send just the latest message.
+      const requestHasHistory = messages.some((m) => m.role === "assistant")
+      const recallTask = async (): Promise<SemanticRecallResult[]> => {
+        if (!(memoryOn && assistantMemoryConfig.semanticRecall && signedIn && userQuery && !requestHasHistory)) return []
         if (MEMORY_CONFIG.useMastraMemory) {
           try {
-            const mastraMemory = getMastraMemory();
-            if (MEMORY_CONFIG.debug) {
-              console.log("[Memory] Using Mastra Memory for semantic recall");
-            }
-            semanticResults = await mastraMemory.recall(userQuery, {
-              resourceId: userId,
-              threadId,
-              topK: 5,
-            });
-            console.log(`[Memory] Mastra recall found ${semanticResults.length} relevant messages`);
+            const results = await getMastraMemory().recall(userQuery, { resourceId: userId, threadId, topK: 5 })
+            console.log(`[Memory] Mastra recall found ${results.length} relevant messages`)
+            return results
           } catch (error) {
-            if (MEMORY_CONFIG.gracefulDegradation) {
-              console.error("[Memory] Mastra recall error, using fallback:", error);
-              semanticResults = await semanticRecall(userQuery, userId, threadId);
-              console.log(`[Memory] Fallback recall found ${semanticResults.length} messages`);
-            } else {
-              throw error;
-            }
+            if (!MEMORY_CONFIG.gracefulDegradation) throw error
+            console.error("[Memory] Mastra recall error, using fallback:", error)
           }
-        } else {
-          semanticResults = await semanticRecall(userQuery, userId, threadId);
-          console.log(`[Memory] Semantic recall found ${semanticResults.length} relevant messages`);
         }
+        return semanticRecall(userQuery, userId, threadId)
       }
-
-      // 3. Load long-term user profile (only for logged-in users)
-      if (assistantMemoryConfig.enabled && assistantMemoryConfig.longTermProfile && userId !== 'anonymous') {
-        userProfile = await loadUserProfile(userId);
-        if (userProfile) {
-          console.log(`[Memory] Loaded user profile: ${userProfile.facts.length} facts, ${userProfile.preferences.length} preferences`);
-        }
-      }
+      const [wm, recall, profile] = await Promise.all([
+        memoryOn ? loadWorkingMemory(threadId) : Promise.resolve(null),
+        // Recall is enrichment: a slow embedding call must not hold the answer.
+        withTimeout(recallTask(), SEMANTIC_RECALL_TIMEOUT_MS, [] as SemanticRecallResult[]),
+        memoryOn && assistantMemoryConfig.longTermProfile && signedIn ? loadUserProfile(userId) : Promise.resolve(null),
+      ])
+      workingMemory = wm
+      semanticResults = recall.value
+      userProfile = profile
+      if (recall.timedOut) console.warn(`[Memory] Semantic recall exceeded ${SEMANTIC_RECALL_TIMEOUT_MS}ms — answering without it`)
 
       // 4. Inject memory context into system prompt
       if (assistantMemoryConfig.enabled) {
