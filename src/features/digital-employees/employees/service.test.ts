@@ -178,6 +178,17 @@ describe("dashboard digital employees service", () => {
     expect(result).toEqual({ success: true })
   })
 
+  it("returns no approvals without an org instead of querying unscoped", async () => {
+    vi.mocked(repository.findDashboardPendingApprovals).mockResolvedValue([
+      { id: "a1", digitalEmployeeId: "emp_x", digitalEmployee: { name: "Other org" } },
+    ] as never)
+
+    const result = await listPendingDigitalEmployeeApprovals({ organizationId: null })
+
+    expect(result).toEqual({ total: 0, byEmployee: [] })
+    expect(repository.findDashboardPendingApprovals).not.toHaveBeenCalled()
+  })
+
   it("groups pending approvals by employee", async () => {
     vi.mocked(repository.findDashboardPendingApprovals).mockResolvedValue([
       {
@@ -192,8 +203,9 @@ describe("dashboard digital employees service", () => {
       },
     ] as never)
 
-    const result = await listPendingDigitalEmployeeApprovals({ organizationId: null })
+    const result = await listPendingDigitalEmployeeApprovals({ organizationId: "org_1" })
 
+    expect(repository.findDashboardPendingApprovals).toHaveBeenCalledWith("org_1")
     expect(result.total).toBe(2)
     expect(result.byEmployee).toEqual([
       { employeeId: "emp_1", name: "Alice", count: 2 },

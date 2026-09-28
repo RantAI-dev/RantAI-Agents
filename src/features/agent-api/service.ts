@@ -3,7 +3,8 @@ import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { DEFAULT_MODEL_ID, isValidModelAsync, getModelByIdAsync } from "@/lib/models"
 import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import { resolveToolsForAssistant } from "@/lib/tools"
-import { buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
+import { buildPlatformContextInstruction, buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
+import { getHouseModel } from "@/lib/llm/house-models"
 import {
   smartRetrieve,
   formatContextForPrompt,
@@ -247,6 +248,10 @@ export async function runV1ChatCompletion(
 
   const requestedModel = modelOverride || assistant.model
   const modelId = (await isValidModelAsync(requestedModel)) ? requestedModel : getPlatformDefaultModel(DEFAULT_MODEL_ID)
+  systemPrompt += buildPlatformContextInstruction({
+    assistantName: assistant.name,
+    modelName: getHouseModel(modelId)?.name ?? null,
+  })
   const modelConfig = (assistant.modelConfig && typeof assistant.modelConfig === "object")
     ? assistant.modelConfig as Record<string, unknown>
     : null

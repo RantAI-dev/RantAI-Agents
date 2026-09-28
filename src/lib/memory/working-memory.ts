@@ -13,16 +13,62 @@ import {
   ConversationContext,
   DEFAULT_MEMORY_CONFIG,
 } from './types';
+import {
+  normalizeMemoryKey,
+  isMultiValuePredicate,
+  memoryKeyMatches,
+  memoryValueMatches,
+} from './fact-keys';
+import type { ForgetCriteria } from './long-term-memory';
 
-// In-memory cache for active sessions (fast access)
-const workingMemoryCache = new Map<string, WorkingMemory>();
+/**
+ * In-memory cache for active sessions (fast access).
+ *
+ * Bounded LRU with per-entry expiry. It used to be an unbounded Map whose hits ignored
+ * the DB row's `expiresAt`, so every thread ever seen stayed resident for the life of
+ * the process (a candidate for the latency growth in the CHAT-058 soak) and an expired
+ * session could be served from cache forever.
+ */
+export const WORKING_MEMORY_CACHE_MAX = 500;
+const workingMemoryCache = new Map<string, { wm: WorkingMemory; expiresAt: number }>();
+
+function cacheGet(threadId: string): WorkingMemory | undefined {
+  const entry = workingMemoryCache.get(threadId);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    workingMemoryCache.delete(threadId);
+    return undefined;
+  }
+  // LRU touch
+  workingMemoryCache.delete(threadId);
+  workingMemoryCache.set(threadId, entry);
+  return entry.wm;
+}
+
+function cacheSet(threadId: string, wm: WorkingMemory): void {
+  workingMemoryCache.delete(threadId);
+  workingMemoryCache.set(threadId, {
+    wm,
+    expiresAt: Date.now() + DEFAULT_MEMORY_CONFIG.workingMemoryTTL,
+  });
+  while (workingMemoryCache.size > WORKING_MEMORY_CACHE_MAX) {
+    const oldest = workingMemoryCache.keys().next().value;
+    if (oldest === undefined) break;
+    workingMemoryCache.delete(oldest);
+  }
+}
+
+/** Diagnostic/test hook. */
+export function workingMemoryCacheSize(): number {
+  return workingMemoryCache.size;
+}
 
 /**
  * Load working memory for a thread/session
  */
 export async function loadWorkingMemory(threadId: string): Promise<WorkingMemory> {
   // Check cache first
-  const cached = workingMemoryCache.get(threadId);
+  const cached = cacheGet(threadId);
   if (cached) {
     return cached;
   }
@@ -47,7 +93,7 @@ export async function loadWorkingMemory(threadId: string): Promise<WorkingMemory
       createdAt: new Date(data.createdAt),
       updatedAt: new Date(data.updatedAt),
     };
-    workingMemoryCache.set(threadId, workingMemory);
+    cacheSet(threadId, workingMemory);
     return workingMemory;
   }
 
@@ -67,7 +113,7 @@ export async function loadWorkingMemory(threadId: string): Promise<WorkingMemory
     updatedAt: new Date(),
   };
 
-  workingMemoryCache.set(threadId, newWorkingMemory);
+  cacheSet(threadId, newWorkingMemory);
   return newWorkingMemory;
 }
 
@@ -298,14 +344,19 @@ export async function updateWorkingMemory(
   assistantResponse: string,
   messageId: string,
   extractedEntities?: Entity[],
-  extractedFacts?: Fact[]
+  extractedFacts?: Fact[],
+  options: { extract?: boolean } = {}
 ): Promise<WorkingMemory> {
+  // extract=false: the model already used the memory tools this turn (applied at call
+  // time); do not regex-extract from the message again (it would re-add what a
+  // forget request just removed).
+  const extract = options.extract !== false;
   const workingMemory = await loadWorkingMemory(threadId);
 
   // Use provided entities or extract from message
   const newEntities = extractedEntities && extractedEntities.length > 0
     ? extractedEntities
-    : extractEntities(userMessage, messageId);
+    : extract ? extractEntities(userMessage, messageId) : [];
 
   if (newEntities.length > 0) {
     // console.log(`[Working Memory] Extracted ${newEntities.length} entities:`, newEntities.map(e => e.name).join(', '));
@@ -319,7 +370,7 @@ export async function updateWorkingMemory(
   // Use provided facts or extract from message
   const newFacts = extractedFacts && extractedFacts.length > 0
     ? extractedFacts
-    : extractFacts(userMessage, messageId);
+    : extract ? extractFacts(userMessage, messageId) : [];
 
   if (newFacts.length > 0) {
     // console.log(`[Working Memory] Extracted ${newFacts.length} facts:`, newFacts.map(f => `${f.predicate}: ${f.object}`).join(', '));
@@ -327,11 +378,14 @@ export async function updateWorkingMemory(
   for (const fact of newFacts) {
     if (!fact.source) fact.source = messageId;
     if (!fact.createdAt) fact.createdAt = new Date();
-    // Replace existing fact with same predicate so "ganti X jadi Y" works (no duplicate nama/age/etc.)
+    fact.predicate = normalizeMemoryKey(fact.predicate);
+    // Replace existing fact(s) with the same normalized predicate so "ganti X jadi Y"
+    // works (no duplicate nama/age/location); multi-valued predicates dedupe by value.
+    const multi = isMultiValuePredicate(fact.predicate);
     for (const [id, f] of workingMemory.facts.entries()) {
-      if (f.predicate === fact.predicate) {
+      if (normalizeMemoryKey(f.predicate) !== fact.predicate) continue;
+      if (!multi || String(f.object).toLowerCase() === String(fact.object).toLowerCase()) {
         workingMemory.facts.delete(id);
-        break;
       }
     }
     workingMemory.facts.set(fact.id, fact);
@@ -360,9 +414,76 @@ export async function updateWorkingMemory(
   await saveWorkingMemory(userId, workingMemory);
 
   // Update cache
-  workingMemoryCache.set(threadId, workingMemory);
+  cacheSet(threadId, workingMemory);
 
   return workingMemory;
+}
+
+function wmFactMatches(f: Fact, c: ForgetCriteria): boolean {
+  if (c.all) return true;
+  if ((c.keys ?? []).some(k => memoryKeyMatches(f.predicate, k))) return true;
+  return (c.keywords ?? []).some(kw => memoryValueMatches(f.object, kw) || memoryKeyMatches(f.predicate, kw));
+}
+
+function wmEntityMatches(e: Entity, c: ForgetCriteria): boolean {
+  if (c.all) return true;
+  const attrs = Object.values(e.attributes ?? {}).map(String);
+  if ((c.keys ?? []).some(k => memoryKeyMatches(e.type, k) || memoryKeyMatches(e.name, k))) return true;
+  return (c.keywords ?? []).some(kw => memoryValueMatches(e.name, kw) || attrs.some(a => memoryValueMatches(a, kw)));
+}
+
+function scrubWorkingMemory(wm: WorkingMemory, c: ForgetCriteria): number {
+  let removed = 0;
+  for (const [id, f] of wm.facts.entries()) {
+    if (wmFactMatches(f, c)) { wm.facts.delete(id); removed++; }
+  }
+  for (const [id, e] of wm.entities.entries()) {
+    if (wmEntityMatches(e, c)) { wm.entities.delete(id); removed++; }
+  }
+  if (removed > 0) wm.updatedAt = new Date();
+  return removed;
+}
+
+/**
+ * Remove matching facts/entities from ALL of this user's working-memory sessions
+ * (DB rows + in-process cache), not only the current thread: a deletion request must
+ * not survive in another open session.
+ */
+export async function forgetFromWorkingMemory(
+  userId: string,
+  threadId: string,
+  criteria: ForgetCriteria
+): Promise<number> {
+  let removed = 0;
+
+  // Current thread first (it may exist only in cache if nothing was saved yet).
+  const current = await loadWorkingMemory(threadId);
+  const removedCurrent = scrubWorkingMemory(current, criteria);
+  removed += removedCurrent;
+  if (removedCurrent > 0) {
+    await saveWorkingMemory(userId, current);
+    cacheSet(threadId, current);
+  }
+
+  const rows = await prisma.userMemory.findMany({
+    where: { userId, type: 'WORKING' },
+  });
+  for (const row of rows) {
+    const data = row.value as unknown as WorkingMemoryData;
+    if (!data || data.threadId === threadId) continue;
+    const facts = (data.facts ?? []).filter(f => !wmFactMatches(f, criteria));
+    const entities = (data.entities ?? []).filter(e => !wmEntityMatches(e, criteria));
+    const n = (data.facts?.length ?? 0) - facts.length + (data.entities?.length ?? 0) - entities.length;
+    if (n === 0) continue;
+    removed += n;
+    await prisma.userMemory.update({
+      where: { id: row.id },
+      data: { value: { ...data, facts, entities, updatedAt: new Date().toISOString() } as object },
+    });
+    workingMemoryCache.delete(data.threadId);
+  }
+
+  return removed;
 }
 
 /**

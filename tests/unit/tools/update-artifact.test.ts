@@ -250,4 +250,44 @@ describe("update_artifact tool", () => {
       expect(result.title).toBe("New title")
     })
   })
+
+  // Found while tracing QA TC-809 (artifact versioning): once history hit the
+  // 20-entry cap, every further archive was written to the same `.v21` key.
+  describe("version archive keys", () => {
+    it("keeps numbering past the cap instead of reusing .v21", async () => {
+      const { uploadFile } = await import("@/lib/s3")
+      const versions = Array.from({ length: 20 }, (_, i) => ({ s3Key: `k.v${i + 6}` }))
+      findUniqueMock.mockResolvedValue(
+        existingArtifact({
+          s3Key: "artifacts/o-1/s-1/art.html",
+          metadata: { versions, evictedVersionCount: 5 },
+        }),
+      )
+      validateMock.mockResolvedValue({ ok: true, errors: [], warnings: [] })
+      updateManyMock.mockResolvedValue({ count: 1 })
+      vi.mocked(uploadFile).mockClear()
+
+      await updateArtifactTool.execute({ id: "art", content: HTML_DOC }, baseContext)
+
+      // 5 evicted + 20 kept → the archive being written is version 26.
+      expect(vi.mocked(uploadFile).mock.calls[0][0]).toBe("artifacts/o-1/s-1/art.html.v26")
+    })
+
+    it("numbers from the list length when nothing was evicted (control)", async () => {
+      const { uploadFile } = await import("@/lib/s3")
+      findUniqueMock.mockResolvedValue(
+        existingArtifact({
+          s3Key: "artifacts/o-1/s-1/art.html",
+          metadata: { versions: [{ s3Key: "a.v1" }, { s3Key: "a.v2" }] },
+        }),
+      )
+      validateMock.mockResolvedValue({ ok: true, errors: [], warnings: [] })
+      updateManyMock.mockResolvedValue({ count: 1 })
+      vi.mocked(uploadFile).mockClear()
+
+      await updateArtifactTool.execute({ id: "art", content: HTML_DOC }, baseContext)
+
+      expect(vi.mocked(uploadFile).mock.calls[0][0]).toBe("artifacts/o-1/s-1/art.html.v3")
+    })
+  })
 })

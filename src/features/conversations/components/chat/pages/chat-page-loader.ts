@@ -26,7 +26,10 @@ function mapAssistantsForClient(assistants: AssistantListItem[]): DbAssistant[] 
     name: assistant.name,
     description: assistant.description,
     emoji: assistant.emoji,
-    systemPrompt: assistant.systemPrompt,
+    // Built-in assistants are not user-editable and the chat route resolves
+    // their prompt from the DB by id, so the client never needs it — don't
+    // ship it in the page payload where anyone can read it (QA INC-003).
+    systemPrompt: assistant.isBuiltIn ? "" : assistant.systemPrompt,
     model: assistant.model,
     useKnowledgeBase: assistant.useKnowledgeBase,
     knowledgeBaseGroupIds: assistant.knowledgeBaseGroupIds,
@@ -54,6 +57,7 @@ function mapSessionsForHydration(
     title: session.title,
     assistantId: session.assistantId,
     createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
     messages: [],
   }))
 }

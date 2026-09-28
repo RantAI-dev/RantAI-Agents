@@ -1,5 +1,6 @@
 "use client"
 
+import { STREAMDOWN_ANIMATION, shouldShowStreamingCaret } from "./message-display-state"
 import { Component, useState, type ComponentProps, type ErrorInfo, type ReactNode } from "react"
 import { Streamdown } from "streamdown"
 import type { MermaidErrorComponentProps, ExtraProps } from "streamdown"
@@ -252,9 +253,9 @@ export function StreamdownContent({
     <div className={className ?? "chat-message max-w-none"}>
       <StreamdownErrorBoundary content={rendered}>
         <Streamdown
-          animated={{ animation: "fadeIn", sep: "char", duration: 180 }}
+          animated={STREAMDOWN_ANIMATION}
           isAnimating={isStreaming}
-          caret={isStreaming ? "block" : undefined}
+          caret={shouldShowStreamingCaret(isStreaming, rendered) ? "block" : undefined}
           shikiTheme={
             resolvedTheme === "dark"
               ? ["github-dark", "github-light"]

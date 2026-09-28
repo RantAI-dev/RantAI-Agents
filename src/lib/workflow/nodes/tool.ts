@@ -6,6 +6,7 @@ import { decryptCredential, credentialToHeaders, type CredentialType } from "../
 import { prisma } from "@/lib/prisma"
 import { BUILTIN_TOOLS } from "@/lib/tools/builtin"
 import { mcpClientManager, type McpServerOptions } from "@/lib/mcp/client"
+import { readJsonOrText } from "@/lib/tools/utils"
 
 /**
  * Retry helper with exponential backoff.
@@ -230,7 +231,7 @@ export async function executeTool(
           body: JSON.stringify(resolvedInput),
         })
 
-        const result = await response.json().catch(() => response.text())
+        const result = await readJsonOrText(response)
         return { output: result }
       }
 

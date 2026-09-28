@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import { streamText, convertToModelMessages, tool, zodSchema } from "ai"
-import { z } from "zod"
+import { streamText, convertToModelMessages } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
+import { getHouseModel } from "@/lib/llm/house-models"
 import {
   validateDomain,
   extractOrigin,
@@ -21,6 +21,7 @@ import { executeChatflow, type ChatflowMemoryContext } from "@/lib/workflow/chat
 import {
   LANGUAGE_INSTRUCTION,
   OUTPUT_HYGIENE_INSTRUCTION,
+  buildPlatformContextInstruction,
   CORRECTION_INSTRUCTION_WITH_TOOL,
   LIVE_CHAT_HANDOFF_INSTRUCTION,
 } from "@/lib/prompts/instructions"
@@ -36,6 +37,7 @@ import {
   getMemoryStats,
   getMastraMemory,
   MEMORY_CONFIG,
+  createMemoryTools,
 } from "@/lib/memory"
 import {
   findActiveChatflowWorkflow,
@@ -46,30 +48,8 @@ import {
 } from "./repository"
 import { WidgetChatBodySchema } from "./schema"
 
-// Widget memory queue for tool calls (threadId -> queued items)
-const widgetMemoryQueue = new Map<
-  string,
-  Array<{ facts?: unknown[]; preferences?: unknown[]; entities?: unknown[] }>
->()
-
-// Tool argument interfaces
-interface MemoryToolArgs {
-  facts?: Array<{
-    category: string;
-    label: string;
-    value: string;
-    confidence: number;
-  }>;
-  preferences?: Array<{
-    category: string;
-    preference: string;
-    value: string;
-  }>;
-  entities?: Array<{
-    name: string;
-    type: string;
-  }>;
-}
+// (The module-level widget saveMemory queue is gone: memory tools write inside the
+// tool call — see createMemoryTools in @/lib/memory/memory-tools.)
 
 export const WIDGET_CHAT_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -572,27 +552,34 @@ export async function handleWidgetChat(req: NextRequest) {
       systemPrompt += LIVE_CHAT_HANDOFF_INSTRUCTION
     }
 
+    // Identity + date apply whether or not memory is enabled (the language
+    // rules above sit inside the memory branch). QA TC-803 / CHAT-035.
+    systemPrompt += buildPlatformContextInstruction({
+      assistantName: assistant.name,
+      modelName:
+        getHouseModel(assistant.model || getPlatformDefaultModel(DEFAULT_MODEL_ID))?.name ?? null,
+    })
+
     // Update usage stats (async, non-blocking)
     incrementWidgetEmbedKeyUsage(embedKey.id).catch(console.error)
 
-    // Define schema for memory tool
-    const memorySchema = z.object({
-      facts: z.array(z.object({
-        category: z.string().describe("Category of fact (e.g. 'bio', 'work', 'family')"),
-        label: z.string().describe("Label/Predicate (e.g. 'age', 'occupation')"),
-        value: z.string().describe("Value/Object (e.g. '30', 'Engineer')"),
-        confidence: z.number().min(0).max(1).default(0.9),
-      })).optional(),
-      preferences: z.array(z.object({
-        category: z.string().describe("Category (e.g. 'communication', 'product')"),
-        preference: z.string().describe("Key (e.g. 'channel', 'insurance_type')"),
-        value: z.string().describe("Value (e.g. 'email', 'life')"),
-      })).optional(),
-      entities: z.array(z.object({
-        name: z.string().describe("Name of entity (person, organization, etc.)"),
-        type: z.string().describe("Type of entity (Person, Organization, Date, Location)"),
-      })).optional(),
-    });
+    // Memory tools (saveMemory / forgetMemory) write inside the tool call and report
+    // what was actually stored/removed. Only registered when memory is enabled.
+    const memoryTools = assistantMemoryConfig.enabled
+      ? createMemoryTools({
+          threadId,
+          workingMemoryUserId: widgetUserId,
+          workingMemoryEnabled: true,
+          profileUserId: widgetUserId !== 'anonymous' ? widgetUserId : null,
+          semanticUserId: widgetUserId !== 'anonymous' ? widgetUserId : null,
+          userMessage: lastUserMsg,
+          // Anonymous visitors' memory must carry the 30-day TTL even if the stream
+          // is aborted before the post-stream drain refreshes it.
+          afterProfileWrite: isAnonymous
+            ? () => setWidgetUserMemoryExpiry(widgetUserId, new Date(Date.now() + 30 * 24 * 60 * 60 * 1000))
+            : undefined,
+        })
+      : null;
 
     // Stream response — strip reasoning-model <think> blocks from the user-facing stream.
     const { createStripThinkTransform } = await import("@/lib/llm/strip-think")
@@ -601,36 +588,7 @@ export async function handleWidgetChat(req: NextRequest) {
       system: systemPrompt,
       messages,
       experimental_transform: createStripThinkTransform(),
-      tools: {
-        saveMemory: tool({
-          description: "Save important facts, preferences, and entities about the user from the conversation.",
-          inputSchema: zodSchema(memorySchema),
-          execute: async (
-            input: z.infer<typeof memorySchema>,
-            _options
-          ) => {
-            const { facts, preferences, entities } = input ?? {};
-            if (!widgetMemoryQueue.has(threadId)) {
-              widgetMemoryQueue.set(threadId, []);
-            }
-            widgetMemoryQueue.get(threadId)!.push({ facts, preferences, entities });
-            console.log("[Widget Memory Tool] Queued memory for saving:", {
-              facts: facts?.length || 0,
-              preferences: preferences?.length || 0,
-              entities: entities?.length || 0,
-            });
-            return {
-              success: true,
-              queued: true,
-              items: {
-                facts: facts?.length || 0,
-                preferences: preferences?.length || 0,
-                entities: entities?.length || 0,
-              },
-            };
-          },
-        }),
-      },
+      tools: memoryTools?.tools,
     });
 
     // Handle background memory updates (respect assistantMemoryConfig)
@@ -638,97 +596,43 @@ export async function handleWidgetChat(req: NextRequest) {
     (async () => {
       try {
         const fullResponse = await result.text;
-        const toolCalls = await result.toolCalls as any[];
+        // Memory tools already wrote during the stream; only count the turn here and
+        // skip the regex fallback if one ran (so a forget request is not re-extracted).
+        const memoryToolUsed = memoryTools?.state.used === true;
+        const memoryForgotten = memoryTools?.state.forgot === true;
 
-        console.log(`[Widget Chat] Response finished. Text len: ${fullResponse.length}. Tool calls: ${toolCalls.length}`);
-
-        // Retrieve and process queued memories from tool calls
-        const queuedMemories = widgetMemoryQueue.get(threadId) || [];
-        widgetMemoryQueue.delete(threadId);
-
-        let extractedFacts: any[] = [];
-        let extractedPreferences: any[] = [];
-        let extractedEntities: any[] = [];
-
-        if (queuedMemories.length > 0) {
-          console.log(`[Widget Memory] Processing ${queuedMemories.length} queued memory items`);
-          for (const mem of queuedMemories) {
-            if (mem.facts) extractedFacts.push(...(mem.facts as any[]));
-            if (mem.preferences) extractedPreferences.push(...(mem.preferences as any[]));
-            if (mem.entities) extractedEntities.push(...(mem.entities as any[]));
-          }
-          console.log(`[Widget Memory] Total extracted: ${extractedFacts.length} facts, ${extractedPreferences.length} preferences, ${extractedEntities.length} entities`);
-        }
-
-        for (const call of toolCalls) {
-          if (call.toolName === 'saveMemory') {
-            const args = call.args as any;
-            if (!args) continue;
-            if (args.facts) extractedFacts.push(...args.facts);
-            if (args.preferences) extractedPreferences.push(...args.preferences);
-            if (args.entities) extractedEntities.push(...args.entities);
-          }
-        }
-
-        // Convert to internal types
-        // Fact conversion
-        const finalFacts = extractedFacts.map(f => ({
-          id: `fact_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-          subject: 'user',
-          predicate: f.label || 'unknown',
-          object: f.value || 'unknown',
-          confidence: typeof f.confidence === 'number' ? f.confidence : 0.9,
-          source: threadId,
-          createdAt: new Date(),
-        }));
-
-        // Entity conversion
-        const finalEntities = extractedEntities.map(e => ({
-          id: `ent_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-          name: e.name || 'unknown',
-          type: e.type || 'unknown',
-          source: threadId,
-          createdAt: new Date(),
-          attributes: {},
-          confidence: 0.9,
-        }));
-
-        // Preference conversion
-        const finalPreferences = extractedPreferences.map(p => ({
-          id: `pref_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-          category: p.category || 'general',
-          key: p.preference || 'unknown',
-          value: p.value || 'unknown',
-          confidence: 0.9,
-          source: threadId,
-        }));
+        console.log(`[Widget Chat] Response finished. Text len: ${fullResponse.length}. Memory tool used: ${memoryToolUsed}`);
 
         const messageId = `msg_${Date.now()}`;
 
-        // Update Working Memory
+        // Update Working Memory (context + regex fallback only)
         await updateWorkingMemory(
           widgetUserId,
           threadId,
           lastUserMsg,
           fullResponse,
           messageId,
-          finalEntities,
-          finalFacts
+          [],
+          [],
+          { extract: !memoryToolUsed }
         );
 
         // Update User Profile (Long Term), even for widget users, but relying on TTL cleanup
         if (widgetUserId !== 'anonymous') {
-          // Store Semantic
-          await storeForSemanticRecall(widgetUserId, threadId, lastUserMsg, fullResponse);
+          // Store Semantic (not on a forget turn: the message names what was deleted)
+          if (!memoryForgotten) {
+            await storeForSemanticRecall(widgetUserId, threadId, lastUserMsg, fullResponse);
+          }
 
-          // Update Profile
+          // Count the turn; regex fallback only if no memory tool ran
           await updateUserProfile(
             widgetUserId,
             lastUserMsg,
             fullResponse,
             threadId,
-            finalFacts,
-            finalPreferences
+            [],
+            [],
+            { extract: !memoryToolUsed }
           );
 
           // IMPLEMENT TTL: Auto-expire widget memories after 30 days
@@ -751,7 +655,7 @@ export async function handleWidgetChat(req: NextRequest) {
           }
         }
 
-      if (MEMORY_CONFIG.dualWrite && widgetUserId !== 'anonymous') {
+      if (MEMORY_CONFIG.dualWrite && widgetUserId !== 'anonymous' && !memoryForgotten) {
         try {
           const mastraMemory = getMastraMemory();
           if (MEMORY_CONFIG.debug) {

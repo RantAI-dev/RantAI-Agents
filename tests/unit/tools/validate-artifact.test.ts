@@ -1398,6 +1398,33 @@ export default Scene`
     expect(r.ok).toBe(true)
     expect(r.warnings.join(" ")).toMatch(/Bounds/)
   })
+
+  // QA CHAT-026: a scene loading a model from an arbitrary host failed to
+  // render and needed a manual "AI fix".
+  const withModel = (url: string) =>
+    `function Scene() {\n  const { scene } = useGLTF("${url}")\n  return <Clone object={scene} />\n}\n\nexport default Scene`
+
+  it("accepts a model from the verified Khronos CDN", async () => {
+    const r = await v(
+      withModel(
+        "https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/Duck/glTF-Binary/Duck.glb",
+      ),
+    )
+    expect(r.ok).toBe(true)
+  })
+
+  it("accepts a model from the verified three.js CDN", async () => {
+    const r = await v(
+      withModel("https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/models/gltf/Parrot.glb"),
+    )
+    expect(r.ok).toBe(true)
+  })
+
+  it("rejects a model from an unverified host", async () => {
+    const r = await v(withModel("https://example.com/models/sun.glb"))
+    expect(r.ok).toBe(false)
+    expect(r.errors.join(" ")).toMatch(/verified list/)
+  })
 })
 
 // ---------------------------------------------------------------------------

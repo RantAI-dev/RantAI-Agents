@@ -42,6 +42,8 @@ export const ChatRequestBodySchema = z
     canvasMode: z.string().optional(),
     organizationId: z.string().optional(),
     targetArtifactId: z.string().optional(),
+    // Browser IANA zone, so "today" in the system prompt is the user's today.
+    timeZone: z.string().max(64).optional(),
   })
   .passthrough()
 

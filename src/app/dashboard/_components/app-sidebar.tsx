@@ -24,6 +24,8 @@ import {
   LogOut,
   MessageSquare,
   Monitor,
+  MoreHorizontal,
+  Pencil,
   Moon,
   Network,
   Plus,
@@ -61,6 +63,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { EditableSessionTitle } from "@/features/conversations/components/chat/editable-session-title"
+import { getSessionActivityDate } from "@/features/conversations/sessions/session-sync"
 import { cn } from "@/lib/utils"
 import { brand } from "@/lib/branding"
 import { BrandLogo } from "@/components/brand-logo"
@@ -219,7 +233,15 @@ function ChatSectionContent({
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { sessions, deleteSession } = useChatSessions()
+  const { sessions, deleteSession, updateSession } = useChatSessions()
+  // Session awaiting delete confirmation. Deleting used to fire on a single
+  // click of an invisible (opacity-0) trash icon right next to the
+  // timestamp, so a stray click silently removed chats (QA CHAT-011).
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; title: string } | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  // Radix returns focus to the menu trigger when the menu closes; after
+  // "Rename" that would immediately blur (and close) the new title input.
+  const skipMenuFocusReturnRef = React.useRef(false)
 
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
@@ -228,8 +250,43 @@ function ChatSectionContent({
     return null
   }
 
+  const confirmDelete = () => {
+    if (!pendingDelete) return
+    const target = sessions.find((s) => s.id === pendingDelete.id)
+    const urlId = target?.dbId || pendingDelete.id
+    const wasActive = pathname === `/dashboard/chat/${urlId}`
+    deleteSession(pendingDelete.id)
+    setPendingDelete(null)
+    if (wasActive) router.push("/dashboard/chat")
+  }
+
   return (
     <div className="space-y-1">
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete chat?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &quot;{pendingDelete?.title}&quot; and all of its messages will be permanently
+              deleted. This can&apos;t be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDelete}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {sessions.length > 0 && (
         <div className="space-y-1">
           <p className="px-3 py-1 text-xs font-medium text-sidebar-muted uppercase tracking-wider">
@@ -239,6 +296,7 @@ function ChatSectionContent({
             const sessionAssistant = getAssistantById(session.assistantId)
             const sessionUrlId = session.dbId || session.id
             const isActive = pathname === `/dashboard/chat/${sessionUrlId}`
+            const isRenaming = renamingId === session.id
             return (
               <div
                 key={session.id}
@@ -248,7 +306,10 @@ function ChatSectionContent({
                     ? "bg-sidebar-accent text-sidebar-foreground"
                     : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
                 )}
-                onClick={() => router.push(`/dashboard/chat/${sessionUrlId}`)}
+                onClick={() => {
+                  if (isRenaming) return
+                  router.push(`/dashboard/chat/${sessionUrlId}`)
+                }}
               >
                 <div
                   className={cn(
@@ -261,25 +322,70 @@ function ChatSectionContent({
                 />
                 <span className="text-base shrink-0">{sessionAssistant?.emoji || "💬"}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate text-sm">{session.title}</p>
+                  {isRenaming ? (
+                    <EditableSessionTitle
+                      title={session.title}
+                      editing
+                      hideTrigger
+                      onEditingChange={(editing) => {
+                        if (!editing) setRenamingId(null)
+                      }}
+                      onRename={(title) => updateSession(session.id, { title })}
+                      className="text-sm"
+                    />
+                  ) : (
+                    <p className="font-medium truncate text-sm">{session.title}</p>
+                  )}
                   <p className="text-xs text-sidebar-muted truncate">
-                    {formatDistanceToNow(session.createdAt, { addSuffix: true })}
+                    {formatDistanceToNow(getSessionActivityDate(session), { addSuffix: true })}
                   </p>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-sidebar-foreground/60 hover:text-destructive hover:bg-sidebar-hover"
-                  aria-label={`Delete chat ${session.title}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    const wasActive = isActive
-                    deleteSession(session.id)
-                    if (wasActive) router.push("/dashboard/chat")
-                  }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+                {/* modal={false}: a modal menu that opens an AlertDialog can
+                    leave `pointer-events: none` stuck on <body> (Radix). */}
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-6 w-6 shrink-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover",
+                        "opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                      )}
+                      aria-label={`Chat options for ${session.title}`}
+                      title="Chat options"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    onClick={(e) => e.stopPropagation()}
+                    onCloseAutoFocus={(e) => {
+                      if (skipMenuFocusReturnRef.current) {
+                        skipMenuFocusReturnRef.current = false
+                        e.preventDefault()
+                      }
+                    }}
+                  >
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        skipMenuFocusReturnRef.current = true
+                        setRenamingId(session.id)
+                      }}
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-2" />
+                      Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onSelect={() => setPendingDelete({ id: session.id, title: session.title })}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             )
           })}

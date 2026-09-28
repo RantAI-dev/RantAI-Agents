@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { Fragment, useEffect, useRef, useState, useCallback } from "react"
 import { generateUUID } from "@/lib/uuid"
 import { useChat } from "@ai-sdk/react"
 import { motion, AnimatePresence } from "framer-motion"
@@ -38,7 +38,28 @@ import { ReasoningBox } from "./reasoning-box"
 import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
-import { isMeaningfulFigureCaption, type EmbeddableFigure } from "./citations"
+import { citedSourceNumbers, isMeaningfulFigureCaption, type EmbeddableFigure } from "./citations"
+import { EditableSessionTitle } from "./editable-session-title"
+import {
+  CONNECTION_LOST_MESSAGE,
+  STREAM_WATCHDOG_INTERVAL_MS,
+  StreamServerError,
+  classifyStreamFailure,
+  hasRunningToolCall,
+  isStreamStalled,
+  resolveStreamErrorEvents,
+  type StreamAbortReason,
+} from "./stream-resilience"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { ConversationExport } from "./conversation-export"
 import { CommandPalette } from "./command-palette"
 import {
@@ -58,6 +79,7 @@ import { ChatInputToolbar, ALL_DOCS_GROUP_ID, type AssistantToolInfo, type Assis
 import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
 import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } from "./edit-version-indicator"
 import { ToolCallIndicator } from "./tool-call-indicator"
+import { ToolApprovalPrompt, parseApprovalGatedTools, type ToolApprovalState } from "./tool-approval-prompt"
 import { useArtifacts } from "./artifacts/use-artifacts"
 import { ArtifactIndicator } from "./artifacts/artifact-indicator"
 import { isPersistedArtifactToolCall, getEffectiveToolState } from "./artifact-tool-result"
@@ -273,7 +295,11 @@ function MessageActions({
   return (
     <div
       className={cn(
-        "flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200",
+        // Always visible (muted) rather than hover-only: hidden-until-hover
+        // controls read as "missing" (QA TC-795/797/799, CHAT-047), don't
+        // exist on touch screens, and invisible-but-clickable buttons beside
+        // the timestamp caused accidental deletes (INC-001).
+        "flex items-center gap-0.5 opacity-70 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200",
         isUser ? "justify-end" : "justify-start"
       )}
     >
@@ -388,6 +414,8 @@ function MessagesArea({
   openArtifact,
   artifacts,
   digitalEmployeeId,
+  toolApprovals,
+  onToolApproval,
 }: {
   chat: ReturnType<typeof useChat>
   allMessages: ReturnType<typeof useChat>["messages"]
@@ -425,6 +453,8 @@ function MessagesArea({
   openArtifact: (id: string) => void
   artifacts: Map<string, Artifact>
   digitalEmployeeId?: string
+  toolApprovals: Record<string, ToolApprovalState>
+  onToolApproval: (toolCallId: string, approved: boolean) => void
 }) {
 
   // Viewport-relative atBottomThreshold so the "near bottom" zone (which
@@ -704,15 +734,24 @@ function MessagesArea({
                                     // to "error" so the pill renders red instead of green.
                                     const effective = getEffectiveToolState(tp)
                                     return (
-                                      <ToolCallIndicator
-                                        key={tp.toolCallId}
-                                        toolName={tp.toolName}
-                                        state={effective.state}
-                                        args={tp.input}
-                                        result={tp.output}
-                                        errorText={effective.errorText}
-                                        employeeId={digitalEmployeeId}
-                                      />
+                                      <Fragment key={tp.toolCallId}>
+                                        <ToolCallIndicator
+                                          toolName={tp.toolName}
+                                          state={effective.state}
+                                          args={tp.input}
+                                          result={tp.output}
+                                          errorText={effective.errorText}
+                                          employeeId={digitalEmployeeId}
+                                        />
+                                        {toolApprovals[tp.toolCallId] && (
+                                          <ToolApprovalPrompt
+                                            toolName={tp.toolName}
+                                            args={tp.input as Record<string, unknown> | undefined}
+                                            state={toolApprovals[tp.toolCallId]}
+                                            onDecide={(approved) => onToolApproval(tp.toolCallId, approved)}
+                                          />
+                                        )}
+                                      </Fragment>
                                     )
                                   })}
                                 </div>
@@ -766,15 +805,24 @@ function MessagesArea({
                                     // tell the LLM's attempt didn't take.
                                     const effective = getEffectiveToolState(tc)
                                     return (
-                                      <ToolCallIndicator
-                                        key={tc.toolCallId}
-                                        toolName={tc.toolName}
-                                        state={effective.state}
-                                        args={tc.input}
-                                        result={tc.output}
-                                        errorText={effective.errorText}
-                                        employeeId={digitalEmployeeId}
-                                      />
+                                      <Fragment key={tc.toolCallId}>
+                                        <ToolCallIndicator
+                                          toolName={tc.toolName}
+                                          state={effective.state}
+                                          args={tc.input}
+                                          result={tc.output}
+                                          errorText={effective.errorText}
+                                          employeeId={digitalEmployeeId}
+                                        />
+                                        {toolApprovals[tc.toolCallId] && (
+                                          <ToolApprovalPrompt
+                                            toolName={tc.toolName}
+                                            args={tc.input as Record<string, unknown> | undefined}
+                                            state={toolApprovals[tc.toolCallId]}
+                                            onDecide={(approved) => onToolApproval(tc.toolCallId, approved)}
+                                          />
+                                        )}
+                                      </Fragment>
                                     )
                                   })}
                                   {/* Artifact IDs without matching tool call (legacy/fallback) */}
@@ -868,6 +916,11 @@ function MessagesArea({
                             sources={sources}
                             messageId={message.id}
                             hiddenFigureNums={embeddedFigureNums}
+                            citedNums={
+                              isStreamingMessage
+                                ? undefined
+                                : citedSourceNumbers(content, sources.length)
+                            }
                           />
                         )}
 
@@ -969,6 +1022,18 @@ function MessagesArea({
                             copied={copiedId === message.id}
                             isUserMessage={isUser}
                           />
+                        ) : null}
+                        {hasEditHistory ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive rounded-lg opacity-70 group-hover:opacity-100"
+                            onClick={() => handleDeleteMessage(message.id)}
+                            aria-label="Delete message"
+                            title="Delete message"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
                         ) : (
                           <MessageActions
                             onCopy={() => handleCopy(message.id, content)}
@@ -1045,6 +1110,26 @@ function MessagesArea({
   )
 }
 
+type SendMessageFn = (
+  userInput: string,
+  baseMessages: ReturnType<typeof useChat>["messages"],
+  replyToId?: string,
+  editHistory?: EditHistoryEntry[],
+  fileCtx?: { fileContext?: string; fileDocumentIds?: string[] },
+  attachments?: AttachmentInfo[],
+  toolOverrides?: {
+    enableWebSearch?: boolean
+    enableCodeInterpreter?: boolean
+    useKnowledgeBase?: boolean
+    knowledgeBaseGroupIds?: string[]
+    enableTools?: boolean
+    enabledToolNames?: string[]
+    enableSkills?: boolean
+    enabledSkillIds?: string[]
+    canvasMode?: CanvasMode
+  },
+) => Promise<void>
+
 export function ChatWorkspace({
   session,
   assistant,
@@ -1064,6 +1149,8 @@ export function ChatWorkspace({
   const virtuosoRef = useRef<VirtuosoHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  // Latest sendMessage, so an error banner's Retry can re-send the turn.
+  const sendMessageRef = useRef<SendMessageFn | null>(null)
   // Tracks whether the component is *really* mounted. React 18 StrictMode
   // double-invokes effects in dev (setup → cleanup → setup, synchronously),
   // and an unconditional abort in the cleanup would tear down the
@@ -1132,6 +1219,24 @@ export function ChatWorkspace({
 
   // Version viewing state for edited messages (messageId -> version number, 1-indexed)
   const [viewingVersions, setViewingVersions] = useState<Record<string, number>>({})
+  // Gated tool calls awaiting (or past) the user's Approve/Deny, by toolCallId.
+  const [toolApprovals, setToolApprovals] = useState<Record<string, ToolApprovalState>>({})
+
+  const handleToolApproval = useCallback(async (toolCallId: string, approved: boolean) => {
+    setToolApprovals((prev) => ({ ...prev, [toolCallId]: "submitting" }))
+    try {
+      const res = await fetch("/api/chat/tool-approval", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toolCallId, approved }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setToolApprovals((prev) => ({ ...prev, [toolCallId]: approved ? "approved" : "denied" }))
+    } catch (err) {
+      console.error("[Chat] tool approval failed:", err)
+      setToolApprovals((prev) => ({ ...prev, [toolCallId]: "failed" }))
+    }
+  }, [])
 
   // Handoff state
   const [handoffState, setHandoffState] = useState<HandoffState>("idle")
@@ -2196,6 +2301,15 @@ export function ChatWorkspace({
       // the streaming-input handler for how these get populated.
       const preStreamSnapshots = new Map<string, Artifact | null>()
       const createdStreamingIds = new Set<string>()
+      // Hoisted so the catch can keep/persist partial text on a lost
+      // connection and tell a watchdog/offline abort from the user's Stop.
+      let assistantContent = ""
+      let abortReason: StreamAbortReason = null
+      let stopConnectionWatch: (() => void) | null = null
+      // `{"type":"error"}` events seen mid-stream (QA CHAT-019). Providers
+      // sometimes emit one and then recover, so they only surface if the
+      // stream ends without any assistant output.
+      const streamErrorTexts: string[] = []
 
       try {
         // Normalize messages to plain { id, role, content } before sending.
@@ -2220,7 +2334,6 @@ export function ChatWorkspace({
         const resolvedCanvasMode = toolOverrides?.canvasMode ?? canvasMode
         setIsStreaming(true)
 
-        let assistantContent = ""
         // Accumulates reasoning-delta chunks from the server. Surfaced to
         // the user as a collapsible "Thinking" box above the answer, and
         // persisted into the assistant message's metadata.reasoning so the
@@ -2339,7 +2452,13 @@ export function ChatWorkspace({
                 // lose the generated tokens. Client-side syncMessages keeps
                 // running in parallel for in-session UX.
                 assistantMessageId: assistantMsgId,
-                systemPrompt: assistant.systemPrompt,
+                // The server resolves a saved assistant's prompt from the DB
+                // by id; sending it would expose built-in prompts in DevTools
+                // (QA INC-003). Only an assistant without an id needs it.
+                ...(!assistant.id && { systemPrompt: assistant.systemPrompt }),
+                // Lets the server tell the model today's date in the user's
+                // zone (QA CHAT-035).
+                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 useKnowledgeBase: toolOverrides?.useKnowledgeBase ?? effectiveKnowledgeBase,
                 knowledgeBaseGroupIds: toolOverrides?.knowledgeBaseGroupIds ?? effectiveKBGroupIds,
                 enableWebSearch: toolOverrides?.enableWebSearch ?? effectiveWebSearch,
@@ -2384,6 +2503,9 @@ export function ChatWorkspace({
           })
         }
 
+        // Tool calls the server will hold until the user approves them.
+        const approvalGatedTools = parseApprovalGatedTools(response.headers.get("X-Tool-Approval"))
+
         // Handle streaming response
         const reader = response.body?.getReader()
         const decoder = new TextDecoder()
@@ -2397,9 +2519,36 @@ export function ChatWorkspace({
         // SSE parsing state
         let sseBuffer = ""
 
+        // Connection watch (QA CHAT-048). A dropped connection doesn't
+        // reject reader.read() — it just hangs, leaving the caret blinking
+        // and Stop active forever. Abort on the browser's `offline` event or
+        // when no bytes arrive for too long, recording why so the catch can
+        // show "Connection lost" instead of treating it as the user's Stop.
+        let lastByteAt = Date.now()
+        const abortForConnection = (reason: Exclude<StreamAbortReason, null>) => {
+          if (abortReason || abortController.signal.aborted) return
+          abortReason = reason
+          abortController.abort()
+        }
+        const handleOffline = () => abortForConnection("offline")
+        window.addEventListener("offline", handleOffline)
+        const watchdog = window.setInterval(() => {
+          const toolRunning = hasRunningToolCall(
+            Array.from(toolCalls.values(), (tc) => tc.state),
+          )
+          if (isStreamStalled({ msSinceLastByte: Date.now() - lastByteAt, toolRunning })) {
+            abortForConnection("stalled")
+          }
+        }, STREAM_WATCHDOG_INTERVAL_MS)
+        stopConnectionWatch = () => {
+          window.removeEventListener("offline", handleOffline)
+          window.clearInterval(watchdog)
+        }
+
         while (reader) {
           const { done, value } = await reader.read()
           if (done) break
+          lastByteAt = Date.now()
 
           const chunk = decoder.decode(value, { stream: true })
 
@@ -2489,6 +2638,10 @@ export function ChatWorkspace({
                     const tc = toolCalls.get(part.toolCallId as string)!
                     tc.args = part.input as Record<string, unknown>
                     tc.state = "call"
+                    if (approvalGatedTools.has(tc.toolName)) {
+                      const id = part.toolCallId as string
+                      setToolApprovals((prev) => (prev[id] ? prev : { ...prev, [id]: "pending" }))
+                    }
 
                     // Progressive artifact rendering — show content as it streams
                     if (
@@ -2530,6 +2683,13 @@ export function ChatWorkspace({
                   if (tc) {
                     tc.output = part.output
                     tc.state = "result"
+                    // Settle the approval prompt from what the server did —
+                    // covers timeouts and decisions made in another tab.
+                    setToolApprovals((prev) => {
+                      if (!(toolCallId in prev)) return prev
+                      const out = part.output as { performed?: unknown } | null
+                      return { ...prev, [toolCallId]: out?.performed === false ? "denied" : "approved" }
+                    })
 
                     // Handle create_artifact — replace streaming placeholder with final
                     if (tc.toolName === "create_artifact" && part.output && typeof part.output === "object") {
@@ -2680,6 +2840,13 @@ export function ChatWorkspace({
                   }
                   break
                 }
+                case "error": {
+                  const errorText =
+                    typeof part.errorText === "string" ? part.errorText : ""
+                  streamErrorTexts.push(errorText)
+                  console.warn("[Chat] stream error event:", errorText)
+                  break
+                }
                 case "sources":
                   if (Array.isArray(part.sources)) {
                     streamedSources = part.sources as Source[]
@@ -2737,6 +2904,17 @@ export function ChatWorkspace({
               return updated
             })
           }
+        }
+        stopConnectionWatch?.()
+        stopConnectionWatch = null
+
+        // Mid-stream error events: surface only when nothing came back.
+        const errorOutcome = resolveStreamErrorEvents({
+          errorTexts: streamErrorTexts,
+          hasOutput: assistantContent.trim().length > 0 || toolCalls.size > 0,
+        })
+        if (errorOutcome.surface) {
+          throw new StreamServerError(errorOutcome.message)
         }
         } // end else (standard SSE streaming mode)
 
@@ -2896,6 +3074,69 @@ export function ChatWorkspace({
         }
         createdStreamingIds.clear()
         preStreamSnapshots.clear()
+        stopConnectionWatch?.()
+        stopConnectionWatch = null
+
+        const failureKind = classifyStreamFailure(
+          err,
+          abortReason,
+          typeof navigator === "undefined" ? true : navigator.onLine,
+        )
+
+        // Retry re-sends the same turn (same context, attachments, toolbar
+        // overrides) rather than only putting the text back in the input.
+        const retryFn = () => {
+          setError(null)
+          const resend = sendMessageRef.current
+          if (resend) {
+            void resend(userInput, baseMessages, replyToId, editHistory, fileCtx, attachments, toolOverrides)
+          } else {
+            setInput(userInput)
+            textareaRef.current?.focus()
+          }
+        }
+
+        if (failureKind === "connection-lost") {
+          console.warn("Chat stream lost connection:", abortReason ?? err)
+          setIsStreaming(false)
+          const partial = assistantContent.replace(AGENT_HANDOFF_MARKER, "").trim()
+          // Keep whatever text already arrived; drop only an empty bubble.
+          chat.setMessages((prev) => {
+            const idx = prev.findIndex((m) => m.id === assistantMsgId)
+            if (idx >= 0 && !getMessageContent(prev[idx])) {
+              return [...prev.slice(0, idx), ...prev.slice(idx + 1)] as typeof prev
+            }
+            return prev
+          })
+          if (session && onUpdateSession) {
+            onUpdateSession(session.id, {
+              messages: [
+                ...baseMessages.map((m) => {
+                  const ext = m as unknown as MessageWithExtras
+                  return {
+                    id: m.id,
+                    role: toChatMessageRole(m.role),
+                    content: getMessageContent(m),
+                    createdAt: new Date(),
+                    ...(ext.replyTo != null && { replyTo: ext.replyTo }),
+                    ...(ext.editHistory != null && { editHistory: ext.editHistory }),
+                  }
+                }),
+                { ...userMessage, createdAt: new Date() },
+                ...(partial
+                  ? [{
+                      id: assistantMsgId,
+                      role: "assistant" as const,
+                      content: partial,
+                      createdAt: new Date(),
+                    }]
+                  : []),
+              ],
+            })
+          }
+          setError({ message: CONNECTION_LOST_MESSAGE, retry: retryFn })
+          return
+        }
 
         // Handle user-initiated abort — keep partial content if any.
         // When the abort fires before the first byte (no content yet),
@@ -2904,7 +3145,7 @@ export function ChatWorkspace({
         // than "last assistant" because rapid-fire sends now auto-abort
         // the prior stream — when that catch runs, a newer send may have
         // already appended its own placeholder which we must not touch.
-        if (err instanceof DOMException && err.name === "AbortError") {
+        if (failureKind === "user-abort") {
           setIsStreaming(false)
           chat.setMessages((prev) => {
             const idx = prev.findIndex((m) => m.id === assistantMsgId)
@@ -2954,25 +3195,22 @@ export function ChatWorkspace({
           })
         }
 
-        // Set error state
-        const retryFn = () => {
-          setInput(userInput)
-          setError(null)
-          textareaRef.current?.focus()
-        }
-
         // Surface the timeout reason specifically — the generic
         // "Failed to get a response" leaves the user wondering whether
         // they should wait more or retry. The polling-timeout error
-        // message in the digital-employee path explains both.
+        // message in the digital-employee path explains both. A server
+        // `{"type":"error"}` event carries a readable errorText; show it.
         const isTimeout =
           err instanceof Error && err.message.includes("timed out")
-        const errorDescription = isTimeout
-          ? err.message
+        const isServerMessage = err instanceof StreamServerError
+        const errorDescription = isTimeout || isServerMessage
+          ? (err as Error).message
           : "Failed to get a response from the assistant."
 
         setError({
-          message: isTimeout ? err.message : "Failed to get response. Please try again.",
+          message: isTimeout || isServerMessage
+            ? (err as Error).message
+            : "Failed to get response. Please try again.",
           retry: retryFn,
         })
 
@@ -2988,12 +3226,17 @@ export function ChatWorkspace({
           ),
         })
       } finally {
+        stopConnectionWatch?.()
         setIsLoading(false)
         abortControllerRef.current = null
       }
     },
     [chat, session, onUpdateSession, assistant, toast, effectiveWebSearch, effectiveCodeInterpreter, effectiveKnowledgeBase, effectiveKBGroupIds, effectiveToolsEnabled, effectiveToolNames, effectiveSkillsEnabled, effectiveSkillIds, canvasMode, activeArtifactId, apiSessionId]
   )
+
+  useEffect(() => {
+    sendMessageRef.current = sendMessage
+  }, [sendMessage])
 
   const queueInitialMessageSend = useCallback(async () => {
     if (!initialMessage) return
@@ -3187,6 +3430,14 @@ export function ChatWorkspace({
   // syncMessages in flight, partial lazy load, etc.). Sharing one index
   // across both layers used to delete the wrong rows whenever they
   // diverged.
+  // Deleting truncates the conversation from that message on, so it asks
+  // first (QA INC-001: a stray click beside a timestamp silently wiped the
+  // rest of a chat).
+  const [pendingDeleteMessageId, setPendingDeleteMessageId] = useState<string | null>(null)
+  const requestDeleteMessage = useCallback((messageId: string) => {
+    setPendingDeleteMessageId(messageId)
+  }, [])
+
   const handleDeleteMessage = useCallback(
     (messageId: string) => {
       const liveIndex = chat.messages.findIndex((m) => m.id === messageId)
@@ -3663,12 +3914,46 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
   }
 
   const allMessages = [...chat.messages]
+  const pendingDeleteIndex = pendingDeleteMessageId
+    ? allMessages.findIndex((m) => m.id === pendingDeleteMessageId)
+    : -1
+  const pendingDeleteFollowing =
+    pendingDeleteIndex >= 0 ? allMessages.length - pendingDeleteIndex - 1 : 0
 
   return (
     <div className="flex flex-col h-full bg-background">
+      <AlertDialog
+        open={pendingDeleteMessageId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteMessageId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete message?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDeleteFollowing > 0
+                ? `This deletes the message and the ${pendingDeleteFollowing} message${pendingDeleteFollowing === 1 ? "" : "s"} after it. This can't be undone.`
+                : "This deletes the message. This can't be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (pendingDeleteMessageId) handleDeleteMessage(pendingDeleteMessageId)
+                setPendingDeleteMessageId(null)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       {/* Header with mobile back button and actions */}
       <div className="flex items-center justify-between gap-2 py-3 pl-14 pr-4 border-b border-border/50">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           {onBack && (
             <Button
               variant="ghost"
@@ -3680,7 +3965,10 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               <ArrowLeft className="h-4 w-4" />
             </Button>
           )}
-          <span className="font-medium truncate">{session.title}</span>
+          <EditableSessionTitle
+            title={session.title}
+            onRename={(title) => onUpdateSession?.(session.id, { title })}
+          />
           {/* Live chat status indicator */}
           {handoffState === "connected" && (
             <span className="flex items-center gap-1.5 text-xs text-chart-2 bg-chart-2/10 px-2 py-0.5 rounded-full">
@@ -3770,7 +4058,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     handleCopy={handleCopy}
                     handleEditMessage={handleEditMessage}
                     handleRegenerate={handleRegenerate}
-                    handleDeleteMessage={handleDeleteMessage}
+                    handleDeleteMessage={requestDeleteMessage}
                     handleReply={handleReply}
                     scrollToBottom={scrollToBottom}
                     scrollToMessage={scrollToMessage}
@@ -3778,6 +4066,8 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
                     openArtifact={handleOpenArtifact}
                     artifacts={artifacts}
                     digitalEmployeeId={digitalEmployeeId}
+                    toolApprovals={toolApprovals}
+                    onToolApproval={handleToolApproval}
                   />
                 </div>
 
@@ -4021,7 +4311,7 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               handleCopy={handleCopy}
               handleEditMessage={handleEditMessage}
               handleRegenerate={handleRegenerate}
-              handleDeleteMessage={handleDeleteMessage}
+              handleDeleteMessage={requestDeleteMessage}
               handleReply={handleReply}
               scrollToBottom={scrollToBottom}
               scrollToMessage={scrollToMessage}
@@ -4029,6 +4319,8 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               openArtifact={handleOpenArtifact}
               artifacts={artifacts}
               digitalEmployeeId={digitalEmployeeId}
+              toolApprovals={toolApprovals}
+              onToolApproval={handleToolApproval}
             />
         )}
       </div>

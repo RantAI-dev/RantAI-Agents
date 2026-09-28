@@ -1,7 +1,7 @@
 import { tool as aiTool, jsonSchema } from "ai"
 import type { ToolSet } from "ai"
 import { prisma } from "@/lib/prisma"
-import { AVAILABLE_MODELS, getModelsFromDb } from "@/lib/models"
+import { getModelByIdAsync } from "@/lib/models"
 import { BUILTIN_TOOLS } from "./builtin"
 import { adaptMcpToolsToAiSdk } from "@/lib/mcp/tool-adapter"
 import type { McpServerOptions, McpToolInfo } from "@/lib/mcp/client"
@@ -14,11 +14,14 @@ import {
 import type { CommunityToolContext } from "@/lib/skill-sdk"
 import { workflowEngine } from "@/lib/workflow"
 import type { WorkflowVariables } from "@/lib/workflow/types"
+import { readJsonOrText } from "@/lib/tools/utils"
 
-async function getModelById(modelId: string) {
-  const dbModels = await getModelsFromDb()
-  return dbModels.find((m) => m.id === modelId) ?? AVAILABLE_MODELS.find((m) => m.id === modelId)
-}
+// The shared lookup, not a local copy: the copy here searched only the DB
+// catalogue and the static list, so the white-labelled house models
+// (rantai/nano — the default — swift, prime) were "not function-calling" and
+// every assistant on them silently lost all its bound tools. Found while
+// re-testing QA CHAT-037; it is also why CHAT-035 saw no tools on Nano.
+const getModelById = getModelByIdAsync
 
 /**
  * Resolve all enabled tools for an assistant into Vercel AI SDK format.
@@ -167,7 +170,7 @@ export async function resolveToolsForAssistant(
                 const errText = await res.text().catch(() => "Unknown")
                 throw new Error(`HTTP ${res.status}: ${errText.substring(0, 500)}`)
               }
-              const result = await res.json().catch(() => res.text())
+              const result = await readJsonOrText(res)
               logToolExecution(toolDef.name, toolDef.id, params, result, context, Date.now() - startTime).catch(() => {})
               return result
             } catch (err) {
@@ -527,7 +530,7 @@ export async function resolveToolsByNames(
                 const errText = await res.text().catch(() => "Unknown")
                 throw new Error(`HTTP ${res.status}: ${errText.substring(0, 500)}`)
               }
-              const result = await res.json().catch(() => res.text())
+              const result = await readJsonOrText(res)
               logToolExecution(toolDef.name, toolDef.id, params, result, context, Date.now() - startTime).catch(() => {})
               return result
             } catch (err) {

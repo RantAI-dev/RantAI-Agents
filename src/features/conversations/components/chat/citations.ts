@@ -162,6 +162,11 @@ export function autoPlaceFigures(
   alreadyInlined: Set<number>,
 ): string {
   if (!content || !figures?.length) return content
+  // An answer that cites nothing is not grounded in the retrieved documents —
+  // typically "the documents don't cover this". Matching caption words against
+  // it only finds coincidences: QA CHAT-034 got "Gambar 5.7 Patung Airlangga"
+  // under a no-information answer about flamingo migration.
+  if (!/\[\d{1,3}\](?!\()/.test(content)) return content
   let out = content
   for (const f of figures) {
     if (alreadyInlined.has(f.n)) continue
@@ -230,6 +235,45 @@ export function autoPlaceByAnchor(
     alreadyInlined.add(f.n)
   }
   return out
+}
+
+/**
+ * Source numbers the answer actually cites as `[n]` (1..count), ignoring fenced
+ * code. Drives the Sources panel: retrieval returns its top-k whether or not
+ * each chunk was used, and showing them in retrieval order put three unrelated
+ * documents above the ones the answer cited (QA CHAT-032).
+ */
+export function citedSourceNumbers(content: string, count: number): Set<number> {
+  const out = new Set<number>()
+  if (!content || count < 1) return out
+  const segments = content.split(/(```[\s\S]*?```)/g)
+  segments.forEach((seg, i) => {
+    if (i % 2 === 1) return
+    for (const m of seg.matchAll(/\[(\d{1,3})\](?!\()/g)) {
+      const n = Number(m[1])
+      if (n >= 1 && n <= count) out.add(n)
+    }
+    for (const m of seg.matchAll(/\[figure:(\d{1,3})\]/g)) {
+      const n = Number(m[1])
+      if (n >= 1 && n <= count) out.add(n)
+    }
+  })
+  return out
+}
+
+/**
+ * Split numbered sources into the ones the answer cites (shown first, in
+ * citation-number order) and the rest (retrieved but unused, shown collapsed).
+ * Numbers are never reassigned — `[n]` in the text must keep pointing at card n.
+ */
+export function partitionSourcesByCitation<T extends { n: number }>(
+  sources: T[],
+  cited: Set<number>,
+): { cited: T[]; uncited: T[] } {
+  return {
+    cited: sources.filter((s) => cited.has(s.n)),
+    uncited: sources.filter((s) => !cited.has(s.n)),
+  }
 }
 
 /** Stable id for a source card so a citation chip can scroll to it. */

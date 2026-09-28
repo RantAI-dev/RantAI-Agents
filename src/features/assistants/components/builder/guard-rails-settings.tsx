@@ -8,6 +8,13 @@ import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { GuardRailsConfig } from "@/lib/types/assistant"
 
 interface GuardRailsSettingsProps {
@@ -51,6 +58,31 @@ export function GuardRailsSettings({ config, onChange }: GuardRailsSettingsProps
         <p className="text-xs text-muted-foreground">
           Configure safety rules and content restrictions for this agent.
         </p>
+      </section>
+
+      {/* Tool Approval */}
+      <section className="space-y-3">
+        <Label htmlFor="tool-approval">Tool Approval</Label>
+        <p className="text-xs text-muted-foreground">
+          Which tool calls wait for the user to approve them in chat before they run.
+        </p>
+        <Select
+          value={config.toolApproval ?? "risky"}
+          onValueChange={(value) =>
+            onChange({ ...config, toolApproval: value as GuardRailsConfig["toolApproval"] })
+          }
+        >
+          <SelectTrigger id="tool-approval" className="w-full max-w-md">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="risky">
+              Actions with side effects (recommended) — messages, external APIs, MCP, workflows
+            </SelectItem>
+            <SelectItem value="all">Every tool call</SelectItem>
+            <SelectItem value="off">Never ask — run all tools automatically</SelectItem>
+          </SelectContent>
+        </Select>
       </section>
 
       {/* Blocked Topics */}

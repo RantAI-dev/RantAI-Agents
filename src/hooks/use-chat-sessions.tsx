@@ -8,6 +8,13 @@ import {
   type SerializedChatSession,
 } from "@/features/conversations/components/chat/pages/chat-session-data"
 import { toast } from "@/hooks/use-toast"
+import {
+  accumulatePendingDeletes,
+  filterDeletedSessions,
+  hasNewMessageIds,
+  moveSessionToTop,
+  selectMessageIdsToDelete,
+} from "@/features/conversations/sessions/session-sync"
 
 // Edit history entry for versioning
 interface EditHistoryEntry {
@@ -78,6 +85,9 @@ export interface ChatSession {
   title: string
   assistantId: string
   createdAt: Date
+  /** Last activity (server `updatedAt`, bumped client-side on send). Drives
+   *  sidebar order and the "last active" timestamp. */
+  updatedAt?: Date
   messages: ChatMessage[]
   artifacts?: PersistedArtifactData[]
 }
@@ -91,6 +101,7 @@ function parseSessionMetadata(data: any[]): ChatSession[] {
     title: s.title,
     assistantId: s.assistantId || "",
     createdAt: new Date(s.createdAt),
+    ...(s.updatedAt && { updatedAt: new Date(s.updatedAt) }),
     messages: [], // Messages loaded on demand
   }))
 }
@@ -150,6 +161,24 @@ function readHydratedSessionsFromDocument(): SerializedChatSession[] | null {
   }
 }
 
+// A stale hydration payload must not move a session's last-activity back in
+// time (the client bumps it optimistically on send).
+const DEFAULT_SESSION_TITLE = "New Chat"
+
+function latestDate(a: Date | undefined, b: Date | undefined): Date | undefined {
+  if (!a) return b
+  if (!b) return a
+  return a.getTime() >= b.getTime() ? a : b
+}
+
+// A payload rendered before the first-message title PATCH landed still says
+// "New Chat"; merging it would put the placeholder back over the real title.
+function mergeTitle(existingTitle: string, incomingTitle: string): string {
+  return incomingTitle === DEFAULT_SESSION_TITLE && existingTitle !== DEFAULT_SESSION_TITLE
+    ? existingTitle
+    : incomingTitle
+}
+
 function mergeHydratedSessions(
   previousSessions: ChatSession[],
   incomingSessions: SerializedChatSession[]
@@ -170,8 +199,10 @@ function mergeHydratedSessions(
       merged.push({
         ...existing,
         ...normalized,
+        title: mergeTitle(existing.title, normalized.title),
         id: existing.id,
         dbId: existing.dbId ?? normalized.dbId,
+        updatedAt: latestDate(existing.updatedAt, normalized.updatedAt),
         messages: normalized.messages.length > 0 ? normalized.messages : existing.messages,
         artifacts:
           normalized.artifacts && normalized.artifacts.length > 0
@@ -186,9 +217,10 @@ function mergeHydratedSessions(
       const existing = remaining.splice(dbMatchIndex, 1)[0]
       merged.push({
         ...existing,
-        title: normalized.title,
+        title: mergeTitle(existing.title, normalized.title),
         assistantId: normalized.assistantId,
         createdAt: normalized.createdAt,
+        updatedAt: latestDate(existing.updatedAt, normalized.updatedAt),
         messages: normalized.messages.length > 0 ? normalized.messages : existing.messages,
         artifacts:
           normalized.artifacts && normalized.artifacts.length > 0
@@ -225,11 +257,27 @@ export function ChatSessionsProvider({
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(Boolean(seededSessions))
   const [isSyncing, setIsSyncing] = useState(false)
-  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  // Holds the latest pending sync function so unmount (e.g. Fast Refresh)
-  // can flush it instead of dropping in-flight writes. Without this, the
-  // 1s debounce window could swallow the user's last message on hot reload.
-  const pendingSyncFnRef = useRef<(() => Promise<void>) | null>(null)
+  // Debounce timers and pending sync functions are keyed per session. A
+  // single shared timer meant a sync for chat B cancelled the not-yet-flushed
+  // sync for chat A (switching chats inside the 1s window dropped A's writes).
+  const syncTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  // Holds the latest pending sync function per session so unmount (e.g. Fast
+  // Refresh) can flush it instead of dropping in-flight writes. Without this,
+  // the 1s debounce window could swallow the user's last message on hot reload.
+  const pendingSyncFnsRef = useRef<Map<string, () => Promise<void>>>(new Map())
+  // Message ids the UI removed (delete / edit / regenerate truncation, error
+  // rollback, clear) that still need a server DELETE. Accumulated across
+  // debounced calls; see session-sync.ts for the known-and-removed rule.
+  const pendingDeletesRef = useRef<Map<string, Set<string>>>(new Map())
+  // The last message-id list each session's workspace reported through
+  // syncMessages. Used as the "previously known" list so that a lazy load
+  // which swaps in server history the workspace never displayed cannot be
+  // mistaken for the user removing that history.
+  const lastSyncedIdsRef = useRef<Map<string, string[]>>(new Map())
+  // Sessions deleted in this tab. Hydration payloads can be stale (router
+  // cache, or a page render that raced the DELETE); filtering them keeps a
+  // deleted chat from reappearing in the sidebar.
+  const deletedSessionIdsRef = useRef<Set<string>>(new Set())
   const loadedSessionsRef = useRef<Set<string>>(new Set())
   const hasSeededSessionsRef = useRef(Boolean(seededSessions))
   const sessionsRef = useRef(sessions)
@@ -289,11 +337,21 @@ export function ChatSessionsProvider({
           const fullSession = parseFullSession(data)
           loadedSessionsRef.current.add(activeSessionId)
           setSessions((prev) =>
-            prev.map((s) =>
-              s.id === activeSessionId
-                ? { ...s, messages: fullSession.messages, artifacts: fullSession.artifacts }
-                : s
-            )
+            prev.map((s) => {
+              if (s.id !== activeSessionId) return s
+              // If the user already sent something while this request was in
+              // flight, keep their local messages and put the loaded history
+              // in front of them instead of replacing the list wholesale.
+              const localIds = new Set(s.messages.map((m) => m.id))
+              const messages =
+                s.messages.length === 0
+                  ? fullSession.messages
+                  : [
+                      ...fullSession.messages.filter((m) => !localIds.has(m.id)),
+                      ...s.messages,
+                    ]
+              return { ...s, messages, artifacts: fullSession.artifacts }
+            })
           )
         }
       } catch (error) {
@@ -308,12 +366,13 @@ export function ChatSessionsProvider({
 
   const hydrateSessions = useCallback((nextSessions: SerializedChatSession[]) => {
     hasSeededSessionsRef.current = true
+    const liveSessions = filterDeletedSessions(nextSessions, deletedSessionIdsRef.current)
     setSessions((prev) => {
-      if (nextSessions.length === 0) {
+      if (liveSessions.length === 0) {
         return []
       }
 
-      return mergeHydratedSessions(prev, nextSessions)
+      return mergeHydratedSessions(prev, liveSessions)
     })
     setIsLoaded(true)
   }, [])
@@ -346,6 +405,7 @@ export function ChatSessionsProvider({
         title: data.title ?? "New Chat",
         assistantId,
         createdAt: new Date(data.createdAt ?? Date.now()),
+        updatedAt: new Date(data.createdAt ?? Date.now()),
         messages: [],
       }
       loadedSessionsRef.current.add(session.id)
@@ -406,18 +466,39 @@ export function ChatSessionsProvider({
 
   // Sync messages to database (debounced)
   const syncMessages = useCallback((sessionId: string, messages: ChatMessage[]) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === sessionId ? { ...s, messages } : s))
+    const nextIds = messages.map((m) => m.id)
+    const previousIds =
+      lastSyncedIdsRef.current.get(sessionId) ??
+      sessionsRef.current.find((s) => s.id === sessionId)?.messages.map((m) => m.id) ??
+      []
+    lastSyncedIdsRef.current.set(sessionId, nextIds)
+    pendingDeletesRef.current.set(
+      sessionId,
+      accumulatePendingDeletes(
+        pendingDeletesRef.current.get(sessionId) ?? new Set(),
+        previousIds,
+        nextIds,
+      ),
     )
+    // A new message id means the user just sent (or edited/regenerated) —
+    // bump last activity and move the chat to the top of the sidebar now,
+    // not only after the next navigation re-fetches the server order.
+    const isNewActivity = hasNewMessageIds(previousIds, nextIds)
 
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current)
+    setSessions((prev) => {
+      const updated = prev.map((s) => (s.id === sessionId ? { ...s, messages } : s))
+      return isNewActivity ? moveSessionToTop(updated, sessionId, new Date()) : updated
+    })
+
+    const existingTimeout = syncTimeoutsRef.current.get(sessionId)
+    if (existingTimeout) {
+      clearTimeout(existingTimeout)
     }
 
     setIsSyncing(true)
     const performSync = async () => {
-      syncTimeoutRef.current = null
-      pendingSyncFnRef.current = null
+      syncTimeoutsRef.current.delete(sessionId)
+      pendingSyncFnsRef.current.delete(sessionId)
       // Resolve DB ID lazily (after debounce) so createSession has time to set dbId
       const apiId = resolveDbId(sessionId)
       try {
@@ -428,7 +509,31 @@ export function ChatSessionsProvider({
         }
 
         const data = await response.json()
-        const existingMessageIds = new Set(data.messages.map((m: any) => m.id))
+        const existingMessageIds = new Set<string>(data.messages.map((m: any) => m.id))
+
+        // Persist removals (delete / edit / regenerate truncation). Only ids
+        // this tab previously held and then dropped are eligible — never
+        // "whatever the server has that we don't", which would wipe history
+        // whenever the local list is partial.
+        const pendingDeletes = pendingDeletesRef.current.get(sessionId)
+        if (pendingDeletes && pendingDeletes.size > 0) {
+          const idsToDelete = selectMessageIdsToDelete(pendingDeletes, existingMessageIds, nextIds)
+          if (idsToDelete.length > 0) {
+            const deleteResponse = await orgFetch(`/api/dashboard/chat/sessions/${apiId}/messages`, {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ messageIds: idsToDelete }),
+            })
+            if (deleteResponse.ok) {
+              for (const id of idsToDelete) pendingDeletes.delete(id)
+            } else {
+              console.error("[ChatSessions] Failed to delete messages:", deleteResponse.status)
+            }
+          }
+          // Ids not on the server yet stay pending on purpose: the chat
+          // route upserts the turn at stream end, so a message removed
+          // mid-stream can land after this sync — the next sync removes it.
+        }
 
         const newMessages = messages.filter((m) => !existingMessageIds.has(m.id))
 
@@ -493,10 +598,13 @@ export function ChatSessionsProvider({
         setIsSyncing(false)
       }
     }
-    pendingSyncFnRef.current = performSync
-    syncTimeoutRef.current = setTimeout(() => {
-      void performSync()
-    }, 1000)
+    pendingSyncFnsRef.current.set(sessionId, performSync)
+    syncTimeoutsRef.current.set(
+      sessionId,
+      setTimeout(() => {
+        void performSync()
+      }, 1000),
+    )
   }, [resolveDbId])
 
   // Delete a session — caller is responsible for navigation after deletion
@@ -509,7 +617,17 @@ export function ChatSessionsProvider({
     const previousSession = sessionsRef.current.find((s) => s.id === sessionId)
     let previousActiveId: string | null = null
 
+    deletedSessionIdsRef.current.add(sessionId)
+    deletedSessionIdsRef.current.add(apiId)
     setSessions((prev) => prev.filter((s) => s.id !== sessionId))
+
+    // Drop any debounced sync for the deleted chat — it would only 404.
+    const pendingTimeout = syncTimeoutsRef.current.get(sessionId)
+    if (pendingTimeout) clearTimeout(pendingTimeout)
+    syncTimeoutsRef.current.delete(sessionId)
+    pendingSyncFnsRef.current.delete(sessionId)
+    pendingDeletesRef.current.delete(sessionId)
+    lastSyncedIdsRef.current.delete(sessionId)
 
     // Clear active session if it was the deleted one
     setActiveSessionId((current) => {
@@ -543,6 +661,8 @@ export function ChatSessionsProvider({
       })
       .catch((error) => {
         console.error("[ChatSessions] Failed to delete session:", error)
+        deletedSessionIdsRef.current.delete(sessionId)
+        deletedSessionIdsRef.current.delete(apiId)
         if (previousSession) {
           setSessions((prev) => {
             if (prev.some((s) => s.id === sessionId)) return prev
@@ -568,16 +688,14 @@ export function ChatSessionsProvider({
   // sync immediately. The server-side upsert is keyed on message `id`,
   // so a duplicate post from the remounted tree is a no-op.
   useEffect(() => {
+    const timeouts = syncTimeoutsRef.current
+    const pendingFns = pendingSyncFnsRef.current
     return () => {
-      if (syncTimeoutRef.current) {
-        clearTimeout(syncTimeoutRef.current)
-        syncTimeoutRef.current = null
-      }
-      const flush = pendingSyncFnRef.current
-      if (flush) {
-        pendingSyncFnRef.current = null
-        void flush()
-      }
+      for (const timeout of timeouts.values()) clearTimeout(timeout)
+      timeouts.clear()
+      const flushes = Array.from(pendingFns.values())
+      pendingFns.clear()
+      for (const flush of flushes) void flush()
     }
   }, [])
 

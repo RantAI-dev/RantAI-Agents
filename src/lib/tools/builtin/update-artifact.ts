@@ -179,7 +179,10 @@ export const updateArtifactTool: ToolDefinition = {
           typeof meta.evictedVersionCount === "number"
             ? meta.evictedVersionCount
             : 0
-        const versionNum = versions.length + 1
+        // Count evicted versions too: once the list is capped at
+        // MAX_VERSION_HISTORY its length stops growing, and numbering from it
+        // alone wrote every later archive to the same `.v21` key.
+        const versionNum = evictedVersionCount + versions.length + 1
 
         // Upload old content to a versioned S3 key
         let versionS3Key: string | undefined

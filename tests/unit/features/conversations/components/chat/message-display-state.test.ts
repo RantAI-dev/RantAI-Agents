@@ -125,3 +125,32 @@ describe("getMessageDisplayState", () => {
     expect(result.showTypingIndicator).toBe(true)
   })
 })
+
+describe("streaming caret / visible text (QA TC-783)", () => {
+  it("keeps the typing indicator while only whitespace or markdown syntax has arrived", async () => {
+    for (const content of ["\n", "  ", "**", "## ", "- ", "1. ", "```", "|"]) {
+      expect(getMessageDisplayState(input({ isLoading: true, content })).showTypingIndicator).toBe(true)
+    }
+  })
+
+  it("positive control: hides the typing indicator once readable text arrives", () => {
+    expect(getMessageDisplayState(input({ isLoading: true, content: "**Hi" })).showTypingIndicator).toBe(false)
+  })
+
+  it("shows the caret only while streaming AND with visible text", async () => {
+    const { shouldShowStreamingCaret } = await import(
+      "@/features/conversations/components/chat/message-display-state"
+    )
+    expect(shouldShowStreamingCaret(true, "\n")).toBe(false)
+    expect(shouldShowStreamingCaret(true, "**")).toBe(false)
+    expect(shouldShowStreamingCaret(true, "Hello")).toBe(true)
+    expect(shouldShowStreamingCaret(false, "Hello")).toBe(false)
+  })
+
+  it("animates without per-character stagger (bold runs no longer start invisible)", async () => {
+    const { STREAMDOWN_ANIMATION } = await import(
+      "@/features/conversations/components/chat/message-display-state"
+    )
+    expect(STREAMDOWN_ANIMATION.stagger).toBe(0)
+  })
+})

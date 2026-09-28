@@ -99,3 +99,19 @@ function getZodTypeName(schema: z.ZodSchema): string {
       return "string"
   }
 }
+
+/**
+ * Read an HTTP tool response as JSON when it is JSON, otherwise as text.
+ *
+ * `res.json().catch(() => res.text())` cannot work: json() consumes the body
+ * before failing, so the fallback throws "Body already used" and every
+ * custom tool pointed at a non-JSON endpoint failed.
+ */
+export async function readJsonOrText(res: Response): Promise<unknown> {
+  const text = await res.text()
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
+  }
+}

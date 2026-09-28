@@ -18,5 +18,10 @@ function appendPoolParams(url: string | undefined): string | undefined {
   const hasPoolParams = url.includes("connection_limit") || url.includes("pool_timeout")
   if (hasPoolParams) return url
   const separator = url.includes("?") ? "&" : "?"
-  return `${url}${separator}connection_limit=5&pool_timeout=10`
+  // One chat request makes a dozen-plus queries plus background memory
+  // writes; at 5 connections, 30 concurrent chats queued past pool_timeout
+  // and failed (QA CHAT-057). Same env knobs and defaults as the cloud edition.
+  const limit = process.env.DATABASE_CONNECTION_LIMIT ?? "20"
+  const timeout = process.env.DATABASE_POOL_TIMEOUT ?? "15"
+  return `${url}${separator}connection_limit=${limit}&pool_timeout=${timeout}`
 }

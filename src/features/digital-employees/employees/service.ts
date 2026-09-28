@@ -337,6 +337,11 @@ export async function listPendingDigitalEmployeeApprovals(params: {
   total: number
   byEmployee: Array<{ employeeId: string; name: string; count: number }>
 }> {
+  // No resolved org means no scope — return nothing rather than querying
+  // unscoped. The repository used to drop its org filter for null, so a user
+  // without an active org saw every tenant's pending approvals (and their
+  // employee names). Found while tracing QA CHAT-037's pending-approvals poll.
+  if (!params.organizationId) return { total: 0, byEmployee: [] }
   const approvals = await findDashboardPendingApprovals(params.organizationId)
   const byEmployee: Record<string, { employeeId: string; name: string; count: number }> = {}
 

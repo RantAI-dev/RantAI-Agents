@@ -36,6 +36,11 @@ export interface GuardRailsConfig {
   safetyInstructions?: string
   maxResponseLength?: number
   requireCitations?: boolean
+  /**
+   * Which tool calls pause for the user's approval in chat. Unset = "risky":
+   * everything except read-only builtins (see src/lib/tools/approval.ts).
+   */
+  toolApproval?: "off" | "risky" | "all"
 }
 
 export interface Assistant {

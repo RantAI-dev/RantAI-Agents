@@ -148,7 +148,9 @@ function CsvOrArrayView({
         .replace(/^-+|-+$/g, "")
         .toLowerCase() || "sheet"
     const filename = isFiltered ? `${slug}-filtered.csv` : `${slug}.csv`
-    const blob = new Blob([csvRows.join("\n")], { type: "text/csv" })
+    // BOM so Excel reads UTF-8 (accents, non-Latin names) instead of the
+    // system code page; CRLF per RFC 4180.
+    const blob = new Blob(["\uFEFF" + csvRows.join("\r\n")], { type: "text/csv;charset=utf-8" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url

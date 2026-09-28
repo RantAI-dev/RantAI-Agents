@@ -41,11 +41,14 @@ ENV PORT=3000
 #   libreoffice-core/writer → docx → pdf conversion (text/document script pipeline)
 #   poppler-utils           → pdftoppm for per-page PNG previews
 #   pandoc                  → markdown/docx interop fallback
+#   fonts-*                 → glyphs for the above; without them non-Latin text
+#                             renders as boxes ("tofu") in DOCX/PDF output
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-core \
     libreoffice-writer \
     poppler-utils \
     pandoc \
+    fontconfig fonts-dejavu-core fonts-liberation fonts-noto-core fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/package.json ./package.json

@@ -301,6 +301,24 @@ export function ArtifactPanel({
           setExportError(`XLSX export failed: ${message}`)
           // fall through to CSV text path
         }
+      } else if (trimmed.length > 0) {
+        // CSV sheet → .xlsx, so it opens in columns in every Excel locale.
+        try {
+          const { csvToXlsxBlob } = await import("@/lib/spreadsheet/csv-to-xlsx")
+          const blob = await csvToXlsxBlob(displayArtifact.content, displayArtifact.title)
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement("a")
+          a.href = url
+          a.download = filename
+          a.click()
+          URL.revokeObjectURL(url)
+          return
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error"
+          console.error("[ArtifactPanel] CSV → XLSX conversion failed:", err)
+          setExportError(`XLSX export failed: ${message}`)
+          return
+        }
       }
     }
 
@@ -955,9 +973,10 @@ function getExtension(artifact: Artifact): string {
         if (parsed?.kind === "spreadsheet/v1") return ".xlsx"
       }
     } catch {
-      // fall through to csv
+      // not JSON — a CSV sheet
     }
-    return ".csv"
+    // CSV sheets download as .xlsx too (see the download handler).
+    return ".xlsx"
   }
   return getArtifactRegistryEntry(artifact.type)?.extension ?? ".txt"
 }
