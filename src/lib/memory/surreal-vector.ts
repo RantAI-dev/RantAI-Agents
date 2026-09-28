@@ -11,11 +11,36 @@ const TABLE_NAME = 'conversation_memory';
 // Lazy client initialization
 let surrealClient: SurrealDBClient | null = null;
 
+/**
+ * Indexes the recall query needs. rag/store/schema.surql documents them, but
+ * nothing ever applies that file, so deployments ran recall — every chat
+ * request's `WHERE userId = … AND threadId = …` — as a full scan of every
+ * user's messages. The table grows by two rows per message, so latency climbed
+ * steadily at constant load (QA CHAT-058). Measured locally at 3.3k rows:
+ * 426ms scan → 18ms with the index. IF NOT EXISTS makes this idempotent.
+ */
+export const CONVERSATION_MEMORY_INDEXES = [
+  `DEFINE INDEX IF NOT EXISTS conversation_user_thread_idx ON ${TABLE_NAME} FIELDS userId, threadId;`,
+  `DEFINE INDEX IF NOT EXISTS conversation_user_idx ON ${TABLE_NAME} FIELDS userId;`,
+];
+
+let indexesReady: Promise<void> | null = null;
+
 async function getClient(): Promise<SurrealDBClient> {
   if (!surrealClient) {
     surrealClient = await SurrealDBClient.getInstance(getSurrealDBConfigFromEnv());
   }
-  return surrealClient;
+  const client = surrealClient;
+  // Once per process; a failure is logged and retried on the next call
+  // rather than blocking recall.
+  indexesReady ??= (async () => {
+    for (const statement of CONVERSATION_MEMORY_INDEXES) await client.query(statement);
+  })().catch((err) => {
+    console.error('[SurrealDB Vector] Could not ensure conversation_memory indexes:', err);
+    indexesReady = null;
+  });
+  await indexesReady;
+  return client;
 }
 
 export interface ConversationMemoryRecord {
@@ -90,7 +115,9 @@ export async function searchConversationMemory(
     // console.log(`[SurrealDB Vector] Searching: userId=${userId}, query=${query.substring(0, 30)}...`);
 
     const results = await client.query<ConversationMemoryRecord>(
-      `SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity
+      // Not SELECT *: that shipped every row's 4096-float embedding back just
+      // to be discarded.
+      `SELECT id, userId, threadId, role, content, metadata, createdAt, vector::similarity::cosine(embedding, $embedding) AS similarity
        FROM ${TABLE_NAME}
        WHERE ${whereClause}
        ORDER BY similarity DESC

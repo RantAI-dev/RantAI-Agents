@@ -44,7 +44,12 @@ export const forgetMemoryInputSchema = z.object({
   keywords: z.array(z.string()).optional()
     .describe("Specific values to forget wherever they are stored, e.g. ['Depok']."),
   all: z.boolean().optional()
-    .describe("true ONLY when the user asks to forget everything about them."),
+    .describe(
+      "true ONLY when the user asks to forget everything about them with no topic named " +
+        "(\"forget everything about me\", \"hapus semua data saya\"). If they name a topic — even " +
+        "\"all information about my location\" / \"semua informasi tentang lokasi saya\" — use keys " +
+        "(e.g. ['location']) and leave this unset.",
+    ),
 });
 
 export type SaveMemoryInput = z.infer<typeof saveMemoryInputSchema>;

@@ -172,6 +172,22 @@ const DEFAULT_CONFIG: Required<HybridSearchConfig> = {
 };
 
 /**
+ * Defaults + caller config, where an explicit `undefined` does NOT override a
+ * default. A plain spread let `{ groupIds: undefined }` — what chat passes
+ * when no KB group is selected, i.e. "all documents" — replace `[]`, and
+ * vector search then threw on `groupIds.length`. The throw was caught and
+ * retrieval silently fell back to vector-only, so the default chat path never
+ * ran hybrid search at all. Found re-testing QA CHAT-032/034.
+ */
+export function mergeHybridConfig(config: HybridSearchConfig = {}): Required<HybridSearchConfig> {
+  const merged = { ...DEFAULT_CONFIG } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(config)) {
+    if (value !== undefined) merged[key] = value;
+  }
+  return merged as Required<HybridSearchConfig>;
+}
+
+/**
  * Hybrid Search class
  */
 export class HybridSearch {
@@ -189,7 +205,7 @@ export class HybridSearch {
   private dbClient: VectorStore | null = null;
 
   constructor(config: HybridSearchConfig = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = mergeHybridConfig(config);
   }
 
   /**
