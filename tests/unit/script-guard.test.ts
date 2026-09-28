@@ -78,3 +78,18 @@ describe("shouldGuardScript", () => {
     expect(shouldGuardScript("Переведи: hello")).toBe(false)
   })
 })
+
+describe("createModelScriptRepair", () => {
+  it("asks for the reply's own language, read from the surrounding text", async () => {
+    const { createModelScriptRepair } = await import("../../src/lib/llm/script-guard")
+    const prompts: string[] = []
+    const repair = createModelScriptRepair(async (prompt) => {
+      prompts.push(prompt)
+      return "mesin"
+    })
+    await repair("机器", { before: "AI adalah sistem", after: " yang dapat belajar" })
+    await repair("机器", { before: "AI is a", after: " that can learn" })
+    expect(prompts[0]).toContain("into Indonesian")
+    expect(prompts[1]).toContain("into English")
+  })
+})

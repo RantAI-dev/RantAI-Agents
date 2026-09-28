@@ -132,12 +132,21 @@ export function createScriptGuardTransform<TOOLS extends ToolSet>(repair: Script
  * Repair via a short, bounded model call. Takes the language model so the
  * module stays free of provider wiring (and testable with a fake).
  */
+const INDONESIAN_WORDS = /\b(yang|dan|di|untuk|dengan|adalah|ini|itu|dari|pada|dalam|akan|telah|atau|juga|tidak|bisa|dapat|secara|oleh)\b/gi
+
+/** "Indonesian" when the surrounding text reads as Indonesian, else "English". */
+export function guessReplyLanguage(text: string): "Indonesian" | "English" {
+  const hits = text.match(INDONESIAN_WORDS)?.length ?? 0
+  return hits >= 1 ? "Indonesian" : "English"
+}
+
 export function createModelScriptRepair(
   generate: (prompt: string, signal: AbortSignal) => Promise<string>,
   timeoutMs = 5_000,
 ): ScriptRepair {
   return async (fragment, { before, after }) => {
-    const prompt = `A reply written in Indonesian or English accidentally contains a fragment in another script. Give the words that should replace the fragment so the sentence reads naturally in the reply's language. Output ONLY the replacement words — no quotes, no explanation.
+    const language = guessReplyLanguage(`${before} ${after}`)
+    const prompt = `A reply written in ${language} accidentally contains a fragment in another script. Translate the fragment's own literal meaning into ${language}, in a form that fits the sentence. Output ONLY the ${language} translation of the fragment — do not repeat any of the surrounding words, no quotes, no explanation.
 
 Text before: ${JSON.stringify(before)}
 Fragment: ${JSON.stringify(fragment)}
