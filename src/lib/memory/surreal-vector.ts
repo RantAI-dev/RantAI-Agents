@@ -185,3 +185,20 @@ export async function deleteThreadMemories(userId: string, threadId: string): Pr
     { userId, threadId }
   );
 }
+
+/**
+ * Delete a user's stored messages that mention any of the given keywords
+ * (case-insensitive substring). Used by the forgetMemory tool so a "forget X"
+ * request also removes X from semantic recall, not just from the profile.
+ */
+export async function deleteUserMemoriesContaining(userId: string, keywords: string[]): Promise<void> {
+  const kws = keywords.map(k => k.trim().toLowerCase()).filter(k => k.length >= 2);
+  if (kws.length === 0) return;
+  const client = await getClient();
+  for (const kw of kws) {
+    await client.query(
+      `DELETE ${TABLE_NAME} WHERE userId = $userId AND string::contains(string::lowercase(content), $kw)`,
+      { userId, kw }
+    );
+  }
+}

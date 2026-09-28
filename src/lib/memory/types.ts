@@ -23,6 +23,8 @@ export interface Fact {
   confidence: number;
   source: string; // messageId where fact was extracted
   createdAt: Date;
+  /** Last time this value was (re)written. Used for latest-wins presentation. JSON-loaded as string. */
+  updatedAt?: Date | string;
 }
 
 // Current conversation context
@@ -75,6 +77,9 @@ export interface Preference {
   value: string;
   confidence: number;
   source: string;
+  createdAt?: Date | string;
+  /** Last time this value was (re)written. Used for latest-wins presentation. JSON-loaded as string. */
+  updatedAt?: Date | string;
 }
 
 // Semantic recall result

@@ -19,12 +19,20 @@ async function initPyodide() {
   post({ type: "kernel-status", status: "loading" })
   ;(self as any).importScripts(PYODIDE_CDN + "pyodide.js")
   pyodide = await self.loadPyodide({ indexURL: PYODIDE_CDN })
-  await pyodide.loadPackage(["numpy", "micropip", "matplotlib", "scikit-learn"])
+  // No packages up front. This used to preload numpy, matplotlib and
+  // scikit-learn (which drags in scipy — tens of MB) before the first cell
+  // could run, whatever the notebook imported: the "very slow execution" in
+  // QA CHAT-026. runCell loads exactly what each cell imports instead.
 
   await pyodide.runPythonAsync(`
 import io, base64, sys, json as _json
 __display_buffer__ = []
-try:
+
+def __patch_matplotlib__():
+    # Route plt.show() into the display buffer. Called after every package
+    # load, so it takes effect the first time a cell imports matplotlib.
+    if 'matplotlib' not in sys.modules or getattr(sys.modules['matplotlib'], '_rantai_patched', False):
+        return
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -35,8 +43,7 @@ try:
         __display_buffer__.append(('image/png', base64.b64encode(buf.read()).decode()))
         plt.close('all')
     plt.show = _capture_show
-except ImportError:
-    pass
+    matplotlib._rantai_patched = True
 
 def __format_last__(value):
     if value is None:
@@ -112,6 +119,11 @@ async function runCell(req: Extract<WorkerRequest, { type: "run" }>) {
       } catch {
         // best-effort — proceed with whatever loaded
       }
+    }
+    // matplotlib is patched lazily: import it now if this cell uses it, so
+    // plt.show() is captured on the cell's first run.
+    if (/\bmatplotlib\b/.test(source)) {
+      await pyodide.runPythonAsync("import matplotlib\n__patch_matplotlib__()")
     }
     if (body.trim()) {
       await Promise.race([pyodide.runPythonAsync(body), timeoutPromise])

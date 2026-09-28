@@ -184,13 +184,11 @@ export async function createDashboardDigitalEmployeeWorkspaceFile(params: {
   })
 }
 
-export async function findDashboardPendingApprovals(organizationId: string | null) {
+export async function findDashboardPendingApprovals(organizationId: string) {
   return prisma.employeeApproval.findMany({
     where: {
       status: "PENDING",
-      digitalEmployee: {
-        ...(organizationId ? { organizationId } : {}),
-      },
+      digitalEmployee: { organizationId },
     },
     select: {
       id: true,

@@ -37,6 +37,28 @@ export async function findAssistantById(assistantId: string) {
   })
 }
 
+export async function isOrganizationMember(userId: string, organizationId: string) {
+  const membership = await prisma.organizationMember.findUnique({
+    where: { userId_organizationId: { userId, organizationId } },
+    select: { userId: true },
+  })
+  return membership !== null
+}
+
+/**
+ * Newest artifacts of a (caller-validated, user-owned) session, so the model
+ * can revise one with update_artifact instead of creating a duplicate.
+ */
+export async function findSessionArtifactSummaries(sessionId: string, limit = 10) {
+  const rows = await prisma.document.findMany({
+    where: { sessionId, artifactType: { not: null } },
+    select: { id: true, title: true, artifactType: true },
+    orderBy: { updatedAt: "desc" },
+    take: limit,
+  })
+  return rows.map((r) => ({ id: r.id, title: r.title, type: r.artifactType as string }))
+}
+
 export async function findActiveChatflowByAssistantId(assistantId: string) {
   return prisma.workflow.findFirst({
     where: {

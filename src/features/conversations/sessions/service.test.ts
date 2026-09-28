@@ -215,6 +215,34 @@ describe("dashboard chat sessions service", () => {
     expect(result).toEqual({ success: true })
   })
 
+  it("deletes the session rows before the slow S3/RAG cleanup (QA CHAT-011)", async () => {
+    vi.mocked(repository.findDashboardSessionBasicByIdAndUser).mockResolvedValue({
+      id: "session_1",
+    } as never)
+    vi.mocked(repository.findArtifactsBySessionId).mockResolvedValueOnce([
+      { id: "doc_1", s3Key: "artifacts/doc_1", metadata: null },
+    ] as never)
+    const order: string[] = []
+    prismaMock.$transaction.mockImplementationOnce(async (ops: unknown[]) => {
+      order.push("rows")
+      return ops
+    })
+    const { deleteFiles } = await import("@/lib/s3")
+    vi.mocked(deleteFiles).mockImplementationOnce(async () => {
+      order.push("s3")
+      return undefined as never
+    })
+
+    const result = await deleteDashboardChatSession({
+      userId: "user_1",
+      sessionId: "session_1",
+    })
+
+    expect(result).toEqual({ success: true })
+    // positive control: cleanup still happens, just after the rows are gone
+    expect(order).toEqual(["rows", "s3"])
+  })
+
   it("returns 400 when deleting messages without ids", async () => {
     const result = await deleteDashboardChatSessionMessages({
       userId: "user_1",

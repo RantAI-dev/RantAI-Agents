@@ -298,12 +298,28 @@ export async function deleteDashboardChatSession(params: {
     return { status: 404, error: "Session not found" }
   }
 
-  // Cleanup artifact S3 files and RAG chunks before deleting session.
+  // Delete the rows first, then clean up S3 files and RAG chunks. The
+  // cleanup is best-effort and can be slow (one S3 batch + one vector-store
+  // call per artifact); running it before the row delete meant a refresh in
+  // that window still listed the chat, and a timeout there left it in place
+  // entirely — deleted chats "came back" (QA CHAT-011). The artifact list is
+  // read up front because the transaction removes those rows.
   // We flatten every `metadata.versions[].s3Key` into the bulk delete
   // batch — single-artifact delete already cleans these up, but
   // session delete used to leave them orphaned forever (up to
   // MAX_VERSION_HISTORY=20 keys per artifact).
   const artifacts = await findArtifactsBySessionId(params.sessionId)
+
+  // Wrap the row deletes in a transaction so a partial failure between
+  // artifact-row delete and session-row delete can't leave the DB
+  // inconsistent.
+  await prisma.$transaction([
+    prisma.document.deleteMany({
+      where: { sessionId: params.sessionId, artifactType: { not: null } },
+    }),
+    prisma.dashboardSession.delete({ where: { id: params.sessionId } }),
+  ])
+
   if (artifacts.length > 0) {
     // Delete S3 files (canonical + every archived version, non-fatal).
     const s3Keys: string[] = []
@@ -328,16 +344,6 @@ export async function deleteDashboardChatSession(params: {
     )
   }
 
-  // Wrap the row deletes in a transaction so a partial failure between
-  // artifact-row delete and session-row delete can't leave the DB
-  // inconsistent. S3 + RAG cleanup runs before this on purpose — they're
-  // best-effort and shouldn't gate the row deletion.
-  await prisma.$transaction([
-    prisma.document.deleteMany({
-      where: { sessionId: params.sessionId, artifactType: { not: null } },
-    }),
-    prisma.dashboardSession.delete({ where: { id: params.sessionId } }),
-  ])
   return { success: true }
 }
 
@@ -531,7 +537,10 @@ export async function updateDashboardChatSessionArtifact(params: {
   const versions = (meta.versions as Array<unknown>) || []
   const evictedVersionCount =
     typeof meta.evictedVersionCount === "number" ? meta.evictedVersionCount : 0
-  const versionNum = versions.length + 1
+  // Count evicted versions too: once the list is capped at
+  // MAX_VERSION_HISTORY its length stops growing, and numbering from it
+  // alone wrote every later archive to the same `.v21` key.
+  const versionNum = evictedVersionCount + versions.length + 1
 
   // Archive old version to a versioned S3 key
   let versionS3Key: string | undefined

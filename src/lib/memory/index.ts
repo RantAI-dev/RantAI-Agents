@@ -15,6 +15,7 @@ export {
   formatWorkingMemoryForPrompt,
   clearWorkingMemory,
   cleanupExpiredWorkingMemories,
+  forgetFromWorkingMemory,
 } from './working-memory';
 
 // Semantic Memory (SurrealDB)
@@ -31,7 +32,20 @@ export {
   updateUserProfile,
   formatUserProfileForPrompt,
   clearUserProfile,
+  saveToUserProfile,
+  forgetFromUserProfile,
+  refreshInteractionSummary,
+  type ForgetCriteria,
+  type ForgetResult,
 } from './long-term-memory';
+
+// Memory tools (saveMemory / forgetMemory) shared by chat + widget
+export {
+  createMemoryTools,
+  type MemoryToolContext,
+  type MemoryToolState,
+} from './memory-tools';
+export { normalizeMemoryKey } from './fact-keys';
 
 // Mastra Memory Integration (MASTRA.md Phase 1)
 export {

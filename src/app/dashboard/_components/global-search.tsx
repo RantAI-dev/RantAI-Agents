@@ -21,6 +21,9 @@ import {
   Wrench,
 } from "@/lib/icons"
 import type { SearchResult } from "@/app/api/dashboard/search/route"
+import { createLatestRequestGate } from "./latest-request"
+
+const SEARCH_DEBOUNCE_MS = 300
 
 const TYPE_CONFIG: Record<
   SearchResult["type"],
@@ -47,40 +50,54 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
   const [results, setResults] = useState<SearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const [requestGate] = useState(createLatestRequestGate)
 
-  // Debounced search
+  // Only the newest query may write results: each search aborts the one
+  // before it, and a response that finished anyway is dropped if stale.
   const search = useCallback(async (q: string) => {
     if (q.length < 2) {
+      requestGate.cancel()
       setResults([])
+      setLoading(false)
       return
     }
+    const request = requestGate.begin()
     setLoading(true)
     try {
-      const res = await fetch(`/api/dashboard/search?q=${encodeURIComponent(q)}`)
+      const res = await fetch(`/api/dashboard/search?q=${encodeURIComponent(q)}`, {
+        signal: request.signal,
+      })
+      if (!request.isCurrent()) return
       if (res.ok) {
         const data = await res.json()
+        if (!request.isCurrent()) return
         setResults(data.results || [])
       }
     } catch {
-      // Silently fail
+      // Aborted (superseded) or network failure — nothing to show.
     } finally {
-      setLoading(false)
+      if (request.isCurrent()) setLoading(false)
     }
-  }, [])
+  }, [requestGate])
 
+  // Debounce: every keystroke clears the pending timer, so only a pause of
+  // SEARCH_DEBOUNCE_MS issues a request. Nothing is sent while closed.
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => search(query), 250)
+    if (!open) return
+    debounceRef.current = setTimeout(() => search(query), SEARCH_DEBOUNCE_MS)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [query, search])
+  }, [query, search, open])
 
   // Reset on close
   useEffect(() => {
     if (!open) {
+      requestGate.cancel()
       setQuery("")
       setResults([])
+      setLoading(false)
     }
-  }, [open])
+  }, [open, requestGate])
 
   // Group results by type
   const grouped = results.reduce<Record<string, SearchResult[]>>((acc, r) => {

@@ -1,5 +1,4 @@
 import { streamText, convertToModelMessages, tool, zodSchema, stepCountIs } from "ai"
-import { z } from "zod"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import {
   smartRetrieve,
@@ -10,16 +9,20 @@ import {
 import type { HybridSearchStats } from "@/lib/rag/hybrid-search"
 import { retrieveR3FContext } from "@/lib/rag/r3f-retriever"
 import { searchByDocumentIds } from "@/lib/rag/vector-store"
+import { isLikelyOutOfScope } from "@/lib/rag/oos-gate"
 import { DEFAULT_MODEL_ID, isValidModelAsync, getModelByIdAsync } from "@/lib/models"
 import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import { resolveToolsForAssistant, resolveToolsByNames } from "@/lib/tools"
+import { gateToolsForApproval, resolveToolApprovalMode } from "@/lib/tools/approval"
 import {
   LANGUAGE_INSTRUCTION,
   LIVE_CHAT_HANDOFF_INSTRUCTION,
   CORRECTION_INSTRUCTION_WITH_TOOL,
   OUTPUT_HYGIENE_INSTRUCTION,
+  buildPlatformContextInstruction,
   buildToolInstruction,
 } from "@/lib/prompts/instructions"
+import { getHouseModel } from "@/lib/llm/house-models"
 import {
   resolveRequiredToolNamesForSkills,
   resolveSkillsForAssistant,
@@ -42,6 +45,7 @@ import {
   WorkingMemory,
   SemanticRecallResult,
   UserProfile,
+  createMemoryTools,
 } from "@/lib/memory"
 import { CHAT_ATTACHMENT_MIME_TYPES } from "@/lib/files/mime-types"
 import { processChatFile } from "@/lib/chat/file-processor"
@@ -51,6 +55,8 @@ import {
   findActiveChatflowByAssistantId,
   findActiveConversations,
   findAssistantById,
+  isOrganizationMember,
+  findSessionArtifactSummaries,
   findConversationMessages,
   findConversationStatus,
   findDocumentsByIds,
@@ -87,11 +93,9 @@ function createRagTrace(): RagTrace {
   }
 }
 
-// Memory queue for tool calls (threadId -> queued items)
-const memoryQueue = new Map<
-  string,
-  Array<{ facts?: unknown[]; preferences?: unknown[]; entities?: unknown[] }>
->()
+// (The module-level saveMemory queue is gone: memory tools now write inside the tool
+// call — see createMemoryTools in @/lib/memory/memory-tools. The queue leaked an entry
+// per aborted request and made a "saved" confirmation depend on the stream finishing.)
 
 /** Generic fallback prompt — used when no assistant is selected */
 const BASE_SYSTEM_PROMPT = `You are a helpful AI assistant. Answer questions accurately, concisely, and helpfully. Be friendly and professional.`
@@ -298,14 +302,27 @@ export async function runChat(params: {
     let assistantModelConfig: Record<string, unknown> | null = null
     let assistantGuardRails: Record<string, unknown> | null = null
     let assistantOrganizationId: string | null = null
+    let assistantName: string | null = null
 
     if (assistantId) {
       // Look up assistant from database (all assistants including built-in are seeded there)
       try {
         const dbAssistant = await findAssistantById(assistantId)
 
+        // An org-owned assistant is only usable by that org's members. The
+        // lookup is by id alone, so without this any signed-in user could
+        // chat through another tenant's assistant — its prompt, its model
+        // and its knowledge base. Built-ins (organizationId null) stay open.
+        if (
+          dbAssistant?.organizationId &&
+          !(await isOrganizationMember(params.userId, dbAssistant.organizationId))
+        ) {
+          return { status: 404, error: "Assistant not found" } satisfies ChatPublicServiceError
+        }
+
         if (dbAssistant) {
           assistantOrganizationId = dbAssistant.organizationId
+          assistantName = dbAssistant.name
           systemPrompt = dbAssistant.systemPrompt
           // Respect explicit per-request KB override from chat toolbar.
           // If groups are explicitly selected, force KB on for this request.
@@ -346,15 +363,12 @@ export async function runChat(params: {
           debug("Using custom system prompt")
         } else {
           systemPrompt = BASE_SYSTEM_PROMPT
-          systemPrompt += LANGUAGE_INSTRUCTION
-          systemPrompt += OUTPUT_HYGIENE_INSTRUCTION
           useKnowledgeBase = true
           debug("Assistant not found in DB, fallback to generic prompt")
         }
       } catch (error) {
         console.error("[Chat API] Error fetching assistant from database:", error)
         systemPrompt = customSystemPrompt || BASE_SYSTEM_PROMPT
-        systemPrompt += LANGUAGE_INSTRUCTION
         useKnowledgeBase = useKnowledgeBaseParam ?? true
       }
     } else if (customSystemPrompt) {
@@ -365,8 +379,6 @@ export async function runChat(params: {
     } else {
       // Fallback to generic prompt
       systemPrompt = BASE_SYSTEM_PROMPT;
-      systemPrompt += LANGUAGE_INSTRUCTION;
-      systemPrompt += OUTPUT_HYGIENE_INSTRUCTION;
       useKnowledgeBase = true;
       debug("Fallback to generic prompt");
     }
@@ -679,6 +691,15 @@ export async function runChat(params: {
               anchorChunkIndex: s.anchorChunkIndex ?? null,
             }))
             vlmResults = hybridResult.results
+
+            // Nothing close enough to cite: keep the context (the model needs
+            // it to say "not in the documents") but show no sources, so no
+            // unrelated documents or figures appear under the answer.
+            if (isLikelyOutOfScope(hybridResult.results.map((r) => r.vectorScore))) {
+              console.log(`[RAG] Out-of-scope query — suppressing ${ragSources.length} sources`)
+              ragSources = []
+              vlmResults = []
+            }
 
             console.log(
               `[RAG] Hybrid retrieved ${hybridResult.results.length} chunks (vector=${hybridResult.stats.vectorResults}, graph=${hybridResult.stats.graphResults}) for "${userQuery.substring(0, 50)}..."`
@@ -1061,9 +1082,17 @@ export async function runChat(params: {
     if (hasAssistantTools) {
       debug("Tools enabled:", toolNames.join(", "));
       // Instruct the model to use its tools instead of hallucinating
+      const existingArtifacts =
+        toolNames.includes("update_artifact") && body.sessionId
+          ? await findSessionArtifactSummaries(body.sessionId).catch((err) => {
+              console.error("[Chat API] Could not list session artifacts:", err)
+              return []
+            })
+          : []
       systemPrompt += buildToolInstruction(toolNames, {
         targetArtifactId: body.targetArtifactId,
         canvasMode: body.canvasMode,
+        existingArtifacts,
       });
     }
 
@@ -1081,57 +1110,33 @@ export async function runChat(params: {
       }
     }
 
-    // Define schema for memory tool
-    const memorySchema = z.object({
-      facts: z.array(z.object({
-        category: z.string().describe("Category of fact (e.g. 'bio', 'work', 'family')"),
-        label: z.string().describe("Label/Predicate (e.g. 'age', 'occupation')"),
-        value: z.string().describe("Value/Object (e.g. '30', 'Engineer')"),
-        confidence: z.number().min(0).max(1).default(0.9),
-      })).optional(),
-      preferences: z.array(z.object({
-        category: z.string().describe("Category (e.g. 'communication', 'product')"),
-        preference: z.string().describe("Key (e.g. 'channel', 'insurance_type')"),
-        value: z.string().describe("Value (e.g. 'email', 'life')"),
-      })).optional(),
-      entities: z.array(z.object({
-        name: z.string().describe("Name of entity (person, organization, etc.)"),
-        type: z.string().describe("Type of entity (Person, Organization, Date, Location)"),
-      })).optional(),
-    });
+    // Memory tools (saveMemory / forgetMemory). They write inside the tool call and
+    // report what was actually stored/removed; the post-stream drain below only
+    // counts the turn and must not re-apply them (memoryTools.state.used).
+    const memoryTools = assistantMemoryConfig.enabled
+      ? createMemoryTools({
+          threadId,
+          workingMemoryUserId: userId === 'anonymous' ? 'anon_' + threadId : userId,
+          workingMemoryEnabled: true,
+          profileUserId:
+            userId !== 'anonymous' && assistantMemoryConfig.longTermProfile ? userId : null,
+          semanticUserId:
+            userId !== 'anonymous' && assistantMemoryConfig.semanticRecall ? userId : null,
+          userMessage: userQuery,
+        })
+      : null;
 
-    // Combine all tools: assistant tools + memory saveMemory tool
-    const allTools = {
-      ...resolvedTools,
-      saveMemory: tool({
-        description: "Save important facts, preferences, and entities about the user from the conversation.",
-        inputSchema: zodSchema(memorySchema),
-        execute: async (
-          input: z.infer<typeof memorySchema>,
-          _options
-        ) => {
-          const { facts, preferences, entities } = input ?? {};
-          if (!memoryQueue.has(threadId)) {
-            memoryQueue.set(threadId, []);
-          }
-          memoryQueue.get(threadId)!.push({ facts, preferences, entities });
-          console.log("[Memory Tool] Queued memory for saving:", {
-            facts: facts?.length || 0,
-            preferences: preferences?.length || 0,
-            entities: entities?.length || 0,
-          });
-          return {
-            success: true,
-            queued: true,
-            items: {
-              facts: facts?.length || 0,
-              preferences: preferences?.length || 0,
-              entities: entities?.length || 0,
-            },
-          };
-        },
-      }),
-    };
+    // Combine all tools: assistant tools + memory tools
+    // Outward-facing tools wait for the user's approval in the chat before
+    // running (QA CHAT-037). Policy comes from the assistant's guard rails;
+    // unset means "risky" — gate everything not known to be read-only.
+    const { tools: allTools, gated: approvalGatedTools } = gateToolsForApproval(
+      {
+        ...resolvedTools,
+        ...(memoryTools?.tools ?? {}),
+      },
+      { mode: resolveToolApprovalMode(assistantGuardRails), userId: session.user.id },
+    );
 
     // Resolve prompt variables ({{user_name}}, {{date}}, etc.)
     {
@@ -1141,6 +1146,18 @@ export async function runChat(params: {
         assistantName: undefined, // Already in the prompt context
       });
     }
+
+    // Platform rules apply to EVERY assistant, not only the fallback prompt.
+    // They used to be appended only when no DB assistant resolved, so every
+    // real assistant (including the built-ins QA tested) ran without the
+    // language, identity or date rules — QA INC-002, TC-803, CHAT-035.
+    systemPrompt += LANGUAGE_INSTRUCTION
+    systemPrompt += OUTPUT_HYGIENE_INSTRUCTION
+    systemPrompt += buildPlatformContextInstruction({
+      assistantName,
+      modelName: getHouseModel(modelId)?.name ?? null,
+      timeZone: body.timeZone ?? null,
+    })
 
     // Append guard rails instructions if configured
     if (assistantGuardRails) {
@@ -1284,9 +1301,13 @@ export async function runChat(params: {
             console.log(`[Memory] Skipping background update — request aborted for thread ${threadId}`);
             return;
           }
-          const toolCalls = await result.toolCalls as any[];
+          // saveMemory/forgetMemory already wrote during the stream (inside the tool
+          // call). Here we only count the turn; if a memory tool ran, skip the regex
+          // fallback so e.g. "forget that I live in Depok" is not re-extracted.
+          const memoryToolUsed = memoryTools?.state.used === true;
+          const memoryForgotten = memoryTools?.state.forgot === true;
 
-          console.log(`[Memory] Response finished. Text len: ${fullResponse.length}. Tool calls: ${toolCalls.length}`);
+          console.log(`[Memory] Response finished. Text len: ${fullResponse.length}. Memory tool used: ${memoryToolUsed}`);
 
           // Citation grounding pass — observability only, gated.
           if (process.env.KB_CITATION_GROUNDING_ENABLED === "true") {
@@ -1311,101 +1332,40 @@ export async function runChat(params: {
             }
           }
 
-          // Retrieve and process queued memories from tool calls
-          const queuedMemories = memoryQueue.get(threadId) || [];
-          memoryQueue.delete(threadId);
-
-          let extractedFacts: any[] = [];
-          let extractedPreferences: any[] = [];
-          let extractedEntities: any[] = [];
-
-          if (queuedMemories.length > 0) {
-            console.log(`[Memory] Processing ${queuedMemories.length} queued memory items`);
-            for (const mem of queuedMemories) {
-              if (mem.facts) extractedFacts.push(...(mem.facts as any[]));
-              if (mem.preferences) extractedPreferences.push(...(mem.preferences as any[]));
-              if (mem.entities) extractedEntities.push(...(mem.entities as any[]));
-            }
-            console.log(`[Memory] Total extracted: ${extractedFacts.length} facts, ${extractedPreferences.length} preferences, ${extractedEntities.length} entities`);
-          }
-
-          // Also extract from tool call args (backward compatibility)
-          for (const call of toolCalls) {
-            if (call.toolName === 'saveMemory') {
-              const args = call.args as any;
-              if (args?.facts) extractedFacts.push(...args.facts);
-              if (args?.preferences) extractedPreferences.push(...args.preferences);
-              if (args?.entities) extractedEntities.push(...args.entities);
-            }
-          }
-
-          // Conversion utilities
-          // We need robust type conversion here to match internal interfaces
-
-          // Fact conversion
-          const finalFacts = extractedFacts.map(f => ({
-            id: `fact_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            subject: 'user',
-            predicate: f.label || 'unknown',
-            object: f.value || 'unknown',
-            confidence: typeof f.confidence === 'number' ? f.confidence : 0.9,
-            source: threadId,
-            createdAt: new Date(),
-          }));
-
-          // Entity conversion
-          const finalEntities = extractedEntities.map(e => ({
-            id: `ent_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            name: e.name || 'unknown',
-            type: e.type || 'unknown',
-            source: threadId,
-            createdAt: new Date(),
-            attributes: {}, // Required by Entity interface
-            confidence: 0.9, // Required by Entity interface
-          }));
-
-          // Preference conversion
-          const finalPreferences = extractedPreferences.map(p => ({
-            id: `pref_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-            category: p.category || 'general',
-            key: p.preference || 'unknown',
-            value: p.value || 'unknown',
-            confidence: 0.9,
-            source: threadId,
-          }));
-
           const messageId = `msg_${Date.now()}`;
 
-          // 1. Update working memory (Session based)
-          // Pass extracted data directly to avoid redundant regex extraction
+          // 1. Update working memory (Session based): context + regex fallback only.
           await updateWorkingMemory(
             effectiveUserId,
             threadId,
             userQuery,
             fullResponse,
             messageId,
-            finalEntities,
-            finalFacts
+            [],
+            [],
+            { extract: !memoryToolUsed }
           );
 
           // 2. Update Long-term & Semantic (Only for logged in users)
           if (userId !== 'anonymous' && (assistantMemoryConfig.semanticRecall || assistantMemoryConfig.longTermProfile)) {
             console.log(`[Memory] Updating long-term memory for user ${userId}`);
 
-            // Store for semantic recall (vector db)
-            if (assistantMemoryConfig.semanticRecall) {
+            // Store for semantic recall (vector db). Not on a forget turn: the user's
+            // message names the thing they just asked us to delete.
+            if (assistantMemoryConfig.semanticRecall && !memoryForgotten) {
               await storeForSemanticRecall(userId, threadId, userQuery, fullResponse);
             }
 
-            // Update user profile (Postgres) with extracted facts/prefs
+            // Count the turn, regex fallback if no memory tool ran, refresh the summary.
             if (assistantMemoryConfig.longTermProfile) {
               await updateUserProfile(
                 userId,
                 userQuery,
                 fullResponse,
                 threadId,
-                finalFacts,
-                finalPreferences
+                [],
+                [],
+                { extract: !memoryToolUsed }
               );
             }
           } else {
@@ -1413,7 +1373,7 @@ export async function runChat(params: {
           }
 
           // Optional: dual-write to Mastra Memory (same storage, for migration verification)
-          if (MEMORY_CONFIG.dualWrite && userId !== 'anonymous') {
+          if (MEMORY_CONFIG.dualWrite && userId !== 'anonymous' && !memoryForgotten) {
             try {
               const mastraMemory = getMastraMemory();
               if (MEMORY_CONFIG.debug) {
@@ -1524,6 +1484,11 @@ export async function runChat(params: {
     // free models (esp. OpenRouter) routinely 401 on a bad key or 429 when
     // rate-limited, and without onError the AI SDK ends the stream silently.
     const uiResponse = result.toUIMessageStreamResponse({
+      // Tells the client which tool calls to render Approve/Deny for.
+      headers:
+        modelSupportsTools && approvalGatedTools.length > 0
+          ? { "X-Tool-Approval": approvalGatedTools.join(",") }
+          : undefined,
       onError: (error: unknown) => {
         console.error("[Chat API] stream error:", error)
         const msg = error instanceof Error ? error.message : String(error)

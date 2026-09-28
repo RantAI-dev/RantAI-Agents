@@ -5,6 +5,7 @@ import {
   getConversationStatus,
   listConversationMessages,
   listConversations,
+  runChat,
   uploadChatAttachment,
 } from "./service"
 import * as repository from "./repository"
@@ -14,6 +15,9 @@ vi.mock("./repository", () => ({
   findActiveChatflowByAssistantId: vi.fn(),
   findActiveConversations: vi.fn(),
   findAssistantById: vi.fn(),
+  isOrganizationMember: vi.fn(),
+  findSessionArtifactSummaries: vi.fn().mockResolvedValue([]),
+  validateOwnedSessionId: vi.fn(),
   findConversationMessages: vi.fn(),
   findConversationStatus: vi.fn(),
   findDocumentsByIds: vi.fn(),
@@ -113,6 +117,51 @@ describe("chat-public service", () => {
       id: "conv_1",
       sessionId: "session_1",
       status: "AI_ACTIVE",
+    })
+  })
+
+  // Found while tracing QA INC-003: the assistant was looked up by id alone,
+  // so any signed-in user could chat through another org's assistant.
+  describe("runChat assistant access", () => {
+    const orgAssistant = {
+      systemPrompt: "secret org prompt",
+      model: "rantai/nano",
+      useKnowledgeBase: true,
+      knowledgeBaseGroupIds: [],
+      memoryConfig: null,
+      modelConfig: null,
+      guardRails: null,
+      name: "Org Bot",
+      liveChatEnabled: false,
+      organizationId: "org_other",
+    }
+    const call = () =>
+      runChat({
+        body: { messages: [{ id: "m1", role: "user", content: "hi" }], assistantId: "asst_1" },
+        userId: "user_1",
+        headers: { assistantId: null, systemPromptB64: null, useKnowledgeBase: null },
+      })
+
+    it("refuses an assistant owned by an org the user is not in", async () => {
+      vi.mocked(repository.findAssistantById).mockResolvedValue(orgAssistant as never)
+      vi.mocked(repository.isOrganizationMember).mockResolvedValue(false)
+
+      const result = await call()
+
+      expect(result).toEqual({ status: 404, error: "Assistant not found" })
+      expect(repository.isOrganizationMember).toHaveBeenCalledWith("user_1", "org_other")
+    })
+
+    it("lets a member past the access check (positive control)", async () => {
+      vi.mocked(repository.findAssistantById).mockResolvedValue(orgAssistant as never)
+      vi.mocked(repository.isOrganizationMember).mockResolvedValue(true)
+
+      // The rest of the pipeline is not mocked here, so the call may fail
+      // later — what matters is that it is not the access refusal.
+      const result = await call().catch((e: unknown) => e)
+
+      expect(result).not.toEqual({ status: 404, error: "Assistant not found" })
+      expect(repository.isOrganizationMember).toHaveBeenCalledWith("user_1", "org_other")
     })
   })
 })

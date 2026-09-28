@@ -312,7 +312,13 @@ export async function getModelsFromDb(): Promise<LLMModel[]> {
 
   if (dbModels.length === 0) return AVAILABLE_MODELS
 
-  return dbModels.map((m) => ({
+  return dbModels.map(toLlmModel)
+}
+
+type LlmModelRow = Awaited<ReturnType<typeof prisma.llmModel.findMany>>[number]
+
+function toLlmModel(m: LlmModelRow): LLMModel {
+  return {
     id: m.id,
     name: m.name,
     provider: m.provider,
@@ -324,7 +330,7 @@ export async function getModelsFromDb(): Promise<LLMModel[]> {
       functionCalling: m.hasToolCalling,
       streaming: m.hasStreaming,
     },
-  }))
+  }
 }
 
 /** Check if a model ID exists in DB or static list. */
@@ -340,6 +346,9 @@ export async function isValidModelAsync(id: string): Promise<boolean> {
 
 /** Get a model by id from the DB (synced), falling back to the static list. */
 export async function getModelByIdAsync(id: string): Promise<LLMModel | undefined> {
-  const dbModels = await getModelsFromDb()
-  return dbModels.find((m) => m.id === id) ?? getModelById(id)
+  // One indexed row, not the whole catalogue: this runs on every chat request
+  // (twice with tools), and loading every active LlmModel row each time was
+  // part of the per-request cost behind the load-test findings (QA CHAT-057).
+  const row = await prisma.llmModel.findFirst({ where: { id, isActive: true } })
+  return row ? toLlmModel(row) : getModelById(id)
 }

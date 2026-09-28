@@ -127,7 +127,7 @@ export async function createDashboardMessages(
     }
   }
 
-  return prisma.$transaction(
+  const created = await prisma.$transaction(
     messages.map((message) => {
       const data = {
         sessionId: message.sessionId,
@@ -149,6 +149,30 @@ export async function createDashboardMessages(
       return prisma.dashboardMessage.create({ data })
     })
   )
+
+  // `DashboardSession.updatedAt` is `@updatedAt`, which Prisma only bumps
+  // when the session row itself is written — inserting messages never
+  // touched it, so the sidebar (ordered by updatedAt desc) kept a chat you
+  // just talked in below older ones until its title changed (QA CHAT-015).
+  // Both the client sync and the chat route's stream-end persist go through
+  // here. updateMany: a session deleted concurrently is a no-op, not a throw.
+  await touchDashboardSessions(messages.map((m) => m.sessionId))
+
+  return created
+}
+
+/** Marks sessions as just-active (bumps `updatedAt`). Best-effort. */
+export async function touchDashboardSessions(sessionIds: string[]) {
+  const ids = Array.from(new Set(sessionIds))
+  if (ids.length === 0) return
+  try {
+    await prisma.dashboardSession.updateMany({
+      where: { id: { in: ids } },
+      data: { updatedAt: new Date() },
+    })
+  } catch (error) {
+    console.error("[sessions] Failed to bump session updatedAt:", error)
+  }
 }
 
 export async function findDashboardMessageByIdAndSession(messageId: string, sessionId: string) {

@@ -71,6 +71,8 @@ export interface SerializedChatSession {
   title: string
   assistantId: string
   createdAt: string
+  /** Last activity; absent on payloads built before it was serialized. */
+  updatedAt?: string
   messages: SerializedChatMessage[]
   artifacts?: SerializedChatArtifact[]
 }
@@ -94,6 +96,7 @@ export function normalizeSerializedChatSession(session: SerializedChatSession) {
     title: session.title,
     assistantId: session.assistantId,
     createdAt: new Date(session.createdAt),
+    updatedAt: session.updatedAt ? new Date(session.updatedAt) : undefined,
     messages: session.messages.map(normalizeSerializedChatMessage),
     artifacts: session.artifacts?.map((artifact) => ({
       ...artifact,

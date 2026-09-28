@@ -747,6 +747,10 @@ const R3F_ALLOWED_DEPS = new Set([
   "GradientTexture",
 ])
 
+// The two CDNs listed under "Verified working model URLs" in the r3f prompt.
+const VERIFIED_GLTF_URL =
+  /^https:\/\/(?:raw\.githubusercontent\.com\/KhronosGroup\/glTF-Sample-Assets\/main\/Models\/[\w-]+\/glTF-Binary\/[\w-]+\.glb|cdn\.jsdelivr\.net\/gh\/mrdoob\/three\.js@dev\/examples\/models\/gltf\/[\w-]+\.glb)$/
+
 function validate3d(content: string): ArtifactValidationResult {
   const errors: string[] = []
   const warnings: string[] = []
@@ -799,6 +803,23 @@ function validate3d(content: string): ArtifactValidationResult {
   if (!/\bexport\s+default\b/.test(content)) {
     errors.push(
       "Missing `export default` — the renderer keys off the default export to mount the scene.",
+    )
+  }
+
+  // Model URLs outside the verified CDNs 404 or fail CORS, and the scene
+  // then renders a crash overlay the user has to "AI fix" (QA CHAT-026).
+  // Reject them here so the model corrects itself before the user sees it.
+  const unverifiedModels = new Set<string>()
+  for (const m of content.matchAll(/https?:\/\/[^\s"'`)]+?\.(?:glb|gltf)\b/gi)) {
+    const url = m[0]
+    if (!VERIFIED_GLTF_URL.test(url)) unverifiedModels.add(url)
+  }
+  if (unverifiedModels.size > 0) {
+    errors.push(
+      `Model URL(s) not from the verified list: ${[...unverifiedModels]
+        .slice(0, 3)
+        .map((u) => `\`${u}\``)
+        .join(", ")}. Use a model from the KhronosGroup glTF-Sample-Assets or three.js examples tables in the prompt, or build the object from primitives.`,
     )
   }
 
