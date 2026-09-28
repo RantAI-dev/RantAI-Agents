@@ -163,10 +163,20 @@ function readHydratedSessionsFromDocument(): SerializedChatSession[] | null {
 
 // A stale hydration payload must not move a session's last-activity back in
 // time (the client bumps it optimistically on send).
+const DEFAULT_SESSION_TITLE = "New Chat"
+
 function latestDate(a: Date | undefined, b: Date | undefined): Date | undefined {
   if (!a) return b
   if (!b) return a
   return a.getTime() >= b.getTime() ? a : b
+}
+
+// A payload rendered before the first-message title PATCH landed still says
+// "New Chat"; merging it would put the placeholder back over the real title.
+function mergeTitle(existingTitle: string, incomingTitle: string): string {
+  return incomingTitle === DEFAULT_SESSION_TITLE && existingTitle !== DEFAULT_SESSION_TITLE
+    ? existingTitle
+    : incomingTitle
 }
 
 function mergeHydratedSessions(
@@ -189,6 +199,7 @@ function mergeHydratedSessions(
       merged.push({
         ...existing,
         ...normalized,
+        title: mergeTitle(existing.title, normalized.title),
         id: existing.id,
         dbId: existing.dbId ?? normalized.dbId,
         updatedAt: latestDate(existing.updatedAt, normalized.updatedAt),
@@ -206,7 +217,7 @@ function mergeHydratedSessions(
       const existing = remaining.splice(dbMatchIndex, 1)[0]
       merged.push({
         ...existing,
-        title: normalized.title,
+        title: mergeTitle(existing.title, normalized.title),
         assistantId: normalized.assistantId,
         createdAt: normalized.createdAt,
         updatedAt: latestDate(existing.updatedAt, normalized.updatedAt),
