@@ -20,6 +20,11 @@ describe("resolveMode", () => {
     expect(resolveMode()).toBe("perplexity")
   })
 
+  it("honors WEB_SEARCH_MODE=searxng", () => {
+    process.env.WEB_SEARCH_MODE = "searxng"
+    expect(resolveMode()).toBe("searxng")
+  })
+
   it("is case-insensitive", () => {
     process.env.WEB_SEARCH_MODE = "LOCAL"
     expect(resolveMode()).toBe("local")
@@ -128,5 +133,62 @@ describe("searchWithFallback (local mode)", () => {
     // Verify the URL was serper, not perplexity.
     const call = (global.fetch as any).mock.calls[0]
     expect(call[0]).toBe("https://google.serper.dev/search")
+  })
+})
+
+describe("searchWithFallback (searxng mode)", () => {
+  const originalFetch = global.fetch
+  const originalEnv = { ...process.env }
+
+  beforeEach(() => {
+    process.env.WEB_SEARCH_MODE = "searxng"
+    process.env.SEARCH_API_URL = "http://searxng:8080/search"
+    // Present on purpose: searxng mode must not touch the paid providers.
+    process.env.OPENROUTER_API_KEY = "test-key"
+    process.env.SERPER_API_KEY = "test-key"
+  })
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    process.env = { ...originalEnv }
+  })
+
+  it("queries only SearXNG, in JSON, and maps its results", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [
+          { title: "BMKG", url: "https://www.bmkg.go.id/cuaca", content: "Prakiraan cuaca Depok" },
+          { title: "AccuWeather", url: "https://www.accuweather.com/id", content: "Cuaca per jam" },
+        ],
+      }),
+    })
+    global.fetch = fetchMock as any
+
+    const result = await searchWithFallback("cuaca Depok hari ini", 5)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const calledUrl = new URL(String(fetchMock.mock.calls[0][0]))
+    expect(calledUrl.host).toBe("searxng:8080")
+    expect(calledUrl.searchParams.get("format")).toBe("json")
+    expect(calledUrl.searchParams.get("q")).toBe("cuaca Depok hari ini")
+    expect(result.success).toBe(true)
+    expect(result.provider).toBe("searxng")
+    expect(result.results.map((r) => r.url)).toEqual([
+      "https://www.bmkg.go.id/cuaca",
+      "https://www.accuweather.com/id",
+    ])
+  })
+
+  it("reports a SearXNG failure instead of falling back to a paid or scraped provider", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 502, json: async () => ({}) })
+    global.fetch = fetchMock as any
+
+    const result = await searchWithFallback("anything", 5)
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(String(fetchMock.mock.calls[0][0])).toContain("searxng:8080")
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/SearXNG 502/)
   })
 })

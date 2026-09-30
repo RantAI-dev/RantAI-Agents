@@ -18,7 +18,7 @@ export interface SearchResponse {
   error?: string;
 }
 
-export type WebSearchMode = "perplexity" | "local";
+export type WebSearchMode = "perplexity" | "local" | "searxng";
 
 export interface SearchProvider {
   readonly name: string;

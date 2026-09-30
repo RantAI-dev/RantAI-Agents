@@ -9,13 +9,18 @@ import { DuckDuckGoProvider } from "./providers/duckduckgo";
  *
  * - `perplexity` (default): try `perplexity/sonar-pro` via OpenRouter first; fall back to the local chain on error or when OPENROUTER_API_KEY is unset.
  * - `local`: skip Perplexity entirely; use Serper → SearXNG → DuckDuckGo only.
+ * - `searxng`: the self-hosted SearXNG instance at SEARCH_API_URL and nothing
+ *   else — no paid API, no OpenRouter tokens, and no silent DuckDuckGo scrape
+ *   behind it. SearXNG already fans out to several engines and suspends the
+ *   ones that block it, so a failure here is reported rather than papered over.
  *
  * Set `WEB_SEARCH_MODE=local` to force the legacy keyword-search behavior for
  * privacy-sensitive deployments or when Perplexity quality isn't wanted.
  */
 export function resolveMode(): WebSearchMode {
   const raw = (process.env.WEB_SEARCH_MODE || "perplexity").toLowerCase();
-  return raw === "local" ? "local" : "perplexity";
+  if (raw === "local" || raw === "searxng") return raw;
+  return "perplexity";
 }
 
 /**
@@ -36,7 +41,9 @@ export async function searchWithFallback(
   const chain =
     mode === "perplexity"
       ? [perplexity, serper, searxng, ddg]
-      : [serper, searxng, ddg];
+      : mode === "searxng"
+        ? [searxng]
+        : [serper, searxng, ddg];
 
   let lastError: Error | undefined;
   for (const provider of chain) {
