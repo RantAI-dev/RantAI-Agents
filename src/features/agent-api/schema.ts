@@ -27,6 +27,17 @@ export const V1ChatCompletionSchema = z.object({
    * can widen a request within that organisation but never outside it.
    */
   knowledge_base_ids: z.array(z.string().min(1)).optional(),
+  /**
+   * Send the images an answer cites in the same response.
+   *
+   * An answer points at a book figure with `[figure:N]`. By default the client
+   * resolves that itself from `sources[N-1]`. With this set, each cited image
+   * arrives downscaled and base64-encoded: on a stream, as a `figure` frame
+   * right after the text that completes the tag; otherwise in a top-level
+   * `figures` array. Only cited figures are sent, and at most a handful per
+   * answer.
+   */
+  inline_figures: z.boolean().optional(),
 })
 
 export type V1ChatCompletionInput = z.infer<typeof V1ChatCompletionSchema>
