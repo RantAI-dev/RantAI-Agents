@@ -17,6 +17,9 @@ import { authenticateAgentApiKey } from "@/features/agent-api-keys/service"
 import { incrementAgentApiKeyUsage } from "@/features/agent-api-keys/repository"
 import { prisma } from "@/lib/prisma"
 import type { V1ChatCompletionInput } from "./schema"
+import { createJsonResponse, createSSEStreamResponse } from "./response"
+import { createInlineFigureFeed } from "./inline-figures"
+import { downloadFile } from "@/lib/s3"
 
 interface AuthResult {
   apiKey: { id: string; assistantId: string; scopes: string[]; ipWhitelist: string[] }
@@ -431,193 +434,16 @@ export async function runV1ChatCompletion(
     ...(modelConfig?.maxTokens != null && input.max_tokens == null && { maxOutputTokens: Number(modelConfig.maxTokens) }),
   })
 
+  // Opt-in: the images for the answer's `[figure:N]` tags ride the same
+  // response. Off by default — it multiplies the payload and nothing in it is
+  // cacheable, so only a client that asked for it pays that cost.
+  const figureFeed = input.inline_figures
+    ? createInlineFigureFeed(ragSources, { download: downloadFile })
+    : undefined
+
   if (wantStream) {
-    return createSSEStreamResponse(result, requestId, modelId, ragSources)
+    return createSSEStreamResponse(result, requestId, modelId, ragSources, figureFeed)
   }
 
-  return createJsonResponse(result, requestId, modelId, ragSources)
-}
-
-/** Sources (KB documents) an answer drew on, for the client to render references. */
-type RagSource = { title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }
-
-function createSSEStreamResponse(
-  result: ReturnType<typeof streamText>,
-  requestId: string,
-  modelId: string,
-  sources: RagSource[] = []
-): Response {
-  const encoder = new TextEncoder()
-
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        for await (const chunk of result.textStream) {
-          const data = JSON.stringify({
-            id: requestId,
-            object: "chat.completion.chunk",
-            created: Math.floor(Date.now() / 1000),
-            model: modelId,
-            choices: [
-              {
-                index: 0,
-                delta: { content: chunk },
-                finish_reason: null,
-              },
-            ],
-          })
-          controller.enqueue(encoder.encode(`data: ${data}\n\n`))
-        }
-
-        // Final chunk with finish_reason. `sources` is a custom top-level field
-        // (OpenAI clients ignore unknown keys) carrying the KB references so a
-        // frontend can render reference cards.
-        //
-        // finish_reason is read from the SDK rather than hardcoded: a stream cut
-        // short by a dead upstream must not be reported as a clean "stop", or the
-        // client renders a half-sentence as a finished answer.
-        const finishReason = toOpenAIFinishReason(
-          await Promise.resolve(result.finishReason).catch(() => undefined)
-        )
-        const finalData = JSON.stringify({
-          id: requestId,
-          object: "chat.completion.chunk",
-          created: Math.floor(Date.now() / 1000),
-          model: modelId,
-          choices: [
-            {
-              index: 0,
-              delta: {},
-              finish_reason: finishReason,
-            },
-          ],
-          ...(finishReason === "error" && {
-            error: {
-              message:
-                "Generation did not complete — the model backend ended the stream early. The text above may be truncated.",
-              type: "server_error",
-            },
-          }),
-          sources,
-        })
-        controller.enqueue(encoder.encode(`data: ${finalData}\n\n`))
-
-        // Terminal usage frame — OpenAI-compatible (empty choices + usage).
-        // Lets the credit tracker deduct REAL token counts instead of estimating.
-        // Wrapped so a usage-resolution failure can't break the client stream.
-        try {
-          const usage = await result.totalUsage
-          const usageData = JSON.stringify({
-            id: requestId,
-            object: "chat.completion.chunk",
-            created: Math.floor(Date.now() / 1000),
-            model: modelId,
-            choices: [],
-            usage: {
-              prompt_tokens: usage.inputTokens ?? 0,
-              completion_tokens: usage.outputTokens ?? 0,
-              total_tokens: usage.totalTokens ?? 0,
-            },
-          })
-          controller.enqueue(encoder.encode(`data: ${usageData}\n\n`))
-        } catch {
-          // Usage unavailable — client stream stays intact; tracker falls back.
-        }
-
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"))
-        controller.close()
-      } catch (err) {
-        const errorData = JSON.stringify({
-          error: { message: "Stream error", type: "server_error" },
-        })
-        controller.enqueue(encoder.encode(`data: ${errorData}\n\n`))
-        controller.close()
-      }
-    },
-  })
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "Access-Control-Allow-Origin": "*",
-    },
-  })
-}
-
-/**
- * Map the SDK's finish reason onto the OpenAI wire value.
- *
- * The point of this function is the failure case. When the upstream dies
- * mid-generation the SDK resolves with `error`/`other`/`unknown` and whatever
- * text arrived before the break — previously both response builders hardcoded
- * `"stop"`, so a half-sentence produced by a dead gateway was indistinguishable
- * from a complete answer. That is the worst possible shape for a classroom
- * client: it renders truncated nonsense as if the tutor meant it.
- *
- * `length` and `tool-calls` are legitimate OpenAI values and pass through.
- * Everything else becomes `"error"`, which no client mistakes for success.
- */
-function toOpenAIFinishReason(reason: string | undefined): string {
-  switch (reason) {
-    case "stop":
-      return "stop"
-    case "length":
-      return "length"
-    case "content-filter":
-      return "content_filter"
-    case "tool-calls":
-      return "tool_calls"
-    default:
-      return "error"
-  }
-}
-
-async function createJsonResponse(
-  result: ReturnType<typeof streamText>,
-  requestId: string,
-  modelId: string,
-  sources: RagSource[] = []
-): Promise<Response> {
-  const text = await result.text
-  const usage = await result.totalUsage
-  const finishReason = toOpenAIFinishReason(
-    await Promise.resolve(result.finishReason).catch(() => undefined)
-  )
-
-  const body = {
-    id: requestId,
-    object: "chat.completion",
-    created: Math.floor(Date.now() / 1000),
-    model: modelId,
-    choices: [
-      {
-        index: 0,
-        message: { role: "assistant", content: text },
-        finish_reason: finishReason,
-      },
-    ],
-    ...(finishReason === "error" && {
-      error: {
-        message:
-          "Generation did not complete — the model backend ended the stream early. The text above may be truncated.",
-        type: "server_error",
-      },
-    }),
-    usage: {
-      prompt_tokens: usage.inputTokens ?? 0,
-      completion_tokens: usage.outputTokens ?? 0,
-      total_tokens: usage.totalTokens ?? 0,
-    },
-    // KB references the answer drew on (custom field; OpenAI clients ignore it).
-    sources,
-  }
-
-  return new Response(JSON.stringify(body), {
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-    },
-  })
+  return createJsonResponse(result, requestId, modelId, ragSources, figureFeed)
 }
