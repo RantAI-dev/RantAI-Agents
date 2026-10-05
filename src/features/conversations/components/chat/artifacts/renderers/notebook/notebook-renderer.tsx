@@ -33,6 +33,14 @@ export function NotebookRenderer({ artifactId, content }: Props) {
     sweepStale(new Set(nb.cells.map((c) => c.id)))
   }, [nb.cells, sweepStale])
 
+  // Re-parse and adopt the new cells when the artifact's content prop changes
+  // (e.g. a new version streamed in). useState only honours its initial
+  // argument on mount, so without this effect the renderer would keep showing
+  // v1 cells even after the parent hands us v2 content.
+  useEffect(() => {
+    setNb(parseNotebookContentStreaming(content))
+  }, [content])
+
   const updateCell = useCallback((id: string, patch: Partial<Cell>) => {
     setNb((prev) => ({ ...prev, cells: prev.cells.map((c) => (c.id === id ? { ...c, ...patch } : c)) }))
   }, [])

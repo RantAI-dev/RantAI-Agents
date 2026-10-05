@@ -119,6 +119,100 @@ export function isChatPublicServiceError(
   return typeof candidate.status === "number" && typeof candidate.error === "string"
 }
 
+/** Shape persisted to DashboardMessage.editHistory (Json column). */
+export interface PersistedEditHistoryEntry {
+  content: string
+  assistantResponse?: string
+  editedAt: string
+}
+
+/**
+ * Coerce a client-supplied editHistory array into the exact shape Prisma's
+ * `Json?` column accepts. Anything non-conforming (non-array, non-object
+ * entries, missing content, etc.) is dropped silently rather than throwing —
+ * the persist path is already inside a fire-and-forget best-effort block and
+ * must not crash a stream that's already on the wire.
+ *
+ * Returns `null` when the input is not an array, so the caller can use a
+ * nullish check to decide whether to attach the key at all.
+ */
+export function sanitizeEditHistory(
+  input: unknown
+): PersistedEditHistoryEntry[] | null {
+  if (!Array.isArray(input)) return null
+  const out: PersistedEditHistoryEntry[] = []
+  for (const raw of input) {
+    if (!raw || typeof raw !== "object") continue
+    const entry = raw as {
+      content?: unknown
+      assistantResponse?: unknown
+      editedAt?: unknown
+    }
+    if (typeof entry.content !== "string") continue
+    const cleaned: PersistedEditHistoryEntry = {
+      content: entry.content,
+      editedAt:
+        entry.editedAt instanceof Date
+          ? entry.editedAt.toISOString()
+          : typeof entry.editedAt === "string"
+            ? entry.editedAt
+            : "",
+    }
+    if (typeof entry.assistantResponse === "string") {
+      cleaned.assistantResponse = entry.assistantResponse
+    }
+    out.push(cleaned)
+  }
+  return out
+}
+
+export interface BuildPersistedUserRowInput {
+  message: {
+    id: string
+    role: "user" | "assistant"
+    content?: string
+    replyTo?: unknown
+    editHistory?: unknown
+  }
+  sessionId: string
+}
+
+/**
+ * Build the user-row payload handed to `createDashboardMessages`. Only sets
+ * `editHistory` / `replyTo` when they have a usable value: Prisma's update
+ * path treats `undefined` as "leave alone", but a present-but-null
+ * replyTo or an empty editHistory array would either clear the column
+ * (replyTo: null on the schema) or write an empty list (editHistory: []).
+ * The server is the authoritative mirror of the client's state, so we
+ * faithfully forward what the client supplied and stay quiet otherwise.
+ */
+export function buildPersistedUserRow(
+  input: BuildPersistedUserRowInput
+): {
+  id: string
+  sessionId: string
+  role: "user"
+  content: string
+  replyTo?: string
+  editHistory?: PersistedEditHistoryEntry[]
+} {
+  const { message, sessionId } = input
+  const row: ReturnType<typeof buildPersistedUserRow> = {
+    id: message.id,
+    sessionId,
+    role: "user",
+    content: typeof message.content === "string" ? message.content : "",
+  }
+  if (typeof message.replyTo === "string" && message.replyTo.length > 0) {
+    row.replyTo = message.replyTo
+  }
+  const sanitized = sanitizeEditHistory(message.editHistory)
+  if (sanitized !== null && sanitized.length > 0) {
+    row.editHistory = sanitized
+  }
+  return row
+}
+
 function appendSourcesEventToUiStreamResponse(
   response: Response,
   ragSources: Array<{ title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }>,
@@ -1456,15 +1550,21 @@ export async function runChat(params: {
           )
           const rowsToPersist: Parameters<typeof createDashboardMessages>[0] = []
           if (lastUserMessage?.id && lastUserMessage.content) {
-            // editHistory deliberately omitted — the row may already have
-            // edit history from a prior client-side PATCH and Prisma's
-            // update path leaves undefined fields untouched.
-            rowsToPersist.push({
-              id: lastUserMessage.id,
-              sessionId: validatedSessionId,
-              role: "user",
-              content: lastUserMessage.content,
-            })
+            // Mirror editHistory + replyTo that the client sent on the user
+            // message so a freshly-edited prompt reloads with its prior
+            // versions. buildPersistedUserRow silently drops malformed
+            // values rather than throwing — the persist path is best-effort.
+            // Cast through unknown: ChatMessageSchema.passthrough() preserves
+            // these fields at runtime but the zod-inferred type doesn't list
+            // them, so TS needs the bridge.
+            rowsToPersist.push(
+              buildPersistedUserRow({
+                message: lastUserMessage as unknown as Parameters<
+                  typeof buildPersistedUserRow
+                >[0]["message"],
+                sessionId: validatedSessionId,
+              }),
+            )
           }
           rowsToPersist.push({
             id: persistAssistantMessageId,

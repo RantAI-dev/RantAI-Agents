@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { resolveMode, searchWithFallback } from "@/lib/tools/builtin/web-search/dispatch"
+import { PerplexityProvider } from "@/lib/tools/builtin/web-search/providers/perplexity"
+import type { SearchResponse } from "@/lib/tools/builtin/web-search/types"
 
 describe("resolveMode", () => {
   const originalEnv = { ...process.env }
@@ -190,5 +192,82 @@ describe("searchWithFallback (searxng mode)", () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain("searxng:8080")
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/SearXNG 502/)
+  })
+})
+
+describe("searchWithFallback - failover edge cases", () => {
+  const originalFetch = global.fetch
+  const originalEnv = { ...process.env }
+
+  beforeEach(() => {
+    delete process.env.WEB_SEARCH_MODE
+    process.env.OPENROUTER_API_KEY = "test-key"
+    process.env.SERPER_API_KEY = "serper-key"
+    delete process.env.SEARCH_API_URL
+  })
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    process.env = { ...originalEnv }
+    vi.restoreAllMocks()
+  })
+
+  it("falls back to next provider when primary throws on HTTP 429 (positive control)", async () => {
+    // Perplexity returns 429 with a rate-limit body — provider throws.
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        text: async () => "rate limited by upstream",
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          organic: [{ title: "Apple", link: "https://apple.com", snippet: "computers" }],
+        }),
+      }) as any
+
+    const result = await searchWithFallback("apple", 5)
+    expect(result.success).toBe(true)
+    expect(result.provider).toBe("serper")
+    expect(result.results[0]).toEqual({
+      title: "Apple",
+      url: "https://apple.com",
+      snippet: "computers",
+    })
+  })
+
+  it("falls back when a provider resolves with {success: false} instead of throwing (TC-1550)", async () => {
+    // Simulates a provider that swallows its failure into a payload — the chain
+    // must NOT short-circuit on it, otherwise the user sees the raw error and
+    // the LLM narrates it as "rate-limited" instead of trying the next provider.
+    const swallowed: SearchResponse = {
+      success: false,
+      provider: "perplexity",
+      results: [],
+      resultCount: 0,
+      error: "Perplexity 429: upstream rate limited",
+    }
+    const spy = vi
+      .spyOn(PerplexityProvider.prototype, "search")
+      .mockResolvedValue(swallowed)
+
+    global.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        organic: [{ title: "Apple", link: "https://apple.com", snippet: "computers" }],
+      }),
+    }) as any
+
+    const result = await searchWithFallback("apple", 5)
+
+    expect(spy).toHaveBeenCalledTimes(1)
+    expect(result.provider).toBe("serper")
+    expect(result.success).toBe(true)
+    expect(result.results[0]).toEqual({
+      title: "Apple",
+      url: "https://apple.com",
+      snippet: "computers",
+    })
   })
 })

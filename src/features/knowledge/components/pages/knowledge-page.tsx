@@ -2,7 +2,6 @@ import { auth } from "@/lib/auth"
 import { resolveActiveOrgServer } from "@/lib/org-context"
 import {
   listKnowledgeDocumentsForDashboard,
-  type KnowledgeDocumentListItem,
 } from "@/features/knowledge/documents/service"
 import {
   listKnowledgeGroupsForDashboard,
@@ -11,9 +10,9 @@ import {
 import {
   listKnowledgeCategoriesForDashboard,
 } from "@/features/knowledge/categories/service"
+import { mapDocument } from "@/features/knowledge/documents/service-shared"
 import KnowledgePageClient, {
   type Document,
-  type DocumentGroup,
   type KnowledgeBase,
 } from "./knowledge-page-client"
 
@@ -30,33 +29,6 @@ interface CategoryListItem {
   isSystem: boolean
   createdAt: string
   updatedAt: string
-}
-
-function mapGroupsToDocumentGroups(
-  groups: Array<{ id: string; name: string; color: string | null }>
-): DocumentGroup[] {
-  return groups.map((group) => ({
-    id: group.id,
-    name: group.name,
-    color: group.color,
-  }))
-}
-
-function mapDocument(item: KnowledgeDocumentListItem): Document {
-  return {
-    id: item.id,
-    title: item.title,
-    categories: item.categories,
-    subcategory: item.subcategory,
-    fileType: item.fileType,
-    artifactType: item.artifactType,
-    chunkCount: item.chunkCount,
-    groups: mapGroupsToDocumentGroups(item.groups),
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
-    fileSize: item.fileSize ?? undefined,
-    thumbnailUrl: item.thumbnailUrl,
-  }
 }
 
 function mapKnowledgeBase(item: KnowledgeGroupListItem): KnowledgeBase {

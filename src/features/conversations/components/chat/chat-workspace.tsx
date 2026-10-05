@@ -77,7 +77,12 @@ import { FilePreview } from "./file-preview"
 import { VisionAttachmentHint } from "./vision-attachment-hint"
 import { ChatInputToolbar, ALL_DOCS_GROUP_ID, type AssistantToolInfo, type AssistantSkillInfo, type CanvasMode, type KBGroup, type ToolMode, type SkillMode } from "./chat-input-toolbar"
 import { ThreadIndicator, ReplyButton, MessageReplyIndicator } from "./thread-indicator"
-import { EditVersionIndicator, getVersionContent, getVersionAssistantResponse } from "./edit-version-indicator"
+import { EditVersionIndicator, getVersionContent, getVersionedAssistantContent } from "./edit-version-indicator"
+import { formatChatTitle } from "./chat-title"
+import {
+  requiresRegenerateConfirmation,
+  executeRegenerate,
+} from "./regenerate-guards"
 import { ToolCallIndicator } from "./tool-call-indicator"
 import { ToolApprovalPrompt, parseApprovalGatedTools, type ToolApprovalState } from "./tool-approval-prompt"
 import { useArtifacts } from "./artifacts/use-artifacts"
@@ -536,9 +541,38 @@ function MessagesArea({
             const hasEditHistory = msgEditHistory && msgEditHistory.length > 0
             const totalVersions = hasEditHistory ? msgEditHistory.length + 1 : 1
             const currentViewingVersion = viewingVersions[message.id] || totalVersions
-            const content = hasEditHistory
-              ? getVersionContent(rawContent, msgEditHistory, currentViewingVersion)
-              : rawContent
+            const content = (() => {
+              if (isUser) {
+                // User bubble: pick from own edit history when the user has
+                // navigated to an older version; otherwise show live content.
+                return hasEditHistory
+                  ? getVersionContent(rawContent, msgEditHistory, currentViewingVersion)
+                  : rawContent
+              }
+              // Assistant bubble: when the preceding user message is
+              // viewing an older version, swap in the paired historical
+              // response — the separate "Historical response" box that
+              // duplicated this answer was redundant and is now removed
+              // (TC-944). Live content is preserved when no historical
+              // response was captured for that version.
+              if (index > 0) {
+                const prev = allMessages[index - 1] as unknown as ChatMessage
+                if (prev?.role === "user") {
+                  const prevEditHistory = prev.editHistory
+                  const prevTotal = prevEditHistory && prevEditHistory.length > 0
+                    ? prevEditHistory.length + 1
+                    : 1
+                  const prevViewing = viewingVersions[prev.id] || prevTotal
+                  const historical = getVersionedAssistantContent(
+                    prevEditHistory,
+                    prevViewing,
+                    prevTotal,
+                  )
+                  if (typeof historical === "string") return historical
+                }
+              }
+              return rawContent
+            })()
 
             // Figure sources the model can embed inline via [figure:N], numbered
             // to match the Sources list. Those it DID embed are dropped from the
@@ -582,13 +616,6 @@ function MessagesArea({
             // hidden from the Figures strip — the strip effectively disappears
             // and figures live entirely in the chat flow.
             const embeddedFigureNums = new Set<number>(embeddableFigures.map((f) => f.n))
-
-            const historicalAssistantResponse =
-              isUser && hasEditHistory
-                ? getVersionAssistantResponse(msgEditHistory, currentViewingVersion, totalVersions)
-                : undefined
-            const isViewingHistoricalVersion =
-              hasEditHistory && currentViewingVersion < totalVersions
 
             return (
               <motion.div
@@ -962,34 +989,6 @@ function MessagesArea({
                           </div>
                         )}
                     </div>
-
-                    {/* Historical AI response when viewing previous version */}
-                    {isUser && isViewingHistoricalVersion && historicalAssistantResponse && (
-                      <div className="mt-3 flex gap-3">
-                        <div
-                          className={cn(
-                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full shadow-sm",
-                            "bg-gradient-to-br from-violet-500 to-purple-600 text-white"
-                          )}
-                        >
-                          {assistant.emoji ? (
-                            <span className="text-sm">{assistant.emoji}</span>
-                          ) : (
-                            <Bot className="h-3.5 w-3.5" />
-                          )}
-                        </div>
-                        <div className="flex-1 rounded-2xl py-2.5 px-4 text-sm bg-muted/70 border border-muted-foreground/10">
-                          <div className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
-                            <span>Historical response</span>
-                            <span className="opacity-60">&middot;</span>
-                            <span>Version {currentViewingVersion}/{totalVersions}</span>
-                          </div>
-                          <div className="opacity-90">
-                            <MarkdownContent content={historicalAssistantResponse} />
-                          </div>
-                        </div>
-                      </div>
-                    )}
 
                     {/* Message footer */}
                     {display.showFooter && !isEditing && (
@@ -1439,8 +1438,7 @@ export function ChatWorkspace({
 
         const title =
           session.title === "New Chat" && updatedMessages.length >= 1
-            ? updatedMessages[0].content.slice(0, 50) +
-            (updatedMessages[0].content.length > 50 ? "..." : "")
+            ? formatChatTitle(updatedMessages[0].content)
             : session.title
 
         onUpdateSession(session.id, {
@@ -1982,6 +1980,14 @@ export function ChatWorkspace({
         id: m.id,
         role: m.role,
         content: m.content,
+        createdAt: m.createdAt ? new Date(m.createdAt) : undefined,
+        // Server payload carries them already; pass through so the
+        // version switcher + reply indicator work after a fresh load
+        // (TC-944: edit-history was previously dropped at the seam).
+        ...(m.replyTo ? { replyTo: m.replyTo } : {}),
+        ...(Array.isArray(m.editHistory) && m.editHistory.length > 0
+          ? { editHistory: m.editHistory as EditHistoryEntry[] }
+          : {}),
         metadata: m.metadata || undefined,
       })) as any
     )
@@ -2258,17 +2264,19 @@ export function ChatWorkspace({
 
       // Add user message AND assistant placeholder immediately for instant feedback.
       // Keep a stable assistant message ID so parent session sync cannot remove it mid-stream.
+      // Stamp createdAt on both so the bubble timestamp reads "just now" instead
+      // of freezing on every future visit (TC-1549).
       chat.setMessages([
         ...baseMessages,
-        userMessage,
-        { id: assistantMsgId, role: "assistant", content: "" },
+        { ...userMessage, createdAt: new Date() },
+        { id: assistantMsgId, role: "assistant", content: "", createdAt: new Date() },
       ] as any)
 
       // Update session
       if (session && onUpdateSession) {
         const title =
           session.title === "New Chat"
-            ? userInput.slice(0, 50) + (userInput.length > 50 ? "..." : "")
+            ? formatChatTitle(userInput)
             : session.title
 
         onUpdateSession(session.id, {
@@ -2314,12 +2322,24 @@ export function ChatWorkspace({
       try {
         // Normalize messages to plain { id, role, content } before sending.
         // This strips any custom `parts` set during SSE streaming (e.g. tool-invocation)
-        // which would break convertToModelMessages on the server.
-        const normalizedMessages = [...baseMessages, userMessage].map((m) => ({
-          id: m.id,
-          role: m.role,
-          content: getMessageContent(m) || (m as { content?: string }).content || "",
-        }))
+        // which would break convertToModelMessages on the server. replyTo and
+        // editHistory pass through when present so a freshly-edited user
+        // message reloads with its prior versions and so a reply is threaded
+        // — the server uses the message id to upsert the row.
+        const normalizedMessages = [...baseMessages, userMessage].map((m) => {
+          const ext = m as unknown as MessageWithExtras
+          return {
+            id: m.id,
+            role: m.role,
+            content: getMessageContent(m) || (m as { content?: string }).content || "",
+            ...(typeof ext.replyTo === "string" && ext.replyTo.length > 0
+              ? { replyTo: ext.replyTo }
+              : {}),
+            ...(Array.isArray(ext.editHistory) && ext.editHistory.length > 0
+              ? { editHistory: ext.editHistory }
+              : {}),
+          }
+        })
 
         // If a previous send is still streaming, cancel it before starting
         // a new one — otherwise the old fetch keeps running as a zombie
@@ -3388,40 +3408,65 @@ export function ChatWorkspace({
     setEditingMessageId(null)
     setEditContent("")
 
+    // Editing the very first message retitles the session to the new prompt
+    // when the title is still the placeholder — same rule the auto-titler
+    // uses on send/onFinish (TC-944d). Mirroring it here keeps the title in
+    // sync with the opening turn; a customized title is left alone.
+    if (
+      session &&
+      onUpdateSession &&
+      messageIndex === 0 &&
+      session.title === "New Chat"
+    ) {
+      onUpdateSession(session.id, { title: formatChatTitle(editedContent) })
+    }
+
     // Send the edited message with history
     await sendMessage(editedContent, truncatedMessages, replyToId, newEditHistory)
-  }, [editingMessageId, editContent, chat.messages, sendMessage])
+  }, [editingMessageId, editContent, chat.messages, sendMessage, session, onUpdateSession])
 
-  // Regenerate handler
+  // Regenerate handler. Mid-conversation regenerate silently drops every
+  // message after the target user prompt (sendMessage truncates to the
+  // preceding context), so TC-1546 asks for an explicit Continue/Cancel
+  // confirmation there. Last-message regenerate is one-click — re-rolling
+  // a single fresh response is what the user just asked for.
+  const [pendingRegenerateMessageId, setPendingRegenerateMessageId] = useState<string | null>(null)
   const handleRegenerate = useCallback(
-    async (messageId: string) => {
-      const messageIndex = chat.messages.findIndex((m) => m.id === messageId)
-      if (
-        messageIndex === -1 ||
-        chat.messages[messageIndex].role !== "assistant"
-      )
+    (messageId: string) => {
+      if (requiresRegenerateConfirmation(chat.messages as unknown as ReadonlyArray<{ id: string; role: "user" | "assistant" }>, messageId)) {
+        setPendingRegenerateMessageId(messageId)
         return
-
-      // Find the preceding user message
-      const userMessageIndex = messageIndex - 1
-      if (
-        userMessageIndex < 0 ||
-        chat.messages[userMessageIndex].role !== "user"
+      }
+      void executeRegenerate(
+        chat.messages as unknown as ReadonlyArray<{ id: string; role: "user" | "assistant"; content?: string }>,
+        messageId,
+        sendMessage as unknown as Parameters<typeof executeRegenerate>[2],
+        getMessageContent,
       )
-        return
-
-      const userMessage = chat.messages[userMessageIndex]
-      const userContent = getMessageContent(userMessage)
-      const userReplyTo = (userMessage as unknown as ChatMessage).replyTo
-
-      // Get messages before the user message (to resend with the same context)
-      const truncatedMessages = chat.messages.slice(0, userMessageIndex)
-
-      // Send the same user message again to get a new response
-      await sendMessage(userContent, truncatedMessages, userReplyTo)
     },
     [chat.messages, sendMessage]
   )
+
+  const confirmRegenerate = useCallback(() => {
+    const target = pendingRegenerateMessageId
+    setPendingRegenerateMessageId(null)
+    if (!target) return
+    void executeRegenerate(
+      chat.messages as unknown as ReadonlyArray<{ id: string; role: "user" | "assistant"; content?: string }>,
+      target,
+      sendMessage as unknown as Parameters<typeof executeRegenerate>[2],
+      getMessageContent,
+    )
+  }, [pendingRegenerateMessageId, chat.messages, sendMessage])
+
+  // Count messages that would be discarded by the pending regenerate — shown
+  // in the dialog description so the user knows exactly what they're losing.
+  const pendingRegenerateFollowing = (() => {
+    if (!pendingRegenerateMessageId) return 0
+    const idx = chat.messages.findIndex((m) => m.id === pendingRegenerateMessageId)
+    if (idx < 0) return 0
+    return chat.messages.length - idx - 1
+  })()
 
   // Delete handler — truncates both the live useChat state and the
   // persisted session.messages from the deleted message onward. Each
@@ -3947,6 +3992,29 @@ Use update_artifact with id="${artifactId}" to update the existing artifact with
               }}
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={pendingRegenerateMessageId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRegenerateMessageId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Regenerate response?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingRegenerateFollowing > 0
+                ? `Regenerating will replace this response and remove the ${pendingRegenerateFollowing} message${pendingRegenerateFollowing === 1 ? "" : "s"} after it in this session. This can't be undone.`
+                : "Regenerating will replace this response. This can't be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRegenerate}>
+              Continue
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

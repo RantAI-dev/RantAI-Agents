@@ -146,6 +146,36 @@ export async function getKnowledgeDocumentForDashboard(params: {
   // actually load the preview instead of a dead presigned rustfs:9000 URL.
   const fileUrl = document.s3Key ? appFileUrl(document.s3Key) : undefined
 
+  // Same shape as the list read: only docs in a non-terminal ingest state carry
+  // a job snapshot (processing + failed, so Retry has the jobId it needs).
+  let ingestSnapshot: KnowledgeDocumentDetail["ingest"] = null
+  if (document.status === "processing" || document.status === "failed") {
+    const job = await prisma.ingestJob.findFirst({
+      where: { documentId: document.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        step: true,
+        progress: true,
+        stepCurrent: true,
+        stepTotal: true,
+        etaSeconds: true,
+        error: true,
+      },
+    })
+    if (job) {
+      ingestSnapshot = {
+        jobId: job.id,
+        step: job.step,
+        progress: job.progress,
+        stepCurrent: job.stepCurrent,
+        stepTotal: job.stepTotal,
+        etaSeconds: job.etaSeconds,
+        error: job.error,
+      }
+    }
+  }
+
   return {
     id: document.id,
     title: document.title,
@@ -169,6 +199,8 @@ export async function getKnowledgeDocumentForDashboard(params: {
     })),
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
+    status: document.status || "ready",
+    ingest: ingestSnapshot,
   }
 }
 

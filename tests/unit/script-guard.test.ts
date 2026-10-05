@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from "vitest"
 import {
   createScriptGuardTransform,
+  FOREIGN_SCRIPT_INTENT_RE,
   shouldGuardScript,
   type ScriptRepair,
 } from "../../src/lib/llm/script-guard"
@@ -54,13 +55,20 @@ describe("script guard", () => {
     await expect(run(["Ini cabang ", "人工智能"], dictionary)).resolves.toBe("Ini cabang kecerdasan buatan")
   })
 
-  it("drops the run when the repair is itself contaminated or fails", async () => {
+  it("replaces an unrepairable run with an ellipsis instead of silently emptying the bubble (TC-1545)", async () => {
     const dirty: ScriptRepair = async () => "мешин"
-    await expect(run(["sistem机器 yang"], dirty)).resolves.toBe("sistem yang")
+    await expect(run(["sistem机器 yang"], dirty)).resolves.toBe("sistem… yang")
     const broken: ScriptRepair = async () => {
       throw new Error("timeout")
     }
-    await expect(run(["sistem机器 yang"], broken)).resolves.toBe("sistem yang")
+    await expect(run(["sistem机器 yang"], broken)).resolves.toBe("sistem… yang")
+    // Positive control: Latin text around the unrepairable run is preserved.
+    const nullRepair: ScriptRepair = async () => null
+    const out = await run(["sistem机器 yang belajar"], nullRepair)
+    expect(out).toContain("…")
+    expect(out).toContain("sistem")
+    expect(out).toContain("belajar")
+    expect(out).not.toContain("机器")
   })
 
   it("passes clean text through untouched without calling repair (control)", async () => {
@@ -76,6 +84,31 @@ describe("shouldGuardScript", () => {
     expect(shouldGuardScript("jelaskan apa itu ai")).toBe(true)
     expect(shouldGuardScript("人工智能是什么")).toBe(false)
     expect(shouldGuardScript("Переведи: hello")).toBe(false)
+  })
+
+  it("disables the guard when the user explicitly asks for a foreign script (TC-1545)", () => {
+    // Script names in the prompt must let the answer come through untouched.
+    expect(shouldGuardScript("Tuliskan Bismillah dalam huruf Arab")).toBe(false)
+    expect(shouldGuardScript("Bahasa Mandarinnya Halo apa?")).toBe(false)
+    expect(shouldGuardScript("terjemahkan ini ke arabic")).toBe(false)
+    expect(shouldGuardScript("apa bahasa Koreanya 'terima kasih'?")).toBe(false)
+    expect(shouldGuardScript("how do you write thank you in Japanese")).toBe(false)
+    expect(shouldGuardScript("transliterate this to cyrillic")).toBe(false)
+    expect(shouldGuardScript("alih aksara aksara jepang")).toBe(false)
+  })
+
+  it("keeps the guard on for ordinary Latin prompts and Indonesian-only keywords", () => {
+    expect(shouldGuardScript("jelaskan fotosintesis")).toBe(true)
+    expect(shouldGuardScript("huruf kapital")).toBe(true) // bare "huruf" without a script name
+    expect(shouldGuardScript("bahasa indonesia yang baik")).toBe(true) // bare "bahasa" without a foreign name
+    expect(shouldGuardScript("tes hapus C")).toBe(true) // no foreign-script intent
+  })
+})
+
+describe("FOREIGN_SCRIPT_INTENT_RE", () => {
+  it("is exported and case-insensitive", () => {
+    expect(FOREIGN_SCRIPT_INTENT_RE).toBeInstanceOf(RegExp)
+    expect(FOREIGN_SCRIPT_INTENT_RE.flags).toContain("i")
   })
 })
 

@@ -25,9 +25,36 @@ export function containsForeignScript(text: string): boolean {
   return FOREIGN_CHAR.test(text)
 }
 
+/**
+ * Detects an explicit user intent to receive a foreign-script answer. Case-
+ * insensitive. Used to disable the guard when the user asks for Arabic, CJK,
+ * Cyrillic, etc. — otherwise the legitimate script the assistant is producing
+ * would be edited away (TC-1545).
+ *
+ * Bare "bahasa" / "huruf" / "aksara" are excluded on purpose: they are common
+ * in Indonesian ("bahasa indonesia", "huruf kapital") and would kill the
+ * guard for everyone. The script name must be present. A trailing `\w*` lets
+ * Indonesian morphology through: "Mandarinnya", "Arab-nya", "Koreanya".
+ */
+export const FOREIGN_SCRIPT_INTENT_RE = new RegExp(
+  [
+    // Standalone script / language names (allow morphology suffixes).
+    "\\b(arab|arabic|mandarin|chinese|japanese|jepang|kanji|hiragana|katakana|hangul|korean|korea|cyrillic|russia|rusian|russian|hindi|devanagari|tamil|thai|hebrew|greek|yunani)\\w*",
+    // Translation / transliteration intent.
+    "\\b(terjemah[a-z]*|translate|translating|transliterat[a-z]*)\\b",
+    // "huruf <script>" pairs.
+    "huruf\\s+(arab|mandarin|chinese|japanese|jepang|kanji|hiragana|katakana|hangul|korean|korea|cyrillic|russia|rusian|russian|hindi|devanagari|tamil|thai|hebrew|greek|yunani)",
+    // "alih aksara" (transliteration).
+    "alih\\s+aksara",
+  ].join("|"),
+  "i",
+)
+
 /** Given the user's text, should their answer be guarded? */
 export function shouldGuardScript(userText: string): boolean {
-  return /[A-Za-z]/.test(userText) && !containsForeignScript(userText)
+  if (!/[A-Za-z]/.test(userText) || containsForeignScript(userText)) return false
+  if (FOREIGN_SCRIPT_INTENT_RE.test(userText)) return false
+  return true
 }
 
 export type ScriptRepair = (fragment: string, context: { before: string; after: string }) => Promise<string | null>
@@ -74,10 +101,18 @@ export function createScriptGuardTransform<TOOLS extends ToolSet>(repair: Script
       } catch {
         replacement = ""
       }
+      if (!replacement) {
+        // Repair failed / was contaminated / timed out — never silently delete
+        // the foreign run, otherwise an entire foreign-script answer collapses
+        // to an empty bubble (TC-1545). Emit a single "…" placeholder instead.
+        console.warn(
+          `[script-guard] could not repair foreign-script run ${JSON.stringify(run)}; emitting "…" placeholder`,
+        )
+        return "…"
+      }
       console.warn(
         `[script-guard] replaced foreign-script run ${JSON.stringify(run)} with ${JSON.stringify(replacement)}`,
       )
-      if (!replacement) return ""
       // "sistem机器 yang" → "sistem mesin yang", not "sistemmesin yang".
       const lead = isWordChar(emitted.slice(-1)) && isWordChar(replacement[0]) ? " " : ""
       const trail = isWordChar(replacement.slice(-1)) && isWordChar(after[0]) ? " " : ""

@@ -27,7 +27,8 @@ export type ToolApprovalMode = "off" | "risky" | "all"
  * Tools that only read, compute, or write inside the user's own workspace.
  * Everything else — MCP, custom/OpenAPI, community and workflow tools, and
  * the builtins that reach outside (channel_dispatch sends messages,
- * file_operations mints storage URLs) — is "risky".
+ * file_operations mints storage URLs, code_interpreter runs sandboxed
+ * arbitrary code) — is "risky".
  */
 export const AUTO_APPROVED_TOOLS: ReadonlySet<string> = new Set([
   "knowledge_search",
@@ -40,7 +41,6 @@ export const AUTO_APPROVED_TOOLS: ReadonlySet<string> = new Set([
   "text_utilities",
   "create_artifact",
   "update_artifact",
-  "code_interpreter", // runs in the Piston sandbox, no network
   "ocr_document",
   "saveMemory",
   "forgetMemory",
