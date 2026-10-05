@@ -41,6 +41,15 @@ describe("approval policy", () => {
     expect(toolNeedsApproval("web_search", "all")).toBe(true)
     expect(toolNeedsApproval("channel_dispatch", "off")).toBe(false)
   })
+
+  it("gates code_interpreter in risky mode (TC-1523): runs sandboxed arbitrary code", () => {
+    expect(toolNeedsApproval("code_interpreter", "risky")).toBe(true)
+    // Positive control: an actually-read-only builtin stays auto-approved.
+    expect(toolNeedsApproval("calculator", "risky")).toBe(false)
+    // "all" still gates everything; "off" still gates nothing.
+    expect(toolNeedsApproval("code_interpreter", "all")).toBe(true)
+    expect(toolNeedsApproval("code_interpreter", "off")).toBe(false)
+  })
 })
 
 describe("gateToolsForApproval", () => {

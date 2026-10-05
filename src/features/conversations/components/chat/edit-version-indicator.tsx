@@ -140,20 +140,25 @@ export function getVersionContent(
   return allVersions[viewingVersion - 1] || currentContent
 }
 
-// Helper to get the assistant response for a specific version
-// Returns undefined for the current/latest version (use actual next message)
-export function getVersionAssistantResponse(
-  editHistory: EditHistoryEntry[] | undefined,
+/**
+ * What the assistant bubble should show when its preceding user message is
+ * viewing an older version. Returns `undefined` when the latest version is
+ * selected or no historical response was captured for that version —
+ * caller falls back to the live assistant content. Returning `""` would
+ * blank the bubble, which is the wrong default for the "edited before any
+ * response" / "old data missing assistantResponse" edges.
+ */
+export function getVersionedAssistantContent(
+  previousUserEditHistory: EditHistoryEntry[] | undefined,
   viewingVersion: number,
   totalVersions: number
 ): string | undefined {
-  if (!editHistory || editHistory.length === 0) {
+  if (!previousUserEditHistory || previousUserEditHistory.length === 0) {
     return undefined
   }
-  // If viewing the latest version, return undefined (use the actual assistant message)
-  if (viewingVersion === totalVersions) {
-    return undefined
-  }
-  // Otherwise return the historical assistant response
-  return editHistory[viewingVersion - 1]?.assistantResponse
+  if (viewingVersion >= totalVersions) return undefined
+  const entry = previousUserEditHistory[viewingVersion - 1]
+  return typeof entry?.assistantResponse === "string"
+    ? entry.assistantResponse
+    : undefined
 }

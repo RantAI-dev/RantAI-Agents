@@ -64,6 +64,10 @@ export interface KnowledgeDocumentDetail {
   chunks: Array<{ id: string; content: string; chunkIndex: number; chunkType: string | null; createdAt: string }>
   createdAt: string
   updatedAt: string
+  // Same ingest lifecycle as KnowledgeDocumentListItem — lets the viewer offer
+  // Retry / Delete from the header when the doc is in a terminal failed state.
+  status: string
+  ingest?: KnowledgeDocumentListItem["ingest"]
 }
 
 export interface KnowledgeDocumentIntelligenceResponse {
@@ -190,6 +194,60 @@ export function mapListItem(document: {
     groups: mapGroups(document.groups),
     createdAt: document.createdAt.toISOString(),
     updatedAt: document.updatedAt.toISOString(),
+  }
+}
+
+/** Group shape the dashboard card renders; mirrors DocumentGroup in the client. */
+export interface DashboardDocumentGroup {
+  id: string
+  name: string
+  color: string | null
+}
+
+/** Shape the dashboard page passes into the client; mirrors Document in
+ *  knowledge-page-client.tsx. status + ingest are surfaced so an SSR refetch
+ *  (e.g. preview → Back) does not strip the failed/processing badge. */
+export interface DashboardDocument {
+  id: string
+  title: string
+  categories: string[]
+  subcategory: string | null
+  fileType: string
+  artifactType: string | null
+  fileSize: number | null
+  thumbnailUrl?: string
+  chunkCount: number
+  groups: DashboardDocumentGroup[]
+  createdAt: string
+  updatedAt: string
+  status: string
+  ingest: KnowledgeDocumentListItem["ingest"]
+}
+
+/** Maps a list-row read (from listKnowledgeDocumentsForDashboard) into the
+ *  shape the dashboard page renders. Status defaults to "ready" like
+ *  mapListItem; ingest is carried through so the failed/processing card keeps
+ *  its bar + Retry button across an SSR refetch. */
+export function mapDocument(item: KnowledgeDocumentListItem): DashboardDocument {
+  return {
+    id: item.id,
+    title: item.title,
+    categories: item.categories,
+    subcategory: item.subcategory,
+    fileType: item.fileType,
+    artifactType: item.artifactType,
+    chunkCount: item.chunkCount,
+    groups: item.groups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      color: group.color,
+    })),
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    fileSize: item.fileSize,
+    thumbnailUrl: item.thumbnailUrl,
+    status: item.status || "ready",
+    ingest: item.ingest ?? null,
   }
 }
 

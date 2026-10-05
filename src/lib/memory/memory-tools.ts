@@ -270,16 +270,23 @@ export function createMemoryTools(ctx: MemoryToolContext) {
   const tools = {
     saveMemory: tool({
       description:
-        'Save important facts, preferences, and entities about the user. Saved immediately; ' +
-        'a value for an existing label REPLACES the old value (use it for updates/corrections).',
+        'Save durable personal facts, preferences, and entities the user has shared about ' +
+        'themselves (e.g. "I live in Depok", "I prefer email"). Saved immediately; a value for ' +
+        'an existing label REPLACES the old value (use it for updates/corrections). ' +
+        'DO NOT call this for search queries, conversation content, code, task instructions, ' +
+        'or anything that is not a personal fact about the user.',
       inputSchema: zodSchema(saveMemoryInputSchema),
       execute: async (input: SaveMemoryInput) => executeSaveMemory(ctx, state, input),
     }),
     forgetMemory: tool({
       description:
-        'Delete stored memory about the user. Call this whenever the user asks you to forget, ' +
-        'delete or remove something (e.g. "forget my location", "hapus/lupakan data saya"). ' +
-        'Returns exactly what was removed.',
+        'Delete stored personal memory about the user (locations, preferences, personal data ' +
+        'they previously asked you to remember). Call it ONLY when the user explicitly refers ' +
+        'to their own saved memory/profile facts. Examples: "forget my location", ' +
+        '"hapus/lupakan data saya". Returns exactly what was removed. ' +
+        'DO NOT call this for generic commands (e.g. "Tes hapus C"), for deleting chat ' +
+        'messages, artifacts, code or files, for search/web requests, or when in doubt — ' +
+        'ask the user instead of calling.',
       inputSchema: zodSchema(forgetMemoryInputSchema),
       execute: async (input: ForgetMemoryInput) => executeForgetMemory(ctx, state, input),
     }),

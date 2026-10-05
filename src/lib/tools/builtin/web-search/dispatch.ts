@@ -49,7 +49,7 @@ export async function searchWithFallback(
   for (const provider of chain) {
     try {
       const out = await provider.search(query, maxResults);
-      if (out) return out;
+      if (out && out.success) return out;
     } catch (err) {
       lastError = err as Error;
       console.warn(

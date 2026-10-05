@@ -151,6 +151,18 @@ describe("forgetMemory (CHAT-022)", () => {
     const { tools } = createMemoryTools(ctx())
     expect(Object.keys(tools).sort()).toEqual(["forgetMemory", "saveMemory"])
   })
+
+  it("locks a negative-boundary into both memory tool descriptions (TC-1548)", () => {
+    const { tools } = createMemoryTools(ctx())
+    const save = tools.saveMemory.description.toLowerCase()
+    const forget = tools.forgetMemory.description.toLowerCase()
+    // Both descriptions must warn against generic / non-personal triggers so
+    // "Tes hapus C" / "Cari berita AI" do not light the tool up.
+    expect(save).toContain("personal")
+    expect(save).toMatch(/not .*\b(search|conversation)\b/)
+    expect(forget).toContain("personal")
+    expect(forget).toMatch(/not .*\b(search|conversation|test)\b/)
+  })
 })
 
 describe("working-memory cache bounds (CHAT-058 leak)", () => {

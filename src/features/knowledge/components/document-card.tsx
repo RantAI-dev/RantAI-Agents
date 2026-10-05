@@ -170,16 +170,30 @@ export function DocumentCard({
             <p className="text-[11px] text-destructive leading-tight line-clamp-2">
               {document.ingest?.error || "Ingest failed"}
             </p>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-7 gap-1.5"
-              onClick={handleRetry}
-              disabled={retrying || !document.ingest?.jobId}
-            >
-              {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-              Retry
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-7 gap-1.5"
+                onClick={handleRetry}
+                disabled={retrying || !document.ingest?.jobId}
+              >
+                {retrying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Retry
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-7 gap-1.5 text-destructive hover:text-destructive"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setDeleteDialogOpen(true)
+                }}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete
+              </Button>
+            </div>
           </div>
         )}
         {selectionMode && (

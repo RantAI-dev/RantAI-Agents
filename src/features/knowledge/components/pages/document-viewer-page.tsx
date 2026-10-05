@@ -30,6 +30,8 @@ function mapDocumentDetail(detail: KnowledgeDocumentDetail): DocumentDetail {
     chunks: detail.chunks,
     createdAt: detail.createdAt,
     updatedAt: detail.updatedAt,
+    status: detail.status,
+    ingest: detail.ingest ?? null,
   }
 }
 

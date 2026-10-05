@@ -7,7 +7,33 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Download, FileText, Layers, Eye, Code, Brain, HelpCircle, ImageIcon, Table2, Type } from "@/lib/icons"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { useToast } from "@/hooks/use-toast"
+import {
+  ArrowLeft,
+  Download,
+  FileText,
+  Layers,
+  Eye,
+  Code,
+  Brain,
+  HelpCircle,
+  ImageIcon,
+  Table2,
+  Type,
+  RefreshCw,
+  Trash2,
+  Loader2,
+} from "@/lib/icons"
 import DocumentIntelligence from "@/features/knowledge/components/document-intelligence"
 import DocumentFigures from "./document-figures"
 import { getFileTypeIcon, getFileExtensionLabel, CATEGORY_LABELS } from "@/features/knowledge/components/file-type-utils"
@@ -59,6 +85,17 @@ export interface DocumentDetail {
   }>
   createdAt: string
   updatedAt: string
+  // Ingest lifecycle — lets the header offer Retry / Delete without a refetch.
+  status: string
+  ingest?: {
+    jobId: string
+    step: string | null
+    progress: number
+    stepCurrent: number | null
+    stepTotal: number | null
+    etaSeconds: number | null
+    error: string | null
+  } | null
 }
 
 function formatFileSize(bytes?: number) {
@@ -76,12 +113,17 @@ export default function DocumentViewerClient({
   initialDocument: DocumentDetail | null
 }) {
   const router = useRouter()
+  const { toast } = useToast()
   const [document] = useState<DocumentDetail | null>(initialDocument)
   const [activeTab, setActiveTab] = useState("preview")
   // 1-based page to jump the PDF preview to (from the Figures gallery).
   const [pdfPage, setPdfPage] = useState<number | null>(null)
   // Chunks tab: filter by chunkType (Semua / Teks / Tabel / Gambar / Heading).
   const [chunkFilter, setChunkFilter] = useState<string | null>(null)
+  // Failed-ingest actions in the header.
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [retrying, setRetrying] = useState(false)
 
   const fileType = document?.fileType || document?.metadata?.fileType || "markdown"
   const isPdf = fileType === "pdf"
@@ -151,6 +193,53 @@ export default function DocumentViewerClient({
     }
   }
 
+  // Failed-ingest actions: match the patterns in document-card.tsx (raw fetch,
+  // POST /api/dashboard/files/ingest-jobs/${jobId}/retry) and knowledge-page-
+  // client.tsx (DELETE /api/dashboard/files/${id}). The viewer file has no
+  // existing fetch helper, so raw fetch keeps the dependency surface small.
+  const handleRetry = async () => {
+    if (!document?.ingest?.jobId || retrying) return
+    setRetrying(true)
+    try {
+      const res = await fetch(`/api/dashboard/files/ingest-jobs/${document.ingest.jobId}/retry`, { method: "POST" })
+      if (!res.ok) {
+        const data: { error?: string } = await res.json().catch(() => ({}))
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
+      // Worker re-picks the retry; the live badge on /dashboard/files is the
+      // authoritative surface, so bounce back there.
+      router.push("/dashboard/files")
+    } catch (error) {
+      setRetrying(false)
+      toast({
+        title: "Couldn't retry ingest",
+        description: error instanceof Error ? error.message : "network error, try again.",
+      })
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!document || deleting) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/dashboard/files/${document.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const data: { error?: string } = await res.json().catch(() => ({}))
+        throw new Error(data.error || `HTTP ${res.status}`)
+      }
+      setDeleteDialogOpen(false)
+      router.push("/dashboard/files")
+    } catch (error) {
+      setDeleting(false)
+      toast({
+        title: "Couldn't delete",
+        description: `${document.title} was kept — ${
+          error instanceof Error ? error.message : "network error, try again."
+        }`,
+      })
+    }
+  }
+
   const getPdfViewUrl = () => {
     if (rawUrl) {
       return rawUrl
@@ -214,6 +303,27 @@ export default function DocumentViewerClient({
             </Button>
 
             <div className="flex items-center gap-1">
+              {document.status === "failed" && document.ingest?.jobId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={handleRetry}
+                  disabled={retrying}
+                >
+                  {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Retry ingest
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5 text-destructive hover:text-destructive"
+                onClick={() => setDeleteDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </Button>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleDownload}>
                 <Download className="h-4 w-4" />
               </Button>
@@ -534,6 +644,31 @@ export default function DocumentViewerClient({
           <DocumentIntelligence documentId={document.id} />
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this document?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes &ldquo;{document.title}&rdquo;, its chunks from the
+              vector store, and the underlying S3 file. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault()
+                handleDelete()
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
