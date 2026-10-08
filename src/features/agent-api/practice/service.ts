@@ -105,9 +105,10 @@ async function materiLabels(questions: string[], topic: string): Promise<string[
     const { text } = await generateText({
       model: getChatProvider()(resolveModelId(model)),
       prompt: labelPrompt(questions, topic),
-      // A reasoning model spends most of this thinking; 800 left 23 tokens to spare.
-      maxOutputTokens: 2000,
-      abortSignal: AbortSignal.timeout(25_000),
+      // Room for a reasoning model to think and still answer; the reply itself
+      // is under a hundred tokens.
+      maxOutputTokens: 4000,
+      abortSignal: AbortSignal.timeout(40_000),
     })
     const labels = parseMateriLabels(text, questions.length)
     if (!labels) console.warn("[V1 Practice] materi labels: unusable reply, using derived titles")
