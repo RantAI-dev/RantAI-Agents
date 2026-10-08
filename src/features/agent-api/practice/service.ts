@@ -9,7 +9,8 @@
  */
 import { prisma } from "@/lib/prisma"
 import { smartHybridRetrieve } from "@/lib/rag"
-import { isLikelyOutOfScope } from "@/lib/rag/oos-gate"
+import { generateText } from "ai"
+import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { ensureProviderRegistryLoaded, getProviderRegistry } from "@/lib/llm/provider-registry"
 import { resolveRequestedGroupIds } from "../service"
 import {
@@ -18,6 +19,8 @@ import {
 } from "./generate-contract"
 import { explain, type Excerpt } from "./explain"
 import { gradePractice } from "./grade"
+import { groundingOf } from "../grounding"
+import { labelPrompt, parseMateriLabels } from "./materi-labels"
 import type { PracticeGenerateInput, PracticeGradeInput, PracticeSet } from "./types"
 
 const JSON_HEADERS = { "Content-Type": "application/json" }
@@ -94,6 +97,27 @@ async function generate(...args: Parameters<typeof callAdapter>): Promise<Adapte
   return (await callAdapter(...args)) ?? (await callAdapter(...args))
 }
 
+/** Materi titles from the optional labelling model; null when unset or unusable. */
+async function materiLabels(questions: string[], topic: string): Promise<string[] | null> {
+  const model = process.env.AGENT_API_PRACTICE_LABEL_MODEL?.trim()
+  if (!model) return null
+  try {
+    const { text } = await generateText({
+      model: getChatProvider()(resolveModelId(model)),
+      prompt: labelPrompt(questions, topic),
+      // A reasoning model spends most of this thinking; 800 left 23 tokens to spare.
+      maxOutputTokens: 2000,
+      abortSignal: AbortSignal.timeout(25_000),
+    })
+    const labels = parseMateriLabels(text, questions.length)
+    if (!labels) console.warn("[V1 Practice] materi labels: unusable reply, using derived titles")
+    return labels
+  } catch (err) {
+    console.warn(`[V1 Practice] materi labels skipped: ${(err as Error).message?.slice(0, 120)}`)
+    return null
+  }
+}
+
 function excerptBlock(excerpts: Excerpt[]): string {
   return excerpts
     .map((e, i) => `[${i + 1}] ${e.title}${e.section && e.section !== "None" ? ` — ${e.section}` : ""}\n${e.text}`)
@@ -125,7 +149,9 @@ export async function runPracticeGenerate(
   // memory rather than the curriculum.
   const retrieved = await smartHybridRetrieve(input.topic, { enableEntitySearch: true, groupIds: resolved.ids })
   const prose = retrieved.results.filter((r) => r.chunkType !== "figure" && r.content.trim().length >= 120)
-  if (prose.length === 0 || isLikelyOutOfScope(prose.map((r) => r.vectorScore))) {
+  // The same threshold the chat path reports `grounded` with, so one
+  // calibration (AGENT_API_GROUNDED_MIN_SCORE) governs both.
+  if (prose.length === 0 || !groundingOf(prose.map((r) => r.vectorScore)).grounded) {
     return fail(422, NOT_IN_BOOKS, "not_grounded", "topic_not_in_books")
   }
   const excerpts: Excerpt[] = prose.slice(0, MAX_EXCERPTS).map((r) => ({
@@ -172,9 +198,11 @@ export async function runPracticeGenerate(
   }
 
   const multi = tipe === "multi"
-  const questions = soal.map((raw, i) => {
-    const s = shuffleOptions(raw)
-    return toPracticeQuestion(s, i, multi, explain(s, excerpts, input.topic))
+  const shuffled = soal.map((raw) => shuffleOptions(raw))
+  const labels = await materiLabels(shuffled.map((s) => s.pertanyaan), input.topic)
+  const questions = shuffled.map((s, i) => {
+    const derived = explain(s, excerpts, input.topic)
+    return toPracticeQuestion(s, i, multi, { ...derived, materi: labels?.[i] ?? derived.materi })
   })
 
   const set: PracticeSet = {
