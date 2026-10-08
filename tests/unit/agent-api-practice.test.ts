@@ -15,6 +15,7 @@ import {
 import { gradePractice, weaknessLevel } from "@/features/agent-api/practice/grade"
 import { explain } from "@/features/agent-api/practice/explain"
 import type { PracticeSet } from "@/features/agent-api/practice/types"
+import { labelPrompt, parseMateriLabels } from "@/features/agent-api/practice/materi-labels"
 
 const soal = (over: Partial<AdapterSoal> = {}): AdapterSoal => ({
   pertanyaan: "Enzim yang mengubah amilum menjadi maltosa adalah ....",
@@ -228,5 +229,43 @@ describe("explain", () => {
   it("names both options for a multi-select", () => {
     const r = explain(soal({ kunci: ["A", "C"] }), [], "enzim")
     expect(r.pembahasan).toContain("A. amilase dan C. lipase")
+  })
+})
+
+
+describe("parseMateriLabels", () => {
+  it("reads one title per question", () => {
+    expect(parseMateriLabels('{"materi": ["Enzim Pencernaan", "Organ Pencernaan"]}', 2)).toEqual(["Enzim Pencernaan", "Organ Pencernaan"])
+  })
+
+  it("ignores thinking and prose around the JSON", () => {
+    const raw = '<think>two topics here</think>\nBerikut hasilnya:\n```json\n{"materi": ["Enzim", "Lambung"]}\n```'
+    expect(parseMateriLabels(raw, 2)).toEqual(["Enzim", "Lambung"])
+  })
+
+  it("rejects a list of the wrong length rather than mislabelling the rest", () => {
+    expect(parseMateriLabels('{"materi": ["Enzim"]}', 2)).toBeNull()
+    expect(parseMateriLabels('{"materi": ["Enzim", "Lambung", "Usus"]}', 2)).toBeNull()
+  })
+
+  it("rejects non-strings, empty and overlong titles, and non-JSON", () => {
+    expect(parseMateriLabels('{"materi": ["Enzim", 2]}', 2)).toBeNull()
+    expect(parseMateriLabels('{"materi": ["Enzim", " "]}', 2)).toBeNull()
+    expect(parseMateriLabels(`{"materi": ["Enzim", "${"x".repeat(61)}"]}`, 2)).toBeNull()
+    expect(parseMateriLabels("Enzim, Lambung", 2)).toBeNull()
+    expect(parseMateriLabels("<think>never finished", 2)).toBeNull()
+  })
+
+  it("treats titles that differ only in case or trailing punctuation as one materi", () => {
+    expect(parseMateriLabels('{"materi": ["Enzim Pencernaan.", "enzim pencernaan", "Lambung"]}', 3)).toEqual(["Enzim Pencernaan", "Enzim Pencernaan", "Lambung"])
+  })
+})
+
+describe("labelPrompt", () => {
+  it("numbers the questions and states the exact count expected back", () => {
+    const p = labelPrompt(["Apa itu enzim?", "Apa fungsi lambung?"], "pencernaan")
+    expect(p).toContain("1. Apa itu enzim?")
+    expect(p).toContain("2. Apa fungsi lambung?")
+    expect(p).toContain("tepat 2 judul")
   })
 })
