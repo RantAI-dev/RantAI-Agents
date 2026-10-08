@@ -249,15 +249,15 @@ describe("gateConfig output budget", () => {
   const on = { KB_FIGURE_VLM_ENABLED: "1", KB_FIGURE_VLM_BASE: "http://vlm/v1", KB_FIGURE_VLM_MODEL: "m" }
 
   it("keeps the 8-token default that a non-reasoning model needs", () => {
-    expect(gateConfig(on as NodeJS.ProcessEnv)?.maxTokens).toBe(8)
+    expect(gateConfig(on as unknown as NodeJS.ProcessEnv)?.maxTokens).toBe(8)
   })
 
   it("can be raised for a model that thinks before answering", () => {
-    expect(gateConfig({ ...on, KB_FIGURE_VLM_MAX_TOKENS: "300" } as NodeJS.ProcessEnv)?.maxTokens).toBe(300)
+    expect(gateConfig({ ...on, KB_FIGURE_VLM_MAX_TOKENS: "300" } as unknown as NodeJS.ProcessEnv)?.maxTokens).toBe(300)
   })
 
   it("ignores a nonsense budget", () => {
-    expect(gateConfig({ ...on, KB_FIGURE_VLM_MAX_TOKENS: "abc" } as NodeJS.ProcessEnv)?.maxTokens).toBe(8)
-    expect(gateConfig({ ...on, KB_FIGURE_VLM_MAX_TOKENS: "0" } as NodeJS.ProcessEnv)?.maxTokens).toBe(8)
+    expect(gateConfig({ ...on, KB_FIGURE_VLM_MAX_TOKENS: "abc" } as unknown as NodeJS.ProcessEnv)?.maxTokens).toBe(8)
+    expect(gateConfig({ ...on, KB_FIGURE_VLM_MAX_TOKENS: "0" } as unknown as NodeJS.ProcessEnv)?.maxTokens).toBe(8)
   })
 })

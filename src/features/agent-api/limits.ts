@@ -32,7 +32,7 @@ function positiveInt(raw: string | undefined): number | null {
   return n > 0 ? n : null
 }
 
-export function inputLimits(env: NodeJS.ProcessEnv = process.env): InputLimits {
+export function inputLimits(env: Record<string, string | undefined> = process.env): InputLimits {
   return {
     maxUserMessageChars: positiveInt(env.AGENT_API_MAX_USER_MESSAGE_CHARS),
     maxHistoryMessages: positiveInt(env.AGENT_API_MAX_HISTORY_MESSAGES),

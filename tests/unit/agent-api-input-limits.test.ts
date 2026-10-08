@@ -18,19 +18,19 @@ const s = (content: string) => ({ role: "system" as const, content })
 
 describe("inputLimits", () => {
   it("is off when nothing is configured", () => {
-    expect(inputLimits({} as NodeJS.ProcessEnv)).toEqual({ maxUserMessageChars: null, maxHistoryMessages: null })
+    expect(inputLimits({})).toEqual({ maxUserMessageChars: null, maxHistoryMessages: null })
   })
 
   it("reads both limits from the environment", () => {
     const env = { AGENT_API_MAX_USER_MESSAGE_CHARS: "2000", AGENT_API_MAX_HISTORY_MESSAGES: "20" }
-    expect(inputLimits(env as NodeJS.ProcessEnv)).toEqual({ maxUserMessageChars: 2000, maxHistoryMessages: 20 })
+    expect(inputLimits(env)).toEqual({ maxUserMessageChars: 2000, maxHistoryMessages: 20 })
   })
 
   it("treats zero, negatives and junk as no limit rather than a limit of zero", () => {
     // A limit of 0 would reject every request; a typo must not take the API down.
     for (const v of ["0", "-5", "abc", "", "1.5"]) {
       const env = { AGENT_API_MAX_USER_MESSAGE_CHARS: v, AGENT_API_MAX_HISTORY_MESSAGES: v }
-      expect(inputLimits(env as NodeJS.ProcessEnv)).toEqual({ maxUserMessageChars: null, maxHistoryMessages: null })
+      expect(inputLimits(env)).toEqual({ maxUserMessageChars: null, maxHistoryMessages: null })
     }
   })
 })
