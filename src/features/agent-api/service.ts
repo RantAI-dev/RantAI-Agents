@@ -364,10 +364,10 @@ export async function runV1ChatCompletion(
 
       // Try hybrid retrieval first, fall back to vector-only.
       // maxResults / maxChunks unset → picks up KB_DEFAULT_MAX_CHUNKS from config.
-      const hybridResult = await smartHybridRetrieve(userQuery, {
-        enableEntitySearch: true,
-        groupIds,
-      })
+      // enableEntitySearch is left to its default so KB_ENTITY_SEARCH_ENABLED
+      // is honoured: passing `true` here overrode a deployment that had
+      // switched the entity arm off because its corpus has no entity graph.
+      const hybridResult = await smartHybridRetrieve(userQuery, { groupIds })
 
       grounding = groundingOf(hybridResult.results.map((r) => r.vectorScore))
       if (hybridResult.context) {

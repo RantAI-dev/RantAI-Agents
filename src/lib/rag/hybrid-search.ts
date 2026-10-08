@@ -360,9 +360,14 @@ export class HybridSearch {
         const k = scoped ? Math.min(2000, Math.max(limit * 5, 100)) : limit;
         const ef = Math.max(64, k * 2);
         const filter = scoped ? ` AND ${whereClause}` : "";
+        // The index is named explicitly. Once `document_id_idx` exists, the
+        // planner serves a scoped query from it instead of the vector index,
+        // and the KNN operator then answers OK with zero rows — slowly — so
+        // every search falls through to the full scan below.
         const knnSql = `
           SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity OMIT embedding
           FROM document_chunk
+          WITH INDEX embedding_idx
           WHERE embedding <|${k},${ef}|> $embedding${filter}
           ORDER BY similarity DESC
           LIMIT $limit;
@@ -726,25 +731,33 @@ export class HybridSearch {
   private async enrichWithEntities(
     results: HybridSearchResult[]
   ): Promise<HybridSearchResult[]> {
+    // Nothing to attach when the entity arm is off: on a corpus with no entity
+    // graph these lookups cost a round trip each and always return nothing.
+    if (!this.config.enableEntitySearch || results.length === 0) return results;
     try {
       const client = await this.getClient();
 
+      // One lookup per distinct document, in parallel. Results from the same
+      // document share its entities, so asking per result repeated the same
+      // query many times over. `entity` has no `file_id` field; a clause on it
+      // could never match and kept the document index from being used.
+      const docIds = [...new Set(results.map((r) => r.documentId))];
+      const sql = `
+        SELECT *
+        FROM entity
+        WHERE document_id = $docId
+        ORDER BY confidence DESC
+        LIMIT 5;
+      `;
+      const byDoc = new Map<string, Entity[]>();
+      await Promise.all(
+        docIds.map(async (docId) => {
+          const entityResult = await client.query<Entity>(sql, { docId });
+          byDoc.set(docId, entityResult[0]?.result || []);
+        })
+      );
       for (const result of results) {
-        const sql = `
-          SELECT *
-          FROM entity
-          WHERE document_id = $docId OR file_id = $fileId
-          ORDER BY confidence DESC
-          LIMIT 5;
-        `;
-
-        const entityResult = await client.query<Entity>(sql, {
-          docId: result.documentId,
-          fileId: result.fileId || result.documentId,
-        });
-
-        const entities = entityResult[0]?.result || [];
-        result.relatedEntities = entities;
+        result.relatedEntities = byDoc.get(result.documentId) ?? [];
       }
     } catch (error) {
       console.error("[HybridSearch] Failed to enrich with entities:", error);
