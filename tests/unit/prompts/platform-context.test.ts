@@ -46,6 +46,27 @@ describe("buildPlatformContextInstruction", () => {
 })
 
 describe("LANGUAGE_INSTRUCTION", () => {
+  // A deployment whose assistants run fine-tuned adapters trained against a
+  // fixed prompt, or which must not carry the platform's name, switches the
+  // block off. It has to vanish completely: a leftover heading or date line
+  // would still change the prompt the adapter was trained on.
+  it("emits nothing at all when switched off", () => {
+    const now = new Date("2026-09-25T03:00:00Z")
+    for (const v of ["off", "OFF", " off ", "false", "0"]) {
+      const text = buildPlatformContextInstruction({ assistantName: "Elise", now, env: { PLATFORM_CONTEXT_INSTRUCTION: v } })
+      expect(text).toBe("")
+    }
+  })
+
+  it("stays on by default and for any other value", () => {
+    const now = new Date("2026-09-25T03:00:00Z")
+    for (const env of [{}, { PLATFORM_CONTEXT_INSTRUCTION: "" }, { PLATFORM_CONTEXT_INSTRUCTION: "on" }]) {
+      const text = buildPlatformContextInstruction({ assistantName: "Elise", now, env })
+      expect(text).toContain("You are Elise")
+      expect(text).toContain("## Current date")
+    }
+  })
+
   it("forbids non-Latin script in Indonesian/English replies", () => {
     expect(LANGUAGE_INSTRUCTION).toMatch(/Latin script only/)
     expect(LANGUAGE_INSTRUCTION).toMatch(/Chinese/)
