@@ -1,6 +1,56 @@
 import Surreal from "surrealdb";
 
 /**
+ * Why every call below is wrapped in a timeout.
+ *
+ * After the server restarts, the SDK keeps reporting `status: "connected"`,
+ * emits no event, and every call on the old socket — `query`, `signin`, even
+ * `close` — returns a promise that never settles. Reproduced against a real
+ * SurrealDB v2 (scripts/check-surreal-restart.ts). No rejection means no catch
+ * block runs, so reconnect logic that waits for an error is unreachable: in
+ * production the knowledge base hung for twelve days behind a healthy-looking
+ * process. A deadline is the only signal there is.
+ */
+export class SurrealTimeoutError extends Error {
+  constructor(what: string, ms: number) {
+    super(`SurrealDB ${what} timed out after ${ms} ms`);
+    this.name = "SurrealTimeoutError";
+  }
+}
+
+function envMs(name: string, fallback: number): number {
+  const raw = process.env[name];
+  const n = Number(raw);
+  return raw !== undefined && raw.trim() !== "" && Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
+/** Read lazily so a deployment (and a test) can tune them without a rebuild. */
+const timeouts = {
+  /** A single statement. Generous by default: a large ingest write is slow, not dead. */
+  query: () => envMs("SURREAL_QUERY_TIMEOUT_MS", 120_000),
+  /** connect / signin / use. */
+  connect: () => envMs("SURREAL_CONNECT_TIMEOUT_MS", 10_000),
+  /** The liveness ping sent before a call that follows an idle period. */
+  ping: () => envMs("SURREAL_PING_TIMEOUT_MS", 3_000),
+  /** How long without a successful round trip before a call is preceded by a ping. */
+  idlePing: () => envMs("SURREAL_IDLE_PING_MS", 15_000),
+};
+
+function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  if (ms <= 0) return promise;
+  let timer: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new SurrealTimeoutError(what, ms)), ms);
+  });
+  return Promise.race([promise, deadline]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
+/** Statements that are safe to run a second time after an ambiguous failure. */
+function isReadOnly(sql: string): boolean {
+  return /^\s*(SELECT|RETURN|INFO|SHOW)\b/i.test(sql) && !/;\s*\S/.test(sql.trim().replace(/;\s*$/, ""));
+}
+
+/**
  * Escape a SurrealDB record ID for use in queries
  * Record IDs with special characters (like hyphens in UUIDs) need backtick escaping
  * e.g., "entity:uuid-with-hyphens" becomes "entity:`uuid-with-hyphens`"
@@ -59,6 +109,8 @@ export class SurrealDBClient {
   private reconnectPromise: Promise<void> | null = null;
   private config: SurrealDBConfig;
   private lastAuthTime: number = 0;
+  /** Last time the server answered anything; drives the idle liveness ping. */
+  private lastOkAt: number = 0;
   private static readonly TOKEN_REFRESH_INTERVAL = 50 * 60 * 1000; // 50 minutes
 
   private constructor(config: SurrealDBConfig) {
@@ -119,21 +171,7 @@ export class SurrealDBClient {
 
     this.connectionPromise = (async () => {
       try {
-        await this.db.connect(this.config.url);
-
-        if (this.config.username && this.config.password) {
-          await this.db.signin({
-            username: this.config.username,
-            password: this.config.password,
-          });
-          this.lastAuthTime = Date.now();
-        }
-
-        await this.db.use({
-          namespace: this.config.namespace,
-          database: this.config.database,
-        });
-
+        await this.open(this.db);
         this.connected = true;
         console.log(`[SurrealDB] Connected: ${this.config.namespace}/${this.config.database}`);
       } catch (error) {
@@ -154,7 +192,7 @@ export class SurrealDBClient {
     if (!this.connected) return;
 
     try {
-      await this.db.close();
+      await withTimeout(this.db.close(), timeouts.ping(), "close").catch(() => {});
       this.connected = false;
       this.connectionPromise = null;
       console.log("[SurrealDB] Disconnected");
@@ -178,18 +216,22 @@ export class SurrealDBClient {
     console.log("[SurrealDB] Token expired, re-authenticating...");
 
     try {
+      const ms = timeouts.connect();
       if (this.config.username && this.config.password) {
-        await this.db.signin({
-          username: this.config.username,
-          password: this.config.password,
-        });
+        await withTimeout(
+          this.db.signin({ username: this.config.username, password: this.config.password }),
+          ms,
+          "signin",
+        );
         this.lastAuthTime = Date.now();
       }
 
-      await this.db.use({
-        namespace: this.config.namespace,
-        database: this.config.database,
-      });
+      await withTimeout(
+        this.db.use({ namespace: this.config.namespace, database: this.config.database }),
+        ms,
+        "use",
+      );
+      this.lastOkAt = Date.now();
 
       console.log("[SurrealDB] Re-authenticated successfully");
     } catch (error) {
@@ -210,36 +252,23 @@ export class SurrealDBClient {
       console.log("[SurrealDB] Performing full reconnect...");
 
       try {
-        try {
-          await this.db.close();
-        } catch {
-          // Ignore close errors
-        }
+        // Not awaited: close() on a dead socket never settles, and waiting for
+        // it is what would turn a reconnect into another hang.
+        void this.db.close().catch(() => {});
 
-        this.db = new Surreal();
-        this.connected = false;
+        const next = new Surreal();
+        await this.open(next);
+        // Swapped in only once it works, so a failed attempt leaves the client
+        // in a state the next call can retry from.
+        this.db = next;
         this.connectionPromise = null;
-
-        await this.db.connect(this.config.url);
-
-        if (this.config.username && this.config.password) {
-          await this.db.signin({
-            username: this.config.username,
-            password: this.config.password,
-          });
-          this.lastAuthTime = Date.now();
-        }
-
-        await this.db.use({
-          namespace: this.config.namespace,
-          database: this.config.database,
-        });
-
         this.connected = true;
         console.log("[SurrealDB] Full reconnect successful");
       } catch (error) {
         console.error("[SurrealDB] Full reconnect failed:", error);
-        this.connected = false;
+        // `connected` stays true on purpose: it means "initialised", and
+        // clearing it would make every later call throw "not connected"
+        // forever instead of trying again once the server is back.
         throw error;
       } finally {
         this.reconnectPromise = null;
@@ -249,14 +278,64 @@ export class SurrealDBClient {
     return this.reconnectPromise;
   }
 
+  /** connect + signin + use on `db`, each under a deadline. */
+  private async open(db: Surreal): Promise<void> {
+    const ms = timeouts.connect();
+    await withTimeout(db.connect(this.config.url), ms, "connect");
+    if (this.config.username && this.config.password) {
+      await withTimeout(
+        db.signin({ username: this.config.username, password: this.config.password }),
+        ms,
+        "signin",
+      );
+      this.lastAuthTime = Date.now();
+    }
+    await withTimeout(
+      db.use({ namespace: this.config.namespace, database: this.config.database }),
+      ms,
+      "use",
+    );
+    this.lastOkAt = Date.now();
+  }
+
   /**
-   * Ensure authentication is fresh
+   * Make sure the connection is alive and authenticated before a call.
+   *
+   * After an idle period a one-row ping goes first, under a short deadline. A
+   * dead socket is then found in seconds and replaced, instead of the real
+   * statement waiting out its much longer timeout. A busy connection never
+   * pays for the ping.
    */
-  private async ensureFreshAuth(): Promise<void> {
+  private async ensureReady(): Promise<void> {
+    if (Date.now() - this.lastOkAt >= timeouts.idlePing()) {
+      try {
+        await withTimeout(this.db.query("RETURN 1;"), timeouts.ping(), "ping");
+        this.lastOkAt = Date.now();
+      } catch {
+        await this.fullReconnect();
+        return; // a fresh connection is freshly authenticated
+      }
+    }
     const timeSinceAuth = Date.now() - this.lastAuthTime;
     if (this.lastAuthTime > 0 && timeSinceAuth > SurrealDBClient.TOKEN_REFRESH_INTERVAL) {
-      await this.reauthenticate();
+      try {
+        await this.reauthenticate();
+      } catch {
+        await this.fullReconnect();
+      }
     }
+  }
+
+  /** @deprecated kept for call sites inside this class; see ensureReady. */
+  private ensureFreshAuth(): Promise<void> {
+    return this.ensureReady();
+  }
+
+  /** One SDK call under the statement deadline, recording that the server answered. */
+  private async call<T>(what: string, run: () => Promise<T>): Promise<T> {
+    const result = await withTimeout(run(), timeouts.query(), what);
+    this.lastOkAt = Date.now();
+    return result;
   }
 
   /**
@@ -286,6 +365,7 @@ export class SurrealDBClient {
     const errorCode = err?.cause?.code || err?.code || "";
 
     return (
+      error instanceof SurrealTimeoutError ||
       errorMessage.includes("fetch failed") ||
       errorMessage.includes("connection") ||
       errorMessage.includes("enotfound") ||
@@ -330,14 +410,24 @@ export class SurrealDBClient {
     }
 
     try {
-      await this.ensureFreshAuth();
-      const result = await this.db.query(sql, vars);
+      await this.ensureReady();
+      const result = await this.call("query", () => this.db.query(sql, vars));
       return this.normalizeQueryResult<T>(result as unknown[]);
     } catch (error) {
+      if (error instanceof SurrealTimeoutError) {
+        // The connection is replaced either way, so the next call works.
+        await this.fullReconnect();
+        // A statement that timed out may or may not have reached the server.
+        // Reading again is harmless; writing again could store a row twice.
+        if (!isReadOnly(sql)) throw error;
+        const result = await this.call("query", () => this.db.query(sql, vars));
+        return this.normalizeQueryResult<T>(result as unknown[]);
+      }
+
       if (this.isConnectionError(error)) {
         try {
           await this.fullReconnect();
-          const result = await this.db.query(sql, vars);
+          const result = await this.call("query", () => this.db.query(sql, vars));
           return this.normalizeQueryResult<T>(result as unknown[]);
         } catch (reconnectError) {
           console.error("[SurrealDB] Query failed after full reconnect:", reconnectError);
@@ -348,12 +438,12 @@ export class SurrealDBClient {
       if (this.isTokenExpiredError(error)) {
         try {
           await this.reauthenticate();
-          const result = await this.db.query(sql, vars);
+          const result = await this.call("query", () => this.db.query(sql, vars));
           return this.normalizeQueryResult<T>(result as unknown[]);
         } catch (reauthError) {
           try {
             await this.fullReconnect();
-            const result = await this.db.query(sql, vars);
+            const result = await this.call("query", () => this.db.query(sql, vars));
             return this.normalizeQueryResult<T>(result as unknown[]);
           } catch (reconnectError) {
             console.error("[SurrealDB] Query failed after full reconnect:", reconnectError);
@@ -377,9 +467,13 @@ export class SurrealDBClient {
 
     try {
       await this.ensureFreshAuth();
-      const result = await this.db.create(table, data);
+      const result = await this.call("create", () => this.db.create(table, data));
       return result as T;
     } catch (error) {
+      if (error instanceof SurrealTimeoutError) {
+        await this.fullReconnect();
+        throw error; // a write: not re-run, see query()
+      }
       if (this.isConnectionError(error) || this.isTokenExpiredError(error)) {
         await this.fullReconnect();
         const result = await this.db.create(table, data);
@@ -399,8 +493,12 @@ export class SurrealDBClient {
 
     try {
       await this.ensureFreshAuth();
-      await this.db.delete(id);
+      await this.call("delete", () => this.db.delete(id));
     } catch (error) {
+      if (error instanceof SurrealTimeoutError) {
+        await this.fullReconnect();
+        throw error; // a write: not re-run, see query()
+      }
       if (this.isConnectionError(error) || this.isTokenExpiredError(error)) {
         await this.fullReconnect();
         await this.db.delete(id);
@@ -489,10 +587,14 @@ export class SurrealDBClient {
 
       const sql = `RELATE ${escapedSourceId}->${relationType}->${escapedTargetId} ${setClause};`;
 
-      const result = await this.db.query(sql, data || {});
+      const result = await this.call("relate", () => this.db.query(sql, data || {}));
       const relationResult = result as SurrealQueryResult<T>[];
       return relationResult[0]?.result?.[0] as T;
     } catch (error) {
+      if (error instanceof SurrealTimeoutError) {
+        await this.fullReconnect();
+        throw error; // a write: not re-run, see query()
+      }
       if (this.isConnectionError(error) || this.isTokenExpiredError(error)) {
         await this.fullReconnect();
         const escapedSourceId = escapeRecordId(sourceId);
@@ -566,7 +668,7 @@ export class SurrealDBClient {
       // Execute as transaction
       const sql = `BEGIN TRANSACTION;\n${queries.join(";\n")};\nCOMMIT TRANSACTION;`;
 
-      const result = await this.db.query(sql, vars);
+      const result = await this.call("relateBatch", () => this.db.query(sql, vars));
       const results: T[] = [];
 
       // Extract results from transaction response
@@ -579,6 +681,9 @@ export class SurrealDBClient {
 
       return results;
     } catch (error) {
+      // Replace a dead connection so the next call works; the batch itself is
+      // a write and is not re-run.
+      if (error instanceof SurrealTimeoutError) await this.fullReconnect().catch(() => {});
       console.error("[SurrealDB] Batch relate failed:", error);
       throw error;
     }
@@ -793,7 +898,9 @@ export class SurrealDBClient {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      await this.query("SELECT 1;");
+      // `SELECT 1;` is a parse error in SurrealDB v2 ("expected FROM"), so the
+      // previous probe reported unhealthy against a perfectly healthy server.
+      await this.query("RETURN 1;");
       return true;
     } catch {
       return false;

@@ -101,22 +101,26 @@ async function generate(...args: Parameters<typeof callAdapter>): Promise<Adapte
 async function materiLabels(questions: string[], topic: string): Promise<string[] | null> {
   const model = process.env.AGENT_API_PRACTICE_LABEL_MODEL?.trim()
   if (!model) return null
-  try {
-    const { text } = await generateText({
-      model: getChatProvider()(resolveModelId(model)),
-      prompt: labelPrompt(questions, topic),
-      // Room for a reasoning model to think and still answer; the reply itself
-      // is under a hundred tokens.
-      maxOutputTokens: 4000,
-      abortSignal: AbortSignal.timeout(40_000),
-    })
-    const labels = parseMateriLabels(text, questions.length)
-    if (!labels) console.warn("[V1 Practice] materi labels: unusable reply, using derived titles")
-    return labels
-  } catch (err) {
-    console.warn(`[V1 Practice] materi labels skipped: ${(err as Error).message?.slice(0, 120)}`)
-    return null
+  // Two attempts: on a live deployment roughly one reply in four was unusable
+  // (wrong count or no JSON), and a second draw is cheap next to generation.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { text } = await generateText({
+        model: getChatProvider()(resolveModelId(model)),
+        prompt: labelPrompt(questions, topic),
+        // Room for a reasoning model to think and still answer; the reply itself
+        // is under a hundred tokens.
+        maxOutputTokens: 4000,
+        abortSignal: AbortSignal.timeout(40_000),
+      })
+      const labels = parseMateriLabels(text, questions.length)
+      if (labels) return labels
+      console.warn(`[V1 Practice] materi labels: unusable reply (attempt ${attempt})`)
+    } catch (err) {
+      console.warn(`[V1 Practice] materi labels failed (attempt ${attempt}): ${(err as Error).message?.slice(0, 120)}`)
+    }
   }
+  return null
 }
 
 function excerptBlock(excerpts: Excerpt[]): string {
@@ -148,7 +152,7 @@ export async function runPracticeGenerate(
   // Questions are written only from book prose. Figures carry a caption, not
   // material, and a set built on nothing retrieved would come from the model's
   // memory rather than the curriculum.
-  const retrieved = await smartHybridRetrieve(input.topic, { enableEntitySearch: true, groupIds: resolved.ids })
+  const retrieved = await smartHybridRetrieve(input.topic, { groupIds: resolved.ids })
   const prose = retrieved.results.filter((r) => r.chunkType !== "figure" && r.content.trim().length >= 120)
   // The same threshold the chat path reports `grounded` with, so one
   // calibration (AGENT_API_GROUNDED_MIN_SCORE) governs both.
