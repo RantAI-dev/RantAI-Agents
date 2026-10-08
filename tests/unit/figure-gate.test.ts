@@ -9,7 +9,7 @@
  * would invert the verdict.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { parseVerdict, gateConfig, gateFigures, type GateConfig } from "../../src/lib/rag/figure-gate"
+import { parseVerdict, stripReasoning, gateConfig, gateFigures, type GateConfig } from "../../src/lib/rag/figure-gate"
 import { configureKb, resetKbRuntime } from "@/lib/kb-runtime/runtime"
 import type { BlobStore } from "@/lib/kb-runtime/ports"
 
@@ -192,5 +192,72 @@ describe("gateFigures", () => {
     globalThis.fetch = f
     expect(await gateFigures("q", [], cfg)).toEqual([])
     expect(f).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * Reasoning models (MiniMax-M3 is the measured case) put their thinking in the
+ * reply itself, wrapped in <think>…</think>, and spend output tokens on it
+ * before the answer. Two things go wrong if the gate ignores that: the default
+ * 8-token budget is used up inside the thinking, and a "TIDAK" that appears
+ * while the model weighs the question vetoes the "YA" it concludes with.
+ */
+describe("stripReasoning", () => {
+  it("removes a closed thinking block and keeps the answer", () => {
+    expect(stripReasoning("<think>\nIs it relevant? TIDAK sure yet.\n</think>\nYA")).toBe("YA")
+  })
+
+  it("drops an unterminated thinking block entirely", () => {
+    // Truncated mid-thought: there is no answer here, only reasoning.
+    expect(stripReasoning("<think>\nThe user is asking in Indonesian:")).toBe("")
+  })
+
+  it("leaves an ordinary reply untouched", () => {
+    expect(stripReasoning(" TIDAK ")).toBe("TIDAK")
+  })
+})
+
+describe("gateFigures with a reasoning model", () => {
+  const original = globalThis.fetch
+  afterEach(() => { globalThis.fetch = original })
+
+  it("reads the verdict after the thinking, not the words inside it", async () => {
+    globalThis.fetch = stubReplies(["<think>Could be TIDAK, but the diagram matches.</think>\n\nYA"])
+    expect((await gateFigures("q", [cand("a")], cfg)).map((c) => c.id)).toEqual(["a"])
+  })
+
+  it("still honours a rejection that follows the thinking", async () => {
+    globalThis.fetch = stubReplies(["<think>It says YA in the caption but shows something else.</think>TIDAK"])
+    expect(await gateFigures("q", [cand("a")], cfg)).toEqual([])
+  })
+
+  it("treats thinking that ran out of tokens as no verdict, not a rejection", async () => {
+    globalThis.fetch = stubReplies(["<think>\nThe user is asking in Indonesian:\n</think>\n"])
+    expect((await gateFigures("q", [cand("a")], cfg)).map((c) => c.id)).toEqual(["a"])
+  })
+
+  it("sends the configured output budget", async () => {
+    const spy = stubReplies(["YA"])
+    globalThis.fetch = spy
+    await gateFigures("q", [cand("a")], { ...cfg, maxTokens: 300 })
+    const body = JSON.parse((spy as unknown as { mock: { calls: Array<[string, { body: string }]> } }).mock.calls[0][1].body)
+    expect(body.max_tokens).toBe(300)
+  })
+})
+
+describe("gateConfig output budget", () => {
+  const on = { KB_FIGURE_VLM_ENABLED: "1", KB_FIGURE_VLM_BASE: "http://vlm/v1", KB_FIGURE_VLM_MODEL: "m" }
+
+  it("keeps the 8-token default that a non-reasoning model needs", () => {
+    expect(gateConfig(on as unknown as NodeJS.ProcessEnv)?.maxTokens).toBe(8)
+  })
+
+  it("can be raised for a model that thinks before answering", () => {
+    expect(gateConfig({ ...on, KB_FIGURE_VLM_MAX_TOKENS: "300" } as unknown as NodeJS.ProcessEnv)?.maxTokens).toBe(300)
+  })
+
+  it("ignores a nonsense budget", () => {
+    expect(gateConfig({ ...on, KB_FIGURE_VLM_MAX_TOKENS: "abc" } as unknown as NodeJS.ProcessEnv)?.maxTokens).toBe(8)
+    expect(gateConfig({ ...on, KB_FIGURE_VLM_MAX_TOKENS: "0" } as unknown as NodeJS.ProcessEnv)?.maxTokens).toBe(8)
   })
 })

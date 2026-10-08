@@ -54,7 +54,13 @@ export interface GateConfig {
   maxKeep: number
   /** Per-call budget. A slow gate must not hold up an answer. */
   timeoutMs: number
+  /** Output-token budget for the one-word verdict. 8 is enough for a model that
+   *  answers directly; a reasoning model spends tokens thinking first and needs
+   *  a few hundred, or it runs out before it reaches the verdict. */
+  maxTokens?: number
 }
+
+const DEFAULT_MAX_TOKENS = 8
 
 /**
  * Verbatim from the benchmark. Do not "improve" the wording without re-running
@@ -93,6 +99,7 @@ export function gateConfig(env: NodeJS.ProcessEnv = process.env): GateConfig | n
   const topN = Number(env.KB_FIGURE_VLM_TOPN ?? 2)
   const maxKeep = Number(env.KB_FIGURE_VLM_MAX ?? 1)
   const timeoutMs = Number(env.KB_FIGURE_VLM_TIMEOUT_MS ?? 4000)
+  const maxTokens = Number(env.KB_FIGURE_VLM_MAX_TOKENS ?? DEFAULT_MAX_TOKENS)
   return {
     base,
     model,
@@ -100,6 +107,7 @@ export function gateConfig(env: NodeJS.ProcessEnv = process.env): GateConfig | n
     topN: Number.isFinite(topN) && topN > 0 ? topN : 2,
     maxKeep: Number.isFinite(maxKeep) && maxKeep > 0 ? maxKeep : 1,
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 4000,
+    maxTokens: Number.isInteger(maxTokens) && maxTokens > 0 ? maxTokens : DEFAULT_MAX_TOKENS,
   }
 }
 
@@ -113,6 +121,21 @@ export function gateConfig(env: NodeJS.ProcessEnv = process.env): GateConfig | n
 export function parseVerdict(reply: string): boolean {
   const t = reply.trim().toUpperCase()
   return /\bYA\b/.test(t) && !/\bTIDAK\b/.test(t)
+}
+
+/**
+ * The reply with any `<think>…</think>` reasoning removed.
+ *
+ * Reasoning models return their thinking inline. It has to go before the
+ * verdict is read: a "TIDAK" the model writes while weighing the question would
+ * otherwise veto the "YA" it concludes with. A block that never closes means the
+ * model ran out of tokens mid-thought, so nothing after it is an answer.
+ */
+export function stripReasoning(reply: string): string {
+  return reply
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<think>[\s\S]*$/i, "")
+    .trim()
 }
 
 /**
@@ -147,7 +170,7 @@ async function judge(
       signal: ctl.signal,
       body: JSON.stringify({
         model: cfg.model,
-        max_tokens: 8,
+        max_tokens: cfg.maxTokens ?? DEFAULT_MAX_TOKENS,
         messages: [
           {
             role: "user",
@@ -164,9 +187,10 @@ async function judge(
       return null
     }
     const body = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> }
-    const reply = body.choices?.[0]?.message?.content ?? ""
-    // An empty reply is not a "no": it is a model that answered nothing.
-    if (!reply.trim()) {
+    const reply = stripReasoning(body.choices?.[0]?.message?.content ?? "")
+    // An empty reply is not a "no": it is a model that answered nothing — or one
+    // that spent its whole budget thinking.
+    if (!reply) {
       console.warn(`[RAG] figure gate: ${cfg.model} returned an empty reply — no verdict, candidate kept`)
       return null
     }

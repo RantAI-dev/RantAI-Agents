@@ -35,7 +35,13 @@ export function buildPlatformContextInstruction(params: {
   modelName?: string | null
   now?: Date
   timeZone?: string | null
+  env?: Record<string, string | undefined>
 }): string {
+  // PLATFORM_CONTEXT_INSTRUCTION=off removes the whole block. For a deployment
+  // whose assistants run adapters fine-tuned against a fixed prompt, or which
+  // must not carry the platform's name, any leftover line is still a change.
+  const flag = (params.env ?? process.env).PLATFORM_CONTEXT_INSTRUCTION?.trim().toLowerCase()
+  if (flag === "off" || flag === "false" || flag === "0") return ""
   const assistantName = params.assistantName?.trim() || "RantAI Assistant"
   const now = params.now ?? new Date()
   let timeZone = params.timeZone?.trim() || "UTC"
