@@ -60,6 +60,22 @@ export function createSSEStreamResponse(
           }
         }
 
+        // Figures retrieval selected for this answer that the text never cited
+        // follow the text, so a client can still show them.
+        if (figures) {
+          for (const figure of await figures.remaining()) {
+            const figureData = JSON.stringify({
+              id: requestId,
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model: modelId,
+              choices: [{ index: 0, delta: {}, finish_reason: null }],
+              figure,
+            })
+            controller.enqueue(encoder.encode(`data: ${figureData}\n\n`))
+          }
+        }
+
         // Final chunk with finish_reason. `sources` is a custom top-level field
         // (OpenAI clients ignore unknown keys) carrying the KB references so a
         // frontend can render reference cards.
@@ -212,7 +228,7 @@ export async function createJsonResponse(
     // Images for the `[figure:N]` tags in the answer, only when the request
     // asked for them. Absent rather than empty otherwise, so the default body
     // is byte-for-byte what it was.
-    ...(figures && { figures: await figures.forText(text) }),
+    ...(figures && { figures: [...(await figures.forText(text)), ...(await figures.remaining())] }),
   }
 
   return new Response(JSON.stringify(body), {

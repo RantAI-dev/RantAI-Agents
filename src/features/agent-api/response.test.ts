@@ -124,3 +124,24 @@ describe("grounding signal", () => {
     expect("retrieval_score" in body).toBe(false)
   })
 })
+
+describe("selected but uncited figures", () => {
+  const NO_TAG = ["Kelenjar ludah menghasilkan air liur [2].\n", "Makanan lalu ditelan."]
+
+  it("follow the text on a stream, before the final frame", async () => {
+    const feed = createInlineFigureFeed(sources, { download: png }, [3])
+    const out = await frames(createSSEStreamResponse(fakeResult(NO_TAG), "id1", "askv6", sources, feed))
+    const kinds = out.map((f) => (f === "[DONE]" ? "done" : f.figure ? "figure" : f.choices?.[0]?.finish_reason ? "final" : f.usage ? "usage" : "text"))
+    expect(kinds.filter((k) => k === "figure")).toHaveLength(1)
+    expect(kinds.indexOf("figure")).toBeGreaterThan(kinds.lastIndexOf("text"))
+    expect(kinds.indexOf("figure")).toBeLessThan(kinds.indexOf("final"))
+    const fig = (out.find((f) => f !== "[DONE]" && f.figure) as Record<string, any>).figure
+    expect(fig).toMatchObject({ n: 3, cited: false, mime: "image/webp" })
+  })
+
+  it("are appended to figures on the JSON body", async () => {
+    const feed = createInlineFigureFeed(sources, { download: png }, [3])
+    const body = await (await createJsonResponse(fakeResult(NO_TAG), "id1", "askv6", sources, feed)).json()
+    expect(body.figures.map((f: { n: number; cited: boolean }) => [f.n, f.cited])).toEqual([[3, false]])
+  })
+})

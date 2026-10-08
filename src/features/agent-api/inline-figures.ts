@@ -10,9 +10,12 @@
  *
  * Three decisions worth knowing before changing this file:
  *
- * 1. Only CITED figures are sent. Retrieval routinely surfaces three figures
- *    for an answer that uses one; shipping all of them would triple the
- *    payload for images the reader never sees.
+ * 1. Not every retrieved figure is sent. Retrieval routinely surfaces several
+ *    figures for an answer that uses one; shipping all of them would multiply
+ *    the payload for images the reader never sees. Sent are the figures the
+ *    answer cites, and — after the text — the figures retrieval SELECTED for
+ *    this answer (its direct figure search, after the vision gate) when the
+ *    model did not cite them, marked `cited: false`.
  *
  * 2. Figures are downscaled and re-encoded (WebP, long edge capped). SSE is
  *    text, so every byte pays a 33% base64 tax and nothing is cacheable. A
@@ -37,6 +40,10 @@ export type FigureSourceLike = {
 export interface InlineFigure {
   /** 1-based position in `sources`; matches the `[figure:N]` tag in the text. */
   n: number
+  /** True when the answer wrote this figure's tag. False for a figure that
+   *  retrieval selected for the answer but the model did not cite — a
+   *  fine-tuned adapter never trained to write the tag cites nothing. */
+  cited: boolean
   title: string
   section: string | null
   /** Zero-based page index, as in `sources`. */
@@ -186,6 +193,7 @@ export async function loadInlineFigure(
 
   return {
     n,
+    cited: true,
     title: source.title,
     section: source.section ?? null,
     page: source.page ?? null,
@@ -202,27 +210,35 @@ export async function loadInlineFigure(
  * delta completed; `forText` does the same for a finished, non-streamed
  * answer. Both honour the per-answer cap.
  */
-export function createInlineFigureFeed(sources: FigureSourceLike[], deps: FigureLoaderDeps) {
+export function createInlineFigureFeed(
+  sources: FigureSourceLike[],
+  deps: FigureLoaderDeps,
+  /** Source numbers of figures retrieval selected for this answer. */
+  selected: number[] = [],
+) {
   const limits = deps.limits ?? inlineFigureLimits()
   const scanner = createFigureTagScanner()
-  let sent = 0
+  const sentNumbers = new Set<number>()
 
-  const load = async (numbers: number[]): Promise<InlineFigure[]> => {
+  const load = async (numbers: number[], cited: boolean): Promise<InlineFigure[]> => {
     const out: InlineFigure[] = []
     for (const n of numbers) {
-      if (sent >= limits.maxPerAnswer) break
+      if (sentNumbers.size >= limits.maxPerAnswer) break
+      if (sentNumbers.has(n)) continue
       const fig = await loadInlineFigure(n, sources, { ...deps, limits })
       if (fig) {
-        sent++
-        out.push(fig)
+        sentNumbers.add(n)
+        out.push({ ...fig, cited })
       }
     }
     return out
   }
 
   return {
-    onDelta: (delta: string) => load(scanner.push(delta)),
-    forText: (text: string) => load(citedFigureNumbers(text)),
+    onDelta: (delta: string) => load(scanner.push(delta), true),
+    forText: (text: string) => load(citedFigureNumbers(text), true),
+    /** Selected figures the answer did not cite. Call once the text is done. */
+    remaining: () => load(selected, false),
   }
 }
 

@@ -162,6 +162,45 @@ describe("createInlineFigureFeed", () => {
   })
 })
 
+/**
+ * A fine-tuned adapter that was never trained to write `[figure:N]` cites
+ * nothing, so a feed that sends only cited figures sends none — even when
+ * retrieval selected a figure for this answer and a vision model vouched for
+ * it. Those selected-but-uncited figures follow the text, marked as such.
+ */
+describe("createInlineFigureFeed with selected figures", () => {
+  it("sends a selected figure the answer did not cite, marked uncited", async () => {
+    const feed = createInlineFigureFeed(sources, { download: async () => png(100, 100), limits }, [3])
+    expect(await feed.forText("Kelenjar ludah menghasilkan air liur [2].")).toEqual([])
+    const rest = await feed.remaining()
+    expect(rest.map((f) => [f.n, f.cited])).toEqual([[3, false]])
+  })
+
+  it("does not send a selected figure twice when the answer cited it", async () => {
+    const download = vi.fn(async () => png(100, 100))
+    const feed = createInlineFigureFeed(sources, { download, limits }, [3])
+    expect((await feed.forText("Lihat [figure:3].")).map((f) => [f.n, f.cited])).toEqual([[3, true]])
+    expect(await feed.remaining()).toEqual([])
+    expect(download).toHaveBeenCalledTimes(1)
+  })
+
+  it("counts selected figures against the same per-answer cap", async () => {
+    const feed = createInlineFigureFeed(sources, { download: async () => png(50, 50), limits: { ...limits, maxPerAnswer: 1 } }, [4])
+    expect((await feed.forText("[figure:3]")).map((f) => f.n)).toEqual([3])
+    expect(await feed.remaining()).toEqual([])
+  })
+
+  it("ignores a selected number that is not a figure source", async () => {
+    const feed = createInlineFigureFeed(sources, { download: async () => png(50, 50), limits }, [1, 99])
+    expect(await feed.remaining()).toEqual([])
+  })
+
+  it("sends nothing extra when no figure was selected", async () => {
+    const feed = createInlineFigureFeed(sources, { download: async () => png(50, 50), limits })
+    expect(await feed.remaining()).toEqual([])
+  })
+})
+
 describe("inlineFigureLimits", () => {
   it("reads overrides and ignores nonsense", () => {
     expect(inlineFigureLimits({ AGENT_API_INLINE_FIGURE_MAX: "2", AGENT_API_INLINE_FIGURE_MAX_PX: "480" } as never)).toMatchObject({ maxPerAnswer: 2, maxEdgePx: 480 })
