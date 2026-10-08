@@ -183,6 +183,25 @@ export async function authenticateV1Request(
   }
 }
 
+/**
+ * Source numbers (1-based, as in `[figure:N]`) of the figures retrieval
+ * selected for this answer. Matched by asset key, because `sources` is built
+ * and de-duplicated separately from the result list.
+ */
+export function selectedFigureNumbers(
+  results: Array<{ assetKey?: string | null; chunkType?: string | null; figureSelected?: boolean }>,
+  sources: Array<{ assetKey?: string | null; chunkType?: string | null }>,
+): number[] {
+  const keys = new Set(
+    results.filter((r) => r.figureSelected && r.chunkType === "figure" && r.assetKey).map((r) => r.assetKey as string),
+  )
+  const out: number[] = []
+  sources.forEach((s, i) => {
+    if (s.chunkType === "figure" && s.assetKey && keys.has(s.assetKey)) out.push(i + 1)
+  })
+  return out
+}
+
 export async function runV1ChatCompletion(
   auth: AuthResult,
   input: V1ChatCompletionInput,
@@ -464,7 +483,7 @@ export async function runV1ChatCompletion(
   // response. Off by default — it multiplies the payload and nothing in it is
   // cacheable, so only a client that asked for it pays that cost.
   const figureFeed = input.inline_figures
-    ? createInlineFigureFeed(ragSources, { download: downloadFile })
+    ? createInlineFigureFeed(ragSources, { download: downloadFile }, selectedFigureNumbers(vlmResults, ragSources))
     : undefined
 
   if (wantStream) {

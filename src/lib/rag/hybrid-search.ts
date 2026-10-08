@@ -95,6 +95,10 @@ export interface HybridSearchResult {
   chunkType?: string | null;
   /** For a figure: index of the chunk holding the prose it follows (its anchor). */
   anchorChunkIndex?: number | null;
+  /** True for a figure picked by the direct figure search for THIS query (and
+   *  not rejected by the vision gate), as opposed to one that merely sits next
+   *  to a retrieved passage. */
+  figureSelected?: boolean;
   /** Vector similarity score (0-1) */
   vectorScore: number;
   /** Entity/Graph match score (0-1) */
@@ -1081,6 +1085,7 @@ export async function fetchMatchingFigures(
       assetKey,
       page: meta?.page ?? null,
       chunkType: "figure",
+      figureSelected: true,
       // Carried to the client so the answer can place this figure beside the
       // prose it belongs to, rather than guessing from its caption.
       anchorChunkIndex: meta?.anchorChunkIndex ?? null,

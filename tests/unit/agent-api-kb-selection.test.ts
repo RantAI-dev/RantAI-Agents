@@ -18,7 +18,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { knowledgeBaseGroup: { findMany: (...a: unknown[]) => findMany(...a) } },
 }))
 
-const { resolveRequestedGroupIds } = await import("@/features/agent-api/service")
+const { resolveRequestedGroupIds, selectedFigureNumbers } = await import("@/features/agent-api/service")
 
 const OWNED = [{ id: "kb_math" }, { id: "kb_bio" }, { id: "kb_indo" }]
 
@@ -84,5 +84,27 @@ describe("resolveRequestedGroupIds", () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { organizationId: "org1" } }),
     )
+  })
+})
+
+
+describe("selectedFigureNumbers", () => {
+  const sources = [
+    { chunkType: "text" },
+    { chunkType: "figure", assetKey: "k/near.png" },
+    { chunkType: "figure", assetKey: "k/picked.png" },
+  ]
+
+  it("returns the 1-based source position of a figure retrieval selected", () => {
+    const results = [{ chunkType: "figure", assetKey: "k/picked.png", figureSelected: true }, { chunkType: "figure", assetKey: "k/near.png" }]
+    expect(selectedFigureNumbers(results, sources)).toEqual([3])
+  })
+
+  it("does not treat a figure that merely sits beside a passage as selected", () => {
+    expect(selectedFigureNumbers([{ chunkType: "figure", assetKey: "k/near.png" }], sources)).toEqual([])
+  })
+
+  it("returns nothing when the selected figure is not among the sources", () => {
+    expect(selectedFigureNumbers([{ chunkType: "figure", assetKey: "k/gone.png", figureSelected: true }], sources)).toEqual([])
   })
 })
