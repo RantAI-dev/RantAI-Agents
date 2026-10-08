@@ -123,6 +123,19 @@ export async function refreshProviderRegistry(): Promise<void> {
 }
 
 /**
+ * Wait for the first load. Call from a request path before resolving a model.
+ *
+ * getProviderRegistry() is synchronous and returns the empty snapshot until the
+ * first background refresh lands, and an empty registry routes every model id
+ * to OpenRouter. Without this the first request after a process start sends a
+ * managed provider's model to the wrong upstream and fails. A no-op once
+ * anything has loaded; never throws (refresh keeps the env fallback on error).
+ */
+export async function ensureProviderRegistryLoaded(): Promise<void> {
+  if (loadedAt === 0) await refreshProviderRegistry()
+}
+
+/**
  * Current snapshot, kicking off a background refresh when stale. May be one
  * TTL behind after admin edits from another process; same-process writes call
  * invalidateProviderRegistry() for immediacy.

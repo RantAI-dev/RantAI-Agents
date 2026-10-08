@@ -1,7 +1,7 @@
 import { streamText, convertToModelMessages, stepCountIs } from "ai"
 import { getChatProvider, resolveModelId } from "@/lib/llm/provider"
 import { DEFAULT_MODEL_ID, isValidModelAsync, getModelByIdAsync } from "@/lib/models"
-import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
+import { ensureProviderRegistryLoaded, getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import { resolveToolsForAssistant } from "@/lib/tools"
 import { buildPlatformContextInstruction, buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
 import { getHouseModel } from "@/lib/llm/house-models"
@@ -261,6 +261,9 @@ export async function runV1ChatCompletion(
   systemPrompt += LANGUAGE_INSTRUCTION
   systemPrompt += OUTPUT_HYGIENE_INSTRUCTION
 
+  // The first request after a start would otherwise read an empty registry
+  // and send a managed provider's model to OpenRouter.
+  await ensureProviderRegistryLoaded()
   const requestedModel = modelOverride || assistant.model
   const modelId = (await isValidModelAsync(requestedModel)) ? requestedModel : getPlatformDefaultModel(DEFAULT_MODEL_ID)
   systemPrompt += buildPlatformContextInstruction({
