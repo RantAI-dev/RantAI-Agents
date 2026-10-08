@@ -13,12 +13,17 @@
 
 export function labelPrompt(questions: string[], topic: string): string {
   const list = questions.map((q, i) => `${i + 1}. ${q}`).join("\n")
+  const shape = questions.map(() => '"..."').join(", ")
+  // Kept deliberately plain. An earlier wording that also asked for "as few
+  // distinct titles as possible, at most 3" sent a reasoning model into 2000
+  // tokens of deliberation with nothing left for the answer; this one was
+  // answered in 300–650 reasoning tokens on the same questions.
   return (
-    `Berikut ${questions.length} soal latihan tentang "${topic}".\n\n${list}\n\n` +
-    `Untuk setiap soal, tulis judul materi singkat (2 sampai 5 kata) yang menjadi pokok bahasannya. ` +
-    `Soal dengan pokok bahasan yang sama HARUS memakai judul yang sama persis. ` +
-    `Pakai sesedikit mungkin judul berbeda, paling banyak 3.\n` +
-    `Jawab HANYA dengan JSON berbentuk {"materi": ["...", "..."]} berisi tepat ${questions.length} judul, urut sesuai nomor soal.`
+    `Soal latihan tentang "${topic}":\n${list}\n\n` +
+    `Beri setiap soal satu judul materi singkat (2 sampai 4 kata) sesuai pokok bahasannya. ` +
+    `Soal dengan pokok bahasan yang sama memakai judul yang sama persis. ` +
+    `Ini tugas sederhana: jangan menimbang panjang, langsung tulis jawabannya.\n` +
+    `Balas HANYA JSON: {"materi": [${shape}]} — tepat ${questions.length} judul, urut sesuai nomor soal.`
   )
 }
 
