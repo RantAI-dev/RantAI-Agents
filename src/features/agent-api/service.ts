@@ -6,6 +6,8 @@ import { resolveToolsForAssistant } from "@/lib/tools"
 import { buildPlatformContextInstruction, buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
 import { getHouseModel } from "@/lib/llm/house-models"
 import { applyInputLimits, inputLimits } from "./limits"
+import { groundingOf, type Grounding } from "./grounding"
+import { anchorEnabled, anchoredQuery } from "./anchor-query"
 import {
   smartRetrieve,
   formatContextForPrompt,
@@ -291,6 +293,9 @@ export async function runV1ChatCompletion(
   let ragSources: Array<{ title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }> = []
   // Retrieved chunks kept for selective VLM-at-answer (figure kind + assetKey).
   let vlmResults: import("@/lib/rag/vlm-figures").FigureCandidate[] = []
+  // Set only when retrieval actually ran, so an assistant without a knowledge
+  // base does not report every answer as ungrounded.
+  let grounding: Grounding | undefined
   if (assistant.useKnowledgeBase && rawUserQuery) {
     try {
       const resolved = await resolveRequestedGroupIds(
@@ -329,7 +334,11 @@ export async function runV1ChatCompletion(
       // env gate (KB_STANDALONE_QUERY_ENABLED) as chat-public.
       const messagesAsAny = input.messages.map((m) => ({ role: m.role, content: m.content }))
       const { rewriteStandaloneQuery } = await import("@/lib/rag/standalone-query")
-      const userQuery = await rewriteStandaloneQuery(messagesAsAny)
+      // A short follow-up in a tutoring conversation is searched together with
+      // the conversation's first topic when the deployment asks for it; that
+      // needs no model call, so it takes precedence over the rewrite.
+      const anchored = anchorEnabled() ? anchoredQuery(input.messages) : null
+      const userQuery = anchored ?? (await rewriteStandaloneQuery(messagesAsAny))
       if (userQuery !== rawUserQuery) {
         console.log(`[V1 API] standalone-query rewrite: "${rawUserQuery.slice(0, 60)}" -> "${userQuery.slice(0, 80)}"`)
       }
@@ -341,6 +350,7 @@ export async function runV1ChatCompletion(
         groupIds,
       })
 
+      grounding = groundingOf(hybridResult.results.map((r) => r.vectorScore))
       if (hybridResult.context) {
         const formattedContext = fitContext(formatHybridContextForPrompt(hybridResult), systemPrompt)
         systemPrompt = `${systemPrompt}\n\n${formattedContext}`
@@ -352,6 +362,7 @@ export async function runV1ChatCompletion(
           minSimilarity: 0.30,
           groupIds,
         })
+        grounding = groundingOf(retrievalResult.chunks.map((c) => c.similarity))
         if (retrievalResult.context) {
           const formattedContext = fitContext(formatContextForPrompt(retrievalResult), systemPrompt)
           systemPrompt = `${systemPrompt}\n\n${formattedContext}`
@@ -457,8 +468,8 @@ export async function runV1ChatCompletion(
     : undefined
 
   if (wantStream) {
-    return createSSEStreamResponse(result, requestId, modelId, ragSources, figureFeed)
+    return createSSEStreamResponse(result, requestId, modelId, ragSources, figureFeed, grounding)
   }
 
-  return createJsonResponse(result, requestId, modelId, ragSources, figureFeed)
+  return createJsonResponse(result, requestId, modelId, ragSources, figureFeed, grounding)
 }

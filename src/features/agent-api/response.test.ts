@@ -103,3 +103,24 @@ describe("createJsonResponse", () => {
     expect(body.figures).toEqual([])
   })
 })
+
+describe("grounding signal", () => {
+  const grounding = { grounded: false, retrieval_score: 0.31 }
+
+  it("rides on the final SSE frame beside sources", async () => {
+    const out = await frames(createSSEStreamResponse(fakeResult(DELTAS), "id1", "askv6", sources, undefined, grounding))
+    const last = out.filter((f): f is Record<string, any> => f !== "[DONE]" && Boolean(f.choices?.[0]?.finish_reason)).at(-1)!
+    expect(last).toMatchObject({ grounded: false, retrieval_score: 0.31 })
+  })
+
+  it("is in the JSON body", async () => {
+    const body = await (await createJsonResponse(fakeResult(DELTAS), "id1", "askv6", sources, undefined, grounding)).json()
+    expect(body).toMatchObject({ grounded: false, retrieval_score: 0.31 })
+  })
+
+  it("is absent when retrieval did not run", async () => {
+    const body = await (await createJsonResponse(fakeResult(DELTAS), "id1", "askv6", sources)).json()
+    expect("grounded" in body).toBe(false)
+    expect("retrieval_score" in body).toBe(false)
+  })
+})

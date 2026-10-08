@@ -7,6 +7,8 @@ import type { InlineFigureFeed } from "./inline-figures"
  */
 
 /** Sources (KB documents) an answer drew on, for the client to render references. */
+import type { Grounding } from "./grounding"
+
 export type RagSource = { title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }
 
 export function createSSEStreamResponse(
@@ -15,6 +17,7 @@ export function createSSEStreamResponse(
   modelId: string,
   sources: RagSource[] = [],
   figures?: InlineFigureFeed,
+  grounding?: Grounding,
 ): Response {
   const encoder = new TextEncoder()
 
@@ -87,6 +90,8 @@ export function createSSEStreamResponse(
             },
           }),
           sources,
+          // Present only when retrieval ran; see grounding.ts.
+          ...(grounding && { grounded: grounding.grounded, retrieval_score: grounding.retrieval_score }),
         })
         controller.enqueue(encoder.encode(`data: ${finalData}\n\n`))
 
@@ -168,6 +173,7 @@ export async function createJsonResponse(
   modelId: string,
   sources: RagSource[] = [],
   figures?: InlineFigureFeed,
+  grounding?: Grounding,
 ): Promise<Response> {
   const text = await result.text
   const usage = await result.totalUsage
@@ -201,6 +207,8 @@ export async function createJsonResponse(
     },
     // KB references the answer drew on (custom field; OpenAI clients ignore it).
     sources,
+    // Present only when retrieval ran; see grounding.ts.
+    ...(grounding && { grounded: grounding.grounded, retrieval_score: grounding.retrieval_score }),
     // Images for the `[figure:N]` tags in the answer, only when the request
     // asked for them. Absent rather than empty otherwise, so the default body
     // is byte-for-byte what it was.
