@@ -5,6 +5,7 @@ import { getPlatformDefaultModel } from "@/lib/llm/provider-registry"
 import { resolveToolsForAssistant } from "@/lib/tools"
 import { buildPlatformContextInstruction, buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
 import { getHouseModel } from "@/lib/llm/house-models"
+import { applyInputLimits, inputLimits } from "./limits"
 import {
   smartRetrieve,
   formatContextForPrompt,
@@ -211,6 +212,17 @@ export async function runV1ChatCompletion(
       { status: 403, headers: { "Content-Type": "application/json" } }
     )
   }
+
+  // Input limits (off unless configured). Rejected before any retrieval or
+  // model call, so an oversized request costs nothing.
+  const limited = applyInputLimits(input.messages, inputLimits())
+  if ("error" in limited) {
+    return new Response(
+      JSON.stringify({ error: { message: limited.error, type: "invalid_request_error", code: limited.code } }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    )
+  }
+  input = { ...input, messages: limited.messages }
 
   // Increment usage in background
   incrementAgentApiKeyUsage(auth.apiKey.id).catch(() => {})
