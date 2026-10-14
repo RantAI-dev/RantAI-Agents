@@ -86,13 +86,14 @@ describe("bm25Search", () => {
     expect(p40).toBeDefined()
     expect(p40?.matchedIdentifiers).toContain("ING-P40-6140")
 
-    // Verify exact phrase queries were executed with string::contains and scoped document_id
-    const exactCalls = surrealQuery.mock.calls.filter((c) => c[0].includes("string::contains"))
-    expect(exactCalls.length).toBe(2)
-    for (const call of exactCalls) {
+    // Verify every SQL sent contains document_id IN $document_ids with scoped ids
+    expect(surrealQuery.mock.calls.length).toBe(3)
+    for (const call of surrealQuery.mock.calls) {
       expect(call[0]).toMatch(/document_id IN \$document_ids/)
       expect(call[1].document_ids).toEqual(["doc1"])
     }
+    const exactCalls = surrealQuery.mock.calls.filter((c) => c[0].includes("string::contains"))
+    expect(exactCalls.length).toBe(2)
     const exactVars = exactCalls.map((c) => c[1].exact)
     expect(exactVars).toContain("ing-p20-6120")
     expect(exactVars).toContain("ing-p40-6140")
