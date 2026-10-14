@@ -1,3 +1,5 @@
+import type { Source } from "./message-sources"
+
 /**
  * Inline citation plumbing for RAG chat answers.
  *
@@ -351,4 +353,38 @@ export function reconcileCitations(
  */
 export function linkifyCitations(content: string, messageId: string, count: number): string {
   return reconcileCitations(content, { messageId, count })
+}
+
+/** Minimal shape of a persisted tool call (`message.metadata.toolCalls[]`). */
+interface PersistedToolCall {
+  toolName?: string
+  output?: unknown
+}
+
+/**
+ * Rebuild a message's Sources list from its persisted knowledge_search call
+ * (TC-984). Older messages saved no `sources` field, but the tool output — with
+ * chunk-level pages — survives in `metadata.toolCalls`, so a reload can still
+ * show page-accurate citations. Returns null when there is nothing to restore.
+ */
+export function sourcesFromToolCalls(toolCalls: unknown): Source[] | null {
+  if (!Array.isArray(toolCalls)) return null
+  for (const tc of toolCalls as PersistedToolCall[]) {
+    if (tc?.toolName !== "knowledge_search") continue
+    const raw = (tc.output as { sources?: unknown } | null | undefined)?.sources
+    if (!Array.isArray(raw) || raw.length === 0) continue
+    return (raw as Record<string, unknown>[]).map((s) => ({
+      title: (s.title as string) || (s.documentTitle as string) || "Document",
+      section: (s.section as string) || null,
+      url: (s.url as string) || null,
+      documentId: (s.documentId as string) || null,
+      assetKey: (s.assetKey as string) || null,
+      page: typeof s.page === "number" ? s.page : null,
+      pages: Array.isArray(s.pages) ? (s.pages as number[]) : undefined,
+      chunkType: (s.chunkType as string) || null,
+      chunkIndex: typeof s.chunkIndex === "number" ? s.chunkIndex : null,
+      anchorChunkIndex: typeof s.anchorChunkIndex === "number" ? s.anchorChunkIndex : null,
+    }))
+  }
+  return null
 }

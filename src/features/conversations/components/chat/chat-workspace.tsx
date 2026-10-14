@@ -38,7 +38,7 @@ import { ReasoningBox } from "./reasoning-box"
 import { TypingIndicator } from "./typing-indicator"
 import { QuickSuggestions } from "./quick-suggestions"
 import { MessageSources, Source } from "./message-sources"
-import { citedSourceNumbers, isMeaningfulFigureCaption, type EmbeddableFigure } from "./citations"
+import { citedSourceNumbers, isMeaningfulFigureCaption, sourcesFromToolCalls, type EmbeddableFigure } from "./citations"
 import { EditableSessionTitle } from "./editable-session-title"
 import {
   CONNECTION_LOST_MESSAGE,
@@ -1776,31 +1776,11 @@ export function ChatWorkspace({
           }
           if (m.sources && m.sources.length > 0) {
             restoredSources[m.id] = m.sources
-          } else if (Array.isArray(m.parts)) {
-            for (const part of m.parts) {
-              if (
-                part &&
-                typeof part === "object" &&
-                (part as any).type === "tool-invocation" &&
-                (part as any).toolName === "knowledge_search" &&
-                (part as any).output &&
-                Array.isArray((part as any).output.sources) &&
-                (part as any).output.sources.length > 0
-              ) {
-                restoredSources[m.id] = (part as any).output.sources.map((s: Record<string, unknown>) => ({
-                  title: (s.title as string) || (s.documentTitle as string) || "Document",
-                  section: (s.section as string) || null,
-                  url: (s.url as string) || null,
-                  documentId: (s.documentId as string) || null,
-                  assetKey: (s.assetKey as string) || null,
-                  page: typeof s.page === "number" ? s.page : null,
-                  pages: Array.isArray(s.pages) ? (s.pages as number[]) : undefined,
-                  chunkType: (s.chunkType as string) || null,
-                  chunkIndex: typeof s.chunkIndex === "number" ? s.chunkIndex : null,
-                  anchorChunkIndex: typeof s.anchorChunkIndex === "number" ? s.anchorChunkIndex : null,
-                }))
-              }
-            }
+          } else {
+            const restored = sourcesFromToolCalls(
+              (m.metadata as { toolCalls?: unknown } | null | undefined)?.toolCalls
+            )
+            if (restored) restoredSources[m.id] = restored
           }
         }
         if (Object.keys(restoredAttachments).length > 0) {
@@ -2026,31 +2006,11 @@ export function ChatWorkspace({
       }
       if (m.sources && m.sources.length > 0) {
         restoredSources[m.id] = m.sources
-      } else if (Array.isArray(m.parts)) {
-        for (const part of m.parts) {
-          if (
-            part &&
-            typeof part === "object" &&
-            (part as any).type === "tool-invocation" &&
-            (part as any).toolName === "knowledge_search" &&
-            (part as any).output &&
-            Array.isArray((part as any).output.sources) &&
-            (part as any).output.sources.length > 0
-          ) {
-            restoredSources[m.id] = (part as any).output.sources.map((s: Record<string, unknown>) => ({
-              title: (s.title as string) || (s.documentTitle as string) || "Document",
-              section: (s.section as string) || null,
-              url: (s.url as string) || null,
-              documentId: (s.documentId as string) || null,
-              assetKey: (s.assetKey as string) || null,
-              page: typeof s.page === "number" ? s.page : null,
-              pages: Array.isArray(s.pages) ? (s.pages as number[]) : undefined,
-              chunkType: (s.chunkType as string) || null,
-              chunkIndex: typeof s.chunkIndex === "number" ? s.chunkIndex : null,
-              anchorChunkIndex: typeof s.anchorChunkIndex === "number" ? s.anchorChunkIndex : null,
-            }))
-          }
-        }
+      } else {
+        const restored = sourcesFromToolCalls(
+          (m.metadata as { toolCalls?: unknown } | null | undefined)?.toolCalls
+        )
+        if (restored) restoredSources[m.id] = restored
       }
     }
     if (Object.keys(restoredAttachments).length > 0) {
