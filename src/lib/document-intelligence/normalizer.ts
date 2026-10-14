@@ -30,7 +30,6 @@ export interface ExtractedEntity {
   name: string
   type: string
   confidence?: number
-  [key: string]: unknown
 }
 
 const TYPE_ALIASES: Record<string, CanonicalEntityType> = {

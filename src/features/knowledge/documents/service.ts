@@ -384,12 +384,14 @@ export async function enqueueFileIngest(params: {
   // file the worker will re-download.
   let s3Key: string
   let fileSize: number
+  // Declared outside the try: the placeholder row and the ingest job below
+  // both record it, and a try-scoped const is a ReferenceError there.
+  const ext = path.extname(file.name).toLowerCase()
+  const resolvedMime = (file.type && file.type !== "application/octet-stream")
+    ? file.type
+    : (EXT_TO_MIME[ext] || file.type || "application/octet-stream")
   try {
     const fileBuffer = Buffer.from(await file.arrayBuffer())
-    const ext = path.extname(file.name).toLowerCase()
-    const resolvedMime = (file.type && file.type !== "application/octet-stream")
-      ? file.type
-      : (EXT_TO_MIME[ext] || file.type || "application/octet-stream")
     s3Key = S3Paths.document(params.context.organizationId || null, documentId, file.name)
     const uploadResult = await uploadFile(s3Key, fileBuffer, resolvedMime, {
       documentId,
