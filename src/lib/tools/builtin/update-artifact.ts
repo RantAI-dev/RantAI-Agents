@@ -7,6 +7,7 @@ import { indexArtifactContent } from "@/lib/rag"
 import {
   validateArtifactContent,
   formatValidationError,
+  formatUserFacingValidationError,
 } from "./_validate-artifact"
 import type { ArtifactFailureReason } from "./_artifact-failure"
 import { validateArtifactTitle } from "./_validate-title"
@@ -156,6 +157,7 @@ export const updateArtifactTool: ToolDefinition = {
             persisted: false,
             failureReason: "validation" satisfies ArtifactFailureReason,
             error: formatValidationError(existing.artifactType, validation),
+            userFacingError: formatUserFacingValidationError(validation.errors),
             validationErrors: validation.errors,
           }
         }

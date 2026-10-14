@@ -80,6 +80,11 @@ DXA units (1440 DXA = 1 inch):
 
 For landscape, pass portrait dimensions and let \`docx-js\` swap them: \`size: { width: 12240, height: 15840, orientation: PageOrientation.LANDSCAPE }\`.
 
+## Paragraphs, Typography & Spacing
+
+- **Paragraph Spacing**: Set default paragraph spacing in \`styles.default.document.paragraph\`: \`spacing: { after: 140, line: 276 }\` (~7pt spacing after, 1.15 line spacing).
+- **Leading Whitespace**: Always trim leading whitespace from paragraph text consistently. Never indent the first paragraph of chapters (BAB) or sections with a space character (\`" Text"\`).
+
 ## Styles — Override Built-in Headings
 
 Use \`Arial\` as the default font (universally supported). Override built-in heading IDs **with the exact strings** \`"Heading1"\`, \`"Heading2"\`, etc. Include \`outlineLevel\` (0 for H1, 1 for H2, …) — **required for the TOC to pick the heading up**.
@@ -87,7 +92,12 @@ Use \`Arial\` as the default font (universally supported). Override built-in hea
 \`\`\`js
 const doc = new Document({
   styles: {
-    default: { document: { run: { font: "Arial", size: 24 } } }, // 12pt
+    default: {
+      document: {
+        run: { font: "Arial", size: 24 }, // 12pt
+        paragraph: { spacing: { after: 140, line: 276 } }, // ~7pt after (140 DXA), 1.15 line spacing (276 DXA)
+      },
+    },
     paragraphStyles: [
       { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
         run: { size: 32, bold: true, font: "Arial" },
@@ -385,6 +395,8 @@ This renders correctly in the LibreOffice → PDF preview AND in Word (no F9-ref
 - ❌ Skipping the explicit page size (defaults to A4 in docx-js).
 - ❌ Custom paragraph style on headings that should appear in the TOC — use \`HeadingLevel\` only and rely on the \`Heading1\`/\`Heading2\` style overrides.
 - ❌ Truncation, \`Lorem ipsum\`, \`[TODO]\`, \`(content omitted)\`, or placeholder markers of any kind.
+- ❌ Indenting the first paragraph of a chapter or section with a leading space (e.g. \`" Paragraph text"\`). Always trim leading whitespace consistently.
+- ❌ Omitting paragraph spacing in default styles (\`default.document.paragraph.spacing\`). Without \`{ after: 140, line: 276 }\`, paragraphs run together with zero spacing between them.
 
 ## Worked Example — Hello World
 
@@ -395,7 +407,12 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx"
 
 const doc = new Document({
   styles: {
-    default: { document: { run: { font: "Arial", size: 24 } } },
+    default: {
+      document: {
+        run: { font: "Arial", size: 24 },
+        paragraph: { spacing: { after: 140, line: 276 } },
+      },
+    },
     paragraphStyles: [
       { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
         run: { size: 32, bold: true, font: "Arial" },

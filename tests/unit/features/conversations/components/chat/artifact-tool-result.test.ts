@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest"
 import {
   isPersistedArtifactToolCall,
   getEffectiveToolState,
+  formatUserFacingValidationError,
 } from "@/features/conversations/components/chat/artifact-tool-result"
 
 /** Build a tool-call-like object with sensible defaults so each test only
@@ -183,5 +184,126 @@ describe("getEffectiveToolState", () => {
     // Without `persisted: false` we don't know it failed — leave the state
     // alone rather than guessing.
     expect(result.state).toBe("done")
+  })
+})
+
+describe("formatUserFacingValidationError", () => {
+  it("formats validation errors as bullets without model instructions", () => {
+    const formatted = formatUserFacingValidationError([
+      "Model URL is not in the verified whitelist",
+      "Missing export default",
+    ])
+    expect(formatted).toBe(
+      "Artifact failed validation — the assistant is retrying:\n  - Model URL is not in the verified whitelist\n  - Missing export default",
+    )
+    expect(formatted).not.toMatch(/Fix these and call the tool again/i)
+    expect(formatted).not.toMatch(/do not truncate/i)
+  })
+
+  it("handles empty or missing errors array gracefully", () => {
+    expect(formatUserFacingValidationError()).toBe(
+      "Artifact failed validation — the assistant is retrying",
+    )
+    expect(formatUserFacingValidationError([])).toBe(
+      "Artifact failed validation — the assistant is retrying",
+    )
+  })
+})
+
+describe("getEffectiveToolState — TC-1514 user-facing validation shaping", () => {
+  it("prefers userFacingError over internal model error on failed create_artifact", () => {
+    const modelError =
+      "Your application/3d artifact has issues that will prevent it from rendering correctly:\n  - Model URL must be from the verified whitelist\n\nFix these and call the tool again with the corrected content. Output the COMPLETE corrected artifact — do not truncate."
+    const userFacingError =
+      "Artifact failed validation — the assistant is retrying:\n  - Model URL must be from the verified whitelist"
+
+    const result = getEffectiveToolState(
+      tc({
+        output: {
+          id: "art-3d",
+          title: "Scene",
+          type: "application/3d",
+          persisted: false,
+          failureReason: "validation",
+          error: modelError,
+          userFacingError,
+          validationErrors: ["Model URL must be from the verified whitelist"],
+        },
+      }),
+    )
+
+    expect(result.state).toBe("error")
+    expect(result.errorText).toBe(userFacingError)
+    expect(result.errorText).not.toContain("Fix these and call the tool again")
+    expect(result.errorText).not.toContain("do not truncate")
+  })
+
+  it("derives user-facing message from validationErrors when userFacingError is absent", () => {
+    const modelError =
+      "Your application/3d artifact has issues that will prevent it from rendering correctly:\n  - Non-whitelisted model\n\nFix these and call the tool again with the corrected content. Output the COMPLETE corrected artifact — do not truncate."
+
+    const result = getEffectiveToolState(
+      tc({
+        output: {
+          id: "art-3d",
+          title: "Scene",
+          type: "application/3d",
+          persisted: false,
+          failureReason: "validation",
+          error: modelError,
+          validationErrors: ["Non-whitelisted model"],
+        },
+      }),
+    )
+
+    expect(result.state).toBe("error")
+    expect(result.errorText).toBe(
+      "Artifact failed validation — the assistant is retrying:\n  - Non-whitelisted model",
+    )
+    expect(result.errorText).not.toContain("Fix these and call the tool again")
+  })
+
+  it("strips internal instructions when error contains call the tool again but validationErrors is missing", () => {
+    const modelError =
+      "Your text/document artifact has issues that will prevent it from rendering correctly:\n  - SyntaxError: Unexpected token\n\nFix these and call the tool again with the corrected content. Output the COMPLETE corrected artifact — do not truncate."
+
+    const result = getEffectiveToolState(
+      tc({
+        output: {
+          id: "doc-1",
+          persisted: false,
+          error: modelError,
+        },
+      }),
+    )
+
+    expect(result.state).toBe("error")
+    expect(result.errorText).toBe(
+      "Artifact failed validation — the assistant is retrying:\n- SyntaxError: Unexpected token",
+    )
+    expect(result.errorText).not.toContain("Fix these and call the tool again")
+    expect(result.errorText).not.toContain("do not truncate")
+  })
+
+  it("handles update_artifact with userFacingError on validation failure", () => {
+    const result = getEffectiveToolState(
+      tc({
+        toolName: "update_artifact",
+        output: {
+          id: "art-1",
+          updated: false,
+          persisted: false,
+          failureReason: "validation",
+          error: "internal model instruction",
+          userFacingError: "Artifact failed validation — the assistant is retrying:\n  - Bad syntax",
+          validationErrors: ["Bad syntax"],
+        },
+      }),
+    )
+
+    expect(result.state).toBe("error")
+    expect(result.errorText).toBe(
+      "Artifact failed validation — the assistant is retrying:\n  - Bad syntax",
+    )
   })
 })

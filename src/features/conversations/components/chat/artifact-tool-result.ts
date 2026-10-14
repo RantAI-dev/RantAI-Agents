@@ -52,6 +52,39 @@ export function isPersistedArtifactToolCall(tc: ToolCallLike): boolean {
  *  tool calls (state="done" but persisted/updated=false) get rewritten
  *  to state="error" with the tool's own error message so the indicator
  *  shows red instead of green. */
+/**
+ * Formats a short user-facing validation error message for the chat UI tool card.
+ * Bullet points the reasons without internal model instructions.
+ */
+export function formatUserFacingValidationError(validationErrors?: string[]): string {
+  if (!validationErrors || validationErrors.length === 0) {
+    return "Artifact failed validation — the assistant is retrying"
+  }
+  const bullets = validationErrors.map((e) => `  - ${e}`).join("\n")
+  return `Artifact failed validation — the assistant is retrying:\n${bullets}`
+}
+
+function resolveUserFacingError(out: Record<string, unknown>, fallback: string): string {
+  if (typeof out.userFacingError === "string" && out.userFacingError.trim().length > 0) {
+    return out.userFacingError
+  }
+  if (Array.isArray(out.validationErrors) && out.validationErrors.length > 0) {
+    return formatUserFacingValidationError(out.validationErrors as string[])
+  }
+  if (typeof out.error === "string") {
+    // If the error message contains internal instructions meant for the model, strip them out
+    if (out.failureReason === "validation" || out.error.includes("Fix these and call the tool again")) {
+      const match = out.error.match(/:\n([\s\S]*?)(?:\n\nFix these|\nFix these|$)/)
+      if (match && match[1]?.trim()) {
+        return `Artifact failed validation — the assistant is retrying:\n${match[1].trim()}`
+      }
+      return "Artifact failed validation — the assistant is retrying"
+    }
+    return out.error
+  }
+  return fallback
+}
+
 export function getEffectiveToolState(tc: ToolCallLike): {
   state: ToolCallLike["state"]
   errorText: string | undefined
@@ -61,13 +94,13 @@ export function getEffectiveToolState(tc: ToolCallLike): {
     if (tc.toolName === "create_artifact" && out.persisted === false) {
       return {
         state: "error",
-        errorText: typeof out.error === "string" ? out.error : "Artifact creation failed",
+        errorText: resolveUserFacingError(out, "Artifact creation failed"),
       }
     }
     if (tc.toolName === "update_artifact" && out.updated === false) {
       return {
         state: "error",
-        errorText: typeof out.error === "string" ? out.error : "Artifact update failed",
+        errorText: resolveUserFacingError(out, "Artifact update failed"),
       }
     }
   }

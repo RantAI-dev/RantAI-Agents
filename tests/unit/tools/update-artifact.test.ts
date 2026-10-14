@@ -30,17 +30,21 @@ vi.mock("@/lib/unsplash", () => ({
   resolveSlideImages: vi.fn(async (s: string) => s),
 }))
 
-const { validateMock, formatErrorMock } = vi.hoisted(() => ({
+const { validateMock, formatErrorMock, formatUserFacingErrorMock } = vi.hoisted(() => ({
   validateMock: vi.fn(),
   formatErrorMock: vi.fn(
     (type: string, v: { errors: string[] }) =>
       `validation failed: ${v.errors.join(", ")}`,
+  ),
+  formatUserFacingErrorMock: vi.fn(
+    (errors: string[]) => `Artifact failed validation — the assistant is retrying:\n${errors.map((e) => `  - ${e}`).join("\n")}`,
   ),
 }))
 
 vi.mock("@/lib/tools/builtin/_validate-artifact", () => ({
   validateArtifactContent: validateMock,
   formatValidationError: formatErrorMock,
+  formatUserFacingValidationError: formatUserFacingErrorMock,
 }))
 
 import { updateArtifactTool } from "@/lib/tools/builtin/update-artifact"
