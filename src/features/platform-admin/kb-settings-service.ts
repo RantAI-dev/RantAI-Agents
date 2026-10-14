@@ -42,48 +42,6 @@ async function readOverrides(): Promise<Record<string, unknown>> {
   return row && row.value && typeof row.value === "object" ? { ...(row.value as Record<string, unknown>) } : {}
 }
 
-/**
- * Effective KB config + per-field source ("db" | "env" | "default") so the UI
- * can show where each value comes from. Secret values are masked.
- */
-export async function getKbSettings() {
-  const overrides = await readOverrides()
-  const effective = getRagConfig()
-  const fromEnvOrDefault = envRagConfig()
-  const embeddingProviderId =
-    typeof overrides.embeddingProviderId === "string" ? overrides.embeddingProviderId : null
-
-  const fields = EDITABLE.map((key) => {
-    const overridden = overrides[key] !== undefined && overrides[key] !== null && overrides[key] !== ""
-    const secret = SECRET_KEYS.includes(key)
-    const effectiveValue = overridden ? overrides[key] : fromEnvOrDefault[key]
-    // While an embedding provider is linked, endpoint + key are derived from
-    // it at runtime — surface that instead of the stored/env value.
-    const derived =
-      !!embeddingProviderId && (key === "embeddingBaseUrl" || key === "embeddingApiKey")
-    return {
-      key,
-      source: derived ? "provider" : overridden ? "db" : envSource(key),
-      secret,
-      value: secret ? undefined : derived ? effective[key] : effectiveValue,
-      set: secret ? !!effective[key] : undefined,
-    }
-  })
-  return { fields, embeddingProviderId, effective: redactSecrets(effective) }
-}
-
-function redactSecrets(config: RagConfig): Omit<RagConfig, "embeddingApiKey" | "extractVisionApiKey"> & {
-  embeddingApiKeySet: boolean
-  extractVisionApiKeySet: boolean
-} {
-  const { embeddingApiKey, extractVisionApiKey, ...rest } = config
-  return {
-    ...rest,
-    embeddingApiKeySet: !!embeddingApiKey,
-    extractVisionApiKeySet: !!extractVisionApiKey,
-  }
-}
-
 const ENV_BY_KEY: Partial<Record<keyof RagConfig, string>> = {
   extractPrimary: "KB_EXTRACT_PRIMARY",
   extractFallback: "KB_EXTRACT_FALLBACK",
@@ -102,9 +60,127 @@ const ENV_BY_KEY: Partial<Record<keyof RagConfig, string>> = {
   rerankFinalK: "KB_RERANK_FINAL_K",
 }
 
-function envSource(key: keyof RagConfig): "env" | "default" {
-  const envName = ENV_BY_KEY[key]
-  return envName && process.env[envName] ? "env" : "default"
+export interface KbFieldProvenanceOptions {
+  overrides?: Record<string, unknown>
+  effectiveConfig?: RagConfig
+  envConfig?: RagConfig
+  embeddingProviderId?: string | null
+  env?: Record<string, string | undefined>
+}
+
+export interface KbFieldProvenance {
+  key: keyof RagConfig
+  source: "provider" | "db" | "env" | "default"
+  secret: boolean
+  value?: unknown
+  set?: boolean
+}
+
+export function resolveKbFieldProvenance(
+  key: keyof RagConfig,
+  options: KbFieldProvenanceOptions = {}
+): KbFieldProvenance {
+  const overrides = options.overrides || {}
+  const env = options.env || process.env
+  const secret = SECRET_KEYS.includes(key)
+  const embeddingProviderId = options.embeddingProviderId
+
+  // While an embedding provider is linked, endpoint + key are derived from
+  // it at runtime — surface that instead of the stored/env value.
+  const derived =
+    !!embeddingProviderId && (key === "embeddingBaseUrl" || key === "embeddingApiKey")
+
+  if (derived) {
+    return {
+      key,
+      source: "provider",
+      secret,
+      value: secret ? undefined : options.effectiveConfig ? options.effectiveConfig[key] : overrides[key],
+      set: secret ? true : undefined,
+    }
+  }
+
+  // DB override
+  const overridden =
+    overrides[key] !== undefined && overrides[key] !== null && overrides[key] !== ""
+  if (overridden) {
+    return {
+      key,
+      source: "db",
+      secret,
+      value: secret ? undefined : overrides[key],
+      set: secret ? true : undefined,
+    }
+  }
+
+  // Env vs Default
+  const envVarName = ENV_BY_KEY[key]
+  const hasDirectEnv = !!(envVarName && env[envVarName])
+
+  if (secret) {
+    // Secret keys (embeddingApiKey, extractVisionApiKey) fall back to
+    // OPENROUTER_API_KEY at runtime via resolveApiKey in config.ts.
+    const hasFallbackEnv = !!env.OPENROUTER_API_KEY
+    const isSetInEnv = hasDirectEnv || hasFallbackEnv
+
+    return {
+      key,
+      source: isSetInEnv ? "env" : "default",
+      secret: true,
+      value: undefined, // Never leak secrets
+      set: isSetInEnv,
+    }
+  }
+
+  // Non-secret keys
+  const effectiveValue =
+    options.envConfig?.[key] ?? options.effectiveConfig?.[key] ?? overrides[key]
+
+  return {
+    key,
+    source: hasDirectEnv ? "env" : "default",
+    secret: false,
+    value: effectiveValue,
+    set: undefined,
+  }
+}
+
+/**
+ * Effective KB config + per-field source ("db" | "env" | "default") so the UI
+ * can show where each value comes from. Secret values are masked.
+ */
+export async function getKbSettings() {
+  const overrides = await readOverrides()
+  const effective = getRagConfig()
+  const fromEnvOrDefault = envRagConfig()
+  const embeddingProviderId =
+    typeof overrides.embeddingProviderId === "string" ? overrides.embeddingProviderId : null
+
+  const fields = EDITABLE.map((key) =>
+    resolveKbFieldProvenance(key, {
+      overrides,
+      effectiveConfig: effective,
+      envConfig: fromEnvOrDefault,
+      embeddingProviderId,
+    })
+  )
+  return { fields, embeddingProviderId, effective: redactSecrets(effective) }
+}
+
+function redactSecrets(
+  config: RagConfig,
+  env: Record<string, string | undefined> = process.env
+): Omit<RagConfig, "embeddingApiKey" | "extractVisionApiKey"> & {
+  embeddingApiKeySet: boolean
+  extractVisionApiKeySet: boolean
+} {
+  const { embeddingApiKey, extractVisionApiKey, ...rest } = config
+  const openRouterKey = env.OPENROUTER_API_KEY || ""
+  return {
+    ...rest,
+    embeddingApiKeySet: !!(embeddingApiKey || openRouterKey),
+    extractVisionApiKeySet: !!(extractVisionApiKey || openRouterKey),
+  }
 }
 
 const INT_KEYS: (keyof RagConfig)[] = [

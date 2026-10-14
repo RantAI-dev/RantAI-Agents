@@ -1,3 +1,4 @@
+import { normalizeEntities } from "@/lib/document-intelligence/normalizer"
 import { kb } from "@/lib/kb-runtime/runtime"
 import {
   smartChunkDocument,
@@ -78,7 +79,8 @@ export async function indexDocumentContent(
       await emit?.("extracting_entities")
       const surrealClient = kb("vectors")
       if (input.useCombined) {
-        const { entities, relations } = await extractEntitiesAndRelations(content, input.documentId, input.userId ?? undefined)
+        const { entities: rawEntities, relations } = await extractEntitiesAndRelations(content, input.documentId, input.userId ?? undefined)
+        const entities = normalizeEntities(rawEntities)
         entityCount = entities.length
 
         const entityIdMap = new Map<string, string>()
@@ -151,10 +153,11 @@ export async function indexDocumentContent(
           console.log(`[kb-ingest] Relations: ${storedCount} stored, ${skippedCount} skipped (no matching entity), ${relations.length} total`)
         }
       } else {
-        const entities = await extractEntities(content, input.documentId, undefined, {
+        const rawEntities = await extractEntities(content, input.documentId, undefined, {
           useLLM: true,
           usePatterns: true,
         })
+        const entities = normalizeEntities(rawEntities)
         entityCount = entities.length
 
         for (const entity of entities) {

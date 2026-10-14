@@ -53,11 +53,17 @@ const RELATION_TYPE_OUTLINE: Record<string, string> = {
 
 const ENTITY_TYPE_OUTLINE: Record<string, string> = {
   Person: "border-blue-500 text-blue-700 dark:border-blue-400 dark:text-blue-300",
+  PERSON: "border-blue-500 text-blue-700 dark:border-blue-400 dark:text-blue-300",
   Organization: "border-red-500 text-red-700 dark:border-red-400 dark:text-red-300",
+  ORGANIZATION: "border-red-500 text-red-700 dark:border-red-400 dark:text-red-300",
   Location: "border-green-500 text-green-700 dark:border-green-400 dark:text-green-300",
+  LOCATION: "border-green-500 text-green-700 dark:border-green-400 dark:text-green-300",
   Product: "border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300",
+  PRODUCT: "border-amber-500 text-amber-700 dark:border-amber-400 dark:text-amber-300",
   Technology: "border-purple-500 text-purple-700 dark:border-purple-400 dark:text-purple-300",
+  TECHNOLOGY: "border-purple-500 text-purple-700 dark:border-purple-400 dark:text-purple-300",
   Other: "border-gray-500 text-gray-700 dark:border-gray-400 dark:text-gray-300",
+  OTHER: "border-gray-500 text-gray-700 dark:border-gray-400 dark:text-gray-300",
 }
 
 const RelationList = memo<RelationListProps>(({ relations, entities, loading }) => {

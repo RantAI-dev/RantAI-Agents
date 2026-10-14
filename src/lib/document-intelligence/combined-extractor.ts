@@ -1,3 +1,4 @@
+import { normalizeEntities } from "./normalizer";
 /**
  * Combined Entity + Relation Extractor
  *
@@ -298,13 +299,13 @@ export class CombinedExtractor {
   } {
     const systemPrompt = `You are an expert at extracting structured knowledge from text.
 Your task is to extract:
-1. ENTITIES: People, organizations, locations, products, concepts, dates, events, laws, regulations, etc.
+1. ENTITIES: People, organizations, locations, products, concepts, dates, events, laws, regulations, documents, roles/positions, etc.
 2. RELATIONS: How entities are connected (e.g., "works_for", "located_in", "regulates", "founded_by", etc.)
 
 Output JSON with this exact structure:
 {
   "entities": [
-    {"name": "Entity Name", "type": "PERSON|ORG|LOCATION|DATE|EVENT|CONCEPT|REGULATION|PRODUCT|OTHER", "description": "brief description", "confidence": 0.9}
+    {"name": "Entity Name", "type": "PERSON|ORGANIZATION|LOCATION|DATE|EVENT|CONCEPT|REGULATION|PRODUCT|DOCUMENT|ROLE|TECHNOLOGY|MONEY|EMAIL|URL|PHONE|OTHER", "description": "brief description", "confidence": 0.9}
   ],
   "relations": [
     {"source": "Entity A", "target": "Entity B", "relation_type": "relationship_type", "context": "text supporting this relation", "confidence": 0.85}
@@ -313,6 +314,8 @@ Output JSON with this exact structure:
 
 Guidelines:
 - Extract ALL meaningful entities, not just the most prominent ones
+- Use canonical types: PERSON, ORGANIZATION, LOCATION, DATE, EVENT, CONCEPT, REGULATION, PRODUCT, DOCUMENT, ROLE (for job titles/positions like Director, CEO, Manager), TECHNOLOGY, MONEY, EMAIL, URL, PHONE, OTHER
+- Do not extract trivial single words or sentence fragments as entities
 - Extract relations ONLY between entities you extracted
 - Use consistent entity names (same entity = same name)
 - Confidence: 0.9+ for explicit mentions, 0.7-0.9 for inferred
@@ -415,35 +418,36 @@ Return ONLY valid JSON with "entities" and "relations" arrays.`;
     const entityMap = new Map<string, Entity>();
     const entityNameMap = new Map<string, string>(); // normalized name -> canonical name
 
-    for (const result of chunkResults) {
-      for (const entity of result.entities) {
-        const normalizedName = entity.name.toLowerCase().trim();
-        const key = `${normalizedName}::${entity.type}`;
+    const rawEntities = chunkResults.flatMap((r) => r.entities);
+    const normalizedEntities = normalizeEntities(rawEntities);
 
-        if (entityMap.has(key)) {
-          // Merge: keep higher confidence
-          const existing = entityMap.get(key)!;
-          if (entity.confidence > existing.confidence) {
-            existing.confidence = entity.confidence;
-          }
-          // Track name variant
-          entityNameMap.set(entity.name, existing.name);
-        } else {
-          const newEntity: Entity = {
-            confidence: entity.confidence,
-            documentId: fileId,
-            id: `entity:${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            metadata: {
-              description: entity.description,
-              extraction_method: "combined-llm",
-            },
-            name: entity.name,
-            type: entity.type,
-          };
-          entityMap.set(key, newEntity);
-          entityNameMap.set(entity.name, entity.name);
-          entityNameMap.set(normalizedName, entity.name);
+    for (const entity of normalizedEntities) {
+      const normalizedName = entity.name.toLowerCase().trim();
+      const key = `${normalizedName}::${entity.type}`;
+
+      if (entityMap.has(key)) {
+        // Merge: keep higher confidence
+        const existing = entityMap.get(key)!;
+        if ((entity.confidence ?? 0.8) > existing.confidence) {
+          existing.confidence = entity.confidence ?? 0.8;
         }
+        // Track name variant
+        entityNameMap.set(entity.name, existing.name);
+      } else {
+        const newEntity: Entity = {
+          confidence: entity.confidence ?? 0.8,
+          documentId: fileId,
+          id: `entity:${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          metadata: {
+            description: entity.description as string | undefined,
+            extraction_method: "combined-llm",
+          },
+          name: entity.name,
+          type: entity.type,
+        };
+        entityMap.set(key, newEntity);
+        entityNameMap.set(entity.name, entity.name);
+        entityNameMap.set(normalizedName, entity.name);
       }
     }
 

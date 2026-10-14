@@ -44,16 +44,26 @@ const ENTITY_COLORS: Record<string, string> = {
   Person: "#0ea5e9",
   ORG: "#f43f5e",         // rose-500
   Organization: "#f43f5e",
+  ORGANIZATION: "#f43f5e",
+  ROLE: "#3b82f6",        // blue-500
+  Role: "#3b82f6",
+  DOCUMENT: "#d946ef",    // fuchsia-500
   LOCATION: "#10b981",    // emerald-500
   Location: "#10b981",
   PRODUCT: "#f59e0b",     // amber-500
   Product: "#f59e0b",
+  TECHNOLOGY: "#8b5cf6",  // violet-500
   Technology: "#8b5cf6",  // violet-500
   DATE: "#6366f1",        // indigo-500
   Date: "#6366f1",
+  MONEY: "#22c55e",       // green-500
   Money: "#22c55e",       // green-500
+  CURRENCY: "#22c55e",    // green-500
+  Currency: "#22c55e",    // green-500
+  EMAIL: "#ec4899",       // pink-500
   Email: "#ec4899",       // pink-500
   URL: "#14b8a6",         // teal-500
+  PHONE: "#f97316",       // orange-500
   Phone: "#f97316",       // orange-500
   EVENT: "#84cc16",       // lime-500
   Event: "#84cc16",
