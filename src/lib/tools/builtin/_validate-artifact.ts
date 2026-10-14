@@ -2666,3 +2666,14 @@ export function formatValidationError(
   const bullets = result.errors.map((e) => `  - ${e}`).join("\n")
   return `Your ${type} artifact has issues that will prevent it from rendering correctly:\n${bullets}\n\nFix these and call the tool again with the corrected content. Output the COMPLETE corrected artifact — do not truncate.`
 }
+
+/**
+ * User-facing validation error message rendered in the chat timeline tool card.
+ * Omits internal instructions meant for the model ("Fix these and call the tool again...").
+ */
+export function formatUserFacingValidationError(
+  errors: string[]
+): string {
+  const bullets = errors.map((e) => `  - ${e}`).join("\n")
+  return `Artifact failed validation — the assistant is retrying${bullets ? `:\n${bullets}` : ""}`
+}
