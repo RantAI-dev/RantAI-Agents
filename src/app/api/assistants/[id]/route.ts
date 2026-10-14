@@ -65,8 +65,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const orgContext = await resolveActiveOrg(request, session.user.id)
     const bodyParse = UpdateAssistantSchema.safeParse(await request.json())
     if (!bodyParse.success) {
+      const issue = bodyParse.error.issues[0]?.message
       return NextResponse.json(
-        { error: "Invalid request payload", details: bodyParse.error.flatten() },
+        { error: issue || "Invalid request payload", details: bodyParse.error.flatten() },
         { status: 400 }
       )
     }

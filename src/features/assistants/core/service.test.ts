@@ -182,7 +182,7 @@ describe("assistants service", () => {
       userId: "user_1",
       input: {
         name: "New Assistant",
-        systemPrompt: "Prompt",
+        systemPrompt: "This is a valid test prompt for assistant creation.",
       },
       organizationId: "org_1",
       role: "admin",
@@ -192,7 +192,7 @@ describe("assistants service", () => {
     expect(repository.createAssistant).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "New Assistant",
-        systemPrompt: "Prompt",
+        systemPrompt: "This is a valid test prompt for assistant creation.",
         organizationId: "org_1",
         createdBy: "user_1",
       })
