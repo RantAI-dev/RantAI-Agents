@@ -1776,6 +1776,31 @@ export function ChatWorkspace({
           }
           if (m.sources && m.sources.length > 0) {
             restoredSources[m.id] = m.sources
+          } else if (Array.isArray(m.parts)) {
+            for (const part of m.parts) {
+              if (
+                part &&
+                typeof part === "object" &&
+                (part as any).type === "tool-invocation" &&
+                (part as any).toolName === "knowledge_search" &&
+                (part as any).output &&
+                Array.isArray((part as any).output.sources) &&
+                (part as any).output.sources.length > 0
+              ) {
+                restoredSources[m.id] = (part as any).output.sources.map((s: Record<string, unknown>) => ({
+                  title: (s.title as string) || (s.documentTitle as string) || "Document",
+                  section: (s.section as string) || null,
+                  url: (s.url as string) || null,
+                  documentId: (s.documentId as string) || null,
+                  assetKey: (s.assetKey as string) || null,
+                  page: typeof s.page === "number" ? s.page : null,
+                  pages: Array.isArray(s.pages) ? (s.pages as number[]) : undefined,
+                  chunkType: (s.chunkType as string) || null,
+                  chunkIndex: typeof s.chunkIndex === "number" ? s.chunkIndex : null,
+                  anchorChunkIndex: typeof s.anchorChunkIndex === "number" ? s.anchorChunkIndex : null,
+                }))
+              }
+            }
           }
         }
         if (Object.keys(restoredAttachments).length > 0) {
@@ -2001,6 +2026,31 @@ export function ChatWorkspace({
       }
       if (m.sources && m.sources.length > 0) {
         restoredSources[m.id] = m.sources
+      } else if (Array.isArray(m.parts)) {
+        for (const part of m.parts) {
+          if (
+            part &&
+            typeof part === "object" &&
+            (part as any).type === "tool-invocation" &&
+            (part as any).toolName === "knowledge_search" &&
+            (part as any).output &&
+            Array.isArray((part as any).output.sources) &&
+            (part as any).output.sources.length > 0
+          ) {
+            restoredSources[m.id] = (part as any).output.sources.map((s: Record<string, unknown>) => ({
+              title: (s.title as string) || (s.documentTitle as string) || "Document",
+              section: (s.section as string) || null,
+              url: (s.url as string) || null,
+              documentId: (s.documentId as string) || null,
+              assetKey: (s.assetKey as string) || null,
+              page: typeof s.page === "number" ? s.page : null,
+              pages: Array.isArray(s.pages) ? (s.pages as number[]) : undefined,
+              chunkType: (s.chunkType as string) || null,
+              chunkIndex: typeof s.chunkIndex === "number" ? s.chunkIndex : null,
+              anchorChunkIndex: typeof s.anchorChunkIndex === "number" ? s.anchorChunkIndex : null,
+            }))
+          }
+        }
       }
     }
     if (Object.keys(restoredAttachments).length > 0) {
@@ -2839,6 +2889,37 @@ export function ChatWorkspace({
                           "[chat-workspace] update_artifact returned error:",
                           out.error,
                         )
+                      }
+                    }
+
+                    // Handle knowledge_search tool output: attach sources to current turn (TC-994)
+                    if (tc.toolName === "knowledge_search" && part.output && typeof part.output === "object") {
+                      const out = part.output as Record<string, unknown>
+                      if (Array.isArray(out.sources) && out.sources.length > 0) {
+                        const toolSources = (out.sources as Array<Record<string, unknown>>).map((s) => ({
+                          title: (s.title as string) || (s.documentTitle as string) || "Document",
+                          section: (s.section as string) || null,
+                          url: (s.url as string) || null,
+                          documentId: (s.documentId as string) || null,
+                          assetKey: (s.assetKey as string) || null,
+                          page: typeof s.page === "number" ? s.page : null,
+                          pages: Array.isArray(s.pages) ? (s.pages as number[]) : undefined,
+                          chunkType: (s.chunkType as string) || null,
+                          chunkIndex: typeof s.chunkIndex === "number" ? s.chunkIndex : null,
+                          anchorChunkIndex: typeof s.anchorChunkIndex === "number" ? s.anchorChunkIndex : null,
+                        })) as Source[]
+
+                        const existingKeys = new Set(
+                          streamedSources.map((s) => `${s.documentId || s.title}-${s.section || ""}`)
+                        )
+                        const newSources = toolSources.filter(
+                          (s) => !existingKeys.has(`${s.documentId || s.title}-${s.section || ""}`)
+                        )
+                        streamedSources = [...streamedSources, ...newSources]
+                        setMessageSources((prev) => ({
+                          ...prev,
+                          [assistantMsgId]: streamedSources,
+                        }))
                       }
                     }
                   }

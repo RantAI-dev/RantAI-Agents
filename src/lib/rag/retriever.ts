@@ -33,6 +33,7 @@ export interface HybridRetrievalResult {
     section: string | null;
     assetKey?: string | null;
     page?: number | null;
+    pages?: number[];
     chunkType?: string | null;
     chunkIndex?: number | null;
     anchorChunkIndex?: number | null;
@@ -137,7 +138,9 @@ export async function retrieveContext(
 
   // Phase 7: run vector and BM25 IN PARALLEL — max, not sum, of the two latencies.
   const { bm25Search } = await import("./bm25-search");
-  const { reciprocalRankFusion } = await import("./hybrid-merge");
+  const { reciprocalRankFusion, guaranteeIdentifierSlots } = await import("./hybrid-merge");
+  const { extractIdentifierTokens } = await import("./identifier-extraction");
+  const exactIdentifiers = extractIdentifierTokens(query);
 
   const [vectorChunks, bm25Chunks] = await Promise.all([
     expanded.length > 1
@@ -157,35 +160,79 @@ export async function retrieveContext(
             .slice(0, fetchLimit);
         })()
       : searchWithThreshold(query, minSimilarity, fetchLimit, categoryFilter, groupIds),
-    cfg.hybridBm25Enabled ? bm25Search(query, fetchLimit).catch(() => [] as any[]) : Promise.resolve([] as any[]),
+    cfg.hybridBm25Enabled ? bm25Search(query, fetchLimit, { exactPhrases: exactIdentifiers }).catch(() => [] as any[]) : Promise.resolve([] as any[]),
   ]);
 
   // Build a single chunk pool keyed by chunk.id; vector wins metadata ties.
   const pool = new Map<string, SearchResult>();
   for (const v of vectorChunks) pool.set(v.id, v);
   for (const b of bm25Chunks) {
-    if (pool.has(b.id)) continue;
+    if (pool.has(b.id)) {
+      const existing = pool.get(b.id)!;
+      if (b.matchedIdentifiers && b.matchedIdentifiers.length > 0) {
+        existing.matchedIdentifiers = Array.from(
+          new Set([...(existing.matchedIdentifiers || []), ...b.matchedIdentifiers])
+        );
+      }
+      continue;
+    }
+    const bMeta = b.metadata && typeof b.metadata === "object" ? (b.metadata as Record<string, unknown>) : null;
     pool.set(b.id, {
       id: b.id,
       documentId: b.documentId,
-      documentTitle: "", // not returned by bm25 query; could be enriched in future
+      documentTitle: "",
       content: b.content,
       categories: [],
       subcategory: null,
-      section: null,
-      similarity: 0,
+      section: (bMeta?.section as string) || null,
+      similarity: b.score,
       contextualPrefix: null,
+      page: typeof bMeta?.page === "number" ? bMeta.page : null,
+      chunkIndex: b.chunkIndex ?? (typeof bMeta?.chunk_index === "number" ? bMeta.chunk_index : null),
+      matchedIdentifiers: b.matchedIdentifiers,
     });
   }
 
-  // Fuse ranks via RRF across the two arms.
+  // Enrich missing document titles for BM25-only chunks from document store
+  const missingTitleDocIds = Array.from(
+    new Set(
+      Array.from(pool.values())
+        .filter((c) => !c.documentTitle && c.documentId)
+        .map((c) => c.documentId)
+    )
+  );
+  if (missingTitleDocIds.length > 0) {
+    try {
+      const docs = await kb("documents").findAliveMetaByIds(missingTitleDocIds);
+      const docMap = new Map(docs.map((d) => [d.id, d]));
+      for (const chunk of pool.values()) {
+        if (!chunk.documentTitle && chunk.documentId && docMap.has(chunk.documentId)) {
+          const doc = docMap.get(chunk.documentId)!;
+          chunk.documentTitle = doc.title;
+          chunk.categories = doc.categories || [];
+          chunk.subcategory = doc.subcategory || null;
+        }
+      }
+    } catch {
+      // Non-fatal title enrichment fallback
+    }
+  }
+
+  // Fuse ranks via RRF across the two arms with exact-identifier slot guarantee (TC-994).
   const fused = cfg.hybridBm25Enabled && bm25Chunks.length > 0
     ? reciprocalRankFusion(
         [
-          vectorChunks.map((v) => ({ id: v.id })),
-          bm25Chunks.map((b) => ({ id: b.id })),
+          vectorChunks.map((v) => ({ id: v.id, matchedIdentifiers: v.matchedIdentifiers, content: v.content })),
+          bm25Chunks.map((b) => ({ id: b.id, matchedIdentifiers: b.matchedIdentifiers, content: b.content })),
         ],
-        { limit: fetchLimit }
+        {
+          limit: fetchLimit,
+          guaranteedIdentifiers: exactIdentifiers,
+          getMatchedIdentifiers: (item) => {
+            const chunk = pool.get(item.id);
+            return chunk?.matchedIdentifiers || item.matchedIdentifiers || [];
+          },
+        }
       )
     : vectorChunks.map((v) => ({ id: v.id, rrfScore: v.similarity, sources: [0], first: { id: v.id } }));
 
@@ -219,6 +266,16 @@ export async function retrieveContext(
     chunks = chunks.slice(0, maxChunks);
   }
 
+  // Guarantee at least one slot per exact identifier match in final chunks (TC-994)
+  if (exactIdentifiers.length > 0) {
+    chunks = guaranteeIdentifierSlots(
+      chunks,
+      exactIdentifiers,
+      maxChunks,
+      (c) => c.matchedIdentifiers || []
+    );
+  }
+
   if (chunks.length === 0) {
     return {
       context: "",
@@ -240,11 +297,23 @@ export async function retrieveContext(
   // otherwise the model cites excerpt positions the deduped card list lacks.
   const sourceMap = new Map<
     string,
-    { documentId: string | null; documentTitle: string; section: string | null; categories: string[]; assetKey?: string | null; page?: number | null; chunkType?: string | null; chunkIndex?: number | null; anchorChunkIndex?: number | null }
+    {
+      documentId: string | null;
+      documentTitle: string;
+      section: string | null;
+      categories: string[];
+      assetKey?: string | null;
+      page?: number | null;
+      pages?: number[];
+      chunkType?: string | null;
+      chunkIndex?: number | null;
+      anchorChunkIndex?: number | null;
+    }
   >();
   for (const chunk of chunks) {
     const key = sourceDedupeKey(chunk);
-    if (!sourceMap.has(key)) {
+    const existing = sourceMap.get(key);
+    if (!existing) {
       sourceMap.set(key, {
         documentId: chunk.documentId ?? null,
         documentTitle: chunk.documentTitle,
@@ -252,10 +321,20 @@ export async function retrieveContext(
         categories: chunk.categories,
         assetKey: chunk.assetKey ?? null,
         page: chunk.page ?? null,
+        pages: chunk.page != null ? [chunk.page] : [],
         chunkType: chunk.chunkType ?? null,
         chunkIndex: chunk.chunkIndex ?? null,
         anchorChunkIndex: chunk.anchorChunkIndex ?? null,
       });
+    } else {
+      if (chunk.page != null) {
+        if (!existing.pages) existing.pages = existing.page != null ? [existing.page] : [];
+        if (!existing.pages.includes(chunk.page)) {
+          existing.pages.push(chunk.page);
+          existing.pages.sort((a, b) => a - b);
+        }
+        if (existing.page == null) existing.page = chunk.page;
+      }
     }
   }
   const keyToNumber = new Map(Array.from(sourceMap.keys()).map((k, i) => [k, i + 1]));
@@ -497,7 +576,17 @@ export async function hybridRetrieve(
   // so the model's inline [N] citations always resolve to a real source card.
   const sourceMap = new Map<
     string,
-    { documentId: string | null; documentTitle: string; section: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null; chunkIndex?: number | null; anchorChunkIndex?: number | null }
+    {
+      documentId: string | null;
+      documentTitle: string;
+      section: string | null;
+      assetKey?: string | null;
+      page?: number | null;
+      pages?: number[];
+      chunkType?: string | null;
+      chunkIndex?: number | null;
+      anchorChunkIndex?: number | null;
+    }
   >();
   for (const result of results) {
     const key = sourceDedupeKey({
@@ -505,17 +594,28 @@ export async function hybridRetrieve(
       documentTitle: result.documentTitle || "Document",
       section: result.section || null,
     });
-    if (!sourceMap.has(key)) {
+    const existing = sourceMap.get(key);
+    if (!existing) {
       sourceMap.set(key, {
         documentId: result.documentId ?? null,
         documentTitle: result.documentTitle || "Document",
         section: result.section || null,
         assetKey: result.assetKey ?? null,
         page: result.page ?? null,
+        pages: result.page != null ? [result.page] : [],
         chunkType: result.chunkType ?? null,
         chunkIndex: result.chunkIndex ?? null,
         anchorChunkIndex: result.anchorChunkIndex ?? null,
       });
+    } else {
+      if (result.page != null) {
+        if (!existing.pages) existing.pages = existing.page != null ? [existing.page] : [];
+        if (!existing.pages.includes(result.page)) {
+          existing.pages.push(result.page);
+          existing.pages.sort((a, b) => a - b);
+        }
+        if (existing.page == null) existing.page = result.page;
+      }
     }
   }
   const keyToNumber = new Map(Array.from(sourceMap.keys()).map((k, i) => [k, i + 1]));

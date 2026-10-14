@@ -45,4 +45,42 @@ describe("bm25Search", () => {
     const { bm25Search } = await import("@/lib/rag/bm25-search")
     await expect(bm25Search("x", 5)).rejects.toThrow(/\[bm25Search\].*schema not applied/)
   })
+
+  it("extracts and searches exact identifier phrases for multi-code queries (TC-994)", async () => {
+    const surrealQuery = vi.fn().mockImplementation(async (sql: string, vars: Record<string, unknown>) => {
+      if (sql.includes("@@")) {
+        // BM25 primary search returns only doc_p20
+        return [{ status: "OK", result: [
+          { id: "chunk_p20", document_id: "doc1", content: "ING-P20-6120 spesifikasi", score: 3.0 },
+        ]}]
+      }
+      if (sql.includes("string::contains") && vars.exact === "ing-p40-6140") {
+        // Exact search surfaces chunk_p40 which primary BM25 missed
+        return [{ status: "OK", result: [
+          { id: "chunk_p40", document_id: "doc1", content: "ING-P40-6140 deskripsi lengkap", score: 0 },
+        ]}]
+      }
+      return [{ status: "OK", result: [] }]
+    })
+
+    configureKb({ vectors: { query: surrealQuery, relate: vi.fn(async () => {}), cleanupDocumentIntelligence: vi.fn(async () => ({ deletedRelationTables: 0, entitiesDeleted: false, chunksDeleted: false })), healthCheck: vi.fn(async () => true) } })
+    const { bm25Search } = await import("@/lib/rag/bm25-search")
+
+    const query = "Apa perbedaan antara kode ING-P20-6120 dan ING-P40-6140?"
+    const out = await bm25Search(query, 5)
+
+    expect(out.length).toBe(2)
+    const p20 = out.find((r) => r.id === "chunk_p20")
+    const p40 = out.find((r) => r.id === "chunk_p40")
+    expect(p20).toBeDefined()
+    expect(p40).toBeDefined()
+    expect(p40?.matchedIdentifiers).toContain("ING-P40-6140")
+
+    // Verify exact phrase queries were executed with string::contains
+    const exactCalls = surrealQuery.mock.calls.filter((c) => c[0].includes("string::contains"))
+    expect(exactCalls.length).toBe(2)
+    const exactVars = exactCalls.map((c) => c[1].exact)
+    expect(exactVars).toContain("ing-p20-6120")
+    expect(exactVars).toContain("ing-p40-6140")
+  })
 })

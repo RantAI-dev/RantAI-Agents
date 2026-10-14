@@ -21,6 +21,7 @@ import {
   autoPlaceByAnchor,
   embeddedFigureNumbers,
   citedFigureNumbers,
+  reconcileCitations,
   type EmbeddableFigure,
 } from "./citations"
 
@@ -231,7 +232,9 @@ export function StreamdownContent({
   //   prose their caption matches (so ALL figures live in the answer, none in a
   //   separate strip) → linkify [n] citations into chips.
   const rendered = (() => {
-    if (!citations) return content
+    if (!citations || citations.count < 1) {
+      return reconcileCitations(content, undefined, 0)
+    }
     const figs = citations.figures ?? []
     const explicit = embeddedFigureNumbers(content)
     let out = embedFigures(stripDeadImages(content), figs)

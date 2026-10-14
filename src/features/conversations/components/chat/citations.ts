@@ -297,21 +297,58 @@ export function parseCiteHref(href: string): { messageId: string; n: number } | 
  * are left alone. Fenced code blocks are skipped so code samples containing
  * `[0]`-style indexing aren't mangled.
  */
-export function linkifyCitations(content: string, messageId: string, count: number): string {
-  if (!content || count < 1) return content
+/**
+ * Reconcile citation markers with attached sources (TC-994).
+ *
+ * Rewrites valid `[n]` markers (1 <= n <= count) into anchor links for chip styling.
+ * When the model emits a marker with no matching retrieved source (e.g. n > count
+ * or count === 0 / no sources attached for this turn), strips the dangling marker
+ * instead of rendering it literally.
+ * Fenced code blocks and real markdown links like `[1](url)` are preserved untouched.
+ */
+export function reconcileCitations(
+  content: string,
+  options?: { messageId?: string | null; count?: number } | string,
+  maybeCount?: number,
+): string {
+  if (!content) return content
 
-  // Split on ``` fences; transform only the segments outside code fences
-  // (even indices). This is a cheap guard, not a full markdown parse — inline
-  // code spans are rare carriers of `[n]` and are left as-is.
+  let messageId: string | null = null
+  let count = 0
+
+  if (typeof options === "string") {
+    messageId = options
+    count = typeof maybeCount === "number" ? maybeCount : 0
+  } else if (options && typeof options === "object") {
+    messageId = options.messageId ?? null
+    count = options.count ?? 0
+  }
+
+  // Split on ``` fences; transform only segments outside code fences (even indices).
   const segments = content.split(/(```[\s\S]*?```)/g)
   return segments
     .map((seg, i) => {
       if (i % 2 === 1) return seg // fenced code block — leave untouched
-      return seg.replace(/\[(\d{1,3})\](?!\()/g, (whole, num) => {
+      // Match optional leading space + [n] not followed by "(" (which would indicate a real markdown link)
+      return seg.replace(/( ?)(\[(\d{1,3})\])(?!\()/g, (_whole, leadingSpace, marker, num) => {
         const n = Number(num)
-        if (n < 1 || n > count) return whole
-        return `[${n}](#cite-${messageId}-${n})`
+        if (count >= 1 && n >= 1 && n <= count) {
+          return `${leadingSpace}${messageId ? `[${n}](#cite-${messageId}-${n})` : marker}`
+        }
+        // Dangling marker with no source or no sources attached: strip it and its leading space
+        return ""
       })
     })
     .join("")
+}
+
+/**
+ * Rewrite `[n]` citation markers into markdown links (`[n](#cite-<msg>-<n>)`)
+ * so the markdown renderer emits an anchor we can style as a chip. Only numbers
+ * within 1..count are rewritten; dangling markers outside 1..count or when count < 1
+ * are stripped (TC-994). Markers already followed by `(` (real links) are left alone.
+ * Fenced code blocks are skipped.
+ */
+export function linkifyCitations(content: string, messageId: string, count: number): string {
+  return reconcileCitations(content, { messageId, count })
 }

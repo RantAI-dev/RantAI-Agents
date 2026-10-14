@@ -29,6 +29,10 @@ export interface SearchResult {
    *  and the one that lets an answer place a caption-less figure beside the
    *  sentence it illustrates instead of guessing from caption keywords. */
   anchorChunkIndex?: number | null;
+  /** Exact identifier tokens matched by this chunk (TC-994). */
+  matchedIdentifiers?: string[];
+  /** Distinct chunk page numbers aggregated across chunks of this document (TC-984). */
+  pages?: number[];
 }
 
 interface SurrealChunk {

@@ -1,44 +1,150 @@
 import { kb } from "@/lib/kb-runtime/runtime";
+import { extractIdentifierTokens } from "./identifier-extraction";
 
 export interface Bm25Result {
   id: string;
   documentId: string;
   content: string;
   score: number;
+  metadata?: unknown;
+  chunkIndex?: number | null;
+  matchedIdentifiers?: string[];
 }
 
-type Row = { id: string; document_id: string; content: string; score: number };
+export interface Bm25SearchOptions {
+  exactPhrases?: string[];
+  exactMatchBoost?: number;
+}
+
+interface SurrealBm25Row {
+  id: string;
+  document_id: string;
+  content: string;
+  score?: number;
+  metadata?: unknown;
+  chunk_index?: number | null;
+}
 
 /**
- * BM25 full-text search over document_chunk.content via SurrealDB SEARCH index.
- * Relies on the `content_search_idx` index + `kb_en` analyzer defined in
- * src/lib/rag/store/schema.surql (Phase 7 additions).
+ * Perform BM25 full-text keyword search across chunk contents in SurrealDB.
+ * When identifier-like codes are present in the query (e.g. ING-P20-6120),
+ * searches them as exact phrases and merges them with an exact-match boost (TC-994).
  */
-export async function bm25Search(query: string, limit: number): Promise<Bm25Result[]> {
+export async function bm25Search(
+  query: string,
+  limit: number,
+  options?: Bm25SearchOptions
+): Promise<Bm25Result[]> {
   if (!query.trim()) return [];
+
   const surreal = kb("vectors");
-  // `limit` is interpolated (not $-bound) after number-sanitization — SurrealDB's
-  // LIMIT clause binds inconsistently across versions, and Math.max/floor prevents
-  // anything non-numeric from reaching the query string.
   const safeLimit = Math.max(1, Math.floor(limit));
-  const sql = `
-    SELECT id, document_id, content, search::score(0) AS score
+  const boost = options?.exactMatchBoost ?? 10.0;
+
+  // Determine exact phrases to search.
+  // If not explicitly provided, extract identifier tokens from the query.
+  // If the query is just a single identifier code, the primary BM25 search
+  // targets it directly, so secondary contains is skipped.
+  const trimmedLower = query.trim().toLowerCase();
+  const extracted = extractIdentifierTokens(query);
+  const exactPhrases = options?.exactPhrases ?? (
+    extracted.length === 1 && extracted[0].toLowerCase() === trimmedLower
+      ? []
+      : extracted
+  );
+
+  const mainSql = `
+    SELECT id, document_id, content, metadata, chunk_index, search::score(0) AS score
     FROM document_chunk
     WHERE content @@ $q
     ORDER BY score DESC, id ASC
     LIMIT ${safeLimit};
   `;
-  let res;
+
   try {
-    res = await surreal.query<Row>(sql, { q: query });
+    const mainPromise = surreal.query<SurrealBm25Row>(mainSql, { q: query });
+
+    // Run exact phrase contains queries for each identifier code in parallel
+    const exactPromises = exactPhrases.map((phrase) => {
+      const exactSql = `
+        SELECT id, document_id, content, metadata, chunk_index
+        FROM document_chunk
+        WHERE string::contains(string::lowercase(content), $exact)
+        LIMIT ${safeLimit};
+      `;
+      return surreal
+        .query<SurrealBm25Row>(exactSql, { exact: phrase.toLowerCase() })
+        .then((res) => ({ phrase, rows: res[0]?.result || [] }))
+        .catch(() => ({ phrase, rows: [] as SurrealBm25Row[] }));
+    });
+
+    const [mainRaw, exactResults] = await Promise.all([
+      mainPromise,
+      Promise.all(exactPromises),
+    ]);
+
+    const mainRows = mainRaw[0]?.result || [];
+    const resultMap = new Map<string, Bm25Result>();
+
+    // 1. Ingest main BM25 rows
+    for (const r of mainRows) {
+      resultMap.set(r.id, {
+        id: r.id,
+        documentId: r.document_id,
+        content: r.content,
+        score: r.score ?? 0,
+        metadata: r.metadata,
+        chunkIndex: r.chunk_index ?? null,
+      });
+    }
+
+    // 2. Ingest / boost exact phrase matches
+    for (const { phrase, rows } of exactResults) {
+      for (const r of rows) {
+        const existing = resultMap.get(r.id);
+        if (existing) {
+          existing.score += boost;
+          if (!existing.matchedIdentifiers) {
+            existing.matchedIdentifiers = [];
+          }
+          if (!existing.matchedIdentifiers.includes(phrase)) {
+            existing.matchedIdentifiers.push(phrase);
+          }
+        } else {
+          resultMap.set(r.id, {
+            id: r.id,
+            documentId: r.document_id,
+            content: r.content,
+            score: boost,
+            metadata: r.metadata,
+            chunkIndex: r.chunk_index ?? null,
+            matchedIdentifiers: [phrase],
+          });
+        }
+      }
+    }
+
+    // Sort by score DESC, then id ASC
+    const sorted = Array.from(resultMap.values()).sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.id.localeCompare(b.id);
+    });
+
+    return sorted.slice(0, safeLimit).map((item) => {
+      const res: Bm25Result = {
+        id: item.id,
+        documentId: item.documentId,
+        content: item.content,
+        score: item.score,
+      };
+      if (item.metadata !== undefined) res.metadata = item.metadata;
+      if (item.chunkIndex !== undefined && item.chunkIndex !== null) res.chunkIndex = item.chunkIndex;
+      if (item.matchedIdentifiers && item.matchedIdentifiers.length > 0) {
+        res.matchedIdentifiers = item.matchedIdentifiers;
+      }
+      return res;
+    });
   } catch (err) {
     throw new Error(`[bm25Search] SurrealDB query failed: ${(err as Error).message}`);
   }
-  const rows = res?.[0]?.result ?? [];
-  return rows.slice(0, safeLimit).map((r) => ({
-    id: r.id,
-    documentId: r.document_id,
-    content: r.content,
-    score: r.score,
-  }));
 }

@@ -13,6 +13,7 @@ export interface Source {
   /** Figure asset (multimodal RAG): object key of a cropped figure to render. */
   assetKey?: string | null
   page?: number | null
+  pages?: number[] | null
   chunkType?: string | null
   /** Reading-order position of this chunk, and — for a figure — the position of
    *  the chunk it follows (its anchor). The anchor is how a figure with no
@@ -31,6 +32,20 @@ interface MessageSourcesProps {
   /** Source numbers the finished answer cites. When given, cited sources are
    *  listed first and the rest are folded away; omitted while streaming. */
   citedNums?: Set<number>
+}
+
+/**
+ * Formats 0-indexed page numbers into user-facing 1-indexed Indonesian label (TC-984).
+ * If multiple distinct pages are cited for the same document, joins them (e.g. "hal. 39, 79").
+ */
+export function formatSourcePages(pages?: number[] | null, page?: number | null): string | null {
+  const distinct = pages?.length
+    ? Array.from(new Set(pages.filter((p): p is number => p != null))).sort((a, b) => a - b)
+    : page != null
+      ? [page]
+      : []
+  if (distinct.length === 0) return null
+  return `hal. ${distinct.map((p) => p + 1).join(", ")}`
 }
 
 // Extract domain from URL
@@ -81,7 +96,8 @@ export const MessageSources = memo<MessageSourcesProps>(({ sources, messageId, h
   // repeating the title.
   const metaLine = (s: (typeof numbered)[number]) => {
     const parts: string[] = []
-    if (s.page != null) parts.push(`hal. ${s.page + 1}`)
+    const pageLabel = formatSourcePages(s.pages, s.page)
+    if (pageLabel) parts.push(pageLabel)
     if (s.section && s.section.trim() && s.section.trim() !== s.title.trim()) {
       parts.push(s.section.trim())
     }
@@ -168,9 +184,9 @@ export const MessageSources = memo<MessageSourcesProps>(({ sources, messageId, h
                   <p className="text-[11px] font-medium text-foreground truncate leading-tight">
                     {source.title}
                   </p>
-                  {source.page != null && (
+                  {formatSourcePages(source.pages, source.page) && (
                     <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">
-                      hal. {source.page + 1}
+                      {formatSourcePages(source.pages, source.page)}
                     </p>
                   )}
                 </div>

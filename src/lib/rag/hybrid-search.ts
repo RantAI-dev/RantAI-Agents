@@ -18,6 +18,10 @@ import { getDefaultReranker } from "./rerankers";
 import { gateConfig, gateFigures } from "./figure-gate";
 import { admissionRule, admit, describeRule } from "./figure-admission";
 import { Entity } from "../document-intelligence/types";
+import { getRagConfig } from "./config";
+import { bm25Search } from "./bm25-search";
+import { extractIdentifierTokens } from "./identifier-extraction";
+import { guaranteeIdentifierSlots } from "./hybrid-merge";
 
 
 /**
@@ -109,6 +113,8 @@ export interface HybridSearchResult {
   combinedScore: number;
   /** Final ranking position */
   rank: number;
+  /** Matched exact identifiers (TC-994) */
+  matchedIdentifiers?: string[];
   /** Optional context prefix from ingest-time contextual retrieval. */
   contextualPrefix?: string | null;
   /** Related entities found */
@@ -272,13 +278,39 @@ export class HybridSearch {
     // working FROM-clause pattern.
     const graphResults: Array<{ chunk: ChunkResult; score: number; graphContext?: { relationType: string; pathLength: number } }> = [];
 
+    // Keyword / BM25 search arm with exact phrase matching (TC-994)
+    const exactIdentifiers = extractIdentifierTokens(query);
+    let bm25Results: Array<{ chunk: ChunkResult; score: number }> = [];
+    if (getRagConfig().hybridBm25Enabled) {
+      try {
+        const bm25Hits = await bm25Search(query, finalTopK, { exactPhrases: exactIdentifiers });
+        bm25Results = bm25Hits.map((h) => ({
+          chunk: {
+            id: h.id,
+            document_id: h.documentId,
+            content: h.content,
+            chunk_index: h.chunkIndex ?? 0,
+            metadata: {
+              ...(h.metadata && typeof h.metadata === "object" ? h.metadata : {}),
+              matchedIdentifiers: h.matchedIdentifiers,
+            },
+          } as ChunkResult,
+          score: h.score,
+        }));
+      } catch {
+        // BM25 arm failure is non-fatal
+      }
+    }
+
     // 5. Reciprocal Rank Fusion
     const fusionStart = Date.now();
     const fusedResults = this.reciprocalRankFusion(
       vectorResults,
       entityResults,
       graphResults,
-      finalTopK
+      finalTopK,
+      bm25Results,
+      exactIdentifiers
     );
     stats.fusionTimeMs = Date.now() - fusionStart;
 
@@ -578,7 +610,9 @@ export class HybridSearch {
     vectorResults: Array<{ chunk: ChunkResult; score: number }>,
     entityResults: Array<{ chunk: ChunkResult; score: number }>,
     graphResults: Array<{ chunk: ChunkResult; score: number; graphContext?: { relationType: string; pathLength: number } }>,
-    topK: number
+    topK: number,
+    bm25Results?: Array<{ chunk: ChunkResult; score: number }>,
+    exactIdentifiers?: string[]
   ): HybridSearchResult[] {
     const k = this.config.rrfK;
     const graphWeight = 1 - this.config.vectorWeight - this.config.entityWeight;
@@ -591,6 +625,8 @@ export class HybridSearch {
         vectorScore: number;
         entityRank: number;
         entityScore: number;
+        bm25Rank?: number;
+        bm25Score?: number;
         graphRank: number;
         graphScore: number;
         graphContext?: { relationType: string; pathLength: number };
@@ -659,6 +695,39 @@ export class HybridSearch {
       }
     }
 
+    // Add BM25 results
+    if (bm25Results) {
+      for (let i = 0; i < bm25Results.length; i++) {
+        const result = bm25Results[i];
+        const chunkId = result.chunk.id;
+        if (scoreMap.has(chunkId)) {
+          const existing = scoreMap.get(chunkId)!;
+          existing.bm25Rank = i + 1;
+          existing.bm25Score = result.score;
+          const m = (result.chunk.metadata as any)?.matchedIdentifiers;
+          if (m && Array.isArray(m)) {
+            const cur = (existing.chunk.metadata as any)?.matchedIdentifiers || [];
+            (existing.chunk.metadata as any) = {
+              ...((existing.chunk.metadata as any) || {}),
+              matchedIdentifiers: Array.from(new Set([...cur, ...m])),
+            };
+          }
+        } else {
+          scoreMap.set(chunkId, {
+            chunk: result.chunk,
+            vectorRank: 0,
+            vectorScore: 0,
+            entityRank: 0,
+            entityScore: 0,
+            bm25Rank: i + 1,
+            bm25Score: result.score,
+            graphRank: 0,
+            graphScore: 0,
+          });
+        }
+      }
+    }
+
     // Calculate RRF scores
     const results: HybridSearchResult[] = [];
 
@@ -666,11 +735,13 @@ export class HybridSearch {
       const vectorRRF = data.vectorRank > 0 ? 1 / (k + data.vectorRank) : 0;
       const entityRRF = data.entityRank > 0 ? 1 / (k + data.entityRank) : 0;
       const graphRRF = data.graphRank > 0 ? 1 / (k + data.graphRank) : 0;
+      const bm25RRF = (data.bm25Rank || 0) > 0 ? 1 / (k + data.bm25Rank!) : 0;
 
       const combinedScore =
         this.config.vectorWeight * vectorRRF +
         this.config.entityWeight * entityRRF +
-        graphWeight * graphRRF;
+        graphWeight * graphRRF +
+        (bm25Results && bm25Results.length > 0 ? bm25RRF : 0);
 
       // metadata is written at ingest as { documentTitle, category, subcategory,
       // section, chunkIndex, contextualPrefix } (see chunker.ts:8-16). Earlier
@@ -698,6 +769,7 @@ export class HybridSearch {
         entityScore: data.entityScore,
         graphScore: data.graphScore,
         combinedScore,
+        matchedIdentifiers: (data.chunk.metadata as any)?.matchedIdentifiers,
         rank: 0, // Will be set after sorting
         contextualPrefix: chunkRecord.contextual_prefix ?? null,
         relatedEntities: [], // Will be enriched later
@@ -720,6 +792,15 @@ export class HybridSearch {
 
     for (let i = 0; i < results.length; i++) {
       results[i].rank = i + 1;
+    }
+
+    if (exactIdentifiers && exactIdentifiers.length > 0) {
+      return guaranteeIdentifierSlots(
+        results,
+        exactIdentifiers,
+        topK,
+        (item) => item.matchedIdentifiers || (item.chunkIndex !== undefined && (item as any).chunk?.metadata?.matchedIdentifiers) || []
+      );
     }
 
     return results.slice(0, topK);
