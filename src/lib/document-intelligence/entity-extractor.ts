@@ -1,3 +1,4 @@
+import { normalizeEntities } from "./normalizer";
 /**
  * LLM-based Entity Extractor
  *
@@ -279,8 +280,9 @@ export class LLMEntityExtractor {
       }
     }
 
-    console.log(`[LLMEntityExtractor] Extracted ${entities.length} entities`);
-    return entities;
+    const normalized = normalizeEntities(entities) as Entity[];
+    console.log(`[LLMEntityExtractor] Extracted ${normalized.length} entities`);
+    return normalized;
   }
 
   /**
@@ -366,23 +368,7 @@ export class LLMEntityExtractor {
    * Deduplicate entities by name+type
    */
   private deduplicateEntities(entities: Entity[]): Entity[] {
-    const seen = new Map<string, Entity>();
-
-    for (const entity of entities) {
-      const key = `${entity.type}:${entity.name.toLowerCase()}`;
-
-      if (!seen.has(key)) {
-        seen.set(key, entity);
-      } else {
-        // Keep entity with higher confidence
-        const existing = seen.get(key)!;
-        if (entity.confidence > existing.confidence) {
-          seen.set(key, entity);
-        }
-      }
-    }
-
-    return Array.from(seen.values());
+    return normalizeEntities(entities) as Entity[];
   }
 
   /**
@@ -395,9 +381,12 @@ export class LLMEntityExtractor {
     const systemPrompt = `You are an entity extraction system. Extract entities and return ONLY valid JSON.
 
 Entity Types:
-- Person, Organization, Location, Date, Event, Concept, Product, Number
-- Technology, API, Function, Error
-- Transaction, Account, Currency
+- PERSON, ORGANIZATION, LOCATION, DATE, EVENT, CONCEPT, PRODUCT, REGULATION, DOCUMENT, ROLE, OTHER
+
+IMPORTANT:
+- Use canonical types: PERSON, ORGANIZATION, LOCATION, DATE, EVENT, CONCEPT, PRODUCT, REGULATION, DOCUMENT, ROLE, OTHER
+- Use ROLE for job titles and positions (e.g. Direktur Utama, CEO, Manager)
+- Do not extract trivial fragments or pure stopwords
 
 IMPORTANT:
 - Return ONLY valid JSON, no other text

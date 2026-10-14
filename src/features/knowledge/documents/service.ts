@@ -9,6 +9,7 @@ import {
 } from "@/lib/rag"
 import { getSurrealClient } from "@/lib/surrealdb"
 import { uploadFile, S3Paths, validateUpload, deleteFile } from "@/lib/s3"
+import { EXT_TO_MIME } from "@/lib/files/mime-types"
 import { processDocumentOCR, isPDFScanned } from "@/lib/ocr"
 import { canEdit, canManage } from "@/lib/organization"
 import {
@@ -117,7 +118,10 @@ export async function createKnowledgeDocumentForDashboard(params: {
     }
 
     originalFilename = file.name
-    mimeType = file.type
+    const ext = path.extname(file.name).toLowerCase()
+    mimeType = (file.type && file.type !== "application/octet-stream")
+      ? file.type
+      : (EXT_TO_MIME[ext] || file.type || undefined)
     fileBuffer = Buffer.from(await file.arrayBuffer())
     await emit?.("extracting")
 
@@ -382,8 +386,12 @@ export async function enqueueFileIngest(params: {
   let fileSize: number
   try {
     const fileBuffer = Buffer.from(await file.arrayBuffer())
+    const ext = path.extname(file.name).toLowerCase()
+    const resolvedMime = (file.type && file.type !== "application/octet-stream")
+      ? file.type
+      : (EXT_TO_MIME[ext] || file.type || "application/octet-stream")
     s3Key = S3Paths.document(params.context.organizationId || null, documentId, file.name)
-    const uploadResult = await uploadFile(s3Key, fileBuffer, file.type || "application/octet-stream", {
+    const uploadResult = await uploadFile(s3Key, fileBuffer, resolvedMime, {
       documentId,
       fileType,
       originalFilename: file.name,
@@ -404,7 +412,7 @@ export async function enqueueFileIngest(params: {
     s3Key,
     fileType,
     fileSize,
-    mimeType: file.type || null,
+    mimeType: resolvedMime || null,
     organizationId: params.context.organizationId || null,
     createdBy: params.context.userId,
     status: "processing",
@@ -416,7 +424,7 @@ export async function enqueueFileIngest(params: {
     userId: params.context.userId,
     filename: file.name,
     fileSize,
-    mimeType: file.type || null,
+    mimeType: resolvedMime || null,
     s3Key,
     documentId,
     params: {

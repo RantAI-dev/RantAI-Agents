@@ -44,6 +44,10 @@ const ENTITY_COLORS: Record<string, string> = {
   Person: "#0ea5e9",
   ORG: "#f43f5e",         // rose-500
   Organization: "#f43f5e",
+  ORGANIZATION: "#f43f5e",
+  ROLE: "#3b82f6",        // blue-500
+  Role: "#3b82f6",
+  DOCUMENT: "#d946ef",    // fuchsia-500
   LOCATION: "#10b981",    // emerald-500
   Location: "#10b981",
   PRODUCT: "#f59e0b",     // amber-500

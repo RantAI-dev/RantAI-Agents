@@ -65,25 +65,27 @@ async function parseXlsx(buffer: Buffer, fileName: string): Promise<string> {
     : `[Spreadsheet: ${fileName}]\n\n(empty)`
 }
 
+function extractOfficeParserText(data: unknown): string {
+  if (typeof data === "string") return data
+  if (data && typeof (data as { toText?: () => string }).toText === "function") {
+    return (data as { toText: () => string }).toText()
+  }
+  if (data && typeof (data as { text?: unknown }).text === "string") {
+    return (data as { text: string }).text
+  }
+  throw new Error(`office parser returned ${typeof data} instead of text`)
+}
+
 async function parsePptx(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const officeparser = require("officeparser") as {
     parseOffice: (
       file: Buffer,
-      callback: (text: string, err?: Error) => void,
       config?: Record<string, unknown>
-    ) => void
+    ) => Promise<unknown>
   }
-  return new Promise((resolve, reject) => {
-    officeparser.parseOffice(buffer, (text: string, err?: Error) => {
-      // Some officeparser versions pass an Error/object in the text slot on
-      // failure — resolving that upstream crashed ingest with a 500 instead
-      // of a clean extraction error. Only ever resolve actual strings.
-      if (err) reject(err instanceof Error ? err : new Error(String(err)))
-      else if (typeof text === "string") resolve(text)
-      else reject(new Error(`office parser returned ${typeof text} instead of text`))
-    }, { outputErrorToConsole: false })
-  })
+  const result = await officeparser.parseOffice(buffer, { outputErrorToConsole: false })
+  return extractOfficeParserText(result)
 }
 
 async function parseRtf(buffer: Buffer): Promise<string> {
@@ -137,20 +139,11 @@ async function parseOfficeGeneric(buffer: Buffer): Promise<string> {
   const officeparser = require("officeparser") as {
     parseOffice: (
       file: Buffer,
-      callback: (text: string, err?: Error) => void,
       config?: Record<string, unknown>
-    ) => void
+    ) => Promise<unknown>
   }
-  return new Promise((resolve, reject) => {
-    officeparser.parseOffice(buffer, (text: string, err?: Error) => {
-      // Some officeparser versions pass an Error/object in the text slot on
-      // failure — resolving that upstream crashed ingest with a 500 instead
-      // of a clean extraction error. Only ever resolve actual strings.
-      if (err) reject(err instanceof Error ? err : new Error(String(err)))
-      else if (typeof text === "string") resolve(text)
-      else reject(new Error(`office parser returned ${typeof text} instead of text`))
-    }, { outputErrorToConsole: false })
-  })
+  const result = await officeparser.parseOffice(buffer, { outputErrorToConsole: false })
+  return extractOfficeParserText(result)
 }
 
 // ─── GLTF / GLB 3D model metadata extraction ───────────────────────────────
@@ -276,7 +269,8 @@ export async function extractTextFromBuffer(
     mimeType === "application/vnd.ms-excel" ||
     mimeType === "application/vnd.ms-powerpoint" ||
     mimeType === "application/vnd.oasis.opendocument.text" ||
-    mimeType === "application/vnd.oasis.opendocument.spreadsheet"
+    mimeType === "application/vnd.oasis.opendocument.spreadsheet" ||
+    mimeType === "application/vnd.oasis.opendocument.presentation"
   ) {
     return parseOfficeGeneric(buffer)
   }
