@@ -13,6 +13,7 @@ import {
   partitionSourcesByCitation,
   linkifyCitations,
   reconcileCitations,
+  sourcesFromToolCalls,
   type EmbeddableFigure,
 } from "@/features/conversations/components/chat/citations"
 import { formatSourcePages } from "@/features/conversations/components/chat/message-sources"
@@ -126,5 +127,31 @@ describe("autoPlaceFigures", () => {
     const answer = "Raja Airlangga digambarkan menunggang Garuda [2]."
     const out = autoPlaceFigures(answer, [statue], new Set())
     expect(out).toContain("Gambar 5.7 Patung Airlangga")
+  })
+})
+
+describe("sourcesFromToolCalls (TC-984 reload)", () => {
+  // Persisted shape: message.metadata.toolCalls — messages carry no `parts`.
+  const toolCalls = [
+    { toolCallId: "t0", toolName: "web_search", state: "done", output: { sources: [{ title: "web" }] } },
+    {
+      toolCallId: "t1",
+      toolName: "knowledge_search",
+      state: "done",
+      output: { sources: [{ documentTitle: "Manual", documentId: "d1", page: 38, pages: [38, 78] }] },
+    },
+  ]
+
+  it("restores page-accurate sources from the persisted knowledge_search call", () => {
+    const sources = sourcesFromToolCalls(toolCalls)
+    expect(sources).toHaveLength(1)
+    expect(sources![0]).toMatchObject({ title: "Manual", documentId: "d1", page: 38, pages: [38, 78] })
+    expect(formatSourcePages(sources![0].pages, sources![0].page)).toBe("hal. 39, 79")
+  })
+
+  it("returns null when nothing is restorable", () => {
+    expect(sourcesFromToolCalls(undefined)).toBeNull()
+    expect(sourcesFromToolCalls([{ toolName: "knowledge_search", output: { sources: [] } }])).toBeNull()
+    expect(sourcesFromToolCalls([toolCalls[0]])).toBeNull()
   })
 })
