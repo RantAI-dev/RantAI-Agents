@@ -153,12 +153,18 @@ export async function resolveRequestedGroupIds(
   return { ids }
 }
 
+export type V1AuthError = { status: number; error: string; type: string }
+
 export async function authenticateV1Request(
   authHeader: string | null,
   requestHeaders?: Headers
-): Promise<AuthResult | { status: number; error: string }> {
+): Promise<AuthResult | V1AuthError> {
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return { status: 401, error: "Missing or invalid Authorization header. Expected: Bearer rantai_sk_..." }
+    return {
+      status: 401,
+      error: "Missing or invalid Authorization header. Expected: Bearer rantai_sk_...",
+      type: "authentication_error",
+    }
   }
 
   const key = authHeader.slice(7)
@@ -169,7 +175,10 @@ export async function authenticateV1Request(
     undefined
   const result = await authenticateAgentApiKey(key, requestIp)
   if (!result) {
-    return { status: 401, error: "Invalid or expired API key" }
+    return { status: 401, error: "Invalid or expired API key", type: "authentication_error" }
+  }
+  if ("error" in result && result.error === "ip_not_allowed") {
+    return { status: 403, error: "IP address not allowed", type: "permission_error" }
   }
 
   return {

@@ -14,10 +14,10 @@ export async function OPTIONS() {
 export async function POST(req: Request) {
   try {
     // Authenticate via Bearer token
-    const authResult = await authenticateV1Request(req.headers.get("authorization"))
+    const authResult = await authenticateV1Request(req.headers.get("authorization"), req.headers)
     if ("status" in authResult) {
       return new Response(
-        JSON.stringify({ error: { message: authResult.error, type: "authentication_error" } }),
+        JSON.stringify({ error: { message: authResult.error, type: authResult.type ?? "authentication_error" } }),
         { status: authResult.status, headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
       )
     }

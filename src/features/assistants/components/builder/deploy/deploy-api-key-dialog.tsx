@@ -9,12 +9,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Loader2 } from "@/lib/icons"
+import { Loader2, Copy, Check, AlertTriangle } from "@/lib/icons"
 import type { AgentApiKeyResponse } from "@/features/agent-api-keys/service"
 
 const AVAILABLE_SCOPES = [
@@ -49,6 +50,8 @@ export function DeployApiKeyDialog({
   const [ipWhitelist, setIpWhitelist] = useState("")
   const [expiresAt, setExpiresAt] = useState("")
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [createdKey, setCreatedKey] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (editingKey) {
@@ -62,12 +65,22 @@ export function DeployApiKeyDialog({
       setIpWhitelist("")
       setExpiresAt("")
     }
+    setSubmitError(null)
+    setCreatedKey(null)
+    setCopied(false)
   }, [editingKey, open])
 
   const toggleScope = (scope: string) => {
     setScopes((prev) =>
       prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
     )
+  }
+
+  const handleCopy = () => {
+    if (!createdKey) return
+    navigator.clipboard.writeText(createdKey)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -82,14 +95,20 @@ export function DeployApiKeyDialog({
         .map((ip) => ip.trim())
         .filter(Boolean)
 
-      await onSave({
+      const result = await onSave({
         name,
         assistantId,
         scopes,
         ipWhitelist: ips,
         ...(expiresAt && { expiresAt: new Date(expiresAt).toISOString() }),
       })
-      onOpenChange(false)
+      if (editingKey) {
+        onOpenChange(false)
+      } else if (result && typeof result === "object" && "key" in result && typeof (result as { key: unknown }).key === "string") {
+        setCreatedKey((result as { key: string }).key)
+      } else {
+        onOpenChange(false)
+      }
     } catch (err) {
       // Surface the real reason (plan limit, permissions, …) instead of closing
       // the dialog with no feedback.
@@ -99,6 +118,73 @@ export function DeployApiKeyDialog({
     } finally {
       setSaving(false)
     }
+  }
+
+  if (createdKey) {
+    return (
+      <Dialog
+        open={open}
+        onOpenChange={(val) => {
+          if (!val) {
+            setCreatedKey(null)
+            setCopied(false)
+          }
+          onOpenChange(val)
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save Your API Key</DialogTitle>
+            <DialogDescription>
+              Please copy your API key now. You won&apos;t be able to see it again.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Important</AlertTitle>
+              <AlertDescription>
+                Copy it now — you won&apos;t be able to see it again once you close this dialog.
+              </AlertDescription>
+            </Alert>
+
+            <div className="space-y-2">
+              <Label>API Key</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={createdKey}
+                  className="font-mono text-xs select-all bg-muted"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={handleCopy}
+                  aria-label="Copy API key"
+                >
+                  {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              onClick={() => {
+                setCreatedKey(null)
+                setCopied(false)
+                onOpenChange(false)
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
   }
 
   return (

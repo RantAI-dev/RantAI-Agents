@@ -36,7 +36,7 @@ export async function OPTIONS() {
 export async function POST(req: Request) {
   try {
     const auth = await authenticateV1Request(req.headers.get("authorization"), req.headers)
-    if ("status" in auth) return error(auth.status, auth.error, "authentication_error")
+    if ("status" in auth) return error(auth.status, auth.error, auth.type ?? "authentication_error")
 
     const parsed = PracticeGenerateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return error(400, "Invalid request body", "invalid_request_error", parsed.error.flatten())

@@ -4,6 +4,7 @@ import { useOrgFetch } from "@/hooks/use-organization"
 
 import { useState, useEffect, useCallback } from "react"
 import type { AgentApiKeyResponse } from "@/features/agent-api-keys/service"
+import { maskAgentApiKey } from "@/lib/embed/api-key-generator"
 
 export interface AgentApiKeyInput {
   name: string
@@ -58,7 +59,7 @@ export function useAgentApiKeys(assistantId: string | null) {
           throw new Error(data.error || "Failed to create API key")
         }
         const newKey = await response.json()
-        setKeys((prev) => [newKey, ...prev])
+        setKeys((prev) => [{ ...newKey, key: maskAgentApiKey(newKey.key) }, ...prev])
         return newKey
       } catch (err) {
         console.error("Failed to create agent API key:", err)

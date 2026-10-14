@@ -1,5 +1,5 @@
 import { canManage } from "@/lib/organization"
-import { generateAgentApiKey, hashAgentApiKey } from "@/lib/embed/api-key-generator"
+import { generateAgentApiKey, hashAgentApiKey, maskAgentApiKey } from "@/lib/embed/api-key-generator"
 import {
   createAgentApiKey as createKey,
   deleteAgentApiKey as deleteKey,
@@ -57,10 +57,12 @@ function toResponse(
     createdAt: Date
     updatedAt: Date
   },
-  assistant: AssistantSummary
+  assistant: AssistantSummary,
+  maskKey = false
 ): AgentApiKeyResponse {
   return {
     ...apiKey,
+    key: maskKey ? maskAgentApiKey(apiKey.key) : apiKey.key,
     lastUsedAt: apiKey.lastUsedAt?.toISOString() ?? null,
     expiresAt: apiKey.expiresAt?.toISOString() ?? null,
     createdAt: apiKey.createdAt.toISOString(),
@@ -89,7 +91,7 @@ export async function listAgentApiKeys(
 
   return keys.map((key) => {
     const a = assistantMap.get(key.assistantId)
-    return toResponse(key, a ? { id: a.id, name: a.name, emoji: a.emoji } : null)
+    return toResponse(key, a ? { id: a.id, name: a.name, emoji: a.emoji } : null, true)
   })
 }
 
@@ -130,7 +132,7 @@ export async function createAgentApiKey(params: {
     createdBy: params.context.userId,
   })
 
-  return toResponse(apiKey, { id: assistant.id, name: assistant.name, emoji: assistant.emoji })
+  return toResponse(apiKey, { id: assistant.id, name: assistant.name, emoji: assistant.emoji }, false)
 }
 
 export async function getAgentApiKey(
@@ -153,7 +155,7 @@ export async function getAgentApiKey(
   }
 
   const assistant = await findAssistantById(apiKey.assistantId)
-  return toResponse(apiKey, assistant)
+  return toResponse(apiKey, assistant, true)
 }
 
 export async function updateAgentApiKey(params: {
@@ -184,7 +186,7 @@ export async function updateAgentApiKey(params: {
   })
 
   const assistant = await findAssistantById(updated.assistantId)
-  return toResponse(updated, assistant)
+  return toResponse(updated, assistant, true)
 }
 
 export async function deleteAgentApiKey(
@@ -221,10 +223,15 @@ export async function deleteAgentApiKey(
  * authentication fails (returns null), same as an invalid key.
  */
 export async function authenticateAgentApiKey(key: string, requestIp?: string | null) {
-  const apiKey =
-    (await findAgentApiKeyByHash(hashAgentApiKey(key))) ??
-    // Legacy fallback for not-yet-backfilled rows — remove in phase 2.
-    (await findAgentApiKeyByKey(key))
+  const keyHash = hashAgentApiKey(key)
+  let apiKey = await findAgentApiKeyByHash(keyHash)
+  if (!apiKey) {
+    apiKey = await findAgentApiKeyByKey(key)
+    if (apiKey && !apiKey.keyHash) {
+      await updateKey(apiKey.id, { keyHash }).catch(() => {})
+      apiKey.keyHash = keyHash
+    }
+  }
   if (!apiKey) return null
   if (!apiKey.enabled) return null
   if (apiKey.expiresAt && apiKey.expiresAt < new Date()) return null
@@ -232,7 +239,9 @@ export async function authenticateAgentApiKey(key: string, requestIp?: string | 
   // IP whitelist enforcement. Empty list = allow all. Non-empty requires a
   // known request IP that is in the list.
   if (apiKey.ipWhitelist.length > 0) {
-    if (!requestIp || !apiKey.ipWhitelist.includes(requestIp)) return null
+    if (!requestIp || !apiKey.ipWhitelist.includes(requestIp)) {
+      return { error: "ip_not_allowed" as const }
+    }
   }
 
   const assistant = await findAssistantById(apiKey.assistantId)

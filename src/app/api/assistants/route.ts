@@ -45,8 +45,9 @@ export async function POST(request: Request) {
     const orgContext = await resolveActiveOrg(request, session.user.id)
     const parsed = CreateAssistantSchema.safeParse(await request.json())
     if (!parsed.success) {
+      const issue = parsed.error.issues[0]?.message
       return NextResponse.json(
-        { error: "Invalid request payload", details: parsed.error.flatten() },
+        { error: issue || "Invalid request payload", details: parsed.error.flatten() },
         { status: 400 }
       )
     }
