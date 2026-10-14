@@ -16,14 +16,8 @@ export async function POST(req: Request) {
     // Authenticate via Bearer token
     const authResult = await authenticateV1Request(req.headers.get("authorization"), req.headers)
     if ("status" in authResult) {
-      if (authResult.status === 403) {
-        return new Response(
-          JSON.stringify({ error: authResult.error }),
-          { status: 403, headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
-        )
-      }
       return new Response(
-        JSON.stringify({ error: { message: authResult.error, type: "authentication_error" } }),
+        JSON.stringify({ error: { message: authResult.error, type: authResult.type ?? "authentication_error" } }),
         { status: authResult.status, headers: { "Content-Type": "application/json", ...CORS_HEADERS } }
       )
     }

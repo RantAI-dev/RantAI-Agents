@@ -44,6 +44,18 @@ describe("TC-1042: Agent API Key Masking, Hash Lookup, and Lazy Backfill", () =>
       expect(masked.endsWith("cdef")).toBe(true)
       expect(masked).toContain("…")
     })
+
+    it("is idempotent when applied to an already masked key", () => {
+      const fullKey = "rantai_sk_0123456789abcdef0123456789abcdef"
+      const maskedOnce = maskAgentApiKey(fullKey)
+      const maskedTwice = maskAgentApiKey(maskedOnce)
+      expect(maskedTwice).toBe(maskedOnce)
+    })
+
+    it("returns key unchanged if shorter than minimum length or empty", () => {
+      expect(maskAgentApiKey("")).toBe("")
+      expect(maskAgentApiKey("short_key")).toBe("short_key")
+    })
   })
 
   describe("listAgentApiKeys endpoint masking", () => {

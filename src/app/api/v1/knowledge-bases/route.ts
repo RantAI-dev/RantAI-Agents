@@ -24,14 +24,8 @@ export async function GET(req: Request) {
   try {
     const auth = await authenticateV1Request(req.headers.get("authorization"), req.headers)
     if ("status" in auth) {
-      if (auth.status === 403) {
-        return new Response(
-          JSON.stringify({ error: auth.error }),
-          { status: 403, headers: { "Content-Type": "application/json", ...CORS_HEADERS } },
-        )
-      }
       return new Response(
-        JSON.stringify({ error: { message: auth.error, type: "authentication_error" } }),
+        JSON.stringify({ error: { message: auth.error, type: auth.type ?? "authentication_error" } }),
         { status: auth.status, headers: { "Content-Type": "application/json", ...CORS_HEADERS } },
       )
     }

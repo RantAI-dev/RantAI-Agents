@@ -19,13 +19,13 @@ export interface KbAuth {
 /** Authenticate a KB read request and resolve the bound assistant's KB groups. */
 export async function authenticateKbRequest(
   authHeader: string | null
-): Promise<KbAuth | { status: number; error: string }> {
+): Promise<KbAuth | { status: number; error: string; type?: string }> {
   const auth = await authenticateV1Request(authHeader)
   if ("status" in auth) return auth
 
   const scopes = auth.apiKey.scopes
   if (scopes.length > 0 && !scopes.includes("kb:read")) {
-    return { status: 403, error: "API key does not have scope: kb:read" }
+    return { status: 403, error: "API key does not have scope: kb:read", type: "permission_error" }
   }
 
   const assistant = await prisma.assistant.findUnique({

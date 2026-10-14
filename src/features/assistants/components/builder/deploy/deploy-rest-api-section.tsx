@@ -10,8 +10,6 @@ import {
   KeyRound,
   Copy,
   Check,
-  Eye,
-  EyeOff,
   Trash2,
   Edit,
   ToggleLeft,
@@ -20,7 +18,7 @@ import {
   Shield,
 } from "@/lib/icons"
 import { useAgentApiKeys } from "@/hooks/use-agent-api-keys"
-import { maskApiKey } from "@/lib/embed/api-key-generator"
+import { maskAgentApiKey } from "@/lib/embed/api-key-generator"
 import type { AgentApiKeyResponse } from "@/features/agent-api-keys/service"
 import { DeployApiKeyDialog } from "./deploy-api-key-dialog"
 import {
@@ -44,25 +42,10 @@ export function DeployRestApiSection({ agentId, agentName }: DeployRestApiSectio
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [editingKey, setEditingKey] = useState<AgentApiKeyResponse | null>(null)
   const [deleteConfirmKey, setDeleteConfirmKey] = useState<AgentApiKeyResponse | null>(null)
-  const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set())
-  const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [copiedExample, setCopiedExample] = useState<string | null>(null)
 
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com"
   const exampleKey = keys[0]?.key || "rantai_sk_your_api_key_here"
-
-  const handleCopyKey = (key: string, id: string) => {
-    navigator.clipboard.writeText(key)
-    setCopiedKey(id)
-    setTimeout(() => setCopiedKey(null), 2000)
-  }
-
-  const toggleRevealKey = (id: string) => {
-    const newSet = new Set(revealedKeys)
-    if (newSet.has(id)) newSet.delete(id)
-    else newSet.add(id)
-    setRevealedKeys(newSet)
-  }
 
   const copyExample = (id: string, text: string) => {
     navigator.clipboard.writeText(text)
@@ -167,14 +150,8 @@ console.log(data.choices[0].message.content);`
                   </div>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 px-2.5 py-1.5 bg-muted rounded font-mono text-xs truncate">
-                      {revealedKeys.has(key.id) ? key.key : maskApiKey(key.key)}
+                      {maskAgentApiKey(key.key)}
                     </code>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => toggleRevealKey(key.id)}>
-                      {revealedKeys.has(key.id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleCopyKey(key.key, key.id)}>
-                      {copiedKey === key.id ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-                    </Button>
                   </div>
                   <div className="flex gap-3 mt-2 text-xs text-muted-foreground">
                     <span>{key.requestCount.toLocaleString()} requests</span>
@@ -247,9 +224,9 @@ console.log(data.choices[0].message.content);`
         assistantId={agentId}
         onSave={async (input) => {
           if (editingKey) {
-            await updateKey(editingKey.id, input)
+            return await updateKey(editingKey.id, input)
           } else {
-            await createKey(input)
+            return await createKey(input)
           }
         }}
       />

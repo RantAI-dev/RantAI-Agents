@@ -123,6 +123,7 @@ describe("TC-1559: IP Whitelist Enforcement & Error Status", () => {
       if ("status" in result) {
         expect(result.status).toBe(403)
         expect(result.error).toBe("IP address not allowed")
+        expect(result.type).toBe("permission_error")
       }
     })
 
@@ -143,6 +144,7 @@ describe("TC-1559: IP Whitelist Enforcement & Error Status", () => {
       if ("status" in result) {
         expect(result.status).toBe(401)
         expect(result.error).toBe("Invalid or expired API key")
+        expect(result.type).toBe("authentication_error")
       }
     })
 
@@ -164,7 +166,7 @@ describe("TC-1559: IP Whitelist Enforcement & Error Status", () => {
   })
 
   describe("POST /api/v1/chat/completions route HTTP response", () => {
-    it("returns HTTP 403 with {\"error\":\"IP address not allowed\"} on IP mismatch", async () => {
+    it("returns HTTP 403 with OpenAI-compatible permission_error shape on IP mismatch", async () => {
       mockFindAgentApiKeyByHash.mockResolvedValue(mockKeyWithIp)
       mockFindAssistantById.mockResolvedValue(mockAssistant)
 
@@ -183,7 +185,12 @@ describe("TC-1559: IP Whitelist Enforcement & Error Status", () => {
       const res = await POST(req)
       expect(res.status).toBe(403)
       const data = await res.json()
-      expect(data).toEqual({ error: "IP address not allowed" })
+      expect(data).toEqual({
+        error: {
+          message: "IP address not allowed",
+          type: "permission_error",
+        },
+      })
     })
 
     it("returns HTTP 401 for invalid/expired API key", async () => {
