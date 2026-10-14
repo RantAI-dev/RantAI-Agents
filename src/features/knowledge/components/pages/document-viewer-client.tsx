@@ -117,7 +117,7 @@ export default function DocumentViewerClient({
   const router = useRouter()
   const searchParams = useSearchParams()
   const activeKb = kb || searchParams?.get("kb") || null
-  const returnUrl = activeKb ? `/dashboard/files?kb=${activeKb}` : "/dashboard/files"
+  const returnUrl = activeKb ? `/dashboard/files?kb=${encodeURIComponent(activeKb)}` : "/dashboard/files"
   const { toast } = useToast()
   const [document] = useState<DocumentDetail | null>(initialDocument)
   const [activeTab, setActiveTab] = useState("preview")

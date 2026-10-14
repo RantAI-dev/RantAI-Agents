@@ -308,7 +308,7 @@ export default function KnowledgePageClient({
 
   const handleView = (id: string) => {
     if (initialSelectedKBId) {
-      router.push(`/dashboard/files/${id}?kb=${initialSelectedKBId}`)
+      router.push(`/dashboard/files/${id}?kb=${encodeURIComponent(initialSelectedKBId)}`)
     } else {
       router.push(`/dashboard/files/${id}`)
     }
