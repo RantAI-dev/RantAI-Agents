@@ -171,6 +171,9 @@ export async function authenticateV1Request(
   if (!result) {
     return { status: 401, error: "Invalid or expired API key" }
   }
+  if ("error" in result && result.error === "ip_not_allowed") {
+    return { status: 403, error: "IP address not allowed" }
+  }
 
   return {
     apiKey: {

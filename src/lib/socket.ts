@@ -104,7 +104,7 @@ export function initSocketServer(httpServer: HTTPServer): IOServer {
 
     try {
       const result = await authenticateAgentApiKey(apiKey)
-      if (!result) return next(new Error("Invalid API key"))
+      if (!result || "error" in result) return next(new Error("Invalid API key"))
 
       socket.data.apiKeyId = result.apiKey.id
       socket.data.assistantId = result.apiKey.assistantId
