@@ -83,7 +83,7 @@ export default async function KnowledgePage({
       groupId: selectedKBId,
     }),
     listKnowledgeGroupsForDashboard(orgContext?.organizationId ?? null),
-    listKnowledgeCategoriesForDashboard(),
+    listKnowledgeCategoriesForDashboard(orgContext?.organizationId ?? null),
   ])
 
   return (

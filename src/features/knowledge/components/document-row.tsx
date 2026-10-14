@@ -22,7 +22,7 @@ import {
 import { MoreVertical, Trash2, Eye, Pencil, CircleDot, RefreshCw, Loader2 } from "@/lib/icons"
 import { formatDistanceToNow, format } from "date-fns"
 import { useState } from "react"
-import { getFileTypeIcon, formatFileSize } from "./file-type-utils"
+import { getFileTypeIcon, getFileTypeDetails, getCategoryDisplay, formatFileSize } from "./file-type-utils"
 
 interface DocumentGroup {
   id: string
@@ -41,8 +41,10 @@ interface Document {
   groups: DocumentGroup[]
   createdAt: string
   updatedAt: string
-  fileSize?: number
+  fileSize?: number | null
   thumbnailUrl?: string
+  s3Key?: string | null
+  mimeType?: string | null
 }
 
 interface Category {
@@ -75,7 +77,17 @@ export function DocumentRow({
   onToggleSelection,
 }: DocumentRowProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const { Icon: FileIcon, iconColor, bgColor } = getFileTypeIcon(document.fileType, document.artifactType)
+  const fileTypeDetails = getFileTypeDetails({
+    filename: document.title,
+    s3Key: document.s3Key,
+    mimeType: document.mimeType,
+    fileType: document.fileType,
+    artifactType: document.artifactType,
+  })
+  const FileIcon = fileTypeDetails.Icon
+  const iconColor = fileTypeDetails.iconColor
+  const bgColor = fileTypeDetails.bgColor
+  const extensionLabel = fileTypeDetails.extension
 
   const handleDelete = () => {
     onDelete(document.id)
@@ -130,6 +142,9 @@ export function DocumentRow({
           <span className="text-sm font-medium truncate">
             {document.title}
           </span>
+          <span className="font-mono font-medium text-[11px] shrink-0" style={{ color: fileTypeDetails.accentColor }}>
+            {extensionLabel}
+          </span>
           {/* Status badge inline with title */}
           {document.chunkCount === 0 && document.artifactType ? (
             <Badge
@@ -156,12 +171,34 @@ export function DocumentRow({
               {document.chunkCount}
             </Badge>
           ) : null}
-          {document.categories.length === 0 && (
+          {document.categories.length > 0 ? (
+            document.categories.map((catName) => {
+              const catDisplay = categoryMap ? getCategoryDisplay(catName, categoryMap) : { label: catName, color: "#6b7280" }
+              return (
+                <Badge
+                  key={catName}
+                  variant="outline"
+                  className="text-[10px] h-5 px-1.5 shrink-0 gap-1 font-medium hidden md:inline-flex"
+                  style={{ borderColor: `${catDisplay.color}40`, color: catDisplay.color }}
+                >
+                  {catDisplay.label}
+                </Badge>
+              )
+            })
+          ) : (
             <Badge
               variant="outline"
               className="text-[10px] h-5 px-1.5 shrink-0 gap-1 text-muted-foreground border-dashed"
             >
               Uncategorized
+            </Badge>
+          )}
+          {document.subcategory && (
+            <Badge
+              variant="secondary"
+              className="text-[10px] h-5 px-1.5 shrink-0 gap-1 text-muted-foreground hidden lg:inline-flex"
+            >
+              {document.subcategory}
             </Badge>
           )}
           {document.groups.length === 0 && (

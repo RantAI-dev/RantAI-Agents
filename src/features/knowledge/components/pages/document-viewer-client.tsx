@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -36,7 +36,7 @@ import {
 } from "@/lib/icons"
 import DocumentIntelligence from "@/features/knowledge/components/document-intelligence"
 import DocumentFigures from "./document-figures"
-import { getFileTypeIcon, getFileExtensionLabel, CATEGORY_LABELS } from "@/features/knowledge/components/file-type-utils"
+import { getFileTypeIcon, getFileExtensionLabel, getFileTypeDetails, CATEGORY_LABELS } from "@/features/knowledge/components/file-type-utils"
 import { ArtifactRenderer } from "@/features/conversations/components/chat/artifacts/artifact-renderer"
 import type { ArtifactType } from "@/features/conversations/components/chat/artifacts/types"
 import { StreamdownContent } from "@/features/conversations/components/chat/streamdown-content"
@@ -108,11 +108,16 @@ function formatFileSize(bytes?: number) {
 export default function DocumentViewerClient({
   id,
   initialDocument,
+  kb,
 }: {
   id: string
   initialDocument: DocumentDetail | null
+  kb?: string
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const activeKb = kb || searchParams?.get("kb") || null
+  const returnUrl = activeKb ? `/dashboard/files?kb=${activeKb}` : "/dashboard/files"
   const { toast } = useToast()
   const [document] = useState<DocumentDetail | null>(initialDocument)
   const [activeTab, setActiveTab] = useState("preview")
@@ -208,7 +213,7 @@ export default function DocumentViewerClient({
       }
       // Worker re-picks the retry; the live badge on /dashboard/files is the
       // authoritative surface, so bounce back there.
-      router.push("/dashboard/files")
+      router.push(returnUrl)
     } catch (error) {
       setRetrying(false)
       toast({
@@ -228,7 +233,7 @@ export default function DocumentViewerClient({
         throw new Error(data.error || `HTTP ${res.status}`)
       }
       setDeleteDialogOpen(false)
-      router.push("/dashboard/files")
+      router.push(returnUrl)
     } catch (error) {
       setDeleting(false)
       toast({
@@ -253,10 +258,17 @@ export default function DocumentViewerClient({
     return null
   }
 
-  const { Icon: TypeIcon, bgColor, iconColor, accentColor } = getFileTypeIcon(
-    document?.fileType || document?.metadata?.fileType,
-    document?.artifactType,
-  )
+  const fileTypeDetails = getFileTypeDetails({
+    filename: document?.title,
+    s3Key: document?.s3Key,
+    mimeType: document?.mimeType,
+    fileType: document?.fileType || document?.metadata?.fileType,
+    artifactType: document?.artifactType,
+  })
+  const TypeIcon = fileTypeDetails.Icon
+  const bgColor = fileTypeDetails.bgColor
+  const iconColor = fileTypeDetails.iconColor
+  const accentColor = fileTypeDetails.accentColor
 
   if (!document) {
     return (
@@ -266,7 +278,7 @@ export default function DocumentViewerClient({
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => router.push("/dashboard/files")}
+            onClick={() => router.push(returnUrl)}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -296,7 +308,7 @@ export default function DocumentViewerClient({
               variant="ghost"
               size="sm"
               className="h-8 gap-2 -ml-2 text-muted-foreground hover:text-foreground"
-              onClick={() => router.push("/dashboard/files")}
+              onClick={() => router.push(returnUrl)}
             >
               <ArrowLeft className="h-4 w-4" />
               Files
@@ -349,7 +361,7 @@ export default function DocumentViewerClient({
                   className="font-mono font-semibold text-[10px]"
                   style={{ color: accentColor }}
                 >
-                  {getFileExtensionLabel(fileType, document?.artifactType)}
+                  {fileTypeDetails.extension}
                 </span>
 
                 {document.categories.length > 0 && (

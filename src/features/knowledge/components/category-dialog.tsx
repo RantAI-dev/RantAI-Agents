@@ -109,7 +109,7 @@ export function CategoryDialog({
         ? `/api/dashboard/files/categories/${editingCategory.id}`
         : "/api/dashboard/files/categories"
 
-      const response = await fetch(url, {
+      const response = await orgFetch(url, {
         method: editingCategory ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

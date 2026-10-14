@@ -464,10 +464,13 @@ export function BulkAssignDialog({
                 <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+            <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start" onWheel={(e) => e.stopPropagation()}>
               <Command>
                 <CommandInput placeholder="Search categories..." />
-                <CommandList className="max-h-[180px] overflow-y-auto">
+                <CommandList className="max-h-[180px] overflow-y-auto" onWheel={(e) => {
+                  e.stopPropagation()
+                  e.currentTarget.scrollTop += e.deltaY
+                }}>
                   <CommandEmpty>No category found.</CommandEmpty>
                   <CommandGroup>
                     {availableCategories.map((cat) => {
@@ -572,10 +575,13 @@ export function BulkAssignDialog({
                   <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+              <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start" onWheel={(e) => e.stopPropagation()}>
                 <Command>
                   <CommandInput placeholder="Search categories..." />
-                  <CommandList className="max-h-[180px] overflow-y-auto">
+                  <CommandList className="max-h-[180px] overflow-y-auto" onWheel={(e) => {
+                    e.stopPropagation()
+                    e.currentTarget.scrollTop += e.deltaY
+                  }}>
                     <CommandEmpty>No category found.</CommandEmpty>
                     <CommandGroup>
                       {presentCategoryNames.map((name) => {

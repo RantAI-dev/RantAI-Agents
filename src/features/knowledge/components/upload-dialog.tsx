@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import {
   Dialog,
   DialogContent,
@@ -28,8 +28,9 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, ChevronsUpDown, X, FileCode, FileSpreadsheet, BookOpen, Info, Box } from "@/lib/icons"
+import { Loader2, Upload, FileText, Folder, Check, Image, FileType, Plus, ChevronsUpDown, X, FileCode, FileSpreadsheet, BookOpen, Info, Box, AlertTriangle } from "@/lib/icons"
 import { CategoryDialog, Category } from "./category-dialog"
+import { getFileTypeDetails, checkDuplicateUpload, type ExistingDocSummary } from "./file-type-utils"
 import { xhrUpload } from "./upload-xhr"
 import { cn } from "@/lib/utils"
 import { KB_ACCEPTED_EXTENSIONS, KB_MAX_FILE_BYTES } from "@/lib/files/mime-types"
@@ -187,30 +188,12 @@ interface UploadDialogProps {
   defaultKBIds?: string[]
   categories: Category[]
   onCategoriesChange: () => void
+  existingDocuments?: ExistingDocSummary[]
 }
 
 function getFileIcon(fileName: string) {
-  const ext = fileName.toLowerCase().slice(fileName.lastIndexOf("."))
-
-  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic"].includes(ext)) {
-    return { Icon: Image, color: "text-amber-500" }
-  }
-  if (ext === ".pdf") {
-    return { Icon: FileType, color: "text-red-500" }
-  }
-  if ([".docx", ".doc", ".pptx", ".ppt", ".rtf", ".epub", ".odt"].includes(ext)) {
-    return { Icon: BookOpen, color: "text-red-400" }
-  }
-  if ([".xlsx", ".xls", ".ods", ".csv", ".tsv", ".json", ".jsonl"].includes(ext)) {
-    return { Icon: FileSpreadsheet, color: "text-green-500" }
-  }
-  if ([".py", ".ts", ".tsx", ".js", ".jsx", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".rb", ".php", ".sh", ".sql", ".swift", ".kt"].includes(ext)) {
-    return { Icon: FileCode, color: "text-purple-500" }
-  }
-  if ([".gltf", ".glb"].includes(ext)) {
-    return { Icon: Box, color: "text-cyan-500" }
-  }
-  return { Icon: FileText, color: "text-blue-500" }
+  const details = getFileTypeDetails({ filename: fileName })
+  return { Icon: details.Icon, color: details.iconColor }
 }
 
 export function UploadDialog({
@@ -221,7 +204,9 @@ export function UploadDialog({
   defaultKBIds = [],
   categories: availableCategories,
   onCategoriesChange,
+  existingDocuments,
 }: UploadDialogProps) {
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [phase, setPhase] = useState<"idle" | "uploading" | "processing">("idle")
@@ -239,6 +224,16 @@ export function UploadDialog({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const [formatsDialogOpen, setFormatsDialogOpen] = useState(false)
+  const [createdCategories, setCreatedCategories] = useState<Category[]>([])
+  const categoriesList = useMemo(() => {
+    const list = [...availableCategories]
+    for (const c of createdCategories) {
+      if (!list.some((existing) => existing.id === c.id || existing.name === c.name)) {
+        list.push(c)
+      }
+    }
+    return list
+  }, [availableCategories, createdCategories])
 
   useEffect(() => {
     if (open) {
@@ -256,6 +251,7 @@ export function UploadDialog({
     setFigureMode("auto")
     setUploadProgress(0)
     setPhase("idle")
+    setDuplicateWarning(null)
   }
 
   const toggleCategory = (category: string) => {
@@ -264,8 +260,14 @@ export function UploadDialog({
     )
   }
 
-  const handleCategoryCreated = () => {
+  const handleCategoryCreated = (newCategory?: Category) => {
     setCategoryDialogOpen(false)
+    if (newCategory?.name) {
+      setCreatedCategories((prev) => [...prev, newCategory])
+      setSelectedCategories((prev) =>
+        prev.includes(newCategory.name) ? prev : [...prev, newCategory.name]
+      )
+    }
     onCategoriesChange()
   }
 
@@ -291,9 +293,17 @@ export function UploadDialog({
     setSelectedFile(file)
     setError("")
 
+    const dupCheck = checkDuplicateUpload(file, existingDocuments || [])
+    if (dupCheck.isDuplicate) {
+      setDuplicateWarning(
+        `A document with this filename and size already exists in your organization ("${dupCheck.matchedDoc?.title}"). You can still proceed with uploading if this is intentional.`
+      )
+    } else {
+      setDuplicateWarning(null)
+    }
+
     if (!title) {
-      const name = file.name.replace(/\.[^/.]+$/, "")
-      setTitle(name.replace(/[-_]/g, " "))
+      setTitle(file.name)
     }
   }
 
@@ -446,6 +456,7 @@ export function UploadDialog({
                     e.stopPropagation()
                     setSelectedFile(null)
                     setTitle("")
+                    setDuplicateWarning(null)
                   }}
                 >
                   Remove
@@ -472,6 +483,16 @@ export function UploadDialog({
             )}
           </div>
 
+          {duplicateWarning && (
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium">Possible Duplicate Document</p>
+                <p className="mt-0.5">{duplicateWarning}</p>
+              </div>
+            </div>
+          )}
+
           {/* Title */}
           <div className="space-y-2">
             <Label htmlFor="title">Title</Label>
@@ -496,7 +517,7 @@ export function UploadDialog({
                   {selectedCategories.length > 0 ? (
                     <div className="flex gap-1 flex-wrap">
                       {selectedCategories.map((name) => {
-                        const cat = availableCategories.find((c) => c.name === name)
+                        const cat = categoriesList.find((c) => c.name === name)
                         return (
                           <Badge
                             key={name}
@@ -532,13 +553,16 @@ export function UploadDialog({
                   <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+              <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start" onWheel={(e) => e.stopPropagation()}>
                 <Command>
                   <CommandInput placeholder="Search categories..." />
-                  <CommandList className="max-h-[180px] overflow-y-auto">
+                  <CommandList className="max-h-[180px] overflow-y-auto" onWheel={(e) => {
+                  e.stopPropagation()
+                  e.currentTarget.scrollTop += e.deltaY
+                }}>
                     <CommandEmpty>No category found.</CommandEmpty>
                     <CommandGroup>
-                      {availableCategories.map((cat) => {
+                      {categoriesList.map((cat) => {
                         const isSelected = selectedCategories.includes(cat.name)
                         return (
                           <CommandItem

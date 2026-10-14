@@ -27,6 +27,8 @@ export interface KnowledgeDocumentListItem {
   artifactType: string | null
   fileSize: number | null
   hasS3File: boolean
+  s3Key?: string | null
+  mimeType?: string | null
   thumbnailUrl?: string
   chunkCount: number
   groups: Array<{ id: string; name: string; color: string | null }>
@@ -190,6 +192,8 @@ export function mapListItem(document: {
     artifactType: document.artifactType || null,
     fileSize: document.fileSize,
     hasS3File: Boolean(document.s3Key),
+    s3Key: document.s3Key ?? null,
+    mimeType: (document as { mimeType?: string | null }).mimeType ?? null,
     status: document.status || "ready",
     groups: mapGroups(document.groups),
     createdAt: document.createdAt.toISOString(),
@@ -215,6 +219,8 @@ export interface DashboardDocument {
   fileType: string
   artifactType: string | null
   fileSize: number | null
+  s3Key?: string | null
+  mimeType?: string | null
   thumbnailUrl?: string
   chunkCount: number
   groups: DashboardDocumentGroup[]
@@ -245,6 +251,8 @@ export function mapDocument(item: KnowledgeDocumentListItem): DashboardDocument 
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     fileSize: item.fileSize,
+    s3Key: item.s3Key ?? null,
+    mimeType: item.mimeType ?? null,
     thumbnailUrl: item.thumbnailUrl,
     status: item.status || "ready",
     ingest: item.ingest ?? null,

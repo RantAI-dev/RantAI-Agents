@@ -38,7 +38,7 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip"
 import { useState } from "react"
-import { getFileTypeIcon, formatFileSize } from "./file-type-utils"
+import { getFileTypeIcon, getFileTypeDetails, getCategoryDisplay, formatFileSize } from "./file-type-utils"
 
 interface DocumentGroup {
   id: string
@@ -57,8 +57,10 @@ interface Document {
   groups: DocumentGroup[]
   createdAt: string
   updatedAt: string
-  fileSize?: number
+  fileSize?: number | null
   thumbnailUrl?: string
+  s3Key?: string | null
+  mimeType?: string | null
   status?: string
   ingest?: {
     jobId: string
@@ -95,6 +97,7 @@ export function DocumentCard({
   onDelete,
   onView,
   onEdit,
+  categoryMap,
   selectionMode = false,
   selected = false,
   onToggleSelection,
@@ -102,7 +105,17 @@ export function DocumentCard({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [imgError, setImgError] = useState(false)
   const [retrying, setRetrying] = useState(false)
-  const { Icon: FileIcon, iconColor, bgColor } = getFileTypeIcon(document.fileType, document.artifactType)
+  const fileTypeDetails = getFileTypeDetails({
+    filename: document.title,
+    s3Key: document.s3Key,
+    mimeType: document.mimeType,
+    fileType: document.fileType,
+    artifactType: document.artifactType,
+  })
+  const FileIcon = fileTypeDetails.Icon
+  const iconColor = fileTypeDetails.iconColor
+  const bgColor = fileTypeDetails.bgColor
+  const extensionLabel = fileTypeDetails.extension
 
   const isProcessing = document.status === "processing"
   const isFailed = document.status === "failed"
@@ -139,7 +152,7 @@ export function DocumentCard({
   return (
     <>
       <div
-        className={`group relative cursor-pointer rounded-lg border bg-card overflow-hidden transition-all duration-200 ${
+        className={`group relative cursor-pointer rounded-lg border bg-card overflow-hidden transition-all duration-200 flex flex-col h-full ${
           selected
             ? "ring-2 ring-primary border-primary shadow-lg shadow-primary/10"
             : "hover:shadow-lg hover:shadow-primary/5 hover:border-primary/30 hover:-translate-y-0.5"
@@ -262,20 +275,20 @@ export function DocumentCard({
 
         {/* Preview area */}
         {hasThumbnail ? (
-          /* Image thumbnail - fills card width, aspect ratio preserved */
-          <div className="relative bg-muted/30">
+          /* Image thumbnail - uniform height */
+          <div className="relative h-36 w-full bg-muted/30 overflow-hidden shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={document.thumbnailUrl}
               alt={document.title}
-              className="w-full h-auto block"
+              className="w-full h-full object-cover block"
               onError={() => setImgError(true)}
               loading="lazy"
             />
           </div>
         ) : (
-          /* Icon placeholder for non-image files */
-          <div className="flex items-center justify-center py-8 bg-muted/20">
+          /* Icon placeholder for non-image files - uniform height */
+          <div className="h-36 w-full flex items-center justify-center bg-muted/20 shrink-0">
             <div
               className={`rounded-2xl p-4 ${bgColor}`}
               aria-hidden
@@ -285,36 +298,67 @@ export function DocumentCard({
           </div>
         )}
 
-        {/* Footer: title + file size */}
-        <div className="px-3 py-2.5 border-t border-border/50">
-          <p className="text-sm font-medium leading-snug line-clamp-2 text-center">
-            {document.title}
-          </p>
-          {document.fileSize != null && document.fileSize > 0 && (
-            <p className="text-xs text-muted-foreground text-center mt-1">
-              {formatFileSize(document.fileSize)}
+        {/* Footer: title + file size + extension + categories */}
+        <div className="flex-1 flex flex-col justify-between px-3 py-2.5 border-t border-border/50">
+          <div>
+            <p className="text-sm font-medium leading-snug line-clamp-2 text-center" title={document.title}>
+              {document.title}
             </p>
-          )}
-          {document.categories.length === 0 && (
-            <div className="flex justify-center mt-1.5">
+            <div className="flex items-center justify-center gap-1.5 mt-1 text-xs text-muted-foreground">
+              {document.fileSize != null && document.fileSize > 0 && (
+                <span>{formatFileSize(document.fileSize)}</span>
+              )}
+              {document.fileSize != null && document.fileSize > 0 && (
+                <span>·</span>
+              )}
+              <span className="font-mono font-medium text-[11px]" style={{ color: fileTypeDetails.accentColor }}>
+                {extensionLabel}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1">
+            {document.categories.length > 0 ? (
+              document.categories.map((catName) => {
+                const catDisplay = categoryMap ? getCategoryDisplay(catName, categoryMap) : { label: catName, color: "#6b7280" }
+                return (
+                  <Badge
+                    key={catName}
+                    variant="outline"
+                    className="text-[10px] h-5 px-1.5 gap-1 font-medium"
+                    style={{ borderColor: `${catDisplay.color}40`, color: catDisplay.color }}
+                  >
+                    {catDisplay.label}
+                  </Badge>
+                )
+              })
+            ) : (
               <Badge
                 variant="outline"
                 className="text-[10px] h-5 px-1.5 gap-1 text-muted-foreground border-dashed"
               >
                 Uncategorized
               </Badge>
-            </div>
-          )}
-          {document.groups.length === 0 && (
-            <div className="flex justify-center mt-1">
+            )}
+
+            {document.subcategory && (
+              <Badge
+                variant="secondary"
+                className="text-[10px] h-5 px-1.5 gap-1 text-muted-foreground"
+              >
+                {document.subcategory}
+              </Badge>
+            )}
+
+            {document.groups.length === 0 && (
               <Badge
                 variant="outline"
                 className="text-[10px] h-5 px-1.5 gap-1 text-muted-foreground border-dashed"
               >
                 No KB
               </Badge>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 

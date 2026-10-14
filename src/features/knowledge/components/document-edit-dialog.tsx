@@ -58,7 +58,7 @@ interface DocumentEditDialogProps {
   documentId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSuccess: () => void
+  onSuccess: (updatedDoc?: DocumentData) => void
   knowledgeBases: KnowledgeBase[]
   categories: Category[]
   onCategoriesChange: () => void
@@ -72,7 +72,7 @@ type DocumentLoadResult =
 type DocumentFormProps = {
   documentResource: Promise<DocumentLoadResult>
   onOpenChange: (open: boolean) => void
-  onSuccess: () => void
+  onSuccess: (updatedDoc?: DocumentData) => void
   knowledgeBases: KnowledgeBase[]
   availableCategories: Category[]
   onCategoriesChange: () => void
@@ -156,7 +156,7 @@ function DocumentEditDialogError({
 const DocumentEditDialogLoadedForm = memo<{
   document: DocumentData
   onOpenChange: (open: boolean) => void
-  onSuccess: () => void
+  onSuccess: (updatedDoc?: DocumentData) => void
   knowledgeBases: KnowledgeBase[]
   availableCategories: Category[]
   onCategoriesChange: () => void
@@ -181,6 +181,16 @@ const DocumentEditDialogLoadedForm = memo<{
     )
     const [error, setError] = useState("")
     const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
+    const [createdCategories, setCreatedCategories] = useState<Category[]>([])
+    const categoriesList = useMemo(() => {
+      const list = [...availableCategories]
+      for (const c of createdCategories) {
+        if (!list.some((existing) => existing.id === c.id || existing.name === c.name)) {
+          list.push(c)
+        }
+      }
+      return list
+    }, [availableCategories, createdCategories])
 
     const toggleCategory = (category: string) => {
       setSelectedCategories((prev) =>
@@ -190,8 +200,14 @@ const DocumentEditDialogLoadedForm = memo<{
       )
     }
 
-    const handleCategoryCreated = () => {
+    const handleCategoryCreated = (newCategory?: Category) => {
       setCategoryDialogOpen(false)
+      if (newCategory?.name) {
+        setCreatedCategories((prev) => [...prev, newCategory])
+        setSelectedCategories((prev) =>
+          prev.includes(newCategory.name) ? prev : [...prev, newCategory.name]
+        )
+      }
       onCategoriesChange()
     }
 
@@ -224,7 +240,18 @@ const DocumentEditDialogLoadedForm = memo<{
           throw new Error(data.error || "Failed to update document")
         }
 
-        onSuccess()
+        const responseData = await response.json().catch(() => null)
+        const updatedData: DocumentData = responseData?.document || {
+          id: document.id,
+          title,
+          categories: selectedCategories,
+          subcategory: subcategory || null,
+          groups: knowledgeBases
+            .filter((kb) => selectedKBIds.includes(kb.id))
+            .map((kb) => ({ id: kb.id, name: kb.name, color: kb.color })),
+        }
+
+        onSuccess(updatedData)
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to update document")
       } finally {
@@ -258,7 +285,7 @@ const DocumentEditDialogLoadedForm = memo<{
                 {selectedCategories.length > 0 ? (
                   <div className="flex gap-1 flex-wrap">
                     {selectedCategories.map((name) => {
-                      const cat = availableCategories.find((c) => c.name === name)
+                      const cat = categoriesList.find((c) => c.name === name)
                       return (
                         <Badge
                           key={name}
@@ -287,13 +314,16 @@ const DocumentEditDialogLoadedForm = memo<{
                 <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+            <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start" onWheel={(e) => e.stopPropagation()}>
               <Command>
                 <CommandInput placeholder="Search categories..." />
-                <CommandList className="max-h-[180px] overflow-y-auto">
+                <CommandList className="max-h-[180px] overflow-y-auto" onWheel={(e) => {
+                  e.stopPropagation()
+                  e.currentTarget.scrollTop += e.deltaY
+                }}>
                   <CommandEmpty>No category found.</CommandEmpty>
                   <CommandGroup>
-                    {availableCategories.map((cat) => {
+                    {categoriesList.map((cat) => {
                       const isSelected = selectedCategories.includes(cat.name)
                       return (
                         <CommandItem
@@ -422,8 +452,8 @@ const DocumentEditDialogForm = memo<DocumentFormProps>(
   }) => {
     const result = use(documentResource)
 
-    if (result.error) {
-      return <DocumentEditDialogError message={result.error} onOpenChange={onOpenChange} />
+    if (result.error || !result.data) {
+      return <DocumentEditDialogError message={result.error || "Document not found"} onOpenChange={onOpenChange} />
     }
 
     return (
