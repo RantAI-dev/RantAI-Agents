@@ -50,3 +50,12 @@ export function maskApiKey(key: string): string {
   if (key.length < 20) return key
   return `${key.slice(0, 16)}${"•".repeat(20)}${key.slice(-4)}`
 }
+
+/**
+ * Mask an agent API key for safe display (e.g. first 12 chars + "…" + last 4).
+ * Full key is returned only once at creation time.
+ */
+export function maskAgentApiKey(key: string): string {
+  if (!key || key.length < 16) return key
+  return `${key.slice(0, 12)}…${key.slice(-4)}`
+}
