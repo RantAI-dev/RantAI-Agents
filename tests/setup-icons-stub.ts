@@ -18,7 +18,7 @@ import { vi } from "vitest"
 
 const ICON_NAMES = [
   // registry.ts (Phase 7)
-  "Globe", "FileCode", "Image", "GitBranch", "FileText", "BookOpen",
+  "Globe", "FileCode", "Image", "GitBranch", "FileText", "BookOpen", "FileType", "FileSpreadsheet",
   "Code", "Table2", "Sigma", "Presentation", "Terminal", "Box",
   // adjacent modules that may be pulled in transitively
   "Loader2", "AlertTriangle", "RotateCcw", "ChevronRight", "ChevronLeft",

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useCallback, useEffect, useMemo } from "react"
 import { generateUUID } from "@/lib/uuid"
 import {
   Dialog,
@@ -29,8 +29,9 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { Loader2, Upload, FileText, Folder, Check, Plus, ChevronsUpDown, X, FileCode, FileSpreadsheet, Box, AlertCircle, RefreshCw } from "@/lib/icons"
+import { Loader2, Upload, FileText, Folder, Check, Plus, ChevronsUpDown, X, FileCode, FileSpreadsheet, Box, AlertCircle, RefreshCw, AlertTriangle } from "@/lib/icons"
 import { CategoryDialog, Category } from "./category-dialog"
+import { getFileTypeDetails, checkDuplicateUpload, type ExistingDocSummary } from "./file-type-utils"
 import { xhrUpload } from "./upload-xhr"
 import { cn } from "@/lib/utils"
 import { KB_ACCEPTED_EXTENSIONS, KB_MAX_FILE_BYTES } from "@/lib/files/mime-types"
@@ -42,6 +43,8 @@ interface BulkUploadDialogProps {
   knowledgeBases?: Array<{ id: string; name: string; color?: string | null }>
   categories?: Category[]
   onCategoriesChange?: () => void
+  defaultKBIds?: string[]
+  existingDocuments?: ExistingDocSummary[]
 }
 
 type FileStatus = "idle" | "pending" | "uploading" | "processing" | "success" | "failed"
@@ -52,6 +55,8 @@ interface FileEntry {
   title: string
   status: FileStatus
   uploadProgress: number
+  isDuplicate?: boolean
+  duplicateMatchTitle?: string
   startedAt?: number
   finishedAt?: number
   error?: string
@@ -105,15 +110,9 @@ function FileStatusBadge({ status, error }: { status: FileStatus; error?: string
   }
 }
 
-function getFileIcon(filename: string): { Icon: typeof FileText; color: string } {
-  const ext = filename.toLowerCase().slice(filename.lastIndexOf("."))
-  if ([".pdf"].includes(ext)) return { Icon: FileText, color: "text-red-500" }
-  if ([".xlsx", ".xls", ".ods", ".csv", ".tsv"].includes(ext)) return { Icon: FileSpreadsheet, color: "text-green-500" }
-  if ([".docx", ".doc", ".rtf", ".odt"].includes(ext)) return { Icon: FileText, color: "text-blue-500" }
-  if ([".pptx", ".ppt"].includes(ext)) return { Icon: FileText, color: "text-orange-500" }
-  if ([".js", ".jsx", ".ts", ".tsx", ".py", ".rb", ".go", ".rs", ".java", ".c", ".cpp", ".h", ".hpp", ".cs", ".php", ".pl", ".sh", ".bat", ".ps1"].includes(ext)) return { Icon: FileCode, color: "text-purple-500" }
-  if ([".gltf", ".glb"].includes(ext)) return { Icon: Box, color: "text-cyan-500" }
-  return { Icon: FileText, color: "text-blue-500" }
+function getFileIcon(filename: string) {
+  const details = getFileTypeDetails({ filename })
+  return { Icon: details.Icon, color: details.iconColor }
 }
 
 export function BulkUploadDialog({
@@ -123,11 +122,13 @@ export function BulkUploadDialog({
   knowledgeBases = [],
   categories: availableCategories = [],
   onCategoriesChange,
+  defaultKBIds = [],
+  existingDocuments,
 }: BulkUploadDialogProps) {
   const [files, setFiles] = useState<FileEntry[]>([])
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [subcategory, setSubcategory] = useState("")
-  const [selectedKBIds, setSelectedKBIds] = useState<string[]>([])
+  const [selectedKBIds, setSelectedKBIds] = useState<string[]>(defaultKBIds)
   // PDF-only knob, applied to every PDF in the batch (see pipeline-policy).
   const [figureMode, setFigureMode] = useState<"auto" | "force" | "skip">("auto")
   const [loading, setLoading] = useState(false)
@@ -137,6 +138,23 @@ export function BulkUploadDialog({
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false)
   const filesRef = useRef<FileEntry[]>([])
   filesRef.current = files
+
+  const [createdCategories, setCreatedCategories] = useState<Category[]>([])
+  const categoriesList = useMemo(() => {
+    const list = [...availableCategories]
+    for (const c of createdCategories) {
+      if (!list.some((existing) => existing.id === c.id || existing.name === c.name)) {
+        list.push(c)
+      }
+    }
+    return list
+  }, [availableCategories, createdCategories])
+
+  useEffect(() => {
+    if (open) {
+      setSelectedKBIds(defaultKBIds)
+    }
+  }, [open, defaultKBIds])
 
   const toggleCategory = (category: string) => {
     setSelectedCategories((prev) =>
@@ -150,8 +168,14 @@ export function BulkUploadDialog({
     )
   }
 
-  const handleCategoryCreated = () => {
+  const handleCategoryCreated = (newCategory?: Category) => {
     setCategoryDialogOpen(false)
+    if (newCategory?.name) {
+      setCreatedCategories((prev) => [...prev, newCategory])
+      setSelectedCategories((prev) =>
+        prev.includes(newCategory.name) ? prev : [...prev, newCategory.name]
+      )
+    }
     onCategoriesChange?.()
   }
 
@@ -170,12 +194,15 @@ export function BulkUploadDialog({
         setError(`"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the limit is ${Math.round(KB_MAX_FILE_BYTES / (1024 * 1024))}MB.`)
         continue
       }
+      const dupCheck = checkDuplicateUpload(file, existingDocuments || [])
       newEntries.push({
         id: generateUUID(),
         file,
-        title: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+        title: file.name,
         status: "idle",
         uploadProgress: 0,
+        isDuplicate: dupCheck.isDuplicate,
+        duplicateMatchTitle: dupCheck.matchedDoc?.title,
       })
     }
 
@@ -207,12 +234,15 @@ export function BulkUploadDialog({
         setError(`"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the limit is ${Math.round(KB_MAX_FILE_BYTES / (1024 * 1024))}MB.`)
         continue
       }
+      const dupCheck = checkDuplicateUpload(file, existingDocuments || [])
       newEntries.push({
         id: generateUUID(),
         file,
-        title: file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " "),
+        title: file.name,
         status: "idle",
         uploadProgress: 0,
+        isDuplicate: dupCheck.isDuplicate,
+        duplicateMatchTitle: dupCheck.matchedDoc?.title,
       })
     }
     if (newEntries.length > 0) {
@@ -351,7 +381,7 @@ export function BulkUploadDialog({
       setFiles([])
       setSelectedCategories([])
       setSubcategory("")
-      setSelectedKBIds([])
+      setSelectedKBIds(defaultKBIds)
       setFigureMode("auto")
       setError("")
       onOpenChange(false)
@@ -447,6 +477,15 @@ export function BulkUploadDialog({
 
             {files.length > 0 && (
               <div className="space-y-2">
+                {files.some((f) => f.isDuplicate) && (
+                  <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs mb-2">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-medium">Possible Duplicate Documents</p>
+                      <p className="mt-0.5">Some selected files already exist in your organization. They will still be uploaded unless removed.</p>
+                    </div>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <Label>Files ({files.length})</Label>
                   {!loading && (
@@ -485,6 +524,11 @@ export function BulkUploadDialog({
                           <span className="text-xs text-muted-foreground shrink-0">
                             {(entry.file.size / 1024).toFixed(1)} KB
                           </span>
+                          {entry.isDuplicate && (
+                            <Badge variant="outline" className="text-[10px] h-4 px-1 border-amber-500/30 text-amber-600 dark:text-amber-400 shrink-0">
+                              Duplicate
+                            </Badge>
+                          )}
                           <FileStatusBadge status={entry.status} error={entry.error} />
                           {!loading && entry.status !== "uploading" && entry.status !== "processing" && (
                             <button
@@ -521,7 +565,7 @@ export function BulkUploadDialog({
                         {selectedCategories.length > 0 ? (
                           <div className="flex gap-1 flex-wrap">
                             {selectedCategories.map((name) => {
-                              const cat = availableCategories.find((c) => c.name === name)
+                              const cat = categoriesList.find((c) => c.name === name)
                               return (
                                 <Badge key={name} variant="default" className="text-xs" style={cat ? { backgroundColor: cat.color, borderColor: cat.color } : undefined}>
                                   {cat?.label ?? name}
@@ -535,13 +579,16 @@ export function BulkUploadDialog({
                         <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start">
+                    <PopoverContent className="p-0 w-[var(--radix-popover-trigger-width)]" align="start" onWheel={(e) => e.stopPropagation()}>
                       <Command>
                         <CommandInput placeholder="Search categories..." />
-                        <CommandList className="max-h-[180px] overflow-y-auto">
+                        <CommandList className="max-h-[180px] overflow-y-auto" onWheel={(e) => {
+                      e.stopPropagation()
+                      e.currentTarget.scrollTop += e.deltaY
+                    }}>
                           <CommandEmpty>No category found.</CommandEmpty>
                           <CommandGroup>
-                            {availableCategories.map((cat) => {
+                            {categoriesList.map((cat) => {
                               const isSelected = selectedCategories.includes(cat.name)
                               return (
                                 <CommandItem key={cat.name} value={cat.label} onSelect={() => toggleCategory(cat.name)} className="cursor-pointer">

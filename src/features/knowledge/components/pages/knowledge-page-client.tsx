@@ -5,7 +5,8 @@ import { dispatchKnowledgeBasesUpdated } from "@/hooks/use-knowledge-bases"
 import { useToast } from "@/hooks/use-toast"
 import { useIngestJobUpdates } from "@/features/knowledge/use-ingest-job-updates"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
+import { countKBDocuments, filterDocumentsForKBFolder } from "../file-type-utils"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -63,8 +64,10 @@ export interface Document {
   groups: DocumentGroup[]
   createdAt: string
   updatedAt: string
-  fileSize?: number
+  fileSize?: number | null
   thumbnailUrl?: string
+  s3Key?: string | null
+  mimeType?: string | null
   // Ingest lifecycle + live progress (background upload processing).
   status?: string
   ingest?: {
@@ -163,7 +166,7 @@ export default function KnowledgePageClient({
     setCategories(initialCategories)
   }, [initialCategories])
 
-  const fetchDocuments = useCallback(async (groupId?: string | null) => {
+  const fetchDocuments = useCallback(async (groupId: string | null = initialSelectedKBId) => {
     try {
       setLoading(true)
       const url = groupId
@@ -179,7 +182,7 @@ export default function KnowledgePageClient({
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [initialSelectedKBId])
 
   // Live ingest progress: patch the processing doc's status/progress in place;
   // on terminal status refetch to pull the final chunk count / clear the bar.
@@ -304,7 +307,11 @@ export default function KnowledgePageClient({
   }
 
   const handleView = (id: string) => {
-    router.push(`/dashboard/files/${id}`)
+    if (initialSelectedKBId) {
+      router.push(`/dashboard/files/${id}?kb=${encodeURIComponent(initialSelectedKBId)}`)
+    } else {
+      router.push(`/dashboard/files/${id}`)
+    }
   }
 
   const handleEdit = (id: string) => {
@@ -312,9 +319,14 @@ export default function KnowledgePageClient({
     setEditDialogOpen(true)
   }
 
-  const handleEditSuccess = () => {
+  const handleEditSuccess = (updatedDoc?: Partial<Document> & { id: string }) => {
     setEditDialogOpen(false)
     setEditingDocumentId(null)
+    if (updatedDoc) {
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === updatedDoc.id ? { ...d, ...updatedDoc } : d))
+      )
+    }
     fetchDocuments(initialSelectedKBId)
     fetchKnowledgeBases()
     dispatchKnowledgeBasesUpdated()
@@ -329,8 +341,13 @@ export default function KnowledgePageClient({
     )
   }
 
+  // Count KB documents accurately
+  const kbDocumentCount = useMemo(() => {
+    return countKBDocuments(documents, initialSelectedKBId)
+  }, [documents, initialSelectedKBId])
+
   // Count artifacts for tab visibility
-  const artifactCount = documents.filter((doc) => doc.artifactType != null).length
+  const artifactCount = initialSelectedKBId ? 0 : documents.filter((doc) => doc.artifactType != null).length
 
   // Count uncategorized and no-KB documents
   const uncategorizedCount = documents.filter((doc) => doc.categories.length === 0).length
@@ -338,6 +355,11 @@ export default function KnowledgePageClient({
 
   // Filter documents
   const filteredDocuments = documents.filter((doc) => {
+    if (initialSelectedKBId) {
+      if (doc.artifactType != null) return false
+      if (!doc.groups.some((g) => g.id === initialSelectedKBId)) return false
+    }
+
     // Tab filter: documents vs artifacts
     const matchesTab = contentTab === "documents"
       ? doc.artifactType == null
@@ -472,7 +494,7 @@ export default function KnowledgePageClient({
     <div className="flex flex-col h-full">
       <KnowledgeHeader
         selectedKB={selectedKB ?? null}
-        documentCount={documents.length}
+        documentCount={initialSelectedKBId ? kbDocumentCount : documents.length}
         knowledgeBaseCount={knowledgeBases.length}
         onAddDocument={() => setUploadDialogOpen(true)}
         onBulkUpload={() => setBulkUploadDialogOpen(true)}
@@ -496,7 +518,7 @@ export default function KnowledgePageClient({
             >
               Documents
               <span className="ml-1.5 text-xs text-muted-foreground">
-                {documents.filter((d) => d.artifactType == null).length}
+                {kbDocumentCount}
               </span>
             </button>
             <button
@@ -652,6 +674,7 @@ export default function KnowledgePageClient({
         defaultKBIds={initialSelectedKBId ? [initialSelectedKBId] : []}
         categories={categories}
         onCategoriesChange={fetchCategories}
+        existingDocuments={documents}
       />
 
       {/* Bulk Upload Dialog */}
@@ -660,8 +683,10 @@ export default function KnowledgePageClient({
         onOpenChange={setBulkUploadDialogOpen}
         onSuccess={handleUploadSuccess}
         knowledgeBases={knowledgeBases}
+        defaultKBIds={initialSelectedKBId ? [initialSelectedKBId] : []}
         categories={categories}
         onCategoriesChange={fetchCategories}
+        existingDocuments={documents}
       />
 
       {/* Bulk Assign Dialog — opened from selection-mode action bar; targets selected docs */}
@@ -675,6 +700,7 @@ export default function KnowledgePageClient({
         onSuccess={() => {
           fetchDocuments(initialSelectedKBId)
           fetchKnowledgeBases()
+          dispatchKnowledgeBasesUpdated()
           setSelectedDocIds(new Set())
           setSelectionMode(false)
         }}

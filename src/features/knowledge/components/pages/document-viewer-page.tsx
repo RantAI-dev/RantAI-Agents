@@ -37,14 +37,18 @@ function mapDocumentDetail(detail: KnowledgeDocumentDetail): DocumentDetail {
 
 export default async function DocumentViewerPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams?: Promise<{ kb?: string }>
 }) {
   const { id } = await params
+  const resolvedSearchParams = searchParams ? await searchParams : undefined
+  const kb = resolvedSearchParams?.kb
   const session = await auth()
 
   if (!session?.user?.id) {
-    return <DocumentViewerClient id={id} initialDocument={null} />
+    return <DocumentViewerClient id={id} initialDocument={null} kb={kb} />
   }
 
   const orgContext = await resolveActiveOrgServer(session.user.id)
@@ -58,5 +62,5 @@ export default async function DocumentViewerPage({
     ? null
     : mapDocumentDetail(result)
 
-  return <DocumentViewerClient id={id} initialDocument={initialDocument} />
+  return <DocumentViewerClient id={id} initialDocument={initialDocument} kb={kb} />
 }
