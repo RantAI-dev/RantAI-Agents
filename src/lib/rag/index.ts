@@ -93,3 +93,7 @@ export { generateContextualPrefixes } from "./contextual-retrieval";
 export { LruCache } from "./lru-cache";
 export type { LruCacheOptions } from "./lru-cache";
 export { searchByVector, searchSimilarBatch } from "./vector-store";
+
+// TC-994
+export { extractIdentifierTokens } from "./identifier-extraction";
+export { guaranteeIdentifierSlots } from "./hybrid-merge";

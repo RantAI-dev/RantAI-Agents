@@ -208,6 +208,7 @@ const META_SELECT = { id: true, title: true, categories: true, subcategory: true
 const documents: DocumentStore = {
   async findAliveIdsByFilter(filter) {
     const where: Record<string, unknown> = { deletedAt: null }
+    if (filter.organizationId) where.organizationId = filter.organizationId
     if (filter.category) where.categories = { has: filter.category }
     if (filter.groupIds && filter.groupIds.length > 0) {
       // Knowledge bases nest, and selecting one means selecting its subtree —

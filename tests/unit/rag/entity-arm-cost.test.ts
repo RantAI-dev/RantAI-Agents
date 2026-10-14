@@ -51,12 +51,19 @@ describe("entity arm cost", () => {
 
   it("fetches the entity-name list once per document set, not once per query", async () => {
     const { entityQueries, query } = runtimeWithSpy()
-    configureKb({ ...makeFakeKbRuntime(), vectors: { ...makeFakeKbRuntime().vectors, query } })
+    configureKb({
+      ...makeFakeKbRuntime(),
+      documents: {
+        ...makeFakeKbRuntime().documents,
+        findAliveIdsByFilter: vi.fn(async () => ["doc-1"]),
+      },
+      vectors: { ...makeFakeKbRuntime().vectors, query },
+    })
 
     const { HybridSearch } = await import("@/lib/rag/hybrid-search")
     HybridSearch.resetEntityNameCache()
 
-    const search = new HybridSearch({ enableEntitySearch: true })
+    const search = new HybridSearch({ enableEntitySearch: true, organizationId: "org-1" })
     await search.search("who was mulawarman")
     await search.search("tell me about mulawarman again")
     await search.search("mulawarman once more")
@@ -67,12 +74,19 @@ describe("entity arm cost", () => {
 
   it("scopes the entity lookup by document_id alone", async () => {
     const { entityQueries, query } = runtimeWithSpy()
-    configureKb({ ...makeFakeKbRuntime(), vectors: { ...makeFakeKbRuntime().vectors, query } })
+    configureKb({
+      ...makeFakeKbRuntime(),
+      documents: {
+        ...makeFakeKbRuntime().documents,
+        findAliveIdsByFilter: vi.fn(async () => ["doc-1"]),
+      },
+      vectors: { ...makeFakeKbRuntime().vectors, query },
+    })
 
     const { HybridSearch } = await import("@/lib/rag/hybrid-search")
     HybridSearch.resetEntityNameCache()
 
-    await new HybridSearch({ enableEntitySearch: true }).search("who was mulawarman")
+    await new HybridSearch({ enableEntitySearch: true, organizationId: "org-1" }).search("who was mulawarman")
 
     const nameFetch = entityQueries.find((s) => s.includes("SELECT name FROM entity"))
     expect(nameFetch).toBeDefined()

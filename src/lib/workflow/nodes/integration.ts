@@ -35,6 +35,7 @@ export async function executeIntegration(
         groupIds: ragData.knowledgeBaseGroupIds?.length > 0
           ? ragData.knowledgeBaseGroupIds
           : undefined,
+        organizationId: context.organizationId,
       })
 
       return {

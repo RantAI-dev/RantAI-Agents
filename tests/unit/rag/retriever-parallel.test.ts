@@ -1,3 +1,5 @@
+import { configureKb } from "@/lib/kb-runtime/runtime"
+import { makeFakeKbRuntime } from "../../helpers/kb-fakes"
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 describe("retriever — parallel vector + BM25", () => {
@@ -10,6 +12,7 @@ describe("retriever — parallel vector + BM25", () => {
     process.env.KB_RERANK_ENABLED = "false"
     process.env.KB_QUERY_EXPANSION_ENABLED = "false"
     vi.resetModules()
+    configureKb({ ...makeFakeKbRuntime(), documents: { ...makeFakeKbRuntime().documents, findAliveIdsByFilter: vi.fn(async () => ["d"]) } })
   })
 
   afterEach(() => { global.fetch = originalFetch; process.env = { ...originalEnv } })
@@ -31,7 +34,7 @@ describe("retriever — parallel vector + BM25", () => {
 
     const { retrieveContext } = await import("@/lib/rag/retriever")
     const t0 = Date.now()
-    const r = await retrieveContext("some query", { maxChunks: 5 })
+    const r = await retrieveContext("some query", { maxChunks: 5, organizationId: "org-test" })
     const elapsed = Date.now() - t0
 
     expect(vectorMock).toHaveBeenCalledTimes(1)
@@ -57,7 +60,7 @@ describe("retriever — parallel vector + BM25", () => {
     vi.doMock("@/lib/rag/bm25-search", () => ({ bm25Search: bm25Mock }))
 
     const { retrieveContext } = await import("@/lib/rag/retriever")
-    await retrieveContext("q", { maxChunks: 5 })
+    await retrieveContext("q", { maxChunks: 5, organizationId: "org-test" })
     expect(bm25Mock).not.toHaveBeenCalled()
   })
 })
@@ -71,6 +74,7 @@ describe("retriever — query expansion with parallel embed", () => {
     process.env.KB_QUERY_EXPANSION_ENABLED = "true"
     process.env.KB_QUERY_EXPANSION_PARAPHRASES = "2"
     vi.resetModules()
+    configureKb({ ...makeFakeKbRuntime(), documents: { ...makeFakeKbRuntime().documents, findAliveIdsByFilter: vi.fn(async () => ["d"]) } })
   })
   afterEach(() => { process.env = { ...originalEnv } })
 
@@ -105,7 +109,7 @@ describe("retriever — query expansion with parallel embed", () => {
     vi.doMock("@/lib/rag/bm25-search", () => ({ bm25Search: async () => [] }))
 
     const { retrieveContext } = await import("@/lib/rag/retriever")
-    await retrieveContext("original question", { maxChunks: 5 })
+    await retrieveContext("original question", { maxChunks: 5, organizationId: "org-test" })
 
     // One /embeddings batch call with 3 inputs (original + 2 paraphrases).
     expect(embedFetch).toHaveBeenCalledTimes(1)

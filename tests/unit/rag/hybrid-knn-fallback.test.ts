@@ -59,11 +59,12 @@ describe("hybrid vector search — KNN fallback", () => {
 
     configureKb({
       ...makeFakeKbRuntime(),
+      documents: { ...makeFakeKbRuntime().documents, findAliveIdsByFilter: vi.fn(async () => ["doc-1", "doc-2"]) },
       vectors: { ...makeFakeKbRuntime().vectors, ...vectors },
     })
 
     const { HybridSearch } = await import("@/lib/rag/hybrid-search")
-    const search = new HybridSearch({ enableEntitySearch: false })
+    const search = new HybridSearch({ enableEntitySearch: false, organizationId: "org-1" })
     const { results } = await search.search("where is the answer")
 
     expect(sawKnn, "the KNN path should have been attempted").toBe(true)
@@ -82,11 +83,12 @@ describe("hybrid vector search — KNN fallback", () => {
 
     configureKb({
       ...makeFakeKbRuntime(),
+      documents: { ...makeFakeKbRuntime().documents, findAliveIdsByFilter: vi.fn(async () => ["doc-1", "doc-2"]) },
       vectors: { ...makeFakeKbRuntime().vectors, query },
     })
 
     const { HybridSearch } = await import("@/lib/rag/hybrid-search")
-    const search = new HybridSearch({ enableEntitySearch: false })
+    const search = new HybridSearch({ enableEntitySearch: false, organizationId: "org-1" })
     const { results } = await search.search("where is the answer")
 
     expect(results.length).toBeGreaterThan(0)
@@ -120,10 +122,14 @@ describe("hybrid vector search — KNN names its index", () => {
       seen.push(sql)
       return [{ result: sql.includes("<|") ? [CHUNK] : [], status: "OK" }] as never
     })
-    configureKb({ ...makeFakeKbRuntime(), vectors: { ...makeFakeKbRuntime().vectors, query } })
+    configureKb({
+      ...makeFakeKbRuntime(),
+      documents: { ...makeFakeKbRuntime().documents, findAliveIdsByFilter: vi.fn(async () => ["doc-1", "doc-2"]) },
+      vectors: { ...makeFakeKbRuntime().vectors, query },
+    })
 
     const { HybridSearch } = await import("@/lib/rag/hybrid-search")
-    await new HybridSearch({ enableEntitySearch: false }).search("where is the answer")
+    await new HybridSearch({ enableEntitySearch: false, organizationId: "org-1" }).search("where is the answer")
 
     const knn = seen.find((s) => s.includes("<|"))!
     expect(knn).toMatch(/FROM document_chunk\s+WITH INDEX embedding_idx\s+WHERE embedding <\|/)
@@ -136,10 +142,14 @@ describe("hybrid vector search — KNN names its index", () => {
       if (sql.includes("<|")) return [{ result: [], status: "OK" }] as never
       return [{ result: [CHUNK], status: "OK" }] as never
     })
-    configureKb({ ...makeFakeKbRuntime(), vectors: { ...makeFakeKbRuntime().vectors, query } })
+    configureKb({
+      ...makeFakeKbRuntime(),
+      documents: { ...makeFakeKbRuntime().documents, findAliveIdsByFilter: vi.fn(async () => ["doc-1", "doc-2"]) },
+      vectors: { ...makeFakeKbRuntime().vectors, query },
+    })
 
     const { HybridSearch } = await import("@/lib/rag/hybrid-search")
-    await new HybridSearch({ enableEntitySearch: false }).search("where is the answer")
+    await new HybridSearch({ enableEntitySearch: false, organizationId: "org-1" }).search("where is the answer")
 
     const scan = seen.find((s) => s.includes("vector::similarity::cosine") && !s.includes("<|"))!
     // The scan filters by document id; forcing the vector index there would
@@ -173,14 +183,18 @@ describe("hybrid search — entity enrichment", () => {
       if (sql.includes("vector::similarity::cosine")) return [{ result: rows, status: "OK" }] as never
       return [{ result: [], status: "OK" }] as never
     })
-    configureKb({ ...makeFakeKbRuntime(), vectors: { ...makeFakeKbRuntime().vectors, query } })
+    configureKb({
+      ...makeFakeKbRuntime(),
+      documents: { ...makeFakeKbRuntime().documents, findAliveIdsByFilter: vi.fn(async () => ["doc-1", "doc-2"]) },
+      vectors: { ...makeFakeKbRuntime().vectors, query },
+    })
     return entityQueries
   }
 
   it("does not query the entity table at all when entity search is off", async () => {
     const entityQueries = runtime()
     const { HybridSearch } = await import("@/lib/rag/hybrid-search")
-    const { results } = await new HybridSearch({ enableEntitySearch: false }).search("q")
+    const { results } = await new HybridSearch({ enableEntitySearch: false, organizationId: "org-1" }).search("q")
     expect(results.length).toBeGreaterThan(0)
     expect(entityQueries).toEqual([])
   })
@@ -188,7 +202,7 @@ describe("hybrid search — entity enrichment", () => {
   it("asks once per document, not once per result, and never by file_id", async () => {
     const entityQueries = runtime()
     const { HybridSearch } = await import("@/lib/rag/hybrid-search")
-    const { results } = await new HybridSearch({ enableEntitySearch: true, enableGraphTraversal: false }).search("q")
+    const { results } = await new HybridSearch({ enableEntitySearch: true, enableGraphTraversal: false, organizationId: "org-1" }).search("q")
 
     const enrichment = entityQueries.filter((q) => "docId" in q.vars)
     expect(enrichment.map((q) => q.vars.docId).sort()).toEqual(["doc-1", "doc-2"])
