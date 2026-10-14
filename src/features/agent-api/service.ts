@@ -367,7 +367,10 @@ export async function runV1ChatCompletion(
       // enableEntitySearch is left to its default so KB_ENTITY_SEARCH_ENABLED
       // is honoured: passing `true` here overrode a deployment that had
       // switched the entity arm off because its corpus has no entity graph.
-      const hybridResult = await smartHybridRetrieve(userQuery, { groupIds })
+      const hybridResult = await smartHybridRetrieve(userQuery, {
+        groupIds,
+        organizationId: assistant.organizationId ?? undefined,
+      })
 
       grounding = groundingOf(hybridResult.results.map((r) => r.vectorScore))
       if (hybridResult.context) {
@@ -380,6 +383,7 @@ export async function runV1ChatCompletion(
         const retrievalResult = await smartRetrieve(userQuery, {
           minSimilarity: 0.30,
           groupIds,
+          organizationId: assistant.organizationId ?? undefined,
         })
         grounding = groundingOf(retrievalResult.chunks.map((c) => c.similarity))
         if (retrievalResult.context) {
@@ -417,6 +421,7 @@ export async function runV1ChatCompletion(
     ? await resolveToolsForAssistant(assistant.id, modelId, {
         userId: syntheticUserId,
         assistantId: assistant.id,
+        organizationId: assistant.organizationId ?? undefined,
       })
     : { tools: {}, toolNames: [] as string[] }
 

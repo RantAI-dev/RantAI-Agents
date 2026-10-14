@@ -52,6 +52,8 @@ export interface HybridSearchConfig {
   fileIds?: string[];
   /** Filter by category */
   categoryFilter?: string;
+  /** Organization ID for multi-tenant filtering */
+  organizationId?: string;
   /** User ID for filtering */
   userId?: string;
 }
@@ -178,6 +180,7 @@ const DEFAULT_CONFIG: Required<HybridSearchConfig> = {
   groupIds: [],
   fileIds: [],
   categoryFilter: "",
+  organizationId: "",
   userId: "",
 };
 
@@ -251,6 +254,12 @@ export class HybridSearch {
       totalResults: 0,
     };
 
+    // Fail closed: resolve scoped document IDs upfront
+    const scopedDocumentIds = await this.resolveScopedDocumentIds();
+    if (!scopedDocumentIds || scopedDocumentIds.length === 0) {
+      return { results: [], stats };
+    }
+
     // 1. Generate query embedding
     const embeddingStart = Date.now();
     const queryEmbedding = await generateEmbedding(query);
@@ -258,7 +267,7 @@ export class HybridSearch {
 
     // 2. Vector similarity search
     const vectorStart = Date.now();
-    const vectorResults = await this.vectorSearch(queryEmbedding);
+    const vectorResults = await this.vectorSearch(queryEmbedding, scopedDocumentIds);
     stats.vectorResults = vectorResults.length;
     stats.vectorSearchTimeMs = Date.now() - vectorStart;
 
@@ -283,7 +292,7 @@ export class HybridSearch {
     let bm25Results: Array<{ chunk: ChunkResult; score: number }> = [];
     if (getRagConfig().hybridBm25Enabled) {
       try {
-        const bm25Hits = await bm25Search(query, finalTopK, { exactPhrases: exactIdentifiers });
+        const bm25Hits = await bm25Search(query, finalTopK, scopedDocumentIds, { exactPhrases: exactIdentifiers });
         bm25Results = bm25Hits.map((h) => ({
           chunk: {
             id: h.id,
@@ -327,12 +336,12 @@ export class HybridSearch {
    * Vector similarity search using SurrealDB
    */
   private async vectorSearch(
-    queryEmbedding: number[]
+    queryEmbedding: number[],
+    scopedDocumentIds: string[]
   ): Promise<Array<{ chunk: ChunkResult; score: number }>> {
     try {
       const client = await this.getClient();
-      const scopedDocumentIds = await this.resolveScopedDocumentIds();
-      if (Array.isArray(scopedDocumentIds) && scopedDocumentIds.length === 0) {
+      if (scopedDocumentIds.length === 0) {
         return [];
       }
 
@@ -451,31 +460,19 @@ export class HybridSearch {
     }
   }
 
-  private async resolveScopedDocumentIds(): Promise<string[] | null> {
-    if (!this.config.categoryFilter && this.config.groupIds.length === 0) {
-      return null;
-    }
+  private async resolveScopedDocumentIds(): Promise<string[]> {
+    const hasOrg = Boolean(this.config.organizationId);
+    const hasGroups = Boolean(this.config.groupIds && this.config.groupIds.length > 0);
 
-    const where: {
-      categories?: { has: string };
-      groups?: { some: { groupId: { in: string[] } } };
-    } = {};
-
-    if (this.config.categoryFilter) {
-      where.categories = { has: this.config.categoryFilter };
-    }
-
-    if (this.config.groupIds.length > 0) {
-      where.groups = {
-        some: {
-          groupId: { in: this.config.groupIds },
-        },
-      };
+    // Fail closed: if neither organizationId nor groupIds is available -> no results
+    if (!hasOrg && !hasGroups) {
+      return [];
     }
 
     return kb("documents").findAliveIdsByFilter({
-      category: this.config.categoryFilter ?? undefined,
-      groupIds: this.config.groupIds.length > 0 ? this.config.groupIds : undefined,
+      organizationId: hasOrg ? this.config.organizationId : undefined,
+      category: this.config.categoryFilter || undefined,
+      groupIds: hasGroups ? this.config.groupIds : undefined,
     });
   }
 

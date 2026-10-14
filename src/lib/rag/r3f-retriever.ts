@@ -18,6 +18,7 @@ export async function retrieveR3FContext(
     options?: {
         maxChunks?: number;
         minSimilarity?: number;
+        organizationId?: string;
     }
 ): Promise<string | null> {
     try {
@@ -25,6 +26,7 @@ export async function retrieveR3FContext(
             categoryFilter: "R3F_3D",
             maxChunks: options?.maxChunks ?? 8,
             minSimilarity: options?.minSimilarity ?? 0.25,
+            organizationId: options?.organizationId,
         });
 
         if (!result.context || result.chunks.length === 0) {

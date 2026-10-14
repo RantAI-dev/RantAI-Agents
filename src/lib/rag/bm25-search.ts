@@ -29,13 +29,17 @@ interface SurrealBm25Row {
  * Perform BM25 full-text keyword search across chunk contents in SurrealDB.
  * When identifier-like codes are present in the query (e.g. ING-P20-6120),
  * searches them as exact phrases and merges them with an exact-match boost (TC-994).
+ *
+ * Scoped strictly to the provided documentIds to prevent cross-tenant document leaks.
+ * If documentIds is empty, returns [] immediately without querying SurrealDB.
  */
 export async function bm25Search(
   query: string,
   limit: number,
+  documentIds: string[],
   options?: Bm25SearchOptions
 ): Promise<Bm25Result[]> {
-  if (!query.trim()) return [];
+  if (!query.trim() || !documentIds || documentIds.length === 0) return [];
 
   const surreal = kb("vectors");
   const safeLimit = Math.max(1, Math.floor(limit));
@@ -57,12 +61,16 @@ export async function bm25Search(
     SELECT id, document_id, content, metadata, chunk_index, search::score(0) AS score
     FROM document_chunk
     WHERE content @@ $q
+      AND document_id IN $document_ids
     ORDER BY score DESC, id ASC
     LIMIT ${safeLimit};
   `;
 
   try {
-    const mainPromise = surreal.query<SurrealBm25Row>(mainSql, { q: query });
+    const mainPromise = surreal.query<SurrealBm25Row>(mainSql, {
+      q: query,
+      document_ids: documentIds,
+    });
 
     // Run exact phrase contains queries for each identifier code in parallel
     const exactPromises = exactPhrases.map((phrase) => {
@@ -70,10 +78,14 @@ export async function bm25Search(
         SELECT id, document_id, content, metadata, chunk_index
         FROM document_chunk
         WHERE string::contains(string::lowercase(content), $exact)
+          AND document_id IN $document_ids
         LIMIT ${safeLimit};
       `;
       return surreal
-        .query<SurrealBm25Row>(exactSql, { exact: phrase.toLowerCase() })
+        .query<SurrealBm25Row>(exactSql, {
+          exact: phrase.toLowerCase(),
+          document_ids: documentIds,
+        })
         .then((res) => ({ phrase, rows: res[0]?.result || [] }))
         .catch(() => ({ phrase, rows: [] as SurrealBm25Row[] }));
     });

@@ -118,6 +118,7 @@ export async function retrieveContext(
     maxChunks?: number;
     categoryFilter?: string;
     groupIds?: string[];
+    organizationId?: string;
   }
 ): Promise<RetrievalResult> {
   const cfg = getRagConfig();
@@ -126,7 +127,32 @@ export async function retrieveContext(
     maxChunks = cfg.defaultMaxChunks,
     categoryFilter,
     groupIds,
+    organizationId,
   } = options || {};
+
+  // Fail closed if neither organizationId nor groupIds is available
+  if (!organizationId && (!groupIds || groupIds.length === 0)) {
+    return {
+      context: "",
+      sources: [],
+      chunks: [],
+    };
+  }
+
+  // Pre-resolve scoped document IDs so both vector and BM25 arms are strictly scoped
+  const scopedDocumentIds = await kb("documents").findAliveIdsByFilter({
+    organizationId: organizationId ?? undefined,
+    groupIds: groupIds && groupIds.length > 0 ? groupIds : undefined,
+    category: categoryFilter ?? undefined,
+  });
+
+  if (scopedDocumentIds.length === 0) {
+    return {
+      context: "",
+      sources: [],
+      chunks: [],
+    };
+  }
 
   const reranker = getDefaultReranker();
   const fetchLimit = reranker ? Math.max(cfg.rerankInitialK, maxChunks) : maxChunks;
@@ -146,7 +172,7 @@ export async function retrieveContext(
     expanded.length > 1
       ? (async () => {
           const { searchSimilarBatch } = await import("./vector-store");
-          const lists = await searchSimilarBatch(expanded, fetchLimit, categoryFilter, groupIds);
+          const lists = await searchSimilarBatch(expanded, fetchLimit, categoryFilter, groupIds, organizationId);
           const union = new Map<string, SearchResult>();
           for (const list of lists) {
             for (const r of list) {
@@ -159,8 +185,8 @@ export async function retrieveContext(
             .sort((a, b) => b.similarity - a.similarity)
             .slice(0, fetchLimit);
         })()
-      : searchWithThreshold(query, minSimilarity, fetchLimit, categoryFilter, groupIds),
-    cfg.hybridBm25Enabled ? bm25Search(query, fetchLimit, { exactPhrases: exactIdentifiers }).catch(() => [] as any[]) : Promise.resolve([] as any[]),
+      : searchWithThreshold(query, minSimilarity, fetchLimit, categoryFilter, groupIds, organizationId),
+    cfg.hybridBm25Enabled ? bm25Search(query, fetchLimit, scopedDocumentIds, { exactPhrases: exactIdentifiers }).catch(() => [] as any[]) : Promise.resolve([] as any[]),
   ]);
 
   // Build a single chunk pool keyed by chunk.id; vector wins metadata ties.
@@ -185,7 +211,7 @@ export async function retrieveContext(
       categories: [],
       subcategory: null,
       section: (bMeta?.section as string) || null,
-      similarity: b.score,
+      similarity: 0,
       contextualPrefix: null,
       page: typeof bMeta?.page === "number" ? bMeta.page : null,
       chunkIndex: b.chunkIndex ?? (typeof bMeta?.chunk_index === "number" ? bMeta.chunk_index : null),
@@ -367,11 +393,13 @@ export async function smartRetrieve(
     minSimilarity?: number;
     maxChunks?: number;
     groupIds?: string[];
+    organizationId?: string;
   }
 ): Promise<RetrievalResult> {
   return retrieveContext(query, {
     ...options,
     groupIds: options?.groupIds,
+    organizationId: options?.organizationId,
   });
 }
 
@@ -457,6 +485,7 @@ export async function hybridRetrieve(
     entityWeight?: number;
     groupIds?: string[];
     categoryFilter?: string;
+    organizationId?: string;
   }
 ): Promise<HybridRetrievalResult> {
   const {
@@ -471,6 +500,7 @@ export async function hybridRetrieve(
     entityWeight = 0.3,
     groupIds,
     categoryFilter,
+    organizationId,
   } = options || {};
 
   const searchConfig: HybridSearchConfig = {
@@ -480,6 +510,7 @@ export async function hybridRetrieve(
     finalTopK: maxResults,
     groupIds,
     categoryFilter,
+    organizationId,
   };
 
   const hybridSearch = new HybridSearch(searchConfig);
@@ -650,6 +681,7 @@ export async function smartHybridRetrieve(
     maxResults?: number;
     enableEntitySearch?: boolean;
     groupIds?: string[];
+    organizationId?: string;
   }
 ): Promise<HybridRetrievalResult> {
   return hybridRetrieve(query, {

@@ -440,6 +440,7 @@ export async function handleWidgetChat(req: NextRequest) {
           const hybridResult = await smartHybridRetrieve(userQuery, {
             enableEntitySearch: true,
             groupIds: effectiveGroupIds,
+            organizationId: assistant.organizationId ?? undefined,
           })
 
           if (hybridResult.context) {
@@ -458,6 +459,7 @@ export async function handleWidgetChat(req: NextRequest) {
             const retrievalResult = await smartRetrieve(userQuery, {
               minSimilarity: 0.35,
               groupIds: effectiveGroupIds,
+              organizationId: assistant.organizationId ?? undefined,
             })
 
             if (retrievalResult.context) {

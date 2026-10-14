@@ -152,7 +152,10 @@ export async function runPracticeGenerate(
   // Questions are written only from book prose. Figures carry a caption, not
   // material, and a set built on nothing retrieved would come from the model's
   // memory rather than the curriculum.
-  const retrieved = await smartHybridRetrieve(input.topic, { groupIds: resolved.ids })
+  const retrieved = await smartHybridRetrieve(input.topic, {
+    groupIds: resolved.ids,
+    organizationId: assistant.organizationId ?? undefined,
+  })
   const prose = retrieved.results.filter((r) => r.chunkType !== "figure" && r.content.trim().length >= 120)
   // The same threshold the chat path reports `grounded` with, so one
   // calibration (AGENT_API_GROUNDED_MIN_SCORE) governs both.

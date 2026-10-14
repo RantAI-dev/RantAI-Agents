@@ -698,6 +698,9 @@ export async function runChat(params: {
     }
 
     // Only perform RAG retrieval if knowledge base is enabled
+    const effectiveOrgId: string | null =
+      params.organizationId ?? assistantOrganizationId ?? null
+
     if (useKnowledgeBase) {
       ragTrace?.mark("ragStart")
 
@@ -771,6 +774,7 @@ export async function runChat(params: {
           const hybridResult = await smartHybridRetrieve(userQuery, {
             enableEntitySearch: true,
             groupIds: knowledgeBaseGroupIds,
+            organizationId: effectiveOrgId ?? undefined,
           })
 
           if (hybridResult.context) {
@@ -823,6 +827,7 @@ export async function runChat(params: {
             const retrievalResult = await smartRetrieve(userQuery, {
               minSimilarity: 0.30,
               groupIds: knowledgeBaseGroupIds,
+              organizationId: effectiveOrgId ?? undefined,
             })
 
             if (retrievalResult.context) {
@@ -990,8 +995,7 @@ export async function runChat(params: {
     // body.organizationId — it's client-controlled, and relying on it let
     // built-in agents (org = null) save artifacts with a null org, which the
     // dashboard scope query treats as global => visible to every account.
-    const effectiveOrgId: string | null =
-      params.organizationId ?? assistantOrganizationId ?? null
+    // effectiveOrgId is resolved above for retrieval and tools
     const selectedSkillIds =
       body.enableSkills !== false && Array.isArray(body.enabledSkillIds)
         ? body.enabledSkillIds
@@ -1192,7 +1196,9 @@ export async function runChat(params: {
     // When generating 3D artifacts, retrieve relevant R3F/Drei documentation
     if (body.canvasMode === "application/3d" && userQuery) {
       try {
-        const r3fContext = await retrieveR3FContext(userQuery);
+        const r3fContext = await retrieveR3FContext(userQuery, {
+          organizationId: effectiveOrgId ?? undefined,
+        });
         if (r3fContext) {
           systemPrompt += `\n\n## R3F/Drei Reference Documentation\nHere is relevant React Three Fiber and @react-three/drei documentation for the user's request:\n\n${r3fContext}`;
           console.log("[R3F RAG] Injected Drei/R3F context for 3D artifact");

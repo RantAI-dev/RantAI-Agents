@@ -52,85 +52,50 @@ export async function searchSimilar(
   query: string,
   limit: number = 5,
   categoryFilter?: string,
-  groupIds?: string[]
+  groupIds?: string[],
+  organizationId?: string
 ): Promise<SearchResult[]> {
+  // Fail closed if neither organizationId nor groupIds is available
+  if (!organizationId && (!groupIds || groupIds.length === 0)) {
+    return [];
+  }
+
+  const documentIds = await kb("documents").findAliveIdsByFilter({
+    category: categoryFilter ?? undefined,
+    groupIds: groupIds && groupIds.length > 0 ? groupIds : undefined,
+    organizationId: organizationId ?? undefined,
+  });
+
+  // If no documents match the filter, return empty results
+  if (documentIds.length === 0) {
+    return [];
+  }
+
   // Generate embedding for the query
   const queryEmbedding = await generateEmbedding(query);
 
   // Get SurrealDB client
   const surrealClient = kb("vectors");
 
-  // First, get document IDs that match the filters (if any)
-  let documentIds: string[] | null = null;
-
-  if (categoryFilter || (groupIds && groupIds.length > 0)) {
-    // Build Prisma query to filter documents
-    const whereClause: {
-      categories?: { has: string };
-      groups?: { some: { groupId: { in: string[] } } };
-    } = {};
-
-    if (categoryFilter) {
-      whereClause.categories = { has: categoryFilter };
-    }
-
-    if (groupIds && groupIds.length > 0) {
-      whereClause.groups = {
-        some: {
-          groupId: { in: groupIds },
-        },
-      };
-    }
-
-    documentIds = await kb("documents").findAliveIdsByFilter({
-      category: categoryFilter ?? undefined,
-      groupIds: groupIds ?? undefined,
-    });
-
-    // If no documents match the filter, return empty results
-    if (documentIds.length === 0) {
-      return [];
-    }
-  }
-
-  // Build SurrealDB vector search query
-  let sql: string;
+  const sql = `
+    SELECT
+      id,
+      document_id,
+      content,
+      chunk_index,
+      metadata,
+      contextual_prefix,
+      vector::similarity::cosine(embedding, $embedding) AS similarity
+    FROM document_chunk
+    WHERE document_id IN $document_ids
+    ORDER BY similarity DESC
+    LIMIT $limit
+  `;
   const vars: Record<string, unknown> = {
     embedding: queryEmbedding,
     limit: limit,
+    document_ids: documentIds,
   };
-
-  if (documentIds) {
-    sql = `
-      SELECT
-        id,
-        document_id,
-        content,
-        chunk_index,
-        metadata,
-        contextual_prefix,
-        vector::similarity::cosine(embedding, $embedding) AS similarity
-      FROM document_chunk
-      WHERE document_id IN $document_ids
-      ORDER BY similarity DESC
-      LIMIT $limit
-    `;
-    vars.document_ids = documentIds;
-  } else {
-    sql = `
-      SELECT
-        id,
-        document_id,
-        content,
-        chunk_index,
-        metadata,
-        contextual_prefix,
-        vector::similarity::cosine(embedding, $embedding) AS similarity
-      FROM document_chunk
-      ORDER BY similarity DESC
-      LIMIT $limit
-    `;
-  }
 
   const surrealResults = await surrealClient.query<SurrealChunk>(sql, vars);
   const chunks = surrealResults[0]?.result || [];
@@ -187,9 +152,10 @@ export async function searchWithThreshold(
   minSimilarity: number = 0.5,
   limit: number = 10,
   categoryFilter?: string,
-  groupIds?: string[]
+  groupIds?: string[],
+  organizationId?: string
 ): Promise<SearchResult[]> {
-  const results = await searchSimilar(query, limit, categoryFilter, groupIds);
+  const results = await searchSimilar(query, limit, categoryFilter, groupIds, organizationId);
 
   // Filter by minimum similarity
   return results.filter((result) => result.similarity >= minSimilarity);
@@ -392,51 +358,36 @@ export async function searchByVector(
   queryEmbedding: number[],
   limit: number = 5,
   categoryFilter?: string,
-  groupIds?: string[]
+  groupIds?: string[],
+  organizationId?: string
 ): Promise<SearchResult[]> {
-  const surrealClient = kb("vectors");
-
-  let documentIds: string[] | null = null;
-  if (categoryFilter || (groupIds && groupIds.length > 0)) {
-    const whereClause: {
-      categories?: { has: string };
-      groups?: { some: { groupId: { in: string[] } } };
-    } = {};
-    if (categoryFilter) whereClause.categories = { has: categoryFilter };
-    if (groupIds && groupIds.length > 0) {
-      whereClause.groups = { some: { groupId: { in: groupIds } } };
-    }
-    documentIds = await kb("documents").findAliveIdsByFilter({
-      category: categoryFilter ?? undefined,
-      groupIds: groupIds ?? undefined,
-    });
-    if (documentIds.length === 0) return [];
+  // Fail closed if neither organizationId nor groupIds is available
+  if (!organizationId && (!groupIds || groupIds.length === 0)) {
+    return [];
   }
 
-  let sql: string;
+  const documentIds = await kb("documents").findAliveIdsByFilter({
+    category: categoryFilter ?? undefined,
+    groupIds: groupIds && groupIds.length > 0 ? groupIds : undefined,
+    organizationId: organizationId ?? undefined,
+  });
+  if (documentIds.length === 0) return [];
+
+  const surrealClient = kb("vectors");
+
+  const sql = `
+    SELECT id, document_id, content, chunk_index, metadata, contextual_prefix,
+      vector::similarity::cosine(embedding, $embedding) AS similarity
+    FROM document_chunk
+    WHERE document_id IN $document_ids
+    ORDER BY similarity DESC
+    LIMIT $limit
+  `;
   const vars: Record<string, unknown> = {
     embedding: queryEmbedding,
     limit,
+    document_ids: documentIds,
   };
-  if (documentIds) {
-    sql = `
-      SELECT id, document_id, content, chunk_index, metadata, contextual_prefix,
-        vector::similarity::cosine(embedding, $embedding) AS similarity
-      FROM document_chunk
-      WHERE document_id IN $document_ids
-      ORDER BY similarity DESC
-      LIMIT $limit
-    `;
-    vars.document_ids = documentIds;
-  } else {
-    sql = `
-      SELECT id, document_id, content, chunk_index, metadata, contextual_prefix,
-        vector::similarity::cosine(embedding, $embedding) AS similarity
-      FROM document_chunk
-      ORDER BY similarity DESC
-      LIMIT $limit
-    `;
-  }
 
   const surrealResults = await surrealClient.query<SurrealChunk>(sql, vars);
   const chunks = surrealResults[0]?.result || [];
@@ -478,12 +429,16 @@ export async function searchSimilarBatch(
   queries: string[],
   limit: number = 5,
   categoryFilter?: string,
-  groupIds?: string[]
+  groupIds?: string[],
+  organizationId?: string
 ): Promise<SearchResult[][]> {
   if (queries.length === 0) return [];
+  if (!organizationId && (!groupIds || groupIds.length === 0)) {
+    return queries.map(() => []);
+  }
   const vectors = await generateEmbeddings(queries);
   const searches = vectors.map((vec) =>
-    searchByVector(vec, limit, categoryFilter, groupIds)
+    searchByVector(vec, limit, categoryFilter, groupIds, organizationId)
   );
   return await Promise.all(searches);
 }

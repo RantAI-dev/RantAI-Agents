@@ -19,6 +19,7 @@ export interface KnowledgeQueryOptions extends RemoteSearchOptions {
   groupIds?: string[]
   categoryFilter?: string
   minSimilarity?: number
+  organizationId?: string
 }
 
 const EMPTY: RetrievalResult = { context: "", sources: [], chunks: [] } as RetrievalResult
@@ -56,6 +57,7 @@ export async function retrieveKnowledge(
         documentIds: options.documentIds,
         category: options.category ?? options.categoryFilter,
         hybrid: options.hybrid,
+        organizationId: options.organizationId,
       })
     } catch (err) {
       console.error(
@@ -73,6 +75,7 @@ export async function retrieveKnowledge(
     groupIds: options.groupIds ?? options.knowledgeBaseIds,
     categoryFilter: options.categoryFilter ?? options.category,
     minSimilarity: options.minSimilarity,
+    organizationId: options.organizationId,
   }
   return options.hybrid
     ? normalizeHybrid(await smartHybridRetrieve(query, localOptions))

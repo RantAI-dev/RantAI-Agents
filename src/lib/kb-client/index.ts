@@ -71,6 +71,7 @@ export interface RemoteSearchOptions {
   documentIds?: string[]
   category?: string
   hybrid?: boolean
+  organizationId?: string
 }
 
 export async function remoteSearch(

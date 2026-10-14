@@ -90,7 +90,7 @@ export interface DocumentListItem extends DocumentMeta {
 
 export interface DocumentStore {
   /** Pre-filter for retrieval: alive document ids matching category/group. */
-  findAliveIdsByFilter(filter: { category?: string; groupIds?: string[] }): Promise<string[]>
+  findAliveIdsByFilter(filter: { category?: string; groupIds?: string[]; organizationId?: string }): Promise<string[]>
   /** Metadata for search hits; soft-deleted docs are excluded. */
   findAliveMetaByIds(ids: string[]): Promise<DocumentMeta[]>
   findById(id: string): Promise<{ id: string; title: string; deletedAt: Date | null } | null>
