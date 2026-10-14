@@ -305,7 +305,7 @@ Your task is to extract:
 Output JSON with this exact structure:
 {
   "entities": [
-    {"name": "Entity Name", "type": "PERSON|ORGANIZATION|LOCATION|DATE|EVENT|CONCEPT|REGULATION|PRODUCT|DOCUMENT|ROLE|OTHER", "description": "brief description", "confidence": 0.9}
+    {"name": "Entity Name", "type": "PERSON|ORGANIZATION|LOCATION|DATE|EVENT|CONCEPT|REGULATION|PRODUCT|DOCUMENT|ROLE|TECHNOLOGY|MONEY|EMAIL|URL|PHONE|OTHER", "description": "brief description", "confidence": 0.9}
   ],
   "relations": [
     {"source": "Entity A", "target": "Entity B", "relation_type": "relationship_type", "context": "text supporting this relation", "confidence": 0.85}
@@ -314,7 +314,7 @@ Output JSON with this exact structure:
 
 Guidelines:
 - Extract ALL meaningful entities, not just the most prominent ones
-- Use canonical types: PERSON, ORGANIZATION, LOCATION, DATE, EVENT, CONCEPT, REGULATION, PRODUCT, DOCUMENT, ROLE (for job titles/positions like Director, CEO, Manager), OTHER
+- Use canonical types: PERSON, ORGANIZATION, LOCATION, DATE, EVENT, CONCEPT, REGULATION, PRODUCT, DOCUMENT, ROLE (for job titles/positions like Director, CEO, Manager), TECHNOLOGY, MONEY, EMAIL, URL, PHONE, OTHER
 - Do not extract trivial single words or sentence fragments as entities
 - Extract relations ONLY between entities you extracted
 - Use consistent entity names (same entity = same name)

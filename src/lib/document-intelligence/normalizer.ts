@@ -16,6 +16,11 @@ export const CANONICAL_ENTITY_TYPES = [
   "REGULATION",
   "DOCUMENT",
   "ROLE",
+  "TECHNOLOGY",
+  "MONEY",
+  "EMAIL",
+  "URL",
+  "PHONE",
   "OTHER",
 ] as const
 
@@ -125,17 +130,32 @@ const TYPE_ALIASES: Record<string, CanonicalEntityType> = {
   JABATAN: "ROLE",
   POSISI: "ROLE",
 
+  // Technology aliases
+  TECHNOLOGY: "TECHNOLOGY",
+  TECH: "TECHNOLOGY",
+
+  // Money / Currency aliases
+  MONEY: "MONEY",
+  CURRENCY: "MONEY",
+
+  // Contact aliases
+  EMAIL: "EMAIL",
+  E_MAIL: "EMAIL",
+  MAIL: "EMAIL",
+  URL: "URL",
+  URI: "URL",
+  LINK: "URL",
+  WEBSITE: "URL",
+  PHONE: "PHONE",
+  TELEPHONE: "PHONE",
+  TEL: "PHONE",
+  MOBILE: "PHONE",
+
   // Other
   OTHER: "OTHER",
   MISC: "OTHER",
   UNKNOWN: "OTHER",
   NUMBER: "OTHER",
-  MONEY: "OTHER",
-  CURRENCY: "OTHER",
-  EMAIL: "OTHER",
-  URL: "OTHER",
-  PHONE: "OTHER",
-  TECHNOLOGY: "OTHER",
 }
 
 const JABATAN_REGEX =
@@ -157,7 +177,7 @@ const STOPWORDS = new Set([
 
 // Generic single-word company fragments when classified as OTHER
 const GENERIC_OTHER_FRAGMENTS = new Set([
-  "digital", "utama", "nusantara", "global", "indonesia", "mandiri", "jaya", "abadi",
+  "digital", "utama", "global", "mandiri", "jaya", "abadi",
   "group", "corp", "corporation", "management", "international", "general", "national",
   "solution", "solutions", "teknologi", "technology", "systems", "system",
 ])
@@ -197,7 +217,8 @@ export function normalizeEntityType(
 export function isTrivialEntity(name: string, type?: string): boolean {
   if (!name || typeof name !== "string") return true
   const clean = name.trim()
-  if (clean.length < 3) return true
+  if (clean.length < 2) return true
+  if (clean.length === 2 && !/^[A-Z0-9]{2}$/.test(clean)) return true
 
   // Pure non-alphanumeric or numbers under 3 chars
   if (!/[a-zA-Z0-9]/.test(clean)) return true

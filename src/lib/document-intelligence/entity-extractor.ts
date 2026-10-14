@@ -381,10 +381,10 @@ export class LLMEntityExtractor {
     const systemPrompt = `You are an entity extraction system. Extract entities and return ONLY valid JSON.
 
 Entity Types:
-- PERSON, ORGANIZATION, LOCATION, DATE, EVENT, CONCEPT, PRODUCT, REGULATION, DOCUMENT, ROLE, OTHER
+- PERSON, ORGANIZATION, LOCATION, DATE, EVENT, CONCEPT, PRODUCT, REGULATION, DOCUMENT, ROLE, TECHNOLOGY, MONEY, EMAIL, URL, PHONE, OTHER
 
 IMPORTANT:
-- Use canonical types: PERSON, ORGANIZATION, LOCATION, DATE, EVENT, CONCEPT, PRODUCT, REGULATION, DOCUMENT, ROLE, OTHER
+- Use canonical types: PERSON, ORGANIZATION, LOCATION, DATE, EVENT, CONCEPT, PRODUCT, REGULATION, DOCUMENT, ROLE, TECHNOLOGY, MONEY, EMAIL, URL, PHONE, OTHER
 - Use ROLE for job titles and positions (e.g. Direktur Utama, CEO, Manager)
 - Do not extract trivial fragments or pure stopwords
 
