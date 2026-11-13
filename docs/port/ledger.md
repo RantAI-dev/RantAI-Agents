@@ -1,8 +1,8 @@
 # Port ledger: RantAI-Agents (TypeScript) to Rust
 
 Reason and target number: lighter footprint, targets in `plan.md` §0. Oracle:
-`bun port/oracle/<module>.ts < port/cases/<module>.in.jsonl` (not built yet). Base commit: OSS
-`e744680c`, cloud `1ffcad9`.
+`bun port/oracle/<module>.ts < port/cases/<module>.in.jsonl` (built for memory:
+`port/oracle/memory.ts`). Base commit: OSS `e744680c`, cloud `1ffcad9`.
 
 Status is one of: todo, oracle ready, in progress, parity green, shadowed, cut over, old code deleted.
 Paths are relative to `src/` in this repository; paths starting with `apps/cloud/` are in agents-cloud.
@@ -11,12 +11,12 @@ Paths are relative to `src/` in this repository; paths starting with `apps/cloud
 
 | Module (old path) | New path | Depends on | Case file | Cases | Status | Differences |
 |---|---|---|---|---|---|---|
-| `lib/memory/fact-keys.ts` | `rust/crates/agents-core/src/memory/fact_keys.rs` | none | `port/cases/memory-fact-keys.jsonl` | 0 | todo | |
-| `lib/memory/long-term-memory.ts` (merge, collapse, apply, forget, fingerprint, `summaryNeedsRefresh`) | `agents-core/src/memory/profile.rs` | fact-keys | `memory-profile.jsonl` | 0 | todo | |
-| `lib/memory/long-term-memory.ts` (`extractPermanentFacts`, `extractPreferences`) | `agents-core/src/memory/extract_profile.rs` | none | `memory-extract-profile.jsonl` | 0 | todo | regex dialect |
-| `lib/memory/working-memory.ts` (`extractEntities`, `extractFacts`, `detectContext`) | `agents-core/src/memory/extract_working.rs` | none | `memory-extract-working.jsonl` | 0 | todo | regex dialect |
-| `lib/memory/*` `format*ForPrompt`, `index.ts` `buildPromptWithMemory`, `getMemoryStats` | `agents-core/src/memory/prompt.rs` | profile | `memory-prompt.jsonl` | 0 | todo | `toLocaleDateString` |
-| `lib/memory/memory-tools.ts` (`toFacts`, `toPreferences`, `toEntities`, forget criteria, result messages) | `agents-core/src/memory/tools.rs` | profile | `memory-tools.jsonl` | 0 | todo | |
+| `lib/memory/fact-keys.ts` | `rust/crates/agents-core/src/memory/fact_keys.rs` | none | `port/cases/memory.jsonl` | 130 | parity green | JS string semantics (`trim`, UTF-16 length) |
+| `lib/memory/long-term-memory.ts` (merge, collapse, apply, forget, fingerprint, `summaryNeedsRefresh`) | `agents-core/src/memory/profile.rs` | fact-keys | `port/cases/memory.jsonl` | 77 | parity green | |
+| `lib/memory/long-term-memory.ts` (`extractPermanentFacts`, `extractPreferences`) | not ported | — | — | 0 | out of scope | differences.md row 3 |
+| `lib/memory/working-memory.ts` (`extractEntities`, `extractFacts`, `detectContext`) | not ported | — | — | 0 | out of scope | differences.md row 3 |
+| `lib/memory/*` `format*ForPrompt`, `index.ts` `buildPromptWithMemory` | `agents-core/src/memory/prompt.rs` | profile | `port/cases/memory.jsonl` | 19 | parity green | `toLocaleDateString` -> ISO (row 5) |
+| `lib/memory/memory-tools.ts` (`toFacts`, `toPreferences`, `toEntities`, forget criteria, result messages) | `agents-core/src/memory/tools.rs` | profile | `port/cases/memory.jsonl` | 32 | parity green | TC-1548 (row 4), working memory out of scope (row 3) |
 | `features/assistants/core/completeness.ts` | `agents-core/src/assistants/completeness.rs` | none | `assistants-completeness.jsonl` | 0 | todo | |
 | `features/assistants/core/service.ts` (field copy, built-in whitelist, `toNullableJson*`) | `agents-core/src/assistants/update.rs` | none | `assistants-update.jsonl` | 0 | todo | |
 | `features/assistants/bindings/service.ts:74-80` (hidden-tool merge) | `agents-core/src/assistants/bindings.rs` | none | `assistants-bindings.jsonl` | 0 | todo | |
