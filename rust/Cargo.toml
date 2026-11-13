@@ -29,6 +29,14 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["e
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
 regex = "1"
 toml = "0.8"
+# agents-auth: NextAuth v5 session JWE (dir + A256CBC-HS512, HKDF-SHA256 key) and HS256 JWTs.
+aes = "0.8"
+cbc = { version = "0.1", features = ["std"] }
+hmac = "0.12"
+sha2 = "0.10"
+hkdf = "0.12"
+base64 = "0.22"
+subtle = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

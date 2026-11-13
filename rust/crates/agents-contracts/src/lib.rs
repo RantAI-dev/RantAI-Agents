@@ -2,3 +2,5 @@
 //! parse. Pure data and encoders, no I/O.
 
 pub mod error_codes;
+pub mod openai;
+pub mod ui_stream;
