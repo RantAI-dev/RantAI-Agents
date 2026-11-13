@@ -1,0 +1,30 @@
+[package]
+name = "agents-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "agents-server"
+path = "src/main.rs"
+
+[dependencies]
+agents-core.workspace = true
+agents-contracts.workspace = true
+agents-auth.workspace = true
+agents-store.workspace = true
+agents-llm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+sqlx.workspace = true
+
+[lints]
+workspace = true
