@@ -18,3 +18,4 @@
 ^rust/crates/agents-core/tests/boundary\.rs$
 ^port/(oracle|cases)/
 ^(tsconfig[^/]*\.json|vitest\.config\.ts|eslint\.config\.mjs)$
+^rust/crates/[^/]+/tests/parity_[^/]+\.rs$
