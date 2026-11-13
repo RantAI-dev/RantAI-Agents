@@ -87,6 +87,134 @@ function stubFor(importer: string, specifier: string): string | undefined {
   return inMemoryDir ? relative : undefined;
 }
 
+/** The old module's types. The rows arrive as JSON, so a date is a string or a Date. */
+interface OldFact {
+  id: string;
+  subject: string;
+  predicate: string;
+  object: string;
+  confidence: number;
+  source: string;
+  createdAt: Date | string;
+  updatedAt?: Date | string;
+}
+
+interface OldPreference {
+  id: string;
+  category: string;
+  key: string;
+  value: string;
+  confidence: number;
+  source: string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+interface OldProfile {
+  id: string;
+  userId: string;
+  facts: OldFact[];
+  preferences: OldPreference[];
+  interactionSummary: string;
+  totalConversations: number;
+  lastInteractionAt?: Date | string;
+  createdAt?: Date | string;
+  updatedAt?: Date | string;
+}
+
+interface OldForgetCriteria {
+  keys?: string[];
+  keywords?: string[];
+  all?: boolean;
+}
+
+interface OldForgetResult {
+  removedFacts: { key: string; value: string }[];
+  removedPreferences: { key: string; value: string }[];
+}
+
+interface OldSaveFact {
+  category: string;
+  label: string;
+  value: string;
+  confidence?: number;
+}
+
+interface OldSavePreference {
+  category: string;
+  preference: string;
+  value: string;
+}
+
+interface FactKeysModule {
+  normalizeMemoryKey(raw: string | null | undefined): string;
+  isMultiValuePredicate(predicate: string): boolean;
+  memoryKeyMatches(storedKey: string, requestKey: string): boolean;
+  memoryValueMatches(value: string | null | undefined, keyword: string): boolean;
+}
+
+interface LongTermModule {
+  collapseFacts(facts: OldFact[]): OldFact[];
+  collapsePreferences(preferences: OldPreference[]): OldPreference[];
+  mergeFacts(existing: OldFact[], newFacts: OldFact[], now: Date): OldFact[];
+  mergePreferences(
+    existing: OldPreference[],
+    newPreferences: OldPreference[],
+    now: Date,
+  ): OldPreference[];
+  applyMemoryUpdate(
+    profile: OldProfile,
+    facts: OldFact[],
+    preferences: OldPreference[],
+    now: Date,
+  ): boolean;
+  applyForget(
+    profile: OldProfile,
+    criteria: OldForgetCriteria,
+    now: Date,
+  ): OldForgetResult;
+  profileContentFingerprint(profile: OldProfile): string;
+  summaryNeedsRefresh(profile: OldProfile): boolean;
+  formatUserProfileForPrompt(profile: OldProfile | null): string;
+}
+
+interface MemoryToolsModule {
+  toFacts(input: OldSaveFact[] | undefined, source: string): OldFact[];
+  toPreferences(input: OldSavePreference[] | undefined, source: string): OldPreference[];
+  executeSaveMemory(ctx: unknown, state: unknown, input: unknown): Promise<unknown>;
+  executeForgetMemory(ctx: unknown, state: unknown, input: unknown): Promise<unknown>;
+  createMemoryTools(ctx: unknown): {
+    tools: Record<string, { description: string; inputSchema: { jsonSchema: unknown } }>;
+  };
+}
+
+interface MemoryIndexModule {
+  buildPromptWithMemory(
+    basePrompt: string,
+    workingMemory: unknown,
+    semanticResults: unknown[],
+    userProfile: OldProfile | null,
+  ): string;
+}
+
+/** An argument of a case. */
+function argString(args: unknown[], index: number): string {
+  const value = args[index];
+  return typeof value === "string" ? value : "";
+}
+
+function argArray(args: unknown[], index: number): unknown[] {
+  const value = args[index];
+  return Array.isArray(value) ? value : [];
+}
+
+function argRecord(args: unknown[], index: number): Record<string, unknown> {
+  const value = args[index];
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 type Row = {
   id: string;
   userId: string;
@@ -152,7 +280,7 @@ const db = fakeDb();
 (globalThis as unknown as { __ORACLE_DB__: unknown }).__ORACLE_DB__ = db;
 
 /** Bundle one old module with the heavy imports stubbed, then import it. */
-async function loadOld(entry: string, append = ""): Promise<Record<string, any>> {
+async function loadOld(entry: string, append = ""): Promise<unknown> {
   const result = await Bun.build({
     entrypoints: [path.join(ROOT, entry)],
     target: "bun",
@@ -184,19 +312,19 @@ async function loadOld(entry: string, append = ""): Promise<Record<string, any>>
   }
   const out = path.join(CACHE, entry.replace(/[\/.]/g, "-") + ".ts");
   await Bun.write(out, await result.outputs[0]!.text());
-  return (await import(out)) as Record<string, any>;
+  return (await import(out)) as unknown;
 }
 
-const factKeys = await loadOld("src/lib/memory/fact-keys.ts");
-const longTerm = await loadOld(
+const factKeys = (await loadOld("src/lib/memory/fact-keys.ts")) as FactKeysModule;
+const longTerm = (await loadOld(
   "src/lib/memory/long-term-memory.ts",
   "\nexport { summaryNeedsRefresh };\n",
-);
-const memoryTools = await loadOld("src/lib/memory/memory-tools.ts");
-const memoryIndex = await loadOld("src/lib/memory/index.ts");
+)) as LongTermModule;
+const memoryTools = (await loadOld("src/lib/memory/memory-tools.ts")) as MemoryToolsModule;
+const memoryIndex = (await loadOld("src/lib/memory/index.ts")) as MemoryIndexModule;
 
 /** The parts of a profile the memory functions change. */
-function projectProfile(profile: any) {
+function projectProfile(profile: OldProfile) {
   return {
     facts: profile.facts,
     preferences: profile.preferences,
@@ -206,7 +334,7 @@ function projectProfile(profile: any) {
 }
 
 /** `toFacts`/`toPreferences` ids come from `nanoid()`; the caller injects them in Rust. */
-function projectFact(fact: any, now: string) {
+function projectFact(fact: OldFact, now: string) {
   return {
     id: "<generated>",
     subject: fact.subject,
@@ -220,7 +348,7 @@ function projectFact(fact: any, now: string) {
 }
 
 /** The same for a preference, whose fields are named differently. */
-function projectPreference(preference: any, now: string) {
+function projectPreference(preference: OldPreference, now: string) {
   return {
     id: "<generated>",
     category: preference.category,
@@ -238,11 +366,13 @@ function projectPreference(preference: any, now: string) {
  * (`src/lib/memory/memory-tools.ts:186-190`). The old code has no function for it, so the
  * lines are copied here; `forgetMemoryResult` runs the real code path and checks them.
  */
-function forgetCriteria(input: any) {
+function forgetCriteria(input: Record<string, unknown>): OldForgetCriteria {
+  const keys = Array.isArray(input.keys) ? input.keys : [];
+  const keywords = Array.isArray(input.keywords) ? input.keywords : [];
   return {
-    keys: (input?.keys ?? []).filter((k: any) => typeof k === "string" && k.trim().length > 0),
-    keywords: (input?.keywords ?? []).filter((k: any) => typeof k === "string" && k.trim().length > 1),
-    all: input?.all === true,
+    keys: keys.filter((k): k is string => typeof k === "string" && k.trim().length > 0),
+    keywords: keywords.filter((k): k is string => typeof k === "string" && k.trim().length > 1),
+    all: input.all === true,
   };
 }
 
@@ -264,7 +394,7 @@ function newState() {
 /** The mode of the tool cases: what the store does with the write. */
 type Mode = "ok" | "no_profile" | "fail";
 
-async function runSaveMemory(input: any, profile: any, mode: Mode) {
+async function runSaveMemory(input: unknown, profile: unknown, mode: Mode) {
   db.reset();
   db.state.fail = mode === "fail";
   if (mode !== "fail" && profile) db.seed("user_oracle", profile);
@@ -275,7 +405,7 @@ async function runSaveMemory(input: any, profile: any, mode: Mode) {
   );
 }
 
-async function runForgetMemory(input: any, profile: any, mode: Mode) {
+async function runForgetMemory(input: unknown, profile: unknown, mode: Mode) {
   db.reset();
   db.state.fail = mode === "fail";
   if (mode !== "fail" && profile) db.seed("user_oracle", profile);
@@ -286,36 +416,71 @@ async function runForgetMemory(input: any, profile: any, mode: Mode) {
   );
 }
 
-const FNS: Record<string, (args: any[]) => any> = {
-  normalizeMemoryKey: (a) => factKeys.normalizeMemoryKey(a[0]),
-  isMultiValuePredicate: (a) => factKeys.isMultiValuePredicate(a[0]),
-  memoryKeyMatches: (a) => factKeys.memoryKeyMatches(a[0], a[1]),
-  memoryValueMatches: (a) => factKeys.memoryValueMatches(a[0], a[1]),
-  collapseFacts: (a) => longTerm.collapseFacts(a[0]),
-  collapsePreferences: (a) => longTerm.collapsePreferences(a[0]),
-  mergeFacts: (a) => longTerm.mergeFacts(a[0], a[1], new Date(a[2])),
-  mergePreferences: (a) => longTerm.mergePreferences(a[0], a[1], new Date(a[2])),
+const FNS: Record<string, (args: unknown[]) => unknown> = {
+  normalizeMemoryKey: (a) => factKeys.normalizeMemoryKey(argString(a, 0)),
+  isMultiValuePredicate: (a) => factKeys.isMultiValuePredicate(argString(a, 0)),
+  memoryKeyMatches: (a) => factKeys.memoryKeyMatches(argString(a, 0), argString(a, 1)),
+  memoryValueMatches: (a) => {
+    const value = a[0];
+    return factKeys.memoryValueMatches(
+      typeof value === "string" ? value : null,
+      argString(a, 1),
+    );
+  },
+  collapseFacts: (a) => longTerm.collapseFacts(argArray(a, 0) as OldFact[]),
+  collapsePreferences: (a) =>
+    longTerm.collapsePreferences(argArray(a, 0) as OldPreference[]),
+  mergeFacts: (a) =>
+    longTerm.mergeFacts(
+      argArray(a, 0) as OldFact[],
+      argArray(a, 1) as OldFact[],
+      new Date(argString(a, 2)),
+    ),
+  mergePreferences: (a) =>
+    longTerm.mergePreferences(
+      argArray(a, 0) as OldPreference[],
+      argArray(a, 1) as OldPreference[],
+      new Date(argString(a, 2)),
+    ),
   applyMemoryUpdate: (a) => {
-    const profile = a[0];
-    const changed = longTerm.applyMemoryUpdate(profile, a[1], a[2], new Date(a[3]));
+    const profile = argRecord(a, 0) as OldProfile;
+    const changed = longTerm.applyMemoryUpdate(
+      profile,
+      argArray(a, 1) as OldFact[],
+      argArray(a, 2) as OldPreference[],
+      new Date(argString(a, 3)),
+    );
     return { changed, ...projectProfile(profile) };
   },
   applyForget: (a) => {
-    const profile = a[0];
-    const result = longTerm.applyForget(profile, a[1], new Date(a[2]));
+    const profile = argRecord(a, 0) as OldProfile;
+    const result = longTerm.applyForget(
+      profile,
+      argRecord(a, 1) as OldForgetCriteria,
+      new Date(argString(a, 2)),
+    );
     return { ...result, ...projectProfile(profile) };
   },
-  profileContentFingerprint: (a) => longTerm.profileContentFingerprint(a[0]),
-  summaryNeedsRefresh: (a) => longTerm.summaryNeedsRefresh(a[0]),
-  formatUserProfileForPrompt: (a) => longTerm.formatUserProfileForPrompt(a[0]),
-  buildPromptWithMemory: (a) => memoryIndex.buildPromptWithMemory(a[0], null, [], a[1]),
+  profileContentFingerprint: (a) =>
+    longTerm.profileContentFingerprint(argRecord(a, 0) as OldProfile),
+  summaryNeedsRefresh: (a) => longTerm.summaryNeedsRefresh(argRecord(a, 0) as OldProfile),
+  formatUserProfileForPrompt: (a) =>
+    longTerm.formatUserProfileForPrompt(argRecord(a, 0) as OldProfile),
+  buildPromptWithMemory: (a) => {
+    const profile = a[1] === null || a[1] === undefined ? null : (a[1] as OldProfile);
+    return memoryIndex.buildPromptWithMemory(argString(a, 0), null, [], profile);
+  },
   toFacts: (a) =>
-    memoryTools.toFacts(a[0], a[1]).map((f: any) => projectFact(f, a[2])),
+    memoryTools
+      .toFacts(argArray(a, 0) as OldSaveFact[], argString(a, 1))
+      .map((f) => projectFact(f, argString(a, 2))),
   toPreferences: (a) =>
-    memoryTools.toPreferences(a[0], a[1]).map((p: any) => projectPreference(p, a[2])),
-  forgetCriteria: (a) => forgetCriteria(a[0]),
-  saveMemoryResult: (a) => runSaveMemory(a[0], a[1], a[2]),
-  forgetMemoryResult: (a) => runForgetMemory(a[0], a[1], a[2]),
+    memoryTools
+      .toPreferences(argArray(a, 0) as OldSavePreference[], argString(a, 1))
+      .map((p) => projectPreference(p, argString(a, 2))),
+  forgetCriteria: (a) => forgetCriteria(argRecord(a, 0)),
+  saveMemoryResult: (a) => runSaveMemory(a[0], a[1], argString(a, 2) as Mode),
+  forgetMemoryResult: (a) => runForgetMemory(a[0], a[1], argString(a, 2) as Mode),
   saveMemoryInputSchema: () => {
     const { tools } = memoryTools.createMemoryTools(makeCtx("user_oracle"));
     return tools.saveMemory.inputSchema.jsonSchema;
@@ -327,7 +492,7 @@ const FNS: Record<string, (args: any[]) => any> = {
 };
 
 async function run(line: string): Promise<unknown> {
-  const { fn, args } = JSON.parse(line) as { fn: string; args: any[] };
+  const { fn, args } = JSON.parse(line) as { fn: string; args: unknown[] };
   const handler = FNS[fn];
   if (!handler) throw new Error(`oracle: unknown function ${fn}`);
   return handler(args ?? []);
@@ -342,7 +507,7 @@ if (args[0] === "--cases") {
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const parsed = JSON.parse(trimmed) as { fn: string; args: any[] };
+    const parsed = JSON.parse(trimmed) as { fn: string; args: unknown[] };
     const expected = await run(trimmed);
     out.push(JSON.stringify({ fn: parsed.fn, args: parsed.args, expected }));
   }
