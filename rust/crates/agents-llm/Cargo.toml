@@ -16,5 +16,9 @@ futures.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
+[dev-dependencies]
+# `io-util` is what the in-test stub server needs to read and write on a TcpStream.
+tokio = { workspace = true, features = ["io-util"] }
+
 [lints]
 workspace = true
