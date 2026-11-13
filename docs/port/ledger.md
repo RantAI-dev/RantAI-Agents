@@ -1,8 +1,8 @@
 # Port ledger: RantAI-Agents (TypeScript) to Rust
 
 Reason and target number: lighter footprint, targets in `plan.md` §0. Oracle:
-`bun port/oracle/<module>.ts < port/cases/<module>.in.jsonl` (not built yet). Base commit: OSS
-`e744680c`, cloud `1ffcad9`.
+`bun port/oracle/<module>.ts > port/cases/<module>.jsonl` (built for `auth` so far; the other
+modules are not). Base commit: OSS `e744680c`, cloud `1ffcad9`.
 
 Status is one of: todo, oracle ready, in progress, parity green, shadowed, cut over, old code deleted.
 Paths are relative to `src/` in this repository; paths starting with `apps/cloud/` are in agents-cloud.
@@ -29,6 +29,7 @@ Paths are relative to `src/` in this repository; paths starting with `apps/cloud
 | `features/chat-public/service.ts:139,189,352` (`sanitizeEditHistory`, `buildPersistedUserRow`, content→parts) | `agents-core/src/chat/messages.rs` | none | `chat-messages.jsonl` | 0 | todo | |
 | `lib/tools/approval.ts` (`resolveToolApprovalMode`, `toolNeedsApproval`) | `agents-core/src/tools/approval.rs` | none | `tool-approval.jsonl` | 0 | todo | |
 | `features/agent-api/{response,service}.ts` (OpenAI chunk framing, `estimateTokens`, `fitContext`) | `agents-contracts/src/openai.rs` | none | `agent-api-framing.jsonl` | 0 | todo | JSON number format |
+| `lib/auth.ts` (session cookie), `lib/mobile-auth.ts` (Bearer JWT), `features/agent-api-keys/service.ts` (`rantai_sk_` keys), `features/widget/chat/service.ts` (`X-Widget-Api-Key`) | `agents-auth/src/{session,mobile,api_key,widget}.rs` | none | `port/cases/auth.jsonl` | 53 | parity green | a token without `exp` is refused, a session token encrypted with `A256GCM` is refused, an address outside a key's whitelist is `permission_denied` |
 
 ## Phases B–D: services
 
