@@ -19,7 +19,15 @@ Deliberate differences: `docs/port/differences.md`.
    | Start to `/readyz` | under 1 s |
    | p95 time to first token, 15 VUs | no worse than TypeScript (ceiling 8 s, AGENTS.md §4 of agents-cloud) |
 
-   The TypeScript baseline is measured once, before the first cutover, and written here.
+   TypeScript baseline, measured 2026-11-14 on the dev box (production build of `e744680c`,
+   `NODE_ENV=production bun server.ts`, Postgres only, no traffic):
+
+   | Metric | TypeScript today |
+   |---|---|
+   | Resident memory, idle after first request | 283 MB |
+   | Resident memory, chat/assistants/memory routes loaded | 291 MB |
+   | Start to first response | 4.35 s |
+   | Resident memory under 15 VUs, image size, p95 TTFT | not measured yet (need the load harness from agents-cloud `perf/`) |
 2. **The Rust code lives in the OSS repository** (`RantAI-Agents/rust/`). Cloud-only behaviour
    (credits, plans, house models) is injected through traits the cloud implements, mirroring
    today's `onUsage` and `modelOverride` hooks.
