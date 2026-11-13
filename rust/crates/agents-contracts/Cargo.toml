@@ -8,7 +8,10 @@ publish.workspace = true
 
 [dependencies]
 serde.workspace = true
-serde_json.workspace = true
+# preserve_order: the SSE encoders must emit nested JSON objects (`toolCallId.input`,
+# provider metadata) in insertion order, the way `JSON.stringify` does, or the bytes
+# would not match the TypeScript frames; the default `BTreeMap` sorts keys.
+serde_json = { workspace = true, features = ["preserve_order"] }
 thiserror.workspace = true
 
 
