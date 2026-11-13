@@ -1,0 +1,96 @@
+name: ci
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches: [main]
+  # The backstop for a pull request that ran only some parts: everything, every night.
+  schedule:
+    - cron: "0 19 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Decides which parts run. A pull request runs the parts its files can affect; a shared or unknown
+  # file runs all of them (scripts/check.sh fails closed). main, the nightly run, a manual run and
+  # the label ci:all-parts run everything.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: plan
+        env:
+          SCOPED: ${{ github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'ci:all-parts') }}
+          CHECK_BASE: origin/${{ github.base_ref }}
+        run: |
+          if [ "$SCOPED" = true ]; then parts="$(scripts/check.sh --plan --changed)"; else parts="$(scripts/check.sh --plan)"; fi
+          echo "parts: $parts"
+          echo "parts=$parts" >> "$GITHUB_OUTPUT"
+      - name: Merge lane
+        if: github.event_name == 'pull_request'
+        # Nobody reads the diff, so a script decides who must say yes. The auto lane merges on green.
+        # The owner lane needs the `owner-approved` label, given after reading the evidence in the
+        # pull request, not the code.
+        run: |
+          if ! scripts/merge-lane.sh "origin/${{ github.base_ref }}"; then
+            ${{ contains(github.event.pull_request.labels.*.name, 'owner-approved') }} || {
+              echo "Owner lane: a code owner adds the owner-approved label after reading the plan and the evidence."
+              exit 1
+            }
+          fi
+      - name: Keep AGENTS.md small and filled in
+        run: |
+          lines=$(wc -l < AGENTS.md)
+          [ "$lines" -le 200 ] || { echo "AGENTS.md is $lines lines; the budget is 200. Move detail into docs/ or a skill."; exit 1; }
+          ! grep -n 'TODO(fill)' AGENTS.md || { echo "AGENTS.md still has TODO(fill) lines."; exit 1; }
+
+  # One job per part, side by side. The parts are defined in the CONFIGURE block of scripts/check.sh.
+  check:
+    needs: plan
+    runs-on: ubuntu-latest
+    # The budget for one part, checkout and install included. The parts run in parallel, so this is
+    # also the budget for the run. A part that needs longer is too big: split it, cache more, or
+    # move a slow suite to a scheduled workflow.
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.plan.outputs.parts) }}
+    name: check (${{ matrix.part }})
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # TODO(fill): install only the toolchains this repo uses. With several parts, install per part
+      # (if: matrix.part == 'rust'), so a part does not pay for another's setup.
+      - uses: oven-sh/setup-bun@v2
+      - run: scripts/setup-worktree.sh
+      # The same script people and agents run. If CI needs a step that is not in check.sh, put it in
+      # check.sh, or "green locally" stops meaning "green in CI".
+      - run: scripts/check.sh --part "${{ matrix.part }}"
+
+  # The only check branch protection requires. A part that was not selected does not run; a part
+  # that was selected and failed, or was cancelled, fails this job.
+  ci-required:
+    needs: [plan, check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          PLAN: ${{ needs.plan.result }}
+          CHECK: ${{ needs.check.result }}
+        run: |
+          echo "plan: $PLAN, check: $CHECK"
+          [ "$PLAN" = success ] && [ "$CHECK" = success ]

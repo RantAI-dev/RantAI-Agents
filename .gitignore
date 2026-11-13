@@ -100,3 +100,8 @@ tests/bench-kb/corpus/**/*.jpeg
 tests/bench-kb/corpus/**/*.png
 tests/bench-kb/corpus/**/*.webp
 tests/bench-kb/corpus/**/*.zip
+
+# RantAI guidelines
+.plans/
+.t3/
+target/

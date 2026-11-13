@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# The subject line has the same form in every RantAI repository:  type(scope): summary
+set -uo pipefail
+subject="$(sed -n '1p' "$1")"
+case "$subject" in Merge\ *|Revert\ \"*|fixup!\ *|squash!\ *|amend!\ *) exit 0 ;; esac
+if [ "${#subject}" -le 72 ] && printf '%s' "$subject" |
+  grep -Eq '^(feat|fix|refactor|perf|test|docs|build|ci|chore|revert)(\([a-z0-9][a-z0-9._/-]*\))?!?: [^ ].*[^. ]$'; then
+  exit 0
+fi
+cat >&2 <<EOF
+commit-msg: rejected "$subject"
+Write the subject as  type(scope): summary  in 72 characters or fewer, with no full stop at the end.
+  type   one of feat fix refactor perf test docs build ci chore revert
+  scope  optional, lower case: the area changed
+Example:  fix(billing): round tax per line
+EOF
+exit 1

@@ -1,0 +1,29 @@
+# The error codes this API can return. One row per code:  code <TAB> HTTP status <TAB> message
+# scripts/error-codes.sh checks this file and writes the source files named by the @emit lines.
+#
+#   - Add a row. Never rename or delete one and never change its status: clients branch on both.
+#     A code that is no longer returned gets the word "deprecated" in a fourth column.
+#   - The first thirteen rows are the same in every RantAI repository. Leave them as they are.
+#   - A code is lower snake_case. Add one only when a client would act differently on it;
+#     otherwise use a base code and say what happened in the message.
+#   - The message is the default text for the code: a full sentence, no internal detail.
+#
+# Where the generated code goes, one line per target. Languages: ts, rust, python. Example:
+#   @emit ts src/contracts/error-codes.ts
+#   @emit rust rust/crates/api/src/error_codes.rs
+# A published API that already returns a status outside the standard table names it here:
+#   @allow-status 422
+invalid_request	400	The request is not valid.
+unauthenticated	401	Sign in or send a valid API key.
+permission_denied	403	You do not have permission to do this.
+not_found	404	Not found.
+method_not_allowed	405	This method is not allowed here.
+conflict	409	The request conflicts with the current state.
+payload_too_large	413	The request body is too large.
+unsupported_media_type	415	This content type is not supported.
+rate_limited	429	Too many requests. Try again later.
+internal	500	Something went wrong on our side.
+upstream_failed	502	A service we depend on returned an error.
+unavailable	503	The service is temporarily unavailable. Try again later.
+timeout	504	The request took too long.
+@emit rust rust/crates/agents-contracts/src/error_codes.rs

@@ -1,0 +1,6 @@
+# name<TAB>command that prints one whole number. See scripts/ratchet.sh.
+# scripts/audit.sh prints ready-made lines for the stacks it finds in this repository.
+ts-any	git grep -nE ':[[:space:]]*any\b|\bas any\b' -- '*.ts' '*.tsx' ':!*.d.ts' | wc -l
+ts-suppress	git grep -nE '@ts-(ignore|expect-error|nocheck)|(eslint|oxlint)-disable|biome-ignore' -- '*.ts' '*.tsx' | wc -l
+rust-unwrap	git grep -nE '\.(unwrap|expect)\(' -- '*.rs' ':!tests/*' ':!*/tests/*' ':!*/benches/*' | wc -l
+rust-allow	git grep -nE '#!?\[allow\(' -- '*.rs' | grep -vc reason

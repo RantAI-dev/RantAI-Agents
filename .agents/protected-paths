@@ -1,0 +1,20 @@
+# One regex per line. scripts/guard-diff.sh blocks a worker's diff that touches a match.
+# These are the files that define "done" or "allowed". Changing one is the owner's decision.
+^\.agents/protected-paths$
+^scripts/(check|guard-diff|ratchet|merge-lane|backlog|tracker-lark|file-size|error-codes)\.sh$
+^\.agents/ratchet\.(tsv|lock)$
+^\.agents/size-(baseline\.tsv|exempt)$
+^\.agents/risky-paths$
+^docs/conventions\.md$
+^\.github/
+^\.githooks/
+^tests/contract/
+# Add this repo's own: migrations already applied, lint and type-check configs, the lockfile.
+# ^migrations/
+# (^|/)(biome\.json|tsconfig[^/]*\.json|clippy\.toml|ruff\.toml)$
+# RantAI-Agents
+^prisma/migrations/
+^rust/Cargo\.toml$
+^rust/crates/agents-core/tests/boundary\.rs$
+^port/(oracle|cases)/
+^(tsconfig[^/]*\.json|vitest\.config\.ts|eslint\.config\.mjs)$

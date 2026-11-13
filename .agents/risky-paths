@@ -1,0 +1,16 @@
+# One regex per line. A change that touches a match goes to the owner lane: a person approves it,
+# by reading the plan and the evidence, before it merges. Workers may still edit these files when a
+# brief says so; this list decides who signs off, not who may write.
+# Fill in this repository's own paths. Examples:
+# (^|/)auth/
+# (^|/)(billing|payments?)/
+# (^|/)tenan(t|cy)
+# (^|/)migrations/
+# ^(infra|deploy)/
+# ^docker-compose.*\.ya?ml$
+(^|/)(auth|mobile-auth|org-context)(\.ts|/)
+(^|/)api/auth/
+^prisma/
+(^|/)tenan(t|cy)
+^rust/crates/agents-auth/
+^(Dockerfile|docker-compose[^/]*\.ya?ml|docker/)

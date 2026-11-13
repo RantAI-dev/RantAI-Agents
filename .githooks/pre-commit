@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Fast checks only. The full gate is scripts/check.sh, run before handoff and again in CI.
+exec scripts/check.sh --staged

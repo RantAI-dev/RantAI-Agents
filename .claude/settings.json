@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(scripts/check.sh*)",
+      "Bash(scripts/guard-diff.sh*)",
+      "Bash(scripts/setup-worktree.sh*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git branch*)",
+      "Bash(git fetch*)",
+      "Bash(git switch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git worktree list*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr diff*)",
+      "Bash(gh pr checks*)",
+      "Bash(gh run view*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push origin main*)",
+      "Bash(git push origin HEAD:main*)",
+      "Bash(git commit * --no-verify*)",
+      "Bash(git commit --no-verify*)",
+      "Bash(git reset --hard*)",
+      "Bash(gh pr merge --admin*)",
+      "Read(.env)",
+      "Read(.env.*)"
+    ]
+  }
+}
