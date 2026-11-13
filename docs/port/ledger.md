@@ -37,7 +37,7 @@ Paths are relative to `src/` in this repository; paths starting with `apps/cloud
 |---|---|---|---|---|---|---|
 | `app/api/assistants/**` and the cloud overrides, `/api/user/default-assistant`, `/api/mobile/assistants/**` | `agents-api/src/assistants/` | Phase A assistants rows, `agents-auth`, `agents-store` | `port/cases/http/assistants.jsonl` | 0 | todo | |
 | `app/api/assistants/wizard/stream` | `agents-api/src/assistants/wizard.rs` | `agents-llm`, the UI-stream encoder | `http/wizard-stream.jsonl` | 0 | todo | |
-| `app/api/dashboard/memory/**`, `/api/mobile/memories/**` | `agents-api/src/memory/` | Phase A memory rows, `agents-store` | `http/memory.jsonl` | 0 | todo | |
+| `app/api/dashboard/memory/**`, `/api/mobile/memories/**` | `agents-server/src/routes/memory.rs` | agents-store, agents-auth | `agents-server/tests/memory_routes.rs` (contract) | 3 tests | in progress: built and tested; **not cut over** until chat is, because clearing SEMANTIC no longer reaches SurrealDB | differences 9–11 |
 | Memory store: `UserMemory` rows, SurrealDB `conversation_memory`, `lib/rag/embeddings.ts` | `agents-store/src/memory/` | none | `http/memory-drain.jsonl` | 0 | todo | per-user lock (see plan Phase C) |
 | `app/api/dashboard/chat/sessions/**` | `agents-api/src/sessions/` | `agents-store` | `http/sessions.jsonl` | 0 | todo | |
 | `POST /api/chat`, plain capability (D2) | `agents-api/src/chat/` | everything above, `agents-llm` | `http/chat-plain.jsonl` | 0 | todo | |
@@ -47,3 +47,11 @@ Paths are relative to `src/` in this repository; paths starting with `apps/cloud
 
 Rules: a row moves to "parity green" only on the output of `scripts/check.sh`. Nobody ports a module
 whose dependencies are not yet "parity green". No feature work lands in a module that is "in progress".
+
+## Shared server pieces
+
+| Piece | Path | Status |
+|---|---|---|
+| Request auth (session cookie, mobile Bearer, suspension check every request) and active organisation | `agents-server/src/auth.rs` | built; tests in `memory_routes.rs`, seen failing with the suspension check removed |
+| Standard error body, request id, JSON body extractor, 404 fallback | `agents-server/src/http/` | built |
+| Store: assistants, bindings, defaults, orgs, users, memory | `agents-store` | built; integration tests seen failing with the CAS and the tenant filter removed |

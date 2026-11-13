@@ -5,6 +5,8 @@ pub struct Config {
     pub database_url: String,
     pub bind: String,
     pub db_max_connections: u32,
+    /// `AUTH_SECRET` then `NEXTAUTH_SECRET`, the names Auth.js reads. At least one is required.
+    pub auth_secrets: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -33,10 +35,23 @@ impl Config {
                 .map_err(|_| ConfigError::NotANumber("AGENTS_DB_MAX_CONNECTIONS"))?,
             None => 10,
         };
+        let mut auth_secrets: Vec<String> = Vec::new();
+        for s in ["AUTH_SECRET", "NEXTAUTH_SECRET"]
+            .into_iter()
+            .filter_map(var)
+        {
+            if !auth_secrets.contains(&s) {
+                auth_secrets.push(s);
+            }
+        }
+        if auth_secrets.is_empty() {
+            return Err(ConfigError::Missing("AUTH_SECRET or NEXTAUTH_SECRET"));
+        }
         Ok(Self {
             database_url,
             bind,
             db_max_connections,
+            auth_secrets,
         })
     }
 }

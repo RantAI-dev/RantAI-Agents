@@ -28,7 +28,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .connect_lazy(&config.database_url)?;
     let listener = tokio::net::TcpListener::bind(&config.bind).await?;
     tracing::info!(bind = %config.bind, "agents-server listening");
-    axum::serve(listener, app(AppState { db }))
+    let auth = agents_server::auth::AuthConfig {
+        secrets: config.auth_secrets.clone(),
+    };
+    axum::serve(listener, app(AppState { db, auth }))
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())

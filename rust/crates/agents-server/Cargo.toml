@@ -25,6 +25,12 @@ tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 sqlx.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tower.workspace = true
+http-body-util.workspace = true
+agents-auth.workspace = true
 
 [lints]
 workspace = true

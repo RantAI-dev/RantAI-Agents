@@ -5,5 +5,6 @@
 
 pub mod assistant;
 pub mod memory;
+pub mod org;
 pub mod prompt;
 pub mod validation;
