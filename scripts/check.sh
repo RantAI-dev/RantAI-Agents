@@ -37,7 +37,9 @@ ts_fast()  { :; }
 
 # rust: the Rust port (docs/port/plan.md). The whole workspace is one part until it has more crates.
 rust_paths='^rust/'
-rust_full() { (cd rust && cargo fmt --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked); }
+# agents-store tests use TEST_DATABASE_URL (a migrated database); they skip locally without it
+# and fail in CI without it.
+rust_full() { (cd rust && TEST_DATABASE_URL="${TEST_DATABASE_URL:-${DATABASE_URL:-}}" && export TEST_DATABASE_URL && cargo fmt --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked); }
 rust_fast() { (cd rust && cargo fmt --check); }
 
 PARTS=(ts rust)

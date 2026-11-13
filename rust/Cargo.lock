@@ -70,12 +70,13 @@ dependencies = [
 name = "agents-store"
 version = "0.1.0"
 dependencies = [
- "agents-core",
  "chrono",
  "serde",
  "serde_json",
  "sqlx",
  "thiserror",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
