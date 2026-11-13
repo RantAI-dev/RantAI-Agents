@@ -34,6 +34,7 @@ Paths are relative to `src/` in this repository; paths starting with `apps/cloud
 
 | Surface (old path) | New path | Depends on | Case file | Cases | Status | Differences |
 |---|---|---|---|---|---|---|
+| `lib/llm/provider.ts`, `lib/llm/house-models.ts`, the `streamText` call and the tool loop in `features/chat-public/service.ts` | `rust/crates/agents-llm/src/{provider,types,sse,client,agent_loop}.rs` | `agents-contracts` (the error codes) | `port/cases/http/chat-stream.jsonl` | 0 | in progress | 3, 4, 5, 6, 7 |
 | `app/api/assistants/**` and the cloud overrides, `/api/user/default-assistant`, `/api/mobile/assistants/**` | `agents-api/src/assistants/` | Phase A assistants rows, `agents-auth`, `agents-store` | `port/cases/http/assistants.jsonl` | 0 | todo | |
 | `app/api/assistants/wizard/stream` | `agents-api/src/assistants/wizard.rs` | `agents-llm`, the UI-stream encoder | `http/wizard-stream.jsonl` | 0 | todo | |
 | `app/api/dashboard/memory/**`, `/api/mobile/memories/**` | `agents-api/src/memory/` | Phase A memory rows, `agents-store` | `http/memory.jsonl` | 0 | todo | |
