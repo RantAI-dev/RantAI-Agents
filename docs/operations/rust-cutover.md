@@ -10,7 +10,7 @@ of Rust.
 | Variable | Meaning |
 |---|---|
 | `RUST_API_URL` | Where agents-server listens, for example `http://127.0.0.1:8090`. When it is unset or blank, nothing is routed: Next answers every request, as it did before. |
-| `RUST_ROUTES` | Comma-separated route groups: `assistants`, `sessions`, `memory`, `chat`. A group that is not listed stays in Next. Unknown names are ignored. |
+| `RUST_ROUTES` | Comma-separated route groups: `assistants`, `sessions`, `memory`, `chat`, `auth`, `org`, `sso`, `sharing`, `agent-api`. A group that is not listed stays in Next. Unknown names are ignored. `auth` never carries NextAuth's `/api/auth/session` or `/api/auth/csrf`, and `agent-api` stays off until the S7 slice serves its routes. |
 
 ```sh
 # .env (the Next.js process)

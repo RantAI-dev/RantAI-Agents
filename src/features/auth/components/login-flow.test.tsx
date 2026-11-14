@@ -19,9 +19,13 @@ function errorResponse(status: number, code: string, message: string, headers?: 
 }
 
 const fetchMock = vi.fn()
+const nextAuth = vi.hoisted(() => ({ signIn: vi.fn() }))
+
+vi.mock("next-auth/react", () => ({ signIn: nextAuth.signIn }))
 
 beforeEach(() => {
   fetchMock.mockReset()
+  nextAuth.signIn.mockReset()
   vi.stubGlobal("fetch", fetchMock)
 })
 
@@ -151,6 +155,37 @@ describe("LoginFlow", () => {
   it("shows the sentence for an SSO failure the provider sent us back with", () => {
     render(<LoginFlow initialError="account_link_refused" navigate={vi.fn()} />)
     expect(screen.getByRole("alert").textContent).toMatch(/cannot be linked to this identity provider/i)
+  })
+
+  it("falls back to the password form when the deployment has no Rust sign-in yet", async () => {
+    // 404: RUST_ROUTES has no `auth` group, so /api/auth/sso/discover does not exist.
+    fetchMock.mockResolvedValueOnce(
+      errorResponse(404, "not_found", "This resource does not exist."),
+    )
+    render(<LoginFlow navigate={vi.fn()} />)
+
+    await enterEmail("ana@acme.com")
+    expect(await screen.findByLabelText("Password")).not.toBeNull()
+  })
+
+  it("falls back to the NextAuth credentials provider when /api/auth/login is absent", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ method: "password", providerId: null, providerName: null, startUrl: null }))
+      .mockResolvedValueOnce(errorResponse(404, "not_found", "This resource does not exist."))
+    nextAuth.signIn.mockResolvedValueOnce({ error: undefined, ok: true })
+    const navigate = vi.fn()
+    render(<LoginFlow navigate={navigate} />)
+
+    await enterEmail("ana@acme.com")
+    fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "password123" } })
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }))
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/dashboard"))
+    expect(nextAuth.signIn).toHaveBeenCalledWith("credentials", {
+      email: "ana@acme.com",
+      password: "password123",
+      redirect: false,
+    })
   })
 
   it("keeps the email step when the sign-in service cannot be reached", async () => {

@@ -63,9 +63,18 @@ export function useApiResource<T>(path: string | null): Resource<T> {
 }
 
 /** A cursor list (`{ data, nextCursor }`) that appends the next page and keeps what it has. */
-export function useCursorPage<T>(
-  basePath: string | null,
-): ResourceState<T[]> & { nextCursor: string | null; reload: () => void; loadMore: () => void; loadingMore: boolean } {
+export interface CursorPageResource<T> {
+  /** Never null: an empty page is an empty list, not "not loaded yet". */
+  data: T[]
+  error: string | null
+  loading: boolean
+  nextCursor: string | null
+  loadingMore: boolean
+  reload: () => void
+  loadMore: () => void
+}
+
+export function useCursorPage<T>(basePath: string | null): CursorPageResource<T> {
   const orgFetch = useOrgFetch()
   const [rows, setRows] = useState<T[]>([])
   const [nextCursor, setNextCursor] = useState<string | null>(null)

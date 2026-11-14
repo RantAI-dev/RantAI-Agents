@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
-import { MoreHorizontal, Pencil, Share2, Trash2 } from "@/lib/icons"
+import { MoreHorizontal, Pencil, Link2, Trash2 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -192,7 +192,7 @@ export function ChatSectionContent({
                         })
                       }
                     >
-                      <Share2 className="mr-2 h-3.5 w-3.5" />
+                      <Link2 className="mr-2 h-3.5 w-3.5" />
                       Share
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />

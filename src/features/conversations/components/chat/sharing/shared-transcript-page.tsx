@@ -4,7 +4,7 @@ import { use, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
-import { AlertCircle, ArrowLeft, Loader2, Lock, MessageSquarePlus, User } from "@/lib/icons"
+import { AlertCircle, ArrowLeft, Loader2, ShieldAlert, MessageSquarePlus, User } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { useOrgFetch } from "@/hooks/use-organization"
@@ -71,7 +71,7 @@ export default function SharedTranscriptPage({
     return (
       <div className="flex h-full items-center justify-center p-6">
         <div className="max-w-md space-y-3 text-center">
-          <Lock className="mx-auto h-8 w-8 text-muted-foreground" />
+          <ShieldAlert className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-destructive">{transcript.error ?? "This chat is not available."}</p>
           <Button variant="outline" asChild>
             <Link href="/dashboard/chat/shared">Back to shared chats</Link>
@@ -114,7 +114,7 @@ export default function SharedTranscriptPage({
       {needsAccess && (
         <div className="border-b bg-muted/40 px-4 py-3 text-sm">
           <p className="flex items-center gap-2 font-medium">
-            <Lock className="h-4 w-4" />
+            <ShieldAlert className="h-4 w-4" />
             You need access to {chat.assistantName}
           </p>
           <p className="mt-1 text-muted-foreground">

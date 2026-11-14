@@ -110,7 +110,7 @@ export const RUST_ROUTES: readonly RustRoute[] = [
   // routes answer until that slice lands; the group is listed so an operator can cut them over
   // with RUST_ROUTES, and `RUST_API_URL` being unset keeps everything in Next until then.
   { group: "agent-api", path: "/api/dashboard/agent-api-keys", methods: ["GET", "POST"] },
-  { group: "agent-api", path: "/api/dashboard/agent-api-keys/{id}", methods: GET_PUT.concat("DELETE") },
+  { group: "agent-api", path: "/api/dashboard/agent-api-keys/{id}", methods: ["GET", "PUT", "DELETE"] },
   { group: "agent-api", path: "/v1/chat/completions", methods: ["POST"] },
   { group: "agent-api", path: "/v1/agents/{id}/ws", methods: ["GET"] },
 ]

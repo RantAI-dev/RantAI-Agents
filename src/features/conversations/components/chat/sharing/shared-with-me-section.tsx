@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { formatDistanceToNow } from "date-fns"
-import { Share2, Users } from "@/lib/icons"
+import { Link2, Users } from "@/lib/icons"
 import { cn } from "@/lib/utils"
 import { useApiResource } from "@/hooks/use-api-resource"
 import {
@@ -13,8 +13,8 @@ import {
 
 /**
  * "Shared with me" in the chat sidebar: the chats other people shared with this caller through a
- * unit, the company, or directly. It renders nothing when there is nothing to show, so the
- * sidebar stays as it was for someone nobody shared with.
+ * unit, the company, or directly. The heading links to the full list, so it is reachable even
+ * before anyone shares anything; the list itself stays empty then.
  */
 export function SharedWithMeSection() {
   const pathname = usePathname()
@@ -23,14 +23,23 @@ export function SharedWithMeSection() {
   )
 
   const rows = shared.data?.data ?? []
-  if (rows.length === 0) return null
+  const allHref = "/dashboard/chat/shared"
 
   return (
     <div className="mt-3 space-y-1">
-      <p className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium uppercase tracking-wider text-sidebar-muted">
-        <Share2 className="h-3 w-3" />
+      <Link
+        href={allHref}
+        aria-current={pathname === allHref ? "page" : undefined}
+        className={cn(
+          "flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium uppercase tracking-wider transition-colors",
+          pathname === allHref
+            ? "text-sidebar-foreground"
+            : "text-sidebar-muted hover:text-sidebar-foreground",
+        )}
+      >
+        <Link2 className="h-3 w-3" />
         Shared with me
-      </p>
+      </Link>
       {rows.map((session) => {
         const href = `/dashboard/chat/shared/${session.id}`
         const active = pathname === href
