@@ -19,29 +19,33 @@ pub const OPENROUTER_BASE_URL: &str = "https://openrouter.ai/api/v1";
 /// (`api.minimaxi.com/.chat`) are not the default.
 pub const MINIMAX_BASE_URL: &str = "https://api.minimax.io/v1";
 
-/// The white-labelled house model ids and the upstream model each one stands for.
+/// The white-labelled house model ids, their display names and the upstream model each one
+/// stands for.
 ///
 /// The display names, the synthetic prices and the context windows live in `house-models.ts` and
 /// belong to `agents-core` (see the port ledger); routing only needs the id and the upstream
-/// name.
-const HOUSE_BACKEND_MODELS: &[(&str, &str)] = &[
-    ("rantai/nano", "MiniMax-M2.5"),
-    ("rantai/swift", "MiniMax-M2.7"),
-    ("rantai/prime", "MiniMax-M3"),
+/// name, and the prompt needs the display name.
+const HOUSE_BACKEND_MODELS: &[(&str, &str, &str)] = &[
+    ("rantai/nano", "RantAI Nano", "MiniMax-M2.5"),
+    ("rantai/swift", "RantAI Swift", "MiniMax-M2.7"),
+    ("rantai/prime", "RantAI Prime", "MiniMax-M3"),
 ];
 
 /// Whether this id is a white-labelled house model served by a direct provider.
 #[must_use]
 pub fn is_house_model(id: &str) -> bool {
-    HOUSE_BACKEND_MODELS.iter().any(|(house, _)| *house == id)
+    HOUSE_BACKEND_MODELS
+        .iter()
+        .any(|(house, _, _)| *house == id)
 }
 
-/// The white-labelled house model ids and the upstream model each one stands for.
+/// The white-labelled house model ids, their display names and the upstream model each
+/// one stands for.
 ///
-/// The display names and the context windows live with the catalogue (the cloud edition
-/// owns it); a caller that only needs the ids reads them here.
+/// The context windows live with the catalogue (the cloud edition owns it); a caller that
+/// only needs the ids reads them here.
 #[must_use]
-pub fn house_models() -> &'static [(&'static str, &'static str)] {
+pub fn house_models() -> &'static [(&'static str, &'static str, &'static str)] {
     HOUSE_BACKEND_MODELS
 }
 
@@ -50,8 +54,17 @@ pub fn house_models() -> &'static [(&'static str, &'static str)] {
 pub fn house_backend_model(id: &str) -> &str {
     HOUSE_BACKEND_MODELS
         .iter()
-        .find(|(house, _)| *house == id)
-        .map_or(id, |(_, backend)| *backend)
+        .find(|(house, _, _)| *house == id)
+        .map_or(id, |(_, _, backend)| *backend)
+}
+
+/// The name a house model is shown under. Other ids have none.
+#[must_use]
+pub fn house_model_name(id: &str) -> Option<&'static str> {
+    HOUSE_BACKEND_MODELS
+        .iter()
+        .find(|(house, _, _)| *house == id)
+        .map(|(_, name, _)| *name)
 }
 
 /// Where a chat completion goes.
@@ -191,11 +204,19 @@ mod tests {
 
     #[test]
     fn every_house_id_has_an_upstream_name() -> Result<(), LlmError> {
-        for (house, backend) in HOUSE_BACKEND_MODELS {
+        for (house, _, backend) in HOUSE_BACKEND_MODELS {
             let route = route(house, &config())?;
             assert_eq!(&route.model, backend);
         }
         Ok(())
+    }
+
+    #[test]
+    fn the_house_models_have_the_names_the_users_see() {
+        assert_eq!(house_model_name("rantai/nano"), Some("RantAI Nano"));
+        assert_eq!(house_model_name("rantai/swift"), Some("RantAI Swift"));
+        assert_eq!(house_model_name("rantai/prime"), Some("RantAI Prime"));
+        assert_eq!(house_model_name("openai/gpt-4o-mini"), None);
     }
 
     #[test]

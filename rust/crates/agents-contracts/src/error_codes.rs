@@ -18,6 +18,7 @@ pub enum ErrorCode {
     UpstreamFailed,
     Unavailable,
     Timeout,
+    CapabilityNotPorted,
 }
 
 #[rustfmt::skip]
@@ -37,6 +38,7 @@ impl ErrorCode {
         ErrorCode::UpstreamFailed,
         ErrorCode::Unavailable,
         ErrorCode::Timeout,
+        ErrorCode::CapabilityNotPorted,
     ];
 
     /// The string sent to clients.
@@ -56,6 +58,7 @@ impl ErrorCode {
             Self::UpstreamFailed => "upstream_failed",
             Self::Unavailable => "unavailable",
             Self::Timeout => "timeout",
+            Self::CapabilityNotPorted => "capability_not_ported",
         }
     }
 
@@ -77,6 +80,7 @@ impl ErrorCode {
             Self::UpstreamFailed => 502,
             Self::Unavailable => 503,
             Self::Timeout => 504,
+            Self::CapabilityNotPorted => 409,
         }
     }
 
@@ -98,6 +102,7 @@ impl ErrorCode {
             Self::UpstreamFailed => "A service we depend on returned an error.",
             Self::Unavailable => "The service is temporarily unavailable. Try again later.",
             Self::Timeout => "The request took too long.",
+            Self::CapabilityNotPorted => "This capability is not ported yet.",
         }
     }
 }

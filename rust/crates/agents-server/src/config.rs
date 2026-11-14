@@ -3,7 +3,7 @@
 use agents_llm::provider::{self, Provider, ProviderConfig, Route};
 use agents_llm::types::LlmError;
 
-/// Where the wizard's model is served from.
+/// Where the wizard's and the chat's model is served from.
 ///
 /// The provider is chosen by the model id, the way `provider::route` does it. The two
 /// overrides have no environment variable: the old app had none, so only an embedding
@@ -50,8 +50,14 @@ pub struct Config {
     pub db_max_connections: u32,
     /// `AUTH_SECRET` then `NEXTAUTH_SECRET`, the names Auth.js reads. At least one is required.
     pub auth_secrets: Vec<String>,
-    /// Where the wizard's model is served from.
+    /// Where the wizard's and the chat's model is served from.
     pub llm: LlmSettings,
+    /// How many model calls one chat may make. The platform default, the way
+    /// `resolveMaxSteps` decided it.
+    pub chat_max_steps: u32,
+    /// Whether the identity and date block is part of the system prompt
+    /// (`PLATFORM_CONTEXT_INSTRUCTION=off` removes it).
+    pub platform_context: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -64,6 +70,18 @@ pub enum ConfigError {
 
 fn var(name: &'static str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty())
+}
+
+/// A positive whole number from the environment.
+fn var_count(name: &'static str, default: u32) -> Result<u32, ConfigError> {
+    match var(name) {
+        Some(raw) => raw
+            .parse::<u32>()
+            .ok()
+            .filter(|value| *value > 0)
+            .ok_or(ConfigError::NotANumber(name)),
+        None => Ok(default),
+    }
 }
 
 impl Config {
@@ -101,12 +119,21 @@ impl Config {
                 minimax_base_url: var("MINIMAX_BASE_URL"),
             },
         };
+        let chat_max_steps = var_count("RANTAI_DEFAULT_MAX_STEPS", 20)?;
+        let platform_context = !matches!(
+            var("PLATFORM_CONTEXT_INSTRUCTION")
+                .map(|value| value.trim().to_ascii_lowercase())
+                .as_deref(),
+            Some("off") | Some("false") | Some("0")
+        );
         Ok(Self {
             database_url,
             bind,
             db_max_connections,
             auth_secrets,
             llm,
+            chat_max_steps,
+            platform_context,
         })
     }
 }

@@ -59,6 +59,12 @@ impl ApiError {
         self
     }
 
+    /// The bad fields, when there are any.
+    #[must_use]
+    pub fn errors(&self) -> &[FieldError] {
+        &self.errors
+    }
+
     /// Every bad field, not only the first.
     #[must_use]
     pub fn invalid(errors: Vec<FieldError>) -> Self {

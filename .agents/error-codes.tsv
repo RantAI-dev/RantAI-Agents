@@ -26,4 +26,5 @@ internal	500	Something went wrong on our side.
 upstream_failed	502	A service we depend on returned an error.
 unavailable	503	The service is temporarily unavailable. Try again later.
 timeout	504	The request took too long.
+capability_not_ported	409	This capability is not ported yet.
 @emit rust rust/crates/agents-contracts/src/error_codes.rs
