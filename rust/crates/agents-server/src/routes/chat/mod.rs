@@ -578,7 +578,7 @@ impl ChatRun {
             match memory::drain(&self.db, &self.user_id, &self.now).await {
                 Ok(profile) => {
                     if agents_core::memory::profile::summary_needs_refresh(&profile) {
-                        self.refresh_summary(profile).await;
+                        self.spawn_summary(profile);
                     }
                 }
                 Err(error) => {
@@ -622,19 +622,26 @@ impl ChatRun {
 
     /// Writes the "quick context" summary of the profile.
     ///
-    /// The summary is written by the model, so it runs after the answer and never holds the
-    /// response back.
-    async fn refresh_summary(&self, profile: agents_core::memory::types::UserProfile) {
-        let summary = generate_summary(&self.client, &self.provider, &self.model, &profile).await;
-        let fingerprint = agents_core::memory::profile::profile_content_fingerprint(&profile);
-        if let Err(error) =
-            memory::write_summary(&self.db, &self.user_id, &self.now, &fingerprint, &summary).await
-        {
-            tracing::warn!(error = %error, "the memory summary could not be written");
-        }
+    /// The summary is written by the model, so it runs in its own task: it must never hold
+    /// the answer back.
+    fn spawn_summary(&self, profile: agents_core::memory::types::UserProfile) {
+        let db = self.db.clone();
+        let client = self.client.clone();
+        let provider = self.provider.clone();
+        let model = self.model.clone();
+        let user_id = self.user_id.clone();
+        let now = self.now.clone();
+        tokio::spawn(async move {
+            let summary = generate_summary(&client, &provider, &model, &profile).await;
+            let fingerprint = agents_core::memory::profile::profile_content_fingerprint(&profile);
+            if let Err(error) =
+                memory::write_summary(&db, &user_id, &now, &fingerprint, &summary).await
+            {
+                tracing::warn!(error = %error, "the memory summary could not be written");
+            }
+        });
     }
 }
-
 /// The summary of a profile, as the model writes it.
 async fn generate_summary(
     client: &reqwest::Client,
