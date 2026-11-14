@@ -67,6 +67,9 @@ pub struct ChatHeaders {
 pub struct ChatInput {
     pub body: ChatRequest,
     pub headers: ChatHeaders,
+    /// A message carries a part the plain chat cannot read (a file, a tool call): the chat
+    /// belongs to a capability that is not ported.
+    pub unported_parts: bool,
 }
 
 impl ChatInput {
@@ -105,7 +108,8 @@ pub fn parse(body: &Value, headers: &ChatHeaders) -> Result<ChatInput, ApiError>
     };
 
     let mut errors: Vec<FieldError> = Vec::new();
-    let messages = parse_messages(object.get("messages"), &mut errors);
+    let mut unported_parts = false;
+    let messages = parse_messages(object.get("messages"), &mut errors, &mut unported_parts);
     let request = ChatRequest {
         messages,
         assistant_id: optional_string(object, "assistantId", &mut errors),
@@ -133,11 +137,16 @@ pub fn parse(body: &Value, headers: &ChatHeaders) -> Result<ChatInput, ApiError>
     Ok(ChatInput {
         body: request,
         headers: headers.clone(),
+        unported_parts,
     })
 }
 
 /// The messages of the conversation.
-fn parse_messages(value: Option<&Value>, errors: &mut Vec<FieldError>) -> Vec<ChatMessage> {
+fn parse_messages(
+    value: Option<&Value>,
+    errors: &mut Vec<FieldError>,
+    unported_parts: &mut bool,
+) -> Vec<ChatMessage> {
     let Some(value) = value else {
         errors.push(FieldError::new(
             "/messages",
@@ -195,7 +204,7 @@ fn parse_messages(value: Option<&Value>, errors: &mut Vec<FieldError>) -> Vec<Ch
             ));
             continue;
         }
-        let content = message_text(object, &pointer, errors);
+        let content = message_text(object, &pointer, errors, unported_parts);
         messages.push(ChatMessage {
             id,
             role,
@@ -208,10 +217,17 @@ fn parse_messages(value: Option<&Value>, errors: &mut Vec<FieldError>) -> Vec<Ch
 }
 
 /// The text of a message: the text parts when it has any, the content otherwise.
+///
+/// The parts follow the AI SDK v6 `UIMessage` kinds. A file or a tool call belongs to a
+/// capability the plain chat does not have, so it sets `unported_parts` (a 409, and the router
+/// sends the chat to the TypeScript service). The parts a provider never reads back (the step
+/// marker, the reasoning, the sources, the data parts) are skipped, as `convertToModelMessages`
+/// skipped them for an OpenAI-compatible provider.
 fn message_text(
     object: &serde_json::Map<String, Value>,
     pointer: &str,
     errors: &mut Vec<FieldError>,
+    unported_parts: &mut bool,
 ) -> String {
     match object.get("parts") {
         Some(Value::Array(parts)) => {
@@ -238,8 +254,10 @@ fn message_text(
                             }
                         }
                     }
-                    // Every other part kind (a file, a tool call) belongs to a capability the
-                    // plain chat does not have.
+                    Some("file" | "dynamic-tool") => *unported_parts = true,
+                    Some(kind) if kind.starts_with("tool-") => *unported_parts = true,
+                    Some("step-start" | "reasoning" | "source-url" | "source-document") => {}
+                    Some(kind) if kind.starts_with("data-") => {}
                     Some(other) => errors.push(FieldError::new(
                         format!("{pointer}/parts/{index}/type"),
                         "not_allowed",
@@ -461,6 +479,49 @@ mod tests {
         assert_eq!(
             error.errors().first().map(|e| e.field.as_str()),
             Some("/messages/0/role")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_file_or_a_tool_part_is_a_capability_not_a_bad_request() -> R {
+        for part in [
+            json!({"type": "file", "mediaType": "image/png", "url": "data:image/png;base64,AA"}),
+            json!({"type": "tool-saveMemory", "toolCallId": "c1", "state": "output-available"}),
+            json!({"type": "dynamic-tool", "toolName": "x", "toolCallId": "c2"}),
+        ] {
+            let input = parse_ok(json!({
+                "messages": [{"id": "m1", "role": "user", "parts": [part]}],
+            }))
+            .map_err(|error| error.code.as_str().to_owned())?;
+            assert!(
+                input.unported_parts,
+                "a part the plain chat cannot read routes the chat away"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn the_parts_a_model_does_not_read_are_skipped() -> R {
+        let input = parse_ok(json!({
+            "messages": [{
+                "id": "m1",
+                "role": "assistant",
+                "parts": [
+                    {"type": "step-start"},
+                    {"type": "reasoning", "text": "hmm"},
+                    {"type": "text", "text": "the answer"},
+                    {"type": "source-url", "sourceId": "s1", "url": "https://example.com"},
+                    {"type": "data-usage", "data": {}},
+                ],
+            }],
+        }))
+        .map_err(|error| error.code.as_str().to_owned())?;
+        assert!(!input.unported_parts);
+        assert_eq!(
+            input.body.messages.first().map(|m| m.content.as_str()),
+            Some("the answer")
         );
         Ok(())
     }

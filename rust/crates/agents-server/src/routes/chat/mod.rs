@@ -382,6 +382,9 @@ async fn check_capabilities(
     if input.use_knowledge_base() == Some(true) {
         return Err(not_ported());
     }
+    if input.unported_parts {
+        return Err(not_ported());
+    }
 
     let Some(assistant) = assistant else {
         // Without an assistant there is no knowledge base and no tool either.

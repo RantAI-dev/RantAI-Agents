@@ -478,6 +478,26 @@ async fn an_assistant_with_a_knowledge_base_or_tools_is_not_ported_yet() -> R {
         text.contains("\"code\":\"capability_not_ported\""),
         "{text}"
     );
+
+    // A message whose file travels as a part, the way the SDK's own transport sends it: the
+    // model is never called with the file dropped.
+    let with_part = json!({
+        "messages": [{"id": "m1", "role": "user", "parts": [
+            {"type": "text", "text": "what is in this picture?"},
+            {"type": "file", "mediaType": "image/png", "url": "data:image/png;base64,AA"},
+        ]}],
+        "assistantId": plain,
+    });
+    let (status, _headers, text) = send_raw(
+        &app,
+        "POST",
+        "/api/chat",
+        Some(&bearer(&user_id)?),
+        Some(with_part),
+    )
+    .await?;
+    assert_eq!(status, 409, "{text}");
+    assert!(stub.requests()?.is_empty(), "the model must not be called");
     Ok(())
 }
 
