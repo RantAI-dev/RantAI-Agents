@@ -59,13 +59,15 @@ pub fn router_over(
     llm: LlmSettings,
 ) -> Router {
     let state = AppState {
-        db: db.clone(),
-        auth: AuthConfig {
-            secrets: vec![SECRET.to_owned()],
-        },
         policy,
         wizard,
         llm,
+        ..AppState::new(
+            db.clone(),
+            AuthConfig {
+                secrets: vec![SECRET.to_owned()],
+            },
+        )
     };
     app(state)
 }

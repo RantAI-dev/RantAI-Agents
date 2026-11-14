@@ -33,6 +33,28 @@ impl Default for MemoryConfig {
     }
 }
 
+impl MemoryConfig {
+    /// Reads the column the way `runChat` did: a flag that is not `false` is on, and a field
+    /// of the wrong type leaves the flag alone.
+    ///
+    /// A row written before the column was typed still loads: nothing is rejected, a field that
+    /// cannot be read is simply not there.
+    #[must_use]
+    pub fn from_json(value: &serde_json::Value) -> Self {
+        let flag = |key: &str| value.get(key) != Some(&serde_json::Value::Bool(false));
+        Self {
+            enabled: flag("enabled"),
+            working_memory: flag("workingMemory"),
+            semantic_recall: flag("semanticRecall"),
+            long_term_profile: flag("longTermProfile"),
+            memory_instructions: value
+                .get("memoryInstructions")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ReasoningEffort {
@@ -49,6 +71,20 @@ pub enum ResponseFormat {
     Markdown,
     Concise,
     Detailed,
+}
+
+impl ResponseFormat {
+    /// The name the column carries.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Json => "json",
+            Self::Markdown => "markdown",
+            Self::Concise => "concise",
+            Self::Detailed => "detailed",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -68,6 +104,36 @@ pub struct ModelConfig {
     pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<ResponseFormat>,
+}
+
+impl ModelConfig {
+    /// Reads the column leniently: a field of the wrong type is left out, not an error.
+    ///
+    /// A row written before the column was typed still works: the parts that can be read are
+    /// used, the rest are as if they were never set.
+    #[must_use]
+    pub fn from_json(value: &serde_json::Value) -> Self {
+        let number = |key: &str| value.get(key).and_then(serde_json::Value::as_f64);
+        let count = |key: &str| {
+            value
+                .get(key)
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|number| u32::try_from(number).ok())
+        };
+        Self {
+            temperature: number("temperature"),
+            top_p: number("topP"),
+            max_tokens: count("maxTokens"),
+            presence_penalty: number("presencePenalty"),
+            frequency_penalty: number("frequencyPenalty"),
+            reasoning_effort: value
+                .get("reasoningEffort")
+                .and_then(|value| serde_json::from_value(value.clone()).ok()),
+            response_format: value
+                .get("responseFormat")
+                .and_then(|value| serde_json::from_value(value.clone()).ok()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -210,5 +276,30 @@ mod tests {
             errs.first().map(|e| e.field.as_str()),
             Some("/modelConfig/temperature")
         );
+    }
+
+    #[test]
+    fn a_field_of_the_wrong_type_is_left_out() {
+        let c = ModelConfig::from_json(&serde_json::json!({
+            "temperature": "hot",
+            "topP": 0.9,
+            "maxTokens": 256,
+            "responseFormat": "json",
+        }));
+        assert_eq!(c.temperature, None);
+        assert_eq!(c.top_p, Some(0.9));
+        assert_eq!(c.max_tokens, Some(256));
+        assert_eq!(c.response_format, Some(ResponseFormat::Json));
+    }
+
+    #[test]
+    fn the_memory_flags_are_on_unless_they_are_false() {
+        let c =
+            MemoryConfig::from_json(&serde_json::json!({"enabled": false, "semanticRecall": 1}));
+        assert!(!c.enabled);
+        assert!(c.semantic_recall);
+        assert!(c.long_term_profile);
+        let c = MemoryConfig::from_json(&serde_json::json!({}));
+        assert!(c.enabled && c.working_memory && c.semantic_recall && c.long_term_profile);
     }
 }

@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use agents_server::{AppState, app, config::Config};
+use agents_server::{app, config::Config};
 use sqlx::postgres::PgPoolOptions;
 use tracing_subscriber::EnvFilter;
 
@@ -31,21 +31,17 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let auth = agents_server::auth::AuthConfig {
         secrets: config.auth_secrets.clone(),
     };
-    axum::serve(
-        listener,
-        app(AppState {
-            db,
-            auth,
-            policy: std::sync::Arc::new(agents_server::policy::AllowAll),
-            wizard: std::sync::Arc::new(agents_server::policy::ConfiguredWizard::new(
-                agents_server::policy::WIZARD_MODEL_ID,
-                config.llm.provider.minimax_api_key.is_some(),
-            )),
-            llm: config.llm.clone(),
-        }),
-    )
-    .with_graceful_shutdown(shutdown())
-    .await?;
+    let mut state = agents_server::AppState::new(db, auth);
+    state.wizard = std::sync::Arc::new(agents_server::policy::ConfiguredWizard::new(
+        agents_server::policy::WIZARD_MODEL_ID,
+        config.llm.provider.minimax_api_key.is_some(),
+    ));
+    state.llm = config.llm.clone();
+    state.chat_max_steps = config.chat_max_steps;
+    state.platform_context = config.platform_context;
+    axum::serve(listener, app(state))
+        .with_graceful_shutdown(shutdown())
+        .await?;
     Ok(())
 }
 

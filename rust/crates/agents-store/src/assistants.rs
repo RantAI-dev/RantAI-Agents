@@ -667,3 +667,18 @@ pub async fn tool_counts(db: &PgPool, org_id: &str) -> StoreResult<Vec<(String, 
     .fetch_all(db)
     .await?)
 }
+
+/// Whether the assistant has an active chatflow workflow.
+///
+/// The chatflow runs instead of the plain chat (`findActiveChatflowByAssistantId` in the
+/// TypeScript), so the plain chat service must not answer for such an assistant.
+pub async fn has_active_chatflow(db: &PgPool, assistant_id: &str) -> StoreResult<bool> {
+    let found: Option<bool> = sqlx::query_scalar(
+        r#"SELECT EXISTS(SELECT 1 FROM "Workflow"
+           WHERE "assistantId"=$1 AND "mode"='CHATFLOW' AND "status"='ACTIVE')"#,
+    )
+    .bind(assistant_id)
+    .fetch_one(db)
+    .await?;
+    Ok(found.unwrap_or(false))
+}

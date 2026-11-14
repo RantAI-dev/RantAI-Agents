@@ -6,10 +6,15 @@
 //! models the plan may use. The hook runs before the write, so a refused request leaves no row
 //! behind.
 //!
-//! The trait lives here, in the composition root, because it is the caller's business: the
-//! cloud crate implements it and passes it to [`crate::AppState`].
+//! The same goes for a chat: the model policy, the usage and the credits belong to the cloud
+//! edition, so [`ChatMeter`] is the hook it fills in. The open-source edition allows every chat
+//! and records nothing ([`AllowAllChat`]).
+//!
+//! The traits live here, in the composition root, because it is the caller's business: the
+//! cloud crate implements them and passes them to [`crate::AppState`].
 
 use agents_core::org::OrgRole;
+use agents_llm::types::Usage;
 
 use crate::http::ApiError;
 
@@ -160,11 +165,51 @@ impl WizardModel for ConfiguredWizard {
 fn house_model_entries() -> Vec<WizardModelEntry> {
     agents_llm::provider::house_models()
         .iter()
-        .map(|(id, _)| WizardModelEntry {
+        .map(|(id, _, _)| WizardModelEntry {
             id: (*id).to_owned(),
             name: id.rsplit('/').next().unwrap_or(id).to_owned(),
             function_calling: true,
             ctx: None,
         })
         .collect()
+}
+
+/// What the meter gets to look at.
+#[derive(Debug, Clone, Copy)]
+pub struct ChatContext<'a> {
+    /// Who is asking.
+    pub user_id: &'a str,
+    /// The organisation the chat happens in, when it has one.
+    pub organization_id: Option<&'a str>,
+    /// The assistant the chat is with.
+    pub assistant_id: Option<&'a str>,
+    /// The model the chat will use.
+    pub model: &'a str,
+}
+
+/// What a chat may cost: the model policy, the usage and the credits.
+///
+/// The open-source edition has none of the three, so the default allows every chat and records
+/// nothing. The cloud edition refuses a chat its plan does not pay for before the model is
+/// called, and deducts the credits afterwards.
+pub trait ChatMeter: Send + Sync + std::fmt::Debug {
+    /// Called before the model is called.
+    ///
+    /// A refusal is a 403 `permission_denied` (docs/conventions.md does not use 402).
+    fn check(&self, ctx: &ChatContext<'_>) -> Result<(), ApiError>;
+
+    /// Called after the answer, with what the model reported it cost.
+    fn record(&self, ctx: &ChatContext<'_>, usage: Usage);
+}
+
+/// The open-source meter: nothing is refused and nothing is recorded.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AllowAllChat;
+
+impl ChatMeter for AllowAllChat {
+    fn check(&self, _ctx: &ChatContext<'_>) -> Result<(), ApiError> {
+        Ok(())
+    }
+
+    fn record(&self, _ctx: &ChatContext<'_>, _usage: Usage) {}
 }
