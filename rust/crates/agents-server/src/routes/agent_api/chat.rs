@@ -85,7 +85,7 @@ async fn completions(
     ip: ClientIp,
     body: Option<Body<Value>>,
 ) -> Response<AxumBody> {
-    match run(state, headers, ip.text(), body).await {
+    match run(state, headers, ip, body).await {
         Ok(response) => response,
         // A refusal keeps the CORS header: a browser's client has to be able to read it.
         Err(error) => {
@@ -100,7 +100,7 @@ async fn completions(
 async fn run(
     state: AppState,
     headers: HeaderMap,
-    ip: Option<String>,
+    ip: ClientIp,
     body: Option<Body<Value>>,
 ) -> Result<Response<AxumBody>, ApiError> {
     let Some(Body(body)) = body else {
@@ -118,7 +118,7 @@ async fn run(
         return Err(ApiError::new(ErrorCode::Unauthenticated)
             .message("Missing or invalid Authorization header. Expected: Bearer rantai_sk_..."));
     };
-    let caller = key_auth::authenticate(&state, presented, scope, ip.as_deref()).await?;
+    let caller = key_auth::authenticate(&state, presented, scope, ip).await?;
     let input = bodies::parse_completion(&body)?;
 
     // One statement, so two calls at the same moment never lose a count.

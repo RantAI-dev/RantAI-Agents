@@ -64,11 +64,10 @@ async fn upgrade(
     ip: ClientIp,
     ws: WebSocketUpgrade,
 ) -> Response {
-    let ip = ip.text();
     let presented = key_auth::presented(&headers).map(str::to_owned);
     let caller = match presented {
         Some(key) => {
-            match key_auth::authenticate(&state, &key, Scope::ChatStream, ip.as_deref()).await {
+            match key_auth::authenticate(&state, &key, Scope::ChatStream, ip).await {
                 Ok(caller) if caller.key.assistant_id == assistant_id => Some(caller),
                 // A valid key that belongs to another agent does not open this one.
                 Ok(_) => {
@@ -106,7 +105,7 @@ async fn session(
     socket: WebSocket,
     assistant_id: String,
     caller: Option<KeyCaller>,
-    ip: Option<String>,
+    ip: ClientIp,
 ) {
     let limits = state.api.limits;
     let (out, mut incoming) = mpsc::channel::<Out>(32);
@@ -119,17 +118,13 @@ async fn session(
 
     let caller = match caller {
         Some(caller) => caller,
-        None => {
-            match first_message_key(&state, &mut connection.socket, &assistant_id, ip.as_deref())
-                .await
-            {
-                Some(caller) => caller,
-                None => {
-                    close(&mut connection.socket, CLOSE_UNAUTHORISED, "unauthorised").await;
-                    return;
-                }
+        None => match first_message_key(&state, &mut connection.socket, &assistant_id, ip).await {
+            Some(caller) => caller,
+            None => {
+                close(&mut connection.socket, CLOSE_UNAUTHORISED, "unauthorised").await;
+                return;
             }
-        }
+        },
     };
     // One count per socket, as one HTTP call counts once.
     if let Err(error) =
@@ -370,7 +365,7 @@ async fn first_message_key(
     state: &AppState,
     socket: &mut WebSocket,
     assistant_id: &str,
-    ip: Option<&str>,
+    ip: ClientIp,
 ) -> Option<KeyCaller> {
     let waited = tokio::time::timeout(state.api.limits.auth_timeout, async {
         loop {

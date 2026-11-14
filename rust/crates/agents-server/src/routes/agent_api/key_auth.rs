@@ -20,6 +20,7 @@ use agents_store::assistants::{self, AssistantRow};
 
 use crate::AppState;
 use crate::http::ApiError;
+use crate::http::client_ip::ClientIp;
 
 /// What the call needs the key to be allowed to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,14 +85,14 @@ pub fn presented(headers: &HeaderMap) -> Option<&str> {
 
 /// The caller, or the answer the request gets.
 ///
-/// `ip` is the caller's address as `http::client_ip::ClientIp` gives it (the socket peer, or a
-/// hop a trusted proxy vouches for); `None` means the server cannot know it, which a non-empty
-/// allowlist refuses rather than guesses.
+/// `ip` is the caller's address as `http::client_ip::ClientIp` gives it: the socket peer, or a
+/// hop a trusted proxy vouches for. An address the server cannot know is `None` inside it, which
+/// a non-empty allowlist refuses rather than guesses.
 pub async fn authenticate(
     state: &AppState,
     presented_key: &str,
     scope: Scope,
-    ip: Option<&str>,
+    ip: ClientIp,
 ) -> Result<KeyCaller, ApiError> {
     let row = lookup(state, presented_key).await?;
     let row = check_key(row, scope, ip)?;
@@ -125,7 +126,7 @@ async fn lookup(state: &AppState, presented_key: &str) -> Result<ApiKeyRow, ApiE
 
 /// `enabled`, `expiresAt`, the IP allowlist and the scope, in the order the old code checked
 /// them, so one request cannot be used to learn which check refused the other.
-fn check_key(row: ApiKeyRow, scope: Scope, ip: Option<&str>) -> Result<ApiKeyRow, ApiError> {
+fn check_key(row: ApiKeyRow, scope: Scope, ip: ClientIp) -> Result<ApiKeyRow, ApiError> {
     if !row.enabled {
         return Err(invalid());
     }
@@ -135,7 +136,7 @@ fn check_key(row: ApiKeyRow, scope: Scope, ip: Option<&str>) -> Result<ApiKeyRow
     if expired {
         return Err(invalid());
     }
-    if !ip_allowed(&row.ip_whitelist, ip) {
+    if !ip_allowed(&row.ip_whitelist, ip.text().as_deref()) {
         return Err(ApiError::new(ErrorCode::PermissionDenied).message("IP address not allowed"));
     }
     if !scope.allows(&row.scopes) {
