@@ -171,20 +171,12 @@ pub fn parse_iso(text: &str) -> Option<i64> {
         }
     };
     let midnight = date.and_hms_opt(0, 0, 0)?.and_utc().timestamp_millis();
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "a fraction of a second in milliseconds"
-    )]
     let fraction_ms = (fraction * 1000.0).trunc() as i64;
     clip(midnight + hours * 3_600_000 + minutes * 60_000 + seconds * 1000 + fraction_ms - offset)
 }
 
 /// `TimeClip`: an instant outside what a `Date` holds is invalid.
 fn clip(ms: i64) -> Option<i64> {
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "compared with a bound well inside f64"
-    )]
     let fits = (ms as f64).abs() <= MAX_TIME;
     fits.then_some(ms)
 }
@@ -231,10 +223,6 @@ fn truncate(value: f64) -> Option<i64> {
     if !value.is_finite() || value.abs() > MAX_TIME {
         return None;
     }
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "bounded and truncated on purpose"
-    )]
     let whole = value.trunc() as i64;
     Some(whole)
 }
@@ -255,7 +243,6 @@ fn add_to(unit: &str, ms: i64, amount: f64) -> Option<i64> {
 }
 
 fn add_milliseconds(ms: i64, amount: f64) -> Option<i64> {
-    #[allow(clippy::cast_precision_loss, reason = "a Date instant is below 2^53")]
     let sum = ms as f64 + amount;
     clip(truncate(sum)?)
 }
@@ -265,7 +252,6 @@ fn add_days(ms: i64, amount: f64) -> Option<i64> {
         return Some(ms);
     }
     let at = parts(ms)?;
-    #[allow(clippy::cast_precision_loss, reason = "a day of the month")]
     let day = truncate(at.day as f64 + amount)?;
     make(at.year, at.month, day, at.time)
 }
@@ -275,7 +261,6 @@ fn add_months(ms: i64, amount: f64) -> Option<i64> {
         return Some(ms);
     }
     let at = parts(ms)?;
-    #[allow(clippy::cast_precision_loss, reason = "a month index")]
     let month = truncate(at.month as f64 + amount + 1.0)?;
     // Day 0 of the month after the one wanted: the last day of the one wanted.
     let end = make(at.year, month, 0, at.time)?;

@@ -236,10 +236,6 @@ fn format_token(date: &DateTime<Utc>, ms: i64, token: &str) -> Result<String, St
         ('S', _) => {
             let millis = f64::from(date.timestamp_subsec_millis());
             let exponent = i32::try_from(len).unwrap_or(i32::MAX).saturating_sub(3);
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "Math.trunc of a bounded fraction"
-            )]
             let fraction = (millis * 10_f64.powi(exponent)).trunc() as i64;
             pad(fraction, len)
         }

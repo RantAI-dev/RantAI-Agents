@@ -53,10 +53,6 @@ pub(super) fn number(value: f64) -> Value {
         return Value::Null;
     }
     if value.fract() == 0.0 && value.abs() < 9.007_199_254_740_992e15 {
-        #[allow(
-            clippy::cast_possible_truncation,
-            reason = "integral and below 2^53, so exact"
-        )]
         return Value::from(value as i64);
     }
     Value::from(value)

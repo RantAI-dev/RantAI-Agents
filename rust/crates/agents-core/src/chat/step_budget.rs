@@ -36,10 +36,8 @@ pub fn resolve_max_steps(
         })
         .filter(|steps| steps.is_finite() && *steps > 0.0);
     let desired = requested.unwrap_or(f64::from(platform_default));
-    let capped = desired.trunc().max(1.0).min(f64::from(hard_cap));
-    #[allow(clippy::cast_possible_truncation, reason = "clamped to 1..=hard_cap")]
-    let steps = capped as u32;
-    steps
+    // Clamped to `1..=hard_cap`, so the cast is exact.
+    desired.trunc().max(1.0).min(f64::from(hard_cap)) as u32
 }
 
 #[cfg(test)]

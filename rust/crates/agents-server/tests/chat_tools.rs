@@ -11,6 +11,7 @@ mod stub;
 #[path = "chat_plain/helpers.rs"]
 mod helpers;
 
+#[allow(dead_code, reason = "this file uses only part of the shared helpers")]
 mod common;
 
 use std::time::Duration;
@@ -19,7 +20,7 @@ use agents_server::config::ToolApprovalTiming;
 use agents_store::{PgPool, new_id};
 use axum::Router;
 use common::{R, bearer, code, send, user};
-use helpers::{assistant, body, frames, router_with, send_raw};
+use helpers::{assistant, body, frames, org, router_with, send_raw};
 use serde_json::{Value, json};
 use stub::{Script, Stub};
 
@@ -72,22 +73,27 @@ fn quick(state: &mut agents_server::AppState) {
 }
 
 /// A tool row and its binding to the assistant; returns the tool's id.
+///
+/// The row belongs to an organisation of its own: a global row would join the catalogue every
+/// other test of the shared database reads (the wizard lists the global tools).
 async fn bind_tool(
     db: &PgPool,
     assistant_id: &str,
     name: &str,
     category: &str,
 ) -> Result<String, sqlx::Error> {
+    let owner = org(db).await?;
     let tool_id = new_id();
     sqlx::query(
         r#"INSERT INTO "Tool" ("id","name","displayName","description","category","parameters","tags",
-             "isBuiltIn","enabled","userSelectable","createdAt","updatedAt")
-           VALUES ($1,$2,$2,'Evaluate mathematical expressions.',$3,'{}','{}',$4,true,true,now(),now())"#,
+             "isBuiltIn","enabled","userSelectable","organizationId","createdAt","updatedAt")
+           VALUES ($1,$2,$2,'Evaluate mathematical expressions.',$3,'{}','{}',$4,true,true,$5,now(),now())"#,
     )
     .bind(&tool_id)
     .bind(name)
     .bind(category)
     .bind(category == "builtin")
+    .bind(&owner)
     .execute(db)
     .await?;
     sqlx::query(

@@ -73,7 +73,6 @@ fn stats(body: &str) -> Result<Value, String> {
         0.0
     } else {
         let total: usize = words.iter().map(|word| js::utf16_len(word)).sum();
-        #[allow(clippy::cast_precision_loss, reason = "word counts are far below 2^52")]
         let mean = total as f64 / words.len() as f64;
         js::math_round(mean * 10.0) / 10.0
     };
@@ -116,16 +115,11 @@ fn truncate(body: &str, max_length: f64) -> Result<Value, String> {
         max_length
     };
     let length = js::utf16_len(body);
-    #[allow(clippy::cast_precision_loss, reason = "a text length")]
     if length as f64 <= max_length {
         return Ok(json!({"success": true, "result": body, "truncated": false}));
     }
     // `slice(0, maxLen)`: a negative end counts from the end. The cut never splits a
     // character, where JavaScript could split a surrogate pair.
-    #[allow(
-        clippy::cast_possible_truncation,
-        reason = "clamped to the text length"
-    )]
     let end = if max_length < 0.0 {
         length.saturating_sub((-max_length).trunc().min(length as f64) as usize)
     } else {
