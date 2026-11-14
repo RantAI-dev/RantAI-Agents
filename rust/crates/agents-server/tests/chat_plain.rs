@@ -9,6 +9,8 @@ mod stub;
 
 mod common;
 
+use std::sync::Arc;
+
 use agents_store::PgPool;
 use agents_store::new_id;
 use axum::Router;
@@ -547,6 +549,192 @@ async fn profile_of(db: &PgPool, user_id: &str) -> Result<Value, sqlx::Error> {
     .fetch_optional(db)
     .await?;
     Ok(value.unwrap_or(Value::Null))
+}
+
+/// A meter that refuses the first chat and records the usage of the second.
+#[derive(Debug, Default)]
+struct Meter {
+    refused: std::sync::atomic::AtomicBool,
+    usage: std::sync::Mutex<Option<agents_llm::types::Usage>>,
+}
+
+impl agents_server::policy::ChatMeter for Meter {
+    fn check(
+        &self,
+        _ctx: &agents_server::policy::ChatContext<'_>,
+    ) -> Result<(), agents_server::http::ApiError> {
+        if self.refused.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            return Ok(());
+        }
+        Err(agents_server::http::ApiError::new(
+            agents_contracts::error_codes::ErrorCode::PermissionDenied,
+        ))
+    }
+
+    fn record(
+        &self,
+        _ctx: &agents_server::policy::ChatContext<'_>,
+        usage: agents_llm::types::Usage,
+    ) {
+        if let Ok(mut guard) = self.usage.lock() {
+            *guard = Some(usage);
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_meter_may_refuse_a_chat_and_records_the_usage() -> R {
+    let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
+    let meter = Arc::new(Meter::default());
+    let Some((app, db)) = common::router_with_setup({
+        let base_url = stub.base_url();
+        let meter = Arc::clone(&meter);
+        move |state| {
+            state.llm = agents_server::llm::LlmConfig {
+                base_url: Some(base_url),
+                api_key: Some("test-key".to_owned()),
+                ..agents_server::llm::LlmConfig::default()
+            };
+            state.meter = meter;
+        }
+    })
+    .await?
+    else {
+        return Ok(());
+    };
+    let user_id = user(&db, false).await?;
+    let assistant_id = assistant(&db, None).await?;
+
+    // The meter refuses the first chat: a 403, never a 402.
+    let (status, _headers, text) = send_raw(
+        &app,
+        "POST",
+        "/api/chat",
+        Some(&bearer(&user_id)?),
+        Some(body(&assistant_id)),
+    )
+    .await?;
+    assert_eq!(status, 403);
+    assert!(text.contains("\"code\":\"permission_denied\""), "{text}");
+
+    // The second chat goes through, and the usage is recorded.
+    let (status, _headers, _text) = send_raw(
+        &app,
+        "POST",
+        "/api/chat",
+        Some(&bearer(&user_id)?),
+        Some(body(&assistant_id)),
+    )
+    .await?;
+    assert_eq!(status, 200);
+    let recorded = meter
+        .usage
+        .lock()
+        .ok()
+        .and_then(|guard| *guard)
+        .ok_or("the usage was not recorded")?;
+    assert_eq!(recorded.total, 13);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_client_that_hangs_up_stops_the_model_call() -> R {
+    use futures::StreamExt;
+
+    let stub = Stub::start(Script::Hang("hello there".to_owned())).await?;
+    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+        return Ok(());
+    };
+    let user_id = user(&db, false).await?;
+    let assistant_id = assistant(&db, None).await?;
+
+    let request = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/chat")
+        .header("authorization", bearer(&user_id)?)
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_vec(&body(&assistant_id)).map_err(|error| error.to_string())?,
+        ))
+        .map_err(|error| error.to_string())?;
+    let response = app
+        .clone()
+        .oneshot(request)
+        .await
+        .map_err(|error| error.to_string())?;
+    assert_eq!(response.status().as_u16(), 200);
+
+    // Read until the model has answered, then hang up.
+    let mut stream = Box::pin(response.into_body().into_data_stream());
+    let mut seen = String::new();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|error| error.to_string())?;
+        seen.push_str(&String::from_utf8_lossy(&chunk));
+        if seen.contains("text-delta") {
+            break;
+        }
+    }
+    assert!(seen.contains("text-delta"), "the model must have answered");
+    drop(stream);
+
+    // The upstream call is stopped: the stub sees the connection close.
+    for _ in 0..100 {
+        if stub.client_hung_up() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(
+        stub.client_hung_up(),
+        "the model call must stop when the client hangs up"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_answer_is_written_to_the_session() -> R {
+    let stub = Stub::start(Script::Text(vec!["the answer".to_owned()])).await?;
+    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+        return Ok(());
+    };
+    let user_id = user(&db, false).await?;
+    let assistant_id = assistant(&db, None).await?;
+    let session =
+        agents_store::sessions::create_session(&db, &user_id, &assistant_id, "New Chat").await?;
+
+    let mut request = body(&assistant_id);
+    // The ids are fresh ones: the tests share a database, and a message id that already
+    // lives in another session is a conflict.
+    let assistant_message_id = new_id();
+    if let Some(object) = request.as_object_mut() {
+        object.insert("sessionId".to_owned(), json!(session.id));
+        object.insert("assistantMessageId".to_owned(), json!(assistant_message_id));
+        object.insert(
+            "messages".to_owned(),
+            json!([{"id": new_id(), "role": "user", "content": "hello"}]),
+        );
+    }
+    let (status, _headers, _text) = send_raw(
+        &app,
+        "POST",
+        "/api/chat",
+        Some(&bearer(&user_id)?),
+        Some(request),
+    )
+    .await?;
+    assert_eq!(status, 200);
+
+    // The rows are written before the stream ends, so they are there when the answer is.
+    let messages = agents_store::sessions::list_messages(&db, &user_id, &session.id).await?;
+    let roles: Vec<&str> = messages.iter().map(|row| row.role.as_str()).collect();
+    assert_eq!(roles, vec!["user", "assistant"]);
+    let answer = messages
+        .iter()
+        .find(|row| row.role == "assistant")
+        .ok_or("the answer is not stored")?;
+    assert_eq!(answer.id, assistant_message_id);
+    assert_eq!(answer.content, "the answer");
+    Ok(())
 }
 
 #[tokio::test]

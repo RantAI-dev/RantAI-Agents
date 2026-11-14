@@ -23,6 +23,23 @@ pub async fn router() -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Er
 pub async fn router_with_llm(
     base_url: Option<&str>,
 ) -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>> {
+    router_with_setup(move |state| {
+        state.llm = agents_server::llm::LlmConfig {
+            base_url: base_url.map(str::to_owned),
+            api_key: Some("test-key".to_owned()),
+            ..agents_server::llm::LlmConfig::default()
+        };
+    })
+    .await
+}
+
+/// The router, with the state the caller sets up.
+pub async fn router_with_setup<F>(
+    setup: F,
+) -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>>
+where
+    F: FnOnce(&mut AppState),
+{
     let url = match std::env::var("TEST_DATABASE_URL") {
         Ok(u) if !u.is_empty() => u,
         _ if std::env::var_os("CI").is_some() => {
@@ -40,11 +57,7 @@ pub async fn router_with_llm(
             secrets: vec![SECRET.to_owned()],
         },
     );
-    state.llm = agents_server::llm::LlmConfig {
-        base_url: base_url.map(str::to_owned),
-        api_key: Some("test-key".to_owned()),
-        ..agents_server::llm::LlmConfig::default()
-    };
+    setup(&mut state);
     Ok(Some((app(state), db)))
 }
 
