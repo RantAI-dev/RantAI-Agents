@@ -300,7 +300,7 @@ pub(crate) async fn authorize_agent(
     decision(&principal, permission, &Resource::Agent(&agent))
 }
 
-/// Whether the caller may do `permission` in the organisation itself: creating a agent,
+/// Whether the caller may do `permission` in the organisation itself: creating an agent,
 /// listing or replacing an agent's grants. A grant never answers these: `agents.create` and
 /// the grants of an agent are admin-only (§3.3).
 pub(crate) async fn authorize_org(
