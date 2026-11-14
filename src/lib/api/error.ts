@@ -14,6 +14,14 @@ export interface ApiError {
   message: string
   requestId: string | null
   status: number
+  /** The bad fields of a 400 `invalid_request`, each with its own sentence. */
+  fields: FieldError[]
+}
+
+export interface FieldError {
+  /** A JSON Pointer into the body (`/realm`), or a query or path parameter's name. */
+  field: string
+  message: string
 }
 
 interface ErrorBody {
@@ -23,7 +31,18 @@ interface ErrorBody {
         code?: unknown
         message?: unknown
         requestId?: unknown
+        errors?: unknown
       }
+}
+
+function fieldErrors(raw: unknown): FieldError[] {
+  if (!Array.isArray(raw)) return []
+  return raw.flatMap((entry) => {
+    const { field, message } = (entry ?? {}) as { field?: unknown; message?: unknown }
+    return typeof field === "string" && typeof message === "string" && message
+      ? [{ field, message }]
+      : []
+  })
 }
 
 /** The error an answer carries; `fallbackMessage` when it carries none. */
@@ -40,12 +59,25 @@ export async function readApiError(
 
   const raw = body?.error
   if (typeof raw === "string") {
-    return { code: null, message: raw || fallbackMessage, requestId: null, status: response.status }
+    return {
+      code: null,
+      message: raw || fallbackMessage,
+      requestId: null,
+      status: response.status,
+      fields: [],
+    }
   }
   const code = typeof raw?.code === "string" ? raw.code : null
-  const message = typeof raw?.message === "string" && raw.message ? raw.message : fallbackMessage
+  const fields = fieldErrors(raw?.errors)
+  // The generic invalid_request sentence says nothing a person can fix; the fields do.
+  const message =
+    fields.length > 0
+      ? fields.map((f) => f.message).join(" ")
+      : typeof raw?.message === "string" && raw.message
+        ? raw.message
+        : fallbackMessage
   const requestId = typeof raw?.requestId === "string" ? raw.requestId : null
-  return { code, message, requestId, status: response.status }
+  return { code, message, requestId, status: response.status, fields }
 }
 
 /** The seconds an answer's `Retry-After` header asks for, when it carries one. */
