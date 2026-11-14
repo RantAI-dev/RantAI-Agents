@@ -15,6 +15,7 @@ import {
   passwordLoginDisabled,
   passwordLoginErrorMessage,
 } from "@/features/auth/login-errors"
+import { isLocalPath, safeReturnTo } from "@/features/auth/return-to"
 
 const DASHBOARD = "/dashboard"
 
@@ -31,6 +32,15 @@ interface LoginResponse {
 }
 
 type Step = "email" | "password" | "sso-only"
+
+/**
+ * Whether a failure means the sign-in routes are not served by Rust here (RUST_ROUTES has no
+ * `auth`). NextAuth's catch-all owns `/api/auth/*` then and answers an action it does not know
+ * with 400 `"Bad request."`; a Rust failure always carries a registry `code`.
+ */
+function notServedByRust(failure: { status: number; code: string | null }): boolean {
+  return failure.code === null && (failure.status === 400 || failure.status === 404)
+}
 
 export interface LoginFlowProps {
   /** `?error=<code>` from a failed SSO sign-in, already read by the page. */
@@ -85,16 +95,16 @@ export function LoginFlow({ initialError = null, navigate }: LoginFlowProps) {
         `/api/auth/sso/discover?email=${encodeURIComponent(email.trim())}`,
       )
       if (!result.ok) {
-        // 404 means this deployment has no Rust sign-in behind the router yet (RUST_ROUTES has
-        // no `auth`): the password form is the only route in, so offer it rather than a wall.
-        if (result.error.status === 404) {
+        // No Rust sign-in behind the router: the password form is the only route in, so offer
+        // it rather than a wall.
+        if (notServedByRust(result.error)) {
           setStep("password")
           return
         }
         setError(result.error.message)
         return
       }
-      if (result.data.method === "sso" && result.data.startUrl) {
+      if (result.data.method === "sso" && isLocalPath(result.data.startUrl)) {
         setProviderName(result.data.providerName)
         const separator = result.data.startUrl.includes("?") ? "&" : "?"
         go(`${result.data.startUrl}${separator}callbackUrl=${encodeURIComponent(DASHBOARD)}`)
@@ -137,13 +147,13 @@ export function LoginFlow({ initialError = null, navigate }: LoginFlowProps) {
         body: JSON.stringify({ email: email.trim(), password, callbackUrl: DASHBOARD }),
       })
       if (!response.ok) {
-        // Same 404: the TypeScript credentials provider is what signs in until the router sends
-        // the `auth` group to Rust. It is the one NextAuth call this page keeps.
-        if (response.status === 404) {
+        const failure = await readApiError(response)
+        // The TypeScript credentials provider is what signs in until the router sends the
+        // `auth` group to Rust. It is the one NextAuth call this page keeps.
+        if (notServedByRust(failure)) {
           await signInWithCredentials()
           return
         }
-        const failure = await readApiError(response)
         if (passwordLoginDisabled(failure.code)) {
           setStep("sso-only")
           setPassword("")
@@ -162,7 +172,7 @@ export function LoginFlow({ initialError = null, navigate }: LoginFlowProps) {
       const body = (await response.json()) as LoginResponse
       // A full-page navigation, not a client transition: the SessionProvider mounted by the
       // dashboard must come up with the fresh cookie, or session-gated navigation stays stale.
-      go(body.redirectTo || DASHBOARD)
+      go(safeReturnTo(body.redirectTo, DASHBOARD))
     } catch {
       setError("We could not reach the sign-in service. Check your connection and try again.")
     } finally {

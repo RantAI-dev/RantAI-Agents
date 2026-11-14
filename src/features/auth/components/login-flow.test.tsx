@@ -18,6 +18,14 @@ function errorResponse(status: number, code: string, message: string, headers?: 
   })
 }
 
+/** What NextAuth's catch-all answers for `/api/auth/<anything it does not know>`. */
+function nextAuthBadRequest() {
+  return new Response(JSON.stringify("Bad request."), {
+    status: 400,
+    headers: { "content-type": "application/json" },
+  })
+}
+
 const fetchMock = vi.fn()
 const nextAuth = vi.hoisted(() => ({ signIn: vi.fn() }))
 
@@ -158,10 +166,9 @@ describe("LoginFlow", () => {
   })
 
   it("falls back to the password form when the deployment has no Rust sign-in yet", async () => {
-    // 404: RUST_ROUTES has no `auth` group, so /api/auth/sso/discover does not exist.
-    fetchMock.mockResolvedValueOnce(
-      errorResponse(404, "not_found", "This resource does not exist."),
-    )
+    // RUST_ROUTES has no `auth` group: NextAuth's catch-all owns /api/auth/sso/discover and
+    // answers an action it does not know with 400 "Bad request." (Auth(), @auth/core).
+    fetchMock.mockResolvedValueOnce(nextAuthBadRequest())
     render(<LoginFlow navigate={vi.fn()} />)
 
     await enterEmail("ana@acme.com")
@@ -171,7 +178,7 @@ describe("LoginFlow", () => {
   it("falls back to the NextAuth credentials provider when /api/auth/login is absent", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ method: "password", providerId: null, providerName: null, startUrl: null }))
-      .mockResolvedValueOnce(errorResponse(404, "not_found", "This resource does not exist."))
+      .mockResolvedValueOnce(nextAuthBadRequest())
     nextAuth.signIn.mockResolvedValueOnce({ error: undefined, ok: true })
     const navigate = vi.fn()
     render(<LoginFlow navigate={navigate} />)
@@ -186,6 +193,71 @@ describe("LoginFlow", () => {
       password: "password123",
       redirect: false,
     })
+  })
+
+  it("does not fall back to NextAuth on a Rust 400, which carries a code", async () => {
+    fetchMock.mockResolvedValueOnce(errorResponse(400, "invalid_request", "Enter an email address."))
+    render(<LoginFlow navigate={vi.fn()} />)
+
+    await enterEmail("ana@acme.com")
+    expect((await screen.findByRole("alert")).textContent).toBe("Enter an email address.")
+    expect(screen.queryByLabelText("Password")).toBeNull()
+  })
+
+  it.each(["//evil.test/x", "https://evil.test/x", "/\\evil.test", "/\t/evil.test"])(
+    "never follows a redirectTo that leaves the site (%s)",
+    async (redirectTo) => {
+      fetchMock
+        .mockResolvedValueOnce(jsonResponse({ method: "password", providerId: null, providerName: null, startUrl: null }))
+        .mockResolvedValueOnce(
+          jsonResponse({
+            user: { id: "u1", email: "ana@acme.com", name: "Ana", role: "member" },
+            redirectTo,
+          }),
+        )
+      const navigate = vi.fn()
+      render(<LoginFlow navigate={navigate} />)
+
+      await enterEmail("ana@acme.com")
+      fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "x" } })
+      fireEvent.click(screen.getByRole("button", { name: /sign in/i }))
+
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith("/dashboard"))
+    },
+  )
+
+  it("never follows a startUrl that leaves the site", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        method: "sso",
+        providerId: "p1",
+        providerName: "Evil",
+        startUrl: "https://evil.test/start",
+      }),
+    )
+    const navigate = vi.fn()
+    render(<LoginFlow navigate={navigate} />)
+
+    await enterEmail("ana@acme.com")
+    expect(await screen.findByLabelText("Password")).not.toBeNull()
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it("shows the answer's own sentence for a cross-site refusal, not 'suspended'", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ method: "password", providerId: null, providerName: null, startUrl: null }))
+      .mockResolvedValueOnce(
+        errorResponse(403, "permission_denied", "This request must come from this site."),
+      )
+    render(<LoginFlow navigate={vi.fn()} />)
+
+    await enterEmail("ana@acme.com")
+    fireEvent.change(await screen.findByLabelText("Password"), { target: { value: "x" } })
+    fireEvent.click(screen.getByRole("button", { name: /sign in/i }))
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "This request must come from this site.",
+    )
   })
 
   it("keeps the email step when the sign-in service cannot be reached", async () => {

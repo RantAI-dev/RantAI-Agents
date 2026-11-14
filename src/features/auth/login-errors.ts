@@ -27,8 +27,9 @@ export function loginErrorMessage(code: string | null | undefined): string | nul
 
 /** The same, for a code on a failed password sign-in's answer body. */
 export function passwordLoginErrorMessage(code: string | null, message: string): string {
-  if (code === "rate_limited") return SSO_ERROR_MESSAGES.rate_limited
-  if (code && SSO_ERROR_MESSAGES[code]) return SSO_ERROR_MESSAGES[code]
+  // Only these two read the same on both paths. A password `permission_denied` is either a
+  // suspended account or the cross-site check, and the answer's own sentence says which.
+  if (code === "rate_limited" || code === "password_login_disabled") return SSO_ERROR_MESSAGES[code]
   return message
 }
 
