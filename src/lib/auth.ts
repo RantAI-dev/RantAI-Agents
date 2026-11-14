@@ -21,7 +21,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           where: { email: credentials.email as string },
         })
 
-        if (!user) {
+        // An SSO-only user has no password hash and cannot sign in with one.
+        if (!user || !user.passwordHash) {
           return null
         }
 

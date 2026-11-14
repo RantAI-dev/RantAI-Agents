@@ -18,7 +18,7 @@ model User {
   id            String         @id @default(cuid())
   email         String         @unique
   name          String
-  passwordHash  String
+  passwordHash  String? // null for a user who signs in only through an identity provider
   role          Role           @default(USER)
   status        String         @default("OFFLINE") // ONLINE, BUSY, AWAY, OFFLINE (for live chat)
   avatarS3Key   String? // S3 key for avatar image
@@ -30,6 +30,8 @@ model User {
   updatedAt     DateTime       @updatedAt
   conversations Conversation[]
   mediaJobs     MediaJob[]
+  unitMembers   OrgUnitMember[]
+  identities    UserIdentity[]
 
   @@map("Agent")
 }
@@ -146,6 +148,14 @@ model Organization {
   agentApiKeys        AgentApiKey[]
   mediaJobs           MediaJob[]
   mediaAssets         MediaAsset[]
+  orgUnits            OrgUnit[]
+  orgUnitMembers      OrgUnitMember[]
+  assistantGrants     AssistantGrant[]
+  chatShares          ChatShare[]
+  identityProviders   IdentityProvider[]
+
+  // false: members sign in only through one of the org's identity providers.
+  passwordLoginEnabled Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -231,6 +241,9 @@ model Assistant {
 
   // Digital Employee bindings
   digitalEmployees DigitalEmployee[]
+
+  // Who may use or manage it (docs/design/identity-and-access.md §3.3)
+  grants AssistantGrant[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -485,6 +498,7 @@ model DashboardSession {
   assistantId String
   messages    DashboardMessage[]
   artifacts   Document[] // Artifacts created in this session
+  shares      ChatShare[]
 
   // Organization context (optional - for shared/team chats)
   organizationId String?
@@ -1589,4 +1603,118 @@ model ResolvedImage {
   expiresAt   DateTime // Cache expiry (30 days from creation)
 
   @@index([expiresAt])
+}
+
+// ─── Identity and access (docs/design/identity-and-access.md §3) ───────────────
+// Subjects of grants and shares are polymorphic (subjectType org|unit|user, subjectId), so they
+// carry no foreign key: deleting a unit deletes the grants and shares naming it in the same
+// transaction (agents-store `units::delete`).
+
+// A department or team inside an organisation, nested to any depth. A cycle is rejected on
+// every write. The composite parent key keeps a parent inside the same organisation.
+model OrgUnit {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parentId       String?
+  parent         OrgUnit?        @relation("OrgUnitTree", fields: [organizationId, parentId], references: [organizationId, id], onDelete: NoAction)
+  children       OrgUnit[]       @relation("OrgUnitTree")
+  kind           String // department, team
+  name           String
+  slug           String
+  externalId     String? // the identity-provider group this unit is synced from
+  members        OrgUnitMember[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, parentId, slug])
+  @@index([organizationId, parentId])
+  @@index([organizationId, externalId])
+}
+
+model OrgUnitMember {
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unitId         String
+  unit           OrgUnit      @relation(fields: [organizationId, unitId], references: [organizationId, id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("member") // lead, member
+  source         String       @default("manual") // manual, idp
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@id([unitId, userId])
+  @@index([organizationId, userId])
+}
+
+model AssistantGrant {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assistantId    String
+  assistant      Assistant    @relation(fields: [assistantId], references: [id], onDelete: Cascade)
+  subjectType    String // org, unit, user
+  subjectId      String
+  level          String       @default("use") // use, manage
+  grantedBy      String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([assistantId, subjectType, subjectId])
+  @@index([organizationId, subjectType, subjectId])
+}
+
+model ChatShare {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessionId      String
+  session        DashboardSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  subjectType    String // org, unit, user
+  subjectId      String
+  level          String           @default("view")
+  sharedBy       String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  revokedAt      DateTime?
+
+  @@unique([sessionId, subjectType, subjectId])
+  @@index([organizationId, subjectType, subjectId])
+}
+
+model IdentityProvider {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  kind            String // oidc, saml
+  name            String
+  enabled         Boolean        @default(true)
+  config          Json           @default("{}") // secrets encrypted like Credential
+  emailDomains    String[]
+  jitProvisioning Boolean        @default(false)
+  defaultRole     String         @default("member")
+  identities      UserIdentity[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([organizationId])
+}
+
+// Linked by the provider's immutable subject, never by email alone.
+model UserIdentity {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerId  String
+  provider    IdentityProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  subject     String
+  email       String
+  lastLoginAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([providerId, subject])
+  @@index([userId])
 }
