@@ -6,8 +6,8 @@ use agents_llm::types::LlmError;
 /// Where the wizard's and the chat's model is served from.
 ///
 /// The provider is chosen by the model id, the way `provider::route` does it. The two
-/// overrides have no environment variable: the old app had none, so only an embedding
-/// edition or a test (pointing at a stub server) sets them.
+/// overrides (`AGENTS_LLM_BASE_URL`, `AGENTS_LLM_API_KEY`) are new: the old app had none. They
+/// send every model to one endpoint (a local gateway, or a stub server in a test).
 #[derive(Debug, Clone, Default)]
 pub struct LlmSettings {
     /// Overrides the provider's base URL.
@@ -24,7 +24,19 @@ impl LlmSettings {
     /// # Errors
     /// The provider of that model has no key.
     pub fn route(&self, model_id: &str) -> Result<Route, LlmError> {
-        let route = provider::route(model_id, &self.provider)?;
+        let route = match provider::route(model_id, &self.provider) {
+            Ok(route) => route,
+            // Both overrides set: the endpoint has its own key, the provider's is not needed.
+            Err(LlmError::MissingApiKey { .. })
+                if self.base_url.is_some() && self.api_key.is_some() =>
+            {
+                Route {
+                    provider: Provider::new("", ""),
+                    model: provider::house_backend_model(model_id).to_owned(),
+                }
+            }
+            Err(error) => return Err(error),
+        };
         Ok(Route {
             provider: self.endpoint(route.provider),
             model: route.model,
@@ -111,8 +123,8 @@ impl Config {
             return Err(ConfigError::Missing("AUTH_SECRET or NEXTAUTH_SECRET"));
         }
         let llm = LlmSettings {
-            base_url: None,
-            api_key: None,
+            base_url: var("AGENTS_LLM_BASE_URL"),
+            api_key: var("AGENTS_LLM_API_KEY"),
             provider: ProviderConfig {
                 openrouter_api_key: var("OPENROUTER_API_KEY"),
                 minimax_api_key: var("MINIMAX_API_KEY"),
@@ -171,6 +183,26 @@ mod tests {
         let route = settings.route("openai/gpt-4o-mini")?;
         assert_eq!(route.provider.base_url, provider::OPENROUTER_BASE_URL);
         assert_eq!(route.provider.api_key, "or-key");
+        Ok(())
+    }
+
+    #[test]
+    fn an_endpoint_with_its_own_key_needs_no_provider_key() -> Result<(), LlmError> {
+        let settings = LlmSettings {
+            base_url: Some("http://127.0.0.1:9/v1".to_owned()),
+            api_key: Some("gateway-key".to_owned()),
+            ..LlmSettings::default()
+        };
+        let route = settings.route("rantai/swift")?;
+        assert_eq!(route.provider.base_url, "http://127.0.0.1:9/v1");
+        assert_eq!(route.provider.api_key, "gateway-key");
+        assert_eq!(route.model, "MiniMax-M2.7");
+        // Without the endpoint's key the provider's key is still required.
+        let settings = LlmSettings {
+            base_url: Some("http://127.0.0.1:9/v1".to_owned()),
+            ..LlmSettings::default()
+        };
+        assert!(settings.route("openai/gpt-4o-mini").is_err());
         Ok(())
     }
 }

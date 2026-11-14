@@ -78,11 +78,7 @@ pub fn stub_llm(base_url: &str) -> LlmSettings {
     LlmSettings {
         base_url: Some(base_url.to_owned()),
         api_key: Some("test-key".to_owned()),
-        provider: agents_llm::provider::ProviderConfig {
-            openrouter_api_key: Some("test-key".to_owned()),
-            minimax_api_key: Some("test-key".to_owned()),
-            minimax_base_url: None,
-        },
+        ..LlmSettings::default()
     }
 }
 
