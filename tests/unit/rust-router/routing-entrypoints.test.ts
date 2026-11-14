@@ -80,6 +80,16 @@ describe("middleware", () => {
     expect(stub.seen).toEqual([])
   })
 
+  it("sends the agent API's /v1 completions to Rust", async () => {
+    restoreEnv = withRoutingEnv(stub.url, "agent-api")
+    const response = await middleware(
+      nextRequest("/v1/chat/completions", { method: "POST", body: "{}" }),
+    )
+    expect(await response.text()).toBe("data: from-rust\n\n")
+    expect(stub.seen.map((s) => `${s.method} ${s.url}`)).toEqual(["POST /v1/chat/completions"])
+    expect(mocks.auth).not.toHaveBeenCalled()
+  })
+
   it("leaves /api/chat to its route handler", async () => {
     restoreEnv = withRoutingEnv(stub.url, "chat")
     const response = await middleware(nextRequest("/api/chat", { method: "POST", body: "{}" }))

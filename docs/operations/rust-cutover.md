@@ -10,7 +10,7 @@ of Rust.
 | Variable | Meaning |
 |---|---|
 | `RUST_API_URL` | Where agents-server listens, for example `http://127.0.0.1:8090`. When it is unset or blank, nothing is routed: Next answers every request, as it did before. |
-| `RUST_ROUTES` | Comma-separated route groups: `assistants`, `sessions`, `memory`, `chat`. A group that is not listed stays in Next. Unknown names are ignored. |
+| `RUST_ROUTES` | Comma-separated route groups: `assistants`, `sessions`, `memory`, `chat`, `auth`, `org`, `sso`, `sharing`, `agent-api`. A group that is not listed stays in Next. Unknown names are ignored. `auth` never carries NextAuth's own routes (`/api/auth/session`, `/csrf`, `/callback/*`, `/signin/*`, `/providers`). |
 
 ```sh
 # .env (the Next.js process)
@@ -29,14 +29,19 @@ methods than Next keeps the other methods in Next.
 
 | Group | Paths and methods |
 |---|---|
-| `assistants` | `GET POST /api/assistants`; `GET PUT PATCH DELETE /api/assistants/{id}`; `GET PUT /api/assistants/{id}/tools`, `/skills`, `/mcp-servers`, `/workflows`; `POST DELETE /api/assistants/{id}/default`; `POST /api/assistants/wizard/stream`; `GET PUT /api/user/default-assistant`; `GET PUT PATCH /api/user/preferences`; `GET POST /api/mobile/assistants`; `GET PUT PATCH DELETE /api/mobile/assistants/{id}`; `GET PUT /api/mobile/assistants/{id}/tools`, `/skills`; `POST /api/mobile/assistants/{id}/duplicate`, `/default` |
+| `assistants` | `GET POST /api/assistants`; `GET PUT PATCH DELETE /api/assistants/{id}`; `GET PUT /api/assistants/{id}/tools`, `/skills`, `/mcp-servers`, `/workflows`; `POST DELETE /api/assistants/{id}/default`; `GET PUT /api/assistants/{id}/access`; `DELETE /api/assistants/{id}/access/{grantId}`; `POST /api/assistants/wizard/stream`; `GET PUT /api/user/default-assistant`; `GET PUT PATCH /api/user/preferences`; `GET POST /api/mobile/assistants`; `GET PUT PATCH DELETE /api/mobile/assistants/{id}`; `GET PUT /api/mobile/assistants/{id}/tools`, `/skills`; `POST /api/mobile/assistants/{id}/duplicate`, `/default` |
 | `sessions` | `GET POST /api/dashboard/chat/sessions`; `GET PATCH DELETE /api/dashboard/chat/sessions/{id}`; `POST PATCH DELETE /api/dashboard/chat/sessions/{id}/messages`. The `artifacts/**` sub-routes stay in Next. |
 | `memory` | `GET DELETE /api/dashboard/memory`; `DELETE /api/dashboard/memory/{id}`; `GET DELETE /api/mobile/memories`; `DELETE /api/mobile/memories/{id}` |
 | `chat` | `POST /api/chat` and `POST /api/chat/tool-approval`, both with a fallback (below) |
+| `auth` | `POST /api/auth/login`, `/api/auth/logout`, `/api/mobile/login`; `GET /api/auth/sso/discover`, `/api/auth/sso/{providerId}/start`, `/api/auth/sso/{providerId}/callback`. Every other `/api/auth/*` path is NextAuth's and stays in Next. Without this group the sign-in screen falls back to the NextAuth credentials provider. |
+| `org` | `GET /api/organizations`; `GET PATCH /api/organizations/{id}`; `GET POST …/members`; `POST …/members/accept`; `PATCH DELETE …/members/{memberId}`; `GET POST …/units`; `PATCH DELETE …/units/{unitId}`; `GET POST DELETE …/units/{unitId}/members`; `GET …/audit` |
+| `sso` | `GET POST /api/dashboard/sso/providers`; `GET PATCH DELETE /api/dashboard/sso/providers/{id}`; `POST …/{id}/test` |
+| `sharing` | `GET PUT /api/dashboard/chat/sessions/{id}/shares`; `DELETE …/shares/{shareId}`; `GET /api/dashboard/chat/shared`, `/shared/{id}`; `POST /shared/{id}/fork` |
+| `agent-api` | `GET POST /api/dashboard/agent-api-keys`; `GET PUT PATCH DELETE /api/dashboard/agent-api-keys/{id}`; `POST OPTIONS /v1/chat/completions`. Not the socket (below). |
 
 ### How a request reaches Rust
 
-- `assistants`, `sessions` and `memory` go through `src/middleware.ts`. The middleware
+- Every group but `chat` goes through `src/middleware.ts`. The middleware
   forwards the method, the body and every header to Rust, including cookies,
   `Authorization` and `x-organization-id`. It drops hop-by-hop headers and adds
   `x-forwarded-host` and `x-forwarded-proto`. The answer streams back unbuffered, with
@@ -55,6 +60,27 @@ methods than Next keeps the other methods in Next.
 - When Rust cannot be reached, a routed request gets 502 `upstream_failed`. It does not
   silently fall back to Next. The Rust routes enforce access rules (agent grants) that
   the TypeScript routes do not have, so a silent fallback would skip them.
+
+### The agent socket does not go through Next
+
+`GET /v1/agents/{assistantId}/ws` is a WebSocket. The middleware forwards with `fetch`, which
+cannot carry an `Upgrade`, so the socket is not in the table and `RUST_ROUTES` does nothing for
+it. The proxy in front of the deployment must send `/v1/agents/` straight to agents-server,
+with the upgrade headers, for example in nginx:
+
+```nginx
+location /v1/agents/ {
+    proxy_pass http://127.0.0.1:8090;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_read_timeout 310s;  # the socket's idle limit is 300 s (docs/operations/agent-api.md)
+}
+```
+
+That proxy's address goes in agents-server's `TRUSTED_PROXIES` (docs/operations/network.md).
+Without the location, a socket reaches Next and gets a 404.
 
 Next's middleware buffers a request body to forward it. Next limits that body (10 MB by
 default). The routed groups take JSON bodies far below that limit.

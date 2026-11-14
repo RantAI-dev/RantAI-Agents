@@ -8,7 +8,8 @@ export async function middleware(request: NextRequest) {
 
   // The API paths in the matcher are here only to reach Rust (RUST_API_URL, RUST_ROUTES);
   // Rust checks the caller itself, and an unrouted one goes on to its Next route untouched.
-  if (pathname.startsWith("/api/")) {
+  // `/v1` is the agent API (Bearer key, no session); Next serves nothing there.
+  if (pathname.startsWith("/api/") || pathname.startsWith("/v1/")) {
     const target = rustTarget(request.method, pathname, request.nextUrl.search)
     if (target && !target.route.viaRouteHandler) return forwardToRust(request, target.url)
     return NextResponse.next()
@@ -64,7 +65,17 @@ export const config = {
     "/api/user/preferences",
     "/api/mobile/assistants/:path*",
     "/api/mobile/memories/:path*",
+    "/api/mobile/login",
     "/api/dashboard/chat/sessions/:path*",
+    "/api/dashboard/chat/shared/:path*",
     "/api/dashboard/memory/:path*",
+    "/api/dashboard/sso/:path*",
+    "/api/dashboard/agent-api-keys/:path*",
+    "/api/organizations/:path*",
+    // Sign-in only, never NextAuth's /api/auth/session or /api/auth/csrf.
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/sso/:path*",
+    "/v1/chat/completions",
   ],
 }

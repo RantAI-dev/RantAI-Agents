@@ -55,7 +55,7 @@ export interface DbAssistant {
 }
 
 // Map database assistant to client-side Assistant type
-function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
+export function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
   return {
     id: dbAssistant.id,
     name: dbAssistant.name,
@@ -74,6 +74,7 @@ function mapDbAssistant(dbAssistant: DbAssistant): Assistant {
     openingQuestions: dbAssistant.openingQuestions || undefined,
     tags: dbAssistant.tags || [],
     isDefault: dbAssistant.isSystemDefault,
+    isBuiltIn: dbAssistant.isBuiltIn ?? false,
     isEditable: true, // All assistants are editable
     liveChatEnabled: dbAssistant.liveChatEnabled ?? false,
     toolCount: dbAssistant.toolCount ?? dbAssistant._count?.tools ?? 0,
