@@ -13,6 +13,7 @@
 pub mod assistants;
 pub mod memory;
 pub mod orgs;
+pub mod sessions;
 pub mod users;
 
 use chrono::{NaiveDateTime, Utc};

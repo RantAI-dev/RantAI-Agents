@@ -40,7 +40,7 @@ Paths are relative to `src/` in this repository; paths starting with `apps/cloud
 | `app/api/assistants/wizard/stream` | `agents-api/src/assistants/wizard.rs` | `agents-llm`, the UI-stream encoder | `http/wizard-stream.jsonl` | 0 | todo | |
 | `app/api/dashboard/memory/**`, `/api/mobile/memories/**` | `agents-server/src/routes/memory.rs` | agents-store, agents-auth | `agents-server/tests/memory_routes.rs` (contract) | 3 tests | in progress: built and tested; **not cut over** until chat is, because clearing SEMANTIC no longer reaches SurrealDB | differences 9–11 |
 | Memory store: `UserMemory` rows, SurrealDB `conversation_memory`, `lib/rag/embeddings.ts` | `agents-store/src/memory/` | none | `http/memory-drain.jsonl` | 0 | todo | per-user lock (see plan Phase C) |
-| `app/api/dashboard/chat/sessions/**` | `agents-api/src/sessions/` | `agents-store` | `http/sessions.jsonl` | 0 | todo | |
+| `app/api/dashboard/chat/sessions/**` (D1) | `agents-server/src/routes/sessions.rs` (+ `sessions/bodies.rs`), `agents-store/src/sessions.rs` | `agents-store`, `agents-auth` | `agents-server/tests/session_routes.rs` (contract), `agents-store/tests/sessions.rs` | 14 tests | in progress: built and tested; **not cut over** until the frontend moves with it | differences 17–24 |
 | `POST /api/chat`, plain capability (D2) | `agents-api/src/chat/` | everything above, `agents-llm` | `http/chat-plain.jsonl` | 0 | todo | |
 | `POST /api/chat` with tools and the approval gate (D3) | `agents-api/src/chat/tools/` | D2 | `http/chat-tools.jsonl` | 0 | todo | shared approval store |
 | `POST /api/chat` with KB, RAG and attachments (D4) | `agents-api/src/chat/rag/` | D2 | `http/chat-rag.jsonl` | 0 | todo | |
@@ -55,4 +55,4 @@ whose dependencies are not yet "parity green". No feature work lands in a module
 |---|---|---|
 | Request auth (session cookie, mobile Bearer, suspension check every request) and active organisation | `agents-server/src/auth.rs` | built; tests in `memory_routes.rs`, seen failing with the suspension check removed |
 | Standard error body, request id, JSON body extractor, 404 fallback | `agents-server/src/http/` | built |
-| Store: assistants, bindings, defaults, orgs, users, memory | `agents-store` | built; integration tests seen failing with the CAS and the tenant filter removed |
+| Store: assistants, bindings, defaults, orgs, users, memory, sessions | `agents-store` | built; integration tests seen failing with the CAS and the tenant filter removed; the sessions store was seen failing with its user filter removed |

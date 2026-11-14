@@ -2,6 +2,7 @@
 
 mod health;
 mod memory;
+mod sessions;
 
 use axum::Router;
 
@@ -11,4 +12,5 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .merge(health::router())
         .merge(memory::router())
+        .merge(sessions::router())
 }
