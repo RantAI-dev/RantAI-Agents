@@ -233,10 +233,14 @@ async fn org(db: &PgPool) -> Result<String, sqlx::Error> {
 }
 
 /// An accepted membership of a user in an organisation.
+///
+/// The role is `admin`: the wizard builds an agent, which is `agents.create` and so admin-only
+/// (`docs/port/differences.md`, row 80). The wizard's own tests are about the stream, not the
+/// role; `agent_rbac` covers a member's 403.
 async fn member(db: &PgPool, user_id: &str, org_id: &str) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"INSERT INTO "OrganizationMember" ("id","userId","userEmail","organizationId","role","acceptedAt")
-           VALUES ($1,$2,$2 || '@test.invalid',$3,'member',now())"#,
+           VALUES ($1,$2,$2 || '@test.invalid',$3,'admin',now())"#,
     )
     .bind(new_id())
     .bind(user_id)

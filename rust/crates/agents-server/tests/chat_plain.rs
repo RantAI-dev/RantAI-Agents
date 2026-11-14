@@ -18,7 +18,7 @@ use agents_store::PgPool;
 use agents_store::new_id;
 use axum::body::Body;
 use common::{R, bearer, code, send, user};
-use helpers::{assistant, body, frames, member, org, router_with, send_raw, types};
+use helpers::{assistant, body, frames, grant_org, member, org, router_with, send_raw, types};
 use serde_json::{Value, json};
 use stub::{Script, Stub};
 use tower::ServiceExt;
@@ -229,6 +229,8 @@ async fn the_assistant_of_another_organisation_is_not_found() -> R {
     let my_org = org(&db).await?;
     member(&db, &mine, &my_org).await?;
     let my_assistant = assistant(&db, Some(&my_org)).await?;
+    // A member uses an agent through a grant (differences row 80).
+    grant_org(&db, &my_org, &my_assistant).await?;
 
     let other = user(&db, false).await?;
     let other_org = org(&db).await?;

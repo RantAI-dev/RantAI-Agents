@@ -144,11 +144,11 @@ pub async fn visible_assistants(db: &PgPool, p: &Principal) -> StoreResult<Vec<A
 /// `authz::can_use_agent`. `t` is the quoted table name of the agent row.
 fn usable(t: &str) -> String {
     format!(
-        r#"(({t}."isBuiltIn" = true AND ({t}."organizationId" IS NULL OR {t}."organizationId" = $1))
-        OR ({t}."isBuiltIn" = false AND {t}."organizationId" = $1 AND (
+        r#"(("{t}"."isBuiltIn" = true AND ("{t}"."organizationId" IS NULL OR "{t}"."organizationId" = $1))
+        OR ("{t}"."isBuiltIn" = false AND "{t}"."organizationId" = $1 AND (
               $3 OR EXISTS (
                 SELECT 1 FROM "AssistantGrant" g
-                WHERE g."assistantId" = {t}."id" AND g."organizationId" = $1
+                WHERE g."assistantId" = "{t}"."id" AND g."organizationId" = $1
                   AND {}))))"#,
         subject_matches("g"),
     )

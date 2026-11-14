@@ -50,6 +50,21 @@ async fn assistant_row(db: &PgPool, org_id: Option<&str>) -> Result<String, sqlx
     Ok(id)
 }
 
+/// Grants every member of the organisation the use of an assistant.
+async fn grant_org(db: &PgPool, org_id: &str, assistant_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"INSERT INTO "AssistantGrant" ("id","organizationId","assistantId","subjectType",
+             "subjectId","level","grantedBy","createdAt","updatedAt")
+           VALUES ($1,$2,$3,'org',$2,'use','test',now(),now())"#,
+    )
+    .bind(new_id())
+    .bind(org_id)
+    .bind(assistant_id)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// The default assistant the row holds.
 async fn stored_default(db: &PgPool, user_id: &str) -> Result<Option<String>, sqlx::Error> {
     sqlx::query_scalar(r#"SELECT "defaultAssistantId" FROM "UserPreference" WHERE "userId" = $1"#)
@@ -67,6 +82,8 @@ async fn the_settings_round_trip() -> R {
     let org_id = org(&db).await?;
     member(&db, &member_user, &org_id).await?;
     let assistant = assistant_row(&db, Some(&org_id)).await?;
+    // A member uses an agent through a grant (differences row 80).
+    grant_org(&db, &org_id, &assistant).await?;
     let auth = bearer(&member_user)?;
 
     // Without a row the settings are empty, not missing.
@@ -126,6 +143,7 @@ async fn another_organisation_s_assistant_is_not_found() -> R {
     member(&db, &other_user, &org_b).await?;
     let theirs = assistant_row(&db, Some(&org_b)).await?;
     let mine = assistant_row(&db, Some(&org_a)).await?;
+    grant_org(&db, &org_a, &mine).await?;
     let auth = bearer(&member_user)?;
 
     // Positive control: the organisation's own assistant is accepted.
@@ -171,6 +189,7 @@ async fn a_caller_without_a_token_and_a_suspended_one_are_refused() -> R {
     let org_id = org(&db).await?;
     member(&db, &member_user, &org_id).await?;
     let assistant = assistant_row(&db, Some(&org_id)).await?;
+    grant_org(&db, &org_id, &assistant).await?;
 
     let (status, body) = send(&app, "GET", "/api/user/preferences", None, None).await?;
     assert_eq!((status, code(&body)), (401, Some("unauthenticated")));

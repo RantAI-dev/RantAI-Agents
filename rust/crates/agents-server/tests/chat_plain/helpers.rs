@@ -79,12 +79,17 @@ where
 }
 
 /// An assistant without a knowledge base, tools or a workflow; returns its id.
+///
+/// Without an organisation it is a built-in. That is what a global assistant is under the
+/// access rule (docs/port/differences.md, rows 80 and 120): an org-less non-built-in agent is
+/// visible to nobody, so a test that means "an assistant anyone may chat with" writes a
+/// built-in, exactly as the old `organizationId = null` rows did before row 34.
 pub async fn assistant(db: &PgPool, organization_id: Option<&str>) -> Result<String, sqlx::Error> {
     let id = new_id();
     sqlx::query(
-        r#"INSERT INTO "Assistant" ("id","name","systemPrompt","model","organizationId",
+        r#"INSERT INTO "Assistant" ("id","name","systemPrompt","model","organizationId","isBuiltIn",
              "knowledgeBaseGroupIds","openingQuestions","tags","createdAt","updatedAt")
-           VALUES ($1,'Budi Helper','You are Budi''s helper.','rantai/nano',$2,'{}','{}','{}',now(),now())"#,
+           VALUES ($1,'Budi Helper','You are Budi''s helper.','rantai/nano',$2,$2 IS NULL,'{}','{}','{}',now(),now())"#,
     )
     .bind(&id)
     .bind(organization_id)
@@ -115,6 +120,21 @@ pub async fn member(db: &PgPool, user_id: &str, org_id: &str) -> Result<(), sqlx
     .bind(new_id())
     .bind(user_id)
     .bind(org_id)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Grants every member of the organisation the use of an assistant.
+pub async fn grant_org(db: &PgPool, org_id: &str, assistant_id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"INSERT INTO "AssistantGrant" ("id","organizationId","assistantId","subjectType",
+             "subjectId","level","grantedBy","createdAt","updatedAt")
+           VALUES ($1,$2,$3,'org',$2,'use','test',now(),now())"#,
+    )
+    .bind(new_id())
+    .bind(org_id)
+    .bind(assistant_id)
     .execute(db)
     .await?;
     Ok(())

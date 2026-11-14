@@ -58,6 +58,34 @@ async fn assistant_row(
     Ok(id)
 }
 
+/// A grant on an assistant; returns its id.
+async fn grant(
+    db: &PgPool,
+    org_id: &str,
+    assistant_id: &str,
+    subject_type: &str,
+    subject_id: &str,
+    level: &str,
+) -> Result<String, sqlx::Error> {
+    let id = new_id();
+    sqlx::query(
+        r#"INSERT INTO "AssistantGrant" ("id","organizationId","assistantId","subjectType",
+             "subjectId","level","grantedBy","createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$5,$6,'test',now(),now())
+           ON CONFLICT ("assistantId","subjectType","subjectId")
+             DO UPDATE SET "level" = EXCLUDED."level""#,
+    )
+    .bind(&id)
+    .bind(org_id)
+    .bind(assistant_id)
+    .bind(subject_type)
+    .bind(subject_id)
+    .bind(level)
+    .execute(db)
+    .await?;
+    Ok(id)
+}
+
 /// A platform admin (the `role` of the table `"Agent"`); returns its id.
 async fn admin_user(db: &PgPool) -> Result<String, sqlx::Error> {
     let id = new_id();
@@ -171,7 +199,9 @@ async fn an_assistant_of_another_organisation_is_not_found() -> R {
     let (alice, bob) = (user(&db, false).await?, user(&db, false).await?);
     let (org_a, org_b) = (org(&db).await?, org(&db).await?);
     member(&db, &alice, &org_a, "member").await?;
-    member(&db, &bob, &org_b, "member").await?;
+    // The positive control is an admin: a member of the owning org may not edit an agent it
+    // was not granted (differences row 80).
+    member(&db, &bob, &org_b, "admin").await?;
     let theirs = assistant_row(&db, Some(&org_b), false).await?;
     let auth = bearer(&alice)?;
 
@@ -248,19 +278,11 @@ async fn the_role_of_the_caller_decides_what_it_may_do() -> R {
     let (viewer_auth, member_auth, admin_auth) =
         (bearer(&viewer)?, bearer(&member_user)?, bearer(&admin)?);
 
-    // The viewer may read.
-    let (status, _) = send(
-        &app,
-        "GET",
-        &format!("/api/assistants/{id}"),
-        Some(&viewer_auth),
-        None,
-    )
-    .await?;
-    assert_eq!(status, 200, "a viewer may read the assistant");
-
-    // The viewer may not write, bind, delete or make it the default.
+    // A viewer and a member neither use nor build an agent that was not granted to them
+    // (differences row 80). The read is the same 403 as the write: the assistant is one of
+    // their own organisation, so it exists and they may not act on it (§4).
     let refused = [
+        ("GET", format!("/api/assistants/{id}"), None),
         (
             "PATCH",
             format!("/api/assistants/{id}"),
@@ -284,59 +306,49 @@ async fn the_role_of_the_caller_decides_what_it_may_do() -> R {
             Some(json!({ "name": "new", "systemPrompt": "twenty characters at least" })),
         ),
     ];
-    for (method, uri, body) in refused {
-        let (status, response) = send(&app, method, &uri, Some(&viewer_auth), body).await?;
-        assert_eq!(
-            (status, code(&response)),
-            (403, Some("permission_denied")),
-            "{method} {uri} as a viewer"
-        );
+    for auth in [&viewer_auth, &member_auth] {
+        for (method, uri, body) in &refused {
+            let (status, response) = send(&app, method, uri, Some(auth), body.clone()).await?;
+            assert_eq!(
+                (status, code(&response)),
+                (403, Some("permission_denied")),
+                "{method} {uri} without a grant"
+            );
+        }
     }
 
-    // The member may edit and bind.
+    // Positive control: an admin reads, edits, binds, sets the default and creates.
+    let (status, _) = send(
+        &app,
+        "GET",
+        &format!("/api/assistants/{id}"),
+        Some(&admin_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200, "an admin may read the assistant");
+
     let (status, body) = send(
         &app,
         "PATCH",
         &format!("/api/assistants/{id}"),
-        Some(&member_auth),
-        Some(json!({ "name": "edited by a member" })),
+        Some(&admin_auth),
+        Some(json!({ "name": "edited by an admin" })),
     )
     .await?;
     assert_eq!(status, 200);
-    assert_eq!(body.pointer("/name"), Some(&json!("edited by a member")));
+    assert_eq!(body.pointer("/name"), Some(&json!("edited by an admin")));
 
     let (status, _) = send(
         &app,
         "PUT",
         &format!("/api/assistants/{id}/tools"),
-        Some(&member_auth),
+        Some(&admin_auth),
         Some(json!({ "toolIds": [] })),
     )
     .await?;
-    assert_eq!(status, 200, "a member may write the bindings");
+    assert_eq!(status, 200, "an admin may write the bindings");
 
-    // The member may not delete the assistant nor make it the default.
-    let (status, response) = send(
-        &app,
-        "DELETE",
-        &format!("/api/assistants/{id}"),
-        Some(&member_auth),
-        None,
-    )
-    .await?;
-    assert_eq!((status, code(&response)), (403, Some("permission_denied")));
-
-    let (status, response) = send(
-        &app,
-        "POST",
-        &format!("/api/assistants/{id}/default"),
-        Some(&member_auth),
-        None,
-    )
-    .await?;
-    assert_eq!((status, code(&response)), (403, Some("permission_denied")));
-
-    // The admin may do both.
     let (status, body) = send(
         &app,
         "POST",
@@ -348,6 +360,90 @@ async fn the_role_of_the_caller_decides_what_it_may_do() -> R {
     assert_eq!(status, 200);
     assert_eq!(body.pointer("/isSystemDefault"), Some(&json!(true)));
 
+    let (status, _) = send(
+        &app,
+        "POST",
+        "/api/assistants",
+        Some(&admin_auth),
+        Some(json!({ "name": "made by an admin", "systemPrompt": "twenty characters at least" })),
+    )
+    .await?;
+    assert_eq!(status, 201, "an admin may create an agent");
+
+    // A `use` grant lets the member read, and nothing else.
+    grant(&db, &org_id, &id, "user", &member_user, "use").await?;
+    let (status, _) = send(
+        &app,
+        "GET",
+        &format!("/api/assistants/{id}"),
+        Some(&member_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200, "a use grant lets the member read the agent");
+    let (status, response) = send(
+        &app,
+        "PATCH",
+        &format!("/api/assistants/{id}"),
+        Some(&member_auth),
+        Some(json!({ "name": "not allowed either" })),
+    )
+    .await?;
+    assert_eq!((status, code(&response)), (403, Some("permission_denied")));
+
+    // A `manage` grant lets them edit and bind that one agent (§3.3) ...
+    grant(&db, &org_id, &id, "user", &member_user, "manage").await?;
+    let (status, body) = send(
+        &app,
+        "PATCH",
+        &format!("/api/assistants/{id}"),
+        Some(&member_auth),
+        Some(json!({ "name": "edited by a delegate" })),
+    )
+    .await?;
+    assert_eq!(status, 200);
+    assert_eq!(body.pointer("/name"), Some(&json!("edited by a delegate")));
+
+    let (status, _) = send(
+        &app,
+        "PUT",
+        &format!("/api/assistants/{id}/tools"),
+        Some(&member_auth),
+        Some(json!({ "toolIds": [] })),
+    )
+    .await?;
+    assert_eq!(
+        status, 200,
+        "a manage grant covers the bindings of that agent"
+    );
+
+    // ... but never creating another agent, and never its grants: a delegate cannot widen
+    // their own audience.
+    let (status, response) = send(
+        &app,
+        "POST",
+        "/api/assistants",
+        Some(&member_auth),
+        Some(json!({ "name": "a second agent", "systemPrompt": "twenty characters at least" })),
+    )
+    .await?;
+    assert_eq!((status, code(&response)), (403, Some("permission_denied")));
+
+    let (status, response) = send(
+        &app,
+        "GET",
+        &format!("/api/assistants/{id}/access"),
+        Some(&member_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(
+        (status, code(&response)),
+        (403, Some("permission_denied")),
+        "a manage grant does not reach the access panel"
+    );
+
+    // The admin deletes it (deleting is `agents.manage`).
     let (status, body) = send(
         &app,
         "DELETE",
@@ -452,7 +548,7 @@ async fn ten_writers_with_the_same_version_produce_one_winner() -> R {
     };
     let member_user = user(&db, false).await?;
     let org_id = org(&db).await?;
-    member(&db, &member_user, &org_id, "member").await?;
+    member(&db, &member_user, &org_id, "admin").await?;
     let id = assistant_row(&db, Some(&org_id), false).await?;
     let auth = bearer(&member_user)?;
 
@@ -532,7 +628,7 @@ async fn a_binding_put_replaces_the_set_and_dedupes_it() -> R {
     };
     let member_user = user(&db, false).await?;
     let org_id = org(&db).await?;
-    member(&db, &member_user, &org_id, "member").await?;
+    member(&db, &member_user, &org_id, "admin").await?;
     let id = assistant_row(&db, Some(&org_id), false).await?;
     let (first, second, hidden) = (
         tool_row(&db, Some(&org_id), true).await?,
@@ -684,7 +780,7 @@ async fn the_mobile_routes_take_the_bearer_token_and_refuse_a_suspended_user() -
     };
     let member_user = user(&db, false).await?;
     let org_id = org(&db).await?;
-    member(&db, &member_user, &org_id, "member").await?;
+    member(&db, &member_user, &org_id, "admin").await?;
     let id = assistant_row(&db, Some(&org_id), false).await?;
     let auth = bearer(&member_user)?;
 
@@ -770,7 +866,7 @@ async fn a_bad_body_is_a_400_with_every_bad_field() -> R {
     };
     let member_user = user(&db, false).await?;
     let org_id = org(&db).await?;
-    member(&db, &member_user, &org_id, "member").await?;
+    member(&db, &member_user, &org_id, "admin").await?;
     let id = assistant_row(&db, Some(&org_id), false).await?;
     let auth = bearer(&member_user)?;
 
@@ -851,6 +947,9 @@ async fn the_default_assistant_is_the_one_the_organisation_and_the_user_choose()
     );
     // A built-in exists, so the organisation has something to fall back to.
     let _built_in = assistant_row(&db, None, true).await?;
+    // The member may use the organisation's default: a grant to the whole organisation
+    // (differences row 80: a member uses an agent through a grant).
+    grant(&db, &org_a, &mine, "org", &org_a, "use").await?;
     let (member_auth, admin_auth) = (bearer(&member_user)?, bearer(&admin)?);
 
     // Without a default the organisation falls back to the first built-in.
