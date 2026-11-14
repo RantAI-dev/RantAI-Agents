@@ -66,6 +66,12 @@ pub fn parse_agent_api_key(key: &str) -> Result<AgentApiKey, AuthError> {
 
 /// The caller's IP, the way the old route reads it: the first hop of `x-forwarded-for`, else
 /// `x-real-ip`.
+///
+/// **Parity only: never use it for a decision.** The first hop is whatever the client wrote, so
+/// an allowlist checked against it can be passed by sending the header. `tests/parity_auth.rs`
+/// pins this function to the old behaviour; the server reads the caller's address through
+/// `agents_server::http::client_ip::ClientIp` (the socket peer, or `X-Forwarded-For` only from
+/// `TRUSTED_PROXIES`) and passes `ClientIp::text()` to [`ip_allowed`].
 #[must_use]
 pub fn client_ip(x_forwarded_for: Option<&str>, x_real_ip: Option<&str>) -> Option<String> {
     let forwarded = x_forwarded_for

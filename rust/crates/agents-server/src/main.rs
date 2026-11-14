@@ -52,7 +52,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         ),
         ..agents_server::signin::SignIn::default()
     });
-    axum::serve(listener, app(state))
+    state.trusted_proxies = std::sync::Arc::from(config.trusted_proxies.clone());
+    // The socket peer is the only address a client cannot forge (`http::client_ip`).
+    let service = app(state).into_make_service_with_connect_info::<std::net::SocketAddr>();
+    axum::serve(listener, service)
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())

@@ -35,9 +35,9 @@ use agents_store::grants::{self, GrantRow};
 use crate::AppState;
 use crate::auth::CurrentUser;
 use crate::http::ApiError;
+use crate::http::client_ip::ClientIp;
 use crate::http::json::Body;
 use crate::http::time::iso;
-use crate::routes::organizations::ip_address;
 
 use super::{
     Caller, SuccessJson, authorize_org, caller, load_authorized, missing_body, not_found,
@@ -71,6 +71,7 @@ pub(super) async fn list(
 pub(super) async fn replace(
     State(state): State<AppState>,
     headers: HeaderMap,
+    ip: ClientIp,
     user: CurrentUser,
     Path(id): Path<String>,
     body: Option<Body<Value>>,
@@ -82,7 +83,7 @@ pub(super) async fn replace(
     let caller = caller(&state, &headers, &user).await?;
     let row = manageable(&state, &caller, &id).await?;
     let org_id = caller.org()?.to_owned();
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = Actor {
         user_id: &caller.user_id,
         ip_address: ip.as_deref(),
@@ -97,13 +98,14 @@ pub(super) async fn replace(
 pub(super) async fn revoke(
     State(state): State<AppState>,
     headers: HeaderMap,
+    ip: ClientIp,
     user: CurrentUser,
     Path((id, grant_id)): Path<(String, String)>,
 ) -> Result<Json<SuccessJson>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
     let row = manageable(&state, &caller, &id).await?;
     let org_id = caller.org()?.to_owned();
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = Actor {
         user_id: &caller.user_id,
         ip_address: ip.as_deref(),

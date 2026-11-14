@@ -119,7 +119,44 @@ pub async fn send_with(
     body: Option<Value>,
     headers: &[(&str, &str)],
 ) -> Result<(u16, Value), Box<dyn std::error::Error>> {
+    send_from(router, method, uri, auth, body, headers, None).await
+}
+
+/// The router with `TRUSTED_PROXIES` set to `proxies` (comma-separated ranges).
+pub async fn router_trusting(
+    proxies: &str,
+) -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>> {
+    let Some(db) = pool().await? else {
+        return Ok(None);
+    };
+    let trusted = agents_core::net::parse_cidrs(proxies)?;
+    let state = AppState {
+        trusted_proxies: std::sync::Arc::from(trusted),
+        ..AppState::new(
+            db.clone(),
+            AuthConfig {
+                secrets: vec![SECRET.to_owned()],
+            },
+        )
+    };
+    Ok(Some((app(state), db)))
+}
+
+/// Sends one request as if it came over a socket from `peer`, the way `main.rs` serves with
+/// `ConnectInfo`; `None` is a request with no socket peer.
+pub async fn send_from(
+    router: &Router,
+    method: &str,
+    uri: &str,
+    auth: Option<&str>,
+    body: Option<Value>,
+    headers: &[(&str, &str)],
+    peer: Option<std::net::SocketAddr>,
+) -> Result<(u16, Value), Box<dyn std::error::Error>> {
     let mut req = Request::builder().method(method).uri(uri);
+    if let Some(peer) = peer {
+        req = req.extension(axum::extract::ConnectInfo(peer));
+    }
     if let Some(a) = auth {
         req = req.header("authorization", a);
     }

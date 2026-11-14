@@ -18,7 +18,6 @@ mod org;
 mod units;
 
 use axum::Router;
-use axum::http::HeaderMap;
 use axum::routing::{get, patch, post};
 use serde::Serialize;
 
@@ -174,23 +173,6 @@ pub(crate) fn store_error(e: &StoreError) -> ApiError {
             ApiError::new(ErrorCode::Internal)
         }
     }
-}
-
-/// The caller's address for the audit row. The proxy sets `X-Forwarded-For`; the first entry is
-/// the client. A test or a direct call may send neither, and the row keeps no address.
-///
-/// Not proof of anything: nothing here knows which proxies to trust, so a client that reaches the
-/// server directly, or through a proxy that appends instead of overwriting, chooses this value.
-pub(crate) fn ip_address(headers: &HeaderMap) -> Option<String> {
-    for name in ["x-forwarded-for", "x-real-ip"] {
-        if let Some(value) = headers.get(name).and_then(|v| v.to_str().ok()) {
-            let first = value.split(',').next().unwrap_or_default().trim();
-            if !first.is_empty() {
-                return Some(first.to_owned());
-            }
-        }
-    }
-    None
 }
 
 /// The body a request needs and did not send.

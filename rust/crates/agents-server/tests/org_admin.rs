@@ -529,15 +529,15 @@ async fn every_change_leaves_an_audit_row() -> R {
     member(&db, &owner, &o, "owner").await?;
     member(&db, &other, &o, "member").await?;
     let to = token(&owner);
-    let headers = [("x-forwarded-for", "203.0.113.7")];
-
-    let (status, _) = common::send_with(
+    // The audited IP is the socket peer (no trusted proxies here; tests/client_ip.rs has the rule).
+    let (status, _) = common::send_from(
         &app,
         "PATCH",
         &format!("/api/organizations/{o}"),
         Some(to.as_str()),
         Some(json!({ "name": "Audited" })),
-        &headers,
+        &[],
+        Some("203.0.113.7:40000".parse()?),
     )
     .await?;
     assert_eq!(status, 200);

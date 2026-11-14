@@ -27,9 +27,9 @@ use agents_store::identity::{self, ProviderRow, ProviderWrite, WriteError};
 use crate::AppState;
 use crate::auth::{CurrentUser, active_org};
 use crate::http::ApiError;
+use crate::http::client_ip::ClientIp;
 use crate::http::json::Body;
 use crate::http::time::iso;
-use crate::signin;
 use crate::sso::config::{OidcConfig, Preset, is_guid};
 use crate::sso::env::ENV_PROVIDER_ID;
 
@@ -446,20 +446,21 @@ fn write_error(e: WriteError) -> ApiError {
 
 async fn audit_change(
     state: &AppState,
-    headers: &HeaderMap,
+    ip: ClientIp,
     org: &str,
     user: &str,
     action: &str,
     row_id: &str,
     name: &str,
 ) {
+    let ip_text = ip.text();
     let entry = AuditEntry {
         organization_id: org,
         user_id: Some(user),
         action,
         resource: &format!("identity_provider:{row_id}"),
         detail: json!({ "providerId": row_id, "name": name }),
-        ip_address: Some(&signin::client_address(headers)),
+        ip_address: ip_text.as_deref(),
         risk_level: "high",
     };
     if let Err(e) = audit::record_entry(&state.db, &entry).await {
@@ -470,6 +471,7 @@ async fn audit_change(
 async fn create(
     State(state): State<AppState>,
     headers: HeaderMap,
+    ip: ClientIp,
     user: CurrentUser,
     Body(body): Body<ProviderBody>,
 ) -> Result<(StatusCode, Json<View>), ApiError> {
@@ -489,7 +491,7 @@ async fn create(
         .map_err(write_error)?;
     audit_change(
         &state,
-        &headers,
+        ip,
         &org,
         &user.id,
         "sso.provider.create",
@@ -513,6 +515,7 @@ async fn update(
     State(state): State<AppState>,
     Path(id): Path<String>,
     headers: HeaderMap,
+    ip: ClientIp,
     user: CurrentUser,
     Body(body): Body<ProviderBody>,
 ) -> Result<Json<View>, ApiError> {
@@ -542,7 +545,7 @@ async fn update(
         .ok_or_else(|| ApiError::new(ErrorCode::NotFound))?;
     audit_change(
         &state,
-        &headers,
+        ip,
         &org,
         &user.id,
         "sso.provider.update",
@@ -557,6 +560,7 @@ async fn remove(
     State(state): State<AppState>,
     Path(id): Path<String>,
     headers: HeaderMap,
+    ip: ClientIp,
     user: CurrentUser,
 ) -> Result<StatusCode, ApiError> {
     let org = authorised(&state, &headers, &user).await?;
@@ -572,7 +576,7 @@ async fn remove(
     }
     audit_change(
         &state,
-        &headers,
+        ip,
         &org,
         &user.id,
         "sso.provider.delete",

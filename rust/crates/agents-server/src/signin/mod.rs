@@ -1,5 +1,5 @@
 //! What the sign-in routes share: the deployment's public URL, the cookies Auth.js would set,
-//! randomness, the caller's address, the throttle and the SSO client.
+//! randomness, the throttle and the SSO clients. The caller's address is `crate::http::client_ip`.
 
 pub mod cookies;
 pub mod throttle;
@@ -108,29 +108,6 @@ impl SignIn {
     }
 }
 
-/// The caller's address as the nearest proxy saw it: the last `X-Forwarded-For` entry, which the
-/// proxy in front of this service appended (Next.js or the load balancer), then `X-Real-IP`. The
-/// first entry is whatever the client wrote, so it is never used.
-#[must_use]
-pub fn client_address(headers: &HeaderMap) -> String {
-    let forwarded = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.rsplit(',').next())
-        .map(str::trim)
-        .filter(|v| !v.is_empty());
-    forwarded
-        .or_else(|| {
-            headers
-                .get("x-real-ip")
-                .and_then(|v| v.to_str().ok())
-                .map(str::trim)
-        })
-        .filter(|v| !v.is_empty())
-        .unwrap_or("unknown")
-        .to_owned()
-}
-
 /// A path on this site to send the browser to after sign-in: `/` plus anything but a second `/`
 /// or `\` (which a browser reads as another host). Anything else falls back to `/dashboard`.
 #[must_use]
@@ -168,18 +145,5 @@ mod tests {
             assert_eq!(safe_return_to(Some(bad)), "/dashboard", "{bad}");
         }
         assert_eq!(safe_return_to(None), "/dashboard");
-    }
-
-    #[test]
-    fn the_address_is_the_proxys_entry_not_the_clients() {
-        let mut h = HeaderMap::new();
-        h.insert(
-            "x-forwarded-for",
-            "6.6.6.6, 10.0.0.7"
-                .parse()
-                .unwrap_or(axum::http::HeaderValue::from_static("")),
-        );
-        assert_eq!(client_address(&h), "10.0.0.7");
-        assert_eq!(client_address(&HeaderMap::new()), "unknown");
     }
 }
