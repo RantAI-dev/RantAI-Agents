@@ -150,9 +150,15 @@ async fn manageable(state: &AppState, caller: &Caller, id: &str) -> Result<Assis
 }
 
 /// The grants as the API returns them.
+///
+/// The list is not paginated, unlike the rest of `docs/conventions.md`: `PUT` replaces the
+/// whole set, so the panel has to show every grant of the agent, and an agent's grants are
+/// bounded by its organisation's subjects. `nextCursor` is therefore always null.
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct GrantsJson {
     pub data: Vec<GrantJson>,
+    pub next_cursor: Option<String>,
 }
 
 /// One grant, with the name of what it names.
@@ -204,7 +210,10 @@ async fn grants_json(
             created_at: iso(row.created_at),
         });
     }
-    Ok(GrantsJson { data })
+    Ok(GrantsJson {
+        data,
+        next_cursor: None,
+    })
 }
 
 /// Writes one audit row per grant that was added, changed or removed.

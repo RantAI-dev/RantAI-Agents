@@ -53,7 +53,7 @@ async fn the_panel_lists_every_grant_with_the_name_of_what_it_names() -> R {
     )
     .await?;
     assert_eq!(status, 200);
-    assert_eq!(body, json!({ "data": [] }));
+    assert_eq!(body, json!({ "data": [], "nextCursor": null }));
 
     grant(&db, &org_id, &id, "org", &org_id, "use").await?;
     grant(&db, &org_id, &id, "unit", &department, "use").await?;
@@ -160,7 +160,7 @@ async fn a_put_replaces_the_whole_list_and_writes_the_audit_trail() -> R {
     )
     .await?;
     assert_eq!(status, 200);
-    assert_eq!(body, json!({ "data": [] }));
+    assert_eq!(body, json!({ "data": [], "nextCursor": null }));
     // The member lost the use the `manage` grant gave them.
     let (status, response) = send(
         &app,
