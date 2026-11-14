@@ -362,3 +362,124 @@ async fn another_organisations_agent_and_its_grants_are_not_found() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn a_default_the_caller_may_not_use_is_refused_when_set_and_ignored_afterwards() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let member_user = member_of(&db, &org_id, "member").await?;
+    let admin_user = member_of(&db, &org_id, "admin").await?;
+    let (member_auth, admin_auth) = (bearer(&member_user)?, bearer(&admin_user)?);
+    let id = assistant(&db, &org_id).await?;
+    // The fallback has to exist for the resolution to have something to answer.
+    let _built_in = support::built_in(&db).await?;
+
+    // Setting it while it is not granted is refused, and nothing is written.
+    let (status, response) = send(
+        &app,
+        "PUT",
+        "/api/user/default-assistant",
+        Some(&member_auth),
+        Some(json!({ "assistantId": id })),
+    )
+    .await?;
+    assert_eq!(
+        (status, code(&response)),
+        (403, Some("permission_denied")),
+        "a default the caller may not use is refused"
+    );
+    let (status, response) = send(
+        &app,
+        "PUT",
+        "/api/user/preferences",
+        Some(&member_auth),
+        Some(json!({ "defaultAssistantId": id })),
+    )
+    .await?;
+    assert_eq!((status, code(&response)), (403, Some("permission_denied")));
+    let stored = agents_store::assistants::user_preference(&db, &member_user).await?;
+    assert_eq!(
+        stored.and_then(|p| p.default_assistant_id),
+        None,
+        "the refused requests wrote no default"
+    );
+
+    // Granted, the choice is accepted; the admin then takes the grant away.
+    grant(&db, &org_id, &id, "user", &member_user, "use").await?;
+    let (status, body) = send(
+        &app,
+        "PUT",
+        "/api/user/default-assistant",
+        Some(&member_auth),
+        Some(json!({ "assistantId": id })),
+    )
+    .await?;
+    assert_eq!(status, 200);
+    assert_eq!(body.pointer("/source"), Some(&json!("user")));
+    assert_eq!(body.pointer("/assistant/id"), Some(&json!(id.as_str())));
+
+    let (status, _) = send(
+        &app,
+        "PUT",
+        &format!("/api/assistants/{id}/access"),
+        Some(&admin_auth),
+        Some(json!([])),
+    )
+    .await?;
+    assert_eq!(status, 200);
+
+    // The stored choice is ignored when resolving: the built-in answers instead.
+    let (status, body) = send(
+        &app,
+        "GET",
+        "/api/user/default-assistant",
+        Some(&member_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200);
+    assert_eq!(body.pointer("/source"), Some(&json!("fallback")));
+    assert_eq!(
+        body.pointer("/assistant/isBuiltIn"),
+        Some(&json!(true)),
+        "the default of a caller who lost the grant is a built-in"
+    );
+    assert_ne!(
+        body.pointer("/assistant/id"),
+        Some(&json!(id.as_str())),
+        "the revoked agent is not the default any more"
+    );
+    // The built-in the fallback names may be any built-in of the shared database, not the one
+    // this test seeded; what matters is that it is one of them.
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_built_in_is_listed_for_every_member() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let member_user = member_of(&db, &org_id, "member").await?;
+    let auth = bearer(&member_user)?;
+    let id = support::built_in(&db).await?;
+
+    let (status, body) = send(&app, "GET", "/api/assistants", Some(&auth), None).await?;
+    assert_eq!(status, 200);
+    assert!(
+        ids(&body).contains(&id),
+        "a built-in is visible to every member (§3.3)"
+    );
+    let (status, _) = send(
+        &app,
+        "GET",
+        &format!("/api/assistants/{id}"),
+        Some(&auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200, "a member reads a built-in");
+    Ok(())
+}
