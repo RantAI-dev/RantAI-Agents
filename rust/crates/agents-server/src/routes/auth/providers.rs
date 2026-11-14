@@ -521,6 +521,11 @@ async fn update(
     if current.id == ENV_PROVIDER_ID {
         return Err(env_managed());
     }
+    if current.kind != "oidc" {
+        return Err(
+            ApiError::new(ErrorCode::Conflict).message("Only OIDC providers can be changed here.")
+        );
+    }
     let (draft, config) = sealed_config(&state, draft(body, Some(&current))?)?;
     let write = ProviderWrite {
         kind: "oidc",

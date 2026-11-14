@@ -7,6 +7,11 @@ mod signin_kit;
 use serde_json::{Value, json};
 use signin_kit::{R, Res, SECRET, StubIdp, call, domain, member, org, pool, router, user_with};
 
+/// The value at a JSON Pointer, or `null`: tests compare it without indexing.
+fn at(v: &Value, pointer: &str) -> Value {
+    v.pointer(pointer).cloned().unwrap_or(Value::Null)
+}
+
 fn bearer(user_id: &str) -> Res<String> {
     let token = agents_auth::mobile::sign_mobile_token(
         user_id,
@@ -50,11 +55,11 @@ async fn an_admin_manages_providers_and_the_secret_never_comes_back() -> R {
     });
     let created = call(&app, "POST", PATH, &[("authorization", &admin)], Some(body)).await?;
     assert_eq!(created.status, 201, "{created:?}");
-    let id = created.body["id"].as_str().ok_or("no id")?.to_owned();
-    assert_eq!(created.body["hasClientSecret"], true);
-    assert_eq!(created.body["emailDomains"], json!([d]));
+    let id = at(&created.body, "/id").as_str().ok_or("no id")?.to_owned();
+    assert_eq!(at(&created.body, "/hasClientSecret"), true);
+    assert_eq!(at(&created.body, "/emailDomains"), json!([d]));
     assert_eq!(
-        created.body["callbackUrl"],
+        at(&created.body, "/callbackUrl"),
         json!(format!("http://app.test/api/auth/sso/{id}/callback"))
     );
     assert!(!created.body.to_string().contains(&secret));
@@ -67,12 +72,12 @@ async fn an_admin_manages_providers_and_the_secret_never_comes_back() -> R {
         !stored.to_string().contains(&secret),
         "the secret is stored in clear"
     );
-    assert!(stored["clientSecretEncrypted"].is_string());
+    assert!(at(&stored, "/clientSecretEncrypted").is_string());
 
     let listed = call(&app, "GET", PATH, &[("authorization", &admin)], None).await?;
     assert_eq!(listed.status, 200);
-    assert!(listed.body["nextCursor"].is_null());
-    assert_eq!(listed.body["data"].as_array().map(Vec::len), Some(1));
+    assert!(at(&listed.body, "/nextCursor").is_null());
+    assert_eq!(at(&listed.body, "/data").as_array().map(Vec::len), Some(1));
     assert!(!listed.body.to_string().contains(&secret));
 
     let one = format!("{PATH}/{id}");
@@ -85,7 +90,10 @@ async fn an_admin_manages_providers_and_the_secret_never_comes_back() -> R {
     )
     .await?;
     assert_eq!(
-        (renamed.status, renamed.body["hasClientSecret"].as_bool()),
+        (
+            renamed.status,
+            at(&renamed.body, "/hasClientSecret").as_bool()
+        ),
         (200, Some(true))
     );
     let cleared = call(
@@ -96,7 +104,7 @@ async fn an_admin_manages_providers_and_the_secret_never_comes_back() -> R {
         Some(json!({ "clientSecret": null })),
     )
     .await?;
-    assert_eq!(cleared.body["hasClientSecret"], false);
+    assert_eq!(at(&cleared.body, "/hasClientSecret"), false);
 
     let tested = call(
         &app,
@@ -107,7 +115,7 @@ async fn an_admin_manages_providers_and_the_secret_never_comes_back() -> R {
     )
     .await?;
     assert_eq!(tested.status, 200, "{tested:?}");
-    assert_eq!(tested.body["keyCount"], 1);
+    assert_eq!(at(&tested.body, "/keyCount"), 1);
 
     let deleted = call(&app, "DELETE", &one, &[("authorization", &admin)], None).await?;
     assert_eq!(deleted.status, 204);
@@ -150,7 +158,10 @@ async fn another_org_gets_404_and_a_member_gets_403() -> R {
     )
     .await?;
     assert_eq!(created.status, 201, "{created:?}");
-    let one = format!("{PATH}/{}", created.body["id"].as_str().ok_or("no id")?);
+    let one = format!(
+        "{PATH}/{}",
+        at(&created.body, "/id").as_str().ok_or("no id")?
+    );
 
     for (method, uri, body) in [
         ("GET", one.clone(), None),
@@ -179,7 +190,7 @@ async fn another_org_gets_404_and_a_member_gets_403() -> R {
         );
     }
     let listed_by_b = call(&app, "GET", PATH, &[("authorization", &admin_b)], None).await?;
-    assert_eq!(listed_by_b.body["data"], json!([]));
+    assert_eq!(at(&listed_by_b.body, "/data"), json!([]));
     assert_eq!(
         call(&app, "GET", PATH, &[("authorization", &member_a)], None)
             .await?
@@ -230,9 +241,14 @@ async fn bad_settings_and_a_domain_of_another_org_are_refused() -> R {
     )
     .await?;
     assert_eq!((bad.status, bad.code()), (400, Some("invalid_request")));
-    let fields: Vec<&str> = bad.body["error"]["errors"]
+    let errors = at(&bad.body, "/error/errors");
+    let fields: Vec<&str> = errors
         .as_array()
-        .map(|a| a.iter().filter_map(|e| e["field"].as_str()).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|e| e.get("field").and_then(Value::as_str))
+                .collect()
+        })
         .unwrap_or_default();
     for f in ["/name", "/tenantId", "/emailDomains", "/defaultRole"] {
         assert!(fields.contains(&f), "{f} missing from {fields:?}");
@@ -262,7 +278,7 @@ async fn bad_settings_and_a_domain_of_another_org_are_refused() -> R {
     .await?;
     assert_eq!(first.status, 201, "{first:?}");
     assert_eq!(
-        first.body["issuer"],
+        at(&first.body, "/issuer"),
         "https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47/v2.0"
     );
     let taken = call(

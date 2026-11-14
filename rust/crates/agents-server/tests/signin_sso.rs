@@ -11,6 +11,11 @@ use signin_kit::{
     router_with_env, session_cookie, sign_in, start, user_with,
 };
 
+/// The value at a JSON Pointer, or `null`: tests compare it without indexing.
+fn at(v: &Value, pointer: &str) -> Value {
+    v.pointer(pointer).cloned().unwrap_or(Value::Null)
+}
+
 fn error_of(reply: &signin_kit::Reply) -> Option<String> {
     let location = reply.location.as_deref()?;
     let url = reqwest::Url::parse(location).ok()?;
@@ -35,7 +40,15 @@ async fn a_new_user_signs_in_and_the_session_works_on_a_rust_route() -> R {
     let app = router(&db, false);
     let org_id = org(&db, true).await?;
     let d = domain();
-    let pid = provider(&db, &org_id, &stub, &[d.clone()], true, json!({})).await?;
+    let pid = provider(
+        &db,
+        &org_id,
+        &stub,
+        std::slice::from_ref(&d),
+        true,
+        json!({}),
+    )
+    .await?;
     let email = format!("new@{d}");
 
     let started = start(&app, &pid).await?;
@@ -108,10 +121,19 @@ async fn each_bad_token_is_refused_next_to_a_good_one() -> R {
     let app = router(&db, false);
     let org_id = org(&db, true).await?;
     let d = domain();
-    let pid = provider(&db, &org_id, &stub, &[d.clone()], true, json!({})).await?;
+    let pid = provider(
+        &db,
+        &org_id,
+        &stub,
+        std::slice::from_ref(&d),
+        true,
+        json!({}),
+    )
+    .await?;
     let now = chrono::Utc::now().timestamp();
 
-    let cases: Vec<(&str, Box<dyn Fn(&str, &str) -> Value + '_>, Signing)> = vec![
+    type Claims<'a> = Box<dyn Fn(&str, &str) -> Value + 'a>;
+    let cases: Vec<(&str, Claims<'_>, Signing)> = vec![
         (
             "bad signature",
             Box::new(|n: &str, e: &str| stub.claims("s-sig", e, n)),
@@ -184,7 +206,15 @@ async fn a_replayed_callback_is_refused_and_a_tampered_state_too() -> R {
     let app = router(&db, false);
     let org_id = org(&db, true).await?;
     let d = domain();
-    let pid = provider(&db, &org_id, &stub, &[d.clone()], true, json!({})).await?;
+    let pid = provider(
+        &db,
+        &org_id,
+        &stub,
+        std::slice::from_ref(&d),
+        true,
+        json!({}),
+    )
+    .await?;
     let email = format!("replay@{d}");
 
     let started = start(&app, &pid).await?;
@@ -247,7 +277,15 @@ async fn an_existing_account_is_linked_only_by_a_verified_email_of_a_claimed_dom
     let app = router(&db, false);
     let org_id = org(&db, true).await?;
     let d = domain();
-    let pid = provider(&db, &org_id, &stub, &[d.clone()], true, json!({})).await?;
+    let pid = provider(
+        &db,
+        &org_id,
+        &stub,
+        std::slice::from_ref(&d),
+        true,
+        json!({}),
+    )
+    .await?;
 
     // Unverified email: refused, and the account is not linked.
     let victim = format!("victim@{d}");
@@ -356,7 +394,15 @@ async fn without_jit_an_unknown_user_is_refused() -> R {
     let app = router(&db, false);
     let org_id = org(&db, true).await?;
     let d = domain();
-    let pid = provider(&db, &org_id, &stub, &[d.clone()], false, json!({})).await?;
+    let pid = provider(
+        &db,
+        &org_id,
+        &stub,
+        std::slice::from_ref(&d),
+        false,
+        json!({}),
+    )
+    .await?;
     let reply = sign_in(
         &app,
         &stub,
@@ -415,7 +461,7 @@ async fn group_sync_adds_and_removes_only_idp_memberships() -> R {
         &db,
         &org_id,
         &stub,
-        &[d.clone()],
+        std::slice::from_ref(&d),
         true,
         json!({ "roleMapping": { "it": "admin" } }),
     )
@@ -517,7 +563,15 @@ async fn a_rotated_key_is_fetched_and_discover_finds_the_provider() -> R {
     let app = router(&db, false);
     let org_id = org(&db, true).await?;
     let d = domain();
-    let pid = provider(&db, &org_id, &stub, &[d.clone()], true, json!({})).await?;
+    let pid = provider(
+        &db,
+        &org_id,
+        &stub,
+        std::slice::from_ref(&d),
+        true,
+        json!({}),
+    )
+    .await?;
     let email = format!("rot@{d}");
     let reply = sign_in(
         &app,
@@ -547,8 +601,8 @@ async fn a_rotated_key_is_fetched_and_discover_finds_the_provider() -> R {
         None,
     )
     .await?;
-    assert_eq!(found.body["method"], "sso");
-    assert_eq!(found.body["providerId"], json!(pid));
+    assert_eq!(at(&found.body, "/method"), "sso");
+    assert_eq!(at(&found.body, "/providerId"), json!(pid));
     let none = call(
         &app,
         "GET",
@@ -557,7 +611,7 @@ async fn a_rotated_key_is_fetched_and_discover_finds_the_provider() -> R {
         None,
     )
     .await?;
-    assert_eq!(none.body["method"], "password");
+    assert_eq!(at(&none.body, "/method"), "password");
     let bad = call(&app, "GET", "/api/auth/sso/discover?email=nope", &[], None).await?;
     assert_eq!((bad.status, bad.code()), (400, Some("invalid_request")));
     let missing = call(&app, "GET", "/api/auth/sso/not-a-provider/start", &[], None).await?;
@@ -596,7 +650,7 @@ async fn the_environment_provider_signs_in_until_the_org_has_its_own() -> R {
         None,
     )
     .await?;
-    assert_eq!(found.body["providerId"], "env-oidc");
+    assert_eq!(at(&found.body, "/providerId"), "env-oidc");
     let email = format!("env@{d}");
     let reply = sign_in(
         &app,

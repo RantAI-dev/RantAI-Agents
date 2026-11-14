@@ -11,6 +11,11 @@ use signin_kit::{
     user_with,
 };
 
+/// The value at a JSON Pointer, or `null`: tests compare it without indexing.
+fn at(v: &Value, pointer: &str) -> Value {
+    v.pointer(pointer).cloned().unwrap_or(Value::Null)
+}
+
 async fn login(app: &axum::Router, email: &str, password: &str) -> Res<Reply> {
     call(
         app,
@@ -66,8 +71,8 @@ async fn a_password_login_issues_a_cookie_rust_and_nextauth_both_accept() -> R {
         let user_id = user_with(&db, &email, true, false).await?;
         let reply = login(&app, &email, PASSWORD).await?;
         assert_eq!(reply.status, 200, "{reply:?}");
-        assert_eq!(reply.body["user"]["id"], json!(user_id));
-        assert_eq!(reply.body["redirectTo"], "/dashboard");
+        assert_eq!(at(&reply.body, "/user/id"), json!(user_id));
+        assert_eq!(at(&reply.body, "/redirectTo"), "/dashboard");
         let cookie = session_cookie(&reply, secure).ok_or("no session cookie")?;
         let set = reply.set_cookies.first().ok_or("no Set-Cookie")?;
         assert!(set.contains("; Path=/; Expires=") && set.contains("; HttpOnly"));
@@ -88,15 +93,15 @@ async fn a_password_login_issues_a_cookie_rust_and_nextauth_both_accept() -> R {
         // Auth.js: `decode` and `getToken` read the same claims.
         if let Some(out) = nextauth_decode(&cookie, secure)? {
             for which in ["decoded", "fromRequest"] {
-                let claims = &out[which];
-                assert_eq!(claims["id"], json!(user_id), "{which}: {out}");
-                assert_eq!(claims["sub"], json!(user_id));
-                assert_eq!(claims["email"], json!(email));
-                assert_eq!(claims["role"], "USER");
-                assert_eq!(claims["name"], "Signin User");
-                let (iat, exp) = (claims["iat"].as_i64(), claims["exp"].as_i64());
+                let claims = at(&out, &format!("/{which}"));
+                assert_eq!(at(&claims, "/id"), json!(user_id), "{which}: {out}");
+                assert_eq!(at(&claims, "/sub"), json!(user_id));
+                assert_eq!(at(&claims, "/email"), json!(email));
+                assert_eq!(at(&claims, "/role"), "USER");
+                assert_eq!(at(&claims, "/name"), "Signin User");
+                let (iat, exp) = (at(&claims, "/iat").as_i64(), at(&claims, "/exp").as_i64());
                 assert_eq!(exp.zip(iat).map(|(e, i)| e - i), Some(30 * 24 * 60 * 60));
-                assert!(claims["jti"].as_str().is_some_and(|j| j.len() == 36));
+                assert!(at(&claims, "/jti").as_str().is_some_and(|j| j.len() == 36));
             }
             // A cookie under the other name (the other salt) is not a session to Auth.js.
             let renamed = if secure {
@@ -106,7 +111,7 @@ async fn a_password_login_issues_a_cookie_rust_and_nextauth_both_accept() -> R {
             };
             let out = nextauth_decode(&renamed, !secure)?.ok_or("bun vanished")?;
             assert!(
-                out["fromRequest"].is_null() && out["decoded"].is_null(),
+                at(&out, "/fromRequest").is_null() && at(&out, "/decoded").is_null(),
                 "{out}"
             );
         }
@@ -137,12 +142,12 @@ async fn a_wrong_password_an_unknown_email_and_a_password_less_account_look_the_
         assert!(r.set_cookies.is_empty());
     }
     assert_eq!(
-        wrong.body["error"]["message"],
-        unknown.body["error"]["message"]
+        at(&wrong.body, "/error/message"),
+        at(&unknown.body, "/error/message")
     );
     assert_eq!(
-        wrong.body["error"]["message"],
-        no_hash.body["error"]["message"]
+        at(&wrong.body, "/error/message"),
+        at(&no_hash.body, "/error/message")
     );
 
     let missing = call(&app, "POST", "/api/auth/login", &[], Some(json!({}))).await?;
@@ -151,7 +156,7 @@ async fn a_wrong_password_an_unknown_email_and_a_password_less_account_look_the_
         (400, Some("invalid_request"))
     );
     assert_eq!(
-        missing.body["error"]["errors"].as_array().map(Vec::len),
+        at(&missing.body, "/error/errors").as_array().map(Vec::len),
         Some(2)
     );
     // A form post from another site cannot sign anyone in: the body must be JSON.
@@ -333,8 +338,9 @@ async fn logout_clears_the_cookie_and_the_mobile_login_issues_a_token() -> R {
     )
     .await?;
     assert_eq!(mobile.status, 200, "{mobile:?}");
-    assert_eq!(mobile.body["user"]["id"], json!(id));
-    let token = mobile.body["token"].as_str().ok_or("no token")?;
+    assert_eq!(at(&mobile.body, "/user/id"), json!(id));
+    let token = at(&mobile.body, "/token");
+    let token = token.as_str().ok_or("no token")?;
     let claims =
         agents_auth::mobile::verify_mobile_token(token, SECRET, chrono::Utc::now().timestamp())?;
     assert_eq!(
