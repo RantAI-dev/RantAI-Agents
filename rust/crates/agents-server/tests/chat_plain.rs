@@ -734,7 +734,8 @@ async fn the_answer_is_written_to_the_session() -> R {
 }
 
 #[tokio::test]
-async fn eight_chats_at_once_lose_no_fact_of_the_profile() -> R {
+async fn sixteen_chats_at_once_lose_no_fact_of_the_profile() -> R {
+    const CHATS: usize = 16;
     let stub = Stub::start(Script::SaveMessageThenText {
         text: vec!["saved".to_owned()],
     })
@@ -745,10 +746,11 @@ async fn eight_chats_at_once_lose_no_fact_of_the_profile() -> R {
     let user_id = user(&db, false).await?;
     let assistant_id = assistant(&db, None).await?;
 
-    // Eight chats of the same user, at the same time. Each of them remembers what the user
-    // said, under a label of its own.
+    // Sixteen chats of the same user, at the same time. Each of them remembers what the user
+    // said, under a label of its own, and each of them is counted by the drain: every chat
+    // writes the profile twice, and all of them write the same row.
     let mut chats = Vec::new();
-    for index in 0..8 {
+    for index in 0..CHATS {
         let auth = bearer(&user_id)?;
         let request = json!({
             "messages": [{
@@ -769,8 +771,8 @@ async fn eight_chats_at_once_lose_no_fact_of_the_profile() -> R {
         assert!(text.contains("\"type\":\"text-delta\""));
     }
 
-    // The profile holds every fact: the writers that lost the race read the row again and
-    // write their change on top of it.
+    // The profile holds every fact and every turn: each writer holds the row lock from its
+    // read to its write.
     let profile = profile_of(&db, &user_id).await?;
     let facts = profile
         .get("facts")
@@ -782,18 +784,13 @@ async fn eight_chats_at_once_lose_no_fact_of_the_profile() -> R {
         .map(str::to_owned)
         .collect();
     predicates.sort();
+    let mut expected: Vec<String> = (0..CHATS).map(|index| format!("chat_{index}")).collect();
+    expected.sort();
+    assert_eq!(predicates, expected);
     assert_eq!(
-        predicates,
-        vec![
-            "chat_0".to_owned(),
-            "chat_1".to_owned(),
-            "chat_2".to_owned(),
-            "chat_3".to_owned(),
-            "chat_4".to_owned(),
-            "chat_5".to_owned(),
-            "chat_6".to_owned(),
-            "chat_7".to_owned(),
-        ]
+        profile.get("totalConversations").and_then(Value::as_u64),
+        Some(CHATS as u64),
+        "every chat's drain must be counted"
     );
     Ok(())
 }

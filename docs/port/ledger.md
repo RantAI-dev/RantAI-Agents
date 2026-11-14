@@ -57,5 +57,5 @@ whose dependencies are not yet "parity green". No feature work lands in a module
 |---|---|---|
 | Request auth (session cookie, mobile Bearer, suspension check every request) and active organisation | `agents-server/src/auth.rs` | built; tests in `memory_routes.rs`, seen failing with the suspension check removed |
 | Standard error body, request id, JSON body extractor, 404 fallback | `agents-server/src/http/` | built |
-| Store: assistants, bindings, defaults, orgs, users, memory, sessions | `agents-store` | built; integration tests seen failing with the CAS and the tenant filter removed; the sessions store was seen failing with its user filter removed |
-| The plain chat: the request, the prompt, the stream, the memory and the rows | `agents-server/src/routes/chat/` | built; the tests in `chat_plain.rs` are seen failing with the compare-and-swap retry, the organisation check and the capability gate removed |
+| Store: assistants, bindings, defaults, orgs, users, memory, sessions | `agents-store` | built; integration tests seen failing with the profile row lock and the tenant filter removed; the sessions store was seen failing with its user filter removed |
+| The plain chat: the request, the prompt, the stream, the memory and the rows | `agents-server/src/routes/chat/` | built; the tests in `chat_plain.rs` are seen failing with the profile row lock, the organisation check and the capability gate removed |

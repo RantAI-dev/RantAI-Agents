@@ -5,10 +5,11 @@
 //! `forgetFromUserProfile`, `updateUserProfile`, `refreshInteractionSummary`) and
 //! `src/lib/memory/memory-tools.ts`.
 //!
-//! The profile row is written with a compare-and-swap on `updatedAt` and retried when another
-//! writer won: the in-process lock the TypeScript used does not hold across instances
-//! (docs/port/differences.md, row 1). Working memory and semantic recall are not ported (row 3),
-//! so the profile only changes through the two memory tools and the summary.
+//! Every write of the profile is one transaction that locks the row from the read to the write
+//! (`agents_store::memory::update_profile`): the in-process lock the TypeScript used does not
+//! hold across instances (docs/port/differences.md, row 1). Working memory and semantic recall
+//! are not ported (row 3), so the profile only changes through the two memory tools, the drain
+//! and the summary.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -31,11 +32,6 @@ use sqlx::PgPool;
 use agents_store::memory;
 use agents_store::{StoreError, StoreResult, new_id};
 
-/// How many times a writer retries when another writer changed the row first.
-///
-/// The TypeScript retried eight times as well (`MAX_CAS_ATTEMPTS`).
-const MAX_CAS_ATTEMPTS: usize = 8;
-
 /// The user's profile, or `None` when they have none yet.
 pub async fn load_profile(db: &PgPool, user_id: &str) -> StoreResult<Option<UserProfile>> {
     let Some((value, _)) = memory::load_profile(db, user_id).await? else {
@@ -56,57 +52,38 @@ fn profile_from_value(value: &Value, user_id: &str) -> UserProfile {
     })
 }
 
-/// Reads the profile, changes it and writes it back, retrying when another writer won.
+/// Reads the profile, changes it and writes it back while holding the row lock.
 ///
-/// The mutator may run more than once; it must only use the profile it is given. Returning
-/// `false` skips the write.
+/// The mutator runs exactly once, on the profile as it is stored now. Returning `false` skips
+/// the write.
 pub async fn mutate_profile<F>(
     db: &PgPool,
     user_id: &str,
     now: &str,
-    mut mutate: F,
+    mutate: F,
 ) -> StoreResult<UserProfile>
 where
-    F: FnMut(&mut UserProfile) -> bool,
+    F: FnOnce(&mut UserProfile) -> bool,
 {
-    for attempt in 0..MAX_CAS_ATTEMPTS {
-        let loaded = memory::load_profile(db, user_id).await?;
-        let mut profile = match &loaded {
-            Some((value, _)) => profile_from_value(value, user_id),
+    let mut result = None;
+    memory::update_profile(db, user_id, |current| {
+        let mut profile = match current {
+            Some(value) => profile_from_value(value, user_id),
             None => UserProfile::new(memory::profile_id(user_id), user_id, now),
         };
-        if !mutate(&mut profile) {
-            return Ok(profile);
-        }
-        let value = serde_json::to_value(&profile)
-            .map_err(|error| StoreError::Db(sqlx::Error::Protocol(error.to_string())))?;
-        let expected = loaded.map(|(_, version)| version);
-        match memory::save_profile(db, user_id, &value, expected).await {
-            Ok(_) => return Ok(profile),
-            Err(StoreError::Conflict) => {
-                // Another writer got there first: wait a moment and read the row again.
-                tokio::time::sleep(backoff(attempt)).await;
-            }
-            Err(error) => return Err(error),
-        }
-    }
-    Err(StoreError::Conflict)
-}
-
-/// The wait before a writer reads the row again.
-///
-/// The old code waited 5 to 25 milliseconds, picked at random so two writers do not retry in
-/// lockstep. The port waits longer as the attempts pile up: every chat of a user writes the
-/// same row, and a writer that keeps losing the race must still get its change in.
-fn backoff(attempt: usize) -> std::time::Duration {
-    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|since| since.subsec_nanos() as u64)
-        .unwrap_or(0);
-    let counter = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let spread = (nanos ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15)) % 40;
-    std::time::Duration::from_millis(10 + attempt as u64 * 20 + spread)
+        let write = if mutate(&mut profile) {
+            Some(
+                serde_json::to_value(&profile)
+                    .map_err(|error| StoreError::Db(sqlx::Error::Protocol(error.to_string())))?,
+            )
+        } else {
+            None
+        };
+        result = Some(profile);
+        Ok(write)
+    })
+    .await?;
+    result.ok_or(StoreError::NotFound)
 }
 
 /// The `saveMemory` tool: writes the facts and preferences the model asked for.
@@ -164,19 +141,22 @@ pub async fn drain(db: &PgPool, user_id: &str, now: &str) -> StoreResult<UserPro
 pub async fn write_summary(
     db: &PgPool,
     user_id: &str,
-    now: &str,
     fingerprint: &str,
     summary: &str,
 ) -> StoreResult<()> {
-    let Some(current) = load_profile(db, user_id).await? else {
-        return Ok(());
-    };
-    if profile_content_fingerprint(&current) != fingerprint {
-        return Ok(());
-    }
-    mutate_profile(db, user_id, now, |profile| {
+    // The fingerprint is compared under the row lock, so nothing can change in between.
+    memory::update_profile(db, user_id, |current| {
+        let Some(value) = current else {
+            return Ok(None);
+        };
+        let mut profile = profile_from_value(value, user_id);
+        if profile_content_fingerprint(&profile) != fingerprint {
+            return Ok(None);
+        }
         profile.interaction_summary = summary.to_owned();
-        true
+        serde_json::to_value(&profile)
+            .map(Some)
+            .map_err(|error| StoreError::Db(sqlx::Error::Protocol(error.to_string())))
     })
     .await?;
     Ok(())

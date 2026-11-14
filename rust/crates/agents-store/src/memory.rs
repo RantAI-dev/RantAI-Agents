@@ -81,48 +81,78 @@ pub async fn load_profile(
     Ok(row)
 }
 
-/// Writes the profile if nobody else did since `expected` was read (`None` = "there was no row").
-/// Returns [`StoreError::Conflict`] when another writer won; the caller reloads, re-applies its
-/// change and retries. This replaces the TypeScript in-process lock, which did not hold across
-/// instances.
-pub async fn save_profile(
-    db: &PgPool,
-    user_id: &str,
-    value: &Value,
-    expected: Option<NaiveDateTime>,
-) -> StoreResult<NaiveDateTime> {
-    let ts = now();
-    let written = match expected {
-        None => sqlx::query(
+/// Reads the profile, merges a change into it and writes it back, as one transaction that
+/// holds the row lock from the read to the write.
+///
+/// `merge` gets the stored value (`None` when the user has no profile yet) and returns the
+/// value to store, or `None` to write nothing. It runs exactly once, so no retry is needed and
+/// no concurrent writer can lose a change: this replaces both the TypeScript in-process lock
+/// (which did not hold across instances) and the compare-and-swap that retried a bounded
+/// number of times (docs/port/differences.md, row 1). `merge` must not touch the database:
+/// the row is locked while it runs.
+///
+/// Returns the value the row holds afterwards (`None` when there is still no row).
+pub async fn update_profile<F>(db: &PgPool, user_id: &str, merge: F) -> StoreResult<Option<Value>>
+where
+    F: FnOnce(Option<&Value>) -> StoreResult<Option<Value>>,
+{
+    let mut tx = db.begin().await?;
+    let mut locked = lock_profile(&mut tx, user_id).await?;
+    let mut created = false;
+    if locked.is_none() {
+        // A placeholder row to lock. Two first writers race on the primary key: the loser
+        // waits for the winner's commit, inserts nothing, and then locks the winner's row.
+        let ts = now();
+        created = sqlx::query(
             r#"INSERT INTO "UserMemory" ("id","userId","type","key","value","embedding","createdAt","updatedAt")
-               VALUES ($1,$2,'LONG_TERM',$3,$4,'{}',$5,$5)
+               VALUES ($1,$2,'LONG_TERM',$3,'{}'::jsonb,'{}',$4,$4)
                ON CONFLICT ("id") DO NOTHING"#,
         )
         .bind(profile_id(user_id))
         .bind(user_id)
         .bind(PROFILE_KEY)
-        .bind(value)
         .bind(ts)
-        .execute(db)
+        .execute(&mut *tx)
         .await?
-        .rows_affected(),
-        Some(version) => sqlx::query(
-            r#"UPDATE "UserMemory" SET "value"=$3,"updatedAt"=$4
-               WHERE "userId"=$1 AND "type"='LONG_TERM' AND "key"=$2 AND "updatedAt"=$5"#,
-        )
-        .bind(user_id)
-        .bind(PROFILE_KEY)
-        .bind(value)
-        .bind(ts)
-        .bind(version)
-        .execute(db)
-        .await?
-        .rows_affected(),
-    };
-    if written == 0 {
-        return Err(StoreError::Conflict);
+        .rows_affected()
+            == 1;
+        locked = lock_profile(&mut tx, user_id).await?;
     }
-    Ok(ts)
+    let Some((id, stored)) = locked else {
+        return Err(StoreError::NotFound);
+    };
+    // The placeholder this transaction inserted is not a profile.
+    let current = (!created).then_some(&stored);
+    let Some(value) = merge(current)? else {
+        // Rolls back the placeholder, if any.
+        return Ok(current.cloned());
+    };
+    sqlx::query(r#"UPDATE "UserMemory" SET "value"=$2,"updatedAt"=$3 WHERE "id"=$1"#)
+        .bind(&id)
+        .bind(&value)
+        .bind(now())
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(Some(value))
+}
+
+/// The user's profile row, locked until the transaction ends: its id and its value.
+async fn lock_profile(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    user_id: &str,
+) -> StoreResult<Option<(String, Value)>> {
+    let row: Option<(String, Value)> = sqlx::query_as(
+        r#"SELECT "id","value" FROM "UserMemory"
+           WHERE "userId"=$1 AND "type"='LONG_TERM' AND "key"=$2
+           ORDER BY "updatedAt" DESC LIMIT 1
+           FOR UPDATE"#,
+    )
+    .bind(user_id)
+    .bind(PROFILE_KEY)
+    .fetch_optional(&mut **tx)
+    .await?;
+    Ok(row)
 }
 
 /// The user's rows, newest first, at most `limit`.

@@ -144,32 +144,24 @@ async fn default_is_per_organisation() -> R {
 async fn concurrent_profile_writers_lose_nothing() -> R {
     let Some(db) = db().await? else { return Ok(()) };
     let user = format!("u_{}", new_id());
-    const N: usize = 12;
+    const N: usize = 16;
     let mut set = tokio::task::JoinSet::new();
     for i in 0..N {
         let db = db.clone();
         let user = user.clone();
         set.spawn(async move {
-            for _attempt in 0..50 {
-                let current = memory::load_profile(&db, &user).await?;
-                let (mut value, version) = match current {
-                    Some((v, ts)) => (v, Some(ts)),
-                    None => (json!({"facts": []}), None),
-                };
+            memory::update_profile(&db, &user, |current| {
+                let mut value = current.cloned().unwrap_or_else(|| json!({"facts": []}));
                 if let Some(facts) = value.get_mut("facts").and_then(|f| f.as_array_mut()) {
                     facts.push(json!(format!("fact {i}")));
                 }
-                match memory::save_profile(&db, &user, &value, version).await {
-                    Ok(_) => return Ok::<bool, StoreError>(true),
-                    Err(StoreError::Conflict) => continue,
-                    Err(e) => return Err(e),
-                }
-            }
-            Ok(false)
+                Ok(Some(value))
+            })
+            .await
         });
     }
     while let Some(done) = set.join_next().await {
-        assert!(done??, "a writer gave up after 50 conflicts");
+        done??;
     }
     let (value, _) = memory::load_profile(&db, &user)
         .await?
@@ -179,6 +171,20 @@ async fn concurrent_profile_writers_lose_nothing() -> R {
         .and_then(|f| f.as_array())
         .map_or(0, Vec::len);
     assert_eq!(n, N, "every concurrent write must survive");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_profile_update_that_writes_nothing_leaves_no_row() -> R {
+    let Some(db) = db().await? else { return Ok(()) };
+    let user = format!("u_{}", new_id());
+    let stored = memory::update_profile(&db, &user, |current| {
+        assert!(current.is_none(), "a new user has no profile");
+        Ok(None)
+    })
+    .await?;
+    assert!(stored.is_none());
+    assert!(memory::load_profile(&db, &user).await?.is_none());
     Ok(())
 }
 

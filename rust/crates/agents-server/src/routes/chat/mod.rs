@@ -605,13 +605,10 @@ impl ChatRun {
         let provider = self.provider.clone();
         let model = self.model.clone();
         let user_id = self.user_id.clone();
-        let now = self.now.clone();
         tokio::spawn(async move {
             let summary = generate_summary(&client, &provider, &model, &profile).await;
             let fingerprint = agents_core::memory::profile::profile_content_fingerprint(&profile);
-            if let Err(error) =
-                memory::write_summary(&db, &user_id, &now, &fingerprint, &summary).await
-            {
+            if let Err(error) = memory::write_summary(&db, &user_id, &fingerprint, &summary).await {
                 tracing::warn!(error = %error, "the memory summary could not be written");
             }
         });
