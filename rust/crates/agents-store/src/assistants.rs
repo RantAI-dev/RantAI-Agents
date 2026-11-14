@@ -92,7 +92,7 @@ pub async fn list_visible(db: &PgPool, org_id: &str) -> StoreResult<Vec<Assistan
     let sql = format!(
         r#"SELECT {COLUMNS} FROM "Assistant"
            WHERE "isBuiltIn" = true OR "organizationId" = $1
-           ORDER BY "isBuiltIn" DESC, "createdAt" DESC"#
+           ORDER BY "isBuiltIn" ASC, "createdAt" DESC"#
     );
     Ok(sqlx::query_as::<_, AssistantRow>(&sql)
         .bind(org_id)
@@ -379,6 +379,24 @@ pub async fn resolve_default(
         .await?)
 }
 
+/// The user's preference row: the assistant they chose and their sidebar settings.
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+#[sqlx(rename_all = "camelCase")]
+pub struct UserPreference {
+    pub default_assistant_id: Option<String>,
+    pub sidebar_config: Option<Value>,
+}
+
+/// The user's preference row, if they have one.
+pub async fn user_preference(db: &PgPool, user_id: &str) -> StoreResult<Option<UserPreference>> {
+    Ok(sqlx::query_as::<_, UserPreference>(
+        r#"SELECT "defaultAssistantId", "sidebarConfig" FROM "UserPreference" WHERE "userId" = $1"#,
+    )
+    .bind(user_id)
+    .fetch_optional(db)
+    .await?)
+}
+
 /// Sets the user's preferred assistant (one `UserPreference` row per user).
 pub async fn set_user_default(
     db: &PgPool,
@@ -398,4 +416,230 @@ pub async fn set_user_default(
     .execute(db)
     .await?;
     Ok(())
+}
+
+/// Where the default assistant came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultSource {
+    /// The user chose it.
+    User,
+    /// The organisation's default.
+    System,
+    /// The first built-in, because the organisation has no default.
+    Fallback,
+    /// There is no assistant at all.
+    None,
+}
+
+impl DefaultSource {
+    /// The name the API sends.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::System => "system",
+            Self::Fallback => "fallback",
+            Self::None => "none",
+        }
+    }
+}
+
+/// The default assistant and where it came from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedDefault {
+    pub assistant: Option<AssistantRow>,
+    pub source: DefaultSource,
+}
+
+/// The default assistant of a user in an organisation, and where it came from.
+///
+/// The same order as [`resolve_default`]: the user's own choice (when the organisation may see
+/// it), then the organisation's default, then the first built-in.
+pub async fn resolve_default_with_source(
+    db: &PgPool,
+    user_id: &str,
+    org_id: &str,
+) -> StoreResult<ResolvedDefault> {
+    let assistant = resolve_default(db, user_id, org_id).await?;
+    let source = default_source(db, user_id, org_id).await?;
+    Ok(ResolvedDefault { assistant, source })
+}
+
+/// Which of the three candidates the default comes from.
+async fn default_source(db: &PgPool, user_id: &str, org_id: &str) -> StoreResult<DefaultSource> {
+    let sql = r#"SELECT CASE
+        WHEN EXISTS (SELECT 1 FROM "UserPreference" p JOIN "Assistant" x ON x."id" = p."defaultAssistantId"
+                      WHERE p."userId" = $1 AND (x."isBuiltIn" OR x."organizationId" = $2)) THEN 'user'
+        WHEN EXISTS (SELECT 1 FROM "Assistant" y WHERE y."organizationId" = $2 AND y."isSystemDefault") THEN 'system'
+        WHEN EXISTS (SELECT 1 FROM "Assistant" z WHERE z."isBuiltIn") THEN 'fallback'
+        ELSE 'none' END AS source"#;
+    let source: String = sqlx::query_scalar(sql)
+        .bind(user_id)
+        .bind(org_id)
+        .fetch_one(db)
+        .await?;
+    Ok(match source.as_str() {
+        "user" => DefaultSource::User,
+        "system" => DefaultSource::System,
+        "fallback" => DefaultSource::Fallback,
+        _ => DefaultSource::None,
+    })
+}
+
+/// A tool bound to an assistant, with the tool's own fields.
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+#[sqlx(rename_all = "camelCase")]
+pub struct ToolBinding {
+    pub id: String,
+    pub name: String,
+    pub display_name: String,
+    pub description: String,
+    pub category: String,
+    pub icon: Option<String>,
+    pub is_built_in: bool,
+    pub enabled: bool,
+    pub user_selectable: bool,
+    /// The binding's own flag: the tool is on for this assistant.
+    pub bound_enabled: bool,
+}
+
+/// The tools bound to an assistant, in the order they were bound.
+pub async fn list_tool_bindings(db: &PgPool, assistant_id: &str) -> StoreResult<Vec<ToolBinding>> {
+    Ok(sqlx::query_as::<_, ToolBinding>(
+        r#"SELECT t."id", t."name", t."displayName", t."description", t."category", t."icon",
+                  t."isBuiltIn", t."enabled", t."userSelectable", b."enabled" AS "boundEnabled"
+           FROM "AssistantTool" b JOIN "Tool" t ON t."id" = b."toolId"
+           WHERE b."assistantId" = $1 ORDER BY b."createdAt" ASC"#,
+    )
+    .bind(assistant_id)
+    .fetch_all(db)
+    .await?)
+}
+
+/// The ids of the tools that are hidden from the assistant's picker (`userSelectable = false`).
+/// A binding PUT must not drop them.
+pub async fn hidden_tool_ids(db: &PgPool, assistant_id: &str) -> StoreResult<Vec<String>> {
+    Ok(sqlx::query_scalar(
+        r#"SELECT b."toolId" FROM "AssistantTool" b JOIN "Tool" t ON t."id" = b."toolId"
+           WHERE b."assistantId" = $1 AND t."userSelectable" = false"#,
+    )
+    .bind(assistant_id)
+    .fetch_all(db)
+    .await?)
+}
+
+/// A skill bound to an assistant, with the skill's own fields.
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+#[sqlx(rename_all = "camelCase")]
+pub struct SkillBinding {
+    /// The id of the binding row, not of the skill.
+    pub binding_id: String,
+    pub skill_id: String,
+    pub display_name: String,
+    pub description: String,
+    pub icon: Option<String>,
+    pub enabled: bool,
+    pub priority: i32,
+}
+
+/// The skills bound to an assistant. Only the enabled ones are listed, as before.
+pub async fn list_skill_bindings(
+    db: &PgPool,
+    assistant_id: &str,
+) -> StoreResult<Vec<SkillBinding>> {
+    Ok(sqlx::query_as::<_, SkillBinding>(
+        r#"SELECT b."id" AS "bindingId", b."skillId", s."displayName", s."description", s."icon",
+                  b."enabled", b."priority"
+           FROM "AssistantSkill" b JOIN "Skill" s ON s."id" = b."skillId"
+           WHERE b."assistantId" = $1 AND b."enabled" = true
+           ORDER BY b."priority" ASC, b."createdAt" ASC"#,
+    )
+    .bind(assistant_id)
+    .fetch_all(db)
+    .await?)
+}
+
+/// An MCP server bound to an assistant, with the server's own fields.
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+#[sqlx(rename_all = "camelCase")]
+pub struct McpServerBinding {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub transport: String,
+    pub enabled: bool,
+    pub last_connected_at: Option<NaiveDateTime>,
+    pub last_error: Option<String>,
+    pub tool_count: i64,
+    /// The binding's own flag: the server is on for this assistant.
+    pub bound_enabled: bool,
+}
+
+/// The MCP servers bound to an assistant.
+pub async fn list_mcp_server_bindings(
+    db: &PgPool,
+    assistant_id: &str,
+) -> StoreResult<Vec<McpServerBinding>> {
+    Ok(sqlx::query_as::<_, McpServerBinding>(
+        r#"SELECT m."id", m."name", m."description", m."transport", m."enabled", m."lastConnectedAt",
+                  m."lastError",
+                  (SELECT COUNT(*) FROM "Tool" t WHERE t."mcpServerId" = m."id") AS "toolCount",
+                  b."enabled" AS "boundEnabled"
+           FROM "AssistantMcpServer" b JOIN "McpServerConfig" m ON m."id" = b."mcpServerId"
+           WHERE b."assistantId" = $1 ORDER BY b."createdAt" ASC"#,
+    )
+    .bind(assistant_id)
+    .fetch_all(db)
+    .await?)
+}
+
+/// A workflow bound to an assistant, with the workflow's own fields.
+#[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
+#[sqlx(rename_all = "camelCase")]
+pub struct WorkflowBinding {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub status: String,
+    pub mode: String,
+    pub category: String,
+    pub trigger: Value,
+    pub tags: Vec<String>,
+    pub nodes: Value,
+    /// How many times the workflow ran.
+    pub runs: i64,
+    /// The binding's own flag: the workflow is on for this assistant.
+    pub bound_enabled: bool,
+}
+
+/// The workflows bound to an assistant.
+pub async fn list_workflow_bindings(
+    db: &PgPool,
+    assistant_id: &str,
+) -> StoreResult<Vec<WorkflowBinding>> {
+    Ok(sqlx::query_as::<_, WorkflowBinding>(
+        r#"SELECT w."id", w."name", w."description", w."status"::text AS "status",
+                  w."mode"::text AS "mode", w."category"::text AS "category", w."trigger", w."tags",
+                  w."nodes",
+                  (SELECT COUNT(*) FROM "WorkflowRun" r WHERE r."workflowId" = w."id") AS "runs",
+                  b."enabled" AS "boundEnabled"
+           FROM "AssistantWorkflow" b JOIN "Workflow" w ON w."id" = b."workflowId"
+           WHERE b."assistantId" = $1 ORDER BY b."createdAt" ASC"#,
+    )
+    .bind(assistant_id)
+    .fetch_all(db)
+    .await?)
+}
+
+/// How many tools each assistant has: the tool count the list shows.
+pub async fn tool_counts(db: &PgPool, org_id: &str) -> StoreResult<Vec<(String, i64)>> {
+    Ok(sqlx::query_as::<_, (String, i64)>(
+        r#"SELECT a."id", COUNT(b."id")::bigint FROM "Assistant" a
+           LEFT JOIN "AssistantTool" b ON b."assistantId" = a."id"
+           WHERE a."isBuiltIn" = true OR a."organizationId" = $1
+           GROUP BY a."id""#,
+    )
+    .bind(org_id)
+    .fetch_all(db)
+    .await?)
 }
