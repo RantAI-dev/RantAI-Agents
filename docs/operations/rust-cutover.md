@@ -10,7 +10,7 @@ of Rust.
 | Variable | Meaning |
 |---|---|
 | `RUST_API_URL` | Where agents-server listens, for example `http://127.0.0.1:8090`. When it is unset or blank, nothing is routed: Next answers every request, as it did before. |
-| `RUST_ROUTES` | Comma-separated route groups: `assistants`, `sessions`, `memory`, `chat`, `auth`, `org`, `sso`, `sharing`, `agent-api`. A group that is not listed stays in Next. Unknown names are ignored. `auth` never carries NextAuth's `/api/auth/session` or `/api/auth/csrf`, and `agent-api` stays off until the S7 slice serves its routes. |
+| `RUST_ROUTES` | Comma-separated route groups: `assistants`, `sessions`, `memory`, `chat`, `auth`, `org`, `sso`, `sharing`, `agent-api`. A group that is not listed stays in Next. Unknown names are ignored. `auth` never carries NextAuth's `/api/auth/session` or `/api/auth/csrf`, and `agent-api` carries only the HTTP half of the agent API — the WebSocket upgrade is routed at the ingress, below. |
 
 ```sh
 # .env (the Next.js process)
@@ -33,6 +33,42 @@ methods than Next keeps the other methods in Next.
 | `sessions` | `GET POST /api/dashboard/chat/sessions`; `GET PATCH DELETE /api/dashboard/chat/sessions/{id}`; `POST PATCH DELETE /api/dashboard/chat/sessions/{id}/messages`. The `artifacts/**` sub-routes stay in Next. |
 | `memory` | `GET DELETE /api/dashboard/memory`; `DELETE /api/dashboard/memory/{id}`; `GET DELETE /api/mobile/memories`; `DELETE /api/mobile/memories/{id}` |
 | `chat` | `POST /api/chat` and `POST /api/chat/tool-approval`, both with a fallback (below) |
+| `auth` | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/sso/discover`, `GET /api/auth/sso/{providerId}/start`, `GET /api/auth/sso/{providerId}/callback`, `POST /api/mobile/login`. Never NextAuth's `/api/auth/session`, `/api/auth/csrf` or `/api/auth/callback/*` |
+| `org` | `GET /api/organizations`; `GET PATCH /api/organizations/{id}`; `GET POST /api/organizations/{id}/members`; `POST /api/organizations/{id}/members/accept`; `PATCH DELETE /api/organizations/{id}/members/{memberId}`; `GET POST /api/organizations/{id}/units`; `PATCH DELETE /api/organizations/{id}/units/{unitId}`; `GET POST DELETE /api/organizations/{id}/units/{unitId}/members`; `GET /api/organizations/{id}/audit` |
+| `sso` | `GET POST /api/dashboard/sso/providers`; `GET PATCH DELETE /api/dashboard/sso/providers/{id}`; `POST /api/dashboard/sso/providers/{id}/test` |
+| `sharing` | `GET PUT /api/dashboard/chat/sessions/{id}/shares`; `DELETE …/shares/{shareId}`; `GET /api/dashboard/chat/shared`; `GET /api/dashboard/chat/shared/{id}`; `POST …/shared/{id}/fork` |
+| `agent-api` | `GET POST /api/dashboard/agent-api-keys`; `GET PUT PATCH DELETE /api/dashboard/agent-api-keys/{id}`; `POST OPTIONS /v1/chat/completions`. The socket is not in the table |
+
+### The agent WebSocket is routed at the ingress, not by Next
+
+`GET /v1/agents/{assistantId}/ws` is a WebSocket **upgrade**. A Next.js route handler and the
+middleware forward a request and stream the answer back; neither can upgrade the connection, so
+putting the socket in `RUST_ROUTES` would answer the handshake with an ordinary HTTP response and
+the socket would never open. Route it straight to agents-server in the ingress instead, next to the
+`/v1/chat/completions` decision:
+
+```caddyfile
+# Caddy: the socket goes to agents-server; everything else stays Next (which proxies /v1 over HTTP)
+@agentws path /v1/agents/*/ws
+reverse_proxy @agentws 127.0.0.1:8090
+
+# nginx
+location ~ ^/v1/agents/[^/]+/ws$ {
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header X-Forwarded-For  $proxy_add_x_forwarded_for;
+    proxy_read_timeout 3600s;
+    proxy_pass http://127.0.0.1:8090;
+}
+```
+
+Two consequences worth writing down. The socket authenticates with the same key, and its address is
+read through the same `ClientIp` rule as the HTTP half, so the ingress must set `X-Forwarded-For`
+**and** the deployment must list the ingress in `TRUSTED_PROXIES` — otherwise every socket looks
+like it came from the proxy and every IP allowlist refuses it (`docs/operations/network.md`). And the
+socket is not covered by `RUST_ROUTES`, so turning `agent-api` off does not close it; the ingress
+rule is the switch. See `docs/operations/agent-api.md`.
 
 ### How a request reaches Rust
 

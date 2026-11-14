@@ -135,10 +135,19 @@ describe("the agent-api group", () => {
   it("routes the key admin API and the agent HTTP surface", () => {
     expect(matchRustRoute("GET", "/api/dashboard/agent-api-keys")?.group).toBe("agent-api")
     expect(matchRustRoute("POST", "/api/dashboard/agent-api-keys")?.group).toBe("agent-api")
+    expect(matchRustRoute("GET", "/api/dashboard/agent-api-keys/k1")?.group).toBe("agent-api")
     expect(matchRustRoute("PUT", "/api/dashboard/agent-api-keys/k1")?.group).toBe("agent-api")
+    expect(matchRustRoute("PATCH", "/api/dashboard/agent-api-keys/k1")?.group).toBe("agent-api")
     expect(matchRustRoute("DELETE", "/api/dashboard/agent-api-keys/k1")?.group).toBe("agent-api")
     expect(matchRustRoute("POST", "/v1/chat/completions")?.group).toBe("agent-api")
-    expect(matchRustRoute("GET", "/v1/agents/a1/ws")?.group).toBe("agent-api")
+    expect(matchRustRoute("OPTIONS", "/v1/chat/completions")?.group).toBe("agent-api")
+  })
+
+  it("leaves the WebSocket upgrade to the ingress", () => {
+    // A request handler and the middleware cannot forward an upgrade: Caddy/nginx routes
+    // /v1/agents/{id}/ws straight to agents-server (docs/operations/rust-cutover.md).
+    expect(matchRustRoute("GET", "/v1/agents/a1/ws")).toBeNull()
+    expect(matchRustRoute("GET", "/v1/anything-else")).toBeNull()
   })
 })
 

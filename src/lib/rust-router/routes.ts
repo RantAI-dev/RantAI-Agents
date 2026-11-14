@@ -106,13 +106,18 @@ export const RUST_ROUTES: readonly RustRoute[] = [
   { group: "sharing", path: "/api/dashboard/chat/shared", methods: ["GET"] },
   { group: "sharing", path: "/api/dashboard/chat/shared/{id}", methods: ["GET"] },
   { group: "sharing", path: "/api/dashboard/chat/shared/{id}/fork", methods: ["POST"] },
-  // The agent API keys and the agent HTTP surface (identity-and-access slice S7). The TypeScript
-  // routes answer until that slice lands; the group is listed so an operator can cut them over
-  // with RUST_ROUTES, and `RUST_API_URL` being unset keeps everything in Next until then.
+  // The agent API keys and the agent HTTP surface (identity-and-access slice S7).
+  // Only the HTTP half is here: `GET /v1/agents/{id}/ws` is a WebSocket upgrade, which a Next
+  // route handler and the middleware cannot forward (they answer with a stream, not an upgraded
+  // socket). The ingress (Caddy/nginx) routes that path straight to agents-server —
+  // docs/operations/rust-cutover.md.
   { group: "agent-api", path: "/api/dashboard/agent-api-keys", methods: ["GET", "POST"] },
-  { group: "agent-api", path: "/api/dashboard/agent-api-keys/{id}", methods: ["GET", "PUT", "DELETE"] },
-  { group: "agent-api", path: "/v1/chat/completions", methods: ["POST"] },
-  { group: "agent-api", path: "/v1/agents/{id}/ws", methods: ["GET"] },
+  {
+    group: "agent-api",
+    path: "/api/dashboard/agent-api-keys/{id}",
+    methods: ["GET", "PUT", "PATCH", "DELETE"],
+  },
+  { group: "agent-api", path: "/v1/chat/completions", methods: ["POST", "OPTIONS"] },
 ]
 
 const COMPILED = RUST_ROUTES.map((route) => ({
