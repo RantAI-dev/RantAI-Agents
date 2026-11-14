@@ -44,6 +44,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         public_url: config.public_url.clone(),
         credential_key: config.credential_key.clone(),
         env_provider: config.env_provider.clone(),
+        oidc: agents_server::sso::client::OidcClient::new(
+            agents_server::sso::client::OidcOptions {
+                allow_private_networks: config.sso_allow_private_networks,
+                ..agents_server::sso::client::OidcOptions::default()
+            },
+        ),
         ..agents_server::signin::SignIn::default()
     });
     axum::serve(listener, app(state))

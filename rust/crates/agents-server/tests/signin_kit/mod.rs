@@ -58,6 +58,22 @@ pub fn router_with_env(
     secure: bool,
     env_provider: Option<agents_server::sso::env::EnvProvider>,
 ) -> Router {
+    router_with_clients(
+        db,
+        secure,
+        env_provider,
+        OidcClient::with_options(true, std::time::Duration::ZERO),
+    )
+}
+
+/// The same, with the client the providers of the organisations use. The operator's client
+/// (`env_oidc`) still reaches the local stub.
+pub fn router_with_clients(
+    db: &PgPool,
+    secure: bool,
+    env_provider: Option<agents_server::sso::env::EnvProvider>,
+    oidc: OidcClient,
+) -> Router {
     let signin = SignIn {
         env_provider,
         public_url: Some(
@@ -72,7 +88,8 @@ pub fn router_with_env(
             "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
         )
         .ok(),
-        oidc: OidcClient::with_options(true, std::time::Duration::ZERO),
+        oidc,
+        env_oidc: OidcClient::with_options(true, std::time::Duration::ZERO),
         ..SignIn::default()
     };
     let state = AppState {
@@ -264,8 +281,17 @@ fn lock(s: &Mutex<StubState>) -> std::sync::MutexGuard<'_, StubState> {
 
 impl StubIdp {
     pub async fn start() -> Res<Self> {
+        Self::start_as(None).await
+    }
+
+    /// The same, with `host` in place of the IP in the issuer, so the client resolves a name.
+    pub async fn start_as(host: Option<&str>) -> Res<Self> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-        let issuer = format!("http://{}/realms/acme", listener.local_addr()?);
+        let addr = listener.local_addr()?;
+        let issuer = match host {
+            Some(h) => format!("http://{h}:{}/realms/acme", addr.port()),
+            None => format!("http://{addr}/realms/acme"),
+        };
         let state = Arc::new(Mutex::new(StubState {
             issuer: issuer.clone(),
             keys: vec![("k1".into(), KEY_N.trim().into())],

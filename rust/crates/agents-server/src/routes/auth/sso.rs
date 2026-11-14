@@ -122,7 +122,7 @@ async fn start(
         .map_err(|e| upstream(&provider.id, &e))?;
     let doc = state
         .signin
-        .oidc
+        .oidc_for(&provider.id)
         .discover(&discovery_url, &issuer)
         .await
         .map_err(|e| upstream(&provider.id, &e))?;
@@ -349,7 +349,7 @@ async fn verified_claims(
         .config
         .discovery_url()
         .map_err(|e| sso_failed(e.to_string()))?;
-    let client = &state.signin.oidc;
+    let client = state.signin.oidc_for(&provider.id);
     let doc = client
         .discover(&discovery_url, &issuer)
         .await

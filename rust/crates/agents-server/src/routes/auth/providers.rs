@@ -608,15 +608,13 @@ async fn test(
     };
     let issuer = config.issuer().map_err(|e| failed(&e))?;
     let url = config.discovery_url().map_err(|e| failed(&e))?;
-    let doc = state
-        .signin
-        .oidc
+    // The env row is the operator's provider; every other row is an org admin's choice.
+    let client = state.signin.oidc_for(&row.id);
+    let doc = client
         .discover(&url, &issuer)
         .await
         .map_err(|e| failed(&e))?;
-    let keys = state
-        .signin
-        .oidc
+    let keys = client
         .jwks(&doc.jwks_uri, true)
         .await
         .map_err(|e| failed(&e))?;

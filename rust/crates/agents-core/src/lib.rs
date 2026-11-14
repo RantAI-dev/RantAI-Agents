@@ -7,6 +7,7 @@ pub mod assistant;
 pub mod authz;
 pub mod chat;
 pub mod memory;
+pub mod net;
 pub mod org;
 pub mod prompt;
 pub mod tools;

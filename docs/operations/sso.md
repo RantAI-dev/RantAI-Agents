@@ -40,6 +40,29 @@ Set these on the Rust service. `.env.example` does not list the `AUTH_OIDC_*` va
 | `AUTH_SECRET` (or `NEXTAUTH_SECRET`) | yes | The same secret as the Next.js app: it encrypts the session cookie and the sign-in flow cookie |
 | `AUTH_URL` (or `NEXTAUTH_URL`) | for SSO, yes | The origin users open, for example `https://agents.example.com`. It builds the callback URL and decides the `__Secure-` cookie. Without it the origin is read from `Host` and `X-Forwarded-Proto`, which is wrong behind most proxies |
 | `CREDENTIAL_ENCRYPTION_KEY` | to store a client secret | The key the `Credential` feature uses (64 hex characters or 32 bytes). Provider client secrets are encrypted with it, the same way |
+| `SSO_ALLOW_PRIVATE_NETWORKS` | no, default `false` | Whether a provider an organisation admin adds may live on a private network. See below |
+| `TRUSTED_PROXIES` | no, default empty | The proxies whose `X-Forwarded-For` is believed, for the sign-in throttle and the audit log. See `docs/operations/network.md` |
+
+### Providers on a private network (`SSO_ALLOW_PRIVATE_NETWORKS`)
+
+An organisation admin types the provider's URL, and the service then fetches it: discovery, the
+signing keys, the token endpoint and the admin "test" button. With `SSO_ALLOW_PRIVATE_NETWORKS`
+`false` (the default, and the only value the cloud uses) the service refuses to connect to any
+address that is not public: loopback, the private ranges (`10/8`, `172.16/12`, `192.168/16`),
+link-local (`169.254/16`, `fe80::/10`, including the cloud metadata service `169.254.169.254`),
+CGNAT (`100.64/10`), unique-local (`fc00::/7`, including `fd00:ec2::254`), and IPv4 written inside
+IPv6. The check runs on the address the connection actually uses, after DNS, so a name that
+resolves to a private address, or changes its answer between two lookups, is refused too. The
+service does not follow redirects from a provider and ignores `HTTP(S)_PROXY` for these calls.
+
+A refused provider shows as `upstream_failed` (502) on the test button and `sso_failed` at
+sign-in; the log line carries the reason.
+
+- **On-prem with an internal Keycloak** (or any IdP on the company network): set
+  `SSO_ALLOW_PRIVATE_NETWORKS=true`. Only do this where every organisation admin is trusted with
+  the network the service sits on.
+- **The provider from the environment** (`AUTH_OIDC_*`, below) is exempt: the operator chose it,
+  not an organisation admin, so it may sit on a private address whatever this setting says.
 
 ### One provider from the environment (on-prem)
 

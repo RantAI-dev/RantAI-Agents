@@ -13,7 +13,7 @@ use crate::sso::client::OidcClient;
 use crate::sso::env::EnvProvider;
 
 /// The sign-in part of the application state.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SignIn {
     /// `AUTH_URL`, else `NEXTAUTH_URL`: the origin the browser sees, without a trailing slash.
     /// Without it the origin is read from the request (`Host`, `X-Forwarded-Proto`), as Auth.js
@@ -25,7 +25,24 @@ pub struct SignIn {
     /// The provider from `AUTH_OIDC_*`, for an install with one IdP and no admin step.
     pub env_provider: Option<EnvProvider>,
     pub throttle: throttle::Throttle,
+    /// The client for the providers organisation admins configure: public addresses only,
+    /// unless `SSO_ALLOW_PRIVATE_NETWORKS` is set.
     pub oidc: OidcClient,
+    /// The client for the operator's own provider from `AUTH_OIDC_*`: any address.
+    pub env_oidc: OidcClient,
+}
+
+impl Default for SignIn {
+    fn default() -> Self {
+        Self {
+            public_url: None,
+            credential_key: None,
+            env_provider: None,
+            throttle: throttle::Throttle::default(),
+            oidc: OidcClient::default(),
+            env_oidc: OidcClient::operator(),
+        }
+    }
 }
 
 /// Fresh random bytes from the operating system.
@@ -41,6 +58,17 @@ pub fn random_iv() -> Result<[u8; jwe::IV_LEN], getrandom::Error> {
 }
 
 impl SignIn {
+    /// The client that may reach this provider: the operator's own one is exempt from the
+    /// private-network check, every other one is not.
+    #[must_use]
+    pub fn oidc_for(&self, provider_id: &str) -> &OidcClient {
+        if provider_id == crate::sso::env::ENV_PROVIDER_ID {
+            &self.env_oidc
+        } else {
+            &self.oidc
+        }
+    }
+
     /// The origin the browser sees: the configured URL, else the request's own.
     #[must_use]
     pub fn origin(&self, headers: &HeaderMap) -> String {

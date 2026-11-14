@@ -102,6 +102,12 @@ pub struct Config {
     pub credential_key: Option<agents_auth::credential::CredentialKey>,
     /// The single identity provider of an on-prem install, from `AUTH_OIDC_*`.
     pub env_provider: Option<crate::sso::env::EnvProvider>,
+    /// `SSO_ALLOW_PRIVATE_NETWORKS` (default `false`): whether the providers organisation admins
+    /// configure may sit on loopback, private, link-local or metadata addresses. An on-prem
+    /// install with an internal Keycloak sets `true`; the cloud never does.
+    pub sso_allow_private_networks: bool,
+    /// `TRUSTED_PROXIES` (default empty): the proxies whose `X-Forwarded-For` is believed.
+    pub trusted_proxies: Vec<agents_core::net::Cidr>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -118,6 +124,22 @@ pub enum ConfigError {
 
 fn var(name: &'static str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty())
+}
+
+/// `true` or `false` from the environment; anything else stops the process.
+fn var_bool(name: &'static str, default: bool) -> Result<bool, ConfigError> {
+    match var(name).map(|v| v.trim().to_ascii_lowercase()).as_deref() {
+        None => Ok(default),
+        Some("true") => Ok(true),
+        Some("false") => Ok(false),
+        Some(other) => Err(ConfigError::Invalid(name, other.to_owned())),
+    }
+}
+
+/// `TRUSTED_PROXIES`: comma-separated addresses or CIDR ranges.
+fn trusted_proxies(raw: Option<String>) -> Result<Vec<agents_core::net::Cidr>, ConfigError> {
+    agents_core::net::parse_cidrs(raw.as_deref().unwrap_or_default())
+        .map_err(|bad| ConfigError::Invalid("TRUSTED_PROXIES", bad))
 }
 
 /// A positive whole number from the environment.
@@ -193,6 +215,8 @@ impl Config {
                 None => None,
             };
         let env_provider = crate::sso::env::from_vars(var)?;
+        let sso_allow_private_networks = var_bool("SSO_ALLOW_PRIVATE_NETWORKS", false)?;
+        let trusted_proxies = trusted_proxies(var("TRUSTED_PROXIES"))?;
         Ok(Self {
             database_url,
             bind,
@@ -205,6 +229,8 @@ impl Config {
             public_url,
             credential_key,
             env_provider,
+            sso_allow_private_networks,
+            trusted_proxies,
         })
     }
 }
@@ -223,6 +249,16 @@ fn public_origin(url: &str) -> Result<String, ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trusted_proxies_parse_or_stop_the_process() {
+        assert!(trusted_proxies(None).is_ok_and(|v| v.is_empty()));
+        assert!(trusted_proxies(Some("10.0.0.0/8, ::1".into())).is_ok_and(|v| v.len() == 2));
+        assert!(matches!(
+            trusted_proxies(Some("10.0.0.0/8,nope".into())),
+            Err(ConfigError::Invalid("TRUSTED_PROXIES", _))
+        ));
+    }
 
     #[test]
     fn the_configured_endpoint_replaces_the_routed_one() -> Result<(), LlmError> {
