@@ -85,12 +85,28 @@ where
             Ok(_) => return Ok(profile),
             Err(StoreError::Conflict) => {
                 // Another writer got there first: wait a moment and read the row again.
-                tokio::time::sleep(std::time::Duration::from_millis(5 + attempt as u64 * 5)).await;
+                tokio::time::sleep(backoff(attempt)).await;
             }
             Err(error) => return Err(error),
         }
     }
     Err(StoreError::Conflict)
+}
+
+/// The wait before a writer reads the row again.
+///
+/// The old code waited 5 to 25 milliseconds, picked at random so two writers do not retry in
+/// lockstep. The port waits longer as the attempts pile up: every chat of a user writes the
+/// same row, and a writer that keeps losing the race must still get its change in.
+fn backoff(attempt: usize) -> std::time::Duration {
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.subsec_nanos() as u64)
+        .unwrap_or(0);
+    let counter = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let spread = (nanos ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15)) % 50;
+    std::time::Duration::from_millis(5 + attempt as u64 * 15 + spread)
 }
 
 /// The `saveMemory` tool: writes the facts and preferences the model asked for.
