@@ -5,6 +5,7 @@
 //! test can look at what the model was asked.
 
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
@@ -23,12 +24,15 @@ pub enum Script {
     },
     /// The provider refuses the request.
     Status(u16),
+    /// The model answers one piece and then waits: the test hangs up in the middle.
+    Hang(String),
 }
 
 /// A scripted server on 127.0.0.1.
 pub struct Stub {
     address: SocketAddr,
     requests: Arc<Mutex<Vec<Value>>>,
+    hung_up: Arc<AtomicBool>,
 }
 
 impl Stub {
@@ -38,17 +42,29 @@ impl Stub {
         let address = listener.local_addr()?;
         let requests = Arc::new(Mutex::new(Vec::new()));
         let recorded = Arc::clone(&requests);
+        let hung_up = Arc::new(AtomicBool::new(false));
+        let seen = Arc::clone(&hung_up);
         tokio::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
                 let script = script.clone();
                 let recorded = Arc::clone(&recorded);
+                let seen = Arc::clone(&seen);
                 tokio::spawn(async move {
                     let body = read_request(&mut socket, recorded).await;
-                    let _ = write_reply(&mut socket, &script, &body).await;
+                    let _ = write_reply(&mut socket, &script, &body, seen).await;
                 });
             }
         });
-        Ok(Self { address, requests })
+        Ok(Self {
+            address,
+            requests,
+            hung_up,
+        })
+    }
+
+    /// Whether the client hung up while the model was still answering.
+    pub fn client_hung_up(&self) -> bool {
+        self.hung_up.load(Ordering::SeqCst)
     }
 
     /// The base URL the chat service is pointed at.
@@ -129,6 +145,7 @@ async fn write_reply(
     socket: &mut TcpStream,
     script: &Script,
     request_body: &str,
+    hung_up: Arc<AtomicBool>,
 ) -> std::io::Result<()> {
     let request: Value = serde_json::from_str(request_body).unwrap_or(Value::Null);
     let (status, content_type, body) = match script {
@@ -161,6 +178,25 @@ async fn write_reply(
                     tool_body("saveMemory", &arguments),
                 )
             }
+        }
+        Script::Hang(part) => {
+            // The answer starts and never ends: the test hangs up in the middle.
+            let body = format!("data: {}\n\n", chunk(json!({ "content": part })));
+            let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n";
+            socket.write_all(head.as_bytes()).await?;
+            socket.write_all(body.as_bytes()).await?;
+            socket.flush().await?;
+            // Wait for the client to go away.
+            let mut buffer = [0_u8; 1024];
+            loop {
+                match socket.read(&mut buffer).await {
+                    Ok(0) => break,
+                    Ok(_) => continue,
+                    Err(_) => break,
+                }
+            }
+            hung_up.store(true, Ordering::SeqCst);
+            return Ok(());
         }
         Script::Status(code) => (
             match code {

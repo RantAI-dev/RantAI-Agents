@@ -342,9 +342,13 @@ fn not_ported() -> ApiError {
 
 /// The capabilities the plain chat does not have.
 ///
-/// The knowledge base, the assistant's tools, its MCP servers, its workflows and its chatflow
-/// and the attachments of the request all belong to a later slice of the port (D3, D4). The
-/// request is answered with a 409 so the router sends it to the TypeScript service.
+/// The knowledge base, the assistant's tools, its MCP servers, its workflows and its chatflow,
+/// its skills and the attachments of the request all belong to a later slice of the port (D3,
+/// D4). The request is answered with a 409 so the router sends it to the TypeScript service.
+///
+/// The assistant's own bindings decide, not the request's switches: a chat is never answered
+/// with less than the assistant was set up for. The knowledge base is the exception the old
+/// code made: the request may turn it off.
 async fn check_capabilities(
     state: &AppState,
     input: &request::ChatInput,
@@ -352,7 +356,7 @@ async fn check_capabilities(
 ) -> Result<(), ApiError> {
     let body = &input.body;
 
-    // The knowledge base.
+    // The request's own switches: it asks for something the plain chat does not have.
     if body
         .knowledge_base_group_ids
         .iter()
@@ -360,71 +364,60 @@ async fn check_capabilities(
     {
         return Err(not_ported());
     }
-    let Some(assistant) = assistant else {
-        // Without an assistant there is no knowledge base and no tool either.
-        if input.use_knowledge_base() == Some(true) {
-            return Err(not_ported());
-        }
-        if !body.enabled_tool_names.is_empty()
-            || !body.enabled_skill_ids.is_empty()
-            || body.enable_web_search == Some(true)
-            || body.enable_code_interpreter == Some(true)
-            || body.canvas_mode.is_some()
-        {
-            return Err(not_ported());
-        }
-        if body.file_context.is_some() || !body.file_document_ids.is_empty() {
-            return Err(not_ported());
-        }
-        return Ok(());
-    };
-
-    // The request may turn the knowledge base off; the assistant's own setting is the
-    // fallback.
-    let knowledge_base = input
-        .use_knowledge_base()
-        .unwrap_or(assistant.use_knowledge_base);
-    if knowledge_base {
-        return Err(not_ported());
-    }
-
-    // The request may turn the tools off; then the assistant's tools do not count.
-    let tools_enabled = body.enable_tools != Some(false);
-    if tools_enabled {
-        let tools = assistants::list_tool_bindings(&state.db, &assistant.id)
-            .await
-            .map_err(|e| store_error(&e))?;
-        if tools.iter().any(|tool| tool.bound_enabled && tool.enabled) {
-            return Err(not_ported());
-        }
-        let servers = assistants::list_mcp_server_bindings(&state.db, &assistant.id)
-            .await
-            .map_err(|e| store_error(&e))?;
-        if servers
-            .iter()
-            .any(|server| server.bound_enabled && server.enabled)
-        {
-            return Err(not_ported());
-        }
-    }
     if !body.enabled_tool_names.is_empty()
+        || !body.enabled_skill_ids.is_empty()
         || body.enable_web_search == Some(true)
         || body.enable_code_interpreter == Some(true)
         || body.canvas_mode.is_some()
     {
         return Err(not_ported());
     }
-
-    // The skills of the assistant, and the ones the request asks for.
-    if body.enable_skills != Some(false) {
-        let skills = assistants::list_skill_bindings(&state.db, &assistant.id)
-            .await
-            .map_err(|e| store_error(&e))?;
-        if !skills.is_empty() {
-            return Err(not_ported());
-        }
+    if body.file_context.is_some() || !body.file_document_ids.is_empty() {
+        return Err(not_ported());
     }
-    if !body.enabled_skill_ids.is_empty() {
+    if input.use_knowledge_base() == Some(true) {
+        return Err(not_ported());
+    }
+
+    let Some(assistant) = assistant else {
+        // Without an assistant there is no knowledge base and no tool either.
+        return Ok(());
+    };
+
+    // The knowledge base: the request may turn it off, the assistant's own flag is the
+    // fallback.
+    if input
+        .use_knowledge_base()
+        .unwrap_or(assistant.use_knowledge_base)
+    {
+        return Err(not_ported());
+    }
+    if !assistant.knowledge_base_group_ids.is_empty() {
+        return Err(not_ported());
+    }
+
+    // The tools of the assistant.
+    let tools = assistants::list_tool_bindings(&state.db, &assistant.id)
+        .await
+        .map_err(|e| store_error(&e))?;
+    if tools.iter().any(|tool| tool.bound_enabled && tool.enabled) {
+        return Err(not_ported());
+    }
+    let servers = assistants::list_mcp_server_bindings(&state.db, &assistant.id)
+        .await
+        .map_err(|e| store_error(&e))?;
+    if servers
+        .iter()
+        .any(|server| server.bound_enabled && server.enabled)
+    {
+        return Err(not_ported());
+    }
+
+    // The skills of the assistant.
+    let skills = assistants::list_skill_bindings(&state.db, &assistant.id)
+        .await
+        .map_err(|e| store_error(&e))?;
+    if !skills.is_empty() {
         return Err(not_ported());
     }
 
@@ -439,11 +432,6 @@ async fn check_capabilities(
         .await
         .map_err(|e| store_error(&e))?
     {
-        return Err(not_ported());
-    }
-
-    // The attachments.
-    if body.file_context.is_some() || !body.file_document_ids.is_empty() {
         return Err(not_ported());
     }
 
