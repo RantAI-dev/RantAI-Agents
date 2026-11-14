@@ -109,7 +109,9 @@ export default function AgentApiKeysPage() {
     if (editing) {
       const done = await run(() =>
         orgFetch(`${KEYS_PATH}/${editing.id}`, {
-          method: "PATCH",
+          // PUT, not PATCH: Rust takes both, and the TypeScript route only takes PUT, so the
+          // screen works before and after the `agent-api` cut-over.
+          method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         }),
