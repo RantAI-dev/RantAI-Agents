@@ -345,7 +345,7 @@ async fn the_assistant_of_another_organisation_is_not_found() -> R {
     let other_assistant = assistant(&db, Some(&other_org)).await?;
 
     // Another organisation's assistant is a 404, the same answer as one that does not exist.
-    let (status, response) = send(
+    let (status, _headers, text) = send_raw(
         &app,
         "POST",
         "/api/chat",
@@ -353,9 +353,8 @@ async fn the_assistant_of_another_organisation_is_not_found() -> R {
         Some(body(&other_assistant)),
     )
     .await?;
-    eprintln!("BODY: {response}");
     assert_eq!(status, 404);
-    assert_eq!(code(&response), Some("not_found"));
+    assert!(text.contains("\"code\":\"not_found\""), "{text}");
 
     // The assistant of the caller's own organisation answers.
     let (status, _headers, text) = send_raw(
@@ -385,7 +384,7 @@ async fn an_assistant_with_a_knowledge_base_or_tools_is_not_ported_yet() -> R {
         .bind(&kb)
         .execute(&db)
         .await?;
-    let (status, response) = send(
+    let (status, _headers, text) = send_raw(
         &app,
         "POST",
         "/api/chat",
@@ -394,7 +393,10 @@ async fn an_assistant_with_a_knowledge_base_or_tools_is_not_ported_yet() -> R {
     )
     .await?;
     assert_eq!(status, 409);
-    assert_eq!(code(&response), Some("capability_not_ported"));
+    assert!(
+        text.contains("\"code\":\"capability_not_ported\""),
+        "{text}"
+    );
 
     // An assistant with a tool.
     let with_tool = assistant(&db, None).await?;
@@ -416,7 +418,7 @@ async fn an_assistant_with_a_knowledge_base_or_tools_is_not_ported_yet() -> R {
     .bind(&tool_id)
     .execute(&db)
     .await?;
-    let (status, response) = send(
+    let (status, _headers, text) = send_raw(
         &app,
         "POST",
         "/api/chat",
@@ -425,13 +427,16 @@ async fn an_assistant_with_a_knowledge_base_or_tools_is_not_ported_yet() -> R {
     )
     .await?;
     assert_eq!(status, 409);
-    assert_eq!(code(&response), Some("capability_not_ported"));
+    assert!(
+        text.contains("\"code\":\"capability_not_ported\""),
+        "{text}"
+    );
 
     // A request with an attachment.
     let plain = assistant(&db, None).await?;
     let mut with_file = body(&plain);
     with_file["fileDocumentIds"] = json!(["doc_1"]);
-    let (status, response) = send(
+    let (status, _headers, text) = send_raw(
         &app,
         "POST",
         "/api/chat",
@@ -440,7 +445,10 @@ async fn an_assistant_with_a_knowledge_base_or_tools_is_not_ported_yet() -> R {
     )
     .await?;
     assert_eq!(status, 409);
-    assert_eq!(code(&response), Some("capability_not_ported"));
+    assert!(
+        text.contains("\"code\":\"capability_not_ported\""),
+        "{text}"
+    );
     Ok(())
 }
 
@@ -512,7 +520,7 @@ async fn a_suspended_user_is_refused() -> R {
     let suspended = user(&db, true).await?;
     let assistant_id = assistant(&db, None).await?;
 
-    let (status, response) = send(
+    let (status, _headers, text) = send_raw(
         &app,
         "POST",
         "/api/chat",
@@ -521,7 +529,7 @@ async fn a_suspended_user_is_refused() -> R {
     )
     .await?;
     assert_eq!(status, 401);
-    assert_eq!(code(&response), Some("unauthenticated"));
+    assert!(text.contains("\"code\":\"unauthenticated\""), "{text}");
     Ok(())
 }
 
