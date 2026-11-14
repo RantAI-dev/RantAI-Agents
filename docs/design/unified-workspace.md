@@ -108,6 +108,38 @@ outside the feature reference it.**
 What users relied on digital employees for (scheduled, autonomous work) is covered by **workflows
 with schedule triggers** plus chat-built workflows.
 
+## 6b. Auto agent routing ("Auto" in the agent picker)
+
+This is modelled on Paragon's `kb-bridge` "probe-first / 2B-S" cascade
+(`zen/be/paragpt-core/kb-bridge/probe_first/`, researched 2026-11-14). Paragon picks the agent that
+answers each turn, from the user's pool. **We port the design, not its code.** The code is Python,
+coupled to a 34k-line `sync.py`, and its new path is off by default and switched by env flags.
+
+- **The pool** = `access::visible_assistants(principal)` (S4), so RBAC holds. "Auto" itself is a
+  feature in §3.8 (`chat.auto_route`).
+- **The cascade**, cheapest first; each step can decide:
+  1. **Naming:** the user names an agent, or has pinned one. That is final.
+  2. **Stickiness:** stay on this session's current agent unless step 3 is clearly better (hysteresis).
+     Paragon re-decides every turn and flips.
+  3. **Probe:** embedding similarity of the turn (plus the last 4 turns) against each agent's card:
+     description, tools and example prompts. Once the KB returns, add the KB-evidence probe as Paragon
+     does.
+  4. **Thresholds** in `agents-core` (pure, unit-tested): choose directly, ask, or go to step 5. They
+     are calibrated per embedding model from the eval set, not tuned by hand.
+  5. **One constrained LLM call**, whose `agent` is a JSON enum of the top 5 or fewer, with evidence.
+     Use a small fast model. A timeout or error keeps the current agent; failing that, the org's
+     default agent.
+- **Then the normal chat pipeline runs** for the chosen agent: its prompt, tools, memory scopes and
+  capability gate. The stream starts as soon as the agent is chosen. Each reply records
+  `metadata.routedAgentId` and the step that decided it.
+- **UI:** "Answered by X · switch" on each reply. Switching pins the session to that agent.
+- **Quality:**
+  - a routing eval set, about 100 turns with the expected agent, scored for top-1 accuracy and
+    "abstain correctly"
+  - **shadow mode** first: log what Auto would pick while the user's chosen agent answers
+  - a decision log without the query text, like Paragon's `probe_shadow`
+  - a dashboard of how often each step decided, plus latency
+
 ## 7. Decisions for the owner
 
 1. Who may **create workflows**: admins only (like agents), or members too?
