@@ -61,11 +61,12 @@ pub fn random_id() -> Result<String, ApiError> {
 /// unchanged. A value shorter than sixteen characters is left alone, as the old function did.
 #[must_use]
 pub fn mask(key: &str) -> String {
-    if key.chars().count() < 16 {
+    let characters: Vec<char> = key.chars().collect();
+    if characters.len() < 16 {
         return key.to_owned();
     }
-    let head: String = key.chars().take(12).collect();
-    let tail: String = key.chars().skip(key.chars().count() - 4).collect();
+    let head: String = characters.iter().take(12).collect();
+    let tail: String = characters.iter().rev().take(4).rev().collect();
     format!("{head}…{tail}")
 }
 

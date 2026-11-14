@@ -162,9 +162,9 @@ The `chunk` objects are the AI SDK v6 UI-message-stream chunks the dashboard cha
 one client can read both. Join the `text-delta` deltas in order for the answer.
 
 `sessionId` resumes a conversation the **same key** started on this process: a follow-up that names
-it is answered with the earlier turns in context. Omit it and the server starts a new conversation
-and names it in `done`. A session id that belongs to another key, or another agent, is a
-`not_found` error frame, and a new conversation starts.
+it is answered with the earlier turns in context. Omit it — or name one this process no longer has,
+because it restarted, or one another key or agent owns — and the server starts a new conversation
+and names it in `done`. The conversation is kept in the process, so a restart starts a new one.
 
 Limits:
 
@@ -188,7 +188,7 @@ Every refusal is the standard body, on both transports (the socket sends the sam
 | 400 | `invalid_request` | A body that is not JSON, a missing field, a wrong type, a value out of range. `errors[]` names every bad field |
 | 401 | `unauthenticated` | No key, an unknown key, a disabled one, an expired one, or a key that belongs to another agent |
 | 403 | `permission_denied` | The address is not in the allowlist, the key does not carry the scope, or the caller may not manage keys |
-| 404 | `not_found` | Another organisation's key or agent; a session id that is not this key's |
+| 404 | `not_found` | Another organisation's key or agent |
 | 409 | `capability_not_ported` | The agent needs something this service cannot run — see below |
 | 429 | `rate_limited` | The gate's limiter (the per-key limiter is not ported, differences.md row 147) |
 | 502 | `upstream_failed` | The model call failed, or the turn ended on a tool that needed a decision |
