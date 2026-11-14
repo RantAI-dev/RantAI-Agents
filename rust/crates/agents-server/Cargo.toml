@@ -26,6 +26,10 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 sqlx.workspace = true
 chrono.workspace = true
+# The chat calls the model over HTTP and reads the base64 header the old route read.
+reqwest.workspace = true
+futures.workspace = true
+base64.workspace = true
 
 [dev-dependencies]
 tower.workspace = true

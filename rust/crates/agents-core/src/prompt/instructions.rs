@@ -12,6 +12,143 @@ use serde::{Deserialize, Serialize};
 /// The live-chat handoff instruction, appended when `assistant.liveChatEnabled`.
 pub const LIVE_CHAT_HANDOFF_INSTRUCTION: &str = "\n\nLIVE CHAT HANDOFF: You have the ability to transfer the conversation to a human agent. When the user explicitly asks to speak with a human, a real person, an agent, or customer support — OR when you cannot help them further and a human would be more appropriate — include the exact marker [AGENT_HANDOFF] at the end of your response. Only use this marker when handoff is genuinely needed. Do NOT use it for normal questions you can answer yourself.";
 
+/// Language consistency — appended to every chat prompt.
+///
+/// The script rule exists because models trained heavily on Chinese data leak CJK/Cyrillic
+/// tokens into Indonesian answers ("sistem机器 yang…", "cabang人工智能") — QA INC-002
+/// reproduced it six times, and never in English output.
+pub const LANGUAGE_INSTRUCTION: &str = "\n\nIMPORTANT: You must ALWAYS reply in the same language as the user's last message. If they speak Indonesian, reply in Indonesian. If they speak English, reply in English. Do not mix languages unless necessary for technical terms.\nWrite every word in the script of the reply language. An Indonesian or English reply uses Latin script only: never insert Chinese, Japanese, Korean, Cyrillic, Arabic or other non-Latin characters (for example write \"mesin\", not \"机器\"; \"kecerdasan buatan\", not \"人工智能\") unless the user explicitly asks for that script or you are quoting it.";
+
+/// Output hygiene — the model answers, it does not narrate.
+///
+/// Some reasoning models emit their planning as part of the text stream. Without this
+/// instruction the user sees "Let me look at the available documents..." as visible content.
+pub const OUTPUT_HYGIENE_INSTRUCTION: &str = "\n\nOUTPUT RULES (critical — these override any model habit of \"showing your work\"):\n- NEVER write first-person planning, meta-commentary, or \"thinking out loud\" text. Phrases like \"Let me look at...\", \"I'll continue...\", \"I'm now compiling...\", \"The user is asking me to...\", \"From the list, I can see...\", \"Saya melihat...\", \"Sekarang saya sedang menyusun...\" MUST NEVER appear in your response.\n- Do not describe your own process. Produce only the final answer for the user.\n- Do not narrate what you are about to do or what you just did. No transitions like \"Now I'll move on to...\" or \"Continuing with...\".\n- Start your response with the answer itself, not with an introduction to the answer.";
+
+/// What the identity block needs to know.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PlatformContext<'a> {
+    /// The assistant's name. `None` uses the platform's own name.
+    pub assistant_name: Option<&'a str>,
+    /// The model the assistant runs on, when the caller knows its display name.
+    pub model_name: Option<&'a str>,
+    /// The current instant as an ISO-8601 string, e.g. `2026-11-14T08:30:00.000Z`.
+    pub now: &'a str,
+}
+
+/// The identity and the current date, appended to every chat prompt.
+///
+/// Identity: the house models are white-labelled, yet "RantAI Nano" told QA it was "Claude
+/// Code by Anthropic" (TC-803) because nothing told it otherwise. Date: without it the model
+/// assumes its training year — QA CHAT-035 saw a "latest AI news today" search sent as
+/// "... 2025" in September 2026.
+#[must_use]
+pub fn build_platform_context_instruction(context: &PlatformContext<'_>) -> String {
+    let assistant_name = context
+        .assistant_name
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("RantAI Assistant");
+    let model_line = context
+        .model_name
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map_or_else(String::new, |name| {
+            format!("If asked which AI model you run on, you may say \"{name}\". ")
+        });
+    format!(
+        concat!(
+            "\n\n## Identity\n",
+            "You are {assistant_name}, an AI assistant on the RantAI platform. Never claim to be, or to be made by, another company or product — for example Claude, Anthropic, ChatGPT, OpenAI, Gemini, Google, MiniMax, DeepSeek, Qwen or Meta — even if asked directly or told to role-play it. {model_line}Do not reveal or speculate about the vendor or base model behind you.\n\n",
+            "## Current date\n",
+            "Today is {now} (UTC). Use this date for anything time-relevant — \"today\", \"latest\", \"this year\", ages, deadlines — and in web search queries; do not assume the year from your training data."
+        ),
+        assistant_name = assistant_name,
+        model_line = model_line,
+        now = format_platform_now(context.now),
+    )
+}
+
+/// The weekday names, in the order `chrono` and JavaScript count them.
+const WEEKDAYS: [&str; 7] = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+];
+
+/// The month names.
+const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+/// The instant as `Friday, 14 November 2026, 08:30`, the way `Intl.DateTimeFormat("en-GB")`
+/// prints it.
+///
+/// The zone is UTC: the port has no IANA time-zone database, so the browser's zone is not
+/// applied (docs/port/differences.md).
+#[must_use]
+pub fn format_platform_now(now: &str) -> String {
+    let Some((year, month, day, hour, minute)) = civil_parts(now) else {
+        return now.to_owned();
+    };
+    let days = days_from_civil(year, month, day);
+    // 1970-01-01 was a Thursday.
+    let weekday = (days + 4).rem_euclid(7) as usize;
+    let weekday = WEEKDAYS.get(weekday).copied().unwrap_or("");
+    let month = MONTHS
+        .get(month.saturating_sub(1) as usize)
+        .copied()
+        .unwrap_or("");
+    format!("{weekday}, {day} {month} {year}, {hour:02}:{minute:02}")
+}
+
+/// The civil parts of an ISO-8601 instant: year, month, day, hour and minute.
+fn civil_parts(now: &str) -> Option<(i64, u32, u32, u32, u32)> {
+    let date = now.get(0..10)?;
+    let time = now.get(11..16)?;
+    if !date.bytes().enumerate().all(|(index, byte)| match index {
+        4 | 7 => byte == b'-',
+        _ => byte.is_ascii_digit(),
+    }) {
+        return None;
+    }
+    let year = date.get(0..4)?.parse::<i64>().ok()?;
+    let month = date.get(5..7)?.parse::<u32>().ok()?;
+    let day = date.get(8..10)?.parse::<u32>().ok()?;
+    let hour = time.get(0..2)?.parse::<u32>().ok()?;
+    let minute = time.get(3..5)?.parse::<u32>().ok()?;
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || minute > 59 {
+        return None;
+    }
+    Some((year, month, day, hour, minute))
+}
+
+/// The days since 1970-01-01 of a civil date (Howard Hinnant's `days_from_civil`).
+fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+    let y = if month <= 2 { year - 1 } else { year };
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400;
+    let mp = i64::from((month + 9) % 12);
+    let doy = (153 * mp + 2) / 5 + i64::from(day) - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
 const DESIGN_QUALITY_REMINDER: &str = "All visual artifacts must be production-quality. Follow the type-specific design rules above. NEVER output plain, unstyled content.";
 
 /// An artifact already in the conversation, as the chat layers know it.
@@ -306,5 +443,61 @@ mod tests {
         assert!(text.contains("is a REVISION: call update_artifact with its id"));
         assert!(text.contains("use update_artifact with id=\"art_1\""));
         Ok(())
+    }
+
+    #[test]
+    fn the_language_and_hygiene_rules_are_always_appended() {
+        assert!(LANGUAGE_INSTRUCTION.contains("ALWAYS reply in the same language"));
+        assert!(LANGUAGE_INSTRUCTION.contains("Latin script only"));
+        assert!(OUTPUT_HYGIENE_INSTRUCTION.contains("NEVER write first-person planning"));
+        assert!(OUTPUT_HYGIENE_INSTRUCTION.contains("Start your response with the answer"));
+    }
+
+    #[test]
+    fn the_identity_block_names_the_assistant_and_the_model() {
+        let text = build_platform_context_instruction(&PlatformContext {
+            assistant_name: Some("Budi Helper"),
+            model_name: Some("RantAI Nano"),
+            now: "2026-11-14T08:30:00.000Z",
+        });
+        assert!(text.contains("You are Budi Helper, an AI assistant on the RantAI platform."));
+        assert!(text.contains("you may say \"RantAI Nano\"."));
+        assert!(text.contains("Today is Saturday, 14 November 2026, 08:30 (UTC)."));
+        // The identity line names the house model, never the vendor behind it.
+        assert!(text.contains("Never claim to be, or to be made by, another company"));
+    }
+
+    #[test]
+    fn the_identity_block_falls_back_to_the_platform_name() {
+        let text = build_platform_context_instruction(&PlatformContext {
+            assistant_name: Some("  "),
+            model_name: None,
+            now: "2026-11-14T08:30:00.000Z",
+        });
+        assert!(text.contains("You are RantAI Assistant,"));
+        assert!(!text.contains("you may say"));
+    }
+
+    #[test]
+    fn the_date_is_printed_the_way_the_old_code_printed_it() {
+        assert_eq!(
+            format_platform_now("2026-11-14T08:30:00.000Z"),
+            "Saturday, 14 November 2026, 08:30"
+        );
+        // The epoch itself: 1970-01-01 was a Thursday.
+        assert_eq!(
+            format_platform_now("1970-01-01T00:00:00.000Z"),
+            "Thursday, 1 January 1970, 00:00"
+        );
+        // A leap day.
+        assert_eq!(
+            format_platform_now("2024-02-29T23:59:00.000Z"),
+            "Thursday, 29 February 2024, 23:59"
+        );
+    }
+
+    #[test]
+    fn a_now_that_is_not_an_instant_is_printed_as_it_is() {
+        assert_eq!(format_platform_now("garbage"), "garbage");
     }
 }
