@@ -104,7 +104,7 @@ async fn run(
     body: Option<Body<Value>>,
 ) -> Result<Response<AxumBody>, ApiError> {
     let Some(Body(body)) = body else {
-        return Err(missing_body());
+        return Err(crate::routes::organizations::missing_body());
     };
 
     // The scope a key needs depends on `stream`, and the key is checked before the body is
@@ -375,9 +375,4 @@ fn add_headers<B>(response: &mut Response<B>, headers: &[(&'static str, &'static
 /// Sends one frame, ignoring a client that went away.
 async fn send(tx: &mpsc::Sender<Result<Bytes, io::Error>>, frame: &str) {
     let _ = tx.send(Ok(Bytes::from(frame.to_owned()))).await;
-}
-
-/// The body a request needs and did not send.
-fn missing_body() -> ApiError {
-    ApiError::new(ErrorCode::InvalidRequest).message("A JSON body is required.")
 }

@@ -529,7 +529,7 @@ async fn a_disabled_an_expired_a_narrow_and_a_wrong_scope_key_are_refused() -> R
         &app,
         "PATCH",
         &format!("/api/dashboard/agent-api-keys/{id}"),
-        &[token.clone()],
+        std::slice::from_ref(&token),
         Some(json!({"enabled": false})),
         peer(),
     )
@@ -741,7 +741,7 @@ async fn an_agent_with_an_mcp_server_or_a_workflow_is_a_409() -> R {
     .bind(&server)
     .execute(&db)
     .await?;
-    let bound = sqlx::query(
+    sqlx::query(
         r#"INSERT INTO "AssistantMcpServer" ("id","assistantId","mcpServerId","enabled","createdAt")
            VALUES ($1,$2,$3,true,now())"#,
     )
@@ -774,7 +774,7 @@ async fn an_agent_with_an_mcp_server_or_a_workflow_is_a_409() -> R {
     .bind(&org_id)
     .execute(&db)
     .await?;
-    let bound = sqlx::query(
+    sqlx::query(
         r#"INSERT INTO "AssistantWorkflow" ("id","assistantId","workflowId","enabled","createdAt")
            VALUES ($1,$2,$3,true,now())"#,
     )

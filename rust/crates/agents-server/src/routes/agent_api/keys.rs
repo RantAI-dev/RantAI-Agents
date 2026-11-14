@@ -18,7 +18,6 @@ use axum::http::HeaderMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use agents_contracts::error_codes::ErrorCode;
 use agents_core::authz::Permission;
 use agents_store::api_keys::{self, ApiKeyRow, KeyPatch, NewKey};
 use agents_store::assistants;
@@ -130,7 +129,7 @@ pub async fn create(
     authorize_org(&state.db, &caller, Permission::ApiKeysManage).await?;
     let org_id = caller.org()?;
     let Some(Body(body)) = body else {
-        return Err(missing_body());
+        return Err(crate::routes::organizations::missing_body());
     };
     let input = bodies::parse_create(&body)?;
 
@@ -199,7 +198,7 @@ pub async fn update(
     authorize_org(&state.db, &caller, Permission::ApiKeysManage).await?;
     let org_id = caller.org()?;
     let Some(Body(body)) = body else {
-        return Err(missing_body());
+        return Err(crate::routes::organizations::missing_body());
     };
     let input = bodies::parse_update(&body)?;
 
@@ -278,9 +277,4 @@ impl Summaries {
         self.seen.insert(assistant_id.to_owned(), summary.clone());
         summary
     }
-}
-
-/// The body a request needs and did not send.
-fn missing_body() -> ApiError {
-    ApiError::new(ErrorCode::InvalidRequest).message("A JSON body is required.")
 }

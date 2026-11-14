@@ -171,7 +171,9 @@ async fn a_key_in_the_handshake_streams_the_ui_chunks() -> R {
 
     let (text, session) = read_turn(&mut socket).await;
     assert_eq!(text, "Hello world");
-    let session = session.expect("the turn ends with a done frame naming the session");
+    let Some(session) = session else {
+        return Err("the turn ended without a done frame naming the session".into());
+    };
     assert!(!session.is_empty());
 
     // The chunks are the UI stream's, not the OpenAI ones: `start` first, `finish` last.
@@ -438,7 +440,9 @@ async fn a_message_resumes_the_conversation_the_key_started() -> R {
         .send_json(&json!({"type": "message", "content": "my name is Budi"}))
         .await?;
     let (_, session) = read_turn(&mut socket).await;
-    let session = session.expect("the first turn names its session");
+    let Some(session) = session else {
+        return Err("the first turn named no session".into());
+    };
 
     socket
         .send_json(&json!({"type": "message", "content": "what is my name?", "sessionId": session}))

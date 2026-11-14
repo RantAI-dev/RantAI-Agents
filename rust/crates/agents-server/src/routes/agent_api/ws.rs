@@ -214,24 +214,47 @@ async fn upgrade(
         .into_response()
 }
 
+/// One socket, and everything its frames change.
+struct Connection {
+    socket: WebSocket,
+    /// The conversation this socket is in, once one exists.
+    session_id: Option<String>,
+    /// The turn that is running, when one is.
+    running: Option<CancelHandle>,
+    /// Where a running turn sends its frames.
+    out: mpsc::Sender<Out>,
+}
+
 /// One socket, from the key to the close.
 async fn session(
     state: AppState,
-    mut socket: WebSocket,
+    socket: WebSocket,
     assistant_id: String,
     caller: Option<KeyCaller>,
     ip: Option<String>,
 ) {
     let limits = state.api.limits;
+    let (out, mut incoming) = mpsc::channel::<Out>(32);
+    let mut connection = Connection {
+        socket,
+        session_id: None,
+        running: None,
+        out,
+    };
+
     let caller = match caller {
         Some(caller) => caller,
-        None => match first_message_key(&state, &mut socket, &assistant_id, ip.as_deref()).await {
-            Some(caller) => caller,
-            None => {
-                close(&mut socket, CLOSE_UNAUTHORISED, "unauthorised").await;
-                return;
+        None => {
+            match first_message_key(&state, &mut connection.socket, &assistant_id, ip.as_deref())
+                .await
+            {
+                Some(caller) => caller,
+                None => {
+                    close(&mut connection.socket, CLOSE_UNAUTHORISED, "unauthorised").await;
+                    return;
+                }
             }
-        },
+        }
     };
     // One count per socket, as one HTTP call counts once.
     if let Err(error) =
@@ -240,43 +263,28 @@ async fn session(
         tracing::warn!(error = %error, "the key's use count could not be written");
     }
 
-    // The conversation: the one the client resumed, or a new one.
-    let mut session_id: Option<String> = None;
-    let (out, mut incoming) = mpsc::channel::<Out>(32);
-    let mut running: Option<CancelHandle> = None;
-
     loop {
         let idle = tokio::time::sleep(limits.idle_timeout);
         tokio::pin!(idle);
         tokio::select! {
             () = &mut idle => {
-                cancel(&mut running);
-                close(&mut socket, CLOSE_IDLE, "idle timeout").await;
+                cancel(&mut connection.running);
+                close(&mut connection.socket, CLOSE_IDLE, "idle timeout").await;
                 return;
             }
-            frame = socket.recv() => {
+            frame = connection.socket.recv() => {
                 match frame {
                     Some(Ok(Message::Text(text))) => {
-                        handle_text(
-                            &state,
-                            &limits,
-                            &caller,
-                            &assistant_id,
-                            &text,
-                            &mut session_id,
-                            &mut running,
-                            &out,
-                            &mut socket,
-                        )
-                        .await;
+                        handle_text(&state, &limits, &caller, &assistant_id, &text, &mut connection)
+                            .await;
                     }
                     Some(Ok(Message::Close(_))) | None => {
-                        cancel(&mut running);
+                        cancel(&mut connection.running);
                         return;
                     }
                     Some(Ok(Message::Binary(bytes))) => {
                         let _ = send(
-                            &mut socket,
+                            &mut connection.socket,
                             &error_frame(
                                 ErrorCode::UnsupportedMediaType,
                                 "This socket carries JSON text frames only.",
@@ -288,23 +296,23 @@ async fn session(
                     // The protocol answers a ping itself; nothing to do.
                     Some(Ok(_)) => {}
                     Some(Err(_)) => {
-                        cancel(&mut running);
+                        cancel(&mut connection.running);
                         return;
                     }
                 }
             }
-            output = incoming.recv(), if session_id.is_some() => {
+            output = incoming.recv(), if connection.session_id.is_some() => {
                 let Some(output) = output else { return };
                 match output {
                     Out::Chunk(chunk) => {
                         let frame = json!({"type": "chunk", "chunk": chunk}).to_string();
-                        if send(&mut socket, &frame).await.is_err() {
-                            cancel(&mut running);
+                        if send(&mut connection.socket, &frame).await.is_err() {
+                            cancel(&mut connection.running);
                             return;
                         }
                     }
                     Out::Done { text } => {
-                        let id = session_id.clone().unwrap_or_default();
+                        let id = connection.session_id.clone().unwrap_or_default();
                         if !text.is_empty() {
                             state.api.conversations.append(
                                 &limits,
@@ -315,15 +323,18 @@ async fn session(
                                 },
                             );
                         }
-                        running = None;
+                        connection.running = None;
                         let frame = json!({"type": "done", "sessionId": id}).to_string();
-                        if send(&mut socket, &frame).await.is_err() {
+                        if send(&mut connection.socket, &frame).await.is_err() {
                             return;
                         }
                     }
                     Out::Failed { code, message } => {
-                        running = None;
-                        if send(&mut socket, &error_frame(code, &message)).await.is_err() {
+                        connection.running = None;
+                        if send(&mut connection.socket, &error_frame(code, &message))
+                            .await
+                            .is_err()
+                        {
                             return;
                         }
                     }
@@ -344,24 +355,17 @@ enum Out {
 }
 
 /// One incoming text frame.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "the socket's state is the arguments; grouping it would be a struct with no other use"
-)]
 async fn handle_text(
     state: &AppState,
     limits: &Limits,
     caller: &KeyCaller,
     assistant_id: &str,
     text: &str,
-    session_id: &mut Option<String>,
-    running: &mut Option<CancelHandle>,
-    out: &mpsc::Sender<Out>,
-    socket: &mut WebSocket,
+    connection: &mut Connection,
 ) {
     if text.len() > limits.max_frame {
         let _ = send(
-            socket,
+            &mut connection.socket,
             &error_frame(ErrorCode::PayloadTooLarge, "This frame is too large."),
         )
         .await;
@@ -371,7 +375,7 @@ async fn handle_text(
         Ok(frame) => frame,
         Err(_) => {
             let _ = send(
-                socket,
+                &mut connection.socket,
                 &error_frame(ErrorCode::InvalidRequest, "A frame must be a JSON object."),
             )
             .await;
@@ -380,21 +384,21 @@ async fn handle_text(
     };
     match frame.get("type").and_then(Value::as_str) {
         Some("ping") => {
-            let _ = send(socket, "{\"type\":\"pong\"}").await;
+            let _ = send(&mut connection.socket, "{\"type\":\"pong\"}").await;
         }
         Some("auth") => {
             // The socket is authenticated already; a second key changes nothing.
             let _ = send(
-                socket,
+                &mut connection.socket,
                 &error_frame(ErrorCode::Conflict, "This socket is already authenticated."),
             )
             .await;
         }
         Some("message") => {
-            if running.is_some() {
+            if connection.running.is_some() {
                 // One turn at a time: the answer to the first is still being written.
                 let _ = send(
-                    socket,
+                    &mut connection.socket,
                     &error_frame(ErrorCode::Conflict, "A turn is already running."),
                 )
                 .await;
@@ -402,7 +406,7 @@ async fn handle_text(
             }
             let Some(content) = frame.get("content").and_then(Value::as_str) else {
                 let _ = send(
-                    socket,
+                    &mut connection.socket,
                     &error_frame(ErrorCode::InvalidRequest, "A message needs text content."),
                 )
                 .await;
@@ -410,7 +414,7 @@ async fn handle_text(
             };
             if content.trim().is_empty() {
                 let _ = send(
-                    socket,
+                    &mut connection.socket,
                     &error_frame(ErrorCode::InvalidRequest, "A message needs text content."),
                 )
                 .await;
@@ -424,10 +428,10 @@ async fn handle_text(
                         .conversations
                         .resume(&caller.key.id, assistant_id, requested)
             {
-                *session_id = Some(requested.to_owned());
+                connection.session_id = Some(requested.to_owned());
                 tracing::debug!(messages = messages.len(), "a conversation was resumed");
             }
-            let id = match session_id.clone() {
+            let id = match connection.session_id.clone() {
                 Some(id) => id,
                 None => match state
                     .api
@@ -435,12 +439,12 @@ async fn handle_text(
                     .create(limits, &caller.key.id, assistant_id)
                 {
                     Some(id) => {
-                        *session_id = Some(id.clone());
+                        connection.session_id = Some(id.clone());
                         id
                     }
                     None => {
                         let _ = send(
-                            socket,
+                            &mut connection.socket,
                             &error_frame(
                                 ErrorCode::Internal,
                                 "A conversation could not be started.",
@@ -459,23 +463,21 @@ async fn handle_text(
                     content: content.to_owned(),
                 },
             );
+            let messages = state.api.conversations.messages(&id);
             let (handle, cancel) = Cancel::channel();
-            *running = Some(handle);
+            connection.running = Some(handle);
             tokio::spawn(run_turn(
                 state.clone(),
                 caller.clone(),
                 id,
-                state
-                    .api
-                    .conversations
-                    .messages(session_id.as_deref().unwrap_or_default()),
-                out.clone(),
+                messages,
+                connection.out.clone(),
                 cancel,
             ));
         }
         _ => {
             let _ = send(
-                socket,
+                &mut connection.socket,
                 &error_frame(ErrorCode::InvalidRequest, "Unknown frame type."),
             )
             .await;

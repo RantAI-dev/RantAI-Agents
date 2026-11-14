@@ -63,12 +63,12 @@ pub async fn connect(
         if read == 0 {
             return Err("the server closed before answering the handshake".into());
         }
-        buffer.extend_from_slice(&chunk[..read]);
+        buffer.extend_from_slice(chunk.get(..read).unwrap_or_default());
         if let Some(at) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
             break at + 4;
         }
     };
-    let head = String::from_utf8_lossy(&buffer[..head_end]).to_string();
+    let head = String::from_utf8_lossy(buffer.get(..head_end).unwrap_or_default()).to_string();
     let status: u16 = head
         .split_whitespace()
         .nth(1)
@@ -79,7 +79,7 @@ pub async fn connect(
     }
     Ok(Handshake::Open(Socket {
         stream,
-        buffer: buffer[head_end..].to_vec(),
+        buffer: buffer.get(head_end..).unwrap_or_default().to_vec(),
     }))
 }
 
@@ -119,7 +119,8 @@ impl Socket {
         let mask = [0x37_u8, 0xfa, 0x21, 0x3d];
         frame.extend_from_slice(&mask);
         for (index, byte) in payload.iter().enumerate() {
-            frame.push(byte ^ mask[index % 4]);
+            let key = mask.get(index % mask.len()).copied().unwrap_or(0);
+            frame.push(byte ^ key);
         }
         self.stream.write_all(&frame).await?;
         self.stream.flush().await
@@ -137,8 +138,11 @@ impl Socket {
         let masked = first.get(1).copied().unwrap_or(0) & 0x80 != 0;
         let length = match first.get(1).copied().unwrap_or(0) & 0x7f {
             126 => {
-                let bytes = self.read_exact(2).await?;
-                u64::from(u16::from_be_bytes([bytes[0], bytes[1]]))
+                let (high, low) = match self.read_exact(2).await?.as_slice() {
+                    [high, low] => (*high, *low),
+                    _ => return None,
+                };
+                u64::from(u16::from_be_bytes([high, low]))
             }
             127 => {
                 let bytes = self.read_exact(8).await?;
@@ -156,7 +160,9 @@ impl Socket {
         let mut payload = self.read_exact(usize::try_from(length).ok()?).await?;
         if let Some(mask) = mask {
             for (index, byte) in payload.iter_mut().enumerate() {
-                *byte ^= mask[index % 4];
+                if let Some(key) = mask.get(index % mask.len().max(1)) {
+                    *byte ^= key;
+                }
             }
         }
         match opcode {
@@ -203,7 +209,9 @@ impl Socket {
             let mut chunk = [0_u8; 2048];
             match self.stream.read(&mut chunk).await {
                 Ok(0) | Err(_) => return None,
-                Ok(read) => self.buffer.extend_from_slice(&chunk[..read]),
+                Ok(read) => self
+                    .buffer
+                    .extend_from_slice(chunk.get(..read).unwrap_or_default()),
             }
         }
         Some(self.buffer.drain(..count).collect())
