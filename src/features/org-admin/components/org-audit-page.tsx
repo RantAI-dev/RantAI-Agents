@@ -10,9 +10,6 @@ import { useCursorPage } from "@/hooks/use-api-resource"
 import { orgPaths } from "@/features/org-admin/api"
 import type { AuditRow } from "@/features/org-admin/types"
 
-/** One page of the audit log: who changed what, from where, and when. */
-const PAGE = "?limit=50"
-
 /**
  * Audit log: every change to members, units, roles, grants, shares, providers and keys, newest
  * first. The API decides who may read it (`org.audit.read`); this screen shows what it answers.
@@ -20,7 +17,7 @@ const PAGE = "?limit=50"
 export default function OrgAuditPage() {
   const { activeOrganization } = useOrganization()
   const orgId = activeOrganization?.id ?? null
-  const page = useCursorPage<AuditRow>(orgId ? `${orgPaths.audit(orgId)}${PAGE}` : null)
+  const page = useCursorPage<AuditRow>(orgId ? orgPaths.audit(orgId) : null)
 
   if (!orgId) {
     return (

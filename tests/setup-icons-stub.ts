@@ -38,7 +38,7 @@ const ICON_NAMES = [
   // org admin screens (src/features/org-admin/components/**)
   "AlertCircle", "CheckCircle", "Crown", "MoreHorizontal", "Network",
   "ScrollText", "Users", "UserPlus", "KeyRound", "ExternalLink", "Shield",
-  "SlidersHorizontal", "Tag", "Wrench", "Bot", "Plus", "Database",
+  "SlidersHorizontal", "Tag", "Wrench", "Bot", "Plus", "Database", "History",
 ] as const
 
 const stubModule: Record<string, unknown> = {}
