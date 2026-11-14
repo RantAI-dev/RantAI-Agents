@@ -14,8 +14,9 @@
 //!   itself, where a grant never answers.
 //! - A built-in agent has no grants and no organisation (`grants::set` refuses one), so all
 //!   three routes answer 404 for it: there is nothing to share.
-//! - Every change writes an `AuditLog` row (§3.7): `rbac.grant.set` for a grant that was added
-//!   or whose level changed, `rbac.grant.revoke` for one that went.
+//! - Every change writes an `AuditLog` row (§3.7) in the change's own transaction (the store
+//!   does it): `rbac.grant.set` for a grant that was added or whose level changed,
+//!   `rbac.grant.revoke` for one that went.
 
 use std::collections::BTreeMap;
 
@@ -23,12 +24,12 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use agents_core::authz::{GrantLevel, Permission, Subject, SubjectType};
 use agents_core::validation::FieldError;
 use agents_store::assistants::AssistantRow;
-use agents_store::audit::{self, Entry};
+use agents_store::audit::Actor;
 use agents_store::grants::{self, GrantRow};
 
 use crate::AppState;
@@ -36,6 +37,7 @@ use crate::auth::CurrentUser;
 use crate::http::ApiError;
 use crate::http::json::Body;
 use crate::http::time::iso;
+use crate::routes::organizations::ip_address;
 
 use super::{
     Caller, SuccessJson, authorize_org, caller, load_authorized, missing_body, not_found,
@@ -80,15 +82,14 @@ pub(super) async fn replace(
     let caller = caller(&state, &headers, &user).await?;
     let row = manageable(&state, &caller, &id).await?;
     let org_id = caller.org()?.to_owned();
-    let before = grants::list(&state.db, &org_id, &row.id)
+    let ip = ip_address(&headers);
+    let actor = Actor {
+        user_id: &caller.user_id,
+        ip_address: ip.as_deref(),
+    };
+    let after = grants::replace_all(&state.db, &org_id, &row.id, &wanted, &actor)
         .await
         .map_err(|e| store_error(&e))?;
-    let after = grants::replace_all(&state.db, &org_id, &row.id, &wanted, &user.id)
-        .await
-        .map_err(|e| store_error(&e))?;
-
-    let ip = client_ip(&headers);
-    audit_changes(&state, &caller, &row, &before, &after, ip.as_deref()).await?;
     Ok(Json(grants_json(&state, &org_id, after).await?))
 }
 
@@ -102,37 +103,14 @@ pub(super) async fn revoke(
     let caller = caller(&state, &headers, &user).await?;
     let row = manageable(&state, &caller, &id).await?;
     let org_id = caller.org()?.to_owned();
-    let rows = grants::list(&state.db, &org_id, &row.id)
+    let ip = ip_address(&headers);
+    let actor = Actor {
+        user_id: &caller.user_id,
+        ip_address: ip.as_deref(),
+    };
+    grants::revoke_by_id(&state.db, &org_id, &row.id, &grant_id, &actor)
         .await
         .map_err(|e| store_error(&e))?;
-    let grant = rows
-        .iter()
-        .find(|grant| grant.id == grant_id)
-        .ok_or_else(not_found)?;
-    let subject = grant.to_grant().ok_or_else(not_found)?.subject;
-    grants::revoke(&state.db, &org_id, &row.id, &subject)
-        .await
-        .map_err(|e| store_error(&e))?;
-
-    let ip = client_ip(&headers);
-    audit::record(
-        &state.db,
-        &Entry {
-            organization_id: &org_id,
-            user_id: Some(&caller.user_id),
-            action: "rbac.grant.revoke",
-            resource: &format!("assistant:{}", row.id),
-            detail: &json!({
-                "assistantId": row.id,
-                "subjectType": grant.subject_type,
-                "subjectId": grant.subject_id,
-                "level": grant.level,
-            }),
-            ip_address: ip.as_deref(),
-        },
-    )
-    .await
-    .map_err(|e| store_error(&e))?;
     Ok(Json(SuccessJson { success: true }))
 }
 
@@ -214,79 +192,6 @@ async fn grants_json(
         data,
         next_cursor: None,
     })
-}
-
-/// Writes one audit row per grant that was added, changed or removed.
-async fn audit_changes(
-    state: &AppState,
-    caller: &Caller,
-    row: &AssistantRow,
-    before: &[GrantRow],
-    after: &[GrantRow],
-    ip: Option<&str>,
-) -> Result<(), ApiError> {
-    let key = |grant: &GrantRow| format!("{}:{}", grant.subject_type, grant.subject_id);
-    let old: BTreeMap<String, &GrantRow> = before.iter().map(|g| (key(g), g)).collect();
-    let new: BTreeMap<String, &GrantRow> = after.iter().map(|g| (key(g), g)).collect();
-    let resource = format!("assistant:{}", row.id);
-    // The agent is the caller's organisation's (see `manageable`), so the trail is that
-    // organisation's.
-    let org_id = row.organization_id.as_deref().unwrap_or_default();
-
-    for (k, grant) in &new {
-        let changed = old
-            .get(k)
-            .is_none_or(|previous| previous.level != grant.level);
-        if changed {
-            audit::record(
-                &state.db,
-                &Entry {
-                    organization_id: org_id,
-                    user_id: Some(&caller.user_id),
-                    action: "rbac.grant.set",
-                    resource: &resource,
-                    detail: &json!({
-                        "assistantId": row.id,
-                        "subjectType": grant.subject_type,
-                        "subjectId": grant.subject_id,
-                        "level": grant.level,
-                    }),
-                    ip_address: ip,
-                },
-            )
-            .await
-            .map_err(|e| store_error(&e))?;
-        }
-    }
-    for (k, grant) in &old {
-        if !new.contains_key(k) {
-            audit::record(
-                &state.db,
-                &Entry {
-                    organization_id: org_id,
-                    user_id: Some(&caller.user_id),
-                    action: "rbac.grant.revoke",
-                    resource: &resource,
-                    detail: &json!({
-                        "assistantId": row.id,
-                        "subjectType": grant.subject_type,
-                        "subjectId": grant.subject_id,
-                        "level": grant.level,
-                    }),
-                    ip_address: ip,
-                },
-            )
-            .await
-            .map_err(|e| store_error(&e))?;
-        }
-    }
-    Ok(())
-}
-
-/// The caller's IP, the way the old API-key route reads it.
-fn client_ip(headers: &HeaderMap) -> Option<String> {
-    let header = |name: &str| headers.get(name).and_then(|value| value.to_str().ok());
-    agents_auth::api_key::client_ip(header("x-forwarded-for"), header("x-real-ip"))
 }
 
 /// The grant list a replace request asks for, with every bad entry listed.

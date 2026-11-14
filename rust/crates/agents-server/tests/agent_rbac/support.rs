@@ -58,6 +58,7 @@ pub async fn unit(
             slug,
             external_id: None,
         },
+        None,
     )
     .await
     .map_err(store)?;
@@ -71,9 +72,17 @@ pub async fn unit_member(
     unit_id: &str,
     user_id: &str,
 ) -> Result<(), sqlx::Error> {
-    units::add_member(db, org_id, unit_id, user_id, false, MemberSource::Manual)
-        .await
-        .map_err(store)?;
+    units::add_member(
+        db,
+        org_id,
+        unit_id,
+        user_id,
+        false,
+        MemberSource::Manual,
+        None,
+    )
+    .await
+    .map_err(store)?;
     Ok(())
 }
 
