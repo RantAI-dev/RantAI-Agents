@@ -49,6 +49,8 @@ pub struct AppState {
     /// `TRUSTED_PROXIES`: the proxies whose `X-Forwarded-For` is believed. Empty means the
     /// socket peer is the caller ([`http::client_ip`]).
     pub trusted_proxies: Arc<[agents_core::net::Cidr]>,
+    /// The agent API: the conversations of the open sockets and the limits they run under.
+    pub api: routes::agent_api::ApiState,
 }
 
 impl AppState {
@@ -72,6 +74,7 @@ impl AppState {
             http: reqwest::Client::new(),
             signin: Arc::new(signin::SignIn::default()),
             trusted_proxies: Arc::from(Vec::new()),
+            api: routes::agent_api::ApiState::default(),
         }
     }
 }

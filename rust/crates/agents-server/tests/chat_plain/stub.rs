@@ -245,6 +245,11 @@ async fn write_reply(
             }
         }
         Script::Hang(part) => {
+            // A connection that sent no request is not the model call (something else on the
+            // machine found the port): its close must not read as the client hanging up.
+            if request_body.is_empty() {
+                return Ok(());
+            }
             // The answer starts and never ends: the test hangs up in the middle.
             let body = format!("data: {}\n\n", chunk(json!({ "content": part })));
             let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\n\r\n";

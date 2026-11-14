@@ -41,17 +41,23 @@ impl Stub {
         let address = listener.local_addr()?;
         let bodies = Arc::new(Mutex::new(Vec::new()));
         let recorded = Arc::clone(&bodies);
+        // A reply is handed out only to a connection that sent a request: a stray connection to
+        // the port (another process probing it) must not use up the next scripted answer.
+        let replies = Arc::new(Mutex::new(replies.into_iter()));
         tokio::spawn(async move {
-            let mut replies = replies.into_iter();
             while let Ok((mut socket, _)) = listener.accept().await {
-                let reply = replies
-                    .next()
-                    .unwrap_or_else(|| "data: [DONE]\n\n".to_owned());
                 let recorded = Arc::clone(&recorded);
+                let replies = Arc::clone(&replies);
                 tokio::spawn(async move {
-                    let body = read_request(&mut socket, recorded).await;
+                    let Some(_body) = read_request(&mut socket, recorded).await else {
+                        return;
+                    };
+                    let reply = replies
+                        .lock()
+                        .ok()
+                        .and_then(|mut queue| queue.next())
+                        .unwrap_or_else(|| "data: [DONE]\n\n".to_owned());
                     let _ = write_reply(&mut socket, &reply).await;
-                    let _ = body;
                 });
             }
         });
@@ -70,19 +76,20 @@ impl Stub {
 }
 
 /// Read the request, keeping its body for the test to look at.
+/// The body of one request, or `None` when the connection closed without sending one.
 async fn read_request(
     socket: &mut tokio::net::TcpStream,
     bodies: Arc<Mutex<Vec<String>>>,
-) -> String {
+) -> Option<String> {
     let mut buffer = Vec::new();
     let mut chunk = [0_u8; 2048];
     loop {
         let read = match socket.read(&mut chunk).await {
             Ok(read) => read,
-            Err(_) => return String::new(),
+            Err(_) => return None,
         };
         if read == 0 {
-            return String::new();
+            return None;
         }
         buffer.extend_from_slice(chunk.get(..read).unwrap_or(&[]));
         let Some(head_end) = buffer.windows(4).position(|window| window == b"\r\n\r\n") else {
@@ -98,7 +105,7 @@ async fn read_request(
             if let Ok(mut guard) = bodies.lock() {
                 guard.push(body.clone());
             }
-            return body;
+            return Some(body);
         }
     }
 }
@@ -376,6 +383,9 @@ async fn the_wizard_streams_the_frames_and_the_sanitised_proposal() -> R {
         ]),
     ])
     .await?;
+    // A stray connection that sends nothing must not use up the model's scripted answer.
+    drop(tokio::net::TcpStream::connect(stub.address).await?);
+    tokio::time::sleep(Duration::from_millis(50)).await;
     let app = router_for(&db, &stub);
 
     let frames = raw_frames(&app, Some(&auth), request()).await?;
@@ -785,10 +795,18 @@ async fn a_client_that_goes_away_closes_the_model_stream() -> R {
     let (asked_tx, asked) = tokio::sync::oneshot::channel::<()>();
     let (closed_tx, closed) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(async move {
-        let Ok((mut socket, _)) = listener.accept().await else {
-            return;
+        // Skip connections that send no request (see `Stub::start`).
+        let mut socket = loop {
+            let Ok((mut socket, _)) = listener.accept().await else {
+                return;
+            };
+            if read_request(&mut socket, Arc::new(Mutex::new(Vec::new())))
+                .await
+                .is_some()
+            {
+                break socket;
+            }
         };
-        let _ = read_request(&mut socket, Arc::new(Mutex::new(Vec::new()))).await;
         let first = format!(
             "data: {}\n\n",
             json!({
