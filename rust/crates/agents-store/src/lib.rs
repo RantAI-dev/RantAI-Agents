@@ -11,6 +11,7 @@
 //! query has an integration test against a migrated database: set `TEST_DATABASE_URL`.
 
 pub mod assistants;
+pub mod catalog;
 pub mod memory;
 pub mod orgs;
 pub mod sessions;

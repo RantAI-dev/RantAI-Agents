@@ -76,6 +76,7 @@ dependencies = [
  "agents-store",
  "axum",
  "chrono",
+ "futures",
  "http-body-util",
  "serde",
  "serde_json",

@@ -418,6 +418,30 @@ pub async fn set_user_default(
     Ok(())
 }
 
+/// Sets the user's sidebar settings (one `UserPreference` row per user).
+///
+/// The old route stored the sidebar settings next to the chosen assistant, so the row is
+/// the same one: the settings are written on their own and the assistant is left as it is.
+pub async fn set_user_sidebar_config(
+    db: &PgPool,
+    user_id: &str,
+    config: Option<&Value>,
+) -> StoreResult<()> {
+    let ts = now();
+    sqlx::query(
+        r#"INSERT INTO "UserPreference" ("id","userId","sidebarConfig","createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$4)
+           ON CONFLICT ("userId") DO UPDATE SET "sidebarConfig"=EXCLUDED."sidebarConfig","updatedAt"=EXCLUDED."updatedAt""#,
+    )
+    .bind(new_id())
+    .bind(user_id)
+    .bind(config)
+    .bind(ts)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Where the default assistant came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DefaultSource {

@@ -608,6 +608,18 @@ fn truncate(text: &str, limit: usize) -> String {
     text.get(..cut).unwrap_or("").to_owned()
 }
 
+/// A client with the timeout the port uses for a chat completion.
+///
+/// The old code let the AI SDK pick the client; the wizard route had 60 seconds for the
+/// whole request, so the client gets the same budget.
+#[must_use]
+pub fn default_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
 /// Stream one chat completion.
 ///
 /// The client is the caller's: build it with the timeout you want (the old code let the AI SDK

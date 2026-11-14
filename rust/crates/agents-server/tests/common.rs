@@ -1,6 +1,8 @@
 //! Shared helpers for route tests: a router over the test database, seeded users and tokens.
 
 use agents_server::auth::AuthConfig;
+use agents_server::config::LlmSettings;
+use agents_server::policy::{AllowAll, WizardModel};
 use agents_server::{AppState, app};
 use agents_store::{PgPool, new_id};
 use axum::Router;
@@ -16,6 +18,20 @@ pub type R = Result<(), Box<dyn std::error::Error>>;
 
 /// The router over `TEST_DATABASE_URL`, or `None` (skip) when it is unset outside CI.
 pub async fn router() -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>> {
+    let Some(db) = pool().await? else {
+        return Ok(None);
+    };
+    let app = router_over(
+        &db,
+        std::sync::Arc::new(AllowAll),
+        std::sync::Arc::new(agents_server::policy::ConfiguredWizard::new("stub-model")),
+        LlmSettings::default(),
+    );
+    Ok(Some((app, db)))
+}
+
+/// The test database, or `None` (skip) when it is unset outside CI.
+pub async fn pool() -> Result<Option<PgPool>, Box<dyn std::error::Error>> {
     let url = match std::env::var("TEST_DATABASE_URL") {
         Ok(u) if !u.is_empty() => u,
         _ if std::env::var_os("CI").is_some() => {
@@ -26,15 +42,29 @@ pub async fn router() -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Er
             return Ok(None);
         }
     };
-    let db = PgPool::connect(&url).await?;
+    Ok(Some(PgPool::connect(&url).await?))
+}
+
+/// The router over a pool, with the caller's policy, wizard model and model endpoint.
+///
+/// The wizard model and the endpoint are what the cloud edition brings; a test that needs
+/// the wizard to talk to a stub server passes its base URL here.
+pub fn router_over(
+    db: &PgPool,
+    policy: std::sync::Arc<dyn agents_server::policy::AssistantPolicy>,
+    wizard: std::sync::Arc<dyn WizardModel>,
+    llm: LlmSettings,
+) -> Router {
     let state = AppState {
         db: db.clone(),
         auth: AuthConfig {
             secrets: vec![SECRET.to_owned()],
         },
-        policy: std::sync::Arc::new(agents_server::policy::AllowAll),
+        policy,
+        wizard,
+        llm,
     };
-    Ok(Some((app(state), db)))
+    app(state)
 }
 
 /// A user row; returns its id.
