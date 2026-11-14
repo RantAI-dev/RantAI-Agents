@@ -6,7 +6,7 @@
 
 use aes::Aes256;
 use aes::cipher::block_padding::Pkcs7;
-use aes::cipher::{BlockDecryptMut, KeyIvInit};
+use aes::cipher::{BlockDecryptMut, BlockEncryptMut, KeyIvInit};
 use hkdf::Hkdf;
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256, Sha512};
@@ -26,7 +26,7 @@ pub const CEK_LEN: usize = 64;
 /// The AES-256 key and the MAC key are the same length.
 const HALF_CEK: usize = CEK_LEN / 2;
 /// AES-CBC uses a 16 byte initialisation vector.
-const IV_LEN: usize = 16;
+pub const IV_LEN: usize = 16;
 /// The authentication tag is the first half of the HMAC-SHA-512 output.
 const TAG_LEN: usize = 32;
 
@@ -122,6 +122,33 @@ pub fn decrypt(token: &str, cek: &[u8; CEK_LEN]) -> Result<Vec<u8>, AuthError> {
         .decrypt_padded_mut::<Pkcs7>(&mut buffer)
         .map_err(|_| AuthError::Invalid)?;
     Ok(plaintext.to_vec())
+}
+
+/// Encrypt `plaintext` into a compact JWE under `protected_header` (the header's JSON text, written
+/// as given: `jose` writes the members in the order they were set). `iv` must be fresh random
+/// bytes for every token; the caller supplies them, so this crate stays free of randomness.
+pub fn encrypt(
+    protected_header: &str,
+    plaintext: &[u8],
+    cek: &[u8; CEK_LEN],
+    iv: &[u8; IV_LEN],
+) -> Result<String, AuthError> {
+    let protected = base64url::encode(protected_header.as_bytes());
+    let enc_key = cek.get(HALF_CEK..).ok_or(AuthError::Invalid)?;
+    let encryptor =
+        cbc::Encryptor::<Aes256>::new_from_slices(enc_key, iv).map_err(|_| AuthError::Invalid)?;
+    let ciphertext = encryptor.encrypt_padded_vec_mut::<Pkcs7>(plaintext);
+    let mac_key = cek.get(..HALF_CEK).ok_or(AuthError::Invalid)?;
+    let mut mac = <HmacSha512 as Mac>::new_from_slice(mac_key).map_err(|_| AuthError::Invalid)?;
+    mac.update(&mac_data(protected.as_bytes(), iv, &ciphertext));
+    let full = mac.finalize().into_bytes();
+    let tag = full.get(..TAG_LEN).ok_or(AuthError::Invalid)?;
+    Ok(format!(
+        "{protected}..{}.{}.{}",
+        base64url::encode(iv),
+        base64url::encode(&ciphertext),
+        base64url::encode(tag)
+    ))
 }
 
 /// `additionalData || iv || ciphertext || uint64be(aad length in bits)`, per RFC 7518 §5.2.2.1.
