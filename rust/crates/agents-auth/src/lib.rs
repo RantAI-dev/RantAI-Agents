@@ -1,14 +1,20 @@
 //! Verifies the credentials Next.js issues, so Rust routes accept the same callers: the
 //! NextAuth v5 session cookie, the mobile Bearer JWT, widget keys and `rantai_sk_` API keys.
 //!
-//! Pure: no database, no clock, no network. The caller passes the secret and the current
-//! time in, and does the database lookups itself.
+//! Also issues them: the session cookie and the mobile token, the SSO flow cookie, and the ID
+//! token check of an OIDC sign-in.
+//!
+//! Pure: no database, no clock, no network, no randomness. The caller passes the secret, the
+//! current time and any random bytes in, and does the database lookups and HTTP calls itself.
 
 pub mod api_key;
 pub mod base64url;
+pub mod credential;
 pub mod jwe;
 pub mod mobile;
+pub mod oidc;
 pub mod session;
+pub mod session_issue;
 pub mod widget;
 
 use agents_contracts::error_codes::ErrorCode;

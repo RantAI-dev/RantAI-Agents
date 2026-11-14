@@ -18,6 +18,15 @@ sha2.workspace = true
 hkdf.workspace = true
 base64.workspace = true
 subtle.workspace = true
+# Not in [workspace.dependencies]: rust/Cargo.toml is a protected path. Approved for S2.
+# The ID token signature (RS*/PS*/ES*) against a JWK; ring is already built for rustls.
+jsonwebtoken = { version = "9.3", default-features = false }
+# The TypeScript Credential encryption: AES-256-GCM with a 16 byte IV.
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
+
+[dev-dependencies]
+# Signing test ID tokens with a PEM key needs the `use_pem` feature.
+jsonwebtoken = "9.3"
 
 [lints]
 workspace = true

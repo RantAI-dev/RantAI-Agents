@@ -19,6 +19,10 @@ pub enum ErrorCode {
     Unavailable,
     Timeout,
     CapabilityNotPorted,
+    SsoFailed,
+    AccountLinkRefused,
+    AccountNotProvisioned,
+    PasswordLoginDisabled,
 }
 
 #[rustfmt::skip]
@@ -39,6 +43,10 @@ impl ErrorCode {
         ErrorCode::Unavailable,
         ErrorCode::Timeout,
         ErrorCode::CapabilityNotPorted,
+        ErrorCode::SsoFailed,
+        ErrorCode::AccountLinkRefused,
+        ErrorCode::AccountNotProvisioned,
+        ErrorCode::PasswordLoginDisabled,
     ];
 
     /// The string sent to clients.
@@ -59,6 +67,10 @@ impl ErrorCode {
             Self::Unavailable => "unavailable",
             Self::Timeout => "timeout",
             Self::CapabilityNotPorted => "capability_not_ported",
+            Self::SsoFailed => "sso_failed",
+            Self::AccountLinkRefused => "account_link_refused",
+            Self::AccountNotProvisioned => "account_not_provisioned",
+            Self::PasswordLoginDisabled => "password_login_disabled",
         }
     }
 
@@ -81,6 +93,10 @@ impl ErrorCode {
             Self::Unavailable => 503,
             Self::Timeout => 504,
             Self::CapabilityNotPorted => 409,
+            Self::SsoFailed => 401,
+            Self::AccountLinkRefused => 409,
+            Self::AccountNotProvisioned => 403,
+            Self::PasswordLoginDisabled => 403,
         }
     }
 
@@ -103,6 +119,10 @@ impl ErrorCode {
             Self::Unavailable => "The service is temporarily unavailable. Try again later.",
             Self::Timeout => "The request took too long.",
             Self::CapabilityNotPorted => "This capability is not ported yet.",
+            Self::SsoFailed => "Single sign-on did not complete. Start the sign-in again.",
+            Self::AccountLinkRefused => "An account with this email already exists and cannot be linked to this identity provider. Sign in with your password, or ask an administrator.",
+            Self::AccountNotProvisioned => "There is no account for you in this organisation. Ask an administrator to invite you.",
+            Self::PasswordLoginDisabled => "Your organisation signs in through single sign-on. Use the single sign-on button.",
         }
     }
 }

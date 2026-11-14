@@ -11,7 +11,7 @@
 
 use chrono::{DateTime, NaiveDateTime};
 use serde_json::{Value, json};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{Executor, PgPool, Postgres, Transaction};
 
 use crate::{StoreResult, new_id, now};
 
@@ -133,6 +133,44 @@ pub async fn list(
         .bind(limit)
         .fetch_all(db)
         .await?)
+}
+
+#[derive(Debug, Clone)]
+pub struct AuditEntry<'a> {
+    pub organization_id: &'a str,
+    pub user_id: Option<&'a str>,
+    /// `sso.login`, `auth.login`, `sso.provider.create`, …
+    pub action: &'a str,
+    /// `user:<id>`, `identity_provider:<id>`, …
+    pub resource: &'a str,
+    pub detail: Value,
+    pub ip_address: Option<&'a str>,
+    /// `low`, `medium`, `high` or `critical`.
+    pub risk_level: &'a str,
+}
+
+/// Writes one row from a full entry (sign-in and SSO, which set the risk level), inside the
+/// caller's transaction when it passes one.
+pub async fn record_entry<'e, E>(exec: E, entry: &AuditEntry<'_>) -> StoreResult<()>
+where
+    E: Executor<'e, Database = Postgres>,
+{
+    sqlx::query(
+        r#"INSERT INTO "AuditLog" ("id","organizationId","userId","action","resource","detail","ipAddress","riskLevel","createdAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)"#,
+    )
+    .bind(new_id())
+    .bind(entry.organization_id)
+    .bind(entry.user_id)
+    .bind(entry.action)
+    .bind(entry.resource)
+    .bind(&entry.detail)
+    .bind(entry.ip_address)
+    .bind(entry.risk_level)
+    .bind(now())
+    .execute(exec)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]

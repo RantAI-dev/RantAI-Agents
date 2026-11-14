@@ -5,6 +5,8 @@ pub mod config;
 pub mod http;
 pub mod policy;
 pub mod routes;
+pub mod signin;
+pub mod sso;
 
 use std::sync::Arc;
 
@@ -41,6 +43,9 @@ pub struct AppState {
     /// The HTTP client the model is called with. One for the process: the connection pool is
     /// what keeps the chat fast.
     pub http: reqwest::Client,
+    /// Sign-in: the public URL, the throttle, the SSO client and the provider from the
+    /// environment.
+    pub signin: Arc<signin::SignIn>,
 }
 
 impl AppState {
@@ -62,6 +67,7 @@ impl AppState {
             tool_approval: config::ToolApprovalTiming::default(),
             platform_context: true,
             http: reqwest::Client::new(),
+            signin: Arc::new(signin::SignIn::default()),
         }
     }
 }

@@ -95,6 +95,13 @@ pub struct Config {
     /// Whether the identity and date block is part of the system prompt
     /// (`PLATFORM_CONTEXT_INSTRUCTION=off` removes it).
     pub platform_context: bool,
+    /// `AUTH_URL`, else `NEXTAUTH_URL`: the origin browsers use. It decides the session cookie's
+    /// `__Secure-` prefix and the SSO redirect URI, as it does for Auth.js.
+    pub public_url: Option<String>,
+    /// `CREDENTIAL_ENCRYPTION_KEY`, the key the TypeScript `Credential` feature uses.
+    pub credential_key: Option<agents_auth::credential::CredentialKey>,
+    /// The single identity provider of an on-prem install, from `AUTH_OIDC_*`.
+    pub env_provider: Option<crate::sso::env::EnvProvider>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -103,6 +110,10 @@ pub enum ConfigError {
     Missing(&'static str),
     #[error("{0} is not a valid number")]
     NotANumber(&'static str),
+    #[error("{0} is not valid: {1}")]
+    Invalid(&'static str, String),
+    #[error(transparent)]
+    Sso(#[from] crate::sso::env::EnvError),
 }
 
 fn var(name: &'static str) -> Option<String> {
@@ -170,6 +181,18 @@ impl Config {
                 .as_deref(),
             Some("off") | Some("false") | Some("0")
         );
+        let public_url = match var("AUTH_URL").or_else(|| var("NEXTAUTH_URL")) {
+            Some(url) => Some(public_origin(&url)?),
+            None => None,
+        };
+        let credential_key =
+            match var(agents_auth::credential::KEY_ENV) {
+                Some(raw) => Some(agents_auth::credential::CredentialKey::parse(&raw).map_err(
+                    |e| ConfigError::Invalid("CREDENTIAL_ENCRYPTION_KEY", e.to_string()),
+                )?),
+                None => None,
+            };
+        let env_provider = crate::sso::env::from_vars(var)?;
         Ok(Self {
             database_url,
             bind,
@@ -179,8 +202,22 @@ impl Config {
             chat_max_steps,
             chat_max_steps_cap,
             platform_context,
+            public_url,
+            credential_key,
+            env_provider,
         })
     }
+}
+
+/// The origin of `AUTH_URL` (`https://app.example.com`): Auth.js reads only the origin and the
+/// protocol from it here.
+fn public_origin(url: &str) -> Result<String, ConfigError> {
+    let parsed = reqwest::Url::parse(url.trim())
+        .map_err(|e| ConfigError::Invalid("AUTH_URL", e.to_string()))?;
+    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+        return Err(ConfigError::Invalid("AUTH_URL", url.to_owned()));
+    }
+    Ok(parsed.origin().ascii_serialization())
 }
 
 #[cfg(test)]

@@ -105,3 +105,6 @@ tests/bench-kb/corpus/**/*.zip
 .plans/
 .t3/
 target/
+
+# Throwaway RSA keys the OIDC tests sign their stub ID tokens with; never used outside tests.
+!rust/crates/agents-auth/tests/fixtures/*.pem

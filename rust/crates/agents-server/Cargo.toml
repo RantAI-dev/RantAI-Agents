@@ -31,11 +31,21 @@ chrono.workspace = true
 # The chat calls the model over HTTP and reads the base64 header the old route read.
 reqwest.workspace = true
 base64.workspace = true
+# The flow's state check compares in constant time.
+subtle.workspace = true
+# Not in [workspace.dependencies]: rust/Cargo.toml is a protected path. Approved for S2.
+# Verifies the bcryptjs password hashes the TypeScript stored ($2a$/$2b$).
+bcrypt = "0.17"
+# Random bytes for the JWE IVs, PKCE, state and nonce; already built for sqlx.
+getrandom = "0.2"
 
 [dev-dependencies]
 tower.workspace = true
 http-body-util.workspace = true
 agents-auth.workspace = true
+# The stub identity provider signs its ID tokens with a test RSA key (PEM).
+jsonwebtoken = "9.3"
+sha2.workspace = true
 
 [lints]
 workspace = true

@@ -40,6 +40,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     state.chat_max_steps = config.chat_max_steps;
     state.chat_max_steps_cap = config.chat_max_steps_cap;
     state.platform_context = config.platform_context;
+    state.signin = std::sync::Arc::new(agents_server::signin::SignIn {
+        public_url: config.public_url.clone(),
+        credential_key: config.credential_key.clone(),
+        env_provider: config.env_provider.clone(),
+        ..agents_server::signin::SignIn::default()
+    });
     axum::serve(listener, app(state))
         .with_graceful_shutdown(shutdown())
         .await?;
