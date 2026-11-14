@@ -13,6 +13,7 @@
 pub mod access;
 pub mod approvals;
 pub mod assistants;
+pub mod audit;
 pub mod catalog;
 pub mod grants;
 pub mod memory;

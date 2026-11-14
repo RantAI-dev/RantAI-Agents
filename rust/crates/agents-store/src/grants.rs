@@ -127,6 +127,38 @@ pub async fn list(db: &PgPool, org_id: &str, assistant_id: &str) -> StoreResult<
         .await?)
 }
 
+/// The name of what a unit or user grant names, for the access panel. `None` when the subject
+/// no longer exists or is another organisation's, which a grant cannot name anyway.
+pub async fn subject_name(
+    db: &PgPool,
+    org_id: &str,
+    subject: &Subject,
+) -> StoreResult<Option<String>> {
+    let sql = match subject.kind {
+        SubjectType::Org => {
+            return Ok(sqlx::query_scalar::<_, String>(
+                r#"SELECT "name" FROM "Organization" WHERE "id" = $1"#,
+            )
+            .bind(&subject.id)
+            .fetch_optional(db)
+            .await?);
+        }
+        SubjectType::Unit => {
+            r#"SELECT "name" FROM "OrgUnit" WHERE "id" = $1 AND "organizationId" = $2"#
+        }
+        SubjectType::User => {
+            r#"SELECT a."name" FROM "Agent" a
+               JOIN "OrganizationMember" m ON m."userId" = a."id" AND m."organizationId" = $2
+               WHERE a."id" = $1 AND m."acceptedAt" IS NOT NULL"#
+        }
+    };
+    Ok(sqlx::query_scalar::<_, String>(sql)
+        .bind(&subject.id)
+        .bind(org_id)
+        .fetch_optional(db)
+        .await?)
+}
+
 /// An agent as `authz::authorize` needs it, for a caller acting in `org_id`. The agent itself is
 /// loaded whatever its organisation, so `authorize` can answer `NotFound` for another tenant's;
 /// only grants stored in `org_id` are attached. An unknown id is `NotFound`.
