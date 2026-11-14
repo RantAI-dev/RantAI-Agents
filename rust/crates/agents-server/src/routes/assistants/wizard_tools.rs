@@ -11,7 +11,9 @@
 
 use serde_json::{Value, json};
 
-use agents_core::assistant::wizard::{KnownIds, ProposeAgentInput, sanitize_proposal};
+use agents_core::assistant::wizard::{
+    KnownIds, ProposeAgentInput, filter_known_ids, sanitize_proposal,
+};
 use agents_llm::types::ToolDefinition;
 use agents_store::catalog::{KnowledgeGroupEntry, McpServerEntry, SkillEntry, ToolEntry};
 
@@ -162,9 +164,9 @@ fn proposal_properties() -> Value {
 /// Run one tool call.
 ///
 /// The proposal is sanitised before it goes to the client: the ids the organisation does
-/// not have are dropped, the way `sanitizeProposal` dropped them. The refinement is not:
-/// the old code only wired `onProposal`, so a refinement went to the client as the model
-/// wrote it.
+/// not have are dropped, the way `sanitizeProposal` dropped them. The refinement is
+/// filtered the same way, which the old code did not do (it only wired `onProposal`):
+/// differences.md row 61.
 pub(super) fn run(name: &str, args: &Value, catalogues: &Catalogues) -> ToolRun {
     match name {
         "listModels" => ToolRun::Ran {
@@ -200,9 +202,15 @@ pub(super) fn run(name: &str, args: &Value, catalogues: &Catalogues) -> ToolRun 
                 error,
             },
         },
-        REFINE => ToolRun::Ran {
-            input: args.clone(),
-            output: json!({"ok": true}),
+        REFINE => match read_refinement(args, &catalogues.known_ids()) {
+            Ok(input) => ToolRun::Ran {
+                input,
+                output: json!({"ok": true}),
+            },
+            Err(error) => ToolRun::Invalid {
+                input: args.clone(),
+                error,
+            },
         },
         _ => ToolRun::Invalid {
             input: args.clone(),
@@ -225,6 +233,63 @@ fn read_proposal(args: &Value) -> Result<ProposeAgentInput, String> {
         return Err("The proposal has no model.".to_owned());
     }
     Ok(payload)
+}
+
+/// Read the arguments of `refineAgent` and drop the ids the organisation does not have.
+///
+/// A refinement is a partial proposal: only the fields it carries change the draft. An
+/// unknown model is removed from the patch rather than blanked, so the draft keeps the
+/// model it had.
+fn read_refinement(args: &Value, known: &KnownIds) -> Result<Value, String> {
+    const UNREADABLE: &str = "The refinement could not be read.";
+    let Some(object) = args.as_object() else {
+        return Err(UNREADABLE.to_owned());
+    };
+    let mut patch = object.clone();
+    for (key, ids) in [
+        ("selectedToolIds", &known.tools),
+        ("selectedSkillIds", &known.skills),
+        ("selectedMcpServerIds", &known.mcp),
+        ("knowledgeBaseGroupIds", &known.kbs),
+    ] {
+        let Some(value) = patch.get(key) else {
+            continue;
+        };
+        let Some(items) = value.as_array() else {
+            return Err(UNREADABLE.to_owned());
+        };
+        let mut listed = Vec::with_capacity(items.len());
+        for item in items {
+            let Some(id) = item.as_str() else {
+                return Err(UNREADABLE.to_owned());
+            };
+            listed.push(id.to_owned());
+        }
+        let kept = filter_known_ids(&listed, ids).kept;
+        patch.insert(key.to_owned(), json!(kept));
+    }
+    match patch.get("name") {
+        Some(Value::String(name)) if name.trim().is_empty() => {
+            return Err("The refinement has an empty name.".to_owned());
+        }
+        Some(Value::String(_)) | None => {}
+        Some(_) => return Err(UNREADABLE.to_owned()),
+    }
+    match patch.get("systemPrompt") {
+        Some(Value::String(prompt)) if prompt.chars().count() < 20 => {
+            return Err("The refinement's system prompt is too short.".to_owned());
+        }
+        Some(Value::String(_)) | None => {}
+        Some(_) => return Err(UNREADABLE.to_owned()),
+    }
+    match patch.get("model") {
+        Some(Value::String(model)) if !known.models.contains(model) => {
+            patch.remove("model");
+        }
+        Some(Value::String(_)) | None => {}
+        Some(_) => return Err(UNREADABLE.to_owned()),
+    }
+    Ok(Value::Object(patch))
 }
 
 /// The models, as the `listModels` tool returns them.

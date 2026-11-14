@@ -4,14 +4,12 @@
 //! The stub is a raw TCP listener in this file: it answers with the OpenAI SSE frames the
 //! providers send, so the tests never touch the network.
 
-#[allow(
-    dead_code,
-    reason = "the wizard test uses only part of the shared helpers"
-)]
+#[allow(dead_code, reason = "this file uses only part of the shared helpers")]
 mod common;
 
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use agents_llm::provider::ProviderConfig;
 use agents_server::config::LlmSettings;
@@ -378,28 +376,33 @@ async fn the_wizard_streams_the_frames_and_the_sanitised_proposal() -> R {
 
     let frames = raw_frames(&app, Some(&auth), request()).await?;
 
-    // The frames are the ones the AI SDK's UI message stream carries. The text of the
-    // second step comes in two deltas: the client holds back the last characters of a
-    // step, because they could still be a `<think>` tag.
+    // The frames are the ones the AI SDK's UI message stream carries. How many text
+    // deltas there are depends on how the bytes arrive (the client holds back a possible
+    // `<think>` tag), so a run of deltas counts as one.
+    let mut kinds = types(&frames);
+    kinds.dedup_by(|a, b| a == "text-delta" && b == "text-delta");
     assert_eq!(
-        types(&frames),
+        kinds,
         vec![
             "start",
             "start-step",
+            "tool-input-start",
+            "tool-input-delta",
             "tool-input-available",
             "tool-output-available",
             "finish-step",
             "start-step",
             "text-start",
             "text-delta",
-            "text-delta",
             "text-end",
             "finish-step",
             "finish",
         ]
     );
-    // The stream ends the way the SDK ends it.
+    // The stream ends the way the SDK ends it, with the last step's reason.
     assert_eq!(frames.last().map(String::as_str), Some("[DONE]"));
+    let finish = chunk_of_type(&frames, "finish").ok_or("no finish chunk")?;
+    assert_eq!(finish.pointer("/finishReason"), Some(&json!("stop")));
 
     // The proposal is in the tool chunk, and the ids the organisation does not have are
     // gone.
@@ -570,5 +573,291 @@ async fn a_caller_without_a_token_and_a_suspended_one_are_refused() -> R {
     // Positive control: the same request with a live token is answered.
     let frames = raw_frames(&app, Some(&bearer(&member_user)?), request()).await?;
     assert_eq!(types(&frames).first().map(String::as_str), Some("start"));
+    Ok(())
+}
+
+/// A knowledge base group; returns its id.
+async fn kb_row(db: &PgPool, org_id: Option<&str>) -> Result<String, sqlx::Error> {
+    let id = new_id();
+    sqlx::query(
+        r#"INSERT INTO "KnowledgeBaseGroup" ("id","name","organizationId","createdAt","updatedAt")
+           VALUES ($1,$1,$2,now(),now())"#,
+    )
+    .bind(&id)
+    .bind(org_id)
+    .execute(db)
+    .await?;
+    Ok(id)
+}
+
+/// The output of the tool call with that id.
+fn output_of(frames: &[String], call_id: &str) -> Option<Value> {
+    frames
+        .iter()
+        .filter_map(|frame| serde_json::from_str::<Value>(frame).ok())
+        .find(|chunk| {
+            chunk.get("type").and_then(Value::as_str) == Some("tool-output-available")
+                && chunk.get("toolCallId").and_then(Value::as_str) == Some(call_id)
+        })
+        .and_then(|chunk| chunk.get("output").cloned())
+}
+
+/// The ids a list tool returned.
+fn listed_ids(output: &Value) -> Vec<String> {
+    output
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.get("id").and_then(Value::as_str).map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn the_catalogues_are_the_organisation_s_own() -> R {
+    let Some(db) = common::pool().await? else {
+        return Ok(());
+    };
+    let member_user = user(&db, false).await?;
+    let (org_a, org_b) = (org(&db).await?, org(&db).await?);
+    member(&db, &member_user, &org_a).await?;
+    let (my_tool, their_tool) = (tool_row(&db, &org_a).await?, tool_row(&db, &org_b).await?);
+    let (my_kb, their_kb, global_kb) = (
+        kb_row(&db, Some(&org_a)).await?,
+        kb_row(&db, Some(&org_b)).await?,
+        kb_row(&db, None).await?,
+    );
+    let auth = bearer(&member_user)?;
+
+    let stub = Stub::start(vec![
+        sse(&[
+            tool_chunk("call_tools", "listTools", json!({})),
+            finish_chunk("tool_calls"),
+        ]),
+        sse(&[
+            tool_chunk("call_kbs", "listKnowledgeGroups", json!({})),
+            finish_chunk("tool_calls"),
+        ]),
+        sse(&[
+            tool_chunk(
+                "call_propose",
+                "proposeAgent",
+                json!({
+                    "name": "Scoped",
+                    "systemPrompt": "## Goal\nOnly what the organisation has.",
+                    "model": MODEL,
+                    "selectedToolIds": [my_tool, their_tool],
+                    "knowledgeBaseGroupIds": [my_kb, their_kb, global_kb]
+                }),
+            ),
+            finish_chunk("tool_calls"),
+        ]),
+        sse(&[chunk(json!({"content": "done"})), finish_chunk("stop")]),
+    ])
+    .await?;
+    let app = router_for(&db, &stub);
+    let frames = raw_frames(&app, Some(&auth), request()).await?;
+
+    let tools = listed_ids(&output_of(&frames, "call_tools").ok_or("no listTools output")?);
+    // Positive control: the organisation's own tool is listed.
+    assert!(tools.contains(&my_tool), "own tool listed: {tools:?}");
+    assert!(
+        !tools.contains(&their_tool),
+        "another organisation's tool is not listed"
+    );
+
+    let kbs = listed_ids(&output_of(&frames, "call_kbs").ok_or("no listKnowledgeGroups output")?);
+    assert_eq!(
+        kbs,
+        vec![my_kb.clone()],
+        "only the organisation's own groups: not another organisation's, not a global one"
+    );
+
+    let proposal = frames
+        .iter()
+        .filter_map(|frame| serde_json::from_str::<Value>(frame).ok())
+        .find(|chunk| {
+            chunk.get("type").and_then(Value::as_str) == Some("tool-input-available")
+                && chunk.get("toolName").and_then(Value::as_str) == Some("proposeAgent")
+        })
+        .and_then(|chunk| chunk.get("input").cloned())
+        .ok_or("no proposal")?;
+    assert_eq!(
+        proposal.pointer("/selectedToolIds"),
+        Some(&json!([my_tool])),
+        "another organisation's tool is dropped from the proposal"
+    );
+    assert_eq!(
+        proposal.pointer("/knowledgeBaseGroupIds"),
+        Some(&json!([my_kb])),
+        "another organisation's group and a global one are dropped from the proposal"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_refinement_and_an_invalid_proposal_are_handled_like_the_sdk() -> R {
+    let Some(db) = common::pool().await? else {
+        return Ok(());
+    };
+    let member_user = user(&db, false).await?;
+    let org_id = org(&db).await?;
+    member(&db, &member_user, &org_id).await?;
+    let tool = tool_row(&db, &org_id).await?;
+    let auth = bearer(&member_user)?;
+
+    let stub = Stub::start(vec![
+        sse(&[
+            tool_chunk(
+                "call_refine",
+                "refineAgent",
+                json!({
+                    "model": "unknown/model",
+                    "selectedToolIds": [tool, "tool_unknown"],
+                    "emoji": "📄"
+                }),
+            ),
+            finish_chunk("tool_calls"),
+        ]),
+        sse(&[
+            tool_chunk(
+                "call_bad",
+                "proposeAgent",
+                json!({"name": "Short", "systemPrompt": "too short", "model": MODEL}),
+            ),
+            finish_chunk("tool_calls"),
+        ]),
+        sse(&[chunk(json!({"content": "ok"})), finish_chunk("stop")]),
+    ])
+    .await?;
+    let app = router_for(&db, &stub);
+    let frames = raw_frames(&app, Some(&auth), request()).await?;
+
+    let refinement = chunk_of_type(&frames, "tool-input-available")
+        .and_then(|chunk| chunk.get("input").cloned())
+        .ok_or("no refinement")?;
+    // Positive control: the fields the organisation has stay.
+    assert_eq!(refinement.pointer("/selectedToolIds"), Some(&json!([tool])));
+    assert_eq!(refinement.pointer("/emoji"), Some(&json!("📄")));
+    // An unknown model is left out of the patch, so the draft keeps its own.
+    assert_eq!(refinement.pointer("/model"), None);
+
+    // A proposal that does not fit the schema: an input error and an output error, both
+    // dynamic, and no proposal for the client to apply.
+    let input_error = chunk_of_type(&frames, "tool-input-error").ok_or("no input error")?;
+    assert_eq!(input_error.pointer("/toolCallId"), Some(&json!("call_bad")));
+    assert_eq!(input_error.pointer("/dynamic"), Some(&json!(true)));
+    let output_error = chunk_of_type(&frames, "tool-output-error").ok_or("no output error")?;
+    assert_eq!(
+        output_error.pointer("/toolCallId"),
+        Some(&json!("call_bad"))
+    );
+    assert_eq!(output_error.pointer("/dynamic"), Some(&json!(true)));
+    assert!(
+        !frames
+            .iter()
+            .any(|frame| frame.contains("\"tool-input-available\"")
+                && frame.contains("\"proposeAgent\"")),
+        "an invalid proposal never reaches the client as one"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_client_that_goes_away_closes_the_model_stream() -> R {
+    let Some(db) = common::pool().await? else {
+        return Ok(());
+    };
+    let member_user = user(&db, false).await?;
+    let org_id = org(&db).await?;
+    member(&db, &member_user, &org_id).await?;
+    let auth = bearer(&member_user)?;
+
+    // A model that starts a tool call and then goes quiet, holding the connection open.
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let address = listener.local_addr()?;
+    let (asked_tx, asked) = tokio::sync::oneshot::channel::<()>();
+    let (closed_tx, closed) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(async move {
+        let Ok((mut socket, _)) = listener.accept().await else {
+            return;
+        };
+        let _ = read_request(&mut socket, Arc::new(Mutex::new(Vec::new()))).await;
+        let first = format!(
+            "data: {}\n\n",
+            json!({
+                "id": "chatcmpl-1",
+                "object": "chat.completion.chunk",
+                "model": "stub",
+                "choices": [{"index": 0, "delta": {"tool_calls": [{
+                    "index": 0, "id": "call_1",
+                    "function": {"name": "proposeAgent", "arguments": "{\"name\":"}
+                }]}}],
+            })
+        );
+        let head =
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n";
+        let _ = socket.write_all(head.as_bytes()).await;
+        let _ = socket.write_all(first.as_bytes()).await;
+        let _ = socket.flush().await;
+        let _ = asked_tx.send(());
+        // Wait for the server to hang up.
+        let mut buffer = [0_u8; 64];
+        loop {
+            match socket.read(&mut buffer).await {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {}
+            }
+        }
+        let _ = closed_tx.send(());
+    });
+    let app = common::router_over(
+        &db,
+        Arc::new(AllowAll),
+        Arc::new(StubWizard),
+        LlmSettings {
+            base_url: Some(format!("http://{address}")),
+            api_key: Some("stub-key".to_owned()),
+            provider: ProviderConfig {
+                openrouter_api_key: Some("or-key".to_owned()),
+                ..ProviderConfig::default()
+            },
+        },
+    );
+
+    let request = Request::builder()
+        .method("POST")
+        .uri("/api/assistants/wizard/stream")
+        .header("content-type", "application/json")
+        .header("authorization", &auth)
+        .body(Body::from(serde_json::to_vec(&request())?))?;
+    let response: Response<Body> = app.oneshot(request).await?;
+    assert_eq!(
+        response.status().as_u16(),
+        200,
+        "positive control: the turn started"
+    );
+    let mut body = response.into_body();
+    // Read until the model has been asked and the tool call has started.
+    tokio::time::timeout(Duration::from_secs(10), asked).await??;
+    let mut seen = String::new();
+    while !seen.contains("tool-input-start") {
+        let frame = tokio::time::timeout(Duration::from_secs(10), body.frame())
+            .await?
+            .ok_or("the stream ended early")??;
+        if let Ok(data) = frame.into_data() {
+            seen.push_str(&String::from_utf8_lossy(&data));
+        }
+    }
+
+    // The client goes away.
+    drop(body);
+
+    // Bounded: the upstream connection must close promptly; without the cancel it never does.
+    tokio::time::timeout(Duration::from_secs(5), closed)
+        .await
+        .map_err(|_| "the model stream was still open 5 s after the client went away")??;
     Ok(())
 }

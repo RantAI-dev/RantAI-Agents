@@ -2,9 +2,9 @@
 //! knowledge base groups an organisation may use.
 //!
 //! Old: the `listTools`, `listSkills`, `listMcpServers` and `listKnowledgeGroups` closures
-//! of `src/features/assistants/wizard/service.ts`. Each one lists the organisation's own
-//! rows together with the global ones (`organizationId` null), the way the wizard's picker
-//! shows them.
+//! of `src/features/assistants/wizard/service.ts`. The tools, skills and MCP servers are the
+//! organisation's own rows together with the global ones (`organizationId` null); the
+//! knowledge base groups are the organisation's own only, as the old query had them.
 
 use sqlx::PgPool;
 
@@ -92,16 +92,21 @@ pub async fn list_mcp_servers(db: &PgPool, org_id: &str) -> StoreResult<Vec<McpS
     .await?)
 }
 
-/// The organisation's knowledge base groups and the global ones, with their document counts.
+/// The organisation's own knowledge base groups, with how many live documents each holds.
+///
+/// Only the organisation's: unlike the other catalogues, the old wizard read the groups with
+/// `where: { organizationId }` (`findKnowledgeGroupSummaries`), so a global group was never
+/// offered. A soft-deleted document is not counted (`aliveDocumentRelation`).
 pub async fn list_knowledge_groups(
     db: &PgPool,
     org_id: &str,
 ) -> StoreResult<Vec<KnowledgeGroupEntry>> {
     Ok(sqlx::query_as::<_, KnowledgeGroupEntry>(
-        r#"SELECT g."id", g."name", g."parentId", COUNT(d."id") AS "docCount"
+        r#"SELECT g."id", g."name", g."parentId", COUNT(doc."id") AS "docCount"
            FROM "KnowledgeBaseGroup" g
            LEFT JOIN "DocumentGroup" d ON d."groupId" = g."id"
-           WHERE g."organizationId" = $1 OR g."organizationId" IS NULL
+           LEFT JOIN "Document" doc ON doc."id" = d."documentId" AND doc."deletedAt" IS NULL
+           WHERE g."organizationId" = $1
            GROUP BY g."id", g."name", g."parentId""#,
     )
     .bind(org_id)

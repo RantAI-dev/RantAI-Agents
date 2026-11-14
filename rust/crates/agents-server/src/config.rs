@@ -5,14 +5,14 @@ use agents_llm::types::LlmError;
 
 /// Where the wizard's model is served from.
 ///
-/// The base URL and the key are settings, so a deployment can point the wizard at a proxy
-/// and a test at a stub server without touching the code. Without them the provider is
-/// chosen by the model id, the way `provider::route` does it.
+/// The provider is chosen by the model id, the way `provider::route` does it. The two
+/// overrides have no environment variable: the old app had none, so only an embedding
+/// edition or a test (pointing at a stub server) sets them.
 #[derive(Debug, Clone, Default)]
 pub struct LlmSettings {
-    /// Overrides the provider's base URL (`AGENTS_LLM_BASE_URL`).
+    /// Overrides the provider's base URL.
     pub base_url: Option<String>,
-    /// Overrides the provider's key (`AGENTS_LLM_API_KEY`).
+    /// Overrides the provider's key.
     pub api_key: Option<String>,
     /// The keys the providers need (`OPENROUTER_API_KEY`, `MINIMAX_API_KEY`).
     pub provider: ProviderConfig,
@@ -52,12 +52,7 @@ pub struct Config {
     pub auth_secrets: Vec<String>,
     /// Where the wizard's model is served from.
     pub llm: LlmSettings,
-    /// The model the wizard runs on (`AGENTS_WIZARD_MODEL_ID`).
-    pub wizard_model: String,
 }
-
-/// The model the wizard ran on before the setting existed.
-const DEFAULT_WIZARD_MODEL: &str = "anthropic/claude-sonnet-4.6";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -98,23 +93,20 @@ impl Config {
             return Err(ConfigError::Missing("AUTH_SECRET or NEXTAUTH_SECRET"));
         }
         let llm = LlmSettings {
-            base_url: var("AGENTS_LLM_BASE_URL"),
-            api_key: var("AGENTS_LLM_API_KEY"),
+            base_url: None,
+            api_key: None,
             provider: ProviderConfig {
                 openrouter_api_key: var("OPENROUTER_API_KEY"),
                 minimax_api_key: var("MINIMAX_API_KEY"),
                 minimax_base_url: var("MINIMAX_BASE_URL"),
             },
         };
-        let wizard_model =
-            var("AGENTS_WIZARD_MODEL_ID").unwrap_or_else(|| DEFAULT_WIZARD_MODEL.to_owned());
         Ok(Self {
             database_url,
             bind,
             db_max_connections,
             auth_secrets,
             llm,
-            wizard_model,
         })
     }
 }

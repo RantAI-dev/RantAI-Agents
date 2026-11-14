@@ -67,6 +67,10 @@ impl AssistantPolicy for AllowAll {
     }
 }
 
+/// The model the open-source wizard runs on: `WIZARD_MODEL_ID` of the old service. A
+/// non-reasoning model, because the wizard's flow needs terse tool calling.
+pub const WIZARD_MODEL_ID: &str = "anthropic/claude-sonnet-4.6";
+
 /// One model the wizard may offer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct WizardModelEntry {
@@ -82,8 +86,8 @@ pub struct WizardModelEntry {
 
 /// The model the wizard runs on and the catalogue it offers.
 ///
-/// The open-source edition has no model catalogue and no plans, so its default runs on the
-/// model from the configuration and offers the house models the port knows
+/// The open-source edition has no model catalogue and no plans, so its default runs on
+/// [`WIZARD_MODEL_ID`] and offers the house models the port knows
 /// ([`ConfiguredWizard`]). The cloud edition replaces it: the model the wizard runs on, the
 /// models an organisation may use and the plan that organisation is on are its business
 /// (differences.md row 29).
@@ -99,8 +103,8 @@ pub trait WizardModel: Send + Sync + std::fmt::Debug {
     fn models(&self, organization_id: &str) -> Vec<WizardModelEntry>;
 }
 
-/// The open-source wizard model: the model from the configuration, and the house models the
-/// port knows as the catalogue.
+/// The open-source wizard model: the model it runs on, and the house models the port knows
+/// as the catalogue.
 ///
 /// The open-source edition has no plans, so an organisation is never on the free plan here
 /// and the prompt asks for a paid house model. The cloud edition brings its own.
@@ -111,12 +115,17 @@ pub struct ConfiguredWizard {
 }
 
 impl ConfiguredWizard {
-    /// A wizard that runs on `model_id` and offers the house models.
+    /// A wizard that runs on `model_id` and offers the house models when they can be
+    /// served: the old service offered them only when `MINIMAX_API_KEY` was set.
     #[must_use]
-    pub fn new(model_id: impl Into<String>) -> Self {
+    pub fn new(model_id: impl Into<String>, house_models_served: bool) -> Self {
         Self {
             model_id: model_id.into(),
-            models: house_model_entries(),
+            models: if house_models_served {
+                house_model_entries()
+            } else {
+                Vec::new()
+            },
         }
     }
 

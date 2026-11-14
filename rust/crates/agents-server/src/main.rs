@@ -38,7 +38,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             auth,
             policy: std::sync::Arc::new(agents_server::policy::AllowAll),
             wizard: std::sync::Arc::new(agents_server::policy::ConfiguredWizard::new(
-                config.wizard_model.clone(),
+                agents_server::policy::WIZARD_MODEL_ID,
+                config.llm.provider.minimax_api_key.is_some(),
             )),
             llm: config.llm.clone(),
         }),

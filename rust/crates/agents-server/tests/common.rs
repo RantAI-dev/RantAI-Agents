@@ -24,7 +24,10 @@ pub async fn router() -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Er
     let app = router_over(
         &db,
         std::sync::Arc::new(AllowAll),
-        std::sync::Arc::new(agents_server::policy::ConfiguredWizard::new("stub-model")),
+        std::sync::Arc::new(agents_server::policy::ConfiguredWizard::new(
+            "stub-model",
+            true,
+        )),
         LlmSettings::default(),
     );
     Ok(Some((app, db)))

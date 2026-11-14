@@ -163,7 +163,7 @@ async fn another_organisation_s_assistant_is_not_found() -> R {
 }
 
 #[tokio::test]
-async fn a_caller_without_a_token_is_refused() -> R {
+async fn a_caller_without_a_token_and_a_suspended_one_are_refused() -> R {
     let Some((app, db)) = router().await? else {
         return Ok(());
     };
@@ -196,6 +196,29 @@ async fn a_caller_without_a_token_is_refused() -> R {
     )
     .await?;
     assert_eq!((status, code(&body)), (401, Some("unauthenticated")));
+    let (status, body) = send(
+        &app,
+        "PUT",
+        "/api/user/preferences",
+        Some(&bearer(&suspended)?),
+        Some(json!({ "sidebarConfig": {"sidebarCollapsed": true} })),
+    )
+    .await?;
+    assert_eq!((status, code(&body)), (401, Some("unauthenticated")));
+
+    // Positive control: the same requests with a live token are answered.
+    let live = bearer(&member_user)?;
+    let (status, _) = send(&app, "GET", "/api/user/preferences", Some(&live), None).await?;
+    assert_eq!(status, 200);
+    let (status, _) = send(
+        &app,
+        "PUT",
+        "/api/user/preferences",
+        Some(&live),
+        Some(json!({ "defaultAssistantId": assistant })),
+    )
+    .await?;
+    assert_eq!(status, 200);
     Ok(())
 }
 

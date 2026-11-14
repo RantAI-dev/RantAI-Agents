@@ -4,9 +4,12 @@
 //! `src/features/assistants/wizard/{service,tools,schema}.ts`.
 //!
 //! The answer is the AI SDK v6 UI message stream, the same one the old route sent
-//! (`result.toUIMessageStreamResponse()`): `start`, a `start-step` per step, the text as
-//! `text-start`/`text-delta`/`text-end`, every tool call as `tool-input-available` followed
-//! by `tool-output-available`, a `finish-step` per step, `finish`, and `[DONE]`.
+//! (`result.toUIMessageStreamResponse()`, `ai` 6.0): `start`, a `start-step` per step, the
+//! text as `text-start`/`text-delta`/`text-end`, every tool call as `tool-input-start` and
+//! `tool-input-delta` while it streams, then `tool-input-available` followed by
+//! `tool-output-available` (or `tool-input-error` and `tool-output-error` for arguments that
+//! do not fit the tool), a `finish-step` per step, `finish` with the last step's reason, and
+//! `[DONE]`.
 //!
 //! The proposal reaches the client in the `tool-input-available` chunk whose `toolName` is
 //! `proposeAgent`: `src/features/assistants/wizard/hooks/use-wizard-stream.ts` reads
@@ -18,7 +21,9 @@
 //! - the model the wizard runs on, the models it offers and the plan of the organisation
 //!   come from the caller's hook ([`crate::policy::WizardModel`]), not from the route;
 //! - the errors use the standard body, and a bad request is a 400 with every bad field;
-//! - the model provider's own words never reach the client.
+//! - the model provider's own words never reach the client;
+//! - a `refineAgent` patch is filtered like a proposal (row 61);
+//! - a client that disconnects stops the turn and the upstream request at once.
 
 use axum::body::Body as AxumBody;
 use axum::extract::State;
@@ -28,16 +33,19 @@ use futures::StreamExt;
 use serde_json::Value;
 
 use agents_contracts::ui_stream::{
-    ErrorChunk, FinishChunk, FinishStepChunk, ReasoningDeltaChunk, ReasoningEndChunk,
-    ReasoningStartChunk, StartChunk, StartStepChunk, TextDeltaChunk, TextEndChunk, TextStartChunk,
-    ToolInputAvailableChunk, ToolInputErrorChunk, ToolOutputAvailableChunk, UI_MESSAGE_STREAM_DONE,
-    UI_MESSAGE_STREAM_HEADERS, UiChunk, sse_frame,
+    ErrorChunk, FinishChunk, FinishReason as UiFinishReason, FinishStepChunk, ReasoningDeltaChunk,
+    ReasoningEndChunk, ReasoningStartChunk, StartChunk, StartStepChunk, TextDeltaChunk,
+    TextEndChunk, TextStartChunk, ToolInputAvailableChunk, ToolInputDeltaChunk,
+    ToolInputErrorChunk, ToolInputStartChunk, ToolOutputAvailableChunk, ToolOutputErrorChunk,
+    UI_MESSAGE_STREAM_DONE, UI_MESSAGE_STREAM_HEADERS, UiChunk, sse_frame,
 };
 use agents_core::assistant::wizard::{WizardContext, build_wizard_system_prompt};
 use agents_core::org::OrgRole;
 use agents_llm::client::{Cancel, stream_chat};
 use agents_llm::provider::Provider;
-use agents_llm::types::{ChatRequest, Event, Message, Role, ToolCall};
+use agents_llm::types::{
+    ChatRequest, Event, FinishReason as LlmFinishReason, Message, Role, ToolCall,
+};
 use agents_store::catalog;
 
 use crate::AppState;
@@ -66,12 +74,13 @@ pub(super) async fn stream(
     user: CurrentUser,
     body: Option<Body<Value>>,
 ) -> Result<Response, ApiError> {
+    // The old route refused a caller without an organisation before it read the body.
+    let caller = caller(&state, &headers, &user).await?;
+    let org_id = caller.org()?.to_owned();
     let Some(Body(body)) = body else {
         return Err(missing_body());
     };
     let request = wizard_bodies::parse(&body)?;
-    let caller = caller(&state, &headers, &user).await?;
-    let org_id = caller.org()?.to_owned();
     let role = caller
         .role
         .map(OrgRole::as_str)
@@ -188,203 +197,175 @@ fn model_messages(request: &WizardRequest) -> Vec<Message> {
 }
 
 /// Run the turn and write the frames.
+///
+/// A client that goes away stops the turn: the receiving half of the channel is the
+/// response body, so when the client disconnects it is dropped, `tx.closed()` resolves and
+/// the turn's future is dropped with the upstream stream in it, which closes the
+/// connection to the model provider. Waiting for the next `send` to fail is not enough: a
+/// model that is still writing a tool call's arguments sends nothing to the client.
 async fn run_turn(turn: Turn, tx: tokio::sync::mpsc::Sender<String>) {
+    tokio::select! {
+        result = drive(turn, &tx) => {
+            if let Err(Gone) = result {
+                tracing::debug!("the wizard's client went away");
+            }
+        }
+        () = tx.closed() => {
+            tracing::debug!("the wizard's client went away; the model stream is dropped");
+        }
+    }
+}
+
+/// The client is gone: nothing more can be written.
+struct Gone;
+
+/// The turn: the model's steps, with the tools run between them.
+async fn drive(turn: Turn, tx: &tokio::sync::mpsc::Sender<String>) -> Result<(), Gone> {
     let Turn {
         provider,
         catalogues,
         mut chat,
     } = turn;
     let client = agents_llm::client::default_client();
-    let cancel = Cancel::never();
 
-    if !send(
-        &tx,
+    send(
+        tx,
         &UiChunk::Start(StartChunk {
             message_metadata: None,
             message_id: None,
         }),
     )
-    .await
-    {
-        return;
-    }
+    .await?;
 
+    let mut finish_reason = UiFinishReason::Other;
     for _step in 1..=MAX_STEPS {
-        if !send(&tx, &UiChunk::StartStep(StartStepChunk {})).await {
-            return;
-        }
-        let mut stream = Box::pin(stream_chat(&client, &provider, &chat, cancel.clone()));
+        send(tx, &UiChunk::StartStep(StartStepChunk {})).await?;
+        let mut stream = Box::pin(stream_chat(&client, &provider, &chat, Cancel::never()));
         let mut text = String::new();
         let mut text_open = false;
         let mut reasoning_open = false;
         let mut calls: Vec<ToolCall> = Vec::new();
+        // The id of every call by its index: an argument fragment names only the index.
+        let mut call_ids: Vec<(usize, String)> = Vec::new();
+        let mut step_reason = LlmFinishReason::Other;
         while let Some(event) = stream.next().await {
             match event {
                 Ok(Event::TextDelta { text: part }) => {
                     if !text_open {
                         text_open = true;
-                        if !send(
-                            &tx,
+                        send(
+                            tx,
                             &UiChunk::TextStart(TextStartChunk {
                                 id: TEXT_ID.to_owned(),
                                 provider_metadata: None,
                             }),
                         )
-                        .await
-                        {
-                            return;
-                        }
+                        .await?;
                     }
                     text.push_str(&part);
-                    if !send(
-                        &tx,
+                    send(
+                        tx,
                         &UiChunk::TextDelta(TextDeltaChunk {
                             id: TEXT_ID.to_owned(),
                             delta: part,
                             provider_metadata: None,
                         }),
                     )
-                    .await
-                    {
-                        return;
-                    }
+                    .await?;
                 }
                 Ok(Event::ReasoningDelta { text: part }) => {
                     if !reasoning_open {
                         reasoning_open = true;
-                        if !send(
-                            &tx,
+                        send(
+                            tx,
                             &UiChunk::ReasoningStart(ReasoningStartChunk {
                                 id: REASONING_ID.to_owned(),
                                 provider_metadata: None,
                             }),
                         )
-                        .await
-                        {
-                            return;
-                        }
+                        .await?;
                     }
-                    if !send(
-                        &tx,
+                    send(
+                        tx,
                         &UiChunk::ReasoningDelta(ReasoningDeltaChunk {
                             id: REASONING_ID.to_owned(),
                             delta: part,
                             provider_metadata: None,
                         }),
                     )
-                    .await
-                    {
-                        return;
+                    .await?;
+                }
+                // The SDK forwards the provider's tool-input parts as they stream.
+                Ok(Event::ToolCallStart { index, id, name }) => {
+                    call_ids.push((index, id.clone()));
+                    send(
+                        tx,
+                        &UiChunk::ToolInputStart(ToolInputStartChunk {
+                            tool_call_id: id,
+                            tool_name: name,
+                            provider_executed: None,
+                            provider_metadata: None,
+                            dynamic: None,
+                            title: None,
+                        }),
+                    )
+                    .await?;
+                }
+                Ok(Event::ToolCallArgsDelta { index, delta }) => {
+                    if let Some((_, id)) = call_ids.iter().find(|(i, _)| *i == index) {
+                        send(
+                            tx,
+                            &UiChunk::ToolInputDelta(ToolInputDeltaChunk {
+                                tool_call_id: id.clone(),
+                                input_text_delta: delta,
+                            }),
+                        )
+                        .await?;
                     }
                 }
                 Ok(Event::ToolCallReady { id, name, args }) => {
                     calls.push(ToolCall { id, name, args });
                 }
-                // The start of a tool call and its argument fragments are told by the
-                // ready event: the client only needs the finished arguments.
-                Ok(Event::ToolCallStart { .. }) | Ok(Event::ToolCallArgsDelta { .. }) => {}
-                Ok(Event::Usage(_)) | Ok(Event::Finish { .. }) => {}
+                Ok(Event::Finish { reason }) => step_reason = reason,
+                Ok(Event::Usage(_)) => {}
                 Ok(Event::Error { message }) => {
-                    send_error(&tx, &message).await;
-                    return;
+                    send_error(tx, &message).await;
+                    return Ok(());
                 }
                 Err(error) => {
                     // The provider's own words stay in the log; the client gets a fixed
                     // message.
                     tracing::warn!(error = %error, "the wizard's model failed");
-                    send_error(&tx, error.user_message()).await;
-                    return;
+                    send_error(tx, error.user_message()).await;
+                    return Ok(());
                 }
             }
         }
-        if text_open
-            && !send(
-                &tx,
+        finish_reason = ui_finish_reason(step_reason);
+        if text_open {
+            send(
+                tx,
                 &UiChunk::TextEnd(TextEndChunk {
                     id: TEXT_ID.to_owned(),
                     provider_metadata: None,
                 }),
             )
-            .await
-        {
-            return;
+            .await?;
         }
-        if reasoning_open
-            && !send(
-                &tx,
+        if reasoning_open {
+            send(
+                tx,
                 &UiChunk::ReasoningEnd(ReasoningEndChunk {
                     id: REASONING_ID.to_owned(),
                     provider_metadata: None,
                 }),
             )
-            .await
-        {
-            return;
+            .await?;
         }
 
-        // The tools of this step.
-        let mut results: Vec<Message> = Vec::new();
-        for call in &calls {
-            match wizard_tools::run(&call.name, &call.args, &catalogues) {
-                ToolRun::Ran { input, output } => {
-                    if !send(
-                        &tx,
-                        &UiChunk::ToolInputAvailable(ToolInputAvailableChunk {
-                            tool_call_id: call.id.clone(),
-                            tool_name: call.name.clone(),
-                            input,
-                            provider_executed: None,
-                            provider_metadata: None,
-                            dynamic: None,
-                            title: None,
-                        }),
-                    )
-                    .await
-                    {
-                        return;
-                    }
-                    if !send(
-                        &tx,
-                        &UiChunk::ToolOutputAvailable(ToolOutputAvailableChunk {
-                            tool_call_id: call.id.clone(),
-                            output: output.clone(),
-                            provider_executed: None,
-                            preliminary: None,
-                            dynamic: None,
-                        }),
-                    )
-                    .await
-                    {
-                        return;
-                    }
-                    results.push(Message::tool_result(call, output_text(&output)));
-                }
-                ToolRun::Invalid { input, error } => {
-                    if !send(
-                        &tx,
-                        &UiChunk::ToolInputError(ToolInputErrorChunk {
-                            tool_call_id: call.id.clone(),
-                            tool_name: call.name.clone(),
-                            input,
-                            provider_executed: None,
-                            provider_metadata: None,
-                            dynamic: None,
-                            error_text: error.clone(),
-                            title: None,
-                        }),
-                    )
-                    .await
-                    {
-                        return;
-                    }
-                    results.push(Message::tool_result(call, error));
-                }
-            }
-        }
+        let results = run_tools(tx, &calls, &catalogues).await?;
 
-        if !send(&tx, &UiChunk::FinishStep(FinishStepChunk {})).await {
-            return;
-        }
+        send(tx, &UiChunk::FinishStep(FinishStepChunk {})).await?;
         if calls.is_empty() {
             break;
         }
@@ -399,20 +380,101 @@ async fn run_turn(turn: Turn, tx: tokio::sync::mpsc::Sender<String>) {
         chat.messages.extend(results);
     }
 
-    if !send(
-        &tx,
+    send(
+        tx,
         &UiChunk::Finish(FinishChunk {
-            // The SDK's own `finish` chunk carries no reason: the part it reads it from has
-            // none.
-            finish_reason: None,
+            // The reason of the last step, as `streamText` reports it.
+            finish_reason: Some(finish_reason),
             message_metadata: None,
         }),
     )
-    .await
-    {
-        return;
+    .await?;
+    tx.send(UI_MESSAGE_STREAM_DONE.to_owned())
+        .await
+        .map_err(|_| Gone)
+}
+
+/// Run the tool calls of one step and write their chunks; returns the results for the
+/// model.
+///
+/// A call whose arguments do not fit the tool is a `tool-input-error` followed by a
+/// `tool-output-error`, both marked `dynamic`, the way the SDK reports an invalid call.
+async fn run_tools(
+    tx: &tokio::sync::mpsc::Sender<String>,
+    calls: &[ToolCall],
+    catalogues: &Catalogues,
+) -> Result<Vec<Message>, Gone> {
+    let mut results: Vec<Message> = Vec::new();
+    for call in calls {
+        match wizard_tools::run(&call.name, &call.args, catalogues) {
+            ToolRun::Ran { input, output } => {
+                send(
+                    tx,
+                    &UiChunk::ToolInputAvailable(ToolInputAvailableChunk {
+                        tool_call_id: call.id.clone(),
+                        tool_name: call.name.clone(),
+                        input,
+                        provider_executed: None,
+                        provider_metadata: None,
+                        dynamic: None,
+                        title: None,
+                    }),
+                )
+                .await?;
+                send(
+                    tx,
+                    &UiChunk::ToolOutputAvailable(ToolOutputAvailableChunk {
+                        tool_call_id: call.id.clone(),
+                        output: output.clone(),
+                        provider_executed: None,
+                        preliminary: None,
+                        dynamic: None,
+                    }),
+                )
+                .await?;
+                results.push(Message::tool_result(call, output_text(&output)));
+            }
+            ToolRun::Invalid { input, error } => {
+                send(
+                    tx,
+                    &UiChunk::ToolInputError(ToolInputErrorChunk {
+                        tool_call_id: call.id.clone(),
+                        tool_name: call.name.clone(),
+                        input,
+                        provider_executed: None,
+                        provider_metadata: None,
+                        dynamic: Some(true),
+                        error_text: error.clone(),
+                        title: None,
+                    }),
+                )
+                .await?;
+                send(
+                    tx,
+                    &UiChunk::ToolOutputError(ToolOutputErrorChunk {
+                        tool_call_id: call.id.clone(),
+                        error_text: error.clone(),
+                        provider_executed: None,
+                        dynamic: Some(true),
+                    }),
+                )
+                .await?;
+                results.push(Message::tool_result(call, error));
+            }
+        }
     }
-    let _ = tx.send(UI_MESSAGE_STREAM_DONE.to_owned()).await;
+    Ok(results)
+}
+
+/// A step's finish reason, as the UI stream names it.
+fn ui_finish_reason(reason: LlmFinishReason) -> UiFinishReason {
+    match reason {
+        LlmFinishReason::Stop => UiFinishReason::Stop,
+        LlmFinishReason::Length => UiFinishReason::Length,
+        LlmFinishReason::ToolCalls => UiFinishReason::ToolCalls,
+        LlmFinishReason::ContentFilter => UiFinishReason::ContentFilter,
+        LlmFinishReason::Other => UiFinishReason::Other,
+    }
 }
 
 /// The text of a tool's output, the way it goes back to the model.
@@ -420,9 +482,9 @@ fn output_text(output: &Value) -> String {
     serde_json::to_string(output).unwrap_or_else(|_| "{}".to_owned())
 }
 
-/// Write one chunk. `false` means the client is gone.
-async fn send(tx: &tokio::sync::mpsc::Sender<String>, chunk: &UiChunk) -> bool {
-    tx.send(sse_frame(chunk)).await.is_ok()
+/// Write one chunk.
+async fn send(tx: &tokio::sync::mpsc::Sender<String>, chunk: &UiChunk) -> Result<(), Gone> {
+    tx.send(sse_frame(chunk)).await.map_err(|_| Gone)
 }
 
 /// Write the error the client sees.
