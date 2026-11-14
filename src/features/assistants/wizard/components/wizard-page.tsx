@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { resolveActiveOrgServer } from "@/lib/org-context"
+import { canManage, resolveActiveOrgServer } from "@/lib/org-context"
 import { WizardPageClient } from "./wizard-page-client"
 
 export default async function WizardPage() {
@@ -10,6 +10,10 @@ export default async function WizardPage() {
 
   const orgContext = await resolveActiveOrgServer(session.user.id)
   if (!orgContext) redirect("/")
+
+  // Only owners and admins build agents (design §3.2): a member typing the URL goes back to the
+  // list, which shows only the agents shared with them.
+  if (!canManage(orgContext.role)) redirect("/dashboard/agent-builder")
 
   const organizationId = orgContext.organizationId
 
