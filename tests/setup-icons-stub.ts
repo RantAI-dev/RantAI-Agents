@@ -33,6 +33,8 @@ const ICON_NAMES = [
   "Copy",
   // code-toolbar.tsx
   "WrapText", "GitCompareArrows",
+  // login flow (src/features/auth/components/login-flow.tsx)
+  "ArrowLeft", "ArrowRight", "EyeOff", "ShieldCheck", "Mail",
 ] as const
 
 const stubModule: Record<string, unknown> = {}
