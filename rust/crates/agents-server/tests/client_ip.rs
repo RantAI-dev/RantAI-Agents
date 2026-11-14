@@ -2,13 +2,37 @@
 //! proxy. A client cannot pick the address the audit log records or the throttle counts by
 //! writing `X-Forwarded-For` or `X-Real-IP` itself.
 
+#[allow(dead_code, reason = "this file uses only part of the shared helpers")]
 mod common;
 
 use std::net::SocketAddr;
 
+use agents_server::auth::AuthConfig;
+use agents_server::{AppState, app};
 use agents_store::{PgPool, new_id};
-use common::{R, bearer, code, router, router_trusting, send_from, user};
+use axum::Router;
+use common::{R, SECRET, bearer, code, pool, router, send_from, user};
 use serde_json::json;
+
+/// The router with `TRUSTED_PROXIES` set to `proxies` (comma-separated ranges).
+pub async fn router_trusting(
+    proxies: &str,
+) -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>> {
+    let Some(db) = pool().await? else {
+        return Ok(None);
+    };
+    let trusted = agents_core::net::parse_cidrs(proxies)?;
+    let state = AppState {
+        trusted_proxies: std::sync::Arc::from(trusted),
+        ..AppState::new(
+            db.clone(),
+            AuthConfig {
+                secrets: vec![SECRET.to_owned()],
+            },
+        )
+    };
+    Ok(Some((app(state), db)))
+}
 
 fn peer(ip: &str) -> Result<SocketAddr, std::net::AddrParseError> {
     format!("{ip}:40000").parse()
