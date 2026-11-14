@@ -29,7 +29,8 @@ Paths are relative to `src/` in this repository; paths starting with `apps/cloud
 | `features/conversations/sessions/session-sync.ts` | `agents-core/src/chat/session_sync.rs` | none | `session-sync.jsonl` | 0 | todo | |
 | `features/chat-public/service.ts:139,189,352` (`sanitizeEditHistory`, `buildPersistedUserRow`, content→parts) | `agents-core/src/chat/messages.rs` | none | `chat-messages.jsonl` | 0 | todo | |
 | `lib/tools/approval.ts` (`resolveToolApprovalMode`, `toolNeedsApproval`, the exempt set) | `agents-core/src/prompt/approval.rs` | config | `port/cases/assistants.jsonl` | 20 | parity green | pending decisions move to a store (row 2) |
-| `features/agent-api/{response,service}.ts` (OpenAI chunk framing, `estimateTokens`, `fitContext`) | `agents-contracts/src/openai.rs` | none | `agent-api-framing.jsonl` | 0 | todo | JSON number format |
+| `features/agent-api/response.ts` (OpenAI chunk and body framing; `estimateTokens`, `fitContext` in `service.ts` still todo) | `agents-contracts/src/openai.rs` | none | `port/cases/streams.jsonl` (OpenAI kinds) | 31 | parity green | JSON number format: `retrieval_score` prints like JavaScript (`0`, not `0.0`) |
+| The chat UI message stream: the AI SDK 6.0.39 chunk types, `JsonToSseTransformStream` framing, `UI_MESSAGE_STREAM_HEADERS`, the `X-Tool-Approval`/`X-RAG-Trace`/`X-Model-Fallback` headers and the legacy `sources` frame (`chat-public/service.ts`) | `agents-contracts/src/ui_stream.rs` | `openai.rs` (`RagSource`) | `port/cases/streams.jsonl` (ui kinds) | 47 | parity green | sources frame replaced by `source-document` chunks before `finish` (differences.md row 32) |
 | `lib/auth.ts` (session cookie), `lib/mobile-auth.ts` (Bearer JWT), `features/agent-api-keys/service.ts` (`rantai_sk_` keys), `features/widget/chat/service.ts` (`X-Widget-Api-Key`) | `agents-auth/src/{session,mobile,api_key,widget}.rs` | none | `port/cases/auth.jsonl` | 53 | parity green | a token without `exp` is refused, a session token encrypted with `A256GCM` is refused, an address outside a key's whitelist is `permission_denied` |
 
 ## Phases B–D: services
@@ -44,7 +45,7 @@ Paths are relative to `src/` in this repository; paths starting with `apps/cloud
 | `app/api/dashboard/chat/sessions/**` (D1) | `agents-server/src/routes/sessions.rs` (+ `sessions/bodies.rs`), `agents-store/src/sessions.rs` | `agents-store`, `agents-auth` | `agents-server/tests/session_routes.rs` (contract), `agents-store/tests/sessions.rs` | 14 tests | in progress: built and tested; **not cut over** until the frontend moves with it | differences 17–24 |
 | `POST /api/chat`, plain capability (D2) | `agents-api/src/chat/` | everything above, `agents-llm` | `http/chat-plain.jsonl` | 0 | todo | |
 | `POST /api/chat` with tools and the approval gate (D3) | `agents-api/src/chat/tools/` | D2 | `http/chat-tools.jsonl` | 0 | todo | shared approval store |
-| `POST /api/chat` with KB, RAG and attachments (D4) | `agents-api/src/chat/rag/` | D2 | `http/chat-rag.jsonl` | 0 | todo | |
+| `POST /api/chat` with KB, RAG and attachments (D4) | `agents-api/src/chat/rag/` | D2 | `http/chat-rag.jsonl` | 0 | todo | sources as chunks (differences.md row 32) |
 | Widget, mobile, `/v1/chat/completions`, Socket.io `api:chat` (D5) | `agents-api/src/chat/entry/` | D2–D4 | `http/chat-entry.jsonl` | 0 | todo | |
 
 Rules: a row moves to "parity green" only on the output of `scripts/check.sh`. Nobody ports a module
