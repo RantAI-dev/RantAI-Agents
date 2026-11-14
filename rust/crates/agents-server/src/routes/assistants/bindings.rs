@@ -3,9 +3,11 @@
 //! Old: `src/app/api/assistants/[id]/{tools,skills,mcp-servers,workflows}/route.ts` and
 //! `src/features/assistants/bindings/service.ts`.
 //!
-//! Reading the bindings needs the role the old code did not check: a viewer of the organisation
-//! could replace an assistant's tools (docs/port/differences.md, row 26). Writing them needs a
-//! member, and a built-in needs a platform admin.
+//! Reading the bindings needs the same role as using the assistant (`agents.use`), and writing
+//! them the role that edits it (`agents.manage`, which a `manage` grant gives for one agent);
+//! the old code checked only that the caller's org matched, so a viewer could replace an
+//! assistant's tools (docs/port/differences.md, rows 26 and 120). A built-in needs a platform
+//! admin (row 25).
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -13,8 +15,8 @@ use axum::http::HeaderMap;
 use serde::Serialize;
 use serde_json::Value;
 
-use agents_core::assistant::access::{self, Action};
 use agents_core::assistant::bindings::{merge_hidden_tool_ids, non_empty_string_ids};
+use agents_core::authz::Permission;
 use agents_store::assistants::{self, Binding};
 
 use crate::AppState;
@@ -24,7 +26,7 @@ use crate::http::json::Body;
 use crate::http::time::iso;
 
 use super::bodies::parse_id_list;
-use super::{actor, caller, forbidden, load_visible, missing_body, store_error, target};
+use super::{caller, load_authorized, missing_body, store_error};
 
 /// `GET /api/assistants/{id}/tools` — the tools bound to the assistant.
 pub(super) async fn list_tools(
@@ -34,7 +36,7 @@ pub(super) async fn list_tools(
     Path(id): Path<String>,
 ) -> Result<Json<Vec<ToolJson>>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsUse).await?;
     let bindings = assistants::list_tool_bindings(&state.db, &row.id)
         .await
         .map_err(|e| store_error(&e))?;
@@ -56,10 +58,7 @@ pub(super) async fn set_tools(
     };
     let ids = parse_id_list(&body, "toolIds", 1)?;
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
-    if !access::can(&actor(&caller), Action::EditBindings, &target(&row)) {
-        return Err(forbidden());
-    }
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsManage).await?;
     let hidden = assistants::hidden_tool_ids(&state.db, &row.id)
         .await
         .map_err(|e| store_error(&e))?;
@@ -83,7 +82,7 @@ pub(super) async fn list_skills(
     Path(id): Path<String>,
 ) -> Result<Json<Vec<SkillJson>>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsUse).await?;
     let bindings = assistants::list_skill_bindings(&state.db, &row.id)
         .await
         .map_err(|e| store_error(&e))?;
@@ -103,10 +102,7 @@ pub(super) async fn set_skills(
     };
     let ids = parse_id_list(&body, "skillIds", 0)?;
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
-    if !access::can(&actor(&caller), Action::EditBindings, &target(&row)) {
-        return Err(forbidden());
-    }
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsManage).await?;
     let ids = non_empty_string_ids(&ids);
     assistants::replace_bindings(&state.db, &row.id, Binding::Skill, &ids)
         .await
@@ -127,7 +123,7 @@ pub(super) async fn list_mcp_servers(
     Path(id): Path<String>,
 ) -> Result<Json<Vec<McpServerJson>>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsUse).await?;
     let bindings = assistants::list_mcp_server_bindings(&state.db, &row.id)
         .await
         .map_err(|e| store_error(&e))?;
@@ -149,10 +145,7 @@ pub(super) async fn set_mcp_servers(
     };
     let ids = parse_id_list(&body, "mcpServerIds", 1)?;
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
-    if !access::can(&actor(&caller), Action::EditBindings, &target(&row)) {
-        return Err(forbidden());
-    }
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsManage).await?;
     let ids = non_empty_string_ids(&ids);
     assistants::replace_bindings(&state.db, &row.id, Binding::McpServer, &ids)
         .await
@@ -176,7 +169,7 @@ pub(super) async fn list_workflows(
     Path(id): Path<String>,
 ) -> Result<Json<Vec<WorkflowJson>>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsUse).await?;
     let bindings = assistants::list_workflow_bindings(&state.db, &row.id)
         .await
         .map_err(|e| store_error(&e))?;
@@ -196,10 +189,7 @@ pub(super) async fn set_workflows(
     };
     let ids = parse_id_list(&body, "workflowIds", 1)?;
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
-    if !access::can(&actor(&caller), Action::EditBindings, &target(&row)) {
-        return Err(forbidden());
-    }
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsManage).await?;
     let ids = non_empty_string_ids(&ids);
     assistants::replace_bindings(&state.db, &row.id, Binding::Workflow, &ids)
         .await

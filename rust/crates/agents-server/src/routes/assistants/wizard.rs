@@ -40,6 +40,7 @@ use agents_contracts::ui_stream::{
     UI_MESSAGE_STREAM_DONE, UI_MESSAGE_STREAM_HEADERS, UiChunk, sse_frame,
 };
 use agents_core::assistant::wizard::{WizardContext, build_wizard_system_prompt};
+use agents_core::authz::Permission;
 use agents_core::org::OrgRole;
 use agents_llm::client::{Cancel, stream_chat};
 use agents_llm::provider::Provider;
@@ -77,6 +78,9 @@ pub(super) async fn stream(
     // The old route refused a caller without an organisation before it read the body.
     let caller = caller(&state, &headers, &user).await?;
     let org_id = caller.org()?.to_owned();
+    // The wizard builds an agent: it is the create permission, so a member no longer reaches
+    // it (§3.2; differences row 80).
+    super::authorize_org(&state.db, &caller, Permission::AgentsCreate).await?;
     let Some(Body(body)) = body else {
         return Err(missing_body());
     };

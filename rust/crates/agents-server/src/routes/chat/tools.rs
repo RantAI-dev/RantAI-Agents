@@ -168,6 +168,8 @@ pub struct ChatTools {
     pub db: PgPool,
     pub user_id: String,
     pub organization_id: Option<String>,
+    /// The caller's role in that organisation, for a check made after the chat started.
+    pub organization_role: Option<agents_core::org::OrgRole>,
     pub assistant_id: Option<String>,
     pub session_id: Option<String>,
     pub builtins: Vec<BoundTool>,
@@ -178,6 +180,31 @@ pub struct ChatTools {
 }
 
 impl ChatTools {
+    /// Whether the caller may still use the assistant of this chat (§3.3).
+    ///
+    /// The grant can be revoked while the loop runs, so the check is repeated where it still
+    /// matters: a gated call the user approved does not run for a caller who lost access. The
+    /// approval route cannot make this check itself: a `ChatToolApproval` row is keyed by tool
+    /// call and user, and its body names no assistant (differences row 76).
+    async fn may_use_assistant(&self) -> bool {
+        let Some(assistant_id) = self.assistant_id.as_deref() else {
+            return true;
+        };
+        let caller = super::super::assistants::Caller {
+            user_id: self.user_id.clone(),
+            org_id: self.organization_id.clone(),
+            role: self.organization_role,
+            is_platform_admin: false,
+        };
+        super::super::assistants::load_authorized(
+            &self.db,
+            &caller,
+            assistant_id,
+            agents_core::authz::Permission::AgentsUse,
+        )
+        .await
+        .is_ok()
+    }
     /// Every tool name the model is offered, built-ins first.
     fn names(&self) -> Vec<&str> {
         let mut names: Vec<&str> = self.builtins.iter().map(|t| t.name.as_str()).collect();
@@ -295,7 +322,15 @@ impl ToolExecutor for ChatTools {
             }
             if tool_needs_approval(&call.name, self.approval_mode) {
                 match approval::wait(&self.db, &call.id, &self.user_id, self.timing).await {
-                    Ok(Outcome::Approved) => {}
+                    Ok(Outcome::Approved) => {
+                        // The user's approval is not a grant: a caller who may no longer use
+                        // the assistant runs nothing.
+                        if !self.may_use_assistant().await {
+                            return ToolOutcome::Completed {
+                                content: approval::refusal(Outcome::Denied).to_string(),
+                            };
+                        }
+                    }
                     Ok(outcome) => {
                         return ToolOutcome::Completed {
                             content: approval::refusal(outcome).to_string(),

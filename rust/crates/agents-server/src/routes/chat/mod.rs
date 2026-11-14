@@ -36,6 +36,7 @@ use agents_contracts::ui_stream::{
     TOOL_APPROVAL_HEADER, UI_MESSAGE_STREAM_HEADERS, tool_approval_header_value,
 };
 use agents_core::assistant::config::{MemoryConfig, ModelConfig};
+use agents_core::authz::Permission;
 use agents_core::chat::step_budget::resolve_max_steps;
 use agents_core::prompt::approval::resolve_tool_approval_mode;
 use agents_llm::agent_loop::{ToolExecutor, run_agent_loop};
@@ -50,7 +51,7 @@ use crate::auth::{CurrentUser, active_org};
 use crate::http::ApiError;
 use crate::http::json::Body;
 use crate::policy::ChatContext;
-use crate::routes::assistants::{Caller, load_visible};
+use crate::routes::assistants::{Caller, load_authorized};
 
 /// The model a chat without an assistant of its own uses.
 const DEFAULT_MODEL: &str = "rantai/nano";
@@ -77,11 +78,12 @@ async fn chat(
     let input = request::parse(&body, &read_headers(&headers))?;
     let now = now_iso();
 
-    // The assistant the chat is with. Another organisation's assistant is a 404, the same
-    // answer as an assistant that does not exist.
+    // The assistant the chat is with: one the caller may use (§3.3). Another organisation's
+    // assistant is a 404, the same answer as an assistant that does not exist; one of the
+    // caller's own organisation that no grant reaches is a 403.
     let caller = chat_caller(&state, &headers, &user).await;
     let assistant = match input.assistant_id() {
-        Some(id) => Some(load_visible(&state.db, &caller, id).await?),
+        Some(id) => Some(load_authorized(&state.db, &caller, id, Permission::AgentsUse).await?),
         None => None,
     };
 
@@ -165,6 +167,7 @@ async fn chat(
         db: state.db.clone(),
         user_id: user.id.clone(),
         organization_id: caller.org_id.clone(),
+        organization_role: caller.role,
         assistant_id: assistant.as_ref().map(|row| row.id.clone()),
         session_id: session_id.clone(),
         builtins: builtin_tools,
