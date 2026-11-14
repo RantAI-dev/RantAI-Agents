@@ -3,6 +3,10 @@
 //! Every function takes the organisation id and scopes by it; a unit of another organisation is
 //! [`StoreError::NotFound`]. Access rules live in `agents_core::authz`: callers check first.
 //!
+//! Every write takes an `audit: Option<&Actor>`. With `Some`, the change's `AuditLog` row is
+//! written in the change's own transaction. `None` is for fixtures and for writes that record
+//! their own row.
+//!
 //! Every write to the tree takes a per-organisation advisory lock for its transaction. Under
 //! READ COMMITTED two concurrent moves (A under B, B under A) would each check a snapshot without
 //! the other's write and together make a cycle; the lock makes the second one check after the
@@ -10,9 +14,11 @@
 
 use agents_core::authz::{MemberSource, TreeError, UnitKind, UnitTree};
 use chrono::NaiveDateTime;
+use serde_json::{Value, json};
 use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::access::lock_subjects as lock_tree;
+use crate::audit::{self, Actor};
 use crate::{StoreError, StoreResult, new_id, now};
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
@@ -65,6 +71,23 @@ const UNIT_COLUMNS: &str =
 const MEMBER_COLUMNS: &str =
     r#""organizationId","unitId","userId","role","source","createdAt","updatedAt""#;
 
+/// Records a change to `unit_id` when the caller named an actor.
+async fn record(
+    tx: &mut Transaction<'_, Postgres>,
+    org_id: &str,
+    actor: Option<&Actor<'_>>,
+    action: &str,
+    unit_id: &str,
+    detail: Value,
+) -> StoreResult<()> {
+    match actor {
+        Some(actor) => {
+            audit::record(tx, org_id, actor, action, format!("unit:{unit_id}"), detail).await
+        }
+        None => Ok(()),
+    }
+}
+
 async fn unit_exists(
     tx: &mut Transaction<'_, Postgres>,
     org_id: &str,
@@ -103,7 +126,12 @@ async fn slug_taken(
 
 /// Creates a unit. An unknown parent (or another organisation's) is `NotFound`; a slug already
 /// used by a sibling is `Conflict`.
-pub async fn create(db: &PgPool, org_id: &str, unit: &NewUnit<'_>) -> StoreResult<UnitRow> {
+pub async fn create(
+    db: &PgPool,
+    org_id: &str,
+    unit: &NewUnit<'_>,
+    actor: Option<&Actor<'_>>,
+) -> StoreResult<UnitRow> {
     let mut tx = db.begin().await?;
     lock_tree(&mut tx, org_id).await?;
     if let Some(parent) = unit.parent_id
@@ -130,6 +158,9 @@ pub async fn create(db: &PgPool, org_id: &str, unit: &NewUnit<'_>) -> StoreResul
         .bind(ts)
         .fetch_one(&mut *tx)
         .await?;
+    let detail =
+        json!({ "name": row.name, "slug": row.slug, "kind": row.kind, "parentId": row.parent_id });
+    record(&mut tx, org_id, actor, "org.unit.create", &row.id, detail).await?;
     tx.commit().await?;
     Ok(row)
 }
@@ -141,11 +172,12 @@ pub async fn move_to(
     org_id: &str,
     unit_id: &str,
     new_parent: Option<&str>,
+    actor: Option<&Actor<'_>>,
 ) -> StoreResult<UnitRow> {
     let mut tx = db.begin().await?;
     lock_tree(&mut tx, org_id).await?;
-    let slug = sqlx::query_scalar::<_, String>(
-        r#"SELECT "slug" FROM "OrgUnit" WHERE "id" = $1 AND "organizationId" = $2"#,
+    let (slug, old_parent) = sqlx::query_as::<_, (String, Option<String>)>(
+        r#"SELECT "slug", "parentId" FROM "OrgUnit" WHERE "id" = $1 AND "organizationId" = $2"#,
     )
     .bind(unit_id)
     .bind(org_id)
@@ -189,6 +221,8 @@ pub async fn move_to(
         .bind(now())
         .fetch_one(&mut *tx)
         .await?;
+    let detail = json!({ "unitId": unit_id, "from": old_parent, "parentId": new_parent });
+    record(&mut tx, org_id, actor, "org.unit.move", unit_id, detail).await?;
     tx.commit().await?;
     Ok(row)
 }
@@ -200,25 +234,36 @@ pub async fn rename(
     unit_id: &str,
     name: &str,
     external_id: Option<&str>,
+    actor: Option<&Actor<'_>>,
 ) -> StoreResult<UnitRow> {
+    let mut tx = db.begin().await?;
     let sql = format!(
         r#"UPDATE "OrgUnit" SET "name" = $3, "externalId" = $4, "updatedAt" = $5
            WHERE "id" = $1 AND "organizationId" = $2 RETURNING {UNIT_COLUMNS}"#
     );
-    sqlx::query_as::<_, UnitRow>(&sql)
+    let row = sqlx::query_as::<_, UnitRow>(&sql)
         .bind(unit_id)
         .bind(org_id)
         .bind(name)
         .bind(external_id)
         .bind(now())
-        .fetch_optional(db)
+        .fetch_optional(&mut *tx)
         .await?
-        .ok_or(StoreError::NotFound)
+        .ok_or(StoreError::NotFound)?;
+    let detail = json!({ "unitId": unit_id, "name": name, "externalId": external_id });
+    record(&mut tx, org_id, actor, "org.unit.update", unit_id, detail).await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 /// Deletes a unit with its memberships, and the grants and shares that name it. A unit that
 /// still has children is `Conflict`: they are moved or deleted first.
-pub async fn delete(db: &PgPool, org_id: &str, unit_id: &str) -> StoreResult<()> {
+pub async fn delete(
+    db: &PgPool,
+    org_id: &str,
+    unit_id: &str,
+    actor: Option<&Actor<'_>>,
+) -> StoreResult<()> {
     let mut tx = db.begin().await?;
     lock_tree(&mut tx, org_id).await?;
     if !unit_exists(&mut tx, org_id, unit_id).await? {
@@ -248,6 +293,8 @@ pub async fn delete(db: &PgPool, org_id: &str, unit_id: &str) -> StoreResult<()>
         .bind(org_id)
         .execute(&mut *tx)
         .await?;
+    let detail = json!({ "unitId": unit_id });
+    record(&mut tx, org_id, actor, "org.unit.delete", unit_id, detail).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -301,7 +348,9 @@ pub async fn add_member(
     user_id: &str,
     is_lead: bool,
     source: MemberSource,
+    actor: Option<&Actor<'_>>,
 ) -> StoreResult<MemberRow> {
+    let mut tx = db.begin().await?;
     let ts = now();
     let sql = format!(
         r#"INSERT INTO "OrgUnitMember" ("organizationId","unitId","userId","role","source","createdAt","updatedAt")
@@ -314,16 +363,29 @@ pub async fn add_member(
              DO UPDATE SET "role" = EXCLUDED."role", "source" = EXCLUDED."source", "updatedAt" = EXCLUDED."updatedAt"
            RETURNING {MEMBER_COLUMNS}"#
     );
-    sqlx::query_as::<_, MemberRow>(&sql)
+    let row = sqlx::query_as::<_, MemberRow>(&sql)
         .bind(org_id)
         .bind(unit_id)
         .bind(user_id)
         .bind(if is_lead { "lead" } else { "member" })
         .bind(source.as_str())
         .bind(ts)
-        .fetch_optional(db)
+        .fetch_optional(&mut *tx)
         .await?
-        .ok_or(StoreError::NotFound)
+        .ok_or(StoreError::NotFound)?;
+    let detail =
+        json!({ "unitId": unit_id, "userId": row.user_id, "role": row.role, "source": row.source });
+    record(
+        &mut tx,
+        org_id,
+        actor,
+        "org.unit.member.add",
+        unit_id,
+        detail,
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 pub async fn remove_member(
@@ -331,18 +393,31 @@ pub async fn remove_member(
     org_id: &str,
     unit_id: &str,
     user_id: &str,
+    actor: Option<&Actor<'_>>,
 ) -> StoreResult<()> {
+    let mut tx = db.begin().await?;
     let done = sqlx::query(
         r#"DELETE FROM "OrgUnitMember" WHERE "organizationId" = $1 AND "unitId" = $2 AND "userId" = $3"#,
     )
     .bind(org_id)
     .bind(unit_id)
     .bind(user_id)
-    .execute(db)
+    .execute(&mut *tx)
     .await?;
     if done.rows_affected() == 0 {
         return Err(StoreError::NotFound);
     }
+    let detail = json!({ "unitId": unit_id, "userId": user_id });
+    record(
+        &mut tx,
+        org_id,
+        actor,
+        "org.unit.member.remove",
+        unit_id,
+        detail,
+    )
+    .await?;
+    tx.commit().await?;
     Ok(())
 }
 
