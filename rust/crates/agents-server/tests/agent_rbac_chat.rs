@@ -14,6 +14,7 @@ mod helpers;
 #[path = "agent_rbac/support.rs"]
 mod support;
 
+#[allow(dead_code, reason = "shared test helpers, used piecemeal")]
 mod common;
 
 use std::time::Duration;
@@ -26,23 +27,6 @@ use support::{assistant, grant, member_of, org};
 /// The refusal a call that was not approved gives the model.
 const DENIED: &str = r#"{"performed":false,"approval":"denied","message":"The user declined this action. Do not retry it; tell the user it was not performed."}"#;
 
-/// A router whose model is the stub, over the test database.
-async fn chat_router(
-    stub: &Stub,
-) -> Result<Option<(axum::Router, agents_store::PgPool)>, Box<dyn std::error::Error>> {
-    let Some(db) = common::pool().await? else {
-        return Ok(None);
-    };
-    let mut state = agents_server::AppState::new(
-        db.clone(),
-        agents_server::auth::AuthConfig {
-            secrets: vec![common::SECRET.to_owned()],
-        },
-    );
-    state.llm = stub.llm();
-    Ok(Some((agents_server::app(state), db)))
-}
-
 /// The body of a plain chat.
 fn body(assistant_id: &str) -> Value {
     json!({
@@ -54,7 +38,7 @@ fn body(assistant_id: &str) -> Value {
 #[tokio::test]
 async fn a_chat_without_the_use_grant_is_a_403_and_with_it_streams() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned(), " there".to_owned()])).await?;
-    let Some((app, db)) = chat_router(&stub).await? else {
+    let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let org_id = org(&db).await?;
@@ -93,7 +77,7 @@ async fn a_chat_without_the_use_grant_is_a_403_and_with_it_streams() -> R {
 #[tokio::test]
 async fn the_old_sessions_of_a_caller_who_lost_access_stay_readable() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
-    let Some((app, db)) = chat_router(&stub).await? else {
+    let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let org_id = org(&db).await?;
@@ -162,7 +146,7 @@ async fn the_old_sessions_of_a_caller_who_lost_access_stay_readable() -> R {
 #[tokio::test]
 async fn a_chat_with_another_organisations_assistant_is_a_404() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
-    let Some((app, db)) = chat_router(&stub).await? else {
+    let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let (org_a, org_b) = (org(&db).await?, org(&db).await?);
