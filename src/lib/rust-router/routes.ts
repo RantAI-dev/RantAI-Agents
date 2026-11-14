@@ -8,7 +8,17 @@
  * method. A path Rust serves with fewer methods than Next keeps the rest in Next.
  */
 
-export const ROUTE_GROUPS = ["assistants", "sessions", "memory", "chat"] as const
+export const ROUTE_GROUPS = [
+  "assistants",
+  "sessions",
+  "memory",
+  "chat",
+  "auth",
+  "org",
+  "sso",
+  "sharing",
+  "agent-api",
+] as const
 export type RouteGroup = (typeof ROUTE_GROUPS)[number]
 
 export interface RustRoute {
@@ -60,6 +70,49 @@ export const RUST_ROUTES: readonly RustRoute[] = [
   // routes/chat/mod.rs, routes/chat/approval.rs
   { group: "chat", path: "/api/chat", methods: ["POST"], viaRouteHandler: true },
   { group: "chat", path: "/api/chat/tool-approval", methods: ["POST"], viaRouteHandler: true },
+  // routes/auth/{password,sso}.rs — never NextAuth's own /api/auth/session or /csrf: the pages
+  // still call those, and they stay in Next.
+  { group: "auth", path: "/api/auth/login", methods: ["POST"] },
+  { group: "auth", path: "/api/auth/logout", methods: ["POST"] },
+  { group: "auth", path: "/api/auth/sso/discover", methods: ["GET"] },
+  { group: "auth", path: "/api/auth/sso/{providerId}/start", methods: ["GET"] },
+  { group: "auth", path: "/api/auth/sso/{providerId}/callback", methods: ["GET"] },
+  { group: "auth", path: "/api/mobile/login", methods: ["POST"] },
+  // routes/organizations/*
+  { group: "org", path: "/api/organizations", methods: ["GET"] },
+  { group: "org", path: "/api/organizations/{id}", methods: ["GET", "PATCH"] },
+  { group: "org", path: "/api/organizations/{id}/members", methods: ["GET", "POST"] },
+  { group: "org", path: "/api/organizations/{id}/members/accept", methods: ["POST"] },
+  { group: "org", path: "/api/organizations/{id}/members/{memberId}", methods: ["PATCH", "DELETE"] },
+  { group: "org", path: "/api/organizations/{id}/units", methods: ["GET", "POST"] },
+  { group: "org", path: "/api/organizations/{id}/units/{unitId}", methods: ["PATCH", "DELETE"] },
+  {
+    group: "org",
+    path: "/api/organizations/{id}/units/{unitId}/members",
+    methods: ["GET", "POST", "DELETE"],
+  },
+  { group: "org", path: "/api/organizations/{id}/audit", methods: ["GET"] },
+  // routes/auth/providers.rs
+  { group: "sso", path: "/api/dashboard/sso/providers", methods: ["GET", "POST"] },
+  { group: "sso", path: "/api/dashboard/sso/providers/{id}", methods: ["GET", "PATCH", "DELETE"] },
+  { group: "sso", path: "/api/dashboard/sso/providers/{id}/test", methods: ["POST"] },
+  // routes/sharing.rs
+  { group: "sharing", path: "/api/dashboard/chat/sessions/{id}/shares", methods: ["GET", "PUT"] },
+  {
+    group: "sharing",
+    path: "/api/dashboard/chat/sessions/{id}/shares/{shareId}",
+    methods: ["DELETE"],
+  },
+  { group: "sharing", path: "/api/dashboard/chat/shared", methods: ["GET"] },
+  { group: "sharing", path: "/api/dashboard/chat/shared/{id}", methods: ["GET"] },
+  { group: "sharing", path: "/api/dashboard/chat/shared/{id}/fork", methods: ["POST"] },
+  // The agent API keys and the agent HTTP surface (identity-and-access slice S7). The TypeScript
+  // routes answer until that slice lands; the group is listed so an operator can cut them over
+  // with RUST_ROUTES, and `RUST_API_URL` being unset keeps everything in Next until then.
+  { group: "agent-api", path: "/api/dashboard/agent-api-keys", methods: ["GET", "POST"] },
+  { group: "agent-api", path: "/api/dashboard/agent-api-keys/{id}", methods: GET_PUT.concat("DELETE") },
+  { group: "agent-api", path: "/v1/chat/completions", methods: ["POST"] },
+  { group: "agent-api", path: "/v1/agents/{id}/ws", methods: ["GET"] },
 ]
 
 const COMPILED = RUST_ROUTES.map((route) => ({
