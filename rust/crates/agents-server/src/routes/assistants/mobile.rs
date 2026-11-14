@@ -53,9 +53,14 @@ pub(super) async fn list(
     let preference = assistants::user_preference(&state.db, &user.id)
         .await
         .map_err(|e| store_error(&e))?;
+    // A default the caller may no longer use is not sent: the list is the one the access rule
+    // answered, so this compares against it rather than trusting the stored preference (§3.3).
+    let default_assistant_id = preference
+        .and_then(|p| p.default_assistant_id)
+        .filter(|id| rows.iter().any(|row| &row.id == id));
     Ok(Json(MobileListJson {
         assistants: items,
-        default_assistant_id: preference.and_then(|p| p.default_assistant_id),
+        default_assistant_id,
     }))
 }
 

@@ -4,7 +4,7 @@
 //! generated from `port/cases/assistants.in.jsonl`: every expected value is what the OLD
 //! TypeScript returned, none of them was written by hand.
 //!
-//! Three groups of cases are skipped on purpose; each points at its row in
+//! Several groups of cases are skipped on purpose; each points at its row in
 //! `docs/port/differences.md`:
 //!
 //! - Edits and binding writes on a built-in assistant: the old code allowed every
@@ -14,6 +14,10 @@
 //! - JSON config validation: the old code accepted the config columns as `z.unknown()`;
 //!   the port validates and range-checks them, so cases where only a config error differs
 //!   are skipped (row 28).
+//! - Who builds and uses an agent: the old code let a `member` edit every agent of the
+//!   organisation and showed every agent to every one of them; the port answers through
+//!   `authz::authorize`, so those cases are skipped and the new rule is asserted to deny
+//!   them (row 80). An org-less non-built-in agent is visible to nobody (row 120).
 //!
 //! Validation cases compare the SET of failing field paths, not the message text. The
 //! prompt-variable clock cases replace the locale-dependent old values and the ISO port
