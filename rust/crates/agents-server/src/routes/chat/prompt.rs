@@ -7,11 +7,12 @@
 //! 1. the assistant's own prompt,
 //! 2. the live-chat handoff instruction,
 //! 3. the memory sections (the profile) and the memory instruction,
-//! 4. the `{{variable}}` placeholders,
-//! 5. the language rule and the output-hygiene rule,
-//! 6. the identity and the date,
-//! 7. the guard rails,
-//! 8. the response format.
+//! 4. the tool instruction, when the assistant has tools (D3),
+//! 5. the `{{variable}}` placeholders,
+//! 6. the language rule and the output-hygiene rule,
+//! 7. the identity and the date,
+//! 8. the guard rails,
+//! 9. the response format.
 
 use agents_core::assistant::config::{MemoryConfig, ModelConfig, ResponseFormat};
 use agents_core::memory::prompt::build_prompt_with_memory;
@@ -19,8 +20,9 @@ use agents_core::memory::tools::MEMORY_UPDATE_INSTRUCTION;
 use agents_core::memory::types::UserProfile;
 use agents_core::prompt::guard_rails::build_guard_rails_prompt;
 use agents_core::prompt::instructions::{
-    LANGUAGE_INSTRUCTION, LIVE_CHAT_HANDOFF_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION,
-    PlatformContext, build_platform_context_instruction,
+    ArtifactContext, LANGUAGE_INSTRUCTION, LIVE_CHAT_HANDOFF_INSTRUCTION,
+    OUTPUT_HYGIENE_INSTRUCTION, PlatformContext, ToolInstructionOptions,
+    build_platform_context_instruction, build_tool_instruction,
 };
 use agents_core::prompt::response_format::get_response_format_instruction;
 use agents_core::prompt::variables::{VariableContext, resolve_prompt_variables};
@@ -58,6 +60,8 @@ pub struct PromptContext<'a> {
     pub now: &'a str,
     /// Whether the identity and date block is part of the prompt.
     pub platform_context: bool,
+    /// The assistant's tools the model is offered, not counting the memory tools.
+    pub tool_names: &'a [String],
 }
 
 /// The system prompt of one chat.
@@ -79,6 +83,16 @@ pub fn build(assistant: Option<&AssistantPrompt>, context: &PromptContext<'_>) -
             system.push_str("\n\nMemory Instructions:\n");
             system.push_str(instructions);
         }
+    }
+
+    if !context.tool_names.is_empty() {
+        // No canvas mode and no artifact tools reach the Rust chat, so the artifact parts of
+        // the instruction are empty.
+        system.push_str(&build_tool_instruction(
+            context.tool_names,
+            &ToolInstructionOptions::default(),
+            &ArtifactContext::default(),
+        ));
     }
 
     system = resolve_prompt_variables(
@@ -152,7 +166,32 @@ mod tests {
             model_name: Some("RantAI Nano"),
             now: "2026-11-14T08:30:00.000Z",
             platform_context: true,
+            tool_names: &[],
         }
+    }
+
+    #[test]
+    fn the_tool_instruction_comes_before_the_variables_and_only_with_tools() {
+        let assistant = AssistantPrompt {
+            system_prompt: "Answer {{user_name}}.".to_owned(),
+            ..AssistantPrompt::default()
+        };
+        let names = vec!["calculator".to_owned(), "date_time".to_owned()];
+        let with_tools = build(
+            Some(&assistant),
+            &PromptContext {
+                tool_names: &names,
+                ..context(None)
+            },
+        );
+        let at = with_tools
+            .find("You have these tools: calculator, date_time.")
+            .unwrap_or(usize::MAX);
+        let language = with_tools.find(LANGUAGE_INSTRUCTION.trim()).unwrap_or(0);
+        assert!(at < language, "{with_tools}");
+        assert!(with_tools.starts_with("Answer Budi."));
+        let without = build(Some(&assistant), &context(None));
+        assert!(!without.contains("## Available Tools"));
     }
 
     #[test]

@@ -67,6 +67,15 @@ pub enum AgentEvent {
         /// What the tool returned.
         content: String,
     },
+    /// A tool failed; the message goes back to the model.
+    ToolFailed {
+        /// The call the failure answers.
+        id: String,
+        /// The tool's name.
+        name: String,
+        /// What went wrong.
+        message: String,
+    },
     /// A tool needs a human decision; the loop stopped.
     ApprovalRequired {
         /// The call that is waiting.
@@ -274,10 +283,10 @@ impl<'a> LoopState<'a> {
             }
             ToolOutcome::Failed { message } => {
                 results.push(Message::tool_result(&call, message.clone()));
-                self.events.push_back(Ok(AgentEvent::ToolResult {
+                self.events.push_back(Ok(AgentEvent::ToolFailed {
                     id: call.id.clone(),
                     name: call.name.clone(),
-                    content: message,
+                    message,
                 }));
             }
             ToolOutcome::NeedsApproval { reason } => {

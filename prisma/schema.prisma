@@ -692,6 +692,21 @@ model McpServerConfig {
   @@index([organizationId])
 }
 
+// A gated tool call of a live chat, waiting for the user's Approve or Deny
+// (lib/tools/approval.ts). Kept in the database so the decision may reach another
+// instance than the stream. A row with a decision and no waiting stream is a decision
+// that arrived early; the stream deletes its row once it has read the decision.
+model ChatToolApproval {
+  toolCallId String
+  userId     String
+  status     String    @default("pending") // "pending" | "approved" | "denied"
+  createdAt  DateTime  @default(now())
+  decidedAt  DateTime?
+
+  @@id([toolCallId, userId])
+  @@index([createdAt])
+}
+
 // Tool execution log for tracking and debugging
 model ToolExecution {
   id             String   @id @default(cuid())

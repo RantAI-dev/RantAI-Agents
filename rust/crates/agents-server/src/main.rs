@@ -38,6 +38,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     ));
     state.llm = config.llm.clone();
     state.chat_max_steps = config.chat_max_steps;
+    state.chat_max_steps_cap = config.chat_max_steps_cap;
     state.platform_context = config.platform_context;
     axum::serve(listener, app(state))
         .with_graceful_shutdown(shutdown())
