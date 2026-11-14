@@ -44,14 +44,14 @@ use agents_llm::client::{Cancel, CancelHandle};
 use agents_llm::provider::Provider;
 use agents_llm::types::{ChatRequest as LlmRequest, Message, ReasoningEffort, ToolChoice};
 use agents_store::assistants::AssistantRow;
-use agents_store::{PgPool, assistants, sessions};
+use agents_store::{PgPool, StoreError, assistants, sessions};
 
 use crate::AppState;
 use crate::auth::{CurrentUser, active_org};
 use crate::http::ApiError;
 use crate::http::json::Body;
 use crate::policy::ChatContext;
-use crate::routes::assistants::{Caller, load_authorized};
+use crate::routes::assistants::{Caller, authorize_agent, load_authorized};
 
 /// The model a chat without an assistant of its own uses.
 const DEFAULT_MODEL: &str = "rantai/nano";
@@ -101,13 +101,23 @@ async fn chat(
 
     // The session: one the caller owns, or none. An unknown id is dropped, the way the
     // TypeScript dropped it.
-    let session_id = match input.body.session_id.as_deref() {
-        Some(id) => sessions::get_session(&state.db, &user.id, id)
-            .await
-            .ok()
-            .map(|session| session.id),
+    let session = match input.body.session_id.as_deref() {
+        Some(id) => sessions::get_session(&state.db, &user.id, id).await.ok(),
         None => None,
     };
+    // A session of another agent takes no message unless the caller may still use that agent
+    // too: otherwise naming a granted agent would write into a revoked one's chat (§3.3).
+    if let Some(session) = &session
+        && assistant.as_ref().map(|row| row.id.as_str()) != Some(session.assistant_id.as_str())
+    {
+        match assistants::get(&state.db, &session.assistant_id).await {
+            Ok(row) => authorize_agent(&state.db, &caller, &row, Permission::AgentsUse).await?,
+            // The session's agent is gone: there is no access left to protect.
+            Err(StoreError::NotFound) => {}
+            Err(error) => return Err(store_error(&error)),
+        }
+    }
+    let session_id = session.map(|session| session.id);
 
     let memory_config = assistant
         .as_ref()

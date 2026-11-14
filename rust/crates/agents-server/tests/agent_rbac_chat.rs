@@ -347,3 +347,86 @@ async fn an_approved_call_does_not_run_for_a_caller_who_lost_the_grant() -> R {
     assert_eq!(runs(&db, &tool_id).await?, 1, "the tool ran once");
     Ok(())
 }
+
+/// How many messages a session holds.
+async fn message_count(db: &agents_store::PgPool, session_id: &str) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar(r#"SELECT count(*) FROM "DashboardMessage" WHERE "sessionId" = $1"#)
+        .bind(session_id)
+        .fetch_one(db)
+        .await
+}
+
+#[tokio::test]
+async fn a_session_of_a_revoked_agent_takes_no_message_through_another_agent() -> R {
+    let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
+    let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let member_user = member_of(&db, &org_id, "member").await?;
+    let auth = bearer(&member_user)?;
+    let revoked = assistant(&db, &org_id).await?;
+    let granted = assistant(&db, &org_id).await?;
+    grant(&db, &org_id, &revoked, "user", &member_user, "use").await?;
+    grant(&db, &org_id, &granted, "user", &member_user, "use").await?;
+
+    let mut sessions = Vec::new();
+    for id in [&revoked, &granted] {
+        let (status, session) = send(
+            &app,
+            "POST",
+            "/api/dashboard/chat/sessions",
+            Some(&auth),
+            Some(json!({ "assistantId": id, "title": "s" })),
+        )
+        .await?;
+        assert_eq!(status, 200);
+        let session_id = session
+            .pointer("/id")
+            .and_then(Value::as_str)
+            .ok_or("no session id")?
+            .to_owned();
+        sessions.push(session_id);
+    }
+    let [old_session, granted_session] = sessions.as_slice() else {
+        return Err("two sessions".into());
+    };
+    sqlx::query(r#"DELETE FROM "AssistantGrant" WHERE "assistantId" = $1"#)
+        .bind(&revoked)
+        .execute(&db)
+        .await?;
+
+    // The body names an agent the caller may use, the session belongs to one they lost; and
+    // the same session with no agent named at all.
+    let with_other = json!({
+        "messages": [{"id": "m1", "role": "user", "content": "hello"}],
+        "assistantId": granted,
+        "sessionId": old_session,
+    });
+    let with_none = json!({
+        "messages": [{"id": "m1", "role": "user", "content": "hello"}],
+        "sessionId": old_session,
+    });
+    for body in [with_other, with_none] {
+        let (status, _headers, text) =
+            helpers::send_raw(&app, "POST", "/api/chat", Some(&auth), Some(body)).await?;
+        assert_eq!(status, 403, "{text}");
+        assert!(text.contains("\"code\":\"permission_denied\""), "{text}");
+    }
+    assert_eq!(
+        message_count(&db, old_session).await?,
+        0,
+        "nothing was written into the revoked agent's session"
+    );
+
+    // Positive control: the session of the agent still granted takes the message.
+    let body = json!({
+        "messages": [{"id": "m1", "role": "user", "content": "hello"}],
+        "assistantId": granted,
+        "sessionId": granted_session,
+    });
+    let (status, _headers, text) =
+        helpers::send_raw(&app, "POST", "/api/chat", Some(&auth), Some(body)).await?;
+    assert_eq!(status, 200, "{text}");
+    Ok(())
+}
