@@ -49,7 +49,8 @@ export async function loginMobile(
   | { error: "suspended" }
 > {
   const user = await prisma.user.findUnique({ where: { email } })
-  if (!user) return { error: "invalid" }
+  // An SSO-only user has no password hash and cannot sign in with one.
+  if (!user || !user.passwordHash) return { error: "invalid" }
 
   const isValid = await compare(password, user.passwordHash)
   if (!isValid) return { error: "invalid" }
