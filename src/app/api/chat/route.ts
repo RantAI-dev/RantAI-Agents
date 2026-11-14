@@ -7,8 +7,23 @@ import {
   runChat,
 } from "@/features/chat-public/service"
 import { auth } from "@/lib/auth"
+import { forwardWithFallback } from "@/lib/rust-router/forward"
+import { rustTarget } from "@/lib/rust-router/routes"
 
+// POST /api/chat — with the `chat` route group on, Rust answers first; an assistant it cannot
+// serve yet (KB, MCP, workflows, attachments) is a 409 `capability_not_ported`, and that
+// request runs here instead (docs/operations/rust-cutover.md).
 export async function POST(req: Request) {
+  const { pathname, search } = new URL(req.url)
+  const target = rustTarget(req.method, pathname, search)
+  if (!target) return chatInNext(req)
+  return forwardWithFallback(req, target.url, {
+    fallbackOn: { status: 409, code: "capability_not_ported" },
+    fallback: chatInNext,
+  })
+}
+
+async function chatInNext(req: Request) {
   const session = await auth()
   if (!session?.user?.id) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {

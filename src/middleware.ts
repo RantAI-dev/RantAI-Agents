@@ -1,8 +1,18 @@
 import { auth } from "@/lib/auth"
 import { NextResponse, NextRequest } from "next/server"
+import { forwardToRust } from "@/lib/rust-router/forward"
+import { rustTarget } from "@/lib/rust-router/routes"
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
+
+  // The API paths in the matcher are here only to reach Rust (RUST_API_URL, RUST_ROUTES);
+  // Rust checks the caller itself, and an unrouted one goes on to its Next route untouched.
+  if (pathname.startsWith("/api/")) {
+    const target = rustTarget(request.method, pathname, request.nextUrl.search)
+    if (target && !target.route.viaRouteHandler) return forwardToRust(request, target.url)
+    return NextResponse.next()
+  }
 
   // Allow login page without auth check
   if (pathname === "/login") {
@@ -43,5 +53,18 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/login", "/agent/:path*", "/admin/:path*", "/dashboard/:path*"],
+  matcher: [
+    "/login",
+    "/agent/:path*",
+    "/admin/:path*",
+    "/dashboard/:path*",
+    // The Rust route groups (src/lib/rust-router/routes.ts). The matcher must be a literal.
+    "/api/assistants/:path*",
+    "/api/user/default-assistant",
+    "/api/user/preferences",
+    "/api/mobile/assistants/:path*",
+    "/api/mobile/memories/:path*",
+    "/api/dashboard/chat/sessions/:path*",
+    "/api/dashboard/memory/:path*",
+  ],
 }
