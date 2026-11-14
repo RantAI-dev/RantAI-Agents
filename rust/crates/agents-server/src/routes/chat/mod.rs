@@ -14,10 +14,12 @@
 mod approval;
 mod memory;
 mod persist;
-mod prompt;
-mod request;
-mod stream;
-mod tools;
+// The agent API (§3.6) runs the same pipeline: the prompt, the body and the tools are its
+// inputs, and the response frames come from `stream`.
+pub(crate) mod prompt;
+pub(crate) mod request;
+pub(crate) mod stream;
+pub(crate) mod tools;
 
 use std::io;
 use std::sync::Arc;
@@ -54,7 +56,7 @@ use crate::policy::ChatContext;
 use crate::routes::assistants::{Caller, authorize_agent, load_authorized};
 
 /// The model a chat without an assistant of its own uses.
-const DEFAULT_MODEL: &str = "rantai/nano";
+pub(crate) const DEFAULT_MODEL: &str = "rantai/nano";
 
 /// How many frames the response waits for before the writer catches up.
 const FRAME_BUFFER: usize = 32;
@@ -273,7 +275,7 @@ async fn chat(
 }
 
 /// What the assistant brings to the system prompt.
-fn assistant_prompt(
+pub(crate) fn assistant_prompt(
     assistant: Option<&AssistantRow>,
     input: &request::ChatInput,
 ) -> prompt::AssistantPrompt {
@@ -304,7 +306,7 @@ fn assistant_prompt(
 }
 
 /// The conversation as the model sees it: the system prompt, then the messages.
-fn model_messages(system: &str, input: &request::ChatInput) -> Vec<Message> {
+pub(crate) fn model_messages(system: &str, input: &request::ChatInput) -> Vec<Message> {
     let mut messages = vec![Message::system(system)];
     for message in &input.body.messages {
         let message = match message.role.as_str() {
@@ -412,7 +414,7 @@ fn not_ported() -> ApiError {
 /// The assistant's own bindings decide, not the request's switches: a chat is never answered
 /// with less than the assistant was set up for. The knowledge base is the exception the old
 /// code made: the request may turn it off.
-async fn check_capabilities(
+pub(crate) async fn check_capabilities(
     state: &AppState,
     input: &request::ChatInput,
     assistant: Option<&AssistantRow>,
@@ -506,7 +508,7 @@ fn missing_body() -> ApiError {
 }
 
 /// The store's failure, as the answer the caller sees.
-fn store_error(e: &agents_store::StoreError) -> ApiError {
+pub(crate) fn store_error(e: &agents_store::StoreError) -> ApiError {
     match e {
         agents_store::StoreError::NotFound => ApiError::new(ErrorCode::NotFound),
         agents_store::StoreError::Conflict => ApiError::new(ErrorCode::Conflict),
@@ -518,7 +520,7 @@ fn store_error(e: &agents_store::StoreError) -> ApiError {
 }
 
 /// The failure of the provider, as the answer the caller sees.
-fn llm_error(error: &agents_llm::types::LlmError) -> ApiError {
+pub(crate) fn llm_error(error: &agents_llm::types::LlmError) -> ApiError {
     match error {
         agents_llm::types::LlmError::MissingApiKey { .. } => {
             tracing::error!(error = %error, "the model provider has no key");

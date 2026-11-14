@@ -22,7 +22,9 @@ thiserror.workspace = true
 tokio.workspace = true
 # The streams: the wizard's answer and the database reads it starts with.
 futures.workspace = true
-axum.workspace = true
+# `ws` for the agent API's WebSocket (§3.6). The same crate, one more feature: `rust/Cargo.toml`
+# is a protected path, so the feature is added on the crate that needs it.
+axum = { workspace = true, features = ["ws"] }
 tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

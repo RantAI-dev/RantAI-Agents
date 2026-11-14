@@ -1,5 +1,6 @@
 //! One module per route group. Add a group with `.merge(group::router())`.
 
+pub(crate) mod agent_api;
 pub(crate) mod assistants;
 mod auth;
 mod chat;
@@ -15,6 +16,7 @@ use crate::AppState;
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .merge(agent_api::router())
         .merge(assistants::router())
         .merge(auth::router())
         .merge(chat::router())
