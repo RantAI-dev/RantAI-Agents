@@ -12,7 +12,7 @@ mod common;
 
 use agents_core::authz::{SubjectType, UnitKind};
 use agents_store::{PgPool, new_id};
-use common::{R, bearer, code, router, send};
+use common::{R, bearer, code, router, send, send_from, send_with};
 use serde_json::{Value, json};
 use support::{assistant, grant_use, member_of, org, session, unit, unit_member, user_subject};
 
@@ -649,5 +649,391 @@ async fn a_share_to_a_stranger_is_a_404() -> R {
     )
     .await?;
     assert_eq!(status, 200);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_audit_address_is_the_socket_peer_not_a_header() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let owner = member_of(&db, &org_id, "member").await?;
+    let recipient = member_of(&db, &org_id, "member").await?;
+    let agent = assistant(&db, Some(&org_id)).await?;
+    let id = session(&db, &owner, Some(&org_id), &agent, "audited").await?;
+    let auth = bearer(&owner)?;
+    let peer: std::net::SocketAddr = "203.0.113.9:4000".parse()?;
+    // No proxy is trusted by default, so this header is the client's own claim.
+    let spoofed = [("x-forwarded-for", "198.51.100.1")];
+
+    let (status, shares) = send_from(
+        &app,
+        "PUT",
+        &format!("/api/dashboard/chat/sessions/{id}/shares"),
+        Some(&auth),
+        Some(share_body(&[("user", &recipient)])),
+        &spoofed,
+        Some(peer),
+    )
+    .await?;
+    assert_eq!(status, 200, "{shares}");
+    let share = share_id(&shares, &recipient).ok_or("no share id")?;
+    let (status, _) = send_from(
+        &app,
+        "DELETE",
+        &format!("/api/dashboard/chat/sessions/{id}/shares/{share}"),
+        Some(&auth),
+        None,
+        &spoofed,
+        Some(peer),
+    )
+    .await?;
+    assert_eq!(status, 200);
+
+    let rows: Vec<(String, Option<String>)> = sqlx::query_as(
+        r#"SELECT "action", "ipAddress" FROM "AuditLog" WHERE "resource" = $1
+           ORDER BY "createdAt" ASC"#,
+    )
+    .bind(format!("session:{id}"))
+    .fetch_all(&db)
+    .await?;
+    assert_eq!(
+        rows,
+        vec![
+            (
+                "rbac.share.create".to_owned(),
+                Some("203.0.113.9".to_owned())
+            ),
+            (
+                "rbac.share.revoke".to_owned(),
+                Some("203.0.113.9".to_owned())
+            ),
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_admin_does_not_read_a_chat_nobody_shared() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let owner = member_of(&db, &org_id, "member").await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let agent = assistant(&db, Some(&org_id)).await?;
+    let id = chat_with_messages(&app, &bearer(&owner)?, &agent, Some(&org_id), &db, &owner).await?;
+    let admin_auth = bearer(&admin)?;
+
+    for (method, uri) in [
+        ("GET", format!("/api/dashboard/chat/shared/{id}")),
+        ("POST", format!("/api/dashboard/chat/shared/{id}/fork")),
+    ] {
+        let (status, body) = send(&app, method, &uri, Some(&admin_auth), None).await?;
+        assert_eq!(
+            (status, code(&body)),
+            (403, Some("permission_denied")),
+            "{method} {uri} as an admin"
+        );
+    }
+    let (status, _) = send(
+        &app,
+        "GET",
+        &format!("/api/dashboard/chat/sessions/{id}"),
+        Some(&admin_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 404, "the session routes stay owner-only");
+    assert!(!shared_ids(&app, &admin_auth).await?.contains(&id));
+
+    // Positive control: once the owner shares it with the organisation, the admin reads it.
+    let (status, _) = send(
+        &app,
+        "PUT",
+        &format!("/api/dashboard/chat/sessions/{id}/shares"),
+        Some(&bearer(&owner)?),
+        Some(share_body(&[("org", &org_id)])),
+    )
+    .await?;
+    assert_eq!(status, 200);
+    let (status, _) = send(
+        &app,
+        "GET",
+        &format!("/api/dashboard/chat/shared/{id}"),
+        Some(&admin_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200);
+    Ok(())
+}
+
+/// The organisation of a session, straight from the row.
+async fn session_org(db: &PgPool, id: &str) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar(r#"SELECT "organizationId" FROM "DashboardSession" WHERE "id" = $1"#)
+        .bind(id)
+        .fetch_one(db)
+        .await
+}
+
+#[tokio::test]
+async fn the_backfill_only_attaches_a_chat_to_its_agents_org_for_a_member() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let (org_a, org_b) = (org(&db).await?, org(&db).await?);
+    let admin_a = member_of(&db, &org_a, "admin").await?;
+    let member_a = member_of(&db, &org_a, "member").await?;
+    let outsider = member_of(&db, &org_b, "member").await?;
+    let both = member_of(&db, &org_b, "member").await?;
+    sqlx::query(
+        r#"INSERT INTO "OrganizationMember" ("id","userId","userEmail","organizationId","role","acceptedAt")
+           VALUES ($1,$2,$2 || '@test.invalid',$3,'member',now())"#,
+    )
+    .bind(new_id())
+    .bind(&both)
+    .bind(&org_a)
+    .execute(&db)
+    .await?;
+    let (agent_a, agent_b) = (
+        assistant(&db, Some(&org_a)).await?,
+        assistant(&db, Some(&org_b)).await?,
+    );
+    let global = assistant(&db, None).await?;
+    let admin_auth = bearer(&admin_a)?;
+    let in_a = [("x-organization-id", org_a.as_str())];
+
+    // An admin of A on an org-less chat that is not A's: a 404, as for any other tenant's row,
+    // and nothing is attached.
+    let not_ours = [
+        // A's agent, but the owner is not a member of A.
+        session(&db, &outsider, None, &agent_a, "outsider").await?,
+        // The agent is B's.
+        session(&db, &both, None, &agent_b, "b's agent").await?,
+        // A global agent, somebody else's chat.
+        session(&db, &member_a, None, &global, "global").await?,
+    ];
+    for id in &not_ours {
+        let uri = format!("/api/dashboard/chat/sessions/{id}/shares");
+        let (status, body) = send_with(&app, "GET", &uri, Some(&admin_auth), None, &in_a).await?;
+        assert_eq!((status, code(&body)), (404, Some("not_found")), "GET {id}");
+        let (status, body) = send_with(
+            &app,
+            "PUT",
+            &uri,
+            Some(&admin_auth),
+            Some(share_body(&[("org", &org_a)])),
+            &in_a,
+        )
+        .await?;
+        assert_eq!((status, code(&body)), (404, Some("not_found")), "PUT {id}");
+        assert_eq!(session_org(&db, id).await?, None, "{id} was attached");
+    }
+    // The owner acting in A on their chat with B's agent: also not A's.
+    let (status, body) = send_with(
+        &app,
+        "PUT",
+        &format!("/api/dashboard/chat/sessions/{}/shares", not_ours[1]),
+        Some(&bearer(&both)?),
+        Some(share_body(&[("org", &org_a)])),
+        &in_a,
+    )
+    .await?;
+    assert_eq!((status, code(&body)), (404, Some("not_found")));
+    assert_eq!(session_org(&db, &not_ours[1]).await?, None);
+
+    // An org-less chat A may claim is refused to a member who is not its owner, like any of A's.
+    let mine = session(&db, &admin_a, None, &agent_a, "admin's").await?;
+    let (status, body) = send(
+        &app,
+        "GET",
+        &format!("/api/dashboard/chat/sessions/{mine}/shares"),
+        Some(&bearer(&member_a)?),
+        None,
+    )
+    .await?;
+    assert_eq!((status, code(&body)), (403, Some("permission_denied")));
+
+    // Positive control: an admin of A attaches a member's chat with A's agent, with the share.
+    let theirs = session(&db, &member_a, None, &agent_a, "member's").await?;
+    let (status, body) = send_with(
+        &app,
+        "PUT",
+        &format!("/api/dashboard/chat/sessions/{theirs}/shares"),
+        Some(&admin_auth),
+        Some(share_body(&[("org", &org_a)])),
+        &in_a,
+    )
+    .await?;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(session_org(&db, &theirs).await?, Some(org_a.clone()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_new_chat_belongs_to_its_agents_org_not_the_header() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let (org_a, org_b) = (org(&db).await?, org(&db).await?);
+    let user = member_of(&db, &org_a, "member").await?;
+    sqlx::query(
+        r#"INSERT INTO "OrganizationMember" ("id","userId","userEmail","organizationId","role","acceptedAt")
+           VALUES ($1,$2,$2 || '@test.invalid',$3,'member',now())"#,
+    )
+    .bind(new_id())
+    .bind(&user)
+    .bind(&org_b)
+    .execute(&db)
+    .await?;
+    let agent_b = assistant(&db, Some(&org_b)).await?;
+    let global = assistant(&db, None).await?;
+    let auth = bearer(&user)?;
+    let in_a = [("x-organization-id", org_a.as_str())];
+
+    // Acting in A with B's agent: the chat is B's, so A can never share a B transcript.
+    let (status, body) = send_with(
+        &app,
+        "POST",
+        "/api/dashboard/chat/sessions",
+        Some(&auth),
+        Some(json!({"assistantId": agent_b})),
+        &in_a,
+    )
+    .await?;
+    assert_eq!(status, 200, "{body}");
+    let id = body.pointer("/id").and_then(Value::as_str).ok_or("no id")?;
+    assert_eq!(session_org(&db, id).await?, Some(org_b.clone()));
+
+    // Positive control: an agent of no organisation takes the organisation the request acts in.
+    let (status, body) = send_with(
+        &app,
+        "POST",
+        "/api/dashboard/chat/sessions",
+        Some(&auth),
+        Some(json!({"assistantId": global})),
+        &in_a,
+    )
+    .await?;
+    assert_eq!(status, 200, "{body}");
+    let id = body.pointer("/id").and_then(Value::as_str).ok_or("no id")?;
+    assert_eq!(session_org(&db, id).await?, Some(org_a.clone()));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_fork_leaves_the_edit_history_home_and_lands_in_the_callers_org() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let owner = member_of(&db, &org_id, "member").await?;
+    let recipient = member_of(&db, &org_id, "member").await?;
+    let third = member_of(&db, &org_id, "member").await?;
+    let agent = assistant(&db, Some(&org_id)).await?;
+    for user in [&recipient, &third] {
+        grant_use(&db, &org_id, &agent, user_subject(user)).await?;
+    }
+    let owner_auth = bearer(&owner)?;
+    let id = session(&db, &owner, Some(&org_id), &agent, "drafts").await?;
+    let (status, _) = send(
+        &app,
+        "POST",
+        &format!("/api/dashboard/chat/sessions/{id}/messages"),
+        Some(&owner_auth),
+        Some(json!({"messages": [{
+            "id": new_id(), "role": "user", "content": "final",
+            "editHistory": [{"content": "a private first draft", "editedAt": "2026-11-14T00:00:00Z"}]
+        }]})),
+    )
+    .await?;
+    assert_eq!(status, 200);
+    send(
+        &app,
+        "PUT",
+        &format!("/api/dashboard/chat/sessions/{id}/shares"),
+        Some(&owner_auth),
+        Some(share_body(&[("user", &recipient)])),
+    )
+    .await?;
+    let recipient_auth = bearer(&recipient)?;
+
+    let (status, transcript) = send(
+        &app,
+        "GET",
+        &format!("/api/dashboard/chat/shared/{id}"),
+        Some(&recipient_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200);
+    assert!(
+        !transcript.to_string().contains("private first draft"),
+        "{transcript}"
+    );
+    let (status, fork) = send(
+        &app,
+        "POST",
+        &format!("/api/dashboard/chat/shared/{id}/fork"),
+        Some(&recipient_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200, "{fork}");
+    let forked = fork.pointer("/id").and_then(Value::as_str).ok_or("no id")?;
+    assert_eq!(session_org(&db, forked).await?, Some(org_id.clone()));
+    let history: Vec<Option<serde_json::Value>> = sqlx::query_scalar(
+        r#"SELECT "editHistory" FROM "DashboardMessage" WHERE "sessionId" = $1"#,
+    )
+    .bind(forked)
+    .fetch_all(&db)
+    .await?;
+    assert_eq!(history, vec![None], "the fork carries no edit history");
+    // Positive control: the original still has it.
+    let (_, detail) = send(
+        &app,
+        "GET",
+        &format!("/api/dashboard/chat/sessions/{id}"),
+        Some(&owner_auth),
+        None,
+    )
+    .await?;
+    assert!(detail.to_string().contains("private first draft"));
+
+    // A fork of the fork, shared on: the third user sees the recipient's copy, and nothing of
+    // the owner's original, which was never shared with them.
+    send(
+        &app,
+        "PUT",
+        &format!("/api/dashboard/chat/sessions/{forked}/shares"),
+        Some(&recipient_auth),
+        Some(share_body(&[("user", &third)])),
+    )
+    .await?;
+    let third_auth = bearer(&third)?;
+    let (status, again) = send(
+        &app,
+        "POST",
+        &format!("/api/dashboard/chat/shared/{forked}/fork"),
+        Some(&third_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200, "{again}");
+    assert_eq!(
+        again.pointer("/messageCount").and_then(Value::as_i64),
+        Some(1)
+    );
+    let (status, _) = send(
+        &app,
+        "GET",
+        &format!("/api/dashboard/chat/shared/{id}"),
+        Some(&third_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 403, "the original stays closed to the third user");
     Ok(())
 }

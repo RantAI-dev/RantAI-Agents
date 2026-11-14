@@ -485,21 +485,24 @@ pub async fn delete_messages(
 
 /// Whether the caller may start a chat with this assistant: the assistant must exist, and when
 /// it belongs to an organisation the caller must be a member of it. A system-global assistant
-/// (no organisation) is open to everybody.
+/// (no organisation) is open to everybody. `None` is "may not"; `Some(org)` is the assistant's
+/// organisation (`None` for a global one), which the new session is filed under.
 pub async fn may_use_assistant(
     db: &PgPool,
     user_id: &str,
     assistant_id: &str,
-) -> StoreResult<bool> {
+) -> StoreResult<Option<Option<String>>> {
     let organization: Option<Option<String>> =
         sqlx::query_scalar(r#"SELECT "organizationId" FROM "Assistant" WHERE "id"=$1"#)
             .bind(assistant_id)
             .fetch_optional(db)
             .await?;
     match organization {
-        None => Ok(false),
-        Some(None) => Ok(true),
-        Some(Some(org_id)) => Ok(orgs::membership(db, user_id, &org_id).await?.is_some()),
+        None => Ok(None),
+        Some(None) => Ok(Some(None)),
+        Some(Some(org_id)) => Ok(orgs::membership(db, user_id, &org_id)
+            .await?
+            .map(|_| Some(org_id))),
     }
 }
 

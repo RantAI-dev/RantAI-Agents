@@ -168,18 +168,21 @@ async fn create_session(
     let (assistant_id, title) = parse_create(&body)?;
     // An assistant that does not exist and an assistant of another organisation are the same
     // answer: the caller must not learn which.
-    let visible = sessions::may_use_assistant(&state.db, &user.id, &assistant_id)
+    let Some(agent_org) = sessions::may_use_assistant(&state.db, &user.id, &assistant_id)
         .await
-        .map_err(|e| store_error(&e))?;
-    if !visible {
+        .map_err(|e| store_error(&e))?
+    else {
         return Err(ApiError::new(ErrorCode::NotFound));
-    }
-    // The session belongs to the organisation the request acts in, so a share of it can be
-    // checked by the same tenancy rule as everything else (differences row 130). A caller with
-    // no organisation still chats with the built-ins; their session stays org-less.
-    let org_id = active_org_opt(&state, &headers, &user)
-        .await?
-        .map(|org| org.org_id);
+    };
+    // The session belongs to its agent's organisation, whatever the request acts in: a chat
+    // with B's agent filed under A could be shared with A (differences row 130). Only an agent
+    // of no organisation takes the request's one; a caller with none gets an org-less session.
+    let org_id = match agent_org {
+        Some(org) => Some(org),
+        None => active_org_opt(&state, &headers, &user)
+            .await?
+            .map(|org| org.org_id),
+    };
     let row = sessions::create_session(
         &state.db,
         &user.id,

@@ -16,8 +16,9 @@
 //! - Every change writes an `AuditLog` row in the change's own transaction (`rbac.share.create`,
 //!   `rbac.share.revoke`, resource `session:<id>`).
 //! - A session written before sessions carried an organisation is attached to the caller's
-//!   organisation on its first share when its agent belongs to exactly that organisation; a
-//!   global agent leaves it unshareable (a 409 with a sentence).
+//!   organisation on its first share when its agent is that organisation's and its owner a
+//!   member of it; its owner with a global agent gets a 409 with a sentence, and every other
+//!   org-less chat is a 404 (differences row 130).
 
 mod bodies;
 
@@ -42,12 +43,12 @@ use agents_store::shares::{self, ShareRow};
 use crate::AppState;
 use crate::auth::{CurrentUser, active_org};
 use crate::http::ApiError;
+use crate::http::client_ip::ClientIp;
 use crate::http::json::Body;
 use crate::http::time::iso;
 use crate::routes::assistants::{
     SuccessJson, decision, missing_body, not_found, store_error as assistant_store_error,
 };
-use crate::routes::organizations::ip_address;
 
 use bodies::parse_shares;
 
@@ -79,7 +80,7 @@ pub(super) async fn list(
     Path(id): Path<String>,
 ) -> Result<Json<SharesJson>, ApiError> {
     let (principal, org_id) = caller(&state, &headers, &user).await?;
-    let chat = chat_ref_or_orgless(&state, &org_id, &id).await?;
+    let chat = chat_ref_or_orgless(&state, &principal, &org_id, &id).await?;
     decision(&principal, Permission::ChatsShare, &Resource::Chat(&chat))?;
     let rows = shares::list_for_session(&state.db, &org_id, &id)
         .await
@@ -98,6 +99,7 @@ pub(super) async fn list(
 pub(super) async fn replace(
     State(state): State<AppState>,
     headers: HeaderMap,
+    ip: ClientIp,
     user: CurrentUser,
     Path(id): Path<String>,
     body: Option<Body<Value>>,
@@ -107,9 +109,9 @@ pub(super) async fn replace(
     };
     let wanted = parse_shares(&body)?;
     let (principal, org_id) = caller(&state, &headers, &user).await?;
-    let chat = chat_ref_or_orgless(&state, &org_id, &id).await?;
+    let chat = chat_ref_or_orgless(&state, &principal, &org_id, &id).await?;
     decision(&principal, Permission::ChatsShare, &Resource::Chat(&chat))?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = Actor {
         user_id: &principal.user_id,
         ip_address: ip.as_deref(),
@@ -127,13 +129,14 @@ pub(super) async fn replace(
 pub(super) async fn revoke(
     State(state): State<AppState>,
     headers: HeaderMap,
+    ip: ClientIp,
     user: CurrentUser,
     Path((id, share_id)): Path<(String, String)>,
 ) -> Result<Json<SuccessJson>, ApiError> {
     let (principal, org_id) = caller(&state, &headers, &user).await?;
-    let chat = chat_ref_or_orgless(&state, &org_id, &id).await?;
+    let chat = chat_ref_or_orgless(&state, &principal, &org_id, &id).await?;
     decision(&principal, Permission::ChatsShare, &Resource::Chat(&chat))?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = Actor {
         user_id: &principal.user_id,
         ip_address: ip.as_deref(),
@@ -257,10 +260,13 @@ async fn caller(
 }
 
 /// The chat as `authz` sees it. A session with no organisation yet is presented as this
-/// organisation's with no shares, so its owner or an admin may share it and the store can attach
-/// it (or refuse with the 409); another organisation's chat stays `NotFound`.
+/// organisation's with no shares only when the backfill could attach it here
+/// ([`shares::OrglessHome::Here`]), so its owner or an admin may share it. Its owner with a
+/// global agent gets the 409 that says why; everyone else gets the 404 another tenant's row
+/// gets, so an admin cannot probe or claim chats that are not their organisation's.
 async fn chat_ref_or_orgless(
     state: &AppState,
+    principal: &Principal,
     org_id: &str,
     session_id: &str,
 ) -> Result<ChatRef, ApiError> {
@@ -272,11 +278,20 @@ async fn chat_ref_or_orgless(
             .await
             .map_err(|e| store_error(&e));
     }
-    Ok(ChatRef {
-        organization_id: org_id.to_owned(),
-        owner_id: row.user_id,
-        shares: Vec::new(),
-    })
+    let home = shares::orgless_home(&state.db, org_id, session_id)
+        .await
+        .map_err(|e| store_error(&e))?;
+    match home {
+        shares::OrglessHome::Here => Ok(ChatRef {
+            organization_id: org_id.to_owned(),
+            owner_id: row.user_id,
+            shares: Vec::new(),
+        }),
+        shares::OrglessHome::Global if row.user_id == principal.user_id => {
+            Err(store_error(&StoreError::Conflict))
+        }
+        _ => Err(not_found()),
+    }
 }
 
 /// A shared chat the caller may read, or the answer they get instead.

@@ -244,54 +244,89 @@ pub async fn revoke_by_id(
     Ok(())
 }
 
+/// Where a session with no organisation would live, seen from `org_id` (differences row 130).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrglessHome {
+    /// Its agent is `org_id`'s and its owner an accepted member of `org_id`: the first share
+    /// attaches it here.
+    Here,
+    /// Its agent belongs to no organisation (or is gone): no tenant can claim it.
+    Global,
+    /// Anything else: another organisation's agent, or an owner outside `org_id`.
+    Elsewhere,
+}
+
+/// The one rule that lets `org_id` claim an org-less session `s` whose agent is `a`. `$2` is
+/// `org_id`. The owner must be a member too: an admin may not pull in the old chat of somebody
+/// who never belonged, or has left.
+const ATTACHABLE: &str = r#"a."organizationId" = $2 AND EXISTS (
+    SELECT 1 FROM "OrganizationMember" m
+    WHERE m."userId" = s."userId" AND m."organizationId" = $2 AND m."acceptedAt" IS NOT NULL)"#;
+
+/// [`OrglessHome`] of a session, `NotFound` when it is unknown or already has an organisation.
+pub async fn orgless_home(db: &PgPool, org_id: &str, session_id: &str) -> StoreResult<OrglessHome> {
+    let sql = format!(
+        r#"SELECT a."organizationId" IS NULL, COALESCE({ATTACHABLE}, false)
+           FROM "DashboardSession" s LEFT JOIN "Assistant" a ON a."id" = s."assistantId"
+           WHERE s."id" = $1 AND s."organizationId" IS NULL"#
+    );
+    let (global, here) = sqlx::query_as::<_, (bool, bool)>(&sql)
+        .bind(session_id)
+        .bind(org_id)
+        .fetch_optional(db)
+        .await?
+        .ok_or(StoreError::NotFound)?;
+    Ok(if here {
+        OrglessHome::Here
+    } else if global {
+        OrglessHome::Global
+    } else {
+        OrglessHome::Elsewhere
+    })
+}
+
 /// Makes sure the session belongs to `org_id`, attaching it when it has no organisation yet and
-/// its assistant belongs to exactly this organisation. A session with no organisation and a
-/// global agent, or one whose agent is another organisation's, is
-/// [`StoreError::Conflict`].
+/// [`OrglessHome::Here`] holds. A global agent is [`StoreError::Conflict`]; anything else is
+/// `NotFound`.
 ///
 /// The backfill is the one migration the sharing slice makes for rows written before sessions
-/// carried an organisation (differences row 130); it runs inside the first share's transaction.
+/// carried an organisation (differences row 130). It runs inside the first share's transaction,
+/// and the rule is re-checked by the `UPDATE` itself, so a concurrent attach or a membership
+/// removed since the route's check cannot slip through.
 async fn attach_session(
     tx: &mut Transaction<'_, Postgres>,
     org_id: &str,
     session_id: &str,
 ) -> StoreResult<()> {
-    let row = sqlx::query_as::<_, (Option<String>, String)>(
-        r#"SELECT "organizationId", "assistantId" FROM "DashboardSession" WHERE "id" = $1"#,
+    let row = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+        r#"SELECT s."organizationId", a."organizationId"
+           FROM "DashboardSession" s LEFT JOIN "Assistant" a ON a."id" = s."assistantId"
+           WHERE s."id" = $1"#,
     )
     .bind(session_id)
     .fetch_optional(&mut **tx)
     .await?
     .ok_or(StoreError::NotFound)?;
-    match row.0.as_deref() {
-        Some(org) if org == org_id => Ok(()),
-        Some(_) => Err(StoreError::NotFound),
-        None => {
-            let assistant_org: Option<Option<String>> =
-                sqlx::query_scalar(r#"SELECT "organizationId" FROM "Assistant" WHERE "id" = $1"#)
-                    .bind(&row.1)
-                    .fetch_optional(&mut **tx)
-                    .await?;
-            match assistant_org.flatten().as_deref() {
-                Some(org) if org == org_id => {
-                    // Another organisation may have attached it between the read and this
-                    // write; the guard makes exactly one of them the winner, and the loser is
-                    // told the chat is not this organisation's.
-                    let done = sqlx::query(
-                        r#"UPDATE "DashboardSession" SET "organizationId" = $2
-                           WHERE "id" = $1 AND "organizationId" IS NULL"#,
-                    )
-                    .bind(session_id)
-                    .bind(org_id)
-                    .execute(&mut **tx)
-                    .await?;
-                    if done.rows_affected() == 0 {
-                        return Err(StoreError::NotFound);
-                    }
-                    Ok(())
-                }
-                _ => Err(StoreError::Conflict),
+    match row {
+        (Some(org), _) if org == org_id => Ok(()),
+        (Some(_), _) => Err(StoreError::NotFound),
+        (None, None) => Err(StoreError::Conflict),
+        (None, Some(_)) => {
+            let sql = format!(
+                r#"UPDATE "DashboardSession" s SET "organizationId" = $2
+                   FROM "Assistant" a
+                   WHERE s."id" = $1 AND s."organizationId" IS NULL AND a."id" = s."assistantId"
+                     AND {ATTACHABLE}"#
+            );
+            let done = sqlx::query(&sql)
+                .bind(session_id)
+                .bind(org_id)
+                .execute(&mut **tx)
+                .await?;
+            if done.rows_affected() == 0 {
+                return Err(StoreError::NotFound);
             }
+            Ok(())
         }
     }
 }
