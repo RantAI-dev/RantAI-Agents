@@ -565,6 +565,12 @@ async fn run_turn(
             }
         }
     }
+    // The frames that end the stream: `finish` says why the answer stopped. The `[DONE]` the
+    // same builder appends is the SSE terminator, and this socket has a `done` frame instead.
+    let closed = frames.close();
+    if pipe(&out, &closed).await.is_err() {
+        return;
+    }
     prepared
         .meter
         .record(&prepared.context.as_context(), frames.usage);

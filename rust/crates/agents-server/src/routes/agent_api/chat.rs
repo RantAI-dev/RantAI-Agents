@@ -358,12 +358,16 @@ const fn wire_usage(usage: Usage) -> WireUsage {
 }
 
 /// Inserts the headers an answer carries.
+///
+/// `from_bytes`, not `from_static`: the contract module spells the names the way the old code
+/// did (`Content-Type`), and `from_static` panics on anything but lowercase.
 fn add_headers<B>(response: &mut Response<B>, headers: &[(&'static str, &'static str)]) {
     for (name, value) in headers {
-        if let Ok(value) = HeaderValue::from_str(value) {
-            response
-                .headers_mut()
-                .insert(axum::http::HeaderName::from_static(name), value);
+        if let (Ok(name), Ok(value)) = (
+            axum::http::HeaderName::from_bytes(name.as_bytes()),
+            HeaderValue::from_str(value),
+        ) {
+            response.headers_mut().insert(name, value);
         }
     }
 }
