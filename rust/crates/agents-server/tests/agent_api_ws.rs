@@ -280,6 +280,55 @@ async fn a_socket_that_never_authenticates_is_closed_after_the_timeout() -> R {
 }
 
 #[tokio::test]
+async fn a_silent_socket_is_closed_after_the_idle_timeout() -> R {
+    let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
+    let Some((app, db)) = helpers::router_with(&stub, |state| {
+        state.api.limits.idle_timeout = Duration::from_millis(150);
+    })
+    .await?
+    else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let assistant_id = assistant(&db, &org_id).await?;
+    let key = key_for(&app, &common::bearer(&admin)?, &assistant_id).await?;
+
+    let address = ws::serve(app).await?;
+    let mut socket = open(address, &assistant_id, &key).await?;
+    // No message: a socket that says nothing is closed rather than held open for ever.
+    let closed = tokio::time::timeout(Duration::from_secs(5), socket.recv())
+        .await
+        .ok()
+        .flatten();
+    assert_eq!(closed, Some(Frame::Close(4408)));
+
+    // Positive control: the same limit, and a socket that keeps talking stays open past it.
+    let Some((app, db)) = helpers::router_with(&stub, |state| {
+        state.api.limits.idle_timeout = Duration::from_millis(150);
+    })
+    .await?
+    else {
+        return Ok(());
+    };
+    let second = member_of(&db, &org_id, "admin").await?;
+    let assistant_id = assistant(&db, &org_id).await?;
+    let key = key_for(&app, &common::bearer(&second)?, &assistant_id).await?;
+    let address = ws::serve(app).await?;
+    let mut socket = open(address, &assistant_id, &key).await?;
+    for _ in 0..3 {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        socket.send_json(&json!({"type": "ping"})).await?;
+        assert_eq!(
+            next(&mut socket).await,
+            Some(Frame::Text(json!({"type": "pong"}))),
+            "a frame inside the window keeps the socket open"
+        );
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_ping_is_answered_with_a_pong() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
     let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {

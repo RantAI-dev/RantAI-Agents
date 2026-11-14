@@ -138,8 +138,11 @@ async fn session(
         tracing::warn!(error = %error, "the key's use count could not be written");
     }
 
+    // Silence is measured across both directions: an answer that is still streaming is not an
+    // idle socket, and a client that only listens is not one either.
+    let mut last = tokio::time::Instant::now();
     loop {
-        let idle = tokio::time::sleep(limits.idle_timeout);
+        let idle = tokio::time::sleep_until(last + limits.idle_timeout);
         tokio::pin!(idle);
         tokio::select! {
             () = &mut idle => {
@@ -148,6 +151,7 @@ async fn session(
                 return;
             }
             frame = connection.socket.recv() => {
+                last = tokio::time::Instant::now();
                 match frame {
                     Some(Ok(Message::Text(text))) => {
                         handle_text(&state, &limits, &caller, &assistant_id, &text, &mut connection)
@@ -177,6 +181,7 @@ async fn session(
                 }
             }
             output = incoming.recv(), if connection.session_id.is_some() => {
+                last = tokio::time::Instant::now();
                 let Some(output) = output else { return };
                 match output {
                     Out::Chunk(chunk) => {
