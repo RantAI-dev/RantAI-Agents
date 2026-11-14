@@ -10,10 +10,11 @@
 //! `false` covers both "hidden from you" (the old 404, to avoid leaking existence) and
 //! "not your role" (the old 403); the caller picks the response it sends.
 //!
-//! The role checks come from [`crate::authz`]'s role table. Two rules of the identity-and-access
-//! design wait for slice S4, because `tests/parity_assistants.rs` (owner-protected) pins the old
-//! answers: `View` is still "in your org" rather than "granted to you", and `Edit` still lets a
-//! `member` edit (differences row 80). S4 moves its routes to [`crate::authz::authorize`].
+//! The role checks come from [`crate::authz`]'s role table. No route calls this any more: slice
+//! S4 moved every one of them to [`crate::authz::authorize`] (differences rows 80 and 120). It
+//! stays because `tests/parity_assistants.rs` (owner-protected) compares the old answers with the
+//! oracle, and a comparison needs the old function. `Delete` here also keeps "a built-in cannot
+//! be deleted", which the S4 routes still refuse (row 122).
 
 use crate::authz::{Permission, role_has};
 use crate::org::OrgRole;

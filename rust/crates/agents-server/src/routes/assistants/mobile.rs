@@ -14,7 +14,7 @@ use axum::http::{HeaderMap, StatusCode};
 use serde::Serialize;
 use serde_json::Value;
 
-use agents_core::assistant::access::{self, Action, AssistantRef};
+use agents_core::authz::Permission;
 use agents_core::org::OrgRole;
 use agents_store::assistants::{self, AssistantFields, UserPreference};
 
@@ -23,7 +23,7 @@ use crate::auth::CurrentUser;
 use crate::http::ApiError;
 use crate::policy::{PolicyAction, PolicyContext};
 
-use super::{AssistantJson, actor, caller, forbidden, load_visible, store_error};
+use super::{AssistantJson, caller, load_authorized, principal, store_error};
 
 /// `GET /api/mobile/assistants` — the assistants of the organisation and the user's own default.
 pub(super) async fn list(
@@ -33,7 +33,8 @@ pub(super) async fn list(
 ) -> Result<Json<MobileListJson>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
     let org_id = caller.org()?.to_owned();
-    let rows = assistants::list_visible(&state.db, &org_id)
+    let principal = principal(&state.db, &caller).await?;
+    let rows = agents_store::access::visible_assistants(&state.db, &principal)
         .await
         .map_err(|e| store_error(&e))?;
     let counts = assistants::tool_counts(&state.db, &org_id)
@@ -52,9 +53,14 @@ pub(super) async fn list(
     let preference = assistants::user_preference(&state.db, &user.id)
         .await
         .map_err(|e| store_error(&e))?;
+    // A default the caller may no longer use is not sent: the list is the one the access rule
+    // answered, so this compares against it rather than trusting the stored preference (§3.3).
+    let default_assistant_id = preference
+        .and_then(|p| p.default_assistant_id)
+        .filter(|id| rows.iter().any(|row| &row.id == id));
     Ok(Json(MobileListJson {
         assistants: items,
-        default_assistant_id: preference.and_then(|p| p.default_assistant_id),
+        default_assistant_id,
     }))
 }
 
@@ -77,19 +83,13 @@ pub(super) async fn duplicate(
 ) -> Result<(StatusCode, Json<AssistantJson>), ApiError> {
     let caller = caller(&state, &headers, &user).await?;
     let org_id = caller.org()?.to_owned();
-    let source = load_visible(&state.db, &caller, &id).await?;
-    // The copy is an ordinary assistant of the organisation: the same rule as editing one
-    // decides who may create it.
-    let new_assistant = AssistantRef {
-        organization_id: Some(org_id.clone()),
-        is_built_in: false,
-    };
-    if !access::can(&actor(&caller), Action::Edit, &new_assistant) {
-        return Err(forbidden());
-    }
+    let source = load_authorized(&state.db, &caller, &id, Permission::AgentsUse).await?;
+    // A copy is a new assistant: only an owner or an admin creates one (§3.2), and no grant
+    // answers that.
+    super::authorize_org(&state.db, &caller, Permission::AgentsCreate).await?;
     let mut fields = AssistantFields::from(&source);
     fields.name = format!("{} (Copy)", source.name);
-    let assistant_count = assistants::list_visible(&state.db, &org_id)
+    let assistant_count = assistants::list_for_org(&state.db, &org_id)
         .await
         .map_err(|e| store_error(&e))?
         .len();
@@ -118,8 +118,8 @@ pub(super) async fn set_user_default(
     Path(id): Path<String>,
 ) -> Result<Json<PreferencesJson>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
-    // Only an assistant the user may see may become their default.
-    load_visible(&state.db, &caller, &id).await?;
+    // Only an assistant the user may use may become their default.
+    load_authorized(&state.db, &caller, &id, Permission::AgentsUse).await?;
     assistants::set_user_default(&state.db, &user.id, Some(&id))
         .await
         .map_err(|e| store_error(&e))?;

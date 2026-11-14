@@ -8,8 +8,8 @@
 //! `src/hooks/use-sidebar-preferences.ts`).
 //!
 //! What changed on the way (docs/port/differences.md):
-//! - the assistant the user chooses must be one they may see: the old route looked the id
-//!   up without the organisation, so any assistant in the database could be chosen;
+//! - the assistant the user chooses must be one they may use (row 60): the old route looked the
+//!   id up without the organisation, so any assistant in the database could be chosen;
 //! - the errors use the standard body, and a bad body is a 400 with every bad field.
 
 use axum::Json;
@@ -18,6 +18,7 @@ use axum::http::HeaderMap;
 use serde::Serialize;
 use serde_json::Value;
 
+use agents_core::authz::Permission;
 use agents_core::validation::FieldError;
 
 use crate::AppState;
@@ -25,7 +26,7 @@ use crate::auth::CurrentUser;
 use crate::http::ApiError;
 use crate::http::json::Body;
 
-use super::{caller_or_no_org, load_visible, missing_body, store_error};
+use super::{caller_or_no_org, load_authorized, missing_body, store_error};
 
 /// `GET /api/user/preferences` — the user's settings.
 pub(super) async fn get(
@@ -60,8 +61,9 @@ pub(super) async fn put(
     let update = parse_update(&body)?;
     let caller = caller_or_no_org(&state, &headers, &user).await?;
     if let Some(Some(assistant_id)) = update.default_assistant_id.as_ref() {
-        // An assistant the caller may not see is not found, not forbidden.
-        load_visible(&state.db, &caller, assistant_id).await?;
+        // A default the caller may not use is refused here and skipped when resolving; an
+        // assistant of another organisation is not found, not forbidden.
+        load_authorized(&state.db, &caller, assistant_id, Permission::AgentsUse).await?;
     }
     if let Some(assistant_id) = update.default_assistant_id.clone() {
         agents_store::assistants::set_user_default(&state.db, &user.id, assistant_id.as_deref())

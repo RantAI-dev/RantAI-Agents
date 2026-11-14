@@ -49,7 +49,7 @@ async fn assistant_crud_and_tenant_listing() -> R {
     let mine = assistants::create(&db, &a, "u1", &fields("mine")).await?;
     let theirs = assistants::create(&db, &b, "u2", &fields("theirs")).await?;
 
-    let visible = assistants::list_visible(&db, &a).await?;
+    let visible = assistants::list_for_org(&db, &a).await?;
     assert!(
         visible.iter().any(|r| r.id == mine.id),
         "owner sees its own assistant"
@@ -130,14 +130,31 @@ async fn default_is_per_organisation() -> R {
         "org B's default must not clear org A's"
     );
 
-    let picked = assistants::resolve_default(&db, "nobody", &a).await?;
-    assert_eq!(picked.map(|r| r.id), Some(da.id.clone()));
+    let picked = resolved(&db, "nobody", &a).await?;
+    assert_eq!(picked.assistant.map(|r| r.id), Some(da.id.clone()));
 
     // A preference pointing at another org's assistant is ignored.
     assistants::set_user_default(&db, "u9", Some(&db_.id)).await?;
-    let picked = assistants::resolve_default(&db, "u9", &a).await?;
-    assert_eq!(picked.map(|r| r.id), Some(da.id));
+    let picked = resolved(&db, "u9", &a).await?;
+    assert_eq!(picked.assistant.map(|r| r.id), Some(da.id));
     Ok(())
+}
+
+/// The default an owner of `org` resolves to: an owner holds every grant-free permission.
+async fn resolved(
+    db: &agents_store::PgPool,
+    user_id: &str,
+    org: &str,
+) -> Result<agents_store::assistants::ResolvedDefault, agents_store::StoreError> {
+    let principal = agents_core::authz::Principal::new(
+        user_id,
+        org,
+        agents_core::org::OrgRole::Owner,
+        false,
+        Vec::new(),
+        &agents_core::authz::UnitTree::default(),
+    );
+    agents_store::access::resolve_default(db, &principal).await
 }
 
 #[tokio::test]

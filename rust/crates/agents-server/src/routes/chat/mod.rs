@@ -36,6 +36,7 @@ use agents_contracts::ui_stream::{
     TOOL_APPROVAL_HEADER, UI_MESSAGE_STREAM_HEADERS, tool_approval_header_value,
 };
 use agents_core::assistant::config::{MemoryConfig, ModelConfig};
+use agents_core::authz::Permission;
 use agents_core::chat::step_budget::resolve_max_steps;
 use agents_core::prompt::approval::resolve_tool_approval_mode;
 use agents_llm::agent_loop::{ToolExecutor, run_agent_loop};
@@ -43,14 +44,14 @@ use agents_llm::client::{Cancel, CancelHandle};
 use agents_llm::provider::Provider;
 use agents_llm::types::{ChatRequest as LlmRequest, Message, ReasoningEffort, ToolChoice};
 use agents_store::assistants::AssistantRow;
-use agents_store::{PgPool, assistants, sessions};
+use agents_store::{PgPool, StoreError, assistants, sessions};
 
 use crate::AppState;
 use crate::auth::{CurrentUser, active_org};
 use crate::http::ApiError;
 use crate::http::json::Body;
 use crate::policy::ChatContext;
-use crate::routes::assistants::{Caller, load_visible};
+use crate::routes::assistants::{Caller, authorize_agent, load_authorized};
 
 /// The model a chat without an assistant of its own uses.
 const DEFAULT_MODEL: &str = "rantai/nano";
@@ -77,11 +78,12 @@ async fn chat(
     let input = request::parse(&body, &read_headers(&headers))?;
     let now = now_iso();
 
-    // The assistant the chat is with. Another organisation's assistant is a 404, the same
-    // answer as an assistant that does not exist.
+    // The assistant the chat is with: one the caller may use (§3.3). Another organisation's
+    // assistant is a 404, the same answer as an assistant that does not exist; one of the
+    // caller's own organisation that no grant reaches is a 403.
     let caller = chat_caller(&state, &headers, &user).await;
     let assistant = match input.assistant_id() {
-        Some(id) => Some(load_visible(&state.db, &caller, id).await?),
+        Some(id) => Some(load_authorized(&state.db, &caller, id, Permission::AgentsUse).await?),
         None => None,
     };
 
@@ -99,13 +101,23 @@ async fn chat(
 
     // The session: one the caller owns, or none. An unknown id is dropped, the way the
     // TypeScript dropped it.
-    let session_id = match input.body.session_id.as_deref() {
-        Some(id) => sessions::get_session(&state.db, &user.id, id)
-            .await
-            .ok()
-            .map(|session| session.id),
+    let session = match input.body.session_id.as_deref() {
+        Some(id) => sessions::get_session(&state.db, &user.id, id).await.ok(),
         None => None,
     };
+    // A session of another agent takes no message unless the caller may still use that agent
+    // too: otherwise naming a granted agent would write into a revoked one's chat (§3.3).
+    if let Some(session) = &session
+        && assistant.as_ref().map(|row| row.id.as_str()) != Some(session.assistant_id.as_str())
+    {
+        match assistants::get(&state.db, &session.assistant_id).await {
+            Ok(row) => authorize_agent(&state.db, &caller, &row, Permission::AgentsUse).await?,
+            // The session's agent is gone: there is no access left to protect.
+            Err(StoreError::NotFound) => {}
+            Err(error) => return Err(store_error(&error)),
+        }
+    }
+    let session_id = session.map(|session| session.id);
 
     let memory_config = assistant
         .as_ref()
@@ -165,6 +177,7 @@ async fn chat(
         db: state.db.clone(),
         user_id: user.id.clone(),
         organization_id: caller.org_id.clone(),
+        organization_role: caller.role,
         assistant_id: assistant.as_ref().map(|row| row.id.clone()),
         session_id: session_id.clone(),
         builtins: builtin_tools,

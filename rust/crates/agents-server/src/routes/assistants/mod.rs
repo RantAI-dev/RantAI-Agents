@@ -13,8 +13,11 @@
 //! - the default is per organisation, not one global flag;
 //! - an update is a compare-and-swap on `updatedAt`: a writer that lost the race gets a 409;
 //! - the routes need an organisation: the open-source edition has no plan limits, but the cloud
-//!   edition refuses a create or an update through [`crate::policy::AssistantPolicy`].
+//!   edition refuses a create or an update through [`crate::policy::AssistantPolicy`];
+//! - every check goes through `agents_core::authz` (rows 80 and 120): building an agent is
+//!   admin-only, using one needs a grant, and every list is filtered in SQL.
 
+mod access;
 mod bindings;
 mod bodies;
 mod core;
@@ -33,10 +36,13 @@ use serde::Serialize;
 use serde_json::Value;
 
 use agents_contracts::error_codes::ErrorCode;
-use agents_core::assistant::access::{self, Action, Actor, AssistantRef};
+use agents_core::authz::{
+    AgentRef, Decision, Grant, Permission, Principal, Resource, UnitTree, authorize,
+};
 use agents_core::org::OrgRole;
 use agents_store::StoreError;
 use agents_store::assistants::{self, AssistantRow};
+use agents_store::grants::{self, GrantRow};
 
 use crate::AppState;
 use crate::auth::{CurrentUser, active_org};
@@ -80,6 +86,15 @@ pub fn router() -> Router<AppState> {
         .route(
             "/api/assistants/{id}/default",
             post(defaults::set_org_default).delete(defaults::clear_org_default),
+        )
+        // Who may use or manage this one agent (§3.3).
+        .route(
+            "/api/assistants/{id}/access",
+            get(access::list).put(access::replace),
+        )
+        .route(
+            "/api/assistants/{id}/access/{grantId}",
+            axum::routing::delete(access::revoke),
         )
         .route(
             "/api/user/default-assistant",
@@ -212,43 +227,121 @@ pub(crate) async fn caller_or_no_org(
     }
 }
 
-/// The actor the access policy decides with.
-pub(crate) fn actor(caller: &Caller) -> Actor {
-    Actor {
-        user_id: caller.user_id.clone(),
-        organization_id: caller.org_id.clone(),
-        role: caller.role,
-        is_platform_admin: caller.is_platform_admin,
-    }
+/// The caller as `authz::authorize` sees them: their role and their units in the organisation
+/// the request acts in.
+///
+/// A platform admin who belongs to no organisation may still edit a built-in assistant, so a
+/// caller without one gets a principal of no organisation: it owns nothing, which is what
+/// makes every org agent a 404 for it, while a built-in stays readable (and, for a platform
+/// admin, editable).
+pub(crate) async fn principal(db: &sqlx::PgPool, caller: &Caller) -> Result<Principal, ApiError> {
+    let Some(org_id) = caller.org_id.as_deref() else {
+        return Ok(Principal::new(
+            caller.user_id.clone(),
+            String::new(),
+            caller.role.unwrap_or(OrgRole::Viewer),
+            caller.is_platform_admin,
+            Vec::new(),
+            &UnitTree::default(),
+        ));
+    };
+    agents_store::access::principal(db, &caller.user_id, org_id)
+        .await
+        .map_err(|e| store_error(&e))?
+        .ok_or_else(forbidden)
 }
 
-/// The assistant an action is about, reduced to what the policy sees.
-pub(crate) fn target(row: &AssistantRow) -> AssistantRef {
-    AssistantRef {
+/// The assistant reduced to what `authz` sees, with the grants stored in the caller's
+/// organisation; a grant of another organisation never reaches the caller.
+pub(crate) async fn agent_ref(
+    db: &sqlx::PgPool,
+    caller: &Caller,
+    row: &AssistantRow,
+) -> Result<AgentRef, ApiError> {
+    let granted: Vec<Grant> = match caller.org_id.as_deref() {
+        Some(org) if row.organization_id.as_deref() == Some(org) => grants::list(db, org, &row.id)
+            .await
+            .map_err(|e| store_error(&e))?
+            .iter()
+            .filter_map(GrantRow::to_grant)
+            .collect(),
+        _ => Vec::new(),
+    };
+    Ok(AgentRef {
         organization_id: row.organization_id.clone(),
         is_built_in: row.is_built_in,
+        grants: granted,
+    })
+}
+
+/// The decision, as the answer the caller gets: `Deny` is a 403 `permission_denied`, and
+/// `NotFound` a 404 (§4: another organisation's resource is always 404, never 403).
+pub(crate) fn decision(
+    principal: &Principal,
+    permission: Permission,
+    resource: &Resource<'_>,
+) -> Result<(), ApiError> {
+    match authorize(principal, permission, resource) {
+        Decision::Allow => Ok(()),
+        Decision::Deny => Err(forbidden()),
+        Decision::NotFound => Err(not_found()),
     }
 }
 
-/// The assistant the request is about, when the caller may see it.
+/// Whether the caller may do `permission` on this assistant.
+pub(crate) async fn authorize_agent(
+    db: &sqlx::PgPool,
+    caller: &Caller,
+    row: &AssistantRow,
+    permission: Permission,
+) -> Result<(), ApiError> {
+    let principal = principal(db, caller).await?;
+    let agent = agent_ref(db, caller, row).await?;
+    decision(&principal, permission, &Resource::Agent(&agent))
+}
+
+/// Whether the caller may do `permission` in the organisation itself: creating an agent,
+/// listing or replacing an agent's grants. A grant never answers these: `agents.create` and
+/// the grants of an agent are admin-only (§3.3).
+pub(crate) async fn authorize_org(
+    db: &sqlx::PgPool,
+    caller: &Caller,
+    permission: Permission,
+) -> Result<(), ApiError> {
+    let org_id = caller.org()?.to_owned();
+    let principal = principal(db, caller).await?;
+    decision(
+        &principal,
+        permission,
+        &Resource::Org {
+            organization_id: &org_id,
+        },
+    )
+}
+
+/// The assistant the request is about, when the caller may do `permission` on it.
 ///
-/// An assistant of another organisation and an assistant that does not exist are the same
-/// answer: a 403 would tell the caller that the id exists.
-pub(crate) async fn load_visible(
+/// An assistant that does not exist and one of another organisation are the same answer, a
+/// 404; an assistant of the caller's own organisation that they may not act on is a 403.
+pub(crate) async fn load_authorized(
     db: &sqlx::PgPool,
     caller: &Caller,
     id: &str,
+    permission: Permission,
 ) -> Result<AssistantRow, ApiError> {
     let row = assistants::get(db, id).await.map_err(|e| store_error(&e))?;
-    if !access::can(&actor(caller), Action::View, &target(&row)) {
-        return Err(ApiError::new(ErrorCode::NotFound));
-    }
+    authorize_agent(db, caller, &row, permission).await?;
     Ok(row)
 }
 
 /// The answer to a request the caller may not make.
 pub(crate) fn forbidden() -> ApiError {
     ApiError::new(ErrorCode::PermissionDenied)
+}
+
+/// The answer for a resource that does not exist, or belongs to another organisation.
+pub(crate) fn not_found() -> ApiError {
+    ApiError::new(ErrorCode::NotFound)
 }
 
 /// The store's failure, as the answer the caller sees.

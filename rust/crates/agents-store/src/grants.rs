@@ -6,9 +6,11 @@
 
 use agents_core::authz::{AgentRef, Grant, GrantLevel, Subject, SubjectType};
 use chrono::NaiveDateTime;
-use sqlx::PgPool;
+use serde_json::json;
+use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::access::{lock_subjects, subject_in_org};
+use crate::audit::{self, Actor};
 use crate::{StoreError, StoreResult, new_id, now};
 
 #[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
@@ -125,6 +127,219 @@ pub async fn list(db: &PgPool, org_id: &str, assistant_id: &str) -> StoreResult<
         .bind(assistant_id)
         .fetch_all(db)
         .await?)
+}
+
+/// The name of what a unit or user grant names, for the access panel. `None` when the subject
+/// no longer exists or is another organisation's, which a grant cannot name anyway.
+pub async fn subject_name(
+    db: &PgPool,
+    org_id: &str,
+    subject: &Subject,
+) -> StoreResult<Option<String>> {
+    let sql = match subject.kind {
+        SubjectType::Org => {
+            return Ok(sqlx::query_scalar::<_, String>(
+                r#"SELECT "name" FROM "Organization" WHERE "id" = $1"#,
+            )
+            .bind(&subject.id)
+            .fetch_optional(db)
+            .await?);
+        }
+        SubjectType::Unit => {
+            r#"SELECT "name" FROM "OrgUnit" WHERE "id" = $1 AND "organizationId" = $2"#
+        }
+        SubjectType::User => {
+            r#"SELECT a."name" FROM "Agent" a
+               JOIN "OrganizationMember" m ON m."userId" = a."id" AND m."organizationId" = $2
+               WHERE a."id" = $1 AND m."acceptedAt" IS NOT NULL"#
+        }
+    };
+    Ok(sqlx::query_scalar::<_, String>(sql)
+        .bind(&subject.id)
+        .bind(org_id)
+        .fetch_optional(db)
+        .await?)
+}
+
+/// Replaces every grant of an agent with `wanted`, in one transaction: the grants it does not
+/// name are removed, the ones it names are inserted or have their level changed. Each grant that
+/// was added or changed level leaves an `rbac.grant.set` row and each one removed an
+/// `rbac.grant.revoke` row, in the same transaction (§3.7).
+///
+/// A built-in agent, another organisation's agent, or a subject outside the organisation is
+/// `NotFound`, and nothing is written: a body that names a stranger does not half-apply.
+pub async fn replace_all(
+    db: &PgPool,
+    org_id: &str,
+    assistant_id: &str,
+    wanted: &[(Subject, GrantLevel)],
+    actor: &Actor<'_>,
+) -> StoreResult<Vec<GrantRow>> {
+    let mut tx = db.begin().await?;
+    lock_org_agent(&mut tx, org_id, assistant_id).await?;
+    for (subject, _) in wanted {
+        if !subject_in_org(&mut tx, org_id, subject).await? {
+            return Err(StoreError::NotFound);
+        }
+    }
+    // Read under the lock: the diff the audit rows describe is the one this write makes.
+    let before = list_in(&mut tx, org_id, assistant_id).await?;
+
+    let ts = now();
+    let upsert = r#"INSERT INTO "AssistantGrant" ("id","organizationId","assistantId","subjectType","subjectId","level","grantedBy","createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+           ON CONFLICT ("assistantId","subjectType","subjectId")
+             DO UPDATE SET "level" = EXCLUDED."level", "grantedBy" = EXCLUDED."grantedBy", "updatedAt" = EXCLUDED."updatedAt""#;
+    for (subject, level) in wanted {
+        sqlx::query(upsert)
+            .bind(new_id())
+            .bind(org_id)
+            .bind(assistant_id)
+            .bind(subject.kind.as_str())
+            .bind(&subject.id)
+            .bind(level.as_str())
+            .bind(actor.user_id)
+            .bind(ts)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    // Everything the body did not name goes. Deleting by (type, id) rather than by row id
+    // keeps a grant that stays at the same level with its id and its `createdAt`.
+    sqlx::query(
+        r#"DELETE FROM "AssistantGrant" g
+           WHERE g."organizationId" = $1 AND g."assistantId" = $2
+             AND NOT EXISTS (
+               SELECT 1 FROM unnest($3::text[], $4::text[]) AS w("subjectType", "subjectId")
+               WHERE w."subjectType" = g."subjectType" AND w."subjectId" = g."subjectId")"#,
+    )
+    .bind(org_id)
+    .bind(assistant_id)
+    .bind(
+        wanted
+            .iter()
+            .map(|(s, _)| s.kind.as_str())
+            .collect::<Vec<&str>>(),
+    )
+    .bind(
+        wanted
+            .iter()
+            .map(|(s, _)| s.id.clone())
+            .collect::<Vec<String>>(),
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let after = list_in(&mut tx, org_id, assistant_id).await?;
+    let same = |a: &GrantRow, b: &GrantRow| {
+        a.subject_type == b.subject_type && a.subject_id == b.subject_id
+    };
+    for grant in &after {
+        let changed = before
+            .iter()
+            .find(|old| same(old, grant))
+            .is_none_or(|old| old.level != grant.level);
+        if changed {
+            record(&mut tx, actor, "rbac.grant.set", grant).await?;
+        }
+    }
+    for grant in &before {
+        if !after.iter().any(|new| same(new, grant)) {
+            record(&mut tx, actor, "rbac.grant.revoke", grant).await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(after)
+}
+
+/// Removes one grant of an agent by its id and leaves an `rbac.grant.revoke` row, in one
+/// transaction. A built-in agent, another organisation's agent, or a grant id that is not this
+/// agent's is `NotFound`.
+pub async fn revoke_by_id(
+    db: &PgPool,
+    org_id: &str,
+    assistant_id: &str,
+    grant_id: &str,
+    actor: &Actor<'_>,
+) -> StoreResult<()> {
+    let mut tx = db.begin().await?;
+    lock_org_agent(&mut tx, org_id, assistant_id).await?;
+    let sql = format!(
+        r#"DELETE FROM "AssistantGrant"
+           WHERE "id" = $1 AND "organizationId" = $2 AND "assistantId" = $3
+           RETURNING {COLUMNS}"#
+    );
+    let grant = sqlx::query_as::<_, GrantRow>(&sql)
+        .bind(grant_id)
+        .bind(org_id)
+        .bind(assistant_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .ok_or(StoreError::NotFound)?;
+    record(&mut tx, actor, "rbac.grant.revoke", &grant).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Takes the organisation's subject lock and checks the agent is one of its own, not built in.
+async fn lock_org_agent(
+    tx: &mut Transaction<'_, Postgres>,
+    org_id: &str,
+    assistant_id: &str,
+) -> StoreResult<()> {
+    lock_subjects(tx, org_id).await?;
+    let agent_here = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (SELECT 1 FROM "Assistant"
+             WHERE "id" = $1 AND "organizationId" = $2 AND "isBuiltIn" = false)"#,
+    )
+    .bind(assistant_id)
+    .bind(org_id)
+    .fetch_one(&mut **tx)
+    .await?;
+    if agent_here {
+        Ok(())
+    } else {
+        Err(StoreError::NotFound)
+    }
+}
+
+async fn list_in(
+    tx: &mut Transaction<'_, Postgres>,
+    org_id: &str,
+    assistant_id: &str,
+) -> StoreResult<Vec<GrantRow>> {
+    let sql = format!(
+        r#"SELECT {COLUMNS} FROM "AssistantGrant"
+           WHERE "organizationId" = $1 AND "assistantId" = $2
+           ORDER BY "createdAt" ASC, "id" ASC"#
+    );
+    Ok(sqlx::query_as::<_, GrantRow>(&sql)
+        .bind(org_id)
+        .bind(assistant_id)
+        .fetch_all(&mut **tx)
+        .await?)
+}
+
+async fn record(
+    tx: &mut Transaction<'_, Postgres>,
+    actor: &Actor<'_>,
+    action: &str,
+    grant: &GrantRow,
+) -> StoreResult<()> {
+    audit::record(
+        tx,
+        &grant.organization_id,
+        actor,
+        action,
+        format!("assistant:{}", grant.assistant_id),
+        json!({
+            "assistantId": grant.assistant_id,
+            "subjectType": grant.subject_type,
+            "subjectId": grant.subject_id,
+            "level": grant.level,
+        }),
+    )
+    .await
 }
 
 /// An agent as `authz::authorize` needs it, for a caller acting in `org_id`. The agent itself is

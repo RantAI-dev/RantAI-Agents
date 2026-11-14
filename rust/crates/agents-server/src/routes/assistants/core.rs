@@ -8,8 +8,8 @@ use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use serde_json::Value;
 
-use agents_core::assistant::access::{self, Action};
 use agents_core::assistant::input::{AssistantCreate, AssistantUpdate};
+use agents_core::authz::Permission;
 use agents_core::org::OrgRole;
 use agents_store::assistants::{self, AssistantFields, AssistantRow};
 
@@ -21,22 +21,26 @@ use crate::policy::{PolicyAction, PolicyContext};
 
 use super::bodies::{parse_create, parse_update};
 use super::{
-    AssistantJson, DEFAULT_EMOJI, DEFAULT_MODEL, SuccessJson, actor, caller, expected_version,
-    forbidden, load_visible, missing_body, store_error, target,
+    AssistantJson, DEFAULT_EMOJI, DEFAULT_MODEL, SuccessJson, authorize_org, caller,
+    expected_version, forbidden, load_authorized, missing_body, principal, store_error,
 };
 
-/// `GET /api/assistants` — the assistants the organisation may use.
+/// `GET /api/assistants` — the assistants the caller may use.
+///
+/// The list is filtered in SQL (`access::visible_assistants`), by the same rule as
+/// `authz::authorize`: never loaded broadly and filtered in memory (§4).
 pub(super) async fn list(
     State(state): State<AppState>,
     headers: HeaderMap,
     user: CurrentUser,
 ) -> Result<Json<Vec<AssistantJson>>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
-    let org_id = caller.org()?;
-    let rows = assistants::list_visible(&state.db, org_id)
+    let org_id = caller.org()?.to_owned();
+    let principal = principal(&state.db, &caller).await?;
+    let rows = agents_store::access::visible_assistants(&state.db, &principal)
         .await
         .map_err(|e| store_error(&e))?;
-    let counts = assistants::tool_counts(&state.db, org_id)
+    let counts = assistants::tool_counts(&state.db, &org_id)
         .await
         .map_err(|e| store_error(&e))?;
     let items = rows
@@ -65,16 +69,10 @@ pub(super) async fn create(
     let input = parse_create(&body)?;
     let caller = caller(&state, &headers, &user).await?;
     let org_id = caller.org()?.to_owned();
-    // A new assistant is an ordinary assistant of the organisation: the same rule as editing
-    // one decides who may create it.
-    let new_assistant = access::AssistantRef {
-        organization_id: Some(org_id.clone()),
-        is_built_in: false,
-    };
-    if !access::can(&actor(&caller), Action::Edit, &new_assistant) {
-        return Err(forbidden());
-    }
-    let assistant_count = assistants::list_visible(&state.db, &org_id)
+    // Only an owner or an admin builds agents (§3.2; differences row 80). The check is on the
+    // organisation, so a `manage` grant on one agent never answers it.
+    authorize_org(&state.db, &caller, Permission::AgentsCreate).await?;
+    let assistant_count = assistants::list_for_org(&state.db, &org_id)
         .await
         .map_err(|e| store_error(&e))?
         .len();
@@ -106,7 +104,7 @@ pub(super) async fn get_one(
     Path(id): Path<String>,
 ) -> Result<Json<AssistantJson>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsUse).await?;
     Ok(Json(AssistantJson::from_row(&row)))
 }
 
@@ -127,10 +125,7 @@ pub(super) async fn update(
     };
     let input = parse_update(&body)?;
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
-    if !access::can(&actor(&caller), Action::Edit, &target(&row)) {
-        return Err(forbidden());
-    }
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsManage).await?;
     // A built-in keeps its name and its knowledge-base settings: only a platform admin gets
     // here, and the old service dropped those three fields for a built-in.
     let input = if row.is_built_in {
@@ -163,10 +158,15 @@ pub(super) async fn delete(
     Path(id): Path<String>,
 ) -> Result<Json<SuccessJson>, ApiError> {
     let caller = caller(&state, &headers, &user).await?;
-    let row = load_visible(&state.db, &caller, &id).await?;
-    if !access::can(&actor(&caller), Action::Delete, &target(&row)) {
+    let row = load_authorized(&state.db, &caller, &id, Permission::AgentsManage).await?;
+    // A built-in cannot be deleted by anyone, a platform admin included (differences row 25,
+    // which `parity_assistants.rs` pins).
+    if row.is_built_in {
         return Err(forbidden());
     }
+    // A `manage` grant edits one agent but never removes it (§3.3, row 124): deleting is
+    // `agents.manage` in the organisation, which no grant answers.
+    authorize_org(&state.db, &caller, Permission::AgentsManage).await?;
     assistants::delete(&state.db, &row.id)
         .await
         .map_err(|e| store_error(&e))?;
