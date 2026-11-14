@@ -35,6 +35,9 @@ const ICON_NAMES = [
   "WrapText", "GitCompareArrows",
   // login flow (src/features/auth/components/login-flow.tsx)
   "ArrowLeft", "ArrowRight", "EyeOff", "ShieldCheck", "Mail",
+  // org admin screens (src/features/org-admin/components/**)
+  "AlertCircle", "CheckCircle", "Crown", "MoreHorizontal", "Network",
+  "ScrollText", "Users", "UserPlus", "KeyRound", "ExternalLink",
 ] as const
 
 const stubModule: Record<string, unknown> = {}
