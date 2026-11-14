@@ -155,6 +155,52 @@ Every change to members, units, roles, grants, shares, identity providers and ke
 `AuditLog` row (`action` such as `rbac.grant.create`, `sso.provider.update`), with the actor and
 the IP.
 
+### 3.8 Feature access: which features each user gets (phase 2)
+
+Owner direction, 2026-11-14: as in an enterprise GitLab or Jira, an admin decides **which features**
+are available to which users or teams, on-prem or in the enterprise cloud. They also decide which
+**agents** (§3.3), projects and workflows each user can use. The rule: **one decision path,
+answered in layers.**
+
+| Layer | Who sets it | Example | Stored in |
+|---|---|---|---|
+| 1. Deployment | the operator (platform admin, licence, env) | "video generation is not installed here"; "public links are disabled on this install" | env/config plus a `PlatformSetting` table |
+| 2. Organisation | org owner/admin, capped by the cloud plan (`ChatMeter`/`AssistantPolicy` hooks) | "our org does not use the design studio" | `OrgFeature` |
+| 3. Role | org admin: the four built-in roles plus **custom roles** | "Analyst = chat + projects + workflows.use, no media" | `OrgRole { name, permissions[] }` |
+| 4. Assignment | org admin, team leads within their unit, or IdP group mapping (S2) | "the Marketing unit gets the `Creative` role"; "Dina gets `media.video`" | `RoleAssignment { subject: org/unit/user, roleId }` |
+| 5. Resource | the resource's managers | "Support agent: use by the Support unit" | the grants of §3.3, projects, workflows, artifacts |
+
+- **Effective access** = (layer 1 ∩ layer 2) ∩ (the union of the roles the user holds directly, through
+  any unit, or through the org) ∩ the resource grant. A feature switched off at layer 1 or 2 is off for
+  everyone, admins included. Platform admins only override at layer 1.
+- **The feature catalogue** extends `Permission`. Each entry names the feature it belongs to, so the
+  UI can hide whole areas:
+  - `chat.use`, `projects.create`, `memory.project.write`
+  - `workflows.create`, `workflows.use`
+  - `media.image`, `media.video`, `media.audio`
+  - `design.studio`
+  - `artifacts.publish_public`
+  - `sharing.external`
+  - `api_keys.manage`
+  - `agents.create`, …
+- **Enforcement stays where it is.** `authz::authorize` gains the layer 1–4 check; nothing in the routes
+  changes. Lists still filter in SQL.
+- **Capabilities endpoint:** `GET /api/me/capabilities` returns the caller's effective feature set in
+  their active org. The UI hides navigation, buttons and chat tools from it. The agent is only offered
+  the tools the user may use; for example, no `generate_video` for a user without `media.video`.
+- **Admin screens:**
+  - **Features** (org on/off, with what the plan allows)
+  - **Roles** (custom roles, as a permission matrix)
+  - **Assignments** (who has which role, by unit or user)
+  - **Check access**: pick a user and a feature or resource, and see the decision **with the reason**
+    ("allowed: the Creative role through the Marketing unit"). `authorize` already returns a `Decision`;
+    it gains an explanation.
+- **IdP mapping (S2)** can assign roles from IdP groups, so an enterprise manages feature access in
+  Keycloak or Entra and it follows on the next login.
+- **Every change is audited** (`rbac.role.*`, `rbac.assignment.*`, `org.feature.*`).
+- **Defaults:** a new org gets every feature its plan or licence allows, and the four built-in roles
+  behave as today, so nothing changes until an admin customises it.
+
 ## 4. Enforcement rules
 
 - One authorisation path: routes never compare roles themselves; they call `authz::authorize`.
@@ -178,6 +224,8 @@ the IP.
 | S7 | Agent API keys in Rust, `/v1/chat/completions`, the WebSocket | S4 | MiniMax |
 | S8 | Next.js UI: login with SSO, org settings (members, teams, SSO), agent access panel, share dialog, KB hidden in the builder | S3–S5 | MiniMax |
 | S9 | The router: Next.js rewrites send the ported paths to Rust | S4 | Claude |
+| S10 | Feature access (§3.8): `PlatformSetting`, `OrgFeature`, `OrgRole`, `RoleAssignment`, the layered `authorize`, `/api/me/capabilities`, IdP group → role | S1–S4 | Claude (security) |
+| S11 | Admin UI for features, roles, assignments and check-access; the UI and the chat tool list follow capabilities | S10 | worker |
 
 S9 is what makes the RBAC real. Until the UI's `/api/assistants/**`, `/api/chat` and the session
 routes reach Rust, the TypeScript routes, which have no grants, still answer.
