@@ -18,6 +18,7 @@ mod bodies;
 use axum::Json;
 use axum::Router;
 use axum::extract::{Path, State};
+use axum::http::HeaderMap;
 use axum::routing::{get, post};
 use chrono::NaiveDateTime;
 use serde::Serialize;
@@ -29,7 +30,7 @@ use agents_store::StoreError;
 use agents_store::sessions;
 
 use crate::AppState;
-use crate::auth::CurrentUser;
+use crate::auth::{CurrentUser, active_org_opt};
 use crate::http::ApiError;
 use crate::http::json::Body;
 
@@ -157,6 +158,7 @@ async fn list_sessions(
 
 async fn create_session(
     State(state): State<AppState>,
+    headers: HeaderMap,
     user: CurrentUser,
     body: Option<Body<Value>>,
 ) -> Result<Json<SessionSummaryJson>, ApiError> {
@@ -172,9 +174,21 @@ async fn create_session(
     if !visible {
         return Err(ApiError::new(ErrorCode::NotFound));
     }
-    let row = sessions::create_session(&state.db, &user.id, &assistant_id, &title)
-        .await
-        .map_err(|e| store_error(&e))?;
+    // The session belongs to the organisation the request acts in, so a share of it can be
+    // checked by the same tenancy rule as everything else (differences row 130). A caller with
+    // no organisation still chats with the built-ins; their session stays org-less.
+    let org_id = active_org_opt(&state, &headers, &user)
+        .await?
+        .map(|org| org.org_id);
+    let row = sessions::create_session(
+        &state.db,
+        &user.id,
+        org_id.as_deref(),
+        &assistant_id,
+        &title,
+    )
+    .await
+    .map_err(|e| store_error(&e))?;
     Ok(Json(new_session_json(&row)))
 }
 

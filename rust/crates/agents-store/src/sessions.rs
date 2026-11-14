@@ -168,17 +168,20 @@ pub async fn get_session_detail(
     })
 }
 
-/// Creates a session. The id is new; the title and the assistant are the caller's.
+/// Creates a session. The id is new; the title and the assistant are the caller's, and the
+/// organisation is the one the request acts in (`None` when the caller has none: such a session
+/// cannot be shared until it is backfilled).
 pub async fn create_session(
     db: &PgPool,
     user_id: &str,
+    organization_id: Option<&str>,
     assistant_id: &str,
     title: &str,
 ) -> StoreResult<SessionRow> {
     let ts = now();
     let sql = format!(
-        r#"INSERT INTO "DashboardSession" ("id","userId","title","assistantId","createdAt","updatedAt")
-           VALUES ($1,$2,$3,$4,$5,$5)
+        r#"INSERT INTO "DashboardSession" ("id","userId","title","assistantId","organizationId","createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$6)
            RETURNING {SESSION_COLUMNS}"#
     );
     Ok(sqlx::query_as::<_, SessionRow>(&sql)
@@ -186,9 +189,114 @@ pub async fn create_session(
         .bind(user_id)
         .bind(title)
         .bind(assistant_id)
+        .bind(organization_id)
         .bind(ts)
         .fetch_one(db)
         .await?)
+}
+
+/// A session by id alone. The sharing routes use it after `authz` has allowed the caller to read
+/// or share the chat; every other read is [`get_session`], which also asks for the owner.
+pub async fn get_session_any(db: &PgPool, session_id: &str) -> StoreResult<SessionRow> {
+    let sql = format!(r#"SELECT {SESSION_COLUMNS} FROM "DashboardSession" WHERE "id" = $1"#);
+    sqlx::query_as::<_, SessionRow>(&sql)
+        .bind(session_id)
+        .fetch_optional(db)
+        .await?
+        .ok_or(StoreError::NotFound)
+}
+
+/// The messages of a session by id alone, in `seq` order, for a read-only shared transcript.
+pub async fn messages_any(db: &PgPool, session_id: &str) -> StoreResult<Vec<MessageRow>> {
+    fetch_messages(db, session_id).await
+}
+
+/// The columns a fork copies from each message. The edit history is deliberately absent.
+#[derive(Debug, sqlx::FromRow)]
+#[sqlx(rename_all = "camelCase")]
+struct ForkMessage {
+    id: String,
+    role: String,
+    content: String,
+    reply_to: Option<String>,
+    sources: Option<Value>,
+    metadata: Option<Value>,
+}
+
+/// Copies a session's transcript into a new session owned by `user_id`, in `organization_id`.
+///
+/// Every message is copied with a new id and its `replyTo` remapped to the copy, so the fork is
+/// independent of the original. The edit history of the original is not copied: a shared
+/// transcript shows no earlier drafts of somebody else's answers.
+pub async fn fork_session(
+    db: &PgPool,
+    user_id: &str,
+    organization_id: Option<&str>,
+    source_session_id: &str,
+    title: &str,
+) -> StoreResult<SessionRow> {
+    let mut tx = db.begin().await?;
+    let (assistant_id,): (String,) =
+        sqlx::query_as(r#"SELECT "assistantId" FROM "DashboardSession" WHERE "id" = $1"#)
+            .bind(source_session_id)
+            .fetch_optional(&mut *tx)
+            .await?
+            .ok_or(StoreError::NotFound)?;
+    let ts = now();
+    let new_session_id = new_id();
+    let sql = format!(
+        r#"INSERT INTO "DashboardSession" ("id","userId","title","assistantId","organizationId","createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$6)
+           RETURNING {SESSION_COLUMNS}"#
+    );
+    let session = sqlx::query_as::<_, SessionRow>(&sql)
+        .bind(&new_session_id)
+        .bind(user_id)
+        .bind(title)
+        .bind(&assistant_id)
+        .bind(organization_id)
+        .bind(ts)
+        .fetch_one(&mut *tx)
+        .await?;
+    let source: Vec<ForkMessage> = sqlx::query_as(
+        r#"SELECT "id","role","content","replyTo","sources","metadata"
+           FROM "DashboardMessage" WHERE "sessionId" = $1 ORDER BY "seq" ASC"#,
+    )
+    .bind(source_session_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    let remapped: std::collections::BTreeMap<&str, String> = source
+        .iter()
+        .map(|message| (message.id.as_str(), new_id()))
+        .collect();
+    for message in &source {
+        let id = remapped
+            .get(message.id.as_str())
+            .cloned()
+            .unwrap_or_else(new_id);
+        let reply_to = message
+            .reply_to
+            .as_deref()
+            .and_then(|target| remapped.get(target))
+            .cloned();
+        sqlx::query(
+            r#"INSERT INTO "DashboardMessage"
+                 ("id","sessionId","role","content","replyTo","sources","metadata","createdAt")
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"#,
+        )
+        .bind(&id)
+        .bind(&new_session_id)
+        .bind(&message.role)
+        .bind(&message.content)
+        .bind(reply_to)
+        .bind(&message.sources)
+        .bind(&message.metadata)
+        .bind(ts)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(session)
 }
 
 /// Renames a session. Somebody else's session is [`StoreError::NotFound`].

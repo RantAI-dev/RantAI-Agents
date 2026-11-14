@@ -286,7 +286,7 @@ async fn sql_visibility_equals_authorize_over_every_pair() -> R {
                 p.role
             );
 
-            let sql_chats: BTreeSet<String> = access::sessions_shared_with(&db, &p)
+            let sql_chats: BTreeSet<String> = access::sessions_shared_with(&db, &p, None, 10_000)
                 .await?
                 .into_iter()
                 .map(|s| s.id)
@@ -374,7 +374,7 @@ async fn another_orgs_grants_units_and_shares_never_leak() -> R {
             .any(|r| r.id == b_agent)
     );
     assert!(
-        access::sessions_shared_with(&db, &in_b)
+        access::sessions_shared_with(&db, &in_b, None, 10_000)
             .await?
             .iter()
             .any(|s| s.id == b_session)
@@ -395,7 +395,11 @@ async fn another_orgs_grants_units_and_shares_never_leak() -> R {
             .iter()
             .any(|r| r.id == b_agent)
     );
-    assert!(access::sessions_shared_with(&db, &in_a).await?.is_empty());
+    assert!(
+        access::sessions_shared_with(&db, &in_a, None, 10_000)
+            .await?
+            .is_empty()
+    );
     let b_ref = grants::agent_ref(&db, &a, &b_agent).await?;
     assert_eq!(
         authorize(&in_a, Permission::AgentsUse, &Resource::Agent(&b_ref)),

@@ -667,7 +667,8 @@ async fn the_answer_is_written_to_the_session() -> R {
     let user_id = user(&db, false).await?;
     let assistant_id = assistant(&db, None).await?;
     let session =
-        agents_store::sessions::create_session(&db, &user_id, &assistant_id, "New Chat").await?;
+        agents_store::sessions::create_session(&db, &user_id, None, &assistant_id, "New Chat")
+            .await?;
 
     let mut request = body(&assistant_id);
     // The ids are fresh ones: the tests share a database, and a message id that already
