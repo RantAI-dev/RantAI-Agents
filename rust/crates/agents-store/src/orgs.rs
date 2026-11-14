@@ -39,3 +39,21 @@ pub async fn default_membership(db: &PgPool, user_id: &str) -> StoreResult<Optio
     .fetch_optional(db)
     .await?)
 }
+
+/// Whether the user may sign in with a password: refused only when every organisation they are an
+/// accepted member of has turned password sign-in off. A user in no organisation may.
+pub async fn password_login_allowed(db: &PgPool, user_id: &str) -> StoreResult<bool> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        r#"SELECT NOT EXISTS (
+                    SELECT 1 FROM "OrganizationMember" m
+                    WHERE m."userId" = $1 AND m."acceptedAt" IS NOT NULL)
+               OR EXISTS (
+                    SELECT 1 FROM "OrganizationMember" m
+                    JOIN "Organization" o ON o."id" = m."organizationId"
+                    WHERE m."userId" = $1 AND m."acceptedAt" IS NOT NULL
+                      AND o."passwordLoginEnabled" = true)"#,
+    )
+    .bind(user_id)
+    .fetch_one(db)
+    .await?)
+}

@@ -7,6 +7,9 @@
 
 pub mod id_token;
 
+/// The JWKS type the verifier takes, so callers need not depend on `jsonwebtoken`.
+pub use jsonwebtoken::jwk::JwkSet;
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 

@@ -13,12 +13,15 @@
 pub mod access;
 pub mod approvals;
 pub mod assistants;
+pub mod audit;
 pub mod catalog;
 pub mod grants;
+pub mod identity;
 pub mod memory;
 pub mod orgs;
 pub mod sessions;
 pub mod shares;
+pub mod sso_login;
 pub mod tools;
 pub mod units;
 pub mod users;

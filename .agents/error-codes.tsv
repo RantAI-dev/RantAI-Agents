@@ -27,4 +27,8 @@ upstream_failed	502	A service we depend on returned an error.
 unavailable	503	The service is temporarily unavailable. Try again later.
 timeout	504	The request took too long.
 capability_not_ported	409	This capability is not ported yet.
+sso_failed	401	Single sign-on did not complete. Start the sign-in again.
+account_link_refused	409	An account with this email already exists and cannot be linked to this identity provider. Sign in with your password, or ask an administrator.
+account_not_provisioned	403	There is no account for you in this organisation. Ask an administrator to invite you.
+password_login_disabled	403	Your organisation signs in through single sign-on. Use the single sign-on button.
 @emit rust rust/crates/agents-contracts/src/error_codes.rs
