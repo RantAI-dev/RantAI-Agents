@@ -106,12 +106,7 @@ pub async fn session(
     org_id: &str,
     assistant_id: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let s = sessions::create_session(db, user_id, assistant_id, "t").await?;
-    sqlx::query(r#"UPDATE "DashboardSession" SET "organizationId" = $2 WHERE "id" = $1"#)
-        .bind(&s.id)
-        .bind(org_id)
-        .execute(db)
-        .await?;
+    let s = sessions::create_session(db, user_id, Some(org_id), assistant_id, "t").await?;
     Ok(s.id)
 }
 

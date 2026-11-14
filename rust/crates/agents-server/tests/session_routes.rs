@@ -56,9 +56,11 @@ async fn seed_session(
     assistant_id: &str,
     title: &str,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    Ok(sessions::create_session(db, owner, assistant_id, title)
-        .await?
-        .id)
+    Ok(
+        sessions::create_session(db, owner, None, assistant_id, title)
+            .await?
+            .id,
+    )
 }
 
 fn fields(body: &Value) -> Vec<&str> {

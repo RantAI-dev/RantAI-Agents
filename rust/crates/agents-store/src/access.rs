@@ -10,6 +10,7 @@ use agents_core::authz::{
     Permission, Principal, Subject, SubjectType, UnitMembership, UnitTree, is_org_admin, role_has,
 };
 use agents_core::org::OrgRole;
+use chrono::NaiveDateTime;
 use sqlx::{PgPool, Postgres, Transaction};
 
 use crate::StoreResult;
@@ -217,9 +218,56 @@ pub async fn resolve_default(
     Ok(ResolvedDefault { assistant, source })
 }
 
+/// Where a page of shared sessions starts: strictly after this row in `("updatedAt", "id")`
+/// order. Opaque to clients, the way `audit::Cursor` is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SharedCursor {
+    pub updated_at: NaiveDateTime,
+    pub id: String,
+}
+
+impl SharedCursor {
+    /// The row a page ended on, as the cursor of the next page.
+    #[must_use]
+    pub fn after(row: &SessionRow) -> Self {
+        Self {
+            updated_at: row.updated_at,
+            id: row.id.clone(),
+        }
+    }
+
+    /// `<milliseconds since the epoch>.<id>`.
+    #[must_use]
+    pub fn encode(&self) -> String {
+        format!(
+            "{}.{}",
+            self.updated_at.and_utc().timestamp_millis(),
+            self.id
+        )
+    }
+
+    /// `None` for anything [`SharedCursor::encode`] did not produce.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        let (millis, id) = text.split_once('.')?;
+        let updated_at = chrono::DateTime::from_timestamp_millis(millis.parse().ok()?)?.naive_utc();
+        let valid = !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric());
+        valid.then(|| Self {
+            updated_at,
+            id: id.to_owned(),
+        })
+    }
+}
+
 /// Other users' sessions of the org that an active share reaches the principal through (§3.4),
-/// most recently updated first. The caller's own sessions are not listed here.
-pub async fn sessions_shared_with(db: &PgPool, p: &Principal) -> StoreResult<Vec<SessionRow>> {
+/// most recently updated first, at most `limit` after `cursor`. The caller's own sessions are
+/// not listed here.
+pub async fn sessions_shared_with(
+    db: &PgPool,
+    p: &Principal,
+    cursor: Option<&SharedCursor>,
+    limit: i64,
+) -> StoreResult<Vec<SessionRow>> {
     if !role_has(p.role, Permission::ChatsReadShared) {
         return Ok(Vec::new());
     }
@@ -231,12 +279,34 @@ pub async fn sessions_shared_with(db: &PgPool, p: &Principal) -> StoreResult<Vec
              WHERE c."sessionId" = "DashboardSession"."id" AND c."organizationId" = $1
                AND c."revokedAt" IS NULL AND {share}
            )
-           ORDER BY "updatedAt" DESC, "id" ASC"#,
+             AND ($3::timestamp IS NULL OR ("updatedAt", "id") < ($3, $4))
+           ORDER BY "updatedAt" DESC, "id" DESC
+           LIMIT $5"#,
         share = subject_matches("c"),
     );
     Ok(sqlx::query_as::<_, SessionRow>(&sql)
         .bind(&p.organization_id)
         .bind(&p.user_id)
+        .bind(cursor.map(|c| c.updated_at))
+        .bind(cursor.map(|c| c.id.as_str()))
+        .bind(limit)
         .fetch_all(db)
         .await?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_shared_cursor_reads_back_what_it_wrote_and_nothing_else() {
+        let cursor = SharedCursor {
+            updated_at: crate::now(),
+            id: crate::new_id(),
+        };
+        assert_eq!(SharedCursor::parse(&cursor.encode()), Some(cursor));
+        for bad in ["", "x", "1.", ".abc", "abc.def", "1.a'b", "1.abc-def"] {
+            assert_eq!(SharedCursor::parse(bad), None, "{bad}");
+        }
+    }
 }
