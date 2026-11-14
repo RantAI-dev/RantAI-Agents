@@ -146,7 +146,9 @@ async fn a_put_replaces_the_whole_list_and_writes_the_audit_trail() -> R {
         .collect();
     assert_eq!(revoked.len(), 1, "one revoke was written: {rows:?}");
     assert_eq!(
-        revoked[0].1.pointer("/subjectId"),
+        revoked
+            .first()
+            .and_then(|(_, detail)| detail.pointer("/subjectId")),
         Some(&json!(member_user.as_str()))
     );
 
@@ -203,7 +205,10 @@ async fn a_delete_takes_one_grant_away_and_writes_the_audit_trail() -> R {
 
     let rows = audit_rows(&db, &org_id, &id).await?;
     assert_eq!(rows.len(), 1, "one revoke: {rows:?}");
-    assert_eq!(rows[0].0, "rbac.grant.revoke");
+    assert_eq!(
+        rows.first().map(|(action, _)| action.as_str()),
+        Some("rbac.grant.revoke")
+    );
 
     // The same id again is not found; so is one that never existed.
     for gone in [grant_id.as_str(), "no_such_grant"] {

@@ -191,14 +191,12 @@ pub async fn replace_all(
     }
 
     let ts = now();
-    let upsert = format!(
-        r#"INSERT INTO "AssistantGrant" ("id","organizationId","assistantId","subjectType","subjectId","level","grantedBy","createdAt","updatedAt")
+    let upsert = r#"INSERT INTO "AssistantGrant" ("id","organizationId","assistantId","subjectType","subjectId","level","grantedBy","createdAt","updatedAt")
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
            ON CONFLICT ("assistantId","subjectType","subjectId")
-             DO UPDATE SET "level" = EXCLUDED."level", "grantedBy" = EXCLUDED."grantedBy", "updatedAt" = EXCLUDED."updatedAt""#
-    );
+             DO UPDATE SET "level" = EXCLUDED."level", "grantedBy" = EXCLUDED."grantedBy", "updatedAt" = EXCLUDED."updatedAt""#;
     for (subject, level) in wanted {
-        sqlx::query(&upsert)
+        sqlx::query(upsert)
             .bind(new_id())
             .bind(org_id)
             .bind(assistant_id)
