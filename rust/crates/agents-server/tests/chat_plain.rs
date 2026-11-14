@@ -667,7 +667,8 @@ async fn the_answer_is_written_to_the_session() -> R {
     let user_id = user(&db, false).await?;
     let assistant_id = assistant(&db, None).await?;
     let session =
-        agents_store::sessions::create_session(&db, &user_id, &assistant_id, "New Chat").await?;
+        agents_store::sessions::create_session(&db, &user_id, None, &assistant_id, "New Chat")
+            .await?;
 
     let mut request = body(&assistant_id);
     // The ids are fresh ones: the tests share a database, and a message id that already
@@ -763,5 +764,76 @@ async fn sixteen_chats_at_once_lose_no_fact_of_the_profile() -> R {
         Some(CHATS as u64),
         "every chat's drain must be counted"
     );
+    Ok(())
+}
+
+/// A chat shared with a user is read-only for them (§3.4): naming it as `sessionId` in a chat
+/// writes nothing into it, even when they may use its agent.
+#[tokio::test]
+async fn a_recipient_naming_a_shared_session_writes_nothing_into_it() -> R {
+    let stub = Stub::start(Script::Text(vec!["the answer".to_owned()])).await?;
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let (owner, recipient) = (user(&db, false).await?, user(&db, false).await?);
+    member(&db, &owner, &org_id).await?;
+    member(&db, &recipient, &org_id).await?;
+    let assistant_id = assistant(&db, Some(&org_id)).await?;
+    grant_org(&db, &org_id, &assistant_id).await?;
+    let session =
+        agents_store::sessions::create_session(&db, &owner, Some(&org_id), &assistant_id, "theirs")
+            .await?;
+    agents_store::shares::create(
+        &db,
+        &org_id,
+        &session.id,
+        &agents_core::authz::Subject {
+            kind: agents_core::authz::SubjectType::User,
+            id: recipient.clone(),
+        },
+        &owner,
+    )
+    .await?;
+
+    let chat_in = |who: &str| -> Value {
+        let mut request = body(&assistant_id);
+        if let Some(object) = request.as_object_mut() {
+            object.insert("sessionId".to_owned(), json!(session.id));
+            object.insert("assistantMessageId".to_owned(), json!(new_id()));
+            object.insert(
+                "messages".to_owned(),
+                json!([{"id": new_id(), "role": "user", "content": format!("from {who}")}]),
+            );
+        }
+        request
+    };
+    let (status, _, _) = send_raw(
+        &app,
+        "POST",
+        "/api/chat",
+        Some(&bearer(&recipient)?),
+        Some(chat_in("recipient")),
+    )
+    .await?;
+    assert_eq!(status, 200, "the recipient may chat with the agent itself");
+    let messages = agents_store::sessions::list_messages(&db, &owner, &session.id).await?;
+    assert!(
+        messages.is_empty(),
+        "a recipient wrote into a shared chat: {messages:?}"
+    );
+
+    // Positive control: the same call from the owner writes the turn.
+    let (status, _, _) = send_raw(
+        &app,
+        "POST",
+        "/api/chat",
+        Some(&bearer(&owner)?),
+        Some(chat_in("owner")),
+    )
+    .await?;
+    assert_eq!(status, 200);
+    let messages = agents_store::sessions::list_messages(&db, &owner, &session.id).await?;
+    assert_eq!(messages.len(), 2, "the owner's turn is stored");
     Ok(())
 }

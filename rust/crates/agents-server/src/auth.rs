@@ -155,3 +155,28 @@ pub async fn active_org(
                 .message("You do not belong to an organisation.")
         })
 }
+
+/// [`active_org`] for a route a caller without an organisation may still use, such as starting a
+/// chat with a built-in assistant: the answer is `None` instead of a 403. A caller who names an
+/// organisation they do not belong to is still refused.
+pub async fn active_org_opt(
+    state: &AppState,
+    headers: &HeaderMap,
+    user: &CurrentUser,
+) -> Result<Option<OrgContext>, ApiError> {
+    match active_org(state, headers, user).await {
+        Ok(org) => Ok(Some(org)),
+        Err(e) if e.code == ErrorCode::PermissionDenied && !names_an_organisation(headers) => {
+            Ok(None)
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn names_an_organisation(headers: &HeaderMap) -> bool {
+    headers
+        .get("x-organization-id")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .is_some_and(|v| !v.is_empty())
+}

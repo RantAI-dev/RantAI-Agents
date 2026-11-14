@@ -7,6 +7,7 @@ mod health;
 mod memory;
 mod organizations;
 mod sessions;
+mod sharing;
 
 use axum::Router;
 
@@ -21,4 +22,5 @@ pub fn router() -> Router<AppState> {
         .merge(memory::router())
         .merge(organizations::router())
         .merge(sessions::router())
+        .merge(sharing::router())
 }
