@@ -79,18 +79,7 @@ pub struct Grounding {
     pub retrieval_score: f64,
 }
 
-/// A JSON number the way JavaScript prints it: an integral value has no `.0` (`1`, not
-/// `1.0`), because `JSON.stringify(1.0)` is `"1"` while `serde_json` would write `1.0`.
-/// Non-finite floats become `null`, as `JSON.stringify(NaN)` does.
-pub fn js_number(value: f64) -> Value {
-    if !value.is_finite() {
-        return Value::Null;
-    }
-    if value.fract() == 0.0 && value.abs() < 9.007_199_254_740_992e15 {
-        return Value::from(value as i64);
-    }
-    Value::from(value)
-}
+pub use crate::js_json::js_number;
 
 /// Map the SDK's finish reason onto the OpenAI wire value, as `toOpenAIFinishReason`:
 /// `stop`, `length`, `content_filter`, `tool_calls` pass through; everything else —
@@ -141,10 +130,7 @@ fn choice(index: u8, delta: Value, finish_reason: Option<&str>) -> Value {
 fn frame(object: Map<String, Value>) -> String {
     // Same reasoning as `ui_stream::sse_frame`: a `Value` built from strings, integers
     // and this module's own numbers cannot fail to serialise.
-    format!(
-        "data: {}\n\n",
-        serde_json::to_string(&Value::Object(object)).unwrap_or_default()
-    )
+    format!("data: {}\n\n", crate::js_json::stringify_object(object))
 }
 
 fn truncated_error_object() -> Value {
@@ -289,7 +275,7 @@ pub fn completion_body(
         object.insert("figures".to_owned(), Value::from(figures.to_vec()));
     }
     // Same reasoning as `frame`: this `Value` cannot fail to serialise.
-    serde_json::to_string(&Value::Object(object)).unwrap_or_default()
+    crate::js_json::stringify_object(object)
 }
 
 #[cfg(test)]

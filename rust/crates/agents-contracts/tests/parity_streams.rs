@@ -288,7 +288,7 @@ fn sse_frames_match_the_installed_sdk_byte_for_byte() -> Result<(), Box<dyn Erro
 /// these expectations are written here on purpose; the wire behaviour they replace (the
 /// legacy frame) is covered by the oracle cases above. See differences.md row 32.
 #[test]
-fn rag_sources_become_source_document_chunks_before_finish() -> Result<(), Box<dyn Error>> {
+fn rag_sources_become_source_document_chunks() -> Result<(), Box<dyn Error>> {
     let sources: Vec<RagSource> = serde_json::from_str(
         r#"[
             {"title":"IPA Kelas VIII","section":"Bab 1","documentId":"doc1","assetKey":null,"page":39,"chunkType":"text","chunkIndex":3,"anchorChunkIndex":null},
@@ -299,8 +299,8 @@ fn rag_sources_become_source_document_chunks_before_finish() -> Result<(), Box<d
     let chunks = agents_contracts::ui_stream::rag_source_chunks(&sources);
     let text: String = chunks.iter().map(sse_frame).collect();
     let expected = [
-        "data: {\"type\":\"source-document\",\"sourceId\":\"doc1\",\"mediaType\":\"text/plain\",\"title\":\"IPA Kelas VIII\",\"filename\":\"Bab 1\",\"providerMetadata\":{\"rantai\":{\"page\":39,\"chunkIndex\":3}}}\n\n",
-        "data: {\"type\":\"source-document\",\"sourceId\":\"documents/org1/doc1/fig.png\",\"mediaType\":\"image/webp\",\"title\":\"IPA Kelas VIII\",\"filename\":\"Gambar 1.11\",\"providerMetadata\":{\"rantai\":{\"page\":40,\"assetKey\":\"documents/org1/doc1/fig.png\",\"anchorChunkIndex\":4}}}\n\n",
+        "data: {\"type\":\"source-document\",\"sourceId\":\"doc1#3\",\"mediaType\":\"text/plain\",\"title\":\"IPA Kelas VIII\",\"filename\":\"Bab 1\",\"providerMetadata\":{\"rantai\":{\"page\":39,\"chunkType\":\"text\",\"chunkIndex\":3}}}\n\n",
+        "data: {\"type\":\"source-document\",\"sourceId\":\"documents/org1/doc1/fig.png\",\"mediaType\":\"image/png\",\"title\":\"IPA Kelas VIII\",\"filename\":\"Gambar 1.11\",\"providerMetadata\":{\"rantai\":{\"page\":40,\"assetKey\":\"documents/org1/doc1/fig.png\",\"chunkType\":\"figure\",\"anchorChunkIndex\":4}}}\n\n",
         "data: {\"type\":\"source-document\",\"sourceId\":\"Tanpa apa pun\",\"mediaType\":\"text/plain\",\"title\":\"Tanpa apa pun\"}\n\n",
     ]
     .concat();

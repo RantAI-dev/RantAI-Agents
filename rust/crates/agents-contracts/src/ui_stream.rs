@@ -457,36 +457,28 @@ fn parse_chunk(value: Value) -> Result<UiChunk, String> {
 
 /// One SSE frame exactly as `JsonToSseTransformStream` writes it: `data: {json}\n\n`.
 pub fn sse_frame(chunk: &UiChunk) -> String {
-    // Serialization cannot fail here: every payload field is a string, a bool or a
-    // `serde_json::Value`, and a `Value` parsed from JSON cannot hold a NaN that would
-    // break `to_string`. The fallback keeps the encoder total without a panic.
-    format!(
-        "data: {}\n\n",
-        serde_json::to_string(chunk).unwrap_or_default()
-    )
+    format!("data: {}\n\n", crate::js_json::stringify(chunk))
 }
 
 /// The RAG sources for one answer as standard `source-document` chunks, to send before
 /// `finish` (differences.md row 32). One chunk per source:
 ///
-/// - `sourceId`: the document id, else the asset key, else the title;
-/// - `mediaType`: `image/webp` for figure chunks (the app encodes figures as webp),
-///   `text/plain` otherwise;
+/// - `sourceId`: the asset key for a figure (unique per figure), else the document id with
+///   `#<chunkIndex>` when the chunk index is known (several chunks of one document stay
+///   distinct), else the document id, else the title;
+/// - `mediaType`: from the asset key's extension (`image/png`, `image/jpeg`, `image/webp`,
+///   `image/gif`, else `application/octet-stream`), `text/plain` when there is no asset;
 /// - `title`: the document title, `filename`: the section (absent when null);
 /// - `providerMetadata.rantai`: the fields the wire type has no slot for (`page`,
-///   `assetKey`, `chunkIndex`, `anchorChunkIndex`, nulls omitted), dropped when all
-///   four are null.
+///   `assetKey`, `chunkType`, `chunkIndex`, `anchorChunkIndex`, nulls omitted), dropped
+///   when all of them are null.
 pub fn rag_source_chunks(sources: &[RagSource]) -> Vec<UiChunk> {
     sources
         .iter()
         .map(|source| {
             let rantai = rantai_metadata(source);
             UiChunk::SourceDocument(SourceDocumentChunk {
-                source_id: source
-                    .document_id
-                    .clone()
-                    .or_else(|| source.asset_key.clone())
-                    .unwrap_or_else(|| source.title.clone()),
+                source_id: source_id(source),
                 media_type: source_media_type(source).to_owned(),
                 title: source.title.clone(),
                 filename: source.section.clone(),
@@ -496,11 +488,30 @@ pub fn rag_source_chunks(sources: &[RagSource]) -> Vec<UiChunk> {
         .collect()
 }
 
+fn source_id(source: &RagSource) -> String {
+    if let Some(asset_key) = &source.asset_key {
+        return asset_key.clone();
+    }
+    match (&source.document_id, source.chunk_index) {
+        (Some(document_id), Some(chunk_index)) => format!("{document_id}#{chunk_index}"),
+        (Some(document_id), None) => document_id.clone(),
+        (None, _) => source.title.clone(),
+    }
+}
+
 fn source_media_type(source: &RagSource) -> &'static str {
-    if source.chunk_type.as_deref() == Some("figure") {
-        "image/webp"
-    } else {
-        "text/plain"
+    let Some(asset_key) = &source.asset_key else {
+        return "text/plain";
+    };
+    let extension = asset_key
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_lowercase());
+    match extension.as_deref() {
+        Some("png") => "image/png",
+        Some("jpg" | "jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        Some("gif") => "image/gif",
+        _ => "application/octet-stream",
     }
 }
 
@@ -511,6 +522,9 @@ fn rantai_metadata(source: &RagSource) -> Option<Value> {
     }
     if let Some(asset_key) = source.asset_key.clone() {
         rantai.insert("assetKey".to_owned(), Value::from(asset_key));
+    }
+    if let Some(chunk_type) = source.chunk_type.clone() {
+        rantai.insert("chunkType".to_owned(), Value::from(chunk_type));
     }
     if let Some(chunk_index) = source.chunk_index {
         rantai.insert("chunkIndex".to_owned(), Value::from(chunk_index));
@@ -538,7 +552,7 @@ pub fn legacy_sources_frame(sources: &[RagSource]) -> String {
     // Same fallback reasoning as `sse_frame`: parsed JSON cannot fail to serialise.
     format!(
         "data: {{\"type\":\"sources\",\"sources\":{}}}\n\n",
-        serde_json::to_string(sources).unwrap_or_default()
+        crate::js_json::stringify(sources)
     )
 }
 
