@@ -4,6 +4,7 @@ pub(crate) mod assistants;
 mod chat;
 mod health;
 mod memory;
+mod organizations;
 mod sessions;
 
 use axum::Router;
@@ -16,5 +17,6 @@ pub fn router() -> Router<AppState> {
         .merge(chat::router())
         .merge(health::router())
         .merge(memory::router())
+        .merge(organizations::router())
         .merge(sessions::router())
 }
