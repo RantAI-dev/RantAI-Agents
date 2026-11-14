@@ -2,8 +2,11 @@
 
 An agent can be reached from another platform: over the OpenAI-compatible HTTP endpoint or over a
 WebSocket, with a key minted for that one agent. It runs in the Rust service (`agents-server`,
-identity-and-access slice S7, design §3.6). The router in front (slice S9) must send
-`/api/dashboard/agent-api-keys/**`, `/v1/chat/completions` and `/v1/agents/{id}/ws` to Rust.
+identity-and-access slice S7, design §3.6). The router in front (slice S9) sends
+`/api/dashboard/agent-api-keys/**` and `/v1/chat/completions` to Rust; the **WebSocket is routed at the
+ingress** (Caddy/nginx), because a Next.js route handler and the middleware cannot forward an
+upgrade — `docs/operations/rust-cutover.md` shows both server blocks. Turning `agent-api` off in
+`RUST_ROUTES` therefore closes the HTTP half only; the ingress rule is the socket's switch.
 
 The key acts as the agent, in the agent's organisation — not as a person. It therefore carries no
 user, no session and no grant: what it may do is what the agent may do.
