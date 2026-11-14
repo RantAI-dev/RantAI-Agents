@@ -308,11 +308,13 @@ async fn the_system_prompt_carries_the_guard_rails_and_the_profile() -> R {
     assert_eq!(status, 200);
 
     // What the model was asked.
-    let request = stub.chat_request()?.expect("the chat request");
+    let request = stub
+        .chat_request()?
+        .ok_or("the stub received the chat request")?;
     let messages = request
         .get("messages")
         .and_then(Value::as_array)
-        .expect("messages");
+        .ok_or("the request carries the messages")?;
     let system = messages
         .first()
         .and_then(|message| message.get("content"))
@@ -435,7 +437,9 @@ async fn an_assistant_with_a_knowledge_base_or_tools_is_not_ported_yet() -> R {
     // A request with an attachment.
     let plain = assistant(&db, None).await?;
     let mut with_file = body(&plain);
-    with_file["fileDocumentIds"] = json!(["doc_1"]);
+    if let Some(object) = with_file.as_object_mut() {
+        object.insert("fileDocumentIds".to_owned(), json!(["doc_1"]));
+    }
     let (status, _headers, text) = send_raw(
         &app,
         "POST",

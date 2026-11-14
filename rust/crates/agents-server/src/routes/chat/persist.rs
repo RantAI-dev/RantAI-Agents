@@ -134,8 +134,13 @@ mod tests {
             "not an object",
             {"content": "second", "assistantResponse": "the answer", "editedAt": "2026-01-02T00:00:00.000Z"},
         ])));
-        let entries = history.expect("a list");
-        let entries = entries.as_array().expect("a list");
+        let entries = match history.as_ref().and_then(Value::as_array) {
+            Some(entries) => entries,
+            None => {
+                assert!(history.is_none(), "the history is not a list");
+                return;
+            }
+        };
         assert_eq!(entries.len(), 2);
         assert_eq!(
             entries

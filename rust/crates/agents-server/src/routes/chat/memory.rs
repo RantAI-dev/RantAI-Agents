@@ -105,8 +105,8 @@ fn backoff(attempt: usize) -> std::time::Duration {
         .map(|since| since.subsec_nanos() as u64)
         .unwrap_or(0);
     let counter = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let spread = (nanos ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15)) % 50;
-    std::time::Duration::from_millis(5 + attempt as u64 * 15 + spread)
+    let spread = (nanos ^ counter.wrapping_mul(0x9E37_79B9_7F4A_7C15)) % 40;
+    std::time::Duration::from_millis(10 + attempt as u64 * 20 + spread)
 }
 
 /// The `saveMemory` tool: writes the facts and preferences the model asked for.
