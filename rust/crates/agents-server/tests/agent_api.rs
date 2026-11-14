@@ -809,6 +809,41 @@ async fn an_agent_with_an_mcp_server_or_a_workflow_is_a_409() -> R {
 }
 
 #[tokio::test]
+async fn concurrent_calls_count_every_use() -> R {
+    // The property is "this is atomic": eight calls at the same moment must leave eight uses.
+    // Awaiting them in turn would pass with or without a read-then-write.
+    let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
+    let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let assistant_id = assistant(&db, &org_id).await?;
+    let key = mint(&app, auth(&admin)?, &assistant_id, json!({}))
+        .await?
+        .json()
+        .get("key")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+
+    let calls = (0..8).map(|_| chat(&app, &key, completion(false)));
+    for answer in futures::future::join_all(calls).await {
+        assert_eq!(answer?.status, 200);
+    }
+
+    let (count, used): (i32, Option<chrono::NaiveDateTime>) = sqlx::query_as(
+        r#"SELECT "requestCount","lastUsedAt" FROM "AgentApiKey" WHERE "keyHash" = $1"#,
+    )
+    .bind(hash_agent_api_key(&key))
+    .fetch_one(&db)
+    .await?;
+    assert_eq!(count, 8, "every use is counted, none lost");
+    assert!(used.is_some());
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_malformed_completion_body_is_a_400_naming_every_bad_field() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
     let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {

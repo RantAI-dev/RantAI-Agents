@@ -488,8 +488,43 @@ async fn an_agent_that_needs_the_knowledge_base_is_refused_on_the_socket() -> R 
         .await?;
     let key = key_for(&app, &token, &kb).await?;
 
-    let address = ws::serve(app).await?;
+    let address = ws::serve(app.clone()).await?;
     let mut socket = open(address, &kb, &key).await?;
+    socket
+        .send_json(&json!({"type": "message", "content": "hello"}))
+        .await?;
+    let refusal = read_error(&mut socket).await;
+    assert_eq!(
+        refusal
+            .as_ref()
+            .and_then(|value| value.get("code"))
+            .and_then(Value::as_str),
+        Some("capability_not_ported"),
+        "{refusal:?}"
+    );
+
+    // An MCP server bound to the agent is refused the same way, on this transport too.
+    let with_mcp = assistant(&db, &org_id).await?;
+    let server = agents_store::new_id();
+    sqlx::query(
+        r#"INSERT INTO "McpServerConfig" ("id","name","transport","enabled","configured","isBuiltIn","createdAt","updatedAt")
+           VALUES ($1,'t','sse',true,true,false,now(),now())"#,
+    )
+    .bind(&server)
+    .execute(&db)
+    .await?;
+    sqlx::query(
+        r#"INSERT INTO "AssistantMcpServer" ("id","assistantId","mcpServerId","enabled","createdAt")
+           VALUES ($1,$2,$3,true,now())"#,
+    )
+    .bind(agents_store::new_id())
+    .bind(&with_mcp)
+    .bind(&server)
+    .execute(&db)
+    .await?;
+    let mcp_key = key_for(&app, &token, &with_mcp).await?;
+    let address = ws::serve(app.clone()).await?;
+    let mut socket = open(address, &with_mcp, &mcp_key).await?;
     socket
         .send_json(&json!({"type": "message", "content": "hello"}))
         .await?;

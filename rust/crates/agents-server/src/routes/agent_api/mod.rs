@@ -23,6 +23,7 @@ mod chat;
 mod key_auth;
 mod keys;
 mod secret;
+mod sessions;
 mod turn;
 mod ws;
 
@@ -33,7 +34,7 @@ use axum::routing::get;
 
 use crate::AppState;
 
-pub use ws::{Conversations, Limits};
+pub use sessions::{Conversations, Limits};
 
 /// What the agent API keeps in the process: the conversations of the open sockets, and the
 /// limits they run under. Lives in [`AppState`] so a test can shorten a timeout.
