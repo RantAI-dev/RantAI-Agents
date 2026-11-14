@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { matchRustRoute, RUST_ROUTES, rustRouting, rustTarget } from "@/lib/rust-router/routes"
@@ -137,8 +137,55 @@ describe("the agent-api group", () => {
     expect(matchRustRoute("POST", "/api/dashboard/agent-api-keys")?.group).toBe("agent-api")
     expect(matchRustRoute("PUT", "/api/dashboard/agent-api-keys/k1")?.group).toBe("agent-api")
     expect(matchRustRoute("DELETE", "/api/dashboard/agent-api-keys/k1")?.group).toBe("agent-api")
+    expect(matchRustRoute("PATCH", "/api/dashboard/agent-api-keys/k1")?.group).toBe("agent-api")
     expect(matchRustRoute("POST", "/v1/chat/completions")?.group).toBe("agent-api")
-    expect(matchRustRoute("GET", "/v1/agents/a1/ws")?.group).toBe("agent-api")
+    expect(matchRustRoute("OPTIONS", "/v1/chat/completions")?.group).toBe("agent-api")
+  })
+
+  it("leaves the socket to the proxy in front: fetch cannot forward an Upgrade", () => {
+    expect(matchRustRoute("GET", "/v1/agents/a1/ws")).toBeNull()
+  })
+})
+
+describe("the access panel", () => {
+  it("routes an agent's grants with the assistants group", () => {
+    expect(matchRustRoute("GET", "/api/assistants/a1/access")?.group).toBe("assistants")
+    expect(matchRustRoute("PUT", "/api/assistants/a1/access")?.group).toBe("assistants")
+    expect(matchRustRoute("DELETE", "/api/assistants/a1/access/g1")?.group).toBe("assistants")
+  })
+})
+
+describe("the table against the Rust router", () => {
+  // Every path agents-server registers is in the table, or named here with the reason.
+  const NOT_ROUTED: Record<string, string> = {
+    "/healthz": "the probe is called on agents-server itself",
+    "/readyz": "the probe is called on agents-server itself",
+    "/v1/agents/{}/ws": "a WebSocket: the proxy in front sends it to agents-server",
+  }
+  const routesDir = path.resolve(__dirname, "../../../rust/crates/agents-server/src/routes")
+  const sources = readdirSync(routesDir, { recursive: true, encoding: "utf8" })
+    .filter((file) => file.endsWith(".rs"))
+    .map((file) => readFileSync(path.join(routesDir, file), "utf8"))
+  const registered = new Set(
+    sources.flatMap((source) =>
+      [...source.matchAll(/\.route\(\s*"(\/[^"]+)"/g)].map((m) => m[1].replace(/\{[^}]+\}/g, "{}")),
+    ),
+  )
+  const table = new Set(RUST_ROUTES.map((r) => r.path.replace(/\{[^}]+\}/g, "{}")))
+
+  it("finds the routes it checks", () => {
+    expect(registered.size).toBeGreaterThan(40)
+  })
+
+  it.each([...registered].filter((p) => !(p in NOT_ROUTED)).map((p) => [p]))(
+    "routes %s",
+    (registeredPath) => {
+      expect(table.has(registeredPath)).toBe(true)
+    },
+  )
+
+  it("names nothing Rust does not serve", () => {
+    expect([...table].filter((p) => !registered.has(p))).toEqual([])
   })
 })
 

@@ -46,6 +46,9 @@ export const RUST_ROUTES: readonly RustRoute[] = [
   { group: "assistants", path: "/api/assistants/{id}/mcp-servers", methods: GET_PUT },
   { group: "assistants", path: "/api/assistants/{id}/workflows", methods: GET_PUT },
   { group: "assistants", path: "/api/assistants/{id}/default", methods: ["POST", "DELETE"] },
+  // The access panel (§3.3). Next has no such route, so without these the panel is a 404.
+  { group: "assistants", path: "/api/assistants/{id}/access", methods: GET_PUT },
+  { group: "assistants", path: "/api/assistants/{id}/access/{grantId}", methods: ["DELETE"] },
   { group: "assistants", path: "/api/user/default-assistant", methods: GET_PUT },
   { group: "assistants", path: "/api/user/preferences", methods: ["GET", "PUT", "PATCH"] },
   { group: "assistants", path: "/api/mobile/assistants", methods: ["GET", "POST"] },
@@ -106,13 +109,16 @@ export const RUST_ROUTES: readonly RustRoute[] = [
   { group: "sharing", path: "/api/dashboard/chat/shared", methods: ["GET"] },
   { group: "sharing", path: "/api/dashboard/chat/shared/{id}", methods: ["GET"] },
   { group: "sharing", path: "/api/dashboard/chat/shared/{id}/fork", methods: ["POST"] },
-  // The agent API keys and the agent HTTP surface (identity-and-access slice S7). The TypeScript
-  // routes answer until that slice lands; the group is listed so an operator can cut them over
-  // with RUST_ROUTES, and `RUST_API_URL` being unset keeps everything in Next until then.
+  // routes/agent_api/{mod,chat}.rs. The socket, `GET /v1/agents/{assistantId}/ws`, is not
+  // here on purpose: the middleware forwards with fetch, which cannot carry an Upgrade, so the
+  // proxy in front sends it to agents-server directly (docs/operations/rust-cutover.md).
   { group: "agent-api", path: "/api/dashboard/agent-api-keys", methods: ["GET", "POST"] },
-  { group: "agent-api", path: "/api/dashboard/agent-api-keys/{id}", methods: ["GET", "PUT", "DELETE"] },
-  { group: "agent-api", path: "/v1/chat/completions", methods: ["POST"] },
-  { group: "agent-api", path: "/v1/agents/{id}/ws", methods: ["GET"] },
+  {
+    group: "agent-api",
+    path: "/api/dashboard/agent-api-keys/{id}",
+    methods: ["GET", "PUT", "PATCH", "DELETE"],
+  },
+  { group: "agent-api", path: "/v1/chat/completions", methods: ["POST", "OPTIONS"] },
 ]
 
 const COMPILED = RUST_ROUTES.map((route) => ({
