@@ -13,7 +13,7 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::StatusCode;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -25,12 +25,11 @@ use agents_store::org_members::{self, MemberRow, MemberWrite};
 use crate::AppState;
 use crate::auth::CurrentUser;
 use crate::http::ApiError;
+use crate::http::client_ip::ClientIp;
 use crate::http::json::Body;
 
 use super::bodies::{parse_invite, parse_role};
-use super::{
-    SuccessJson, ensure_org, ip_address, missing_body, owner_rights, principal, store_error,
-};
+use super::{SuccessJson, ensure_org, missing_body, owner_rights, principal, store_error};
 
 /// One unit the member is directly in.
 #[derive(Debug, Clone, Serialize)]
@@ -103,7 +102,7 @@ pub(super) async fn list(
 pub(super) async fn invite(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    ip: ClientIp,
     Path(id): Path<String>,
     body: Option<Body<Value>>,
 ) -> Result<(StatusCode, Json<MemberJson>), ApiError> {
@@ -113,7 +112,7 @@ pub(super) async fn invite(
     let member = principal(&state, &user, &id).await?;
     ensure_org(&member, Permission::OrgMembersManage, &id)?;
     let (email, role) = parse_invite(&body)?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = Actor {
         user_id: &user.id,
         ip_address: ip.as_deref(),
@@ -130,10 +129,10 @@ pub(super) async fn invite(
 pub(super) async fn accept(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    ip: ClientIp,
     Path(id): Path<String>,
 ) -> Result<Json<MemberJson>, ApiError> {
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = Actor {
         user_id: &user.id,
         ip_address: ip.as_deref(),
@@ -151,7 +150,7 @@ pub(super) async fn accept(
 pub(super) async fn change_role(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    ip: ClientIp,
     Path((id, member_id)): Path<(String, String)>,
     body: Option<Body<Value>>,
 ) -> Result<Json<MemberJson>, ApiError> {
@@ -161,7 +160,7 @@ pub(super) async fn change_role(
     let member = principal(&state, &user, &id).await?;
     ensure_org(&member, Permission::OrgMembersManage, &id)?;
     let role = parse_role(&body)?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = Actor {
         user_id: &user.id,
         ip_address: ip.as_deref(),
@@ -190,12 +189,12 @@ pub(super) async fn change_role(
 pub(super) async fn remove(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    ip: ClientIp,
     Path((id, member_id)): Path<(String, String)>,
 ) -> Result<Json<SuccessJson>, ApiError> {
     let member = principal(&state, &user, &id).await?;
     ensure_org(&member, Permission::OrgMembersManage, &id)?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = Actor {
         user_id: &user.id,
         ip_address: ip.as_deref(),

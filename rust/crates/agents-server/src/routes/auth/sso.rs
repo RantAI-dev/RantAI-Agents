@@ -27,6 +27,7 @@ use agents_store::sso_login::{self, SsoLogin, SsoOutcome};
 use super::password::{issue_session, with_cookies};
 use crate::AppState;
 use crate::http::ApiError;
+use crate::http::client_ip::ClientIp;
 use crate::signin::{self, cookies};
 use crate::sso::{self, Provider, client::CodeExchange};
 
@@ -122,7 +123,7 @@ async fn start(
         .map_err(|e| upstream(&provider.id, &e))?;
     let doc = state
         .signin
-        .oidc
+        .oidc_for(&provider.id)
         .discover(&discovery_url, &issuer)
         .await
         .map_err(|e| upstream(&provider.id, &e))?;
@@ -216,11 +217,12 @@ async fn callback(
     Path(provider_id): Path<String>,
     Query(q): Query<CallbackQuery>,
     headers: HeaderMap,
+    ip: ClientIp,
 ) -> Response {
     let origin = state.signin.origin(&headers);
     let secure = state.signin.secure_cookies(&headers);
     let clear_flow = cookies::clear_flow_cookie(secure);
-    match finish(&state, &provider_id, q, &headers).await {
+    match finish(&state, &provider_id, q, &headers, ip).await {
         Ok((return_to, mut set)) => {
             set.push(clear_flow);
             see_other(&format!("{origin}{return_to}"), &set)
@@ -245,6 +247,7 @@ async fn finish(
     provider_id: &str,
     q: CallbackQuery,
     headers: &HeaderMap,
+    ip: ClientIp,
 ) -> Result<(String, Vec<String>), Refusal> {
     let secure = state.signin.secure_cookies(headers);
     let sealed = cookies::cookie(headers, cookies::flow_cookie_name(secure))
@@ -286,7 +289,7 @@ async fn finish(
     let started = chrono::DateTime::from_timestamp_millis(flow.started_at_ms)
         .ok_or_else(|| sso_failed("bad flow start"))?
         .naive_utc();
-    let address = signin::client_address(headers);
+    let address = ip.text();
     let outcome = sso_login::complete(
         &state.db,
         &SsoLogin {
@@ -302,7 +305,7 @@ async fn finish(
             groups: groups.as_deref(),
             mapped_role: mapped_role.map(|r| r.as_str()),
             flow_started_at: started,
-            ip_address: Some(&address),
+            ip_address: address.as_deref(),
         },
     )
     .await
@@ -349,7 +352,7 @@ async fn verified_claims(
         .config
         .discovery_url()
         .map_err(|e| sso_failed(e.to_string()))?;
-    let client = &state.signin.oidc;
+    let client = state.signin.oidc_for(&provider.id);
     let doc = client
         .discover(&discovery_url, &issuer)
         .await

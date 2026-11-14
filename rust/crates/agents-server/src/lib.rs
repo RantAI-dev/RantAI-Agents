@@ -46,6 +46,9 @@ pub struct AppState {
     /// Sign-in: the public URL, the throttle, the SSO client and the provider from the
     /// environment.
     pub signin: Arc<signin::SignIn>,
+    /// `TRUSTED_PROXIES`: the proxies whose `X-Forwarded-For` is believed. Empty means the
+    /// socket peer is the caller ([`http::client_ip`]).
+    pub trusted_proxies: Arc<[agents_core::net::Cidr]>,
 }
 
 impl AppState {
@@ -68,6 +71,7 @@ impl AppState {
             platform_context: true,
             http: reqwest::Client::new(),
             signin: Arc::new(signin::SignIn::default()),
+            trusted_proxies: Arc::from(Vec::new()),
         }
     }
 }

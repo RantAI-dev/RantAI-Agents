@@ -72,14 +72,17 @@ pub(super) async fn clear_org_default(
 }
 
 /// The assistant an organisation-default request is about: one of the caller's organisation
-/// that they administer, and not a built-in (the flag lives on the assistant row, so a built-in
+/// that they administer (`agents.manage` on the organisation, not a `manage` grant on the one
+/// agent: the default reaches every member), and not a built-in (the flag lives on the assistant row, so a built-in
 /// cannot be an organisation's default; differences row 27).
 async fn default_candidate(
     state: &AppState,
     caller: &super::Caller,
     id: &str,
 ) -> Result<agents_store::assistants::AssistantRow, ApiError> {
+    // The agent first, so another organisation's id stays a 404 rather than a 403.
     let row = load_authorized(&state.db, caller, id, Permission::AgentsManage).await?;
+    super::authorize_org(&state.db, caller, Permission::AgentsManage).await?;
     if row.is_built_in {
         return Err(forbidden());
     }

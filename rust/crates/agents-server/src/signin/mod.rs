@@ -1,5 +1,5 @@
 //! What the sign-in routes share: the deployment's public URL, the cookies Auth.js would set,
-//! randomness, the caller's address, the throttle and the SSO client.
+//! randomness, the throttle and the SSO clients. The caller's address is `crate::http::client_ip`.
 
 pub mod cookies;
 pub mod throttle;
@@ -13,7 +13,7 @@ use crate::sso::client::OidcClient;
 use crate::sso::env::EnvProvider;
 
 /// The sign-in part of the application state.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct SignIn {
     /// `AUTH_URL`, else `NEXTAUTH_URL`: the origin the browser sees, without a trailing slash.
     /// Without it the origin is read from the request (`Host`, `X-Forwarded-Proto`), as Auth.js
@@ -25,7 +25,24 @@ pub struct SignIn {
     /// The provider from `AUTH_OIDC_*`, for an install with one IdP and no admin step.
     pub env_provider: Option<EnvProvider>,
     pub throttle: throttle::Throttle,
+    /// The client for the providers organisation admins configure: public addresses only,
+    /// unless `SSO_ALLOW_PRIVATE_NETWORKS` is set.
     pub oidc: OidcClient,
+    /// The client for the operator's own provider from `AUTH_OIDC_*`: any address.
+    pub env_oidc: OidcClient,
+}
+
+impl Default for SignIn {
+    fn default() -> Self {
+        Self {
+            public_url: None,
+            credential_key: None,
+            env_provider: None,
+            throttle: throttle::Throttle::default(),
+            oidc: OidcClient::default(),
+            env_oidc: OidcClient::operator(),
+        }
+    }
 }
 
 /// Fresh random bytes from the operating system.
@@ -41,6 +58,17 @@ pub fn random_iv() -> Result<[u8; jwe::IV_LEN], getrandom::Error> {
 }
 
 impl SignIn {
+    /// The client that may reach this provider: the operator's own one is exempt from the
+    /// private-network check, every other one is not.
+    #[must_use]
+    pub fn oidc_for(&self, provider_id: &str) -> &OidcClient {
+        if provider_id == crate::sso::env::ENV_PROVIDER_ID {
+            &self.env_oidc
+        } else {
+            &self.oidc
+        }
+    }
+
     /// The origin the browser sees: the configured URL, else the request's own.
     #[must_use]
     pub fn origin(&self, headers: &HeaderMap) -> String {
@@ -80,29 +108,6 @@ impl SignIn {
     }
 }
 
-/// The caller's address as the nearest proxy saw it: the last `X-Forwarded-For` entry, which the
-/// proxy in front of this service appended (Next.js or the load balancer), then `X-Real-IP`. The
-/// first entry is whatever the client wrote, so it is never used.
-#[must_use]
-pub fn client_address(headers: &HeaderMap) -> String {
-    let forwarded = headers
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.rsplit(',').next())
-        .map(str::trim)
-        .filter(|v| !v.is_empty());
-    forwarded
-        .or_else(|| {
-            headers
-                .get("x-real-ip")
-                .and_then(|v| v.to_str().ok())
-                .map(str::trim)
-        })
-        .filter(|v| !v.is_empty())
-        .unwrap_or("unknown")
-        .to_owned()
-}
-
 /// A path on this site to send the browser to after sign-in: `/` plus anything but a second `/`
 /// or `\` (which a browser reads as another host). Anything else falls back to `/dashboard`.
 #[must_use]
@@ -140,18 +145,5 @@ mod tests {
             assert_eq!(safe_return_to(Some(bad)), "/dashboard", "{bad}");
         }
         assert_eq!(safe_return_to(None), "/dashboard");
-    }
-
-    #[test]
-    fn the_address_is_the_proxys_entry_not_the_clients() {
-        let mut h = HeaderMap::new();
-        h.insert(
-            "x-forwarded-for",
-            "6.6.6.6, 10.0.0.7"
-                .parse()
-                .unwrap_or(axum::http::HeaderValue::from_static("")),
-        );
-        assert_eq!(client_address(&h), "10.0.0.7");
-        assert_eq!(client_address(&HeaderMap::new()), "unknown");
     }
 }

@@ -1,4 +1,5 @@
 pub mod api_error;
+pub mod client_ip;
 pub mod json;
 pub mod request_id;
 pub mod time;

@@ -44,9 +44,18 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         public_url: config.public_url.clone(),
         credential_key: config.credential_key.clone(),
         env_provider: config.env_provider.clone(),
+        oidc: agents_server::sso::client::OidcClient::new(
+            agents_server::sso::client::OidcOptions {
+                allow_private_networks: config.sso_allow_private_networks,
+                ..agents_server::sso::client::OidcOptions::default()
+            },
+        ),
         ..agents_server::signin::SignIn::default()
     });
-    axum::serve(listener, app(state))
+    state.trusted_proxies = std::sync::Arc::from(config.trusted_proxies.clone());
+    // The socket peer is the only address a client cannot forge (`http::client_ip`).
+    let service = app(state).into_make_service_with_connect_info::<std::net::SocketAddr>();
+    axum::serve(listener, service)
         .with_graceful_shutdown(shutdown())
         .await?;
     Ok(())

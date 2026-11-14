@@ -119,7 +119,24 @@ pub async fn send_with(
     body: Option<Value>,
     headers: &[(&str, &str)],
 ) -> Result<(u16, Value), Box<dyn std::error::Error>> {
+    send_from(router, method, uri, auth, body, headers, None).await
+}
+
+/// Sends one request as if it came over a socket from `peer`, the way `main.rs` serves with
+/// `ConnectInfo`; `None` is a request with no socket peer.
+pub async fn send_from(
+    router: &Router,
+    method: &str,
+    uri: &str,
+    auth: Option<&str>,
+    body: Option<Value>,
+    headers: &[(&str, &str)],
+    peer: Option<std::net::SocketAddr>,
+) -> Result<(u16, Value), Box<dyn std::error::Error>> {
     let mut req = Request::builder().method(method).uri(uri);
+    if let Some(peer) = peer {
+        req = req.extension(axum::extract::ConnectInfo(peer));
+    }
     if let Some(a) = auth {
         req = req.header("authorization", a);
     }

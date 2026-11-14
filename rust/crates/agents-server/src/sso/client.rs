@@ -4,9 +4,17 @@
 //! may fetch its own copy. A token whose `kid` is not in the cached JWKS refetches it once (the
 //! provider rotated its keys), at most once per cooldown so a stream of bad tokens cannot make
 //! us hammer the provider.
+//!
+//! An organisation admin chooses the provider URLs, so unless private networks are allowed
+//! (`SSO_ALLOW_PRIVATE_NETWORKS`), the client refuses any address that is not public: an IP
+//! literal is checked before the request, and a name is checked after it is resolved, by the
+//! resolver the connector uses, so a name that resolves to a public address for the check and a
+//! private one for the connection (DNS rebinding) cannot get through. Redirects are not followed
+//! and proxies from the environment are not used, so nothing else picks the address.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use agents_auth::oidc::JwkSet;
@@ -47,9 +55,53 @@ struct CachedJwks {
     fetched: Instant,
 }
 
+/// What an [`OidcClient`] may reach.
+#[derive(Debug, Clone, Copy)]
+pub struct OidcOptions {
+    /// Plain `http://` provider URLs: only a test with a local stub provider sets it.
+    pub allow_http: bool,
+    /// Loopback, private, link-local, CGNAT, unique-local and metadata addresses. Off for the
+    /// providers organisation admins configure, unless the operator sets
+    /// `SSO_ALLOW_PRIVATE_NETWORKS=true` (an on-prem install with an internal Keycloak).
+    pub allow_private_networks: bool,
+    /// The least time between two JWKS fetches for an unknown `kid`.
+    pub jwks_refetch_cooldown: Duration,
+}
+
+impl Default for OidcOptions {
+    fn default() -> Self {
+        Self {
+            allow_http: false,
+            allow_private_networks: false,
+            jwks_refetch_cooldown: Duration::from_secs(30),
+        }
+    }
+}
+
+/// Resolves a name only to public addresses: the connector connects to what this returns, so
+/// the address checked is the address used.
+#[derive(Debug)]
+struct PublicOnly;
+
+impl reqwest::dns::Resolve for PublicOnly {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_owned();
+        Box::pin(async move {
+            let addrs: Vec<SocketAddr> =
+                tokio::net::lookup_host((host.as_str(), 0)).await?.collect();
+            if addrs.is_empty() || addrs.iter().any(|a| !agents_core::net::is_public(a.ip())) {
+                return Err(format!("{host} resolves to an address that is not public").into());
+            }
+            let addrs: reqwest::dns::Addrs = Box::new(addrs.into_iter());
+            Ok(addrs)
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct OidcClient {
     http: reqwest::Client,
+    allow_private_networks: bool,
     discovery: Mutex<HashMap<String, (Instant, Discovery)>>,
     jwks: Mutex<HashMap<String, CachedJwks>>,
     /// Plain `http://` provider URLs are refused unless this is set: only a test with a local
@@ -60,18 +112,9 @@ pub struct OidcClient {
 }
 
 impl Default for OidcClient {
+    /// https only, public addresses only.
     fn default() -> Self {
-        Self {
-            http: reqwest::Client::builder()
-                .timeout(Duration::from_secs(10))
-                .redirect(reqwest::redirect::Policy::none())
-                .build()
-                .unwrap_or_default(),
-            discovery: Mutex::new(HashMap::new()),
-            jwks: Mutex::new(HashMap::new()),
-            allow_http: false,
-            jwks_refetch_cooldown: Duration::from_secs(30),
-        }
+        Self::new(OidcOptions::default())
     }
 }
 
@@ -80,23 +123,73 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl OidcClient {
-    /// A client that also accepts `http://` providers and refetches keys without a cooldown: for
-    /// a test with a local stub provider.
     #[must_use]
-    pub fn with_options(allow_http: bool, jwks_refetch_cooldown: Duration) -> Self {
+    pub fn new(options: OidcOptions) -> Self {
+        let builder = reqwest::Client::builder()
+            .timeout(Duration::from_secs(10))
+            .redirect(reqwest::redirect::Policy::none());
+        let builder = if options.allow_private_networks {
+            builder
+        } else {
+            // A proxy from the environment would resolve the name itself, past the check.
+            builder.no_proxy().dns_resolver(Arc::new(PublicOnly))
+        };
         Self {
-            allow_http,
-            jwks_refetch_cooldown,
-            ..Self::default()
+            http: builder.build().unwrap_or_default(),
+            allow_private_networks: options.allow_private_networks,
+            discovery: Mutex::new(HashMap::new()),
+            jwks: Mutex::new(HashMap::new()),
+            allow_http: options.allow_http,
+            jwks_refetch_cooldown: options.jwks_refetch_cooldown,
         }
     }
 
+    /// The client of the operator's own provider (`AUTH_OIDC_*`): https only, any address, since
+    /// the operator, not an organisation admin, chose it.
+    #[must_use]
+    pub fn operator() -> Self {
+        Self::new(OidcOptions {
+            allow_private_networks: true,
+            ..OidcOptions::default()
+        })
+    }
+
+    /// A client that also accepts `http://` providers on any address and refetches keys without
+    /// a cooldown: for a test with a local stub provider.
+    #[must_use]
+    pub fn with_options(allow_http: bool, jwks_refetch_cooldown: Duration) -> Self {
+        Self::new(OidcOptions {
+            allow_http,
+            allow_private_networks: true,
+            jwks_refetch_cooldown,
+        })
+    }
+
     fn check_url(&self, url: &str) -> Result<(), ClientError> {
-        if url.starts_with("https://") || (self.allow_http && url.starts_with("http://")) {
-            Ok(())
-        } else {
-            Err(ClientError::Upstream(format!("not an https URL: {url}")))
+        if !(url.starts_with("https://") || (self.allow_http && url.starts_with("http://"))) {
+            return Err(ClientError::Upstream(format!("not an https URL: {url}")));
         }
+        if self.allow_private_networks {
+            return Ok(());
+        }
+        // The resolver never sees an IP literal: it is checked here.
+        let parsed = reqwest::Url::parse(url).map_err(|e| ClientError::Upstream(e.to_string()))?;
+        let Some(host) = parsed.host_str() else {
+            return Err(ClientError::Upstream(format!("no host in {url}")));
+        };
+        // `host_str` brackets an IPv6 literal; the URL parser already normalised IPv4 forms
+        // such as `0x7f.1` or `2130706433` to dotted decimal.
+        let literal = host
+            .trim_start_matches('[')
+            .trim_end_matches(']')
+            .parse::<IpAddr>()
+            .ok();
+        if literal.is_some_and(|ip| !agents_core::net::is_public(ip)) {
+            return Err(ClientError::Upstream(format!(
+                "not a public address: {url}"
+            )));
+        }
+        Ok(())
     }
 
     async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T, ClientError> {
@@ -174,6 +267,7 @@ impl OidcClient {
         if let Some(secret) = exchange.client_secret {
             form.push(("client_secret", secret));
         }
+        self.check_url(&doc.token_endpoint)?;
         let res = self
             .http
             .post(&doc.token_endpoint)

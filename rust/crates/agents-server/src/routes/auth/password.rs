@@ -25,6 +25,7 @@ use agents_store::{orgs, users};
 
 use crate::AppState;
 use crate::http::ApiError;
+use crate::http::client_ip::ClientIp;
 use crate::http::json::Body;
 use crate::signin::{self, cookies};
 
@@ -105,11 +106,11 @@ fn credentials(
 /// may sign in with it.
 async fn check_password(
     state: &AppState,
-    headers: &HeaderMap,
+    ip: ClientIp,
     email: &str,
     password: String,
 ) -> Result<LoginUser, ApiError> {
-    let address = signin::client_address(headers);
+    let address = ip.key();
     let attempt = state
         .signin
         .throttle
@@ -146,13 +147,14 @@ async fn check_password(
         tracing::warn!(error = %e, "lastActiveAt was not updated");
     }
     if let Ok(Some(m)) = orgs::default_membership(&state.db, &user.id).await {
+        let ip_text = ip.text();
         let entry = AuditEntry {
             organization_id: &m.organization_id,
             user_id: Some(&user.id),
             action: "auth.login",
             resource: &format!("user:{}", user.id),
             detail: json!({ "method": "password" }),
-            ip_address: Some(&address),
+            ip_address: ip_text.as_deref(),
             risk_level: "low",
         };
         if let Err(e) = audit::record_entry(&state.db, &entry).await {
@@ -214,13 +216,14 @@ fn cross_site() -> ApiError {
 async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
+    ip: ClientIp,
     Body(body): Body<LoginBody>,
 ) -> Result<Response, ApiError> {
     if !state.signin.same_origin(&headers) {
         return Err(cross_site());
     }
     let (email, password) = credentials(body.email, body.password)?;
-    let user = check_password(&state, &headers, &email, password).await?;
+    let user = check_password(&state, ip, &email, password).await?;
     let set = issue_session(
         &state,
         &headers,
@@ -260,11 +263,11 @@ struct MobileLoginBody {
 
 async fn mobile_login(
     State(state): State<AppState>,
-    headers: HeaderMap,
+    ip: ClientIp,
     Body(body): Body<MobileLoginBody>,
 ) -> Result<Json<MobileLoginResponse>, ApiError> {
     let (email, password) = credentials(body.email, body.password)?;
-    let user = check_password(&state, &headers, &email, password).await?;
+    let user = check_password(&state, ip, &email, password).await?;
     let secret = state
         .auth
         .secrets

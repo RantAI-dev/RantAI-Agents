@@ -11,7 +11,7 @@
 
 use axum::Json;
 use axum::extract::{Path, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::StatusCode;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -22,13 +22,12 @@ use agents_store::units::{self, MemberRow, NewUnit, UnitRow};
 use crate::AppState;
 use crate::auth::CurrentUser;
 use crate::http::ApiError;
+use crate::http::client_ip::ClientIp;
 use crate::http::json::Body;
 use crate::http::time::iso;
 
 use super::bodies::{parse_unit_create, parse_unit_member, parse_unit_update, parse_user_id};
-use super::{
-    SuccessJson, ensure_parent, ensure_unit, ip_address, missing_body, principal, store_error,
-};
+use super::{SuccessJson, ensure_parent, ensure_unit, missing_body, principal, store_error};
 
 /// One unit with the units below it.
 #[derive(Debug, Clone, Serialize)]
@@ -128,7 +127,7 @@ pub(super) async fn list(
 pub(super) async fn create(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    ip: ClientIp,
     Path(id): Path<String>,
     body: Option<Body<Value>>,
 ) -> Result<(StatusCode, Json<UnitJson>), ApiError> {
@@ -145,7 +144,7 @@ pub(super) async fn create(
             .map_err(|e| store_error(&e))?;
     }
     ensure_parent(&member, &id, input.parent_id.as_deref())?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let kind = UnitKind::parse(&input.kind).ok_or_else(|| {
         ApiError::from(vec![agents_core::validation::FieldError::new(
             "/kind",
@@ -174,7 +173,7 @@ pub(super) async fn create(
 pub(super) async fn update(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    ip: ClientIp,
     Path((id, unit_id)): Path<(String, String)>,
     body: Option<Body<Value>>,
 ) -> Result<Json<UnitJson>, ApiError> {
@@ -187,7 +186,7 @@ pub(super) async fn update(
         .map_err(|e| store_error(&e))?;
     ensure_unit(&member, &id, &unit_id)?;
     let change = parse_unit_update(&body)?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = actor(&user, ip.as_deref());
     let mut row = existing.clone();
     if let Some(parent) = &change.parent_id {
@@ -220,7 +219,7 @@ pub(super) async fn update(
 pub(super) async fn delete(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    ip: ClientIp,
     Path((id, unit_id)): Path<(String, String)>,
 ) -> Result<Json<SuccessJson>, ApiError> {
     let member = principal(&state, &user, &id).await?;
@@ -229,7 +228,7 @@ pub(super) async fn delete(
         .map_err(|e| store_error(&e))?;
     // Like creating it: the unit's parent decides, so a lead keeps the unit they lead.
     ensure_parent(&member, &id, existing.parent_id.as_deref())?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     units::delete(&state.db, &id, &unit_id, Some(&actor(&user, ip.as_deref())))
         .await
         .map_err(|e| store_error(&e))?;
@@ -260,7 +259,7 @@ pub(super) async fn members(
 pub(super) async fn add_member(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    ip: ClientIp,
     Path((id, unit_id)): Path<(String, String)>,
     body: Option<Body<Value>>,
 ) -> Result<(StatusCode, Json<UnitMemberJson>), ApiError> {
@@ -273,7 +272,7 @@ pub(super) async fn add_member(
         .map_err(|e| store_error(&e))?;
     ensure_unit(&member, &id, &unit_id)?;
     let (user_id, is_lead) = parse_unit_member(&body)?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     // The store refuses a user who is not an accepted member of the organisation: a 404.
     let row = units::add_member(
         &state.db,
@@ -293,7 +292,7 @@ pub(super) async fn add_member(
 pub(super) async fn remove_member(
     State(state): State<AppState>,
     user: CurrentUser,
-    headers: HeaderMap,
+    ip: ClientIp,
     Path((id, unit_id)): Path<(String, String)>,
     body: Option<Body<Value>>,
 ) -> Result<Json<SuccessJson>, ApiError> {
@@ -306,7 +305,7 @@ pub(super) async fn remove_member(
         .map_err(|e| store_error(&e))?;
     ensure_unit(&member, &id, &unit_id)?;
     let user_id = parse_user_id(&body)?;
-    let ip = ip_address(&headers);
+    let ip = ip.text();
     let actor = actor(&user, ip.as_deref());
     units::remove_member(&state.db, &id, &unit_id, &user_id, Some(&actor))
         .await

@@ -233,6 +233,26 @@ impl Binding {
         }
     }
 
+    /// The table of the rows this kind binds.
+    const fn target_table(self) -> &'static str {
+        match self {
+            Self::Tool => r#""Tool""#,
+            Self::Skill => r#""Skill""#,
+            Self::McpServer => r#""McpServerConfig""#,
+            Self::Workflow => r#""Workflow""#,
+        }
+    }
+
+    /// The global rows (no organisation) every organisation may bind, as the pickers list them:
+    /// built-in tools and MCP servers, and every global skill. A workflow is never global.
+    const fn shared_rows(self) -> &'static str {
+        match self {
+            Self::Tool | Self::McpServer => r#"t."organizationId" IS NULL AND t."isBuiltIn""#,
+            Self::Skill => r#"t."organizationId" IS NULL"#,
+            Self::Workflow => "false",
+        }
+    }
+
     const fn target_column(self) -> &'static str {
         match self {
             Self::Tool => r#""toolId""#,
@@ -277,6 +297,9 @@ pub async fn list_bindings(
 
 /// Replaces every binding of one kind in one transaction. For skills, the position in
 /// `target_ids` becomes the priority. Duplicates keep their first position.
+///
+/// [`StoreError::NotFound`] when any id is unknown, or belongs to another organisation than the
+/// assistant's and is not a shared global row; nothing is written then.
 pub async fn replace_bindings(
     db: &PgPool,
     assistant_id: &str,
@@ -284,6 +307,27 @@ pub async fn replace_bindings(
     target_ids: &[String],
 ) -> StoreResult<()> {
     let mut tx: Transaction<'_, Postgres> = db.begin().await?;
+    // Every target must belong to the assistant's organisation or be shared: another tenant's
+    // row is the same 404 as one that does not exist, and nothing is written. FOR SHARE keeps
+    // the rows from moving or vanishing before the commit.
+    let wanted: std::collections::HashSet<&String> = target_ids.iter().collect();
+    let check = format!(
+        r#"SELECT t."id" FROM {table} t
+           WHERE t."id" = ANY($1)
+             AND (t."organizationId" = (SELECT a."organizationId" FROM "Assistant" a WHERE a."id" = $2)
+                  OR {shared})
+           FOR SHARE OF t"#,
+        table = kind.target_table(),
+        shared = kind.shared_rows(),
+    );
+    let found: Vec<String> = sqlx::query_scalar(&check)
+        .bind(target_ids)
+        .bind(assistant_id)
+        .fetch_all(&mut *tx)
+        .await?;
+    if found.len() != wanted.len() {
+        return Err(StoreError::NotFound);
+    }
     let del = format!(r#"DELETE FROM {} WHERE "assistantId" = $1"#, kind.table());
     sqlx::query(&del)
         .bind(assistant_id)
@@ -497,11 +541,15 @@ pub async fn list_tool_bindings(db: &PgPool, assistant_id: &str) -> StoreResult<
 }
 
 /// The ids of the tools that are hidden from the assistant's picker (`userSelectable = false`).
-/// A binding PUT must not drop them.
+/// A binding PUT must not drop them. One the organisation may not bind (bound before the
+/// tenancy check existed) is left out, so the next PUT drops it instead of failing.
 pub async fn hidden_tool_ids(db: &PgPool, assistant_id: &str) -> StoreResult<Vec<String>> {
     Ok(sqlx::query_scalar(
         r#"SELECT b."toolId" FROM "AssistantTool" b JOIN "Tool" t ON t."id" = b."toolId"
-           WHERE b."assistantId" = $1 AND t."userSelectable" = false"#,
+           JOIN "Assistant" a ON a."id" = b."assistantId"
+           WHERE b."assistantId" = $1 AND t."userSelectable" = false
+             AND (t."organizationId" = a."organizationId"
+                  OR (t."organizationId" IS NULL AND t."isBuiltIn"))"#,
     )
     .bind(assistant_id)
     .fetch_all(db)
