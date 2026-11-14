@@ -1,4 +1,4 @@
-import { Settings, Wrench, BarChart3, CreditCard } from "@/lib/icons"
+import { Settings, Wrench, BarChart3, CreditCard, Building2, KeyRound } from "@/lib/icons"
 
 const isCloudEdition = process.env.NEXT_PUBLIC_EDITION === "cloud"
 
@@ -8,6 +8,18 @@ const baseNavItems = [
     href: "/dashboard/settings/general",
     icon: Settings,
     description: "Organization, beta features & system info",
+  },
+  {
+    title: "Organisation",
+    href: "/dashboard/settings/organization/general",
+    icon: Building2,
+    description: "Members, teams, single sign-on & audit log",
+  },
+  {
+    title: "API keys",
+    href: "/dashboard/settings/api-keys",
+    icon: KeyRound,
+    description: "Keys the agents use from other platforms",
   },
 ]
 

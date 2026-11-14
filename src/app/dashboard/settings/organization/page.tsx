@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
 
 export default function OrganizationSettingsPage() {
-  redirect("/dashboard/settings/general?tab=organization")
+  redirect("/dashboard/settings/organization/general")
 }
