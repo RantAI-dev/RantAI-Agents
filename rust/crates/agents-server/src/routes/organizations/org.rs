@@ -20,9 +20,7 @@ use crate::http::json::Body;
 use crate::http::time::iso;
 
 use super::bodies::parse_org_update;
-use super::{ensure_org, ip_address, missing_body, permits, principal, store_error};
-
-use agents_core::authz::Resource;
+use super::{ensure_org, ip_address, missing_body, principal, store_error};
 
 /// One organisation in the caller's list, as the old route returned it.
 #[derive(Debug, Clone, Serialize)]
