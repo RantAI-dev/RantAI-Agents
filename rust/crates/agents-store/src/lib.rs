@@ -10,11 +10,13 @@
 //! Queries are checked at runtime, not compile time (no `DATABASE_URL` needed to build). Every
 //! query has an integration test against a migrated database: set `TEST_DATABASE_URL`.
 
+pub mod approvals;
 pub mod assistants;
 pub mod catalog;
 pub mod memory;
 pub mod orgs;
 pub mod sessions;
+pub mod tools;
 pub mod users;
 
 use chrono::{NaiveDateTime, Utc};

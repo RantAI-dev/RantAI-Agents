@@ -55,6 +55,28 @@ impl LlmSettings {
     }
 }
 
+/// How a chat waits for the user's decision on a gated tool call.
+///
+/// The wait polls the database (`agents_store::approvals`), so no connection is held between
+/// two reads, and the decision may reach any instance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ToolApprovalTiming {
+    /// How long the call waits before it counts as not approved (`DEFAULT_APPROVAL_TIMEOUT_MS`:
+    /// proxies drop an idle stream after about 100 s, and no bytes flow while it waits).
+    pub timeout: std::time::Duration,
+    /// How often the decision is read.
+    pub poll: std::time::Duration,
+}
+
+impl Default for ToolApprovalTiming {
+    fn default() -> Self {
+        Self {
+            timeout: std::time::Duration::from_secs(90),
+            poll: std::time::Duration::from_millis(500),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub database_url: String,
@@ -67,6 +89,9 @@ pub struct Config {
     /// How many model calls one chat may make. The platform default, the way
     /// `resolveMaxSteps` decided it.
     pub chat_max_steps: u32,
+    /// The most model calls an assistant's own `maxSteps` may ask for
+    /// (`RANTAI_MAX_STEPS_HARD_CAP`).
+    pub chat_max_steps_cap: u32,
     /// Whether the identity and date block is part of the system prompt
     /// (`PLATFORM_CONTEXT_INSTRUCTION=off` removes it).
     pub platform_context: bool,
@@ -131,7 +156,14 @@ impl Config {
                 minimax_base_url: var("MINIMAX_BASE_URL"),
             },
         };
-        let chat_max_steps = var_count("RANTAI_DEFAULT_MAX_STEPS", 20)?;
+        let chat_max_steps = var_count(
+            "RANTAI_DEFAULT_MAX_STEPS",
+            agents_core::chat::step_budget::PLATFORM_DEFAULT,
+        )?;
+        let chat_max_steps_cap = var_count(
+            "RANTAI_MAX_STEPS_HARD_CAP",
+            agents_core::chat::step_budget::HARD_CAP,
+        )?;
         let platform_context = !matches!(
             var("PLATFORM_CONTEXT_INSTRUCTION")
                 .map(|value| value.trim().to_ascii_lowercase())
@@ -145,6 +177,7 @@ impl Config {
             auth_secrets,
             llm,
             chat_max_steps,
+            chat_max_steps_cap,
             platform_context,
         })
     }

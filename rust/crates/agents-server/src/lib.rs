@@ -29,8 +29,13 @@ pub struct AppState {
     /// The model policy, the usage and the credits of a chat. The open-source edition allows
     /// every chat and records nothing; the cloud edition passes its own.
     pub meter: Arc<dyn ChatMeter>,
-    /// How many model calls one chat may make.
+    /// How many model calls a chat with tools may make, unless the assistant asks for another
+    /// number (`RANTAI_DEFAULT_MAX_STEPS`). A chat without tools makes at most two.
     pub chat_max_steps: u32,
+    /// The most model calls an assistant may ask for (`RANTAI_MAX_STEPS_HARD_CAP`).
+    pub chat_max_steps_cap: u32,
+    /// How a chat waits for the user's decision on a gated tool call.
+    pub tool_approval: config::ToolApprovalTiming,
     /// Whether the identity and date block is part of the system prompt.
     pub platform_context: bool,
     /// The HTTP client the model is called with. One for the process: the connection pool is
@@ -52,7 +57,9 @@ impl AppState {
             )),
             meter: Arc::new(policy::AllowAllChat),
             llm: LlmSettings::default(),
-            chat_max_steps: 20,
+            chat_max_steps: agents_core::chat::step_budget::PLATFORM_DEFAULT,
+            chat_max_steps_cap: agents_core::chat::step_budget::HARD_CAP,
+            tool_approval: config::ToolApprovalTiming::default(),
             platform_context: true,
             http: reqwest::Client::new(),
         }

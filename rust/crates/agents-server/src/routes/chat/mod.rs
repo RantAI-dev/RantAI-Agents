@@ -2,19 +2,22 @@
 //!
 //! Old: `src/app/api/chat/route.ts` and `runChat` in `src/features/chat-public/service.ts`.
 //!
-//! This is the D2 capability: an assistant with no knowledge base, no tools, no chatflow and
-//! no attachments. The two memory tools (`saveMemory` and `forgetMemory`) belong to the chat
-//! service, not to the assistant, so they are here: the profile changes through them and
-//! through the summary (docs/port/differences.md, row 3).
+//! This is the D2 capability, an assistant with no knowledge base, no chatflow and no
+//! attachments, plus D3: the built-in tools that need no outside service, with the approval
+//! gate (`tools.rs`, `approval.rs`). The two memory tools (`saveMemory` and `forgetMemory`)
+//! belong to the chat service, not to the assistant, so they are here: the profile changes
+//! through them and through the summary (docs/port/differences.md, row 3).
 //!
-//! A request the plain chat does not cover is answered with a 409 `capability_not_ported`, so
+//! A request the chat does not cover is answered with a 409 `capability_not_ported`, so
 //! the router sends it to the TypeScript service instead.
 
+mod approval;
 mod memory;
 mod persist;
 mod prompt;
 mod request;
 mod stream;
+mod tools;
 
 use std::io;
 use std::sync::Arc;
@@ -29,8 +32,12 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 
 use agents_contracts::error_codes::ErrorCode;
-use agents_contracts::ui_stream::UI_MESSAGE_STREAM_HEADERS;
+use agents_contracts::ui_stream::{
+    TOOL_APPROVAL_HEADER, UI_MESSAGE_STREAM_HEADERS, tool_approval_header_value,
+};
 use agents_core::assistant::config::{MemoryConfig, ModelConfig};
+use agents_core::chat::step_budget::resolve_max_steps;
+use agents_core::prompt::approval::resolve_tool_approval_mode;
 use agents_llm::agent_loop::{ToolExecutor, run_agent_loop};
 use agents_llm::client::{Cancel, CancelHandle};
 use agents_llm::provider::Provider;
@@ -52,7 +59,9 @@ const DEFAULT_MODEL: &str = "rantai/nano";
 const FRAME_BUFFER: usize = 32;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/api/chat", post(chat))
+    Router::new()
+        .route("/api/chat", post(chat))
+        .merge(approval::router())
 }
 
 /// `POST /api/chat`: the plain chat, as a UI message stream.
@@ -76,8 +85,17 @@ async fn chat(
         None => None,
     };
 
-    // A capability the plain chat does not have is a 409, not a wrong answer.
+    // A capability the chat does not have is a 409, not a wrong answer.
     check_capabilities(&state, &input, assistant.as_ref()).await?;
+    let builtin_tools = tools::resolve(
+        &state.db,
+        &input,
+        assistant.as_ref(),
+        caller.org_id.as_deref(),
+        &user.id,
+    )
+    .await?;
+    let tool_names: Vec<String> = builtin_tools.iter().map(|t| t.name.clone()).collect();
 
     // The session: one the caller owns, or none. An unknown id is dropped, the way the
     // TypeScript dropped it.
@@ -139,17 +157,42 @@ async fn chat(
             model_name: agents_llm::provider::house_model_name(&model_id),
             now: &now,
             platform_context: state.platform_context,
+            tool_names: &tool_names,
         },
+    );
+
+    let chat_tools = Arc::new(tools::ChatTools {
+        db: state.db.clone(),
+        user_id: user.id.clone(),
+        organization_id: caller.org_id.clone(),
+        assistant_id: assistant.as_ref().map(|row| row.id.clone()),
+        session_id: session_id.clone(),
+        builtins: builtin_tools,
+        memory: memory_config.enabled.then(|| {
+            memory::MemoryTools::new(
+                state.db.clone(),
+                user.id.clone(),
+                now.clone(),
+                profile_enabled,
+            )
+        }),
+        approval_mode: resolve_tool_approval_mode(
+            assistant.as_ref().and_then(|row| row.guard_rails.as_ref()),
+        ),
+        timing: state.tool_approval,
+    });
+    let gated = tool_approval_header_value(&chat_tools.gated());
+    let max_steps = resolve_max_steps(
+        assistant.as_ref().and_then(|row| row.model_config.as_ref()),
+        !tool_names.is_empty(),
+        state.chat_max_steps,
+        state.chat_max_steps_cap,
     );
 
     let request = LlmRequest {
         model: route.model.clone(),
         messages: model_messages(&system, &input),
-        tools: if memory_config.enabled {
-            memory::definitions()
-        } else {
-            Vec::new()
-        },
+        tools: chat_tools.definitions(),
         tool_choice: ToolChoice::Auto,
         temperature: model_config.temperature,
         top_p: model_config.top_p,
@@ -162,12 +205,7 @@ async fn chat(
         extra_body: None,
     };
 
-    let executor: Arc<dyn ToolExecutor> = Arc::new(memory::MemoryTools::new(
-        state.db.clone(),
-        user.id.clone(),
-        now.clone(),
-        profile_enabled,
-    ));
+    let executor: Arc<dyn ToolExecutor> = chat_tools.clone();
     let (handle, cancel) = Cancel::channel();
     let run = ChatRun {
         db: state.db.clone(),
@@ -190,9 +228,10 @@ async fn chat(
         model: route.model.clone(),
         request,
         executor,
+        tools: chat_tools,
         cancel: cancel.clone(),
         handle,
-        max_steps: usize::try_from(state.chat_max_steps).unwrap_or(20),
+        max_steps: usize::try_from(max_steps).unwrap_or(1),
         meter: state.meter.clone(),
         now,
     };
@@ -210,6 +249,12 @@ async fn chat(
         if let Ok(value) = HeaderValue::from_str(value) {
             response.headers_mut().insert(name, value);
         }
+    }
+    // The client renders Approve and Deny for the calls of these tools.
+    if !gated.is_empty()
+        && let Ok(value) = HeaderValue::from_str(&gated)
+    {
+        response.headers_mut().insert(TOOL_APPROVAL_HEADER, value);
     }
     Ok(response)
 }
@@ -344,11 +389,12 @@ fn not_ported() -> ApiError {
     ApiError::new(ErrorCode::CapabilityNotPorted)
 }
 
-/// The capabilities the plain chat does not have.
+/// The capabilities the chat does not have.
 ///
-/// The knowledge base, the assistant's tools, its MCP servers, its workflows and its chatflow,
-/// its skills and the attachments of the request all belong to a later slice of the port (D3,
-/// D4). The request is answered with a 409 so the router sends it to the TypeScript service.
+/// The knowledge base, the assistant's MCP servers, its workflows and its chatflow, its skills
+/// and the attachments of the request all belong to a later slice of the port (D3, D4). The
+/// request is answered with a 409 so the router sends it to the TypeScript service. The
+/// assistant's tools are decided by `tools::resolve`.
 ///
 /// The assistant's own bindings decide, not the request's switches: a chat is never answered
 /// with less than the assistant was set up for. The knowledge base is the exception the old
@@ -368,8 +414,7 @@ async fn check_capabilities(
     {
         return Err(not_ported());
     }
-    if !body.enabled_tool_names.is_empty()
-        || !body.enabled_skill_ids.is_empty()
+    if !body.enabled_skill_ids.is_empty()
         || body.enable_web_search == Some(true)
         || body.enable_code_interpreter == Some(true)
         || body.canvas_mode.is_some()
@@ -403,13 +448,6 @@ async fn check_capabilities(
         return Err(not_ported());
     }
 
-    // The tools of the assistant.
-    let tools = assistants::list_tool_bindings(&state.db, &assistant.id)
-        .await
-        .map_err(|e| store_error(&e))?;
-    if tools.iter().any(|tool| tool.bound_enabled && tool.enabled) {
-        return Err(not_ported());
-    }
     let servers = assistants::list_mcp_server_bindings(&state.db, &assistant.id)
         .await
         .map_err(|e| store_error(&e))?;
@@ -503,6 +541,8 @@ struct ChatRun {
     provider: Provider,
     request: LlmRequest,
     executor: Arc<dyn ToolExecutor>,
+    /// The same tools, for the frames of a call the SDK would have refused.
+    tools: Arc<tools::ChatTools>,
     cancel: Cancel,
     handle: CancelHandle,
     max_steps: usize,
@@ -513,7 +553,7 @@ struct ChatRun {
 impl ChatRun {
     /// The chat: the frames, and then the work that follows them.
     async fn go(self, tx: mpsc::Sender<Result<Bytes, io::Error>>) {
-        let mut frames = stream::Frames::new();
+        let mut frames = stream::Frames::with_tools(self.tools.clone());
         send_all(&tx, &stream::Frames::start()).await;
 
         let mut events = Box::pin(run_agent_loop(

@@ -11,23 +11,26 @@
 //! The reasoning part is opened with the first reasoning delta and closed after the `finish`
 //! frame, the way the old `createExtractThinkTransform` did.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use agents_contracts::ui_stream::{
     ErrorChunk, FinishChunk, FinishReason, FinishStepChunk, ReasoningDeltaChunk, ReasoningEndChunk,
     ReasoningStartChunk, StartChunk, StartStepChunk, TextDeltaChunk, TextEndChunk, TextStartChunk,
-    ToolInputAvailableChunk, ToolInputDeltaChunk, ToolInputStartChunk, ToolOutputAvailableChunk,
-    UI_MESSAGE_STREAM_DONE, UiChunk, sse_frame,
+    ToolInputAvailableChunk, ToolInputDeltaChunk, ToolInputErrorChunk, ToolInputStartChunk,
+    ToolOutputAvailableChunk, ToolOutputErrorChunk, UI_MESSAGE_STREAM_DONE, UiChunk, sse_frame,
 };
 use agents_llm::agent_loop::AgentEvent;
 use agents_llm::types::{Event, LlmError, Usage};
 use axum::body::Bytes;
 
+use super::tools::ToolCheck;
+
 /// The id of the text part. The OpenAI-compatible provider names it `txt-0`.
 const TEXT_PART_ID: &str = "txt-0";
 
 /// The frames of one chat, and what the chat produced.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Frames {
     /// The answer, as the model wrote it.
     pub text: String,
@@ -48,13 +51,32 @@ pub struct Frames {
     /// before its first chunk never writes one.
     step_pending: bool,
     failed: bool,
+    /// The tools the model was offered, to tell a call the SDK would refuse.
+    tools: Option<Arc<dyn ToolCheck>>,
+    /// The calls of tools the model was not offered: the SDK marked their frames `dynamic`.
+    unknown_calls: BTreeSet<String>,
 }
 
 impl Frames {
-    /// A chat that has not started yet.
+    /// A chat that has not started yet, with no list of tools.
+    #[cfg(test)]
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// A chat whose model is offered tools.
+    #[must_use]
+    pub fn with_tools(tools: Arc<dyn ToolCheck>) -> Self {
+        Self {
+            tools: Some(tools),
+            ..Self::default()
+        }
+    }
+
+    /// Whether the model was offered this tool; without a list every tool counts.
+    fn is_known(&self, name: &str) -> bool {
+        self.tools.as_ref().is_none_or(|tools| tools.is_known(name))
     }
 
     /// The frames one event of the model produces.
@@ -85,19 +107,24 @@ impl Frames {
                 self.usage = usage;
                 self.step_open = false;
                 let mut frames = self.step_frame();
-                if self.text_open {
-                    self.text_open = false;
-                    frames.push(frame(&UiChunk::TextEnd(TextEndChunk {
-                        id: TEXT_PART_ID.to_owned(),
-                        provider_metadata: None,
-                    })));
-                }
+                frames.extend(self.end_text());
                 frames.push(frame(&UiChunk::FinishStep(FinishStepChunk {})));
                 frames
             }
             AgentEvent::TotalUsage { usage } => {
                 self.usage = usage;
                 Vec::new()
+            }
+            // The SDK wrote a thrown tool error as `tool-output-error`; a call of a tool the
+            // model was not offered was marked `dynamic` too.
+            AgentEvent::ToolFailed { id, message, .. } => {
+                let dynamic = self.unknown_calls.contains(&id).then_some(true);
+                vec![frame(&UiChunk::ToolOutputError(ToolOutputErrorChunk {
+                    tool_call_id: id,
+                    error_text: message,
+                    provider_executed: None,
+                    dynamic,
+                }))]
             }
             AgentEvent::ApprovalRequired { name, reason, .. } => self.on_error(&format!(
                 "The tool {name} needs a decision before it can run: {reason}"
@@ -150,12 +177,14 @@ impl Frames {
             }
             Event::ToolCallStart { index, id, name } => {
                 self.calls.insert(index, id.clone());
+                // The SDK wrote `"dynamic":false` on the start of a tool it did not offer.
+                let dynamic = (!self.is_known(&name)).then_some(false);
                 vec![frame(&UiChunk::ToolInputStart(ToolInputStartChunk {
                     tool_call_id: id,
                     tool_name: name,
                     provider_executed: None,
                     provider_metadata: None,
-                    dynamic: None,
+                    dynamic,
                     title: None,
                 }))]
             }
@@ -167,6 +196,28 @@ impl Frames {
                 }))]
             }
             Event::ToolCallReady { id, name, args } => {
+                // A call the SDK could not parse was `tool-input-error`, not
+                // `tool-input-available`; the tool then failed with the same message.
+                if let Some(Err(message)) =
+                    self.tools.as_ref().map(|tools| tools.check(&name, &args))
+                {
+                    let dynamic = if self.is_known(&name) {
+                        None
+                    } else {
+                        self.unknown_calls.insert(id.clone());
+                        Some(true)
+                    };
+                    return vec![frame(&UiChunk::ToolInputError(ToolInputErrorChunk {
+                        tool_call_id: id,
+                        tool_name: name,
+                        input: args,
+                        provider_executed: None,
+                        provider_metadata: None,
+                        dynamic,
+                        error_text: message,
+                        title: None,
+                    }))];
+                }
                 vec![frame(&UiChunk::ToolInputAvailable(
                     ToolInputAvailableChunk {
                         tool_call_id: id,
@@ -185,10 +236,24 @@ impl Frames {
             }
             Event::Finish { reason } => {
                 self.finish_reason = Some(map_finish_reason(reason));
-                Vec::new()
+                // The provider closed the text part when its stream ended, before the tools
+                // of the step ran.
+                self.end_text()
             }
             Event::Error { message } => self.on_error(&message),
         }
+    }
+
+    /// The `text-end` frame, when the text part is open.
+    fn end_text(&mut self) -> Vec<Bytes> {
+        if !self.text_open {
+            return Vec::new();
+        }
+        self.text_open = false;
+        vec![frame(&UiChunk::TextEnd(TextEndChunk {
+            id: TEXT_PART_ID.to_owned(),
+            provider_metadata: None,
+        }))]
     }
 
     /// The `start-step` frame, when the step has not written it yet.

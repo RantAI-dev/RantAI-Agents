@@ -3,6 +3,12 @@
 //! The stub speaks the OpenAI-compatible SSE dialect the providers speak, so the chat service
 //! talks to it exactly as it talks to OpenRouter. It reads every request and keeps it, so a
 //! test can look at what the model was asked.
+//!
+//! `chat_plain.rs` and `chat_tools.rs` share it, and neither uses every part of it.
+#![allow(
+    dead_code,
+    reason = "shared by two test crates that use different parts"
+)]
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,11 +32,22 @@ pub enum Script {
     Status(u16),
     /// The model answers one piece and then waits: the test hangs up in the middle.
     Hang(String),
+    /// A call of the tool first, and the answer once the tool's result is back.
+    ToolThenText {
+        name: String,
+        arguments: String,
+        text: Vec<String>,
+    },
+    /// A call of the tool on every request that offers tools: only the step budget ends the
+    /// turn.
+    AlwaysTool { name: String, arguments: String },
 }
 
 /// A scripted server on 127.0.0.1.
 pub struct Stub {
     address: SocketAddr,
+    /// The tool call ids start with it, so two tests never wait on the same id.
+    call_prefix: String,
     requests: Arc<Mutex<Vec<Value>>>,
     hung_up: Arc<AtomicBool>,
 }
@@ -44,22 +61,42 @@ impl Stub {
         let recorded = Arc::clone(&requests);
         let hung_up = Arc::new(AtomicBool::new(false));
         let seen = Arc::clone(&hung_up);
+        let call_prefix = format!("call_{}", agents_store::new_id());
+        let prefix = call_prefix.clone();
         tokio::spawn(async move {
             while let Ok((mut socket, _)) = listener.accept().await {
                 let script = script.clone();
                 let recorded = Arc::clone(&recorded);
                 let seen = Arc::clone(&seen);
+                let prefix = prefix.clone();
                 tokio::spawn(async move {
-                    let body = read_request(&mut socket, recorded).await;
-                    let _ = write_reply(&mut socket, &script, &body, seen).await;
+                    let body = read_request(&mut socket, Arc::clone(&recorded)).await;
+                    let count = recorded.lock().map(|guard| guard.len()).unwrap_or(0);
+                    let call_id = format!("{prefix}_{count}");
+                    let _ = write_reply(&mut socket, &script, &body, seen, &call_id).await;
                 });
             }
         });
         Ok(Self {
             address,
+            call_prefix,
             requests,
             hung_up,
         })
+    }
+
+    /// The id of the tool call the stub answers its `n`th request with, counting from one.
+    pub fn call_id(&self, n: usize) -> String {
+        format!("{}_{n}", self.call_prefix)
+    }
+
+    /// The requests that offered the model tools: the chat's own steps, not the summary.
+    pub fn tool_requests(&self) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
+        Ok(self
+            .requests()?
+            .into_iter()
+            .filter(|request| request.get("tools").is_some())
+            .collect())
     }
 
     /// Whether the client hung up while the model was still answering.
@@ -155,6 +192,7 @@ async fn write_reply(
     script: &Script,
     request_body: &str,
     hung_up: Arc<AtomicBool>,
+    call_id: &str,
 ) -> std::io::Result<()> {
     let request: Value = serde_json::from_str(request_body).unwrap_or(Value::Null);
     let (status, content_type, body) = match script {
@@ -162,16 +200,7 @@ async fn write_reply(
         Script::SaveMessageThenText { text } => {
             // The summary call has no tools, and the second call of the turn carries the
             // tool's result: both are answered with the text.
-            let has_tools = request.get("tools").is_some();
-            let has_tool_result = request
-                .get("messages")
-                .and_then(Value::as_array)
-                .is_some_and(|messages| {
-                    messages
-                        .iter()
-                        .any(|message| message.get("role").and_then(Value::as_str) == Some("tool"))
-                });
-            if !has_tools || has_tool_result {
+            if request.get("tools").is_none() || has_tool_result(&request) {
                 ("200 OK", "text/event-stream", text_body(text))
             } else {
                 // The tool remembers what the user said, under a label of its own, so every
@@ -184,7 +213,37 @@ async fn write_reply(
                 (
                     "200 OK",
                     "text/event-stream",
-                    tool_body("saveMemory", &arguments),
+                    tool_body("saveMemory", &arguments, "call_1"),
+                )
+            }
+        }
+        Script::ToolThenText {
+            name,
+            arguments,
+            text,
+        } => {
+            if request.get("tools").is_none() || has_tool_result(&request) {
+                ("200 OK", "text/event-stream", text_body(text))
+            } else {
+                (
+                    "200 OK",
+                    "text/event-stream",
+                    tool_body(name, arguments, call_id),
+                )
+            }
+        }
+        Script::AlwaysTool { name, arguments } => {
+            if request.get("tools").is_none() {
+                (
+                    "200 OK",
+                    "text/event-stream",
+                    text_body(&["Done.".to_owned()]),
+                )
+            } else {
+                (
+                    "200 OK",
+                    "text/event-stream",
+                    tool_body(name, arguments, call_id),
                 )
             }
         }
@@ -234,32 +293,38 @@ fn text_body(parts: &[String]) -> String {
     for part in parts {
         body.push_str(&format!("data: {}\n\n", chunk(json!({"content": part}))));
     }
-    body.push_str(&format!(
-        "data: {}\n\n",
-        chunk(json!({"finish_reason": "stop"}))
-    ));
+    body.push_str(&format!("data: {}\n\n", finish_chunk("stop")));
     body.push_str(&format!("data: {}\n\n", usage_chunk()));
     body.push_str("data: [DONE]\n\n");
     body
 }
 
+/// Whether the request carries a tool's result.
+fn has_tool_result(request: &Value) -> bool {
+    request
+        .get("messages")
+        .and_then(Value::as_array)
+        .is_some_and(|messages| {
+            messages
+                .iter()
+                .any(|message| message.get("role").and_then(Value::as_str) == Some("tool"))
+        })
+}
+
 /// The SSE body of a tool call.
-fn tool_body(name: &str, arguments: &str) -> String {
+fn tool_body(name: &str, arguments: &str, call_id: &str) -> String {
     let mut body = String::new();
     body.push_str(&format!(
         "data: {}\n\n",
         chunk(json!({
             "tool_calls": [{
                 "index": 0,
-                "id": "call_1",
+                "id": call_id,
                 "function": {"name": name, "arguments": arguments},
             }],
         }))
     ));
-    body.push_str(&format!(
-        "data: {}\n\n",
-        chunk(json!({"finish_reason": "tool_calls"}))
-    ));
+    body.push_str(&format!("data: {}\n\n", finish_chunk("tool_calls")));
     body.push_str("data: [DONE]\n\n");
     body
 }
@@ -288,6 +353,17 @@ fn chunk(delta: Value) -> String {
         "object": "chat.completion.chunk",
         "model": "stub",
         "choices": [{"index": 0, "delta": delta}],
+    })
+    .to_string()
+}
+
+/// The chunk that ends the answer: the reason sits on the choice, not in the delta.
+fn finish_chunk(reason: &str) -> String {
+    json!({
+        "id": "chatcmpl-1",
+        "object": "chat.completion.chunk",
+        "model": "stub",
+        "choices": [{"index": 0, "delta": {}, "finish_reason": reason}],
     })
     .to_string()
 }
