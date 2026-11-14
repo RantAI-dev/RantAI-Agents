@@ -4,6 +4,7 @@
 //! `agents-contracts`) gains a dependency that does I/O.
 
 pub mod assistant;
+pub mod authz;
 pub mod chat;
 pub mod memory;
 pub mod org;

@@ -9,7 +9,13 @@
 //! The Rust version answers one question — [`can`] — instead of the old HTTP statuses:
 //! `false` covers both "hidden from you" (the old 404, to avoid leaking existence) and
 //! "not your role" (the old 403); the caller picks the response it sends.
+//!
+//! The role checks come from [`crate::authz`]'s role table. Two rules of the identity-and-access
+//! design wait for slice S4, because `tests/parity_assistants.rs` (owner-protected) pins the old
+//! answers: `View` is still "in your org" rather than "granted to you", and `Edit` still lets a
+//! `member` edit (differences row 80). S4 moves its routes to [`crate::authz::authorize`].
 
+use crate::authz::{Permission, role_has};
 use crate::org::OrgRole;
 
 /// The authenticated caller. The user id is carried for the callers' audit trails; the
@@ -83,7 +89,9 @@ pub fn can(actor: &Actor, action: Action, target: &AssistantRef) -> bool {
                     None => true,
                     Some(organization_id) => {
                         actor.organization_id.as_ref() == Some(organization_id)
-                            && actor.role.is_some_and(OrgRole::can_manage)
+                            && actor
+                                .role
+                                .is_some_and(|r| role_has(r, Permission::AgentsManage))
                     }
                 }
         }
@@ -94,7 +102,9 @@ pub fn can(actor: &Actor, action: Action, target: &AssistantRef) -> bool {
             !target.is_built_in
                 && target.organization_id.is_some()
                 && actor.organization_id == target.organization_id
-                && actor.role.is_some_and(OrgRole::can_manage)
+                && actor
+                    .role
+                    .is_some_and(|r| role_has(r, Permission::AgentsManage))
         }
     }
 }
