@@ -64,7 +64,17 @@ export const config = {
     "/api/user/preferences",
     "/api/mobile/assistants/:path*",
     "/api/mobile/memories/:path*",
+    "/api/mobile/login",
     "/api/dashboard/chat/sessions/:path*",
+    "/api/dashboard/chat/shared/:path*",
     "/api/dashboard/memory/:path*",
+    "/api/dashboard/sso/:path*",
+    "/api/dashboard/agent-api-keys/:path*",
+    "/api/organizations/:path*",
+    // Sign-in only, never NextAuth's /api/auth/session or /api/auth/csrf.
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/auth/sso/:path*",
+    "/v1/:path*",
   ],
 }
