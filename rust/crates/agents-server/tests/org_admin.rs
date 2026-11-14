@@ -7,7 +7,9 @@ mod common;
 mod org_admin_fixtures;
 
 use common::{R, bearer, code, router, send, user};
-use org_admin_fixtures::{member, member_id, org, unit, unit_member, unit_of_kind};
+use org_admin_fixtures::{
+    find, list, member, member_id, org, text, unit, unit_member, unit_of_kind,
+};
 use serde_json::{Value, json};
 
 use agents_core::authz::UnitKind;
@@ -20,12 +22,16 @@ async fn call(
     uri: &str,
     body: Option<Value>,
 ) -> (u16, Value) {
-    send(app, method, uri, Some(token), body).await.unwrap()
+    match send(app, method, uri, Some(token), body).await {
+        Ok(answer) => answer,
+        // A transport failure fails the assertion with the request's own error.
+        Err(e) => (0, json!({ "testError": e.to_string() })),
+    }
 }
 
 /// A token for a user, as the mobile route issues it.
 fn token(user_id: &str) -> String {
-    bearer(user_id).unwrap()
+    bearer(user_id).unwrap_or_default()
 }
 
 fn not_found(body: &Value) -> bool {
@@ -146,16 +152,8 @@ async fn another_organisations_rows_are_a_404() -> R {
     // The list is the caller's own organisations, never another's.
     let (status, body) = call(&app, &ta, "GET", "/api/organizations", None).await;
     assert_eq!(status, 200);
-    let ids: Vec<&str> = body
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|o| o["id"].as_str())
-        .collect();
-    assert!(
-        ids.contains(&a.as_str()) && !ids.contains(&b.as_str()),
-        "{body}"
-    );
+    let ids: Vec<String> = list(&body, "").iter().map(|o| text(o, "/id")).collect();
+    assert!(ids.contains(&a) && !ids.contains(&b), "{body}");
     Ok(())
 }
 
@@ -316,11 +314,9 @@ async fn a_member_is_refused_and_an_admin_is_not() -> R {
     )
     .await;
     assert_eq!(status, 200);
-    let listed = body.as_array().unwrap();
+    let listed = list(&body, "");
     assert!(
-        listed
-            .iter()
-            .all(|m| m["userId"].as_str() != Some(target.as_str())),
+        listed.iter().all(|m| text(m, "/userId") != target),
         "the removed member is gone: {body}"
     );
     Ok(())
@@ -358,7 +354,7 @@ async fn a_lead_manages_their_team_and_nothing_else() -> R {
     )
     .await;
     assert_eq!(status, 201, "a lead creates under their team: {body}");
-    let created = body["id"].as_str().unwrap().to_owned();
+    let created = text(&body, "/id");
     let (status, body) = call(
         &app,
         &tl,
@@ -502,7 +498,7 @@ async fn a_unit_cycle_is_a_conflict() -> R {
     )
     .await;
     assert_eq!(status, 200, "a move to the top level: {body}");
-    assert_eq!(body["parentId"], Value::Null);
+    assert!(body.pointer("/parentId").is_some_and(Value::is_null));
     let (status, body) = call(
         &app,
         &to,
@@ -512,7 +508,7 @@ async fn a_unit_cycle_is_a_conflict() -> R {
     )
     .await;
     assert_eq!(status, 200, "a move back under the department: {body}");
-    assert_eq!(body["parentId"].as_str(), Some(dept.as_str()));
+    assert_eq!(text(&body, "/parentId"), dept);
     Ok(())
 }
 
@@ -550,7 +546,7 @@ async fn every_change_leaves_an_audit_row() -> R {
     )
     .await;
     assert_eq!(status, 201, "{body}");
-    let invited = body["id"].as_str().unwrap().to_owned();
+    let invited = text(&body, "/id");
 
     // A role change needs the member list first; `other` is a member, so it is straightforward.
     let (_, members) = call(
@@ -561,15 +557,10 @@ async fn every_change_leaves_an_audit_row() -> R {
         None,
     )
     .await;
-    let other_member = members
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["userId"].as_str() == Some(other.as_str()))
-        .unwrap()["id"]
-        .as_str()
-        .unwrap()
-        .to_owned();
+    let Some(other_row) = find(list(&members, ""), "userId", &other) else {
+        return Err("the member row of the other user is missing".into());
+    };
+    let other_member = text(other_row, "/id");
     let (status, body) = call(
         &app,
         &to,
@@ -598,7 +589,7 @@ async fn every_change_leaves_an_audit_row() -> R {
     )
     .await;
     assert_eq!(status, 201, "{body}");
-    let created = body["id"].as_str().unwrap().to_owned();
+    let created = text(&body, "/id");
     let (status, _) = call(
         &app,
         &to,
@@ -645,8 +636,8 @@ async fn every_change_leaves_an_audit_row() -> R {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    let rows = body["data"].as_array().unwrap();
-    let actions: Vec<&str> = rows.iter().filter_map(|r| r["action"].as_str()).collect();
+    let rows = list(&body, "/data");
+    let actions: Vec<String> = rows.iter().map(|r| text(r, "/action")).collect();
     for expected in [
         "org.update",
         "org.member.invite",
@@ -659,19 +650,21 @@ async fn every_change_leaves_an_audit_row() -> R {
         "org.unit.member.remove",
     ] {
         assert!(
-            actions.contains(&expected),
+            actions.iter().any(|a| a == expected),
             "{expected} is missing: {actions:?}"
         );
     }
-    let update = rows.iter().find(|r| r["action"] == "org.update").unwrap();
-    assert_eq!(update["userId"].as_str(), Some(owner.as_str()));
-    assert_eq!(update["ipAddress"].as_str(), Some("203.0.113.7"));
-    assert_eq!(update["detail"]["name"], "Audited");
-    assert_eq!(
-        update["resource"].as_str(),
-        Some(format!("org:{o}").as_str())
+    let Some(update) = rows.iter().find(|r| text(r, "/action") == "org.update") else {
+        return Err("the org.update row is missing".into());
+    };
+    assert_eq!(text(update, "/userId"), owner);
+    assert_eq!(text(update, "/ipAddress"), "203.0.113.7");
+    assert_eq!(text(update, "/detail/name"), "Audited");
+    assert_eq!(text(update, "/resource"), format!("org:{o}"));
+    assert!(
+        body.pointer("/nextCursor").is_some_and(Value::is_null),
+        "one page: {body}"
     );
-    assert!(body["nextCursor"].is_null(), "one page: {body}");
 
     // The cursor pages: two at a time, none repeated.
     let (status, first) = call(
@@ -683,8 +676,9 @@ async fn every_change_leaves_an_audit_row() -> R {
     )
     .await;
     assert_eq!(status, 200);
-    assert_eq!(first["data"].as_array().unwrap().len(), 2);
-    let cursor = first["nextCursor"].as_str().unwrap().to_owned();
+    assert_eq!(list(&first, "/data").len(), 2);
+    let cursor = text(&first, "/nextCursor");
+    assert!(!cursor.is_empty(), "a second page follows: {first}");
     let (status, second) = call(
         &app,
         &to,
@@ -694,17 +688,13 @@ async fn every_change_leaves_an_audit_row() -> R {
     )
     .await;
     assert_eq!(status, 200);
-    let first_ids: Vec<&str> = first["data"]
-        .as_array()
-        .unwrap()
+    let first_ids: Vec<String> = list(&first, "/data")
         .iter()
-        .filter_map(|r| r["id"].as_str())
+        .map(|r| text(r, "/id"))
         .collect();
-    let second_ids: Vec<&str> = second["data"]
-        .as_array()
-        .unwrap()
+    let second_ids: Vec<String> = list(&second, "/data")
         .iter()
-        .filter_map(|r| r["id"].as_str())
+        .map(|r| text(r, "/id"))
         .collect();
     assert!(
         second_ids.iter().all(|id| !first_ids.contains(id)),
@@ -737,8 +727,8 @@ async fn an_invitation_waits_for_its_invitee() -> R {
     )
     .await;
     assert_eq!(status, 201, "{body}");
-    assert_eq!(body["isPending"], true, "{body}");
-    assert_eq!(body["acceptedAt"], Value::Null);
+    assert_eq!(body.pointer("/isPending"), Some(&json!(true)), "{body}");
+    assert!(body.pointer("/acceptedAt").is_some_and(Value::is_null));
 
     // The same address twice is a 409.
     let (status, body) = call(
@@ -774,8 +764,8 @@ async fn an_invitation_waits_for_its_invitee() -> R {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["isPending"], false);
-    assert_eq!(body["userId"].as_str(), Some(invitee.as_str()));
+    assert_eq!(body.pointer("/isPending"), Some(&json!(false)));
+    assert_eq!(text(&body, "/userId"), invitee);
     let (status, body) = call(
         &app,
         &to,
@@ -786,10 +776,8 @@ async fn an_invitation_waits_for_its_invitee() -> R {
     .await;
     assert_eq!(status, 200);
     assert!(
-        body.as_array()
-            .unwrap()
-            .iter()
-            .any(|m| m["userId"].as_str() == Some(invitee.as_str()) && m["acceptedAt"].is_string()),
+        list(&body, "").iter().any(|m| text(m, "/userId") == invitee
+            && m.pointer("/acceptedAt").is_some_and(Value::is_string)),
         "{body}"
     );
     // Accepting twice finds no pending row.
@@ -827,15 +815,15 @@ async fn the_member_list_carries_unit_memberships() -> R {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    let listed = body
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|m| m["userId"].as_str() == Some(member_user.as_str()))
-        .unwrap();
-    assert_eq!(listed["units"][0]["unitId"].as_str(), Some(u.as_str()));
-    assert_eq!(listed["units"][0]["role"], "lead");
-    assert_eq!(listed["units"][0]["source"], "manual");
+    let Some(listed) = find(list(&body, ""), "userId", &member_user) else {
+        return Err("the member row is missing".into());
+    };
+    let Some(first) = list(listed, "/units").first() else {
+        return Err("the unit membership is missing".into());
+    };
+    assert_eq!(text(first, "/unitId"), u);
+    assert_eq!(text(first, "/role"), "lead");
+    assert_eq!(text(first, "/source"), "manual");
     Ok(())
 }
 
@@ -892,11 +880,11 @@ async fn the_password_switch_is_part_of_the_settings() -> R {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["passwordLoginEnabled"], false);
-    assert_eq!(body["slug"].as_str(), Some(slug.as_str()));
+    assert_eq!(body.pointer("/passwordLoginEnabled"), Some(&json!(false)));
+    assert_eq!(text(&body, "/slug"), slug);
     let (status, body) = call(&app, &to, "GET", &format!("/api/organizations/{o}"), None).await;
     assert_eq!(status, 200);
-    assert_eq!(body["passwordLoginEnabled"], false);
+    assert_eq!(body.pointer("/passwordLoginEnabled"), Some(&json!(false)));
     // A slug another organisation has is a 409.
     let other = org(&db).await?;
     let other_owner = user(&db, false).await?;
@@ -933,15 +921,13 @@ async fn a_bad_body_names_every_bad_field() -> R {
     )
     .await;
     assert_eq!(status, 400, "{body}");
-    let codes: Vec<&str> = body["error"]["errors"]
-        .as_array()
-        .unwrap()
+    let codes: Vec<String> = list(&body, "/error/errors")
         .iter()
-        .filter_map(|e| e["field"].as_str())
+        .map(|e| text(e, "/field"))
         .collect();
-    assert!(codes.contains(&"/email"), "{body}");
-    assert!(codes.contains(&"/role"), "{body}");
-    assert!(codes.contains(&"/nickname"), "{body}");
+    assert!(codes.iter().any(|c| c == "/email"), "{body}");
+    assert!(codes.iter().any(|c| c == "/role"), "{body}");
+    assert!(codes.iter().any(|c| c == "/nickname"), "{body}");
     let (status, body) = call(
         &app,
         &to,

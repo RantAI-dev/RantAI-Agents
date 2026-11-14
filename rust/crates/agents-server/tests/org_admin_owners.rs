@@ -8,7 +8,7 @@ mod org_admin_fixtures;
 
 use agents_store::PgPool;
 use common::{R, bearer, code, router, send, user};
-use org_admin_fixtures::{member, member_id, org};
+use org_admin_fixtures::{member, member_id, org, text};
 use serde_json::{Value, json};
 
 async fn call(
@@ -18,25 +18,28 @@ async fn call(
     uri: &str,
     body: Option<Value>,
 ) -> (u16, Value) {
-    send(app, method, uri, Some(token), body).await.unwrap()
+    match send(app, method, uri, Some(token), body).await {
+        Ok(answer) => answer,
+        // A transport failure fails the assertion with the request's own error.
+        Err(e) => (0, json!({ "testError": e.to_string() })),
+    }
 }
 
 fn token(user_id: &str) -> String {
-    bearer(user_id).unwrap()
+    bearer(user_id).unwrap_or_default()
 }
 
 fn denied(body: &Value) -> bool {
     code(body) == Some("permission_denied")
 }
 
-async fn owners(db: &PgPool, org_id: &str) -> i64 {
+async fn owners(db: &PgPool, org_id: &str) -> Result<i64, sqlx::Error> {
     sqlx::query_scalar::<_, i64>(
         r#"SELECT count(*) FROM "OrganizationMember" WHERE "organizationId" = $1 AND "role" = 'owner'"#,
     )
     .bind(org_id)
     .fetch_one(db)
     .await
-    .unwrap()
 }
 
 /// Only an owner makes or unmakes an owner; an admin keeps the other member powers.
@@ -78,8 +81,8 @@ async fn only_an_owner_makes_or_unmakes_an_owner() -> R {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(body["role"], "owner");
-    assert_eq!(owners(&db, &o).await, 2);
+    assert_eq!(text(&body, "/role"), "owner");
+    assert_eq!(owners(&db, &o).await?, 2);
 
     // An admin may not demote an owner either.
     let (status, body) = call(
@@ -113,7 +116,7 @@ async fn only_an_owner_makes_or_unmakes_an_owner() -> R {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(owners(&db, &o).await, 1);
+    assert_eq!(owners(&db, &o).await?, 1);
 
     // An admin still manages an ordinary member: the admin's own power is intact.
     let (status, body) = call(
@@ -157,7 +160,7 @@ async fn the_last_owner_stays() -> R {
         .await;
         assert_eq!(status, 409, "the last owner {method}: {answer}");
         assert_eq!(code(&answer), Some("conflict"));
-        assert_eq!(owners(&db, &o).await, 1);
+        assert_eq!(owners(&db, &o).await?, 1);
     }
 
     // A second owner makes the demotion legal: the positive control.
@@ -170,7 +173,7 @@ async fn the_last_owner_stays() -> R {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(owners(&db, &o).await, 2);
+    assert_eq!(owners(&db, &o).await?, 2);
     let (status, body) = call(
         &app,
         &ts,
@@ -180,7 +183,7 @@ async fn the_last_owner_stays() -> R {
     )
     .await;
     assert_eq!(status, 200, "{body}");
-    assert_eq!(owners(&db, &o).await, 1);
+    assert_eq!(owners(&db, &o).await?, 1);
     Ok(())
 }
 
@@ -208,10 +211,16 @@ async fn two_concurrent_demotions_leave_one_owner() -> R {
             send(&app, "PATCH", &uri_a, Some(ta.as_str()), body.clone()),
             send(&app, "PATCH", &uri_b, Some(tb.as_str()), body),
         );
-        let (first_status, first_body) = first.unwrap();
-        let (second_status, second_body) = second.unwrap();
+        let (first_status, first_body) = match first {
+            Ok(answer) => answer,
+            Err(e) => return Err(e),
+        };
+        let (second_status, second_body) = match second {
+            Ok(answer) => answer,
+            Err(e) => return Err(e),
+        };
         assert_eq!(
-            owners(&db, &o).await,
+            owners(&db, &o).await?,
             1,
             "round {round}: exactly one owner must remain, got {} and {} ({first_body} / {second_body})",
             first_status,
@@ -249,10 +258,16 @@ async fn two_concurrent_removals_leave_one_owner() -> R {
             send(&app, "DELETE", &uri_a, Some(ta.as_str()), None),
             send(&app, "DELETE", &uri_b, Some(tb.as_str()), None),
         );
-        let (first_status, first_body) = first.unwrap();
-        let (second_status, second_body) = second.unwrap();
+        let (first_status, first_body) = match first {
+            Ok(answer) => answer,
+            Err(e) => return Err(e),
+        };
+        let (second_status, second_body) = match second {
+            Ok(answer) => answer,
+            Err(e) => return Err(e),
+        };
         assert_eq!(
-            owners(&db, &o).await,
+            owners(&db, &o).await?,
             1,
             "round {round}: got {first_status} and {second_status} ({first_body} / {second_body})"
         );

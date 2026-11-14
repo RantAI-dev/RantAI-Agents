@@ -7,8 +7,34 @@
 use agents_core::authz::UnitKind;
 use agents_store::units::{self, NewUnit};
 use agents_store::{PgPool, new_id};
+use serde_json::Value;
 
 pub type R = Result<(), Box<dyn std::error::Error>>;
+
+/// The string at a JSON pointer, or an empty string. An assertion then fails on the value it
+/// expected, instead of a panic inside the reader.
+pub fn text(value: &Value, pointer: &str) -> String {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// The array at a JSON pointer, or an empty slice.
+pub fn list<'a>(value: &'a Value, pointer: &str) -> &'a [Value] {
+    value
+        .pointer(pointer)
+        .and_then(Value::as_array)
+        .map_or(&[], Vec::as_slice)
+}
+
+/// The first object of an array whose `key` equals `value`.
+pub fn find<'a>(items: &'a [Value], key: &str, value: &str) -> Option<&'a Value> {
+    items
+        .iter()
+        .find(|item| item.get(key).and_then(Value::as_str) == Some(value))
+}
 
 /// An organisation row; returns its id.
 pub async fn org(db: &PgPool) -> Result<String, sqlx::Error> {
