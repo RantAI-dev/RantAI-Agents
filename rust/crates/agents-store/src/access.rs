@@ -128,15 +128,9 @@ pub async fn visible_assistants(db: &PgPool, p: &Principal) -> StoreResult<Vec<A
     let sql = format!(
         r#"WITH RECURSIVE {REACH}
            SELECT {ASSISTANT_COLUMNS} FROM "Assistant"
-           WHERE ("isBuiltIn" = true AND ("organizationId" IS NULL OR "organizationId" = $1))
-              OR ("isBuiltIn" = false AND "organizationId" = $1 AND (
-                    $3 OR EXISTS (
-                      SELECT 1 FROM "AssistantGrant" g
-                      WHERE g."assistantId" = "Assistant"."id" AND g."organizationId" = $1
-                        AND {grant}
-                    )))
+           WHERE {}
            ORDER BY "isBuiltIn" DESC, "createdAt" DESC, "id" ASC"#,
-        grant = subject_matches("g"),
+        usable("Assistant"),
     );
     Ok(sqlx::query_as::<_, AssistantRow>(&sql)
         .bind(&p.organization_id)
@@ -144,6 +138,81 @@ pub async fn visible_assistants(db: &PgPool, p: &Principal) -> StoreResult<Vec<A
         .bind(is_org_admin(p.role))
         .fetch_all(db)
         .await?)
+}
+
+/// "This agent is one the principal may use" (§3.3), the SQL twin of
+/// `authz::can_use_agent`. `t` is the quoted table name of the agent row.
+fn usable(t: &str) -> String {
+    format!(
+        r#"(({t}."isBuiltIn" = true AND ({t}."organizationId" IS NULL OR {t}."organizationId" = $1))
+        OR ({t}."isBuiltIn" = false AND {t}."organizationId" = $1 AND (
+              $3 OR EXISTS (
+                SELECT 1 FROM "AssistantGrant" g
+                WHERE g."assistantId" = {t}."id" AND g."organizationId" = $1
+                  AND {}))))"#,
+        subject_matches("g"),
+    )
+}
+
+/// The default assistant of the principal, and where it came from.
+///
+/// The user's own choice when they may still use it, else the organisation's default when they
+/// may use it, else the first built-in (differences rows 41 and 60). A default the caller may
+/// not use is skipped rather than answered: §3.3 sends the default resolution through the same
+/// check as the list and the chat.
+pub async fn resolve_default(
+    db: &PgPool,
+    p: &Principal,
+) -> StoreResult<crate::assistants::ResolvedDefault> {
+    use crate::assistants::{DefaultSource, ResolvedDefault};
+
+    let sql = format!(
+        r#"WITH RECURSIVE {REACH}
+           SELECT
+             COALESCE(
+               (SELECT p."defaultAssistantId" FROM "UserPreference" p
+                  WHERE p."userId" = $2
+                    AND EXISTS (SELECT 1 FROM "Assistant" x
+                                 WHERE x."id" = p."defaultAssistantId" AND {use_x})),
+               (SELECT y."id" FROM "Assistant" y
+                  WHERE y."organizationId" = $1 AND y."isSystemDefault" AND {use_y}
+                  LIMIT 1),
+               (SELECT z."id" FROM "Assistant" z WHERE z."isBuiltIn"
+                  ORDER BY z."isSystemDefault" DESC, z."createdAt" ASC, z."id" ASC LIMIT 1)
+             ) AS "id",
+             CASE
+               WHEN EXISTS (SELECT 1 FROM "UserPreference" p JOIN "Assistant" x
+                              ON x."id" = p."defaultAssistantId"
+                             WHERE p."userId" = $2 AND {use_x}) THEN 'user'
+               WHEN EXISTS (SELECT 1 FROM "Assistant" y
+                             WHERE y."organizationId" = $1 AND y."isSystemDefault" AND {use_y})
+                 THEN 'system'
+               WHEN EXISTS (SELECT 1 FROM "Assistant" z WHERE z."isBuiltIn") THEN 'fallback'
+               ELSE 'none'
+             END AS "source""#,
+        use_x = usable("x"),
+        use_y = usable("y"),
+    );
+    let (id, source) = sqlx::query_as::<_, (Option<String>, String)>(&sql)
+        .bind(&p.organization_id)
+        .bind(&p.user_id)
+        .bind(is_org_admin(p.role))
+        .fetch_one(db)
+        .await?;
+    let source = DefaultSource::parse(&source).unwrap_or(DefaultSource::None);
+    let Some(id) = id else {
+        return Ok(ResolvedDefault {
+            assistant: None,
+            source,
+        });
+    };
+    let assistant = sqlx::query_as::<_, AssistantRow>(&format!(
+        r#"SELECT {ASSISTANT_COLUMNS} FROM "Assistant" WHERE "id" = $1"#,
+    ))
+    .bind(&id)
+    .fetch_optional(db)
+    .await?;
+    Ok(ResolvedDefault { assistant, source })
 }
 
 /// Other users' sessions of the org that an active share reaches the principal through (§3.4),

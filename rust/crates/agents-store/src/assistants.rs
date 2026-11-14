@@ -87,8 +87,12 @@ pub(crate) const COLUMNS: &str = r#""id","name","description","emoji","systemPro
 "liveChatEnabled","avatarS3Key","modelConfig","openingMessage","openingQuestions","guardRails",
 "chatConfig","memoryConfig","tags","createdAt","updatedAt""#;
 
-/// Built-ins plus the organisation's own assistants, built-ins first, then newest first.
-pub async fn list_visible(db: &PgPool, org_id: &str) -> StoreResult<Vec<AssistantRow>> {
+/// Every assistant an organisation may see, built-ins included, whoever the caller is.
+///
+/// This is not an access check: it answers "what exists in this organisation", which only the
+/// plan cap counts. A caller-facing list goes through
+/// [`crate::access::visible_assistants`], which applies §3.3 in SQL.
+pub async fn list_for_org(db: &PgPool, org_id: &str) -> StoreResult<Vec<AssistantRow>> {
     let sql = format!(
         r#"SELECT {COLUMNS} FROM "Assistant"
            WHERE "isBuiltIn" = true OR "organizationId" = $1
@@ -354,31 +358,6 @@ pub async fn clear_org_default(db: &PgPool, org_id: &str) -> StoreResult<()> {
     Ok(())
 }
 
-/// The assistant a new chat uses: the user's own choice if it is still visible to the
-/// organisation, else the organisation's default, else the first built-in default.
-pub async fn resolve_default(
-    db: &PgPool,
-    user_id: &str,
-    org_id: &str,
-) -> StoreResult<Option<AssistantRow>> {
-    let sql = format!(
-        r#"WITH pick AS (SELECT COALESCE(
-               (SELECT p."defaultAssistantId" FROM "UserPreference" p
-                  JOIN "Assistant" x ON x."id" = p."defaultAssistantId"
-                  WHERE p."userId" = $1 AND (x."isBuiltIn" OR x."organizationId" = $2)),
-               (SELECT y."id" FROM "Assistant" y WHERE y."organizationId" = $2 AND y."isSystemDefault" LIMIT 1),
-               (SELECT z."id" FROM "Assistant" z WHERE z."isBuiltIn"
-                  ORDER BY z."isSystemDefault" DESC, z."createdAt" ASC LIMIT 1)
-             ) AS id)
-           SELECT {COLUMNS} FROM "Assistant" WHERE "id" = (SELECT id FROM pick)"#
-    );
-    Ok(sqlx::query_as::<_, AssistantRow>(&sql)
-        .bind(user_id)
-        .bind(org_id)
-        .fetch_optional(db)
-        .await?)
-}
-
 /// The user's preference row: the assistant they chose and their sidebar settings.
 #[derive(Debug, Clone, PartialEq, sqlx::FromRow)]
 #[sqlx(rename_all = "camelCase")]
@@ -466,6 +445,18 @@ impl DefaultSource {
             Self::None => "none",
         }
     }
+
+    /// The name the API sends, read back.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "user" => Some(Self::User),
+            "system" => Some(Self::System),
+            "fallback" => Some(Self::Fallback),
+            "none" => Some(Self::None),
+            _ => None,
+        }
+    }
 }
 
 /// The default assistant and where it came from.
@@ -473,41 +464,6 @@ impl DefaultSource {
 pub struct ResolvedDefault {
     pub assistant: Option<AssistantRow>,
     pub source: DefaultSource,
-}
-
-/// The default assistant of a user in an organisation, and where it came from.
-///
-/// The same order as [`resolve_default`]: the user's own choice (when the organisation may see
-/// it), then the organisation's default, then the first built-in.
-pub async fn resolve_default_with_source(
-    db: &PgPool,
-    user_id: &str,
-    org_id: &str,
-) -> StoreResult<ResolvedDefault> {
-    let assistant = resolve_default(db, user_id, org_id).await?;
-    let source = default_source(db, user_id, org_id).await?;
-    Ok(ResolvedDefault { assistant, source })
-}
-
-/// Which of the three candidates the default comes from.
-async fn default_source(db: &PgPool, user_id: &str, org_id: &str) -> StoreResult<DefaultSource> {
-    let sql = r#"SELECT CASE
-        WHEN EXISTS (SELECT 1 FROM "UserPreference" p JOIN "Assistant" x ON x."id" = p."defaultAssistantId"
-                      WHERE p."userId" = $1 AND (x."isBuiltIn" OR x."organizationId" = $2)) THEN 'user'
-        WHEN EXISTS (SELECT 1 FROM "Assistant" y WHERE y."organizationId" = $2 AND y."isSystemDefault") THEN 'system'
-        WHEN EXISTS (SELECT 1 FROM "Assistant" z WHERE z."isBuiltIn") THEN 'fallback'
-        ELSE 'none' END AS source"#;
-    let source: String = sqlx::query_scalar(sql)
-        .bind(user_id)
-        .bind(org_id)
-        .fetch_one(db)
-        .await?;
-    Ok(match source.as_str() {
-        "user" => DefaultSource::User,
-        "system" => DefaultSource::System,
-        "fallback" => DefaultSource::Fallback,
-        _ => DefaultSource::None,
-    })
 }
 
 /// A tool bound to an assistant, with the tool's own fields.
