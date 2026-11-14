@@ -85,6 +85,12 @@ export function LoginFlow({ initialError = null, navigate }: LoginFlowProps) {
         `/api/auth/sso/discover?email=${encodeURIComponent(email.trim())}`,
       )
       if (!result.ok) {
+        // 404 means this deployment has no Rust sign-in behind the router yet (RUST_ROUTES has
+        // no `auth`): the password form is the only route in, so offer it rather than a wall.
+        if (result.error.status === 404) {
+          setStep("password")
+          return
+        }
         setError(result.error.message)
         return
       }
@@ -107,6 +113,22 @@ export function LoginFlow({ initialError = null, navigate }: LoginFlowProps) {
     if (busy !== "idle") return
     setError(null)
     setBusy("signing-in")
+
+    /** The NextAuth credentials provider, for a deployment whose sign-in is still in Next. */
+    const signInWithCredentials = async () => {
+      const { signIn } = await import("next-auth/react")
+      const result = await signIn("credentials", {
+        email: email.trim(),
+        password,
+        redirect: false,
+      })
+      if (result?.error) {
+        setError("The email or password is not correct.")
+        return
+      }
+      go(DASHBOARD)
+    }
+
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -115,6 +137,12 @@ export function LoginFlow({ initialError = null, navigate }: LoginFlowProps) {
         body: JSON.stringify({ email: email.trim(), password, callbackUrl: DASHBOARD }),
       })
       if (!response.ok) {
+        // Same 404: the TypeScript credentials provider is what signs in until the router sends
+        // the `auth` group to Rust. It is the one NextAuth call this page keeps.
+        if (response.status === 404) {
+          await signInWithCredentials()
+          return
+        }
         const failure = await readApiError(response)
         if (passwordLoginDisabled(failure.code)) {
           setStep("sso-only")

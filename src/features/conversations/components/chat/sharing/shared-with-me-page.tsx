@@ -3,7 +3,7 @@
 import { useCallback } from "react"
 import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
-import { AlertCircle, Loader2, Share2, Users } from "@/lib/icons"
+import { AlertCircle, Loader2, Link2, Users } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useCursorPage } from "@/hooks/use-api-resource"
@@ -20,7 +20,7 @@ export default function SharedWithMePage() {
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-6 py-8">
         <h1 className="flex items-center gap-2 text-2xl font-semibold">
-          <Share2 className="h-5 w-5" />
+          <Link2 className="h-5 w-5" />
           Shared with me
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
