@@ -20,6 +20,10 @@ mod bodies;
 mod core;
 mod defaults;
 mod mobile;
+mod preferences;
+mod wizard;
+mod wizard_bodies;
+mod wizard_tools;
 
 use axum::Router;
 use axum::http::HeaderMap;
@@ -81,6 +85,15 @@ pub fn router() -> Router<AppState> {
             "/api/user/default-assistant",
             get(defaults::get_user_default).put(defaults::set_user_default),
         )
+        // The user's own settings: the assistant they chose and their sidebar.
+        .route(
+            "/api/user/preferences",
+            get(preferences::get)
+                .put(preferences::put)
+                .patch(preferences::put),
+        )
+        // The agent-builder wizard.
+        .route("/api/assistants/wizard/stream", post(wizard::stream))
         // The mobile mirror. The same handlers: they read the same rows and write the same
         // columns, only the way the caller signs in differs.
         .route(
@@ -167,6 +180,36 @@ fn names_an_organisation(headers: &HeaderMap) -> bool {
         .and_then(|v| v.to_str().ok())
         .map(str::trim)
         .is_some_and(|v| !v.is_empty())
+}
+
+/// The caller, and the organisation they act in when they have one.
+///
+/// A caller without an accepted membership has no organisation: the routes that only read
+/// the caller's own rows (the preferences) use this one, so a user without an organisation
+/// still gets their own settings. A caller who named an organisation they do not belong to
+/// is refused.
+pub(crate) async fn caller_or_no_org(
+    state: &AppState,
+    headers: &HeaderMap,
+    user: &CurrentUser,
+) -> Result<Caller, ApiError> {
+    match active_org(state, headers, user).await {
+        Ok(org) => Ok(Caller {
+            user_id: user.id.clone(),
+            org_id: Some(org.org_id),
+            role: Some(org.role),
+            is_platform_admin: user.is_platform_admin,
+        }),
+        Err(e) if e.code == ErrorCode::PermissionDenied && !names_an_organisation(headers) => {
+            Ok(Caller {
+                user_id: user.id.clone(),
+                org_id: None,
+                role: None,
+                is_platform_admin: user.is_platform_admin,
+            })
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// The actor the access policy decides with.

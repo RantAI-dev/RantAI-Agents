@@ -36,6 +36,15 @@ pub fn is_house_model(id: &str) -> bool {
     HOUSE_BACKEND_MODELS.iter().any(|(house, _)| *house == id)
 }
 
+/// The white-labelled house model ids and the upstream model each one stands for.
+///
+/// The display names and the context windows live with the catalogue (the cloud edition
+/// owns it); a caller that only needs the ids reads them here.
+#[must_use]
+pub fn house_models() -> &'static [(&'static str, &'static str)] {
+    HOUSE_BACKEND_MODELS
+}
+
 /// The upstream model name a house id stands for. Other ids pass through.
 #[must_use]
 pub fn house_backend_model(id: &str) -> &str {

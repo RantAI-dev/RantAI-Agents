@@ -25,6 +25,17 @@ impl OrgRole {
         }
     }
 
+    /// The stored spelling, as the database holds it.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Owner => "owner",
+            Self::Admin => "admin",
+            Self::Member => "member",
+            Self::Viewer => "viewer",
+        }
+    }
+
     /// Create and change the organisation's resources.
     #[must_use]
     pub const fn can_edit(self) -> bool {

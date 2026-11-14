@@ -66,3 +66,105 @@ impl AssistantPolicy for AllowAll {
         Ok(())
     }
 }
+
+/// The model the open-source wizard runs on: `WIZARD_MODEL_ID` of the old service. A
+/// non-reasoning model, because the wizard's flow needs terse tool calling.
+pub const WIZARD_MODEL_ID: &str = "anthropic/claude-sonnet-4.6";
+
+/// One model the wizard may offer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WizardModelEntry {
+    /// The model id the proposal carries.
+    pub id: String,
+    /// The name the wizard shows the model under.
+    pub name: String,
+    /// Whether the model can call tools. The wizard's flow needs it.
+    pub function_calling: bool,
+    /// The context window, when the deployment knows it.
+    pub ctx: Option<u32>,
+}
+
+/// The model the wizard runs on and the catalogue it offers.
+///
+/// The open-source edition has no model catalogue and no plans, so its default runs on
+/// [`WIZARD_MODEL_ID`] and offers the house models the port knows
+/// ([`ConfiguredWizard`]). The cloud edition replaces it: the model the wizard runs on, the
+/// models an organisation may use and the plan that organisation is on are its business
+/// (differences.md row 29).
+pub trait WizardModel: Send + Sync + std::fmt::Debug {
+    /// The model the wizard itself runs on.
+    fn model_id(&self) -> &str;
+
+    /// Whether the organisation is on the free plan. The prompt's model rule and the
+    /// catalogue depend on it.
+    fn is_free_plan(&self, organization_id: &str) -> bool;
+
+    /// The models the wizard may offer to this organisation.
+    fn models(&self, organization_id: &str) -> Vec<WizardModelEntry>;
+}
+
+/// The open-source wizard model: the model it runs on, and the house models the port knows
+/// as the catalogue.
+///
+/// The open-source edition has no plans, so an organisation is never on the free plan here
+/// and the prompt asks for a paid house model. The cloud edition brings its own.
+#[derive(Debug, Clone)]
+pub struct ConfiguredWizard {
+    model_id: String,
+    models: Vec<WizardModelEntry>,
+}
+
+impl ConfiguredWizard {
+    /// A wizard that runs on `model_id` and offers the house models when they can be
+    /// served: the old service offered them only when `MINIMAX_API_KEY` was set.
+    #[must_use]
+    pub fn new(model_id: impl Into<String>, house_models_served: bool) -> Self {
+        Self {
+            model_id: model_id.into(),
+            models: if house_models_served {
+                house_model_entries()
+            } else {
+                Vec::new()
+            },
+        }
+    }
+
+    /// A wizard that runs on `model_id` and offers exactly these models.
+    #[must_use]
+    pub fn with_models(model_id: impl Into<String>, models: Vec<WizardModelEntry>) -> Self {
+        Self {
+            model_id: model_id.into(),
+            models,
+        }
+    }
+}
+
+impl WizardModel for ConfiguredWizard {
+    fn model_id(&self) -> &str {
+        &self.model_id
+    }
+
+    fn is_free_plan(&self, _organization_id: &str) -> bool {
+        false
+    }
+
+    fn models(&self, _organization_id: &str) -> Vec<WizardModelEntry> {
+        self.models.clone()
+    }
+}
+
+/// The house models as the wizard offers them.
+///
+/// The display names live with the model catalogue, which the cloud edition owns; here the
+/// name is the last part of the id (`rantai/nano` is "Nano").
+fn house_model_entries() -> Vec<WizardModelEntry> {
+    agents_llm::provider::house_models()
+        .iter()
+        .map(|(id, _)| WizardModelEntry {
+            id: (*id).to_owned(),
+            name: id.rsplit('/').next().unwrap_or(id).to_owned(),
+            function_calling: true,
+            ctx: None,
+        })
+        .collect()
+}

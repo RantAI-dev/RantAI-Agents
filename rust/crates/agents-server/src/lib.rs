@@ -11,7 +11,8 @@ use std::sync::Arc;
 use axum::Router;
 use sqlx::PgPool;
 
-use policy::AssistantPolicy;
+use config::LlmSettings;
+use policy::{AssistantPolicy, WizardModel};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -20,6 +21,11 @@ pub struct AppState {
     /// The plan limits and the model policy. The open-source edition allows everything; the
     /// cloud edition passes its own.
     pub policy: Arc<dyn AssistantPolicy>,
+    /// The model the wizard runs on and the catalogue it offers. The open-source edition
+    /// offers the house models; the cloud edition passes its own.
+    pub wizard: Arc<dyn WizardModel>,
+    /// Where the wizard's model is served from.
+    pub llm: LlmSettings,
 }
 
 /// The whole router. Each route module registers its own routes in `routes::router`.
