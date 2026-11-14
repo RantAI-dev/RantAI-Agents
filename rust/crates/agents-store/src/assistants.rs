@@ -82,7 +82,7 @@ impl From<&AssistantRow> for AssistantFields {
     }
 }
 
-const COLUMNS: &str = r#""id","name","description","emoji","systemPrompt","model","useKnowledgeBase",
+pub(crate) const COLUMNS: &str = r#""id","name","description","emoji","systemPrompt","model","useKnowledgeBase",
 "knowledgeBaseGroupIds","isSystemDefault","isBuiltIn","organizationId","createdBy","updatedBy",
 "liveChatEnabled","avatarS3Key","modelConfig","openingMessage","openingQuestions","guardRails",
 "chatConfig","memoryConfig","tags","createdAt","updatedAt""#;

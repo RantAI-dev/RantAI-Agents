@@ -117,7 +117,7 @@ pub struct MessageChanges {
     pub metadata: JsonWrite,
 }
 
-const SESSION_COLUMNS: &str =
+pub(crate) const SESSION_COLUMNS: &str =
     r#""id","userId","title","assistantId","organizationId","createdAt","updatedAt""#;
 
 const MESSAGE_COLUMNS: &str = r#""id","sessionId","role","content","replyTo","editHistory","sources","metadata","seq","createdAt""#;
