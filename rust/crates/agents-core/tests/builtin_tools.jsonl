@@ -1,0 +1,82 @@
+{"tool":"calculator","input":{"expression":"2 + 3 * 4"},"output":{"success":true,"expression":"2 + 3 * 4","result":14}}
+{"tool":"calculator","input":{"expression":"15% * 200"},"output":{"success":true,"expression":"15% * 200","result":30}}
+{"tool":"calculator","input":{"expression":"2^10"},"output":{"success":true,"expression":"2^10","result":1024}}
+{"tool":"calculator","input":{"expression":"Math.sqrt(2)"},"output":{"success":true,"expression":"Math.sqrt(2)","result":1.4142135623730951}}
+{"tool":"calculator","input":{"expression":"0.1 + 0.2"},"output":{"success":true,"expression":"0.1 + 0.2","result":0.30000000000000004}}
+{"tool":"calculator","input":{"expression":"1/3"},"output":{"success":true,"expression":"1/3","result":0.3333333333333333}}
+{"tool":"calculator","input":{"expression":"Math.round(-2.5)"},"output":{"success":true,"expression":"Math.round(-2.5)","result":-2}}
+{"tool":"calculator","input":{"expression":"Math.max(1, 5, 3) - Math.min(4, 2)"},"output":{"success":true,"expression":"Math.max(1, 5, 3) - Math.min(4, 2)","result":3}}
+{"tool":"calculator","input":{"expression":"1/0"},"output":{"success":false,"expression":"1/0","error":"Expression did not evaluate to a finite number"}}
+{"tool":"calculator","input":{"expression":"e"},"output":{"success":false,"expression":"e","error":"e is not defined"}}
+{"tool":"calculator","input":{"expression":"alert(1)"},"output":{"success":false,"expression":"alert(1)","error":"Expression contains unsupported characters. Only numbers, operators (+, -, *, /, ^, %), parentheses, and Math.* functions are allowed."}}
+{"tool":"calculator","input":{"expression":"-7 % 3"},"output":{"success":true,"expression":"-7 % 3","result":-1}}
+{"tool":"calculator","input":{"expression":"(1, 2)"},"output":{"success":true,"expression":"(1, 2)","result":2}}
+{"tool":"calculator","input":{"expression":"Math.PI * 2"},"output":{"success":true,"expression":"Math.PI * 2","result":6.283185307179586}}
+{"tool":"calculator","input":{"expression":"Math.log10(1000) + Math.log2(8) + Math.log(Math.E)"},"output":{"success":true,"expression":"Math.log10(1000) + Math.log2(8) + Math.log(Math.E)","result":7}}
+{"tool":"calculator","input":{"expression":"Math.sin(0) + Math.cos(0) + Math.tan(0)"},"output":{"success":true,"expression":"Math.sin(0) + Math.cos(0) + Math.tan(0)","result":1}}
+{"tool":"calculator","input":{"expression":"2 ** 0.5"},"output":{"success":true,"expression":"2 ** 0.5","result":1.4142135623730951}}
+{"tool":"calculator","input":{"expression":"1e21 + 1"},"output":{"success":true,"expression":"1e21 + 1","result":1e+21}}
+{"tool":"calculator","input":{"expression":"Math.abs(-3) + Math.ceil(1.2) + Math.floor(1.8)"},"output":{"success":true,"expression":"Math.abs(-3) + Math.ceil(1.2) + Math.floor(1.8)","result":6}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-15T10:30:05.123Z"},"output":{"success":true,"result":"Mar 15, 2024, 10:30:05 AM","timestamp":1710498605123}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-15T10:30:05.123Z","format":"PPPPpppp"},"output":{"success":true,"result":"Friday, March 15th, 2024 at 10:30:05 AM GMT+00:00","timestamp":1710498605123}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-15T22:30:05.123Z","format":"P p PP pp PPP ppp"},"output":{"success":true,"result":"03/15/2024 10:30 PM Mar 15, 2024 10:30:05 PM March 15th, 2024 10:30:05 PM GMT+0","timestamp":1710541805123}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-15T00:05:05Z","format":"yy y yyy yyyyy MMM MMMM MMMMM do EEE EEEE EEEEE EEEEEE h hh H K k a aaa aaaa aaaaa S SS SSS SSSS"},"output":{"success":true,"result":"24 2024 2024 02024 Mar March M 15th Fri Friday F Fr 12 12 0 0 24 AM am a.m. a 0 00 000 0000","timestamp":1710461105000}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-15T10:30:05Z","format":"x xx xxx xxxx xxxxx X XX XXX z zz zzzz O OOOO Q QQ QQQ QQQQ QQQQQ q t T"},"output":{"success":true,"result":"+00 +0000 +00:00 +0000 +00:00 Z Z Z GMT+0 GMT+0 GMT+00:00 GMT+0 GMT+00:00 1 01 Q1 1st quarter 1 1 1710498605 1710498605000","timestamp":1710498605000}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-15T10:30:05Z","format":"'it''s' dd 'o''clock' '' '"},"output":{"success":true,"result":"it's 15 o'clock ' ","timestamp":1710498605000}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-15T10:30:05Z","format":"yyyy j"},"output":{"success":false,"error":"Format string contains an unescaped latin alphabet character `j`"}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-01T10:30:05Z","format":"do d ddd LLL LLLL"},"output":{"success":true,"result":"1st 1 001 Mar March","timestamp":1709289005000}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-02T10:30:05Z","format":"do"},"output":{"success":true,"result":"2nd","timestamp":1709375405000}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-03T10:30:05Z","format":"do"},"output":{"success":true,"result":"3rd","timestamp":1709461805000}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-11T10:30:05Z","format":"do"},"output":{"success":true,"result":"11th","timestamp":1710153005000}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-22T10:30:05Z","format":"do"},"output":{"success":true,"result":"22nd","timestamp":1711103405000}}
+{"tool":"date_time","input":{"operation":"format","date":"soon"},"output":{"success":false,"error":"Invalid time value"}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-15"},"output":{"success":true,"result":"Mar 15, 2024, 12:00:00 AM","timestamp":1710460800000}}
+{"tool":"date_time","input":{"operation":"format","date":"2024-03-15T17:30:00+07:00","format":"yyyy-MM-dd HH:mm"},"output":{"success":true,"result":"2024-03-15 10:30","timestamp":1710498600000}}
+{"tool":"date_time","input":{"operation":"format"},"output":{"success":false,"error":"'date' parameter is required for format operation"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-01-31T00:00:00Z","date2":"2024-02-29T00:00:00Z","unit":"months"},"output":{"success":true,"result":"1 months","difference":1,"unit":"months"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-01-31T00:00:00Z","date2":"2024-03-30T00:00:00Z","unit":"months"},"output":{"success":true,"result":"1 months","difference":1,"unit":"months"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-03-31T00:00:00Z","date2":"2024-02-29T00:00:00Z","unit":"months"},"output":{"success":true,"result":"0 months","difference":0,"unit":"months"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-02-29T00:00:00Z","date2":"2025-02-28T00:00:00Z","unit":"years"},"output":{"success":true,"result":"0 years","difference":0,"unit":"years"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2020-06-15T00:00:00Z","date2":"2024-06-14T23:00:00Z","unit":"years"},"output":{"success":true,"result":"3 years","difference":3,"unit":"years"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-06-15T00:00:00Z","date2":"2020-06-16T00:00:00Z","unit":"years"},"output":{"success":true,"result":"-3 years","difference":-3,"unit":"years"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-01-01T10:00:00Z","date2":"2024-01-03T09:00:00Z"},"output":{"success":true,"result":"1 days","difference":1,"unit":"days"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-01-03T09:00:00Z","date2":"2024-01-01T10:00:00Z"},"output":{"success":true,"result":"-1 days","difference":-1,"unit":"days"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-01-01T00:00:00Z","date2":"2024-01-15T00:00:00Z","unit":"weeks"},"output":{"success":true,"result":"2 weeks","difference":2,"unit":"weeks"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-01-01T09:00:00Z","date2":"2024-01-01T10:59:00Z","unit":"hours"},"output":{"success":true,"result":"1 hours","difference":1,"unit":"hours"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-01-01T09:00:00Z","date2":"2024-01-01T08:58:30Z","unit":"minutes"},"output":{"success":true,"result":"-1 minutes","difference":-1,"unit":"minutes"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-01-01","date2":"nope"},"output":{"success":true,"result":"NaN days","difference":null,"unit":"days"}}
+{"tool":"date_time","input":{"operation":"diff","date":"2024-01-01"},"output":{"success":false,"error":"'date' and 'date2' are required for diff operation"}}
+{"tool":"date_time","input":{"operation":"add","date":"2024-01-31T12:00:00Z","amount":1,"unit":"months"},"output":{"success":true,"result":"2024-02-29T12:00:00Z","timestamp":1709208000000,"iso":"2024-02-29T12:00:00.000Z"}}
+{"tool":"date_time","input":{"operation":"add","date":"2024-01-31T12:00:00Z","amount":-1.5,"unit":"months"},"output":{"success":true,"result":"2023-12-31T12:00:00Z","timestamp":1704024000000,"iso":"2023-12-31T12:00:00.000Z"}}
+{"tool":"date_time","input":{"operation":"add","date":"2024-02-29T00:00:00Z","amount":1,"unit":"years"},"output":{"success":true,"result":"2025-02-28T00:00:00Z","timestamp":1740700800000,"iso":"2025-02-28T00:00:00.000Z"}}
+{"tool":"date_time","input":{"operation":"add","date":"2024-01-31T12:00:00Z","amount":1.5},"output":{"success":true,"result":"2024-02-01T12:00:00Z","timestamp":1706788800000,"iso":"2024-02-01T12:00:00.000Z"}}
+{"tool":"date_time","input":{"operation":"add","date":"2024-01-31T12:00:00Z","amount":-31,"unit":"days"},"output":{"success":true,"result":"2023-12-31T12:00:00Z","timestamp":1704024000000,"iso":"2023-12-31T12:00:00.000Z"}}
+{"tool":"date_time","input":{"operation":"add","date":"2024-01-31T12:00:00Z","amount":1.5,"unit":"hours"},"output":{"success":true,"result":"2024-01-31T13:30:00Z","timestamp":1706707800000,"iso":"2024-01-31T13:30:00.000Z"}}
+{"tool":"date_time","input":{"operation":"add","date":"2024-01-31T12:00:00Z","amount":2,"unit":"weeks","format":"PP"},"output":{"success":true,"result":"Feb 14, 2024","timestamp":1707912000000,"iso":"2024-02-14T12:00:00.000Z"}}
+{"tool":"date_time","input":{"operation":"add","date":"2024-01-31T12:00:00Z","amount":0,"unit":"months"},"output":{"success":true,"result":"2024-01-31T12:00:00Z","timestamp":1706702400000,"iso":"2024-01-31T12:00:00.000Z"}}
+{"tool":"date_time","input":{"operation":"add","date":"2024-01-31T12:00:00Z"},"output":{"success":false,"error":"'amount' parameter is required for add operation"}}
+{"tool":"date_time","input":{"operation":"add","date":"bad","amount":1},"output":{"success":false,"error":"Invalid time value"}}
+{"tool":"json_transform","input":{"data":"{\"user\":{\"address\":{\"city\":\"Depok\"}},\"items\":[{\"name\":\"a\"},{\"name\":\"b\"}]}","operation":"query","path":"items[1].name"},"output":{"success":true,"path":"items[1].name","result":"b"}}
+{"tool":"json_transform","input":{"data":"{\"items\":[1,2,3]}","operation":"query","path":"items.length"},"output":{"success":true,"path":"items.length","result":3}}
+{"tool":"json_transform","input":{"data":"{\"items\":[1,2,3]}","operation":"query","path":"items.1"},"output":{"success":true,"path":"items.1","result":2}}
+{"tool":"json_transform","input":{"data":"{\"items\":[1,2,3]}","operation":"query","path":"nope.x"},"output":{"success":true,"path":"nope.x","result":null}}
+{"tool":"json_transform","input":{"data":"{\"items\":[1,2,3]}","operation":"query"},"output":{"success":false,"error":"'path' is required for query operation"}}
+{"tool":"json_transform","input":{"data":"{\"b\":1,\"2\":2,\"1\":3,\"a\":{\"y\":1,\"0\":2}}","operation":"flatten"},"output":{"success":true,"result":{"1":3,"2":2,"b":1,"a.0":2,"a.y":1}}}
+{"tool":"json_transform","input":{"data":"{\"b\":1,\"a\":2,\"c\":3}","operation":"pick","keys":["c","a","z"]},"output":{"success":true,"result":{"c":3,"a":2}}}
+{"tool":"json_transform","input":{"data":"[3,1,2]","operation":"pick","keys":["a"]},"output":{"success":false,"error":"Pick operation requires a JSON object (not array)"}}
+{"tool":"json_transform","input":{"data":"[{\"n\":\"b\",\"v\":2},{\"n\":\"A\",\"v\":10},{\"n\":\"a\",\"v\":1}]","operation":"sort","sortBy":"v","order":"desc"},"output":{"success":true,"result":[{"n":"A","v":10},{"n":"b","v":2},{"n":"a","v":1}]}}
+{"tool":"json_transform","input":{"data":"[\"b\",\"B\",\"a\",\"A\",\"_x\",\"10\",\"9\"]","operation":"sort"},"output":{"success":true,"result":["_x","10","9","a","A","b","B"]}}
+{"tool":"json_transform","input":{"data":"[{\"n\":\"b\"},{\"n\":\"a\"},{\"m\":1}]","operation":"sort","sortBy":"n"},"output":{"success":true,"result":[{"m":1},{"n":"a"},{"n":"b"}]}}
+{"tool":"json_transform","input":{"data":"[1.5, 1.0, 2]","operation":"sort"},"output":{"success":true,"result":[1,1.5,2]}}
+{"tool":"json_transform","input":{"data":"{","operation":"flatten"},"output":{"success":false,"error":"Invalid JSON data"}}
+{"tool":"text_utilities","input":{"text":"Hello world. How are you?\n\nFine!","operation":"summarize_stats"},"output":{"success":true,"result":{"characters":32,"words":6,"sentences":3,"paragraphs":2,"averageWordLength":4.3}}}
+{"tool":"text_utilities","input":{"text":"","operation":"summarize_stats"},"output":{"success":true,"result":{"characters":0,"words":0,"sentences":0,"paragraphs":0,"averageWordLength":0}}}
+{"tool":"text_utilities","input":{"text":"a@b.co, c@d.io and a@b.co","operation":"extract_emails"},"output":{"success":true,"result":["a@b.co","c@d.io"],"count":2}}
+{"tool":"text_utilities","input":{"text":"see https://x.io/a?b=1, or <http://y.dev>","operation":"extract_urls"},"output":{"success":true,"result":["https://x.io/a?b=1,","http://y.dev"],"count":2}}
+{"tool":"text_utilities","input":{"text":"  Héllo, World -- 2024!  ","operation":"slug"},"output":{"success":true,"result":"hllo-world-2024"}}
+{"tool":"text_utilities","input":{"text":"the quick brown fox","operation":"truncate","maxLength":12},"output":{"success":true,"result":"the quick...","truncated":true}}
+{"tool":"text_utilities","input":{"text":"the quick brown fox","operation":"truncate","maxLength":-5},"output":{"success":true,"result":"the quick...","truncated":true}}
+{"tool":"text_utilities","input":{"text":"the quick brown fox","operation":"truncate","maxLength":0},"output":{"success":true,"result":"the quick brown fox","truncated":false}}
+{"tool":"text_utilities","input":{"text":"a1 b22","operation":"regex_match","pattern":"(?<l>[a-z])(?<d>[0-9]+)"},"output":{"success":true,"result":[{"match":"a1","index":0,"groups":{"l":"a","d":"1"}},{"match":"b22","index":3,"groups":{"l":"b","d":"22"}}],"count":2}}
+{"tool":"text_utilities","input":{"text":"a1 b22","operation":"regex_match","pattern":"[0-9]+"},"output":{"success":true,"result":[{"match":"1","index":1,"groups":null},{"match":"22","index":4,"groups":null}],"count":2}}
+{"tool":"text_utilities","input":{"text":"x","operation":"regex_match"},"output":{"success":false,"error":"'pattern' is required for regex_match operation"}}
