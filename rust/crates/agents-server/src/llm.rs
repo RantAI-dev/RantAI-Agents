@@ -50,32 +50,34 @@ impl LlmConfig {
 mod tests {
     use super::*;
 
+    type R = Result<(), LlmError>;
+
     #[test]
-    fn an_override_sends_every_model_to_the_same_endpoint() {
+    fn an_override_sends_every_model_to_the_same_endpoint() -> R {
         let config = LlmConfig {
             base_url: Some("http://127.0.0.1:9/v1".to_owned()),
             api_key: Some("test-key".to_owned()),
             ..LlmConfig::default()
         };
-        let route = config
-            .route("rantai/nano")
-            .expect("the override needs no key");
+        let route = config.route("rantai/nano")?;
         assert_eq!(route.provider.base_url, "http://127.0.0.1:9/v1");
         assert_eq!(route.provider.api_key, "test-key");
         assert_eq!(route.model, "rantai/nano");
+        Ok(())
     }
 
     #[test]
-    fn without_an_override_the_model_id_decides_the_provider() {
+    fn without_an_override_the_model_id_decides_the_provider() -> R {
         let config = LlmConfig {
             openrouter_api_key: Some("or-key".to_owned()),
             minimax_api_key: Some("mm-key".to_owned()),
             ..LlmConfig::default()
         };
-        let route = config.route("rantai/swift").expect("a house model");
+        let route = config.route("rantai/swift")?;
         assert_eq!(route.model, "MiniMax-M2.7");
-        let route = config.route("openai/gpt-4o-mini").expect("openrouter");
+        let route = config.route("openai/gpt-4o-mini")?;
         assert_eq!(route.model, "openai/gpt-4o-mini");
+        Ok(())
     }
 
     #[test]

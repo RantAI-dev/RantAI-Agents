@@ -169,7 +169,7 @@ fn parse_messages(value: Option<&Value>, errors: &mut Vec<FieldError>) -> Vec<Ch
             Some(id) => id,
             None => {
                 errors.push(FieldError::new(
-                    &format!("{pointer}/id"),
+                    format!("{pointer}/id"),
                     "required",
                     "A message needs an id.",
                 ));
@@ -180,7 +180,7 @@ fn parse_messages(value: Option<&Value>, errors: &mut Vec<FieldError>) -> Vec<Ch
             Some(role) => role,
             None => {
                 errors.push(FieldError::new(
-                    &format!("{pointer}/role"),
+                    format!("{pointer}/role"),
                     "required",
                     "A message needs a role.",
                 ));
@@ -189,7 +189,7 @@ fn parse_messages(value: Option<&Value>, errors: &mut Vec<FieldError>) -> Vec<Ch
         };
         if !matches!(role.as_str(), "user" | "assistant" | "system") {
             errors.push(FieldError::new(
-                &format!("{pointer}/role"),
+                format!("{pointer}/role"),
                 "not_allowed",
                 "The role must be user, assistant or system.",
             ));
@@ -219,7 +219,7 @@ fn message_text(
             for (index, part) in parts.iter().enumerate() {
                 let Some(part) = part.as_object() else {
                     errors.push(FieldError::new(
-                        &format!("{pointer}/parts/{index}"),
+                        format!("{pointer}/parts/{index}"),
                         "invalid_shape",
                         "A message part must be an object.",
                     ));
@@ -231,7 +231,7 @@ fn message_text(
                             match value.as_str() {
                                 Some(value) => text.push_str(value),
                                 None => errors.push(FieldError::new(
-                                    &format!("{pointer}/parts/{index}/text"),
+                                    format!("{pointer}/parts/{index}/text"),
                                     "invalid_type",
                                     "The text of a part must be a string.",
                                 )),
@@ -241,12 +241,12 @@ fn message_text(
                     // Every other part kind (a file, a tool call) belongs to a capability the
                     // plain chat does not have.
                     Some(other) => errors.push(FieldError::new(
-                        &format!("{pointer}/parts/{index}/type"),
+                        format!("{pointer}/parts/{index}/type"),
                         "not_allowed",
                         format!("A message part of the type {other} is not part of a plain chat."),
                     )),
                     None => errors.push(FieldError::new(
-                        &format!("{pointer}/parts/{index}/type"),
+                        format!("{pointer}/parts/{index}/type"),
                         "required",
                         "A message part needs a type.",
                     )),
@@ -256,7 +256,7 @@ fn message_text(
         }
         Some(_) => {
             errors.push(FieldError::new(
-                &format!("{pointer}/parts"),
+                format!("{pointer}/parts"),
                 "invalid_shape",
                 "The parts of a message must be a list.",
             ));
@@ -281,7 +281,7 @@ fn optional_string(
         Some(Value::String(value)) => Some(value.clone()),
         Some(_) => {
             errors.push(FieldError::new(
-                &format!("/{key}"),
+                format!("/{key}"),
                 "invalid_type",
                 "This field must be a string.",
             ));
@@ -301,7 +301,7 @@ fn optional_bool(
         Some(Value::Bool(value)) => Some(*value),
         Some(_) => {
             errors.push(FieldError::new(
-                &format!("/{key}"),
+                format!("/{key}"),
                 "invalid_type",
                 "This field must be true or false.",
             ));
@@ -324,7 +324,7 @@ fn optional_strings(
                 match item.as_str() {
                     Some(value) => values.push(value.to_owned()),
                     None => errors.push(FieldError::new(
-                        &format!("/{key}/{index}"),
+                        format!("/{key}/{index}"),
                         "invalid_type",
                         "This field must be a list of strings.",
                     )),
@@ -334,7 +334,7 @@ fn optional_strings(
         }
         Some(_) => {
             errors.push(FieldError::new(
-                &format!("/{key}"),
+                format!("/{key}"),
                 "invalid_type",
                 "This field must be a list of strings.",
             ));
@@ -348,18 +348,21 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn parse_ok(body: Value) -> ChatInput {
-        parse(&body, &ChatHeaders::default()).expect("the body is valid")
+    type R = Result<(), Box<dyn std::error::Error>>;
+
+    fn parse_ok(body: Value) -> Result<ChatInput, ApiError> {
+        parse(&body, &ChatHeaders::default())
     }
 
     #[test]
-    fn a_plain_body_is_read() {
+    fn a_plain_body_is_read() -> R {
         let input = parse_ok(json!({
             "messages": [{"id": "m1", "role": "user", "content": "hello"}],
             "assistantId": "a1",
             "sessionId": "s1",
             "assistantMessageId": "m2",
-        }));
+        }))
+        .map_err(|error| error.code.as_str().to_owned())?;
         assert_eq!(input.body.messages.len(), 1);
         assert_eq!(
             input.body.messages.first().map(|m| m.content.as_str()),
@@ -367,10 +370,11 @@ mod tests {
         );
         assert_eq!(input.assistant_id(), Some("a1"));
         assert_eq!(input.body.session_id.as_deref(), Some("s1"));
+        Ok(())
     }
 
     #[test]
-    fn the_parts_replace_the_content() {
+    fn the_parts_replace_the_content() -> R {
         let input = parse_ok(json!({
             "messages": [{
                 "id": "m1",
@@ -378,26 +382,28 @@ mod tests {
                 "content": "ignored",
                 "parts": [{"type": "text", "text": "the answer"}],
             }],
-        }));
+        }))
+        .map_err(|error| error.code.as_str().to_owned())?;
         assert_eq!(
             input.body.messages.first().map(|m| m.content.as_str()),
             Some("the answer")
         );
+        Ok(())
     }
 
     #[test]
-    fn a_body_that_is_not_an_object_is_refused() {
-        let error = parse(&json!([]), &ChatHeaders::default())
-            .err()
-            .expect("an error");
+    fn a_body_that_is_not_an_object_is_refused() -> R {
+        let error = parse(&json!([]), &ChatHeaders::default()).err();
+        let error = error.ok_or("the body is not an object")?;
         assert_eq!(
             error.code,
             agents_contracts::error_codes::ErrorCode::InvalidRequest
         );
+        Ok(())
     }
 
     #[test]
-    fn every_bad_field_is_listed() {
+    fn every_bad_field_is_listed() -> R {
         let error = parse(
             &json!({
                 "messages": [{"id": 1, "role": "user"}],
@@ -407,15 +413,16 @@ mod tests {
             &ChatHeaders::default(),
         )
         .err()
-        .expect("an error");
+        .ok_or("the body is not valid")?;
         let fields: Vec<&str> = error.errors().iter().map(|e| e.field.as_str()).collect();
         assert!(fields.contains(&"/messages/0/id"));
         assert!(fields.contains(&"/assistantId"));
         assert!(fields.contains(&"/useKnowledgeBase"));
+        Ok(())
     }
 
     #[test]
-    fn the_headers_are_the_fallback() {
+    fn the_headers_are_the_fallback() -> R {
         let headers = ChatHeaders {
             assistant_id: Some("a1".to_owned()),
             system_prompt: Some("be nice".to_owned()),
@@ -425,7 +432,7 @@ mod tests {
             &json!({"messages": [{"id": "m1", "role": "user", "content": "hi"}]}),
             &headers,
         )
-        .expect("the body is valid");
+        .map_err(|error| error.code.as_str().to_owned())?;
         assert_eq!(input.assistant_id(), Some("a1"));
         assert_eq!(input.system_prompt(), Some("be nice"));
         assert_eq!(input.use_knowledge_base(), Some(true));
@@ -438,21 +445,23 @@ mod tests {
             }),
             &headers,
         )
-        .expect("the body is valid");
+        .map_err(|error| error.code.as_str().to_owned())?;
         assert_eq!(input.assistant_id(), Some("a2"));
+        Ok(())
     }
 
     #[test]
-    fn an_unknown_role_is_refused() {
+    fn an_unknown_role_is_refused() -> R {
         let error = parse(
             &json!({"messages": [{"id": "m1", "role": "tool", "content": "hi"}]}),
             &ChatHeaders::default(),
         )
         .err()
-        .expect("an error");
+        .ok_or("the role is not one of the three")?;
         assert_eq!(
             error.errors().first().map(|e| e.field.as_str()),
             Some("/messages/0/role")
         );
+        Ok(())
     }
 }

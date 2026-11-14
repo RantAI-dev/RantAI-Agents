@@ -140,7 +140,7 @@ impl Frames {
                 let id = self
                     .reasoning_id
                     .clone()
-                    .unwrap_or_else(|| agents_store::new_id());
+                    .unwrap_or_else(agents_store::new_id);
                 frames.push(frame(&UiChunk::ReasoningDelta(ReasoningDeltaChunk {
                     id,
                     delta: text,
@@ -211,6 +211,13 @@ impl Frames {
         }))]
     }
 
+    /// Whether the stream failed: the model never answered, so there is nothing to count and
+    /// nothing to write.
+    #[must_use]
+    pub fn failed(&self) -> bool {
+        self.failed
+    }
+
     /// The frames that close the stream.
     pub fn close(&mut self) -> Vec<Bytes> {
         let mut frames = Vec::new();
@@ -236,7 +243,7 @@ impl Frames {
             let id = self
                 .reasoning_id
                 .clone()
-                .unwrap_or_else(|| agents_store::new_id());
+                .unwrap_or_else(agents_store::new_id);
             frames.push(frame(&UiChunk::ReasoningEnd(ReasoningEndChunk {
                 id,
                 provider_metadata: None,

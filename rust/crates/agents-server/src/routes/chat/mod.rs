@@ -93,6 +93,10 @@ async fn chat(
         .as_ref()
         .map(|row| MemoryConfig::from_json(row.memory_config.as_ref().unwrap_or(&Value::Null)))
         .unwrap_or_default();
+    let model_config = assistant
+        .as_ref()
+        .map(|row| ModelConfig::from_json(row.model_config.as_ref().unwrap_or(&Value::Null)))
+        .unwrap_or_default();
     let profile = if memory_config.enabled {
         match memory::load_profile(&state.db, &user.id).await {
             Ok(profile) => profile,
@@ -138,32 +142,18 @@ async fn chat(
     let request = LlmRequest {
         model: route.model.clone(),
         messages: model_messages(&system, &input),
-        tools: memory::definitions(),
+        tools: if memory_config.enabled {
+            memory::definitions()
+        } else {
+            Vec::new()
+        },
         tool_choice: ToolChoice::Auto,
-        temperature: assistant
-            .as_ref()
-            .map(|row| model_config_of(row).temperature)
-            .unwrap_or(None),
-        top_p: assistant
-            .as_ref()
-            .map(|row| model_config_of(row).top_p)
-            .unwrap_or(None),
-        max_tokens: assistant
-            .as_ref()
-            .map(|row| model_config_of(row).max_tokens)
-            .unwrap_or(None),
-        presence_penalty: assistant
-            .as_ref()
-            .map(|row| model_config_of(row).presence_penalty)
-            .unwrap_or(None),
-        frequency_penalty: assistant
-            .as_ref()
-            .map(|row| model_config_of(row).frequency_penalty)
-            .unwrap_or(None),
-        reasoning_effort: assistant
-            .as_ref()
-            .and_then(|row| model_config_of(row).reasoning_effort)
-            .map(map_reasoning_effort),
+        temperature: model_config.temperature,
+        top_p: model_config.top_p,
+        max_tokens: model_config.max_tokens,
+        presence_penalty: model_config.presence_penalty,
+        frequency_penalty: model_config.frequency_penalty,
+        reasoning_effort: model_config.reasoning_effort.map(map_reasoning_effort),
         response_format: None,
         include_usage: true,
         extra_body: None,
@@ -249,11 +239,6 @@ fn assistant_prompt(
             memory_config: MemoryConfig::default(),
         },
     }
-}
-
-/// The assistant's model config.
-fn model_config_of(row: &AssistantRow) -> ModelConfig {
-    ModelConfig::from_json(row.model_config.as_ref().unwrap_or(&Value::Null))
 }
 
 /// The conversation as the model sees it: the system prompt, then the messages.
@@ -574,7 +559,9 @@ impl ChatRun {
 
     /// The work that follows the answer: the profile, the rows and the usage.
     async fn after(&self, frames: &stream::Frames) {
-        if self.memory_enabled {
+        // A stream that failed has no answer: the turn is not counted and nothing is written
+        // (the TypeScript skipped the same work, because `result.text` rejected).
+        if self.memory_enabled && !frames.failed() {
             match memory::drain(&self.db, &self.user_id, &self.now).await {
                 Ok(profile) => {
                     if agents_core::memory::profile::summary_needs_refresh(&profile) {
