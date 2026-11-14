@@ -14,9 +14,10 @@
 //! prepared by `turn.rs`, so an agent answers the same way wherever it is reached from — and
 //! the knowledge base, which this phase keeps off, gets the same 409 in both places.
 //!
-//! The client's address comes from `crate::http::client_ip` and nowhere else: the socket peer,
-//! unless the peer is one of `TRUSTED_PROXIES`, and only then `X-Forwarded-For` walked from the
-//! right (differences.md row 146).
+//! The client's address comes from `crate::http::client_ip::ClientIp` and nowhere else — the
+//! socket peer, unless the peer is one of `TRUSTED_PROXIES` (differences.md row 173) — so the IP
+//! allowlist cannot be passed by writing a header, and the audit rows name the same address the
+//! allowlist judged.
 
 mod bodies;
 mod chat;

@@ -623,6 +623,141 @@ async fn an_ip_allowlist_refuses_an_address_it_does_not_name() -> R {
 }
 
 #[tokio::test]
+async fn a_forged_forwarded_for_cannot_get_past_the_allowlist() -> R {
+    // The proxy in front is 10.1.0.0/16; everything else is a client, and a client that writes
+    // `X-Forwarded-For` itself must not choose the address the allowlist reads.
+    let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
+    let Some((app, db)) = helpers::router_with(&stub, |state| {
+        let trusted = agents_core::net::parse_cidrs("10.1.0.0/16").unwrap_or_default();
+        state.trusted_proxies = std::sync::Arc::from(trusted);
+    })
+    .await?
+    else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let assistant_id = assistant(&db, &org_id).await?;
+
+    // A key that only one address may use, minted from a trusted proxy with a truthful hop.
+    let minted = send(
+        &app,
+        "POST",
+        "/api/dashboard/agent-api-keys",
+        &[auth(&admin)?, ("x-forwarded-for", "203.0.113.9".to_owned())],
+        Some(json!({
+            "name": "classroom",
+            "assistantId": assistant_id,
+            "scopes": ["chat", "chat:stream"],
+            "ipWhitelist": ["203.0.113.9"],
+        })),
+        Some(SocketAddr::from(([10, 1, 0, 7], 5000))),
+    )
+    .await?;
+    assert_eq!(minted.status, 201, "{}", minted.text);
+    let key = minted
+        .json()
+        .get("key")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+
+    // The allowlisted address, said by the trusted proxy: in.
+    let allowed = send(
+        &app,
+        "POST",
+        "/v1/chat/completions",
+        &[
+            key_bearer(&key),
+            ("x-forwarded-for", "203.0.113.9".to_owned()),
+        ],
+        Some(completion(false)),
+        Some(SocketAddr::from(([10, 1, 0, 7], 5000))),
+    )
+    .await?;
+    assert_eq!(allowed.status, 200, "{}", allowed.text);
+
+    // The same header from a peer that is not a proxy: the header is ignored and the peer is
+    // judged instead, so a client cannot name itself into the allowlist.
+    let forged = send(
+        &app,
+        "POST",
+        "/v1/chat/completions",
+        &[
+            key_bearer(&key),
+            ("x-forwarded-for", "203.0.113.9".to_owned()),
+        ],
+        Some(completion(false)),
+        Some(SocketAddr::from(([198, 51, 100, 5], 5000))),
+    )
+    .await?;
+    assert_eq!(forged.status, 403, "{}", forged.text);
+    assert_eq!(code(&forged.json()), Some("permission_denied"));
+
+    // And a trusted proxy that reports some other address is believed, so the key stays shut.
+    let other = send(
+        &app,
+        "POST",
+        "/v1/chat/completions",
+        &[
+            key_bearer(&key),
+            ("x-forwarded-for", "198.51.100.9".to_owned()),
+        ],
+        Some(completion(false)),
+        Some(SocketAddr::from(([10, 1, 0, 7], 5000))),
+    )
+    .await?;
+    assert_eq!(other.status, 403, "{}", other.text);
+
+    // The audit row records the address the same rule gives: the peer, not the forged header.
+    let id = minted
+        .json()
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let recorded: Option<String> =
+        sqlx::query_scalar(r#"SELECT "ipAddress" FROM "AuditLog" WHERE "resource" = $1"#)
+            .bind(format!("api_key:{id}"))
+            .fetch_optional(&db)
+            .await?;
+    assert_eq!(
+        recorded.as_deref(),
+        Some("203.0.113.9"),
+        "the trusted hop, not the socket peer of the proxy"
+    );
+
+    // A forged header on the dashboard route does not reach the audit row either.
+    let forged_mint = send(
+        &app,
+        "POST",
+        "/api/dashboard/agent-api-keys",
+        &[auth(&admin)?, ("x-forwarded-for", "203.0.113.9".to_owned())],
+        Some(json!({"name": "second", "assistantId": assistant_id})),
+        Some(SocketAddr::from(([198, 51, 100, 5], 5000))),
+    )
+    .await?;
+    assert_eq!(forged_mint.status, 201, "{}", forged_mint.text);
+    let forged_id = forged_mint
+        .json()
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let recorded: Option<String> =
+        sqlx::query_scalar(r#"SELECT "ipAddress" FROM "AuditLog" WHERE "resource" = $1"#)
+            .bind(format!("api_key:{forged_id}"))
+            .fetch_optional(&db)
+            .await?;
+    assert_eq!(
+        recorded.as_deref(),
+        Some("198.51.100.5"),
+        "the peer, because it is not a trusted proxy"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn a_request_without_a_key_is_a_401() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
     let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {

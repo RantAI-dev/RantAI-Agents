@@ -6,7 +6,7 @@
 //! tools, the same 409 gate, so an agent reached over the API answers the way it answers in
 //! the dashboard.
 //!
-//! What is deliberately not the same (docs/port/differences.md, rows 140–147):
+//! What is deliberately not the same (docs/port/differences.md, rows 140–146):
 //! - there is no conversation and no memory: the old route kept neither, and the memory tools
 //!   belong to the chat service, so the caller replays the conversation every time;
 //! - the knowledge base is refused (409), because retrieval is not part of this phase;

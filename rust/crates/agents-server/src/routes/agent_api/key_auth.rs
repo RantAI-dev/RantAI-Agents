@@ -84,8 +84,9 @@ pub fn presented(headers: &HeaderMap) -> Option<&str> {
 
 /// The caller, or the answer the request gets.
 ///
-/// `ip` is the client's address from [`super::client_ip::client_ip`]; `None` means the
-/// connection had none, which a non-empty allowlist refuses.
+/// `ip` is the caller's address as `http::client_ip::ClientIp` gives it (the socket peer, or a
+/// hop a trusted proxy vouches for); `None` means the server cannot know it, which a non-empty
+/// allowlist refuses rather than guesses.
 pub async fn authenticate(
     state: &AppState,
     presented_key: &str,

@@ -65,8 +65,10 @@ curl -sS -X POST "$BASE/api/dashboard/agent-api-keys" \
 database keeps only `hex(SHA-256(key))`, never the key.
 
 `scopes` is `["chat", "chat:stream"]` unless the request says otherwise; an empty list allows both.
-`ipWhitelist` is empty (any address) unless the request says otherwise, and the address it is
-compared with is the **connection's**, not `X-Forwarded-For` (see "Behind a proxy" below).
+`ipWhitelist` is empty (any address) unless the request says otherwise. The address it is compared
+with is the caller's, as `docs/operations/network.md` defines it: the socket peer, or the last
+`X-Forwarded-For` hop that a peer listed in `TRUSTED_PROXIES` vouches for. A client writing the
+header itself cannot get in.
 
 ## A non-streaming completion
 
@@ -190,7 +192,7 @@ Every refusal is the standard body, on both transports (the socket sends the sam
 | 403 | `permission_denied` | The address is not in the allowlist, the key does not carry the scope, or the caller may not manage keys |
 | 404 | `not_found` | Another organisation's key or agent |
 | 409 | `capability_not_ported` | The agent needs something this service cannot run — see below |
-| 429 | `rate_limited` | The gate's limiter (the per-key limiter is not ported, differences.md row 147) |
+| 429 | `rate_limited` | The gate's limiter (the per-key limiter is not ported, differences.md row 146) |
 | 502 | `upstream_failed` | The model call failed, or the turn ended on a tool that needed a decision |
 
 ## What an agent may not use here
@@ -203,15 +205,16 @@ send, because nothing is retrieved. An OpenAI client reads all of this as `error
 
 ## Behind a proxy
 
-The IP allowlist is checked against the **peer address of the connection**
-(`routes/agent_api/client_ip.rs`). `X-Forwarded-For` is not read: without a trusted-proxy list any
-client can set it, and reading its first hop — what the TypeScript did — let a caller name itself
-into an allowlist. The service is served with connect information, so the peer address is known.
+The allowlist is checked against the caller's address, and there is one rule for it in the whole
+service (`http::client_ip::ClientIp`, `agents_core::net::client_ip`): the socket peer, and only when
+that peer is one of `TRUSTED_PROXIES` the `X-Forwarded-For` hops it vouches for, walked from the
+right. **With `TRUSTED_PROXIES` empty — the default — the header is ignored entirely**, so a
+deployment behind a proxy must set it or every request will look like it came from the proxy.
 
-That means a deployment behind a reverse proxy sees the proxy's address. Until the trusted-proxy
-task lands (`TRUSTED_PROXIES`), either leave `ipWhitelist` empty or list the proxy's address. The
-audit rows of the dashboard routes still record the first `X-Forwarded-For` hop, which is a note
-rather than a decision.
+That rule, what to put in `TRUSTED_PROXIES` and what happens when it is too wide or too narrow are
+in `docs/operations/network.md`. The agent API adds nothing to it: the allowlist and the audit rows
+of the key routes read the same `ClientIp`, so an address that passes the allowlist is the address
+the audit row records.
 
 ## Changing the limits
 
