@@ -4,13 +4,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { ShareChatDialog } from "./share-chat-dialog"
 
 const fetchMock = vi.fn()
+const org = vi.hoisted(() => ({ isAdmin: true }))
 
 vi.mock("@/hooks/use-organization", () => ({
   useOrganization: () => ({
     activeOrganization: { id: "o1", name: "Acme", slug: "acme" },
-    isAdmin: true,
+    isAdmin: org.isAdmin,
     isOwner: false,
-    canEdit: true,
+    canEdit: org.isAdmin,
   }),
   useOrgFetch: () => fetchMock,
 }))
@@ -77,6 +78,7 @@ function json(body: unknown, status = 200) {
 }
 
 beforeEach(() => {
+  org.isAdmin = true
   fetchMock.mockReset()
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method) return Promise.resolve(json({ data: [], nextCursor: null }))
@@ -127,6 +129,29 @@ describe("ShareChatDialog", () => {
       const call = fetchMock.mock.calls.find(([, init]) => (init as RequestInit)?.method === "DELETE")
       expect(call?.[0]).toBe("/api/dashboard/chat/sessions/s1/shares/s-unit")
     })
+  })
+
+  it("lets a member share with teams although the member list is admin-only", async () => {
+    org.isAdmin = false
+    fetchMock.mockImplementation((url: string) => {
+      if (String(url).endsWith("/members")) {
+        return Promise.resolve(
+          json({ error: { code: "permission_denied", message: "No.", requestId: "r" } }, 403),
+        )
+      }
+      if (String(url).includes("/shares")) {
+        return Promise.resolve(json({ data: [shares.data[0]], nextCursor: null }))
+      }
+      if (String(url).endsWith("/units")) return Promise.resolve(json(units))
+      return Promise.resolve(json({ data: [], nextCursor: null }))
+    })
+
+    render(<ShareChatDialog sessionId="s1" title="Quarterly plan" open onOpenChange={() => {}} />)
+
+    // The unit is named, so the targets were built without the member list.
+    expect(await screen.findByText("Support")).not.toBeNull()
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/members"))).toBe(false)
+    expect(screen.queryByText("No.")).toBeNull()
   })
 
   it("shows the API's sentence when the chat belongs to no organisation", async () => {

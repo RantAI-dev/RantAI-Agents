@@ -59,13 +59,17 @@ export function ShareChatDialog({
   onOpenChange: (open: boolean) => void
 }) {
   const orgFetch = useOrgFetch()
-  const { activeOrganization } = useOrganization()
+  const { activeOrganization, isAdmin } = useOrganization()
   const orgId = activeOrganization?.id ?? null
   const orgName = activeOrganization?.name ?? "the whole organisation"
 
   const shares = useApiResource<CursorPage<ChatShare>>(open && sessionId ? sharesPath(sessionId) : null)
   const units = useApiResource<CursorPage<UnitNode>>(open && orgId ? orgPaths.units(orgId) : null)
-  const people = useApiResource<OrgMember[]>(open && orgId ? orgPaths.members(orgId) : null)
+  // The member list needs org.members.manage; a member may still share with the company and
+  // with teams (every member reads the units), so only an admin asks for people.
+  const people = useApiResource<OrgMember[]>(
+    open && orgId && isAdmin ? orgPaths.members(orgId) : null,
+  )
 
   const [draft, setDraft] = useState<ShareSubjectBody[]>([])
   const [hydrated, setHydrated] = useState(false)
@@ -85,8 +89,8 @@ export function ShareChatDialog({
   }
 
   const targets =
-    orgId && people.data && units.data
-      ? shareTargets(orgId, orgName, units.data.data ?? [], people.data, flattenUnits)
+    orgId && units.data
+      ? shareTargets(orgId, orgName, units.data.data ?? [], people.data ?? [], flattenUnits)
       : []
 
   const labelFor = (subject: ShareSubjectBody) =>
