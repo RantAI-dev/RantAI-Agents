@@ -87,9 +87,15 @@ pub fn can(actor: &Actor, action: Action, target: &AssistantRef) -> bool {
                     }
                 }
         }
-        // Setting the default needs a manager, and the target must be one the caller can
-        // see (differences row 27; the store keeps the default per organisation).
-        Action::SetDefault => actor.role.is_some_and(OrgRole::can_manage) && actor.can_see(target),
+        // Setting the default needs a manager of the target's own org. The default is kept per
+        // organisation on the assistant row, so a built-in or org-less assistant cannot be one;
+        // with no org default the built-in default applies (differences row 27).
+        Action::SetDefault => {
+            !target.is_built_in
+                && target.organization_id.is_some()
+                && actor.organization_id == target.organization_id
+                && actor.role.is_some_and(OrgRole::can_manage)
+        }
     }
 }
 
@@ -158,8 +164,9 @@ mod tests {
         let org_a = target(Some("org_a"), false);
         assert!(!can(&member, Action::SetDefault, &org_a));
         assert!(can(&admin, Action::SetDefault, &org_a));
-        // A built-in can be made the default; a foreign org's assistant cannot.
-        assert!(can(&admin, Action::SetDefault, &target(None, true)));
+        // Only an assistant of the caller's own org can be its default.
+        assert!(!can(&admin, Action::SetDefault, &target(None, true)));
+        assert!(!can(&admin, Action::SetDefault, &target(None, false)));
         assert!(!can(
             &admin,
             Action::SetDefault,

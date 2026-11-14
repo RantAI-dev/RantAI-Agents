@@ -198,7 +198,22 @@ pub struct AssistantUpdate {
     pub tags: Option<Vec<String>>,
 }
 
-/// The system prompt minimum, in code points.
+impl AssistantUpdate {
+    /// The part of an update a built-in assistant accepts. The old service copied every field
+    /// except `name`, `useKnowledgeBase` and `knowledgeBaseGroupIds` for a built-in and dropped
+    /// those three silently (`core/service.ts`, the `isBuiltIn` branch of the update).
+    #[must_use]
+    pub fn for_built_in(self) -> Self {
+        Self {
+            name: None,
+            use_knowledge_base: None,
+            knowledge_base_group_ids: None,
+            ..self
+        }
+    }
+}
+
+/// The system prompt minimum, in UTF-16 code units (zod v3 `.min()` counts `.length`).
 const SYSTEM_PROMPT_MINIMUM: usize = 20;
 
 const KNOWN_FIELDS: [&str; 16] = [
@@ -658,27 +673,66 @@ fn enum_field(
     }
 }
 
-/// An array of strings that must be present as an array when set (`null` is a type error).
+/// An array of strings when set; `null` clears it, as the old `z.unknown()` config allowed.
 fn plain_string_array(
     errors: &mut Vec<FieldError>,
     prefix: &str,
     map: &serde_json::Map<String, Value>,
     key: &str,
 ) {
-    if let Some(value) = map.get(key)
-        && !value.is_null()
-        && !value.is_array()
-    {
-        errors.push(FieldError::new(
+    match map.get(key) {
+        None | Some(Value::Null) => {}
+        Some(Value::Array(items)) => {
+            for (index, item) in items.iter().enumerate() {
+                if !item.is_string() {
+                    errors.push(FieldError::new(
+                        format!("{prefix}/{key}/{index}"),
+                        "invalid_type",
+                        "Expected a string.",
+                    ));
+                }
+            }
+        }
+        Some(_) => errors.push(FieldError::new(
             format!("{prefix}/{key}"),
             "invalid_type",
             "Expected an array.",
-        ));
+        )),
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn blocked_topics_must_be_strings() {
+        let errors = validate_update_value(&json!({"guardRails": {"blockedTopics": ["ok", 5]}}));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.field == "/guardRails/blockedTopics/1" && e.code == "invalid_type"),
+            "{errors:?}"
+        );
+        assert!(
+            validate_update_value(&json!({"guardRails": {"blockedTopics": ["a", "b"]}})).is_empty()
+        );
+    }
+
+    #[test]
+    fn a_built_in_update_drops_the_name_and_the_knowledge_base_fields() {
+        let update = AssistantUpdate {
+            name: Some("x".into()),
+            use_knowledge_base: Some(true),
+            knowledge_base_group_ids: Some(vec!["g".into()]),
+            tags: Some(vec!["t".into()]),
+            ..AssistantUpdate::default()
+        }
+        .for_built_in();
+        assert_eq!(update.name, None);
+        assert_eq!(update.use_knowledge_base, None);
+        assert_eq!(update.knowledge_base_group_ids, None);
+        assert_eq!(update.tags, Some(vec!["t".to_owned()]));
+    }
+
     use super::*;
     use serde_json::json;
 

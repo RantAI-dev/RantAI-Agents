@@ -229,7 +229,7 @@ mod tests {
         assert!(is_name_valid("My Agent"));
         assert!(!is_system_prompt_valid("short"));
         assert!(is_system_prompt_valid("xxxxxxxxxxxxxxxxxxxx"));
-        // 20 UTF-16 units: two-decode-unit characters count twice here, unlike the schema.
+        // 20 UTF-16 units: a character outside the BMP counts twice, as in the schema.
         let emoji_prompt = "\u{1F600}".repeat(10);
         assert!(is_system_prompt_valid(&emoji_prompt));
         Ok(())

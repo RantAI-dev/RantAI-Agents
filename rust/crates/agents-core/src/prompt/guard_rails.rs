@@ -16,18 +16,14 @@ pub fn build_guard_rails_prompt(config: Option<&Value>) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     // Blocked topics
-    if let Some(topics) = config.get("blockedTopics").and_then(Value::as_array)
-        && !topics.is_empty()
-    {
-        // The old code joined with `join(", ")`; only string topics occur in practice.
-        let joined = topics
-            .iter()
-            .map(|topic| match topic {
-                Value::String(text) => text.clone(),
-                other => other.to_string(),
-            })
-            .collect::<Vec<String>>()
-            .join(", ");
+    let topics: Vec<&str> = config
+        .get("blockedTopics")
+        .and_then(Value::as_array)
+        .map(|items| items.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    if !topics.is_empty() {
+        // A topic that is not a string is dropped (differences row 28).
+        let joined = topics.join(", ");
         parts.push(format!(
             "- NEVER discuss, provide information about, or engage with the following topics: {joined}"
         ));

@@ -243,27 +243,37 @@ fn access(name: &str, args: &[Value], expected: &Value) -> Result<Outcome, Box<d
         other => return Err(std::io::Error::other(format!("unknown action {other}")).into()),
     };
 
-    // The deliberate differences (each skip names its differences.md row): a built-in
-    // assistant is editable only by a platform admin; bindings need the edit role.
+    let new_allowed = can(&actor, action, &target);
+
+    // The deliberate differences (each skip names its differences.md row). A skip still checks
+    // the new rule: the port must deny where the row says it denies.
     if matches!(action, Action::Edit | Action::EditBindings)
         && target.is_built_in
         && !actor.is_platform_admin
     {
+        assert!(
+            !new_allowed,
+            "row 25: a built-in must be read-only for {actor:?} ({name})"
+        );
         return Ok(Outcome::Skipped(
             "differences row 25: built-ins are read-only except for a platform admin",
         ));
     }
     if action == Action::EditBindings
         && !target.is_built_in
+        && target.organization_id.is_some()
         && actor.organization_id.as_ref() == target.organization_id.as_ref()
         && !actor.role.is_some_and(OrgRole::can_edit)
     {
+        assert!(
+            !new_allowed,
+            "row 26: bindings need the edit role, {actor:?} lacks it ({name})"
+        );
         return Ok(Outcome::Skipped(
             "differences row 26: bindings need the same role as editing",
         ));
     }
 
-    let new_allowed = can(&actor, action, &target);
     assert_eq!(
         new_allowed, old_allowed,
         "access differs for {name}: actor {actor:?} target {target:?} (old status {status})"
@@ -525,9 +535,18 @@ fn dispatch_decision(
                 .get("allowed")
                 .and_then(Value::as_bool)
                 .unwrap_or(false);
+            let new_allowed = can(&actor, Action::SetDefault, &target);
+            if old_allowed && (target.is_built_in || target.organization_id.is_none()) {
+                assert!(
+                    !new_allowed,
+                    "row 27: a built-in or org-less assistant is no org's default"
+                );
+                return Ok(Outcome::Skipped(
+                    "differences row 27: the default is an assistant of the caller's org",
+                ));
+            }
             assert_eq!(
-                can(&actor, Action::SetDefault, &target),
-                old_allowed,
+                new_allowed, old_allowed,
                 "set-default differs: role {role:?} target {target:?}"
             );
             Ok(Outcome::Checked)
