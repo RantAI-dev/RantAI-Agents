@@ -7,6 +7,7 @@ import { DeployRestApiSection } from "./deploy/deploy-rest-api-section"
 import { DeployWebSocketSection } from "./deploy/deploy-websocket-section"
 import { DeployInfoSection } from "./deploy/deploy-info-section"
 import { DeployReadinessPanel } from "./deploy/deploy-readiness-panel"
+import { AgentAccessPanel } from "@/features/assistants/access/components/agent-access-panel"
 import type { DeployReadiness } from "@/features/assistants/core/completeness"
 import type { TabId } from "./agent-editor-layout"
 
@@ -35,6 +36,7 @@ export function TabDeploy({ agentId, agentName, agentModel, agentCreatedAt, isNe
 
   return (
     <div className="p-6 space-y-4">
+      <AgentAccessPanel assistantId={agentId} />
       <DeployReadinessPanel
         readiness={readiness}
         onJumpTo={(field) => {

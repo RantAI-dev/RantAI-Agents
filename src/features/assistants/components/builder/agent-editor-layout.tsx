@@ -43,10 +43,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import type { TabStatus } from "@/features/assistants/core/completeness"
+import { isAgentKbEnabled } from "@/features/assistants/kb-flag"
 
 export type TabId = "configure" | "model" | "tools" | "skills" | "workflows" | "mcp" | "knowledge" | "memory" | "guardrails" | "chat" | "test" | "deploy"
 
-const TABS: { id: TabId; label: string; icon: typeof Settings }[] = [
+const ALL_TABS: { id: TabId; label: string; icon: typeof Settings }[] = [
   { id: "configure", label: "Configure", icon: Settings },
   { id: "model", label: "Model", icon: Cpu },
   { id: "tools", label: "Tools", icon: Wrench },
@@ -60,6 +61,10 @@ const TABS: { id: TabId; label: string; icon: typeof Settings }[] = [
   { id: "test", label: "Test", icon: Play },
   { id: "deploy", label: "Deploy", icon: Rocket },
 ]
+
+// The knowledge section is hidden while the capability is off (design §3.6), so the tab is not
+// offered at all: a tab that can only answer 409 is worse than no tab.
+const TABS = isAgentKbEnabled() ? ALL_TABS : ALL_TABS.filter((tab) => tab.id !== "knowledge")
 
 interface AgentEditorLayoutProps {
   agentName: string

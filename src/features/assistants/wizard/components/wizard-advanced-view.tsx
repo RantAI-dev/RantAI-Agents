@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Plus, X } from "@/lib/icons"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import { isAgentKbEnabled } from "@/features/assistants/kb-flag"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import {
@@ -192,18 +193,21 @@ export function WizardAdvancedView({
           />
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <div className="space-y-0.5">
-            <p className="text-sm font-medium">Use knowledge base</p>
-            <p className="text-xs text-muted-foreground">
-              Retrieve from selected KB groups during chat.
-            </p>
+        {/* The knowledge base is off for every agent in this phase (design §3.6). */}
+        {isAgentKbEnabled() && (
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">Use knowledge base</p>
+              <p className="text-xs text-muted-foreground">
+                Retrieve from selected KB groups during chat.
+              </p>
+            </div>
+            <Switch
+              checked={Boolean(draft.useKnowledgeBase)}
+              onCheckedChange={(v) => onUserEdit("useKnowledgeBase", v)}
+            />
           </div>
-          <Switch
-            checked={Boolean(draft.useKnowledgeBase)}
-            onCheckedChange={(v) => onUserEdit("useKnowledgeBase", v)}
-          />
-        </div>
+        )}
       </div>
     </div>
   )

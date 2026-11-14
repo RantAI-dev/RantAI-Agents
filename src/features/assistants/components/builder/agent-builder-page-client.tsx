@@ -38,6 +38,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useAssistants, type DbAssistant } from "@/hooks/use-assistants"
+import { useOrganization } from "@/hooks/use-organization"
+import { isAgentKbEnabled } from "@/features/assistants/kb-flag"
 import { useDefaultAssistant } from "@/hooks/use-default-assistant"
 import { AgentCard } from "@/features/assistants/components/builder/agent-card"
 import { AgentTemplateGallery } from "@/features/assistants/components/builder/agent-template-gallery"
@@ -72,6 +74,10 @@ export default function AgentBuilderPageClient({
   initialAssistants: DbAssistant[]
 }) {
   const router = useRouter()
+  // Only owners and admins build agents; a member sees the agents shared with them and no
+  // create action (design §3.2, §3.3).
+  const { isAdmin } = useOrganization()
+  const canBuild = isAdmin
   const [search, setSearch] = useState("")
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set())
   const [customTags, setCustomTags] = useState<Set<string>>(new Set())
@@ -267,12 +273,16 @@ export default function AgentBuilderPageClient({
               <CountUp to={agentStats.total} duration={1.2} />
               <span>agents</span>
             </span>
-            <span className="text-muted-foreground/30">·</span>
-            <span className="flex items-center gap-1.5">
-              <Database className="h-3.5 w-3.5" />
-              <CountUp to={agentStats.withKB} duration={1.2} />
-              <span>with KB</span>
-            </span>
+            {isAgentKbEnabled() && (
+              <>
+                <span className="text-muted-foreground/30">·</span>
+                <span className="flex items-center gap-1.5">
+                  <Database className="h-3.5 w-3.5" />
+                  <CountUp to={agentStats.withKB} duration={1.2} />
+                  <span>with KB</span>
+                </span>
+              </>
+            )}
             <span className="text-muted-foreground/30">·</span>
             <span className="flex items-center gap-1.5">
               <Wrench className="h-3.5 w-3.5" />
@@ -285,7 +295,7 @@ export default function AgentBuilderPageClient({
 
       <div className="flex-1 overflow-auto px-6 pb-6">
         {/* Template Gallery */}
-        <AgentTemplateGallery addAssistant={addAssistant} refetch={refetch} />
+        {canBuild && <AgentTemplateGallery addAssistant={addAssistant} refetch={refetch} />}
 
         {/* Search + Filter + Sort Toolbar */}
         <motion.div
@@ -442,11 +452,13 @@ export default function AgentBuilderPageClient({
               </SelectContent>
             </Select>
 
-            {/* Create button */}
-            <Button onClick={handleCreate} size="sm">
-              <Plus className="h-4 w-4 mr-1.5" />
-              Create Agent
-            </Button>
+            {/* Create button — only admins build agents (design §3.2) */}
+            {canBuild && (
+              <Button onClick={handleCreate} size="sm">
+                <Plus className="h-4 w-4 mr-1.5" />
+                Create Agent
+              </Button>
+            )}
           </div>
         </motion.div>
 
@@ -471,12 +483,16 @@ export default function AgentBuilderPageClient({
               </div>
               <h2 className="text-lg font-semibold mb-1">No agents yet</h2>
               <p className="text-sm text-muted-foreground max-w-md mb-4">
-                Create your first agent to get started with the Agent Builder.
+                {canBuild
+                  ? "Create your first agent to get started with the Agent Builder."
+                  : "An admin has not shared an agent with you yet."}
               </p>
-              <Button onClick={handleCreate}>
-                <Plus className="h-4 w-4 mr-1.5" />
-                Create Agent
-              </Button>
+              {canBuild && (
+                <Button onClick={handleCreate}>
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Create Agent
+                </Button>
+              )}
             </div>
           </motion.div>
         ) : displayedAgents.length === 0 ? (
