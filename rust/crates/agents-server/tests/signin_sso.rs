@@ -7,8 +7,8 @@ mod signin_kit;
 use agents_store::new_id;
 use serde_json::{Value, json};
 use signin_kit::{
-    R, Signing, StubIdp, call, callback, domain, member, org, pool, provider, router,
-    session_cookie, sign_in, start, user_with,
+    CLIENT_ID, R, Signing, StubIdp, call, callback, domain, member, org, pool, provider, router,
+    router_with_env, session_cookie, sign_in, start, user_with,
 };
 
 fn error_of(reply: &signin_kit::Reply) -> Option<String> {
@@ -563,5 +563,57 @@ async fn a_rotated_key_is_fetched_and_discover_finds_the_provider() -> R {
     let missing = call(&app, "GET", "/api/auth/sso/not-a-provider/start", &[], None).await?;
     assert_eq!((missing.status, missing.code()), (404, Some("not_found")));
     assert!(stub.token_calls() >= 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_environment_provider_signs_in_until_the_org_has_its_own() -> R {
+    let Some(db) = pool().await? else {
+        return Ok(());
+    };
+    let stub = StubIdp::start().await?;
+    let org_id = org(&db, true).await?;
+    let d = domain();
+    let vars = [
+        ("AUTH_OIDC_PRESET", "keycloak".to_owned()),
+        ("AUTH_OIDC_ISSUER", stub.issuer.clone()),
+        ("AUTH_OIDC_CLIENT_ID", CLIENT_ID.to_owned()),
+        ("AUTH_OIDC_ORG_ID", org_id.clone()),
+        ("AUTH_OIDC_EMAIL_DOMAINS", d.clone()),
+        ("AUTH_OIDC_JIT", "true".to_owned()),
+    ];
+    let env = agents_server::sso::env::from_vars(|name| {
+        vars.iter()
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| v.clone())
+    })?;
+    let app = router_with_env(&db, false, env);
+    let found = call(
+        &app,
+        "GET",
+        &format!("/api/auth/sso/discover?email=a@{d}"),
+        &[],
+        None,
+    )
+    .await?;
+    assert_eq!(found.body["providerId"], "env-oidc");
+    let email = format!("env@{d}");
+    let reply = sign_in(
+        &app,
+        &stub,
+        "env-oidc",
+        |n| stub.claims("env-sub", &email, n),
+        Signing::Good,
+    )
+    .await?;
+    assert!(session_cookie(&reply, false).is_some(), "{reply:?}");
+
+    // The organisation configures its own provider: the environment's steps aside.
+    provider(&db, &org_id, &stub, &[], true, json!({})).await?;
+    let gone = call(&app, "GET", "/api/auth/sso/env-oidc/start", &[], None).await?;
+    assert_eq!(gone.status, 404);
+    sqlx::query(r#"DELETE FROM "IdentityProvider" WHERE "id" = 'env-oidc'"#)
+        .execute(&db)
+        .await?;
     Ok(())
 }

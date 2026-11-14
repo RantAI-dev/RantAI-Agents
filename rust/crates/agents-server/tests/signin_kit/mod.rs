@@ -49,7 +49,17 @@ pub async fn pool() -> Res<Option<PgPool>> {
 
 /// The router with sign-in configured for `PUBLIC_URL` (or `https://app.test` when `secure`).
 pub fn router(db: &PgPool, secure: bool) -> Router {
+    router_with_env(db, secure, None)
+}
+
+/// The same, with a provider from the environment.
+pub fn router_with_env(
+    db: &PgPool,
+    secure: bool,
+    env_provider: Option<agents_server::sso::env::EnvProvider>,
+) -> Router {
     let signin = SignIn {
+        env_provider,
         public_url: Some(
             if secure {
                 "https://app.test"
@@ -84,6 +94,7 @@ pub struct Reply {
     pub location: Option<String>,
     pub set_cookies: Vec<String>,
     pub body: Value,
+    pub retry_after: Option<String>,
 }
 
 impl Reply {
@@ -125,6 +136,11 @@ pub async fn call(
         .get(header::LOCATION)
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
+    let retry_after = res
+        .headers()
+        .get(header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
     let set_cookies = res
         .headers()
         .get_all(header::SET_COOKIE)
@@ -142,6 +158,7 @@ pub async fn call(
         location,
         set_cookies,
         body,
+        retry_after,
     })
 }
 
