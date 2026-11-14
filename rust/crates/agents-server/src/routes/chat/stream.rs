@@ -43,6 +43,10 @@ pub struct Frames {
     calls: BTreeMap<usize, String>,
     /// Whether a step is still running.
     step_open: bool,
+    /// Whether a step has begun but has not said anything yet. The SDK writes the
+    /// `start-step` frame when the first chunk of the step arrives, so a step that fails
+    /// before its first chunk never writes one.
+    step_pending: bool,
     failed: bool,
 }
 
@@ -58,9 +62,53 @@ impl Frames {
         match event {
             AgentEvent::StepStart { .. } => {
                 self.step_open = true;
-                vec![frame(&UiChunk::StartStep(StartStepChunk {}))]
+                self.step_pending = true;
+                Vec::new()
             }
-            AgentEvent::Model(Event::TextDelta { text }) => {
+            AgentEvent::Model(model) => {
+                let mut frames = self.step_frame();
+                frames.extend(self.on_model_event(model));
+                frames
+            }
+            AgentEvent::ToolResult { id, content, .. } => {
+                vec![frame(&UiChunk::ToolOutputAvailable(
+                    ToolOutputAvailableChunk {
+                        tool_call_id: id,
+                        output: tool_output(&content),
+                        provider_executed: None,
+                        preliminary: None,
+                        dynamic: None,
+                    },
+                ))]
+            }
+            AgentEvent::StepFinish { usage, .. } => {
+                self.usage = usage;
+                self.step_open = false;
+                let mut frames = self.step_frame();
+                if self.text_open {
+                    self.text_open = false;
+                    frames.push(frame(&UiChunk::TextEnd(TextEndChunk {
+                        id: TEXT_PART_ID.to_owned(),
+                        provider_metadata: None,
+                    })));
+                }
+                frames.push(frame(&UiChunk::FinishStep(FinishStepChunk {})));
+                frames
+            }
+            AgentEvent::TotalUsage { usage } => {
+                self.usage = usage;
+                Vec::new()
+            }
+            AgentEvent::ApprovalRequired { name, reason, .. } => self.on_error(&format!(
+                "The tool {name} needs a decision before it can run: {reason}"
+            )),
+        }
+    }
+
+    /// The frames the model itself produced.
+    fn on_model_event(&mut self, event: Event) -> Vec<Bytes> {
+        match event {
+            Event::TextDelta { text } => {
                 self.text.push_str(&text);
                 let mut frames = Vec::new();
                 if !self.text_open {
@@ -77,7 +125,7 @@ impl Frames {
                 })));
                 frames
             }
-            AgentEvent::Model(Event::ReasoningDelta { text }) => {
+            Event::ReasoningDelta { text } => {
                 self.reasoning.push_str(&text);
                 let mut frames = Vec::new();
                 if !self.reasoning_open {
@@ -100,7 +148,7 @@ impl Frames {
                 })));
                 frames
             }
-            AgentEvent::Model(Event::ToolCallStart { index, id, name }) => {
+            Event::ToolCallStart { index, id, name } => {
                 self.calls.insert(index, id.clone());
                 vec![frame(&UiChunk::ToolInputStart(ToolInputStartChunk {
                     tool_call_id: id,
@@ -111,14 +159,14 @@ impl Frames {
                     title: None,
                 }))]
             }
-            AgentEvent::Model(Event::ToolCallArgsDelta { index, delta }) => {
+            Event::ToolCallArgsDelta { index, delta } => {
                 let id = self.calls.get(&index).cloned().unwrap_or_default();
                 vec![frame(&UiChunk::ToolInputDelta(ToolInputDeltaChunk {
                     tool_call_id: id,
                     input_text_delta: delta,
                 }))]
             }
-            AgentEvent::Model(Event::ToolCallReady { id, name, args }) => {
+            Event::ToolCallReady { id, name, args } => {
                 vec![frame(&UiChunk::ToolInputAvailable(
                     ToolInputAvailableChunk {
                         tool_call_id: id,
@@ -131,48 +179,25 @@ impl Frames {
                     },
                 ))]
             }
-            AgentEvent::Model(Event::Usage(usage)) => {
+            Event::Usage(usage) => {
                 self.usage = usage;
                 Vec::new()
             }
-            AgentEvent::Model(Event::Finish { reason }) => {
+            Event::Finish { reason } => {
                 self.finish_reason = Some(map_finish_reason(reason));
                 Vec::new()
             }
-            AgentEvent::Model(Event::Error { message }) => self.on_error(&message),
-            AgentEvent::ToolResult { id, content, .. } => {
-                vec![frame(&UiChunk::ToolOutputAvailable(
-                    ToolOutputAvailableChunk {
-                        tool_call_id: id,
-                        output: tool_output(&content),
-                        provider_executed: None,
-                        preliminary: None,
-                        dynamic: None,
-                    },
-                ))]
-            }
-            AgentEvent::StepFinish { usage, .. } => {
-                self.usage = usage;
-                self.step_open = false;
-                let mut frames = Vec::new();
-                if self.text_open {
-                    self.text_open = false;
-                    frames.push(frame(&UiChunk::TextEnd(TextEndChunk {
-                        id: TEXT_PART_ID.to_owned(),
-                        provider_metadata: None,
-                    })));
-                }
-                frames.push(frame(&UiChunk::FinishStep(FinishStepChunk {})));
-                frames
-            }
-            AgentEvent::TotalUsage { usage } => {
-                self.usage = usage;
-                Vec::new()
-            }
-            AgentEvent::ApprovalRequired { name, reason, .. } => self.on_error(&format!(
-                "The tool {name} needs a decision before it can run: {reason}"
-            )),
+            Event::Error { message } => self.on_error(&message),
         }
+    }
+
+    /// The `start-step` frame, when the step has not written it yet.
+    fn step_frame(&mut self) -> Vec<Bytes> {
+        if !self.step_pending {
+            return Vec::new();
+        }
+        self.step_pending = false;
+        vec![frame(&UiChunk::StartStep(StartStepChunk {}))]
     }
 
     /// The frames an upstream failure produces: the error chunk, and nothing else.

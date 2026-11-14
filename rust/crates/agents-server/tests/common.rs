@@ -16,6 +16,13 @@ pub type R = Result<(), Box<dyn std::error::Error>>;
 
 /// The router over `TEST_DATABASE_URL`, or `None` (skip) when it is unset outside CI.
 pub async fn router() -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>> {
+    router_with_llm(None).await
+}
+
+/// The router, with the model called at `base_url` when one is given.
+pub async fn router_with_llm(
+    base_url: Option<&str>,
+) -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>> {
     let url = match std::env::var("TEST_DATABASE_URL") {
         Ok(u) if !u.is_empty() => u,
         _ if std::env::var_os("CI").is_some() => {
@@ -27,12 +34,16 @@ pub async fn router() -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Er
         }
     };
     let db = PgPool::connect(&url).await?;
-    let state = AppState {
-        db: db.clone(),
-        auth: AuthConfig {
+    let mut state = AppState::new(
+        db.clone(),
+        AuthConfig {
             secrets: vec![SECRET.to_owned()],
         },
-        policy: std::sync::Arc::new(agents_server::policy::AllowAll),
+    );
+    state.llm = agents_server::llm::LlmConfig {
+        base_url: base_url.map(str::to_owned),
+        api_key: Some("test-key".to_owned()),
+        ..agents_server::llm::LlmConfig::default()
     };
     Ok(Some((app(state), db)))
 }
