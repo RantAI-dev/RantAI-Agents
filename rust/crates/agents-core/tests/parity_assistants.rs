@@ -35,6 +35,9 @@ use agents_core::assistant::wizard::{
     KnownIds, ProposeAgentInput, WizardContext, build_wizard_system_prompt, filter_known_ids,
     sanitize_proposal,
 };
+use agents_core::authz::{
+    AgentRef, Decision, Permission, Principal, Resource, UnitTree, authorize,
+};
 use agents_core::org::OrgRole;
 use agents_core::prompt::approval::{
     AUTO_APPROVED_TOOLS, resolve_tool_approval_mode, tool_needs_approval,
@@ -224,8 +227,8 @@ fn validation(
     Ok(Outcome::Checked)
 }
 
-/// An access case: the old service status projected to the one access decision, plus the
-/// merged binding list a write produced.
+/// The one access case: the old service status projected to a decision, plus the merged
+/// binding list a write produced.
 fn access(name: &str, args: &[Value], expected: &Value) -> Result<Outcome, Box<dyn Error>> {
     let status = expected
         .get("status")
@@ -274,9 +277,46 @@ fn access(name: &str, args: &[Value], expected: &Value) -> Result<Outcome, Box<d
         ));
     }
 
+    // Rows 80 and 120: the S4 port answers every one of these through `authz::authorize`, with
+    // the grants an agent actually has (the fixture carries no grant table, so none). Where
+    // the answer differs from the old one, the difference is documented, and the port must
+    // deny.
+    let authz_allowed = new_rule_allows(action, &actor, &target);
+    let same_org_agent = !target.is_built_in
+        && target.organization_id.is_some()
+        && actor.organization_id.as_ref() == target.organization_id.as_ref();
+    let orgless_agent = !target.is_built_in && target.organization_id.is_none();
+    if authz_allowed != new_allowed {
+        if same_org_agent {
+            assert!(
+                !authz_allowed,
+                "row 80: a member no longer builds agents, and an ungranted agent is not \
+                 visible ({name}, actor {actor:?})"
+            );
+            return Ok(Outcome::Skipped(
+                "differences row 80: only an admin builds an agent, and an agent is used \
+                 through a grant",
+            ));
+        }
+        if orgless_agent {
+            assert!(
+                !authz_allowed,
+                "row 120: an org-less agent belongs to nobody ({name}, actor {actor:?})"
+            );
+            return Ok(Outcome::Skipped(
+                "differences row 120: an agent with no organisation is visible to nobody",
+            ));
+        }
+    }
+
     assert_eq!(
         new_allowed, old_allowed,
         "access differs for {name}: actor {actor:?} target {target:?} (old status {status})"
+    );
+    assert_eq!(
+        authz_allowed, old_allowed,
+        "the S4 rule differs from the old answer outside a documented row: {name}: \
+         actor {actor:?} target {target:?} (old status {status})"
     );
 
     // The write itself: what the old service wrote is what the merge produces.
@@ -303,6 +343,49 @@ fn access(name: &str, args: &[Value], expected: &Value) -> Result<Outcome, Box<d
         }
     }
     Ok(Outcome::Checked)
+}
+
+/// What the port's rule answers for the same case: `authz::authorize`, the one check the S4
+/// routes use, with the grants the agent actually has. Deleting keeps the old "a built-in is
+/// never deleted" (row 25) on top of `agents.manage`.
+fn new_rule_allows(action: Action, actor: &Actor, target: &AssistantRef) -> bool {
+    let principal = Principal::new(
+        actor.user_id.clone(),
+        actor.organization_id.clone().unwrap_or_default(),
+        // A caller with no role of its own holds the weakest one; every check below that
+        // matters to it (a grant, a built-in, another organisation) answers the same.
+        actor.role.unwrap_or(OrgRole::Viewer),
+        actor.is_platform_admin,
+        Vec::new(),
+        &UnitTree::default(),
+    );
+    let agent = AgentRef {
+        organization_id: target.organization_id.clone(),
+        is_built_in: target.is_built_in,
+        grants: Vec::new(),
+    };
+    let decision = match action {
+        Action::View => authorize(&principal, Permission::AgentsUse, &Resource::Agent(&agent)),
+        Action::Edit | Action::EditBindings => authorize(
+            &principal,
+            Permission::AgentsManage,
+            &Resource::Agent(&agent),
+        ),
+        Action::Delete => {
+            if target.is_built_in {
+                Decision::Deny
+            } else {
+                authorize(
+                    &principal,
+                    Permission::AgentsManage,
+                    &Resource::Agent(&agent),
+                )
+            }
+        }
+        // Not an agent decision: the parity of the default is its own case below.
+        Action::SetDefault => return can(actor, action, target),
+    };
+    decision.is_allowed()
 }
 
 fn known_ids(value: &Value) -> KnownIds {

@@ -159,6 +159,98 @@ pub async fn subject_name(
         .await?)
 }
 
+/// Replaces every grant of an agent with `wanted`, in one transaction: the grants it does not
+/// name are removed, the ones it names are inserted or have their level changed.
+///
+/// A built-in agent, another organisation's agent, or a subject outside the organisation is
+/// `NotFound`, and nothing is written: a body that names a stranger does not half-apply.
+pub async fn replace_all(
+    db: &PgPool,
+    org_id: &str,
+    assistant_id: &str,
+    wanted: &[(Subject, GrantLevel)],
+    granted_by: &str,
+) -> StoreResult<Vec<GrantRow>> {
+    let mut tx = db.begin().await?;
+    lock_subjects(&mut tx, org_id).await?;
+    let agent_here = sqlx::query_scalar::<_, bool>(
+        r#"SELECT EXISTS (SELECT 1 FROM "Assistant"
+             WHERE "id" = $1 AND "organizationId" = $2 AND "isBuiltIn" = false)"#,
+    )
+    .bind(assistant_id)
+    .bind(org_id)
+    .fetch_one(&mut *tx)
+    .await?;
+    if !agent_here {
+        return Err(StoreError::NotFound);
+    }
+    for (subject, _) in wanted {
+        if !subject_in_org(&mut tx, org_id, subject).await? {
+            return Err(StoreError::NotFound);
+        }
+    }
+
+    let ts = now();
+    let upsert = format!(
+        r#"INSERT INTO "AssistantGrant" ("id","organizationId","assistantId","subjectType","subjectId","level","grantedBy","createdAt","updatedAt")
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8)
+           ON CONFLICT ("assistantId","subjectType","subjectId")
+             DO UPDATE SET "level" = EXCLUDED."level", "grantedBy" = EXCLUDED."grantedBy", "updatedAt" = EXCLUDED."updatedAt""#
+    );
+    for (subject, level) in wanted {
+        sqlx::query(&upsert)
+            .bind(new_id())
+            .bind(org_id)
+            .bind(assistant_id)
+            .bind(subject.kind.as_str())
+            .bind(&subject.id)
+            .bind(level.as_str())
+            .bind(granted_by)
+            .bind(ts)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    // Everything the body did not name goes. Deleting by (type, id) rather than by row id
+    // keeps a grant that stays at the same level with its id and its `createdAt`.
+    sqlx::query(
+        r#"DELETE FROM "AssistantGrant" g
+           WHERE g."organizationId" = $1 AND g."assistantId" = $2
+             AND NOT EXISTS (
+               SELECT 1 FROM unnest($3::text[], $4::text[]) AS w("subjectType", "subjectId")
+               WHERE w."subjectType" = g."subjectType" AND w."subjectId" = g."subjectId")"#,
+    )
+    .bind(org_id)
+    .bind(assistant_id)
+    .bind(
+        wanted
+            .iter()
+            .map(|(s, _)| s.kind.as_str())
+            .collect::<Vec<&str>>(),
+    )
+    .bind(
+        wanted
+            .iter()
+            .map(|(s, _)| s.id.clone())
+            .collect::<Vec<String>>(),
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    let sql = format!(
+        r#"SELECT {COLUMNS} FROM "AssistantGrant"
+           WHERE "organizationId" = $1 AND "assistantId" = $2
+           ORDER BY "createdAt" ASC, "id" ASC"#
+    );
+    let rows = sqlx::query_as::<_, GrantRow>(&sql)
+        .bind(org_id)
+        .bind(assistant_id)
+        .fetch_all(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(rows)
+}
+
 /// An agent as `authz::authorize` needs it, for a caller acting in `org_id`. The agent itself is
 /// loaded whatever its organisation, so `authorize` can answer `NotFound` for another tenant's;
 /// only grants stored in `org_id` are attached. An unknown id is `NotFound`.
