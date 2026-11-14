@@ -32,6 +32,7 @@ pub async fn router() -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Er
         auth: AuthConfig {
             secrets: vec![SECRET.to_owned()],
         },
+        policy: std::sync::Arc::new(agents_server::policy::AllowAll),
     };
     Ok(Some((app(state), db)))
 }
@@ -71,9 +72,24 @@ pub async fn send(
     auth: Option<&str>,
     body: Option<Value>,
 ) -> Result<(u16, Value), Box<dyn std::error::Error>> {
+    send_with(router, method, uri, auth, body, &[]).await
+}
+
+/// Sends one request with extra headers; returns the status and the JSON body.
+pub async fn send_with(
+    router: &Router,
+    method: &str,
+    uri: &str,
+    auth: Option<&str>,
+    body: Option<Value>,
+    headers: &[(&str, &str)],
+) -> Result<(u16, Value), Box<dyn std::error::Error>> {
     let mut req = Request::builder().method(method).uri(uri);
     if let Some(a) = auth {
         req = req.header("authorization", a);
+    }
+    for (name, value) in headers {
+        req = req.header(*name, *value);
     }
     let req = match body {
         Some(b) => req

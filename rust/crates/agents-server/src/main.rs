@@ -31,9 +31,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let auth = agents_server::auth::AuthConfig {
         secrets: config.auth_secrets.clone(),
     };
-    axum::serve(listener, app(AppState { db, auth }))
-        .with_graceful_shutdown(shutdown())
-        .await?;
+    axum::serve(
+        listener,
+        app(AppState {
+            db,
+            auth,
+            policy: std::sync::Arc::new(agents_server::policy::AllowAll),
+        }),
+    )
+    .with_graceful_shutdown(shutdown())
+    .await?;
     Ok(())
 }
 
