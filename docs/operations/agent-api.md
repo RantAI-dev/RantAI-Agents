@@ -173,17 +173,22 @@ Limits:
 | What | Value | What happens |
 |---|---|---|
 | One turn at a time | — | A `message` while a turn runs is `{"type":"error","code":"conflict"}`; the running turn is untouched |
-| Frame size | 256 KiB | `{"type":"error","code":"payload_too_large"}` |
+| Frame size | 256 KiB | Checked on the frame header, before the payload is read: the socket is closed |
 | Idle | 300 s | The socket is closed 4408 |
 | Auth | 10 s | A socket that presents no key is closed 4401 |
-| History | 40 messages per conversation, 500 conversations per process | The oldest are dropped |
+| History | 40 messages and 512 KiB of text per conversation, 500 conversations per process | The oldest are dropped |
+| Key | Re-read on every `message` | A key switched off, expired, narrowed or deleted since the socket opened gets an `error` frame and close 4401 |
 
-A socket that closes cancels the model call behind the turn that was running.
+A socket that closes cancels the model call behind the turn that was running, and so does an HTTP
+client that hangs up a streaming answer.
 
 ## Errors
 
 Every refusal is the standard body, on both transports (the socket sends the same `code` in its
-`error` frame):
+`error` frame). `/v1/chat/completions` adds the OpenAI `type` the old route sent beside `code`
+(`authentication_error` for 401, `permission_error` for 403, `not_found_error` for 404,
+`rate_limit_error` for 429, `server_error` for a 5xx, `invalid_request_error` otherwise), so an
+OpenAI SDK branches on it as before:
 
 | Status | `code` | When |
 |---|---|---|

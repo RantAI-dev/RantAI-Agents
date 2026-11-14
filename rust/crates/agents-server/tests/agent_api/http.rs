@@ -85,6 +85,33 @@ pub async fn send(
     })
 }
 
+/// Sends one request and answers the response with its body still unread, so a test can read
+/// part of a stream and then hang up.
+pub async fn open(
+    router: &Router,
+    uri: &str,
+    headers: &[(&str, String)],
+    body: &Value,
+    peer: SocketAddr,
+) -> Result<Response<Body>, String> {
+    let mut request = Request::builder().method("POST").uri(uri);
+    for (name, value) in headers {
+        request = request.header(*name, value);
+    }
+    let mut request = request
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::to_vec(body).map_err(|error| error.to_string())?,
+        ))
+        .map_err(|error| error.to_string())?;
+    request.extensions_mut().insert(ConnectInfo(peer));
+    router
+        .clone()
+        .oneshot(request)
+        .await
+        .map_err(|error| error.to_string())
+}
+
 /// `Bearer <api key>`.
 pub fn bearer(key: &str) -> (&'static str, String) {
     (AUTHORIZATION.as_str(), format!("Bearer {key}"))

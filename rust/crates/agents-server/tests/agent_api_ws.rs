@@ -602,3 +602,93 @@ async fn an_agent_that_needs_the_knowledge_base_is_refused_on_the_socket() -> R 
     assert_eq!(text, "Hello");
     Ok(())
 }
+
+#[tokio::test]
+async fn a_frame_over_the_limit_is_refused_before_it_is_read() -> R {
+    let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
+    let Some((app, db)) = helpers::router_with(&stub, |state| {
+        state.api.limits.max_frame = 1024;
+        // Long enough that only the size check can close the socket inside the wait below.
+        state.api.limits.auth_timeout = Duration::from_secs(60);
+    })
+    .await?
+    else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let assistant_id = assistant(&db, &org_id).await?;
+    let key = key_for(&app, &common::bearer(&admin)?, &assistant_id).await?;
+    let address = ws::serve(app).await?;
+    let path = format!("/v1/agents/{assistant_id}/ws");
+
+    // Positive control: a frame under the limit is read and answered.
+    let mut socket = open(address, &assistant_id, &key).await?;
+    socket.send_json(&json!({"type": "ping"})).await?;
+    assert_eq!(
+        next(&mut socket).await,
+        Some(Frame::Text(json!({"type": "pong"})))
+    );
+
+    // A frame that announces a megabyte and sends none of it, before any key: the server must
+    // refuse it on the length, not wait to buffer it.
+    let Handshake::Open(mut socket) = ws::connect(address, &path, &[]).await? else {
+        return Err("the handshake was refused".into());
+    };
+    socket.send_frame_head(1024 * 1024).await?;
+    let ended = tokio::time::timeout(Duration::from_secs(3), socket.drain()).await;
+    assert!(
+        ended.is_ok(),
+        "the socket is closed, not left reading the frame"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_key_switched_off_while_the_socket_is_open_answers_no_more_turns() -> R {
+    let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
+    let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let assistant_id = assistant(&db, &org_id).await?;
+    let key = key_for(&app, &common::bearer(&admin)?, &assistant_id).await?;
+    let address = ws::serve(app).await?;
+
+    for switch_off in [
+        r#"UPDATE "AgentApiKey" SET "enabled" = false WHERE "keyHash" = $1"#,
+        r#"UPDATE "AgentApiKey" SET "expiresAt" = now() - interval '1 minute' WHERE "keyHash" = $1"#,
+    ] {
+        sqlx::query(
+            r#"UPDATE "AgentApiKey" SET "enabled" = true, "expiresAt" = NULL WHERE "keyHash" = $1"#,
+        )
+        .bind(agents_auth::api_key::hash_agent_api_key(&key))
+        .execute(&db)
+        .await?;
+        let mut socket = open(address, &assistant_id, &key).await?;
+        // Positive control: the key works on this socket.
+        socket
+            .send_json(&json!({"type": "message", "content": "hello"}))
+            .await?;
+        let (text, session) = read_turn(&mut socket).await;
+        assert_eq!(text, "Hello");
+        assert!(session.is_some());
+
+        // Revoked from the dashboard while the socket stays open.
+        sqlx::query(switch_off)
+            .bind(agents_auth::api_key::hash_agent_api_key(&key))
+            .execute(&db)
+            .await?;
+        socket
+            .send_json(&json!({"type": "message", "content": "again"}))
+            .await?;
+        let (text, session) = read_turn(&mut socket).await;
+        assert_eq!(
+            text, "",
+            "no answer after the key is switched off ({switch_off})"
+        );
+        assert!(session.is_none(), "no turn ends ({switch_off})");
+    }
+    Ok(())
+}

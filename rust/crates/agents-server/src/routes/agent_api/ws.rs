@@ -84,7 +84,12 @@ async fn upgrade(
         }
         None => None,
     };
-    ws.on_upgrade(move |socket| session(state, socket, assistant_id, caller, ip))
+    // The size limit is the codec's, so a frame that announces more is refused on its header
+    // and never buffered; `handle_text` only sees frames that already fit.
+    let max = state.api.limits.max_frame;
+    ws.max_message_size(max)
+        .max_frame_size(max)
+        .on_upgrade(move |socket| session(state, socket, assistant_id, caller, ip))
         .into_response()
 }
 
@@ -149,8 +154,12 @@ async fn session(
                 last = tokio::time::Instant::now();
                 match frame {
                     Some(Ok(Message::Text(text))) => {
-                        handle_text(&state, &limits, &caller, &assistant_id, &text, &mut connection)
-                            .await;
+                        let turn = Turn { state: &state, limits: &limits, caller: &caller, assistant_id: &assistant_id, ip };
+                        if handle_text(&turn, &text, &mut connection).await == Flow::Close {
+                            cancel(&mut connection.running);
+                            close(&mut connection.socket, CLOSE_UNAUTHORISED, "unauthorised").await;
+                            return;
+                        }
                     }
                     Some(Ok(Message::Close(_))) | None => {
                         cancel(&mut connection.running);
@@ -229,23 +238,32 @@ enum Out {
     Failed { code: ErrorCode, message: String },
 }
 
+/// What a socket's frames are judged against.
+struct Turn<'a> {
+    state: &'a AppState,
+    limits: &'a Limits,
+    caller: &'a KeyCaller,
+    assistant_id: &'a str,
+    ip: ClientIp,
+}
+
+/// Whether the socket stays open after a frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Flow {
+    Continue,
+    /// The key no longer opens this agent.
+    Close,
+}
+
 /// One incoming text frame.
-async fn handle_text(
-    state: &AppState,
-    limits: &Limits,
-    caller: &KeyCaller,
-    assistant_id: &str,
-    text: &str,
-    connection: &mut Connection,
-) {
-    if text.len() > limits.max_frame {
-        let _ = send(
-            &mut connection.socket,
-            &error_frame(ErrorCode::PayloadTooLarge, "This frame is too large."),
-        )
-        .await;
-        return;
-    }
+async fn handle_text(turn: &Turn<'_>, text: &str, connection: &mut Connection) -> Flow {
+    let Turn {
+        state,
+        limits,
+        caller,
+        assistant_id,
+        ip,
+    } = *turn;
     let frame: Value = match serde_json::from_str(text) {
         Ok(frame) => frame,
         Err(_) => {
@@ -254,7 +272,7 @@ async fn handle_text(
                 &error_frame(ErrorCode::InvalidRequest, "A frame must be a JSON object."),
             )
             .await;
-            return;
+            return Flow::Continue;
         }
     };
     match frame.get("type").and_then(Value::as_str) {
@@ -270,6 +288,14 @@ async fn handle_text(
             .await;
         }
         Some("message") => {
+            if let Err(error) = key_auth::recheck(state, caller, Scope::ChatStream, ip).await {
+                let _ = send(
+                    &mut connection.socket,
+                    &error_frame(error.code, error.code.message()),
+                )
+                .await;
+                return Flow::Close;
+            }
             if connection.running.is_some() {
                 // One turn at a time: the answer to the first is still being written.
                 let _ = send(
@@ -277,7 +303,7 @@ async fn handle_text(
                     &error_frame(ErrorCode::Conflict, "A turn is already running."),
                 )
                 .await;
-                return;
+                return Flow::Continue;
             }
             let Some(content) = frame.get("content").and_then(Value::as_str) else {
                 let _ = send(
@@ -285,7 +311,7 @@ async fn handle_text(
                     &error_frame(ErrorCode::InvalidRequest, "A message needs text content."),
                 )
                 .await;
-                return;
+                return Flow::Continue;
             };
             if content.trim().is_empty() {
                 let _ = send(
@@ -293,7 +319,7 @@ async fn handle_text(
                     &error_frame(ErrorCode::InvalidRequest, "A message needs text content."),
                 )
                 .await;
-                return;
+                return Flow::Continue;
             }
             // A `sessionId` resumes a conversation this key created; anything else starts one.
             if let Some(requested) = frame.get("sessionId").and_then(Value::as_str)
@@ -326,7 +352,7 @@ async fn handle_text(
                             ),
                         )
                         .await;
-                        return;
+                        return Flow::Continue;
                     }
                 },
             };
@@ -358,6 +384,7 @@ async fn handle_text(
             .await;
         }
     }
+    Flow::Continue
 }
 
 /// The first frame of a connection that carried no key: `{"type":"auth","key":"…"}`.

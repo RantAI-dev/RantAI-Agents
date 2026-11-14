@@ -12,8 +12,8 @@
 //! - the knowledge base is refused (409), because retrieval is not part of this phase;
 //! - a chatflow or a tool the port cannot run is a 409 through the same gate, where the old
 //!   route answered 422 for a chatflow alone;
-//! - every error uses the standard body, which an OpenAI client reads just as well (it reads
-//!   `error.message`).
+//! - every error is the standard body plus the OpenAI `type` the old route sent
+//!   (`authentication_error`, `permission_error`, …), so an OpenAI SDK still branches on it.
 
 use std::io;
 
@@ -47,6 +47,9 @@ use super::bodies::{self, Completion};
 
 use super::key_auth::{self, Scope};
 use super::turn::{self, Prepared};
+
+/// The largest error body the route rewrites; the standard body is far smaller.
+const ERROR_BODY_LIMIT: usize = 64 * 1024;
 
 /// How many frames the response waits for before the writer catches up.
 const FRAME_BUFFER: usize = 32;
@@ -89,10 +92,39 @@ async fn completions(
         Ok(response) => response,
         // A refusal keeps the CORS header: a browser's client has to be able to read it.
         Err(error) => {
-            let mut response = ApiError::into_response(error, &crate::http::request_id::current());
+            let mut response = openai_error(error).await;
             add_headers(&mut response, &[CORS]);
             response
         }
+    }
+}
+
+/// The standard error body with the OpenAI `type` beside `code`: the old route answered
+/// `{"error": {"message", "type"}}` and an OpenAI SDK branches on `type`.
+async fn openai_error(error: ApiError) -> Response<AxumBody> {
+    let kind = openai_error_type(error.code);
+    let response = ApiError::into_response(error, &crate::http::request_id::current());
+    let (mut parts, body) = response.into_parts();
+    let Ok(bytes) = axum::body::to_bytes(body, ERROR_BODY_LIMIT).await else {
+        return Response::from_parts(parts, AxumBody::empty());
+    };
+    let mut value: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    if let Some(inner) = value.get_mut("error").and_then(Value::as_object_mut) {
+        inner.insert("type".to_owned(), Value::from(kind));
+    }
+    parts.headers.remove(axum::http::header::CONTENT_LENGTH);
+    Response::from_parts(parts, AxumBody::from(value.to_string()))
+}
+
+/// The OpenAI error type the old route sent for each kind of refusal.
+const fn openai_error_type(code: ErrorCode) -> &'static str {
+    match code.status() {
+        401 => "authentication_error",
+        403 => "permission_error",
+        404 => "not_found_error",
+        429 => "rate_limit_error",
+        status if status >= 500 => "server_error",
+        _ => "invalid_request_error",
     }
 }
 
@@ -259,7 +291,15 @@ fn streamed(
     let (tx, rx) = mpsc::channel::<Result<Bytes, io::Error>>(FRAME_BUFFER);
     tokio::spawn(async move {
         let mut answer = Answer::default();
-        let driven = drive(&client, &prepared, Sink::Frames(&tx, &head), &mut answer).await;
+        // A client that hangs up stops the model call: the loop may be waiting on the model,
+        // not writing, so it would never see the closed channel by itself.
+        let driven = tokio::select! {
+            driven = drive(&client, &prepared, Sink::Frames(&tx, &head), &mut answer) => driven,
+            () = tx.closed() => {
+                handle.cancel();
+                return;
+            }
+        };
         match driven {
             // A stream that broke writes the error frame and no `[DONE]`, the way the old
             // builder's catch did: the client sees the stream close early.

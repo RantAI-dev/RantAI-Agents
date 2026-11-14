@@ -23,6 +23,9 @@ pub struct Limits {
     pub max_frame: usize,
     /// How many messages one conversation keeps; the oldest are dropped.
     pub max_messages: usize,
+    /// How many bytes of text one conversation keeps; the oldest messages are dropped. Without
+    /// it the registry could hold `max_conversations × max_messages × max_frame` (5 GiB).
+    pub max_conversation_bytes: usize,
     /// How many conversations the process remembers.
     pub max_conversations: usize,
 }
@@ -34,6 +37,7 @@ impl Default for Limits {
             idle_timeout: Duration::from_secs(300),
             max_frame: 256 * 1024,
             max_messages: 40,
+            max_conversation_bytes: 512 * 1024,
             max_conversations: 500,
         }
     }
@@ -107,7 +111,8 @@ impl Conversations {
             .then(|| conversation.messages.clone())
     }
 
-    /// Adds one message, dropping the oldest when the conversation is full.
+    /// Adds one message, dropping the oldest when the conversation is over its message count or
+    /// its byte budget.
     pub(super) fn append(&self, limits: &Limits, id: &str, message: CompletionMessage) {
         let Ok(mut inner) = self.inner.lock() else {
             return;
@@ -122,6 +127,12 @@ impl Conversations {
             .saturating_sub(limits.max_messages);
         if excess > 0 {
             conversation.messages.drain(..excess);
+        }
+        let mut bytes: usize = conversation.messages.iter().map(|m| m.content.len()).sum();
+        // The newest message stays even when it alone is over the budget: it is the turn.
+        while bytes > limits.max_conversation_bytes && conversation.messages.len() > 1 {
+            let oldest = conversation.messages.remove(0);
+            bytes -= oldest.content.len();
         }
     }
 
@@ -158,6 +169,34 @@ mod tests {
         assert!(conversations.resume("key-b", "agent-1", &id).is_none());
         assert!(conversations.resume("key-a", "agent-2", &id).is_none());
         assert!(conversations.resume("key-a", "agent-1", "nope").is_none());
+    }
+
+    #[test]
+    fn a_conversation_drops_its_oldest_messages_past_its_byte_budget() {
+        let conversations = Conversations::new();
+        let limits = Limits {
+            max_conversation_bytes: 10,
+            ..Limits::default()
+        };
+        let Some(id) = conversations.create(&limits, "key", "agent") else {
+            return;
+        };
+        for content in ["aaaa", "bbbb", "cccc"] {
+            conversations.append(
+                &limits,
+                &id,
+                CompletionMessage {
+                    role: "user".to_owned(),
+                    content: content.to_owned(),
+                },
+            );
+        }
+        let messages: Vec<String> = conversations
+            .messages(&id)
+            .into_iter()
+            .map(|message| message.content)
+            .collect();
+        assert_eq!(messages, vec!["bbbb".to_owned(), "cccc".to_owned()]);
     }
 
     #[test]

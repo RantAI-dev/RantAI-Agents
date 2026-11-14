@@ -1022,3 +1022,122 @@ async fn a_malformed_completion_body_is_a_400_naming_every_bad_field() -> R {
     assert_eq!(chat(&app, &key, completion(false)).await?.status, 200);
     Ok(())
 }
+
+#[tokio::test]
+async fn a_client_that_hangs_up_a_stream_stops_the_model_call() -> R {
+    use http_body_util::BodyExt;
+
+    let stub = Stub::start(Script::Hang(
+        "Hello there, this is the start of an answer".to_owned(),
+    ))
+    .await?;
+    let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let assistant_id = assistant(&db, &org_id).await?;
+    let key = mint(&app, auth(&admin)?, &assistant_id, json!({}))
+        .await?
+        .json()
+        .get("key")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+
+    let peer = peer().ok_or("no peer")?;
+    let response = http::open(
+        &app,
+        "/v1/chat/completions",
+        &[key_bearer(&key)],
+        &completion(true),
+        peer,
+    )
+    .await?;
+    assert_eq!(response.status(), 200);
+    let mut body = response.into_body();
+    // Positive control: the answer has started and the model is still talking.
+    let first = tokio::time::timeout(std::time::Duration::from_secs(10), body.frame())
+        .await?
+        .ok_or("the stream ended before its first frame")??;
+    let text = first
+        .data_ref()
+        .map(|bytes| String::from_utf8_lossy(bytes).to_string())
+        .unwrap_or_default();
+    assert!(text.contains("Hello there"), "{text}");
+    assert!(!stub.client_hung_up(), "the model is still talking");
+
+    // The client goes away mid-answer: the upstream call is cancelled, not left running.
+    drop(body);
+    let mut waited = std::time::Duration::ZERO;
+    while !stub.client_hung_up() && waited < std::time::Duration::from_secs(10) {
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        waited += std::time::Duration::from_millis(25);
+    }
+    assert!(stub.client_hung_up(), "the model call was cancelled");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_refusal_is_the_openai_error_object() -> R {
+    // The old route answered `{"error": {"message", "type"}}`, and an OpenAI SDK branches on
+    // `type`; the port keeps `code` and `requestId` beside it.
+    let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
+    let Some((app, db)) = helpers::router_with(&stub, |_| {}).await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let assistant_id = assistant(&db, &org_id).await?;
+    let key = mint(
+        &app,
+        auth(&admin)?,
+        &assistant_id,
+        json!({"scopes": ["chat:stream"]}),
+    )
+    .await?
+    .json()
+    .get("key")
+    .and_then(Value::as_str)
+    .unwrap_or_default()
+    .to_owned();
+
+    let error_type = |answer: &Answer| {
+        answer
+            .json()
+            .pointer("/error/type")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    };
+
+    let answer = send(
+        &app,
+        "POST",
+        "/v1/chat/completions",
+        &[],
+        Some(completion(false)),
+        peer(),
+    )
+    .await?;
+    assert_eq!(answer.status, 401, "{}", answer.text);
+    assert_eq!(error_type(&answer).as_deref(), Some("authentication_error"));
+    assert_eq!(code(&answer.json()), Some("unauthenticated"));
+    assert!(answer.json().pointer("/error/message").is_some());
+    assert_eq!(answer.header("access-control-allow-origin"), Some("*"));
+
+    // A key without `chat` asking for a non-streaming answer.
+    let answer = chat(&app, &key, completion(false)).await?;
+    assert_eq!(answer.status, 403, "{}", answer.text);
+    assert_eq!(error_type(&answer).as_deref(), Some("permission_error"));
+
+    let answer = chat(&app, &key, json!({"messages": [], "stream": true})).await?;
+    assert_eq!(answer.status, 400, "{}", answer.text);
+    assert_eq!(
+        error_type(&answer).as_deref(),
+        Some("invalid_request_error")
+    );
+
+    // Positive control: the same key, streaming, is answered.
+    assert_eq!(chat(&app, &key, completion(true)).await?.status, 200);
+    Ok(())
+}

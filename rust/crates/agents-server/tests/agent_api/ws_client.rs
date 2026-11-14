@@ -126,6 +126,16 @@ impl Socket {
         self.stream.flush().await
     }
 
+    /// Sends only the head of a masked text frame that announces `length` bytes, and none of
+    /// them: a server that reads the payload before checking its size waits here.
+    pub async fn send_frame_head(&mut self, length: u64) -> io::Result<()> {
+        let mut head = vec![0x81_u8, 0x80 | 127];
+        head.extend_from_slice(&length.to_be_bytes());
+        head.extend_from_slice(&[0x37, 0xfa, 0x21, 0x3d]);
+        self.stream.write_all(&head).await?;
+        self.stream.flush().await
+    }
+
     /// Sends a JSON frame.
     pub async fn send_json(&mut self, value: &Value) -> io::Result<()> {
         self.send_text(&value.to_string()).await

@@ -111,6 +111,31 @@ pub async fn authenticate(
     })
 }
 
+/// The same checks again, on the key as it is now.
+///
+/// A socket outlives the handshake that authenticated it, so every turn re-reads the row: a key
+/// switched off, expired, narrowed or deleted since stops answering at the next message rather
+/// than at the idle timeout.
+pub async fn recheck(
+    state: &AppState,
+    caller: &KeyCaller,
+    scope: Scope,
+    ip: ClientIp,
+) -> Result<(), ApiError> {
+    let Some(hash) = caller.key.key_hash.as_deref() else {
+        return Err(invalid());
+    };
+    let row = api_keys::find_by_hash(&state.db, hash)
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, "the API key could not be read");
+            ApiError::new(ErrorCode::Internal)
+        })?
+        .filter(|row| row.id == caller.key.id && row.assistant_id == caller.key.assistant_id)
+        .ok_or_else(invalid)?;
+    check_key(row, scope, ip).map(|_| ())
+}
+
 /// The key row a presented value hashes to, or a 401.
 async fn lookup(state: &AppState, presented_key: &str) -> Result<ApiKeyRow, ApiError> {
     let hash = hash_agent_api_key(presented_key);
