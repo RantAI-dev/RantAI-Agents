@@ -10,8 +10,7 @@ export function isLocalPath(path: string | null | undefined): path is string {
     !path.startsWith("//") &&
     !path.startsWith("/\\") &&
     // Control characters: a browser strips tab and newline, so "/\t/evil.test" is "//evil.test".
-    // eslint-disable-next-line no-control-regex -- matching control characters is the point
-    !/[\u0000-\u001f\u007f]/.test(path)
+    ![...path].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)
   )
 }
 
