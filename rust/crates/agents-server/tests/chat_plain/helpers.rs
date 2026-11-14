@@ -2,10 +2,7 @@
 //! stub, seeded assistants and organisations, and the frames of a stream.
 //!
 //! `chat_plain.rs` and `chat_tools.rs` share it, and neither uses every part of it.
-#![allow(
-    dead_code,
-    reason = "shared by two test crates that use different parts"
-)]
+#![allow(dead_code, reason = "two test files use parts of it")]
 
 use agents_store::PgPool;
 use agents_store::new_id;

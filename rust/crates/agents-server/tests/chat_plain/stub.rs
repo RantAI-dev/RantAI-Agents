@@ -5,10 +5,7 @@
 //! test can look at what the model was asked.
 //!
 //! `chat_plain.rs` and `chat_tools.rs` share it, and neither uses every part of it.
-#![allow(
-    dead_code,
-    reason = "shared by two test crates that use different parts"
-)]
+#![allow(dead_code, reason = "two test files use parts of it")]
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
