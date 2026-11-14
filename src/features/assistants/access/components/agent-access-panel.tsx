@@ -53,15 +53,15 @@ const LEVEL_LABELS = { use: "Can use", manage: "Can manage" } as const
  */
 export function AgentAccessPanel({ assistantId }: { assistantId: string | null }) {
   const orgFetch = useOrgFetch()
-  const { activeOrganization } = useOrganization()
+  const { activeOrganization, isAdmin } = useOrganization()
   const orgId = activeOrganization?.id ?? null
   const orgName = activeOrganization?.name ?? "the whole organisation"
 
   const grants = useApiResource<CursorPage<AccessGrant>>(
-    assistantId ? `/api/assistants/${assistantId}/access` : null,
+    assistantId && isAdmin ? `/api/assistants/${assistantId}/access` : null,
   )
-  const units = useApiResource<CursorPage<UnitNode>>(orgId ? orgPaths.units(orgId) : null)
-  const people = useApiResource<OrgMember[]>(orgId ? orgPaths.members(orgId) : null)
+  const units = useApiResource<CursorPage<UnitNode>>(orgId && isAdmin ? orgPaths.units(orgId) : null)
+  const people = useApiResource<OrgMember[]>(orgId && isAdmin ? orgPaths.members(orgId) : null)
 
   const [draft, setDraft] = useState<GrantDraft[]>([])
   const [hydrated, setHydrated] = useState(false)
@@ -75,6 +75,19 @@ export function AgentAccessPanel({ assistantId }: { assistantId: string | null }
   if (!hydrated && grants.data) {
     setHydrated(true)
     setDraft((grants.data.data ?? []).map(draftFromGrant))
+  }
+
+  if (!isAdmin) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Who can use this agent</CardTitle>
+          <CardDescription>
+            Only your organisation&apos;s owners and admins choose who may use an agent.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+    )
   }
 
   if (!assistantId) {

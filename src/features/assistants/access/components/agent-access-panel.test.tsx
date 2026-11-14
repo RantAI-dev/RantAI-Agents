@@ -5,10 +5,12 @@ import { AgentAccessPanel } from "./agent-access-panel"
 
 const fetchMock = vi.fn()
 
+const state = vi.hoisted(() => ({ isAdmin: true }))
+
 vi.mock("@/hooks/use-organization", () => ({
   useOrganization: () => ({
     activeOrganization: { id: "o1", name: "Acme", slug: "acme" },
-    isAdmin: true,
+    isAdmin: state.isAdmin,
     isOwner: false,
     canEdit: true,
   }),
@@ -55,6 +57,7 @@ function json(body: unknown, status = 200) {
 }
 
 beforeEach(() => {
+  state.isAdmin = true
   fetchMock.mockReset()
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     if (init?.method === "PUT") {
@@ -96,6 +99,15 @@ describe("AgentAccessPanel", () => {
         { subjectType: "org", subjectId: "o1", level: "manage" },
       ])
     })
+  })
+
+  it("tells a delegated manager that grants are the admins' decision", async () => {
+    state.isAdmin = false
+    render(<AgentAccessPanel assistantId="a1" />)
+
+    expect(screen.getByText(/only your organisation's owners and admins/i)).not.toBeNull()
+    expect(screen.queryByRole("button", { name: /save access/i })).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("revokes a saved grant by its id", async () => {
