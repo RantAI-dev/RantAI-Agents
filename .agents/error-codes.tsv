@@ -13,6 +13,9 @@
 #   @emit rust rust/crates/api/src/error_codes.rs
 # A published API that already returns a status outside the standard table names it here:
 #   @allow-status 422
+# The cloud edition answers 402 when a plan has to be paid for before the request may go on
+# (the assistant plan cap and the model plan).
+@allow-status 402
 invalid_request	400	The request is not valid.
 unauthenticated	401	Sign in or send a valid API key.
 permission_denied	403	You do not have permission to do this.
@@ -26,4 +29,5 @@ internal	500	Something went wrong on our side.
 upstream_failed	502	A service we depend on returned an error.
 unavailable	503	The service is temporarily unavailable. Try again later.
 timeout	504	The request took too long.
+payment_required	402	Your plan does not allow this.
 @emit rust rust/crates/agents-contracts/src/error_codes.rs
