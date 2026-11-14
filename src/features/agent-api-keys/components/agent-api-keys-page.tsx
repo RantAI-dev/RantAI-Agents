@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { formatDistanceToNow } from "date-fns"
 import {
   AlertCircle,
@@ -8,14 +8,12 @@ import {
   Copy,
   KeyRound,
   Loader2,
+  Pencil,
   Plus,
   Trash2,
 } from "@/lib/icons"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import {
   Card,
   CardContent,
@@ -23,47 +21,43 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useOrgFetch, useOrganization } from "@/hooks/use-organization"
 import { useApiResource } from "@/hooks/use-api-resource"
-import { readApiError } from "@/lib/api/error"
+import { useAgentApiReadiness } from "@/hooks/use-agent-api-readiness"
 import { useAssistants } from "@/hooks/use-assistants"
-import type { AgentApiKeyResponse } from "@/features/agent-api-keys/service"
+import { readApiError } from "@/lib/api/error"
+import { AgentApiKeyDialog } from "./agent-api-key-dialog"
+import type { AgentApiKey } from "./key-types"
 
 const KEYS_PATH = "/api/dashboard/agent-api-keys"
 
+const AGENT_API_DOCS =
+  "https://github.com/RantAI-dev/RantAI-Agents/blob/main/docs/operations/agent-api.md"
+
 /**
- * Agent API keys: one key per agent, for the platforms that call the agent over HTTP or the
- * WebSocket. The plain key is shown once, on the answer that created it; after that only the mask
- * comes back (design §3.6).
+ * Agent API keys: one key per agent, for the platforms that reach the agent over HTTP or the
+ * WebSocket. The whole key is shown once, on the 201 that minted it; every later read carries
+ * the mask (design §3.6).
  */
 export default function AgentApiKeysPage() {
   const orgFetch = useOrgFetch()
   const { isAdmin } = useOrganization()
-  const keys = useApiResource<AgentApiKeyResponse[]>(isAdmin ? KEYS_PATH : null)
+  const keys = useApiResource<AgentApiKey[]>(isAdmin ? KEYS_PATH : null)
   const { assistants } = useAssistants()
 
-  const [createOpen, setCreateOpen] = useState(false)
-  const [name, setName] = useState("")
-  const [assistantId, setAssistantId] = useState("")
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState<AgentApiKey | null>(null)
+  const [formAgentId, setFormAgentId] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [created, setCreated] = useState<AgentApiKeyResponse | null>(null)
+  const [created, setCreated] = useState<AgentApiKey | null>(null)
   const [copied, setCopied] = useState(false)
+
+  const formAgent = useMemo(
+    () => assistants.find((assistant) => assistant.id === formAgentId) ?? null,
+    [assistants, formAgentId],
+  )
+  const readiness = useAgentApiReadiness(dialogOpen ? formAgentId || null : null, formAgent)
 
   if (!isAdmin) {
     return (
@@ -73,6 +67,20 @@ export default function AgentApiKeysPage() {
         </CardContent>
       </Card>
     )
+  }
+
+  const openCreate = () => {
+    setEditing(null)
+    setFormAgentId("")
+    setError(null)
+    setDialogOpen(true)
+  }
+
+  const openEdit = (key: AgentApiKey) => {
+    setEditing(key)
+    setFormAgentId(key.assistantId)
+    setError(null)
+    setDialogOpen(true)
   }
 
   const run = async (request: () => Promise<Response>, success?: () => void) => {
@@ -96,26 +104,35 @@ export default function AgentApiKeysPage() {
     }
   }
 
-  const create = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const submit = async (body: unknown) => {
+    if (editing) {
+      const done = await run(() =>
+        orgFetch(`${KEYS_PATH}/${editing.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      )
+      if (done) setDialogOpen(false)
+      return
+    }
+
     setBusy(true)
     setError(null)
     try {
       const response = await orgFetch(KEYS_PATH, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), assistantId }),
+        body: JSON.stringify(body),
       })
       if (!response.ok) {
         const failure = await readApiError(response)
         setError(failure.message)
         return
       }
-      const key = (await response.json()) as AgentApiKeyResponse
+      const key = (await response.json()) as AgentApiKey
       setCreated(key)
-      setCreateOpen(false)
-      setName("")
-      setAssistantId("")
+      setDialogOpen(false)
       keys.reload()
     } catch {
       setError("We could not reach the server. Try again.")
@@ -135,11 +152,15 @@ export default function AgentApiKeysPage() {
             Agent API keys
           </h2>
           <p className="text-sm text-muted-foreground">
-            Keys other platforms use to call an agent over HTTP or the WebSocket. A key acts as the
-            agent itself, never as a person.
+            Keys other platforms use to call an agent over HTTP (<code>/v1/chat/completions</code>)
+            or the WebSocket. A key acts as the agent itself, never as a person.{" "}
+            <a className="underline underline-offset-2" href={AGENT_API_DOCS} target="_blank" rel="noreferrer">
+              The runbook
+            </a>
+            .
           </p>
         </div>
-        <Button size="sm" onClick={() => setCreateOpen(true)}>
+        <Button size="sm" onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />
           New key
         </Button>
@@ -162,8 +183,8 @@ export default function AgentApiKeysPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Copy this key now</CardTitle>
             <CardDescription>
-              It is shown once. Store it where the other platform can read it; it cannot be read
-              back here.
+              It is in this answer and in no other. Store it where the other platform can read it;
+              the list below shows only its mask.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -195,7 +216,11 @@ export default function AgentApiKeysPage() {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Keys</CardTitle>
-          <CardDescription>{rows.length} configured</CardDescription>
+          <CardDescription>
+            {rows.length} configured. An empty IP allowlist lets every address in; behind a proxy
+            the address is the proxy&apos;s unless the deployment lists its ranges in{" "}
+            <code>TRUSTED_PROXIES</code> (docs/operations/network.md).
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           {keys.loading && !keys.data ? (
@@ -208,18 +233,29 @@ export default function AgentApiKeysPage() {
           ) : (
             <ul className="divide-y">
               {rows.map((key) => (
-                <li key={key.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <li key={key.id} className="flex flex-wrap items-start gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
+                    <p className="flex flex-wrap items-center gap-2 truncate text-sm font-medium">
                       {key.name}
-                      <Badge variant={key.enabled ? "default" : "secondary"} className="ml-2 text-[10px]">
+                      <Badge variant={key.enabled ? "default" : "secondary"} className="text-[10px]">
                         {key.enabled ? "Enabled" : "Disabled"}
                       </Badge>
+                      {key.expiresAt && (
+                        <Badge variant="outline" className="text-[10px] font-normal">
+                          expires {new Date(key.expiresAt).toLocaleDateString()}
+                        </Badge>
+                      )}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {key.assistant ? `${key.assistant.emoji ?? ""} ${key.assistant.name}` : key.assistantId}
+                      {key.assistant
+                        ? `${key.assistant.emoji ?? ""} ${key.assistant.name}`
+                        : `${key.assistantId} (deleted)`}
                       {" · "}
                       <code>{key.key}</code>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      scopes {key.scopes.length > 0 ? key.scopes.join(", ") : "all"} · allowlist{" "}
+                      {key.ipWhitelist.length > 0 ? key.ipWhitelist.join(", ") : "any address"}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {key.lastUsedAt
@@ -230,23 +266,16 @@ export default function AgentApiKeysPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Label htmlFor={`enabled-${key.id}`} className="text-xs text-muted-foreground">
-                      Enabled
-                    </Label>
-                    <Switch
-                      id={`enabled-${key.id}`}
-                      checked={key.enabled}
+                    <Button
+                      variant="outline"
+                      size="sm"
                       disabled={busy}
-                      onCheckedChange={(value) =>
-                        run(() =>
-                          orgFetch(`${KEYS_PATH}/${key.id}`, {
-                            method: "PUT",
-                            headers: { "content-type": "application/json" },
-                            body: JSON.stringify({ enabled: value }),
-                          }),
-                        )
-                      }
-                    />
+                      onClick={() => openEdit(key)}
+                      aria-label={`Edit ${key.name}`}
+                    >
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                      Edit
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -265,55 +294,21 @@ export default function AgentApiKeysPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-md">
-          <form onSubmit={create}>
-            <DialogHeader>
-              <DialogTitle>New agent API key</DialogTitle>
-              <DialogDescription>
-                The key belongs to one agent and carries that agent&apos;s access.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="key-name">Name</Label>
-                <Input
-                  id="key-name"
-                  required
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Support widget"
-                  disabled={busy}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="key-assistant">Agent</Label>
-                <Select value={assistantId} onValueChange={setAssistantId} disabled={busy}>
-                  <SelectTrigger id="key-assistant">
-                    <SelectValue placeholder="Choose an agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {assistants.map((assistant) => (
-                      <SelectItem key={assistant.id} value={assistant.id}>
-                        {assistant.emoji} {assistant.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} disabled={busy}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={busy || !name.trim() || !assistantId}>
-                {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Create key
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {dialogOpen && (
+        <AgentApiKeyDialog
+          key={editing?.id ?? "new"}
+          open={dialogOpen}
+          editing={editing}
+          assistants={assistants}
+          readiness={readiness}
+          assistantId={formAgentId}
+          onAssistantChange={setFormAgentId}
+          busy={busy}
+          error={error}
+          onOpenChange={setDialogOpen}
+          onSubmit={(body) => void submit(body)}
+        />
+      )}
     </div>
   )
 }
