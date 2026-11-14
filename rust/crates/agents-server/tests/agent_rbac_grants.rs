@@ -468,3 +468,39 @@ async fn the_member_list_and_the_panel_agree_after_a_grant_to_a_unit() -> R {
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn only_an_admin_of_the_organisation_sets_its_default() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let delegate = member_of(&db, &org_id, "member").await?;
+    let id = assistant(&db, &org_id).await?;
+    grant(&db, &org_id, &id, "user", &delegate, "manage").await?;
+    let uri = format!("/api/assistants/{id}/default");
+
+    // The default is the organisation's choice: a manage grant on one agent does not make it.
+    for method in ["POST", "DELETE"] {
+        let (status, body) = send(&app, method, &uri, Some(&bearer(&delegate)?), None).await?;
+        assert_eq!(
+            (status, code(&body)),
+            (403, Some("permission_denied")),
+            "{method} as a manage-grant holder"
+        );
+    }
+    let is_default: bool =
+        sqlx::query_scalar(r#"SELECT "isSystemDefault" FROM "Assistant" WHERE "id" = $1"#)
+            .bind(&id)
+            .fetch_one(&db)
+            .await?;
+    assert!(!is_default, "the refused request wrote nothing");
+
+    // Positive control: an admin sets and clears it.
+    for method in ["POST", "DELETE"] {
+        let (status, body) = send(&app, method, &uri, Some(&bearer(&admin)?), None).await?;
+        assert_eq!(status, 200, "{method} as an admin: {body}");
+    }
+    Ok(())
+}
