@@ -157,9 +157,9 @@ fn usable(t: &str) -> String {
 /// The default assistant of the principal, and where it came from.
 ///
 /// The user's own choice when they may still use it, else the organisation's default when they
-/// may use it, else the first built-in (differences rows 41 and 60). A default the caller may
-/// not use is skipped rather than answered: §3.3 sends the default resolution through the same
-/// check as the list and the chat.
+/// may use it, else the first built-in they may use (differences rows 41 and 60). A default the
+/// caller may not use is skipped rather than answered: §3.3 sends the default resolution through
+/// the same check as the list and the chat.
 pub async fn resolve_default(
     db: &PgPool,
     p: &Principal,
@@ -177,7 +177,7 @@ pub async fn resolve_default(
                (SELECT y."id" FROM "Assistant" y
                   WHERE y."organizationId" = $1 AND y."isSystemDefault" AND {use_y}
                   LIMIT 1),
-               (SELECT z."id" FROM "Assistant" z WHERE z."isBuiltIn"
+               (SELECT z."id" FROM "Assistant" z WHERE z."isBuiltIn" AND {use_z}
                   ORDER BY z."isSystemDefault" DESC, z."createdAt" ASC, z."id" ASC LIMIT 1)
              ) AS "id",
              CASE
@@ -187,11 +187,13 @@ pub async fn resolve_default(
                WHEN EXISTS (SELECT 1 FROM "Assistant" y
                              WHERE y."organizationId" = $1 AND y."isSystemDefault" AND {use_y})
                  THEN 'system'
-               WHEN EXISTS (SELECT 1 FROM "Assistant" z WHERE z."isBuiltIn") THEN 'fallback'
+               WHEN EXISTS (SELECT 1 FROM "Assistant" z WHERE z."isBuiltIn" AND {use_z})
+                 THEN 'fallback'
                ELSE 'none'
              END AS "source""#,
         use_x = usable("x"),
         use_y = usable("y"),
+        use_z = usable("z"),
     );
     let (id, source) = sqlx::query_as::<_, (Option<String>, String)>(&sql)
         .bind(&p.organization_id)

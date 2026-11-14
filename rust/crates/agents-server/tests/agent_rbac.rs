@@ -483,3 +483,116 @@ async fn a_built_in_is_listed_for_every_member() -> R {
     assert_eq!(status, 200, "a member reads a built-in");
     Ok(())
 }
+
+#[tokio::test]
+async fn a_manage_grant_edits_the_agent_but_never_deletes_it() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let org_id = org(&db).await?;
+    let admin = member_of(&db, &org_id, "admin").await?;
+    let delegate = member_of(&db, &org_id, "member").await?;
+    let id = assistant(&db, &org_id).await?;
+    grant(&db, &org_id, &id, "user", &delegate, "manage").await?;
+    let delegate_auth = bearer(&delegate)?;
+
+    let (status, _) = send(
+        &app,
+        "PATCH",
+        &format!("/api/assistants/{id}"),
+        Some(&delegate_auth),
+        Some(json!({ "name": "edited by a delegate" })),
+    )
+    .await?;
+    assert_eq!(status, 200, "a manage grant edits the agent");
+
+    // §3.3 and row 124: `manage` delegates editing one agent, not removing it.
+    for uri in [
+        format!("/api/assistants/{id}"),
+        format!("/api/mobile/assistants/{id}"),
+    ] {
+        let (status, response) = send(&app, "DELETE", &uri, Some(&delegate_auth), None).await?;
+        assert_eq!(
+            (status, code(&response)),
+            (403, Some("permission_denied")),
+            "DELETE {uri} as a manage-grant holder"
+        );
+    }
+    let (status, _) = send(
+        &app,
+        "GET",
+        &format!("/api/assistants/{id}"),
+        Some(&delegate_auth),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200, "the agent is still there");
+
+    // Positive control: an admin deletes it.
+    let (status, _) = send(
+        &app,
+        "DELETE",
+        &format!("/api/assistants/{id}"),
+        Some(&bearer(&admin)?),
+        None,
+    )
+    .await?;
+    assert_eq!(status, 200);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_fallback_default_is_never_another_organisations_built_in() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    let (org_a, org_b) = (org(&db).await?, org(&db).await?);
+    let member_user = member_of(&db, &org_a, "member").await?;
+    // A built-in global to everyone, so the fallback has something it may answer.
+    let _global = support::built_in(&db).await?;
+    // A built-in of organisation B, made to sort first among the fallbacks.
+    let theirs = support::built_in(&db).await?;
+    sqlx::query(
+        r#"UPDATE "Assistant" SET "organizationId" = $2, "isSystemDefault" = true,
+             "createdAt" = '2000-01-01' WHERE "id" = $1"#,
+    )
+    .bind(&theirs)
+    .bind(&org_b)
+    .execute(&db)
+    .await?;
+
+    let answer = send(
+        &app,
+        "GET",
+        "/api/user/default-assistant",
+        Some(&bearer(&member_user)?),
+        None,
+    )
+    .await;
+    let read = send(
+        &app,
+        "GET",
+        &format!("/api/assistants/{theirs}"),
+        Some(&bearer(&member_user)?),
+        None,
+    )
+    .await;
+    // Out of the shared database before asserting: no other test may resolve to it.
+    sqlx::query(r#"DELETE FROM "Assistant" WHERE "id" = $1"#)
+        .bind(&theirs)
+        .execute(&db)
+        .await?;
+
+    let (status, body) = answer?;
+    assert_eq!(status, 200);
+    assert_eq!(body.pointer("/source"), Some(&json!("fallback")));
+    assert_eq!(body.pointer("/assistant/isBuiltIn"), Some(&json!(true)));
+    assert_ne!(
+        body.pointer("/assistant/id"),
+        Some(&json!(theirs.as_str())),
+        "the fallback named a built-in of another organisation"
+    );
+    // The same agent through the access rule: another tenant's, so not found.
+    assert_eq!(read?.0, 404);
+    Ok(())
+}

@@ -160,11 +160,13 @@ pub(super) async fn delete(
     let caller = caller(&state, &headers, &user).await?;
     let row = load_authorized(&state.db, &caller, &id, Permission::AgentsManage).await?;
     // A built-in cannot be deleted by anyone, a platform admin included (differences row 25,
-    // which `parity_assistants.rs` pins). Deleting is `agents.manage`, so a `manage` grant
-    // holder may delete the one agent they administer.
+    // which `parity_assistants.rs` pins).
     if row.is_built_in {
         return Err(forbidden());
     }
+    // A `manage` grant edits one agent but never removes it (§3.3, row 124): deleting is
+    // `agents.manage` in the organisation, which no grant answers.
+    authorize_org(&state.db, &caller, Permission::AgentsManage).await?;
     assistants::delete(&state.db, &row.id)
         .await
         .map_err(|e| store_error(&e))?;
