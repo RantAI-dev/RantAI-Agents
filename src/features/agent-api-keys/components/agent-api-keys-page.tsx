@@ -42,6 +42,7 @@ import { useOrgFetch, useOrganization } from "@/hooks/use-organization"
 import { useApiResource } from "@/hooks/use-api-resource"
 import { readApiError } from "@/lib/api/error"
 import { useAssistants } from "@/hooks/use-assistants"
+import { keyableAgents } from "@/features/agent-api-keys/keyable-agents"
 import type { AgentApiKeyResponse } from "@/features/agent-api-keys/service"
 
 const KEYS_PATH = "/api/dashboard/agent-api-keys"
@@ -293,7 +294,7 @@ export default function AgentApiKeysPage() {
                     <SelectValue placeholder="Choose an agent" />
                   </SelectTrigger>
                   <SelectContent>
-                    {assistants.map((assistant) => (
+                    {keyableAgents(assistants).map((assistant) => (
                       <SelectItem key={assistant.id} value={assistant.id}>
                         {assistant.emoji} {assistant.name}
                       </SelectItem>

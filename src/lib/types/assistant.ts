@@ -62,6 +62,8 @@ export interface Assistant {
   memoryConfig?: MemoryConfig
   tags?: string[]
   isDefault?: boolean
+  /** A platform agent of no organisation: it cannot be shared, keyed or edited. */
+  isBuiltIn?: boolean
   isEditable?: boolean
   toolCount?: number
   skillCount?: number
