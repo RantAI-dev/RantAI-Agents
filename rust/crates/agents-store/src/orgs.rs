@@ -1,12 +1,14 @@
 //! Organisations: the rows themselves and who belongs to which organisation.
 //!
-//! The member writes that must keep at least one owner live in [`crate::org_members`]; the audit
-//! rows they leave behind live in [`crate::audit`]. Nothing here checks a permission: callers do
-//! that first with `agents_core::authz::authorize`.
+//! The member writes that must keep at least one owner live in [`crate::org_members`]. Every
+//! write records its audit row ([`crate::audit`]) in its own transaction. Nothing here checks a
+//! permission: callers do that first with `agents_core::authz::authorize`.
 
 use chrono::NaiveDateTime;
+use serde_json::{Value, json};
 use sqlx::PgPool;
 
+use crate::audit::{self, Actor};
 use crate::{StoreError, StoreResult, new_id, now};
 
 /// One organisation, as its settings read it.
@@ -108,9 +110,16 @@ pub struct OrgChanges<'a> {
     pub password_login_enabled: Option<bool>,
 }
 
-/// Changes the organisation's settings. A slug another organisation already uses is `Conflict`.
-pub async fn update(db: &PgPool, org_id: &str, changes: &OrgChanges<'_>) -> StoreResult<OrgRow> {
-    let result = sqlx::query_as::<_, OrgRow>(
+/// Changes the organisation's settings and records the change. A slug another organisation
+/// already uses is `Conflict`.
+pub async fn update(
+    db: &PgPool,
+    org_id: &str,
+    changes: &OrgChanges<'_>,
+    actor: &Actor<'_>,
+) -> StoreResult<OrgRow> {
+    let mut tx = db.begin().await?;
+    let row = sqlx::query_as::<_, OrgRow>(
         r#"UPDATE "Organization"
            SET "name" = COALESCE($2, "name"),
                "slug" = COALESCE($3, "slug"),
@@ -124,14 +133,38 @@ pub async fn update(db: &PgPool, org_id: &str, changes: &OrgChanges<'_>) -> Stor
     .bind(changes.slug)
     .bind(changes.password_login_enabled)
     .bind(now())
-    .fetch_optional(db)
-    .await;
-    match result {
-        Ok(row) => row.ok_or(StoreError::NotFound),
-        // The unique key on the slug. Checking first would still race another writer.
-        Err(e) if is_unique_violation(&e) => Err(StoreError::Conflict),
-        Err(e) => Err(StoreError::Db(e)),
+    .fetch_optional(&mut *tx)
+    .await
+    // The unique key on the slug. Checking first would still race another writer.
+    .map_err(|e| {
+        if is_unique_violation(&e) {
+            StoreError::Conflict
+        } else {
+            StoreError::Db(e)
+        }
+    })?
+    .ok_or(StoreError::NotFound)?;
+    let mut detail = serde_json::Map::new();
+    if let Some(name) = changes.name {
+        detail.insert("name".to_owned(), json!(name));
     }
+    if let Some(slug) = changes.slug {
+        detail.insert("slug".to_owned(), json!(slug));
+    }
+    if let Some(enabled) = changes.password_login_enabled {
+        detail.insert("passwordLoginEnabled".to_owned(), json!(enabled));
+    }
+    audit::record(
+        &mut tx,
+        org_id,
+        actor,
+        "org.update",
+        format!("org:{org_id}"),
+        Value::Object(detail),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
 /// Whether the database refused a write because a unique key already holds the value.

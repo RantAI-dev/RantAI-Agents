@@ -57,6 +57,7 @@ async fn make_units(
                 slug: &slug,
                 external_id: None,
             },
+            None,
         )
         .await?;
         ids.push(row.id);
@@ -91,8 +92,16 @@ async fn world(db: &PgPool, seed: u64) -> Result<World, Box<dyn std::error::Erro
         member(db, &u, &org_a, role).await?;
         for _ in 0..rng.below(4) {
             if let Some(unit) = rng.pick(&units_a) {
-                units::add_member(db, &org_a, unit, &u, rng.chance(25), MemberSource::Manual)
-                    .await?;
+                units::add_member(
+                    db,
+                    &org_a,
+                    unit,
+                    &u,
+                    rng.chance(25),
+                    MemberSource::Manual,
+                    None,
+                )
+                .await?;
             }
         }
         users_a.push(u);
@@ -107,7 +116,7 @@ async fn world(db: &PgPool, seed: u64) -> Result<World, Box<dyn std::error::Erro
     for u in users_a.iter().take(2) {
         member(db, u, &org_b, "member").await?;
         if let Some(unit) = units_b.first() {
-            units::add_member(db, &org_b, unit, u, false, MemberSource::Manual).await?;
+            units::add_member(db, &org_b, unit, u, false, MemberSource::Manual, None).await?;
         }
         users_b.push(u.clone());
     }
@@ -329,15 +338,15 @@ async fn another_orgs_grants_units_and_shares_never_leak() -> R {
         slug,
         external_id: None,
     };
-    let a_unit = units::create(&db, &a, &unit("ua")).await?.id;
-    let b_unit = units::create(&db, &b, &unit("ub")).await?.id;
+    let a_unit = units::create(&db, &a, &unit("ua"), None).await?.id;
+    let b_unit = units::create(&db, &b, &unit("ub"), None).await?.id;
     let a_agent = assistant(&db, &a, "x").await?;
     let b_agent = assistant(&db, &b, "x").await?;
     let b_session = session(&db, &b_only, &b, &b_agent).await?;
     let a_session = session(&db, &dual, &a, &a_agent).await?;
 
     // Positive controls: each write succeeds inside its own org.
-    units::add_member(&db, &b, &b_unit, &dual, false, MemberSource::Manual).await?;
+    units::add_member(&db, &b, &b_unit, &dual, false, MemberSource::Manual, None).await?;
     grants::set(
         &db,
         &b,
@@ -464,21 +473,25 @@ async fn another_orgs_grants_units_and_shares_never_leak() -> R {
         &NewUnit {
             parent_id: Some(&b_unit),
             ..unit("child")
-        }
+        },
+        None
     )
     .await
     .map(drop)));
-    assert!(nf(units::move_to(&db, &a, &a_unit, Some(&b_unit))
+    assert!(nf(units::move_to(&db, &a, &a_unit, Some(&b_unit), None)
         .await
         .map(drop)));
-    assert!(nf(units::move_to(&db, &a, &b_unit, None).await.map(drop)));
+    assert!(nf(units::move_to(&db, &a, &b_unit, None, None)
+        .await
+        .map(drop)));
     assert!(nf(units::add_member(
         &db,
         &a,
         &b_unit,
         &dual,
         false,
-        MemberSource::Manual
+        MemberSource::Manual,
+        None
     )
     .await
     .map(drop)));
@@ -488,11 +501,12 @@ async fn another_orgs_grants_units_and_shares_never_leak() -> R {
         &a_unit,
         &b_only,
         false,
-        MemberSource::Manual
+        MemberSource::Manual,
+        None
     )
     .await
     .map(drop)));
-    assert!(nf(units::delete(&db, &a, &b_unit).await));
+    assert!(nf(units::delete(&db, &a, &b_unit, None).await));
     assert!(nf(grants::revoke(
         &db,
         &a,
@@ -521,7 +535,7 @@ async fn another_orgs_grants_units_and_shares_never_leak() -> R {
     );
     assert!(access::principal(&db, &b_only, &a).await?.is_none());
     // Positive control for the writes above: the same calls inside A succeed.
-    units::add_member(&db, &a, &a_unit, &dual, true, MemberSource::Manual).await?;
+    units::add_member(&db, &a, &a_unit, &dual, true, MemberSource::Manual, None).await?;
     grants::set(
         &db,
         &a,

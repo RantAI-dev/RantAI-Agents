@@ -7,10 +7,11 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use agents_core::authz::Permission;
-use agents_store::{audit, orgs};
+use agents_store::audit::Actor;
+use agents_store::orgs;
 
 use crate::AppState;
 use crate::auth::CurrentUser;
@@ -118,6 +119,11 @@ pub(super) async fn update(
         ensure_org(&member, Permission::OrgMembersManage, &id)?;
     }
     let changes = parse_org_update(&body)?;
+    let ip = ip_address(&headers);
+    let actor = Actor {
+        user_id: &user.id,
+        ip_address: ip.as_deref(),
+    };
     let org = orgs::update(
         &state.db,
         &id,
@@ -126,29 +132,10 @@ pub(super) async fn update(
             slug: changes.slug.as_deref(),
             password_login_enabled: changes.password_login_enabled,
         },
+        &actor,
     )
     .await
     .map_err(|e| store_error(&e))?;
-    let mut detail = serde_json::Map::new();
-    if let Some(name) = &changes.name {
-        detail.insert("name".to_owned(), json!(name));
-    }
-    if let Some(slug) = &changes.slug {
-        detail.insert("slug".to_owned(), json!(slug));
-    }
-    if let Some(enabled) = changes.password_login_enabled {
-        detail.insert("passwordLoginEnabled".to_owned(), json!(enabled));
-    }
-    write_audit(
-        &state,
-        &headers,
-        &user,
-        &id,
-        "org.update",
-        format!("org:{id}"),
-        Value::Object(detail),
-    )
-    .await?;
     Ok(Json(OrgDetailJson {
         id: org.id,
         name: org.name,
@@ -159,30 +146,4 @@ pub(super) async fn update(
         created_at: iso(org.created_at),
         updated_at: iso(org.updated_at),
     }))
-}
-
-/// Writes the audit row of a change, with the actor and the caller's address.
-pub(crate) async fn write_audit(
-    state: &AppState,
-    headers: &HeaderMap,
-    user: &CurrentUser,
-    org_id: &str,
-    action: &str,
-    resource: String,
-    detail: Value,
-) -> Result<(), ApiError> {
-    let ip = ip_address(headers);
-    audit::write(
-        &state.db,
-        org_id,
-        &audit::NewAudit {
-            action,
-            resource,
-            detail,
-            user_id: Some(&user.id),
-            ip_address: ip.as_deref(),
-        },
-    )
-    .await
-    .map_err(|e| store_error(&e))
 }

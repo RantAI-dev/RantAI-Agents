@@ -8,7 +8,7 @@ mod org_admin_fixtures;
 
 use agents_store::PgPool;
 use common::{R, bearer, code, router, send, user};
-use org_admin_fixtures::{member, member_id, org, text};
+use org_admin_fixtures::{member, member_id, org, role_of, text, wait_until_blocked_by};
 use serde_json::{Value, json};
 
 async fn call(
@@ -279,6 +279,123 @@ async fn two_concurrent_removals_leave_one_owner() -> R {
         assert!(
             first_status == 200 || second_status == 200,
             "round {round}: one removal lands"
+        );
+    }
+    Ok(())
+}
+
+/// An owner's promotion of X is in flight when an admin demotes or removes X. The admin's route
+/// read X as a plain member before the promotion committed; the decision has to be taken again
+/// on the locked row, so the admin is refused and X stays an owner.
+///
+/// Deterministic: the test plays the owner's transaction itself, holding an owner row as
+/// `change_role` does, and commits only once the admin's request is parked behind that lock.
+#[tokio::test]
+async fn an_admin_cannot_touch_a_member_promoted_while_it_waited() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    for (method, body) in [
+        ("PATCH", Some(json!({ "role": "viewer" }))),
+        ("DELETE", None),
+    ] {
+        let o = org(&db).await?;
+        let (a, b, admin, x) = (
+            user(&db, false).await?,
+            user(&db, false).await?,
+            user(&db, false).await?,
+            user(&db, false).await?,
+        );
+        member(&db, &a, &o, "owner").await?;
+        member(&db, &b, &o, "owner").await?;
+        member(&db, &admin, &o, "admin").await?;
+        member(&db, &x, &o, "member").await?;
+        let ma = member_id(&db, &o, &a).await?;
+        let mx = member_id(&db, &o, &x).await?;
+
+        let mut owner_tx = db.begin().await?;
+        let pid = sqlx::query_scalar::<_, i32>("SELECT pg_backend_pid()")
+            .fetch_one(&mut *owner_tx)
+            .await?;
+        sqlx::query(r#"SELECT 1 FROM "OrganizationMember" WHERE "id" = $1 FOR UPDATE"#)
+            .bind(&ma)
+            .execute(&mut *owner_tx)
+            .await?;
+        sqlx::query(r#"UPDATE "OrganizationMember" SET "role" = 'owner' WHERE "id" = $1"#)
+            .bind(&mx)
+            .execute(&mut *owner_tx)
+            .await?;
+
+        let uri = format!("/api/organizations/{o}/members/{mx}");
+        let ta = token(&admin);
+        let (answer, promoted) =
+            tokio::join!(send(&app, method, &uri, Some(ta.as_str()), body), async {
+                wait_until_blocked_by(&db, pid).await?;
+                owner_tx.commit().await
+            });
+        promoted?;
+        let (status, answer) = answer?;
+        assert_eq!(
+            role_of(&db, &mx).await?.as_deref(),
+            Some("owner"),
+            "{method}: the admin changed an owner ({status} {answer})"
+        );
+        assert_eq!(status, 403, "{method}: {answer}");
+        assert!(denied(&answer), "{method}: {answer}");
+    }
+    Ok(())
+}
+
+/// The same race with two real requests, many times: an owner promotes X while an admin demotes
+/// X. Either order is fine except one: the admin demoting X after X became an owner.
+#[tokio::test]
+async fn a_promotion_and_a_demotion_at_once_leave_an_owner() -> R {
+    let Some((app, db)) = router().await? else {
+        return Ok(());
+    };
+    for round in 0..12 {
+        let o = org(&db).await?;
+        let (owner, admin, x) = (
+            user(&db, false).await?,
+            user(&db, false).await?,
+            user(&db, false).await?,
+        );
+        member(&db, &owner, &o, "owner").await?;
+        member(&db, &admin, &o, "admin").await?;
+        member(&db, &x, &o, "member").await?;
+        let mx = member_id(&db, &o, &x).await?;
+        let uri = format!("/api/organizations/{o}/members/{mx}");
+        let (to, ta) = (token(&owner), token(&admin));
+        let (promote, demote) = tokio::join!(
+            send(
+                &app,
+                "PATCH",
+                &uri,
+                Some(to.as_str()),
+                Some(json!({ "role": "owner" }))
+            ),
+            send(
+                &app,
+                "PATCH",
+                &uri,
+                Some(ta.as_str()),
+                Some(json!({ "role": "viewer" }))
+            ),
+        );
+        let (promote, demote) = (promote?, demote?);
+        assert_eq!(promote.0, 200, "round {round}: {}", promote.1);
+        assert!(
+            [200, 403].contains(&demote.0),
+            "round {round}: {}",
+            demote.1
+        );
+        assert_eq!(
+            role_of(&db, &mx).await?.as_deref(),
+            Some("owner"),
+            "round {round}: promote {} / demote {} {}",
+            promote.0,
+            demote.0,
+            demote.1
         );
     }
     Ok(())

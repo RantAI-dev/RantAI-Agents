@@ -15,10 +15,12 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
+use agents_contracts::error_codes::ErrorCode;
 use agents_core::authz::Permission;
-use agents_store::org_members::{self, MemberRow};
+use agents_store::audit::Actor;
+use agents_store::org_members::{self, MemberRow, MemberWrite};
 
 use crate::AppState;
 use crate::auth::CurrentUser;
@@ -26,8 +28,9 @@ use crate::http::ApiError;
 use crate::http::json::Body;
 
 use super::bodies::{parse_invite, parse_role};
-use super::org::write_audit;
-use super::{SuccessJson, ensure_org, missing_body, principal, store_error};
+use super::{
+    SuccessJson, ensure_org, ip_address, missing_body, owner_rights, principal, store_error,
+};
 
 /// One unit the member is directly in.
 #[derive(Debug, Clone, Serialize)]
@@ -110,50 +113,41 @@ pub(super) async fn invite(
     let member = principal(&state, &user, &id).await?;
     ensure_org(&member, Permission::OrgMembersManage, &id)?;
     let (email, role) = parse_invite(&body)?;
-    let row = org_members::invite(&state.db, &id, &email, &role, &user.id)
+    let ip = ip_address(&headers);
+    let actor = Actor {
+        user_id: &user.id,
+        ip_address: ip.as_deref(),
+    };
+    let row = org_members::invite(&state.db, &id, &email, &role, &actor)
         .await
         .map_err(|e| store_error(&e))?;
-    write_audit(
-        &state,
-        &headers,
-        &user,
-        &id,
-        "org.member.invite",
-        format!("member:{}", row.id),
-        json!({ "email": row.email, "role": row.role }),
-    )
-    .await?;
     Ok((StatusCode::CREATED, Json(member_json(&row, &[]))))
 }
 
 /// `POST /api/organizations/{id}/members/accept` — the invitee accepts the invite addressed to
-/// them. Nobody else can: the row is found by the caller's address, or by the user id the invite
-/// already names.
+/// them. Nobody else can: the row names the caller's user id, or names nobody yet and carries the
+/// caller's stored address (`org_members::accept_invite`).
 pub(super) async fn accept(
     State(state): State<AppState>,
     user: CurrentUser,
     headers: HeaderMap,
     Path(id): Path<String>,
 ) -> Result<Json<MemberJson>, ApiError> {
-    let row = org_members::accept_invite(&state.db, &id, &user.id, user.email.as_deref())
+    let ip = ip_address(&headers);
+    let actor = Actor {
+        user_id: &user.id,
+        ip_address: ip.as_deref(),
+    };
+    let row = org_members::accept_invite(&state.db, &id, &actor)
         .await
         .map_err(|e| store_error(&e))?;
-    write_audit(
-        &state,
-        &headers,
-        &user,
-        &id,
-        "org.member.accept",
-        format!("member:{}", row.id),
-        json!({ "email": row.email }),
-    )
-    .await?;
     Ok(Json(member_json(&row, &[])))
 }
 
 /// `PATCH /api/organizations/{id}/members/{memberId}` — change a member's role.
 ///
 /// Changing a role to or from `owner` needs `org.manage`: only an owner makes or unmakes one.
+/// The store applies that to the target as it locks it, so a promotion committed meanwhile counts.
 pub(super) async fn change_role(
     State(state): State<AppState>,
     user: CurrentUser,
@@ -167,26 +161,24 @@ pub(super) async fn change_role(
     let member = principal(&state, &user, &id).await?;
     ensure_org(&member, Permission::OrgMembersManage, &id)?;
     let role = parse_role(&body)?;
-    // Another organisation's member is a 404 before anything is decided about the role.
-    let target = org_members::get(&state.db, &id, &member_id)
-        .await
-        .map_err(|e| store_error(&e))?;
-    if target.is_owner() || role == "owner" {
-        ensure_org(&member, Permission::OrgManage, &id)?;
-    }
-    let row = org_members::change_role(&state.db, &id, &member_id, &role)
-        .await
-        .map_err(|e| store_error(&e))?;
-    write_audit(
-        &state,
-        &headers,
-        &user,
+    let ip = ip_address(&headers);
+    let actor = Actor {
+        user_id: &user.id,
+        ip_address: ip.as_deref(),
+    };
+    let written = org_members::change_role(
+        &state.db,
         &id,
-        "org.member.role_change",
-        format!("member:{}", row.id),
-        json!({ "from": target.role, "to": row.role, "email": row.email }),
+        &member_id,
+        &role,
+        owner_rights(&member, &id),
+        &actor,
     )
-    .await?;
+    .await
+    .map_err(|e| store_error(&e))?;
+    let MemberWrite::Done((_, row)) = written else {
+        return Err(ApiError::new(ErrorCode::PermissionDenied));
+    };
     let units = org_members::unit_memberships(&state.db, &id)
         .await
         .map_err(|e| store_error(&e))?;
@@ -203,24 +195,22 @@ pub(super) async fn remove(
 ) -> Result<Json<SuccessJson>, ApiError> {
     let member = principal(&state, &user, &id).await?;
     ensure_org(&member, Permission::OrgMembersManage, &id)?;
-    let target = org_members::get(&state.db, &id, &member_id)
-        .await
-        .map_err(|e| store_error(&e))?;
-    if target.is_owner() {
-        ensure_org(&member, Permission::OrgManage, &id)?;
-    }
-    let removed = org_members::remove(&state.db, &id, &member_id)
-        .await
-        .map_err(|e| store_error(&e))?;
-    write_audit(
-        &state,
-        &headers,
-        &user,
+    let ip = ip_address(&headers);
+    let actor = Actor {
+        user_id: &user.id,
+        ip_address: ip.as_deref(),
+    };
+    let written = org_members::remove(
+        &state.db,
         &id,
-        "org.member.remove",
-        format!("member:{}", removed.id),
-        json!({ "email": removed.email, "role": removed.role }),
+        &member_id,
+        owner_rights(&member, &id),
+        &actor,
     )
-    .await?;
-    Ok(Json(SuccessJson { success: true }))
+    .await
+    .map_err(|e| store_error(&e))?;
+    match written {
+        MemberWrite::Done(_) => Ok(Json(SuccessJson { success: true })),
+        MemberWrite::OwnersOnly => Err(ApiError::new(ErrorCode::PermissionDenied)),
+    }
 }

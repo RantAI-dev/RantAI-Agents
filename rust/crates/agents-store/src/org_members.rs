@@ -1,20 +1,25 @@
 //! `OrganizationMember`: invited, accepted, promoted and removed members.
 //!
-//! Two rules need more than one row, so they live in a transaction:
+//! Two rules need more than one row, so they are decided inside the write's transaction, on
+//! locked rows:
 //!
 //! - **At least one owner.** Demoting or removing the last owner is [`StoreError::Conflict`].
 //!   The transaction locks the organisation's owner rows (`SELECT … FOR UPDATE`, ordered by id)
-//!   before it counts them, so two admins demoting the two owners at once leave one owner:
-//!   the second transaction waits, then sees one owner and refuses
-//!   (`tests/org_members.rs` fires both at once).
-//! - **Only owners make or unmake owners.** The caller's permission decides that before it gets
-//!   here (`authz::authorize` with `org.manage`); this module cannot see who is calling.
+//!   before it counts them, so two owners demoting each other at once leave one owner.
+//! - **Only owners make or unmake owners.** The caller says what it may do
+//!   ([`OwnerRights`], from `authz::authorize` with `org.manage`), and the rule is applied to the
+//!   target row as locked here, not as the caller read it earlier: a member promoted to owner
+//!   while an admin's request was on its way is refused to that admin
+//!   (`agents-server/tests/org_admin_owners.rs` parks the request behind the lock).
 //!
-//! Nothing here checks a permission.
+//! Every write records its `AuditLog` row in the same transaction.
 
 use chrono::NaiveDateTime;
 use sqlx::{PgPool, Postgres, Transaction};
 
+use serde_json::json;
+
+use crate::audit::{self, Actor};
 use crate::{StoreError, StoreResult, new_id, now, orgs};
 
 /// One membership row. A pending invite has an `accepted_at` of `None` and a `user_id` that is
@@ -91,19 +96,6 @@ pub async fn unit_memberships(db: &PgPool, org_id: &str) -> StoreResult<Vec<Unit
     .await?)
 }
 
-pub async fn get(db: &PgPool, org_id: &str, member_id: &str) -> StoreResult<MemberRow> {
-    let sql = format!(
-        r#"SELECT {COLUMNS} FROM "OrganizationMember"
-           WHERE "id" = $1 AND "organizationId" = $2"#
-    );
-    sqlx::query_as::<_, MemberRow>(&sql)
-        .bind(member_id)
-        .bind(org_id)
-        .fetch_optional(db)
-        .await?
-        .ok_or(StoreError::NotFound)
-}
-
 /// Creates a pending invite. An address already invited to, or belonging to, this organisation is
 /// [`StoreError::Conflict`]. A user who already has an account is named by their real id now; the
 /// row still waits for their acceptance.
@@ -112,7 +104,7 @@ pub async fn invite(
     org_id: &str,
     email: &str,
     role: &str,
-    invited_by: &str,
+    actor: &Actor<'_>,
 ) -> StoreResult<MemberRow> {
     let mut tx = db.begin().await?;
     let already = sqlx::query_scalar::<_, bool>(
@@ -134,9 +126,8 @@ pub async fn invite(
     .await?;
     let (user_id, name) = match user {
         Some((id, name)) => (id, name),
-        None => (orgs::pending_id("pending-"), None),
+        None => (orgs::pending_id(PENDING_PREFIX), None),
     };
-    let ts = now();
     let sql = format!(
         r#"INSERT INTO "OrganizationMember"
              ("id","userId","userEmail","userName","organizationId","role","invitedBy","invitedAt","acceptedAt")
@@ -149,121 +140,193 @@ pub async fn invite(
         .bind(name)
         .bind(org_id)
         .bind(role)
-        .bind(invited_by)
-        .bind(ts)
+        .bind(actor.user_id)
+        .bind(now())
         .fetch_one(&mut *tx)
-        .await;
-    match row {
-        Ok(row) => {
-            tx.commit().await?;
-            Ok(row)
-        }
-        Err(e) if orgs::is_unique_violation(&e) => Err(StoreError::Conflict),
-        Err(e) => Err(StoreError::Db(e)),
-    }
+        .await
+        .map_err(conflict_on_unique)?;
+    audit::record(
+        &mut tx,
+        org_id,
+        actor,
+        "org.member.invite",
+        format!("member:{}", row.id),
+        json!({ "email": row.email, "role": row.role }),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(row)
 }
 
-/// Accepts the pending invite addressed to `email`, or one already naming this user.
+/// The prefix of the `userId` of an invite sent to an address nobody has an account for yet.
+const PENDING_PREFIX: &str = "pending-";
+
+/// Accepts the pending invite of the caller (`actor.user_id`) to this organisation.
 ///
-/// `None` when this organisation has no pending invite for that address or user; the caller's
-/// own address or id, so nobody accepts somebody else's. [`StoreError::Conflict`] when this user
-/// is already a member.
-pub async fn accept_invite(
-    db: &PgPool,
-    org_id: &str,
-    user_id: &str,
-    email: Option<&str>,
-) -> StoreResult<MemberRow> {
+/// The invite is the caller's when it names their user id, or when it names nobody yet (a
+/// `pending-…` placeholder) and its address is the caller's address as stored now. The address in
+/// a session token is not used: it is as old as the sign-in. An invite already naming another
+/// account stays that account's, whoever holds its address today.
+///
+/// [`StoreError::NotFound`] when there is no such invite (another organisation's included);
+/// [`StoreError::Conflict`] when this user is already a member.
+pub async fn accept_invite(db: &PgPool, org_id: &str, actor: &Actor<'_>) -> StoreResult<MemberRow> {
+    let mut tx = db.begin().await?;
     let sql = format!(
         r#"UPDATE "OrganizationMember"
-           SET "userId" = $3,
-               "acceptedAt" = $4,
-               "userName" = COALESCE("userName", (SELECT "name" FROM "Agent" WHERE "id" = $3))
-           WHERE "organizationId" = $1 AND "acceptedAt" IS NULL
-             AND ("userId" = $3 OR ($2::text IS NOT NULL AND lower("userEmail") = lower($2)))
+           SET "userId" = $2,
+               "acceptedAt" = $3,
+               "userName" = COALESCE("userName", (SELECT "name" FROM "Agent" WHERE "id" = $2))
+           WHERE "id" = (
+             SELECT "id" FROM "OrganizationMember"
+             WHERE "organizationId" = $1 AND "acceptedAt" IS NULL
+               AND ("userId" = $2
+                    OR (starts_with("userId", $4)
+                        AND lower("userEmail") = (SELECT lower("email") FROM "Agent" WHERE "id" = $2)))
+             ORDER BY ("userId" = $2) DESC, "invitedAt" ASC, "id" ASC
+             LIMIT 1
+           )
            RETURNING {COLUMNS}"#
     );
-    let result = sqlx::query_as::<_, MemberRow>(&sql)
+    let row = sqlx::query_as::<_, MemberRow>(&sql)
         .bind(org_id)
-        .bind(email)
-        .bind(user_id)
+        .bind(actor.user_id)
         .bind(now())
-        .fetch_optional(db)
-        .await;
-    match result {
-        Ok(row) => row.ok_or(StoreError::NotFound),
-        Err(e) if orgs::is_unique_violation(&e) => Err(StoreError::Conflict),
-        Err(e) => Err(StoreError::Db(e)),
+        .bind(PENDING_PREFIX)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(conflict_on_unique)?
+        .ok_or(StoreError::NotFound)?;
+    audit::record(
+        &mut tx,
+        org_id,
+        actor,
+        "org.member.accept",
+        format!("member:{}", row.id),
+        json!({ "email": row.email }),
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(row)
+}
+
+fn conflict_on_unique(e: sqlx::Error) -> StoreError {
+    if orgs::is_unique_violation(&e) {
+        StoreError::Conflict
+    } else {
+        StoreError::Db(e)
     }
 }
 
-/// Locks the organisation's owner rows for this transaction and returns their ids.
+/// Whether the caller may make, unmake or remove an owner: `org.manage`, which only an owner
+/// holds. Decided by `authz::authorize` before the call; applied here to the locked row.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OwnerRights {
+    MayTouchOwners,
+    MayNotTouchOwners,
+}
+
+/// What a role change or a removal did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemberWrite<T> {
+    Done(T),
+    /// The target is an owner, or would become one, and the caller may not touch owners.
+    /// Nothing was written.
+    OwnersOnly,
+}
+
+/// Locks the organisation's owner rows, then the target row, for this transaction.
 ///
-/// The order is fixed so two writers take the same locks in the same order and cannot deadlock.
-/// Under READ COMMITTED the select is re-checked after it waits, so a row the other writer has
-/// already demoted no longer counts.
-async fn lock_owners(tx: &mut Transaction<'_, Postgres>, org_id: &str) -> StoreResult<Vec<String>> {
-    Ok(sqlx::query_scalar::<_, String>(
+/// Returns the target as locked and the number of owners. The owner rows are taken in a fixed
+/// order, so two writers cannot deadlock; since an organisation always has an owner, every
+/// writer in this module queues there, and the target read after it is the role as committed.
+/// The target's own lock covers writers outside this module. A target that became an owner
+/// after the owner rows were read is counted too.
+async fn lock_target(
+    tx: &mut Transaction<'_, Postgres>,
+    org_id: &str,
+    member_id: &str,
+) -> StoreResult<(MemberRow, usize)> {
+    let owners = sqlx::query_scalar::<_, String>(
         r#"SELECT "id" FROM "OrganizationMember"
            WHERE "organizationId" = $1 AND "role" = 'owner' ORDER BY "id" FOR UPDATE"#,
     )
     .bind(org_id)
     .fetch_all(&mut **tx)
-    .await?)
-}
-
-async fn in_transaction(
-    tx: &mut Transaction<'_, Postgres>,
-    org_id: &str,
-    member_id: &str,
-) -> StoreResult<MemberRow> {
+    .await?;
     let sql = format!(
         r#"SELECT {COLUMNS} FROM "OrganizationMember"
-           WHERE "id" = $1 AND "organizationId" = $2"#
+           WHERE "id" = $1 AND "organizationId" = $2 FOR UPDATE"#
     );
-    sqlx::query_as::<_, MemberRow>(&sql)
+    let target = sqlx::query_as::<_, MemberRow>(&sql)
         .bind(member_id)
         .bind(org_id)
         .fetch_optional(&mut **tx)
         .await?
-        .ok_or(StoreError::NotFound)
+        .ok_or(StoreError::NotFound)?;
+    let late_owner = target.is_owner() && !owners.contains(&target.id);
+    Ok((target, owners.len() + usize::from(late_owner)))
 }
 
-/// Sets a member's role. Demoting the last owner is [`StoreError::Conflict`].
+/// Sets a member's role; on success returns the row before and after. Demoting the last owner
+/// is [`StoreError::Conflict`].
 pub async fn change_role(
     db: &PgPool,
     org_id: &str,
     member_id: &str,
     role: &str,
-) -> StoreResult<MemberRow> {
+    rights: OwnerRights,
+    actor: &Actor<'_>,
+) -> StoreResult<MemberWrite<(MemberRow, MemberRow)>> {
     let mut tx = db.begin().await?;
-    let owners = lock_owners(&mut tx, org_id).await?;
-    let target = in_transaction(&mut tx, org_id, member_id).await?;
-    if target.is_owner() && role != "owner" && owners.len() <= 1 {
+    let (before, owners) = lock_target(&mut tx, org_id, member_id).await?;
+    if (before.is_owner() || role == "owner") && rights == OwnerRights::MayNotTouchOwners {
+        return Ok(MemberWrite::OwnersOnly);
+    }
+    if before.is_owner() && role != "owner" && owners <= 1 {
         return Err(StoreError::Conflict);
     }
     let sql = format!(
         r#"UPDATE "OrganizationMember" SET "role" = $3
            WHERE "id" = $1 AND "organizationId" = $2 RETURNING {COLUMNS}"#
     );
-    let row = sqlx::query_as::<_, MemberRow>(&sql)
+    let after = sqlx::query_as::<_, MemberRow>(&sql)
         .bind(member_id)
         .bind(org_id)
         .bind(role)
         .fetch_one(&mut *tx)
         .await?;
+    audit::record(
+        &mut tx,
+        org_id,
+        actor,
+        "org.member.role_change",
+        format!("member:{}", after.id),
+        json!({ "from": before.role, "to": after.role, "email": after.email }),
+    )
+    .await?;
     tx.commit().await?;
-    Ok(row)
+    Ok(MemberWrite::Done((before, after)))
 }
 
 /// Removes a member with their direct unit memberships. Removing the last owner is
 /// [`StoreError::Conflict`].
-pub async fn remove(db: &PgPool, org_id: &str, member_id: &str) -> StoreResult<MemberRow> {
+pub async fn remove(
+    db: &PgPool,
+    org_id: &str,
+    member_id: &str,
+    rights: OwnerRights,
+    actor: &Actor<'_>,
+) -> StoreResult<MemberWrite<MemberRow>> {
     let mut tx = db.begin().await?;
-    let owners = lock_owners(&mut tx, org_id).await?;
-    let target = in_transaction(&mut tx, org_id, member_id).await?;
-    if target.is_owner() && owners.len() <= 1 {
-        return Err(StoreError::Conflict);
+    let (target, owners) = lock_target(&mut tx, org_id, member_id).await?;
+    if target.is_owner() {
+        if rights == OwnerRights::MayNotTouchOwners {
+            return Ok(MemberWrite::OwnersOnly);
+        }
+        if owners <= 1 {
+            return Err(StoreError::Conflict);
+        }
     }
     sqlx::query(r#"DELETE FROM "OrgUnitMember" WHERE "organizationId" = $1 AND "userId" = $2"#)
         .bind(org_id)
@@ -275,6 +338,15 @@ pub async fn remove(db: &PgPool, org_id: &str, member_id: &str) -> StoreResult<M
         .bind(org_id)
         .execute(&mut *tx)
         .await?;
+    audit::record(
+        &mut tx,
+        org_id,
+        actor,
+        "org.member.remove",
+        format!("member:{}", target.id),
+        json!({ "email": target.email, "role": target.role }),
+    )
+    .await?;
     tx.commit().await?;
-    Ok(target)
+    Ok(MemberWrite::Done(target))
 }

@@ -5,16 +5,18 @@
 //! organisation's unit a 404 — and this module decides who may write.
 //!
 //! A team lead holds `org.units.manage` inside their own unit and everything below it, never on
-//! a sibling and never on the organisation itself, so a lead cannot create a top-level unit or
-//! move one there.
+//! a sibling and never on the organisation itself. Creating, deleting and moving a unit are
+//! decided on its parent (a move on both parents), so a lead cannot create or delete a top-level
+//! unit, delete the unit they lead, or carry a unit out of their subtree.
 
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use agents_core::authz::{MemberSource, Permission, UnitKind};
+use agents_core::authz::{MemberSource, UnitKind};
+use agents_store::audit::Actor;
 use agents_store::units::{self, MemberRow, NewUnit, UnitRow};
 
 use crate::AppState;
@@ -24,8 +26,9 @@ use crate::http::json::Body;
 use crate::http::time::iso;
 
 use super::bodies::{parse_unit_create, parse_unit_member, parse_unit_update, parse_user_id};
-use super::org::write_audit;
-use super::{SuccessJson, ensure_org, ensure_unit, missing_body, principal, store_error};
+use super::{
+    SuccessJson, ensure_parent, ensure_unit, ip_address, missing_body, principal, store_error,
+};
 
 /// One unit with the units below it.
 #[derive(Debug, Clone, Serialize)]
@@ -85,6 +88,13 @@ fn unit_json(row: &UnitRow, rows: &[UnitRow]) -> UnitJson {
     }
 }
 
+fn actor<'a>(user: &'a CurrentUser, ip_address: Option<&'a str>) -> Actor<'a> {
+    Actor {
+        user_id: &user.id,
+        ip_address,
+    }
+}
+
 fn member_json(row: &MemberRow) -> UnitMemberJson {
     UnitMemberJson {
         user_id: row.user_id.clone(),
@@ -129,15 +139,13 @@ pub(super) async fn create(
     let input = parse_unit_create(&body)?;
     // A child needs the permission on its parent; a top-level unit needs it on the organisation,
     // which no lead holds.
-    match input.parent_id.as_deref() {
-        Some(parent) => {
-            units::get(&state.db, &id, parent)
-                .await
-                .map_err(|e| store_error(&e))?;
-            ensure_unit(&member, &id, parent)?;
-        }
-        None => ensure_org(&member, Permission::OrgUnitsManage, &id)?,
+    if let Some(parent) = input.parent_id.as_deref() {
+        units::get(&state.db, &id, parent)
+            .await
+            .map_err(|e| store_error(&e))?;
     }
+    ensure_parent(&member, &id, input.parent_id.as_deref())?;
+    let ip = ip_address(&headers);
     let kind = UnitKind::parse(&input.kind).ok_or_else(|| {
         ApiError::from(vec![agents_core::validation::FieldError::new(
             "/kind",
@@ -155,19 +163,10 @@ pub(super) async fn create(
             slug: &input.slug,
             external_id: None,
         },
+        Some(&actor(&user, ip.as_deref())),
     )
     .await
     .map_err(|e| store_error(&e))?;
-    write_audit(
-        &state,
-        &headers,
-        &user,
-        &id,
-        "org.unit.create",
-        format!("unit:{}", row.id),
-        json!({ "name": row.name, "slug": row.slug, "kind": row.kind, "parentId": row.parent_id }),
-    )
-    .await?;
     Ok((StatusCode::CREATED, Json(unit_json(&row, &[]))))
 }
 
@@ -188,19 +187,19 @@ pub(super) async fn update(
         .map_err(|e| store_error(&e))?;
     ensure_unit(&member, &id, &unit_id)?;
     let change = parse_unit_update(&body)?;
+    let ip = ip_address(&headers);
+    let actor = actor(&user, ip.as_deref());
     let mut row = existing.clone();
     if let Some(parent) = &change.parent_id {
-        match parent {
-            Some(new_parent) => {
-                // The unit that receives it must exist and be one this caller may change too.
-                units::get(&state.db, &id, new_parent)
-                    .await
-                    .map_err(|e| store_error(&e))?;
-                ensure_unit(&member, &id, new_parent)?;
-            }
-            None => ensure_org(&member, Permission::OrgUnitsManage, &id)?,
+        // Both ends: where the unit hangs now, and where it is going.
+        ensure_parent(&member, &id, existing.parent_id.as_deref())?;
+        if let Some(new_parent) = parent {
+            units::get(&state.db, &id, new_parent)
+                .await
+                .map_err(|e| store_error(&e))?;
         }
-        row = units::move_to(&state.db, &id, &unit_id, parent.as_deref())
+        ensure_parent(&member, &id, parent.as_deref())?;
+        row = units::move_to(&state.db, &id, &unit_id, parent.as_deref(), Some(&actor))
             .await
             .map_err(|e| store_error(&e))?;
     }
@@ -210,31 +209,10 @@ pub(super) async fn update(
             Some(value) => value.as_deref(),
             None => existing.external_id.as_deref(),
         };
-        row = units::rename(&state.db, &id, &unit_id, name, external)
+        row = units::rename(&state.db, &id, &unit_id, name, external, Some(&actor))
             .await
             .map_err(|e| store_error(&e))?;
     }
-    let mut detail = serde_json::Map::new();
-    detail.insert("unitId".to_owned(), json!(row.id));
-    if let Some(name) = &change.name {
-        detail.insert("name".to_owned(), json!(name));
-    }
-    if let Some(external) = &change.external_id {
-        detail.insert("externalId".to_owned(), json!(external));
-    }
-    if let Some(parent) = &change.parent_id {
-        detail.insert("parentId".to_owned(), json!(parent));
-    }
-    write_audit(
-        &state,
-        &headers,
-        &user,
-        &id,
-        "org.unit.update",
-        format!("unit:{}", row.id),
-        Value::Object(detail),
-    )
-    .await?;
     Ok(Json(unit_json(&row, &[])))
 }
 
@@ -246,23 +224,15 @@ pub(super) async fn delete(
     Path((id, unit_id)): Path<(String, String)>,
 ) -> Result<Json<SuccessJson>, ApiError> {
     let member = principal(&state, &user, &id).await?;
-    units::get(&state.db, &id, &unit_id)
+    let existing = units::get(&state.db, &id, &unit_id)
         .await
         .map_err(|e| store_error(&e))?;
-    ensure_unit(&member, &id, &unit_id)?;
-    units::delete(&state.db, &id, &unit_id)
+    // Like creating it: the unit's parent decides, so a lead keeps the unit they lead.
+    ensure_parent(&member, &id, existing.parent_id.as_deref())?;
+    let ip = ip_address(&headers);
+    units::delete(&state.db, &id, &unit_id, Some(&actor(&user, ip.as_deref())))
         .await
         .map_err(|e| store_error(&e))?;
-    write_audit(
-        &state,
-        &headers,
-        &user,
-        &id,
-        "org.unit.delete",
-        format!("unit:{unit_id}"),
-        json!({ "unitId": unit_id }),
-    )
-    .await?;
     Ok(Json(SuccessJson { success: true }))
 }
 
@@ -303,6 +273,7 @@ pub(super) async fn add_member(
         .map_err(|e| store_error(&e))?;
     ensure_unit(&member, &id, &unit_id)?;
     let (user_id, is_lead) = parse_unit_member(&body)?;
+    let ip = ip_address(&headers);
     // The store refuses a user who is not an accepted member of the organisation: a 404.
     let row = units::add_member(
         &state.db,
@@ -311,19 +282,10 @@ pub(super) async fn add_member(
         &user_id,
         is_lead,
         MemberSource::Manual,
+        Some(&actor(&user, ip.as_deref())),
     )
     .await
     .map_err(|e| store_error(&e))?;
-    write_audit(
-        &state,
-        &headers,
-        &user,
-        &id,
-        "org.unit.member.add",
-        format!("unit:{unit_id}"),
-        json!({ "unitId": unit_id, "userId": row.user_id, "isLead": is_lead }),
-    )
-    .await?;
     Ok((StatusCode::CREATED, Json(member_json(&row))))
 }
 
@@ -344,18 +306,10 @@ pub(super) async fn remove_member(
         .map_err(|e| store_error(&e))?;
     ensure_unit(&member, &id, &unit_id)?;
     let user_id = parse_user_id(&body)?;
-    units::remove_member(&state.db, &id, &unit_id, &user_id)
+    let ip = ip_address(&headers);
+    let actor = actor(&user, ip.as_deref());
+    units::remove_member(&state.db, &id, &unit_id, &user_id, Some(&actor))
         .await
         .map_err(|e| store_error(&e))?;
-    write_audit(
-        &state,
-        &headers,
-        &user,
-        &id,
-        "org.unit.member.remove",
-        format!("unit:{unit_id}"),
-        json!({ "unitId": unit_id, "userId": user_id }),
-    )
-    .await?;
     Ok(Json(SuccessJson { success: true }))
 }

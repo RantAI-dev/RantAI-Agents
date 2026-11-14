@@ -108,6 +108,7 @@ pub async fn unit_of_kind(
             slug,
             external_id: None,
         },
+        None,
     )
     .await?
     .id)
@@ -128,7 +129,36 @@ pub async fn unit_member(
         user_id,
         is_lead,
         agents_core::authz::MemberSource::Manual,
+        None,
     )
     .await?;
     Ok(())
+}
+
+/// Waits until some other backend is blocked on a lock held by backend `pid`, so a test can
+/// observe a request parked at a known point instead of sleeping and hoping.
+pub async fn wait_until_blocked_by(db: &PgPool, pid: i32) -> Result<(), sqlx::Error> {
+    for _ in 0..500 {
+        let blocked = sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))",
+        )
+        .bind(pid)
+        .fetch_one(db)
+        .await?;
+        if blocked > 0 {
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    Err(sqlx::Error::Protocol(format!(
+        "no backend blocked on {pid} after 5s"
+    )))
+}
+
+/// The role a membership row holds now; `None` once the row is gone.
+pub async fn role_of(db: &PgPool, member_row: &str) -> Result<Option<String>, sqlx::Error> {
+    sqlx::query_scalar::<_, String>(r#"SELECT "role" FROM "OrganizationMember" WHERE "id" = $1"#)
+        .bind(member_row)
+        .fetch_optional(db)
+        .await
 }

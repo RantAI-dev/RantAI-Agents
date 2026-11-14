@@ -33,46 +33,47 @@ async fn unit_writes_keep_a_tree_and_clean_up_after_themselves() -> R {
             kind: UnitKind::Department,
             ..new_unit(None, "eng")
         },
+        None,
     )
     .await?;
-    let team = units::create(&db, &org_id, &new_unit(Some(&dept.id), "web")).await?;
-    let sub = units::create(&db, &org_id, &new_unit(Some(&team.id), "frontend")).await?;
+    let team = units::create(&db, &org_id, &new_unit(Some(&dept.id), "web"), None).await?;
+    let sub = units::create(&db, &org_id, &new_unit(Some(&team.id), "frontend"), None).await?;
     assert_eq!(team.parent_id.as_deref(), Some(dept.id.as_str()));
 
     // Slugs are unique among siblings, at the top level too (where the index cannot see it).
     assert!(matches!(
-        units::create(&db, &org_id, &new_unit(None, "eng")).await,
+        units::create(&db, &org_id, &new_unit(None, "eng"), None).await,
         Err(StoreError::Conflict)
     ));
     assert!(matches!(
-        units::create(&db, &org_id, &new_unit(Some(&dept.id), "web")).await,
+        units::create(&db, &org_id, &new_unit(Some(&dept.id), "web"), None).await,
         Err(StoreError::Conflict)
     ));
-    units::create(&db, &org_id, &new_unit(Some(&team.id), "web")).await?;
+    units::create(&db, &org_id, &new_unit(Some(&team.id), "web"), None).await?;
 
     // No move closes a loop: under itself, under a child, under a grandchild.
     for parent in [&dept.id, &team.id, &sub.id] {
         assert!(matches!(
-            units::move_to(&db, &org_id, &dept.id, Some(parent)).await,
+            units::move_to(&db, &org_id, &dept.id, Some(parent), None).await,
             Err(StoreError::Conflict)
         ));
     }
     // A legal move (positive control) and back to the top level.
-    let moved = units::move_to(&db, &org_id, &sub.id, Some(&dept.id)).await?;
+    let moved = units::move_to(&db, &org_id, &sub.id, Some(&dept.id), None).await?;
     assert_eq!(moved.parent_id.as_deref(), Some(dept.id.as_str()));
-    units::move_to(&db, &org_id, &sub.id, None).await?;
+    units::move_to(&db, &org_id, &sub.id, None, None).await?;
     let tree = units::tree(&db, &org_id).await?;
     assert_eq!(tree.ancestors(&team.id), vec![dept.id.clone()]);
     assert!(tree.descendants(&dept.id).contains(&team.id));
 
     // Delete: a unit with children stays; a leaf goes with its members, grants and shares.
     assert!(matches!(
-        units::delete(&db, &org_id, &dept.id).await,
+        units::delete(&db, &org_id, &dept.id, None).await,
         Err(StoreError::Conflict)
     ));
     let u = user(&db).await?;
     member(&db, &u, &org_id, "member").await?;
-    units::add_member(&db, &org_id, &sub.id, &u, false, MemberSource::Manual).await?;
+    units::add_member(&db, &org_id, &sub.id, &u, false, MemberSource::Manual, None).await?;
     let agent = assistant(&db, &org_id, &u).await?;
     let on_unit = Subject {
         kind: SubjectType::Unit,
@@ -81,7 +82,7 @@ async fn unit_writes_keep_a_tree_and_clean_up_after_themselves() -> R {
     grants::set(&db, &org_id, &agent, &on_unit, GrantLevel::Use, &u).await?;
     let chat = session(&db, &u, &org_id, &agent).await?;
     shares::create(&db, &org_id, &chat, &on_unit, &u).await?;
-    units::delete(&db, &org_id, &sub.id).await?;
+    units::delete(&db, &org_id, &sub.id, None).await?;
     assert!(grants::list(&db, &org_id, &agent).await?.is_empty());
     assert!(
         shares::list_for_session(&db, &org_id, &chat)
@@ -112,7 +113,7 @@ async fn concurrent_moves_cannot_make_a_cycle() -> R {
         let mut ids = Vec::new();
         for i in 0..6 {
             ids.push(
-                units::create(&db, &org_id, &new_unit(None, &format!("u{i}")))
+                units::create(&db, &org_id, &new_unit(None, &format!("u{i}")), None)
                     .await?
                     .id,
             );
@@ -136,7 +137,7 @@ async fn concurrent_moves_cannot_make_a_cycle() -> R {
             let (db, org_id, barrier) = (db.clone(), org_id.clone(), barrier.clone());
             tasks.spawn(async move {
                 barrier.wait().await;
-                units::move_to(&db, &org_id, &unit, Some(&parent)).await
+                units::move_to(&db, &org_id, &unit, Some(&parent), None).await
             });
         }
         while let Some(result) = tasks.join_next().await {

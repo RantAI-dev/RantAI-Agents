@@ -27,6 +27,7 @@ use agents_core::authz::{Decision, Permission, Principal, Resource, authorize};
 use agents_core::validation::FieldError;
 use agents_store::StoreError;
 use agents_store::access;
+use agents_store::org_members::OwnerRights;
 
 use crate::AppState;
 use crate::auth::CurrentUser;
@@ -126,6 +127,20 @@ pub(crate) fn ensure_org(
     )
 }
 
+/// `org.units.manage` where a unit hangs: on its parent, or on the organisation for a top-level
+/// unit. Creating, deleting and moving a unit need it (a move at both ends), so a lead never
+/// adds, removes or carries a unit outside their own subtree.
+pub(crate) fn ensure_parent(
+    principal: &Principal,
+    org_id: &str,
+    parent_id: Option<&str>,
+) -> Result<(), ApiError> {
+    match parent_id {
+        Some(parent) => ensure_unit(principal, org_id, parent),
+        None => ensure_org(principal, Permission::OrgUnitsManage, org_id),
+    }
+}
+
 /// Whether the principal holds the permission on the resource. The two answers that are not
 /// `Allow` are left to [`ensure`], which says which status they become.
 pub(crate) fn permits(
@@ -134,6 +149,19 @@ pub(crate) fn permits(
     resource: &Resource<'_>,
 ) -> bool {
     matches!(authorize(principal, permission, resource), Decision::Allow)
+}
+
+/// Whether the principal may make, unmake or remove an owner (`org.manage`). The store applies
+/// it to the target row under its lock, not to a row read here.
+pub(crate) fn owner_rights(principal: &Principal, org_id: &str) -> OwnerRights {
+    let resource = Resource::Org {
+        organization_id: org_id,
+    };
+    if permits(principal, Permission::OrgManage, &resource) {
+        OwnerRights::MayTouchOwners
+    } else {
+        OwnerRights::MayNotTouchOwners
+    }
 }
 
 /// The store's failure, as the answer the caller sees.
@@ -150,6 +178,9 @@ pub(crate) fn store_error(e: &StoreError) -> ApiError {
 
 /// The caller's address for the audit row. The proxy sets `X-Forwarded-For`; the first entry is
 /// the client. A test or a direct call may send neither, and the row keeps no address.
+///
+/// Not proof of anything: nothing here knows which proxies to trust, so a client that reaches the
+/// server directly, or through a proxy that appends instead of overwriting, chooses this value.
 pub(crate) fn ip_address(headers: &HeaderMap) -> Option<String> {
     for name in ["x-forwarded-for", "x-real-ip"] {
         if let Some(value) = headers.get(name).and_then(|v| v.to_str().ok()) {

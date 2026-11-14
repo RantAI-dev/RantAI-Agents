@@ -56,7 +56,11 @@ async fn another_organisations_rows_are_a_404() -> R {
     member(&db, &owner_a, &a, "owner").await?;
     member(&db, &owner_b, &b, "owner").await?;
     let unit_a = unit(&db, &a, None, "eng").await?;
-    let invited_a = org_members::invite(&db, &a, "invitee@test.invalid", "member", &owner_a)
+    let by_owner = agents_store::audit::Actor {
+        user_id: &owner_a,
+        ip_address: None,
+    };
+    let invited_a = org_members::invite(&db, &a, "invitee@test.invalid", "member", &by_owner)
         .await?
         .id;
     let ta = token(&owner_a);

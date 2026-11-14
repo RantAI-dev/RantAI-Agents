@@ -1,7 +1,8 @@
 //! `GET /api/organizations/{id}/audit` — every change to the organisation, newest first.
 //!
-//! New in the port (design §3.7). The list is cursor-paginated by the row id, which is opaque to
-//! the caller and time-ordered, so no row is skipped when one is written during a page read.
+//! New in the port (design §3.7). The list is newest first by time, then id, and paginated by an
+//! opaque cursor naming the last row of the page (`agents_store::audit::Cursor`), so a row
+//! written while a client pages lands before its first page and never shifts a later one.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
@@ -10,7 +11,7 @@ use serde_json::Value;
 
 use agents_core::authz::Permission;
 use agents_core::validation::FieldError;
-use agents_store::audit::AuditRow;
+use agents_store::audit::{AuditRow, Cursor};
 
 use crate::AppState;
 use crate::auth::CurrentUser;
@@ -88,6 +89,20 @@ fn parse_limit(raw: Option<&str>) -> Result<i64, ApiError> {
     Ok(limit.min(MAX_LIMIT))
 }
 
+/// A cursor this API issued, or none. Anything else is a 400: guessing would page from the start.
+fn parse_cursor(raw: Option<&str>) -> Result<Option<Cursor>, ApiError> {
+    match raw.filter(|c| !c.is_empty()) {
+        None => Ok(None),
+        Some(text) => Cursor::parse(text).map(Some).ok_or_else(|| {
+            ApiError::from(vec![FieldError::new(
+                "cursor",
+                "invalid_format",
+                "The cursor is not one this list returned.",
+            )])
+        }),
+    }
+}
+
 /// `GET /api/organizations/{id}/audit?limit=50&cursor=…`
 pub(super) async fn list(
     State(state): State<AppState>,
@@ -98,9 +113,9 @@ pub(super) async fn list(
     let member = principal(&state, &user, &id).await?;
     ensure_org(&member, Permission::OrgAuditRead, &id)?;
     let limit = parse_limit(query.limit.as_deref())?;
-    let cursor = query.cursor.as_deref().filter(|c| !c.is_empty());
+    let cursor = parse_cursor(query.cursor.as_deref())?;
     // One more than asked, to know whether another page exists.
-    let rows = agents_store::audit::list(&state.db, &id, cursor, limit + 1)
+    let rows = agents_store::audit::list(&state.db, &id, cursor.as_ref(), limit + 1)
         .await
         .map_err(|e| store_error(&e))?;
     let more = rows.len() > usize::try_from(limit).unwrap_or(usize::MAX);
@@ -109,7 +124,7 @@ pub(super) async fn list(
         .take(usize::try_from(limit).unwrap_or(0))
         .collect();
     let next_cursor = if more {
-        page.last().map(|row| row.id.clone())
+        page.last().map(|row| Cursor::after(row).encode())
     } else {
         None
     };
