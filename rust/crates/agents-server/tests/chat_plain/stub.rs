@@ -72,6 +72,15 @@ impl Stub {
         format!("http://{}", self.address)
     }
 
+    /// The settings that send every model to this stub.
+    pub fn llm(&self) -> agents_server::config::LlmSettings {
+        agents_server::config::LlmSettings {
+            base_url: Some(self.base_url()),
+            api_key: Some("test-key".to_owned()),
+            ..agents_server::config::LlmSettings::default()
+        }
+    }
+
     /// The requests the stub received, in the order they came.
     pub fn requests(&self) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
         let guard = self.requests.lock().map_err(|error| error.to_string())?;

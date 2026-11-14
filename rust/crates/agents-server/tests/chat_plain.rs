@@ -16,7 +16,7 @@ use agents_store::new_id;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, Response};
-use common::{R, bearer, code, router_with_llm, send, user};
+use common::{R, bearer, code, send, user};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use stub::{Script, Stub};
@@ -59,6 +59,29 @@ async fn send_raw(
         .map_err(|error| error.to_string())?
         .to_bytes();
     Ok((status, headers, String::from_utf8_lossy(&bytes).to_string()))
+}
+
+/// The router over the test database, with the model served by the stub and the state the
+/// caller sets up; `None` (skip) when there is no test database.
+async fn router_with<F>(
+    stub: &Stub,
+    setup: F,
+) -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>>
+where
+    F: FnOnce(&mut agents_server::AppState),
+{
+    let Some(db) = common::pool().await? else {
+        return Ok(None);
+    };
+    let mut state = agents_server::AppState::new(
+        db.clone(),
+        agents_server::auth::AuthConfig {
+            secrets: vec![common::SECRET.to_owned()],
+        },
+    );
+    state.llm = stub.llm();
+    setup(&mut state);
+    Ok(Some((agents_server::app(state), db)))
 }
 
 /// An assistant without a knowledge base, tools or a workflow; returns its id.
@@ -139,7 +162,7 @@ fn types(body: &str) -> Vec<String> {
 #[tokio::test]
 async fn a_plain_chat_streams_the_frames_the_sdk_writes() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned(), " world".to_owned()])).await?;
-    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let user_id = user(&db, false).await?;
@@ -198,7 +221,7 @@ async fn the_think_content_becomes_reasoning() -> R {
         "<think>hmm</think>the answer".to_owned(),
     ]))
     .await?;
-    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let user_id = user(&db, false).await?;
@@ -261,7 +284,7 @@ async fn the_think_content_becomes_reasoning() -> R {
 #[tokio::test]
 async fn the_system_prompt_carries_the_guard_rails_and_the_profile() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
-    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let user_id = user(&db, false).await?;
@@ -334,7 +357,7 @@ async fn the_system_prompt_carries_the_guard_rails_and_the_profile() -> R {
 #[tokio::test]
 async fn the_assistant_of_another_organisation_is_not_found() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
-    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
 
@@ -377,7 +400,7 @@ async fn the_assistant_of_another_organisation_is_not_found() -> R {
 #[tokio::test]
 async fn an_assistant_with_a_knowledge_base_or_tools_is_not_ported_yet() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
-    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let user_id = user(&db, false).await?;
@@ -471,7 +494,7 @@ async fn an_upstream_failure_is_the_error_frame_the_old_code_showed() -> R {
         ),
     ] {
         let stub = Stub::start(Script::Status(status_code)).await?;
-        let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+        let Some((app, db)) = router_with(&stub, |_| {}).await? else {
             return Ok(());
         };
         let user_id = user(&db, false).await?;
@@ -520,7 +543,7 @@ async fn a_caller_without_a_token_is_refused() -> R {
 #[tokio::test]
 async fn a_suspended_user_is_refused() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
-    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let suspended = user(&db, true).await?;
@@ -586,13 +609,9 @@ impl agents_server::policy::ChatMeter for Meter {
 async fn the_meter_may_refuse_a_chat_and_records_the_usage() -> R {
     let stub = Stub::start(Script::Text(vec!["Hello".to_owned()])).await?;
     let meter = Arc::new(Meter::default());
-    let Some((app, db)) = common::router_with_setup({
-        let base_url = stub.base_url();
+    let Some((app, db)) = router_with(&stub, {
         let meter = Arc::clone(&meter);
-        move |state| {
-            state.llm = common::stub_llm(&base_url);
-            state.meter = meter;
-        }
+        move |state| state.meter = meter
     })
     .await?
     else {
@@ -638,7 +657,7 @@ async fn a_client_that_hangs_up_stops_the_model_call() -> R {
     use futures::StreamExt;
 
     let stub = Stub::start(Script::Hang("hello there".to_owned())).await?;
-    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let user_id = user(&db, false).await?;
@@ -690,7 +709,7 @@ async fn a_client_that_hangs_up_stops_the_model_call() -> R {
 #[tokio::test]
 async fn the_answer_is_written_to_the_session() -> R {
     let stub = Stub::start(Script::Text(vec!["the answer".to_owned()])).await?;
-    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let user_id = user(&db, false).await?;
@@ -740,7 +759,7 @@ async fn sixteen_chats_at_once_lose_no_fact_of_the_profile() -> R {
         text: vec!["saved".to_owned()],
     })
     .await?;
-    let Some((app, db)) = router_with_llm(Some(&stub.base_url())).await? else {
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
         return Ok(());
     };
     let user_id = user(&db, false).await?;

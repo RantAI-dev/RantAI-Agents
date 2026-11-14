@@ -72,48 +72,6 @@ pub fn router_over(
     app(state)
 }
 
-/// Every model id served at `base_url`, the way a test points the chat at a stub server.
-#[must_use]
-pub fn stub_llm(base_url: &str) -> LlmSettings {
-    LlmSettings {
-        base_url: Some(base_url.to_owned()),
-        api_key: Some("test-key".to_owned()),
-        ..LlmSettings::default()
-    }
-}
-
-/// The router, with the model called at `base_url` when one is given.
-pub async fn router_with_llm(
-    base_url: Option<&str>,
-) -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>> {
-    router_with_setup(move |state| {
-        if let Some(base_url) = base_url {
-            state.llm = stub_llm(base_url);
-        }
-    })
-    .await
-}
-
-/// The router, with the state the caller sets up.
-pub async fn router_with_setup<F>(
-    setup: F,
-) -> Result<Option<(Router, PgPool)>, Box<dyn std::error::Error>>
-where
-    F: FnOnce(&mut AppState),
-{
-    let Some(db) = pool().await? else {
-        return Ok(None);
-    };
-    let mut state = AppState::new(
-        db.clone(),
-        AuthConfig {
-            secrets: vec![SECRET.to_owned()],
-        },
-    );
-    setup(&mut state);
-    Ok(Some((app(state), db)))
-}
-
 /// A user row; returns its id.
 pub async fn user(db: &PgPool, suspended: bool) -> Result<String, sqlx::Error> {
     let id = new_id();
