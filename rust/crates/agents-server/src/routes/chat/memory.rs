@@ -188,15 +188,25 @@ pub struct MemoryTools {
     db: PgPool,
     user_id: String,
     now: String,
+    /// Whether the assistant keeps a long-term profile. Without one the tools write nothing
+    /// and report the profile as `not_enabled`, the way the old tools did without a
+    /// `profileUserId` (working memory, their other store, is not ported).
+    profile_enabled: bool,
 }
 
 impl MemoryTools {
     /// The tools for one user.
-    pub fn new(db: PgPool, user_id: impl Into<String>, now: impl Into<String>) -> Self {
+    pub fn new(
+        db: PgPool,
+        user_id: impl Into<String>,
+        now: impl Into<String>,
+        profile_enabled: bool,
+    ) -> Self {
         Self {
             db,
             user_id: user_id.into(),
             now: now.into(),
+            profile_enabled,
         }
     }
 }
@@ -231,6 +241,12 @@ impl MemoryTools {
                 };
             }
         };
+        if !self.profile_enabled {
+            let result = save_memory_result(&input, StoredStatus::NotEnabled, &[]);
+            return ToolOutcome::Completed {
+                content: serde_json::to_string(&result).unwrap_or_else(|_| "{}".to_owned()),
+            };
+        }
         let mut fact_counter = 0_u32;
         let mut next_fact_id = || {
             fact_counter += 1;
@@ -287,13 +303,17 @@ impl MemoryTools {
             }
         };
         let criteria = forget_criteria(&input);
-        let removed = match forget(&self.db, &self.user_id, &criteria, &self.now).await {
-            Ok(removed) => removed,
-            Err(error) => {
-                tracing::error!(error = %error, "the memory tool could not write the profile");
-                return ToolOutcome::Failed {
-                    message: "The memory could not be deleted.".to_owned(),
-                };
+        let removed = if !self.profile_enabled {
+            ForgetResult::default()
+        } else {
+            match forget(&self.db, &self.user_id, &criteria, &self.now).await {
+                Ok(removed) => removed,
+                Err(error) => {
+                    tracing::error!(error = %error, "the memory tool could not write the profile");
+                    return ToolOutcome::Failed {
+                        message: "The memory could not be deleted.".to_owned(),
+                    };
+                }
             }
         };
         let result = forget_memory_result(

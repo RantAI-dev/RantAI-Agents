@@ -574,6 +574,72 @@ async fn profile_of(db: &PgPool, user_id: &str) -> Result<Value, sqlx::Error> {
     Ok(value.unwrap_or(Value::Null))
 }
 
+#[tokio::test]
+async fn a_memory_without_the_long_term_profile_neither_reads_nor_writes_it() -> R {
+    let stub = Stub::start(Script::SaveMessageThenText {
+        text: vec!["noted".to_owned()],
+    })
+    .await?;
+    let Some((app, db)) = router_with(&stub, |_| {}).await? else {
+        return Ok(());
+    };
+    let user_id = user(&db, false).await?;
+    let assistant_id = assistant(&db, None).await?;
+    // The memory is on, the long-term profile is off: the old code then neither loaded the
+    // profile into the prompt nor wrote it (`profileUserId` was null).
+    sqlx::query(r#"UPDATE "Assistant" SET "memoryConfig"=$2 WHERE "id"=$1"#)
+        .bind(&assistant_id)
+        .bind(json!({"enabled": true, "longTermProfile": false}))
+        .execute(&db)
+        .await?;
+    let profile = json!({
+        "id": format!("profile_{user_id}"),
+        "userId": user_id,
+        "facts": [{"id": "f1", "subject": "user", "predicate": "location", "object": "Depok",
+                   "confidence": 0.9, "source": "t", "createdAt": "2026-01-01T00:00:00.000Z"}],
+        "preferences": [],
+        "interactionSummary": "",
+        "totalConversations": 1,
+    });
+    sqlx::query(
+        r#"INSERT INTO "UserMemory" ("id","userId","type","key","value","embedding","createdAt","updatedAt")
+           VALUES ($1,$2,'LONG_TERM','user_profile',$3,'{}',now(),now())"#,
+    )
+    .bind(format!("profile_{user_id}"))
+    .bind(&user_id)
+    .bind(&profile)
+    .execute(&db)
+    .await?;
+
+    let (status, _headers, text) = send_raw(
+        &app,
+        "POST",
+        "/api/chat",
+        Some(&bearer(&user_id)?),
+        Some(body(&assistant_id)),
+    )
+    .await?;
+    assert_eq!(status, 200);
+    assert!(text.contains("\"delta\":\"noted\""));
+
+    let requests = stub.requests()?;
+    let system = requests
+        .first()
+        .and_then(|request| request.pointer("/messages/0/content"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    assert!(
+        !system.contains("location: Depok"),
+        "the profile must not be read"
+    );
+    assert_eq!(
+        profile_of(&db, &user_id).await?,
+        profile,
+        "the profile must not be written"
+    );
+    Ok(())
+}
+
 /// A meter that refuses the first chat and records the usage of the second.
 #[derive(Debug, Default)]
 struct Meter {

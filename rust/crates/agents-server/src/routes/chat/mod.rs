@@ -97,7 +97,10 @@ async fn chat(
         .as_ref()
         .map(|row| ModelConfig::from_json(row.model_config.as_ref().unwrap_or(&Value::Null)))
         .unwrap_or_default();
-    let profile = if memory_config.enabled {
+    // The long-term profile is read and written only when the assistant keeps one: the old
+    // code passed no profile user to the memory tools and skipped the drain otherwise.
+    let profile_enabled = memory_config.enabled && memory_config.long_term_profile;
+    let profile = if profile_enabled {
         match memory::load_profile(&state.db, &user.id).await {
             Ok(profile) => profile,
             Err(error) => {
@@ -163,6 +166,7 @@ async fn chat(
         state.db.clone(),
         user.id.clone(),
         now.clone(),
+        profile_enabled,
     ));
     let (handle, cancel) = Cancel::channel();
     let run = ChatRun {
@@ -181,7 +185,7 @@ async fn chat(
             .rev()
             .find(|message| message.role == "user")
             .map(persist::build_user_row),
-        memory_enabled: memory_config.enabled,
+        profile_enabled,
         provider: route.provider,
         model: route.model.clone(),
         request,
@@ -491,7 +495,8 @@ struct ChatRun {
     session_id: Option<String>,
     assistant_message_id: Option<String>,
     user_row: Option<persist::UserRow>,
-    memory_enabled: bool,
+    /// Whether the assistant keeps a long-term profile: the drain counts the turn only then.
+    profile_enabled: bool,
     provider: Provider,
     request: LlmRequest,
     executor: Arc<dyn ToolExecutor>,
@@ -549,7 +554,7 @@ impl ChatRun {
     async fn after(&self, frames: &stream::Frames) {
         // A stream that failed has no answer: the turn is not counted and nothing is written
         // (the TypeScript skipped the same work, because `result.text` rejected).
-        if self.memory_enabled && !frames.failed() {
+        if self.profile_enabled && !frames.failed() {
             match memory::drain(&self.db, &self.user_id, &self.now).await {
                 Ok(profile) => {
                     if agents_core::memory::profile::summary_needs_refresh(&profile) {
