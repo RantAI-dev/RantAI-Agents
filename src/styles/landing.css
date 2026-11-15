@@ -1,0 +1,14 @@
+/*
+ * The landing page (and the sign-in page that shares its look) stays light even when the app is
+ * dark: its wrappers carry `theme-light` (light design-system values, from tokens.css) plus
+ * `theme-home` for the few values the marketing page sets differently.
+ */
+.theme-home {
+  --radius: 0.45rem;
+  /* The landing's charts are one brand-blue ramp, not the app's categorical series. */
+  --chart-1: #74d4ff;
+  --chart-2: #00a6f4;
+  --chart-3: #0084d1;
+  --chart-4: #0069a8;
+  --chart-5: #00598a;
+}

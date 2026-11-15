@@ -88,7 +88,7 @@ export function HomeNavbar() {
                 <Menu className="size-5" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="theme-home w-[280px] border-border bg-background">
+            <SheetContent side="right" className="theme-light theme-home w-[280px] border-border bg-background">
               <SheetHeader>
                 <SheetTitle className="text-foreground">Menu</SheetTitle>
               </SheetHeader>

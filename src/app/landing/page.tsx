@@ -21,7 +21,7 @@ export default function LandingPage() {
     <div
       className={cn(
         funnelDisplay.className,
-        "theme-home relative min-h-screen bg-background text-foreground antialiased"
+        "theme-light theme-home relative min-h-screen bg-background text-foreground antialiased"
       )}
     >
       <a

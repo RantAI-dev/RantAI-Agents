@@ -216,7 +216,7 @@ function ChatNavigationItem({
         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all",
         active
           ? "bg-sidebar-accent text-sidebar-foreground font-medium"
-          : "text-sidebar-foreground/70 hover:bg-sidebar-hover hover:text-sidebar-foreground"
+          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
       )}
     >
       <MessageSquare className="h-5 w-5 shrink-0" />
@@ -355,7 +355,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                   aria-label="Expand sidebar"
                 >
                   <BrandLogo className="h-8 w-8 rounded-lg transition-opacity group-hover/logo:opacity-0" />
-                  <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sidebar-hover opacity-0 transition-opacity group-hover/logo:opacity-100">
+                  <span className="absolute inset-0 flex items-center justify-center rounded-lg bg-sidebar-accent opacity-0 transition-opacity group-hover/logo:opacity-100">
                     <ChevronsRight className="h-4 w-4 text-sidebar-foreground" />
                   </span>
                 </button>
@@ -370,7 +370,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
               <TooltipTrigger asChild>
                 <button
                   onClick={onSearchOpen}
-                  className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+                  className="flex items-center justify-center w-10 h-10 rounded-lg text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
                   aria-label="Search"
                 >
                   <Search className="h-5 w-5" />
@@ -395,7 +395,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                         "flex items-center justify-center w-10 h-10 rounded-lg transition-all",
                         active
                           ? "bg-sidebar-accent text-sidebar-foreground"
-                          : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                          : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                       )}
                     >
                       <item.icon className="h-5 w-5" />
@@ -472,7 +472,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
             <TooltipTrigger asChild>
               <button
                 onClick={onToggle}
-                className="absolute -right-3 top-4 z-50 flex items-center justify-center w-6 h-6 rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover shadow-sm transition-all"
+                className="absolute -right-3 top-4 z-50 flex items-center justify-center w-6 h-6 rounded-full border border-sidebar-border bg-sidebar text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent shadow-sm transition-all"
                 aria-label="Collapse sidebar"
               >
                 <ChevronsLeft className="h-3.5 w-3.5" />
@@ -495,7 +495,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
         {/* Search */}
         <button
           onClick={onSearchOpen}
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all w-full text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all w-full text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
         >
           <Search className="h-5 w-5" />
           <span>Search</span>
@@ -520,7 +520,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                 "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all",
                 active
                   ? "bg-sidebar-accent text-sidebar-foreground font-medium"
-                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
               )}
             >
               <item.icon className="h-5 w-5" />
@@ -537,7 +537,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
           <div className="shrink-0">
             <div className="px-2 py-1.5 mb-2">
               <h3 className="text-sm font-medium text-sidebar-foreground">{currentSection.title}</h3>
-              <p className="text-xs text-sidebar-muted">{currentSection.subtitle}</p>
+              <p className="text-xs text-muted-foreground">{currentSection.subtitle}</p>
             </div>
           </div>
         )}
@@ -552,12 +552,12 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
 
           {currentSection === sections.agent && (
             <div className="space-y-1">
-              <div className="px-3 py-2 rounded-lg bg-sidebar-hover">
+              <div className="px-3 py-2 rounded-lg bg-sidebar-accent">
                 <div className="flex items-center gap-2 text-sm text-sidebar-foreground">
                   <div className="h-2 w-2 rounded-full bg-chart-2" />
                   <span>Queue Status</span>
                 </div>
-                <p className="text-xs text-sidebar-muted mt-1">Ready for customers</p>
+                <p className="text-xs text-muted-foreground mt-1">Ready for customers</p>
               </div>
             </div>
           )}
@@ -569,7 +569,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                   "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer",
                   selectedKBId === null && pathname === "/dashboard/files"
                     ? "bg-sidebar-accent text-sidebar-foreground"
-                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                 )}
                 onClick={() => handleSelectKB(null)}
               >
@@ -584,7 +584,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                 />
                 <Database className="h-4 w-4" />
                 <span className="flex-1">All Documents</span>
-                <span className="text-xs text-sidebar-muted">
+                <span className="text-xs text-muted-foreground">
                   {totalDocumentCount}
                 </span>
               </div>
@@ -598,7 +598,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                       "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer",
                       isSelected
                         ? "bg-sidebar-accent text-sidebar-foreground"
-                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                     )}
                     onClick={() => handleSelectKB(kb.id)}
                   >
@@ -619,14 +619,14 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                       <Folder className="h-2.5 w-2.5" />
                     </div>
                     <span className="flex-1 truncate">{kb.name}</span>
-                    <span className="text-xs text-sidebar-muted">{kb.documentCount}</span>
+                    <span className="text-xs text-muted-foreground">{kb.documentCount}</span>
                   </div>
                 )
               })}
 
               <Link
                 href="/dashboard/files?action=new-kb"
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
               >
                 <Plus className="h-4 w-4" />
                 <span>New Knowledge Base</span>
@@ -644,7 +644,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                     "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
                     pathname === `/dashboard/agent-builder/${assistant.id}`
                       ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                   )}
                 >
                   <span className="text-lg">{assistant.emoji}</span>
@@ -659,7 +659,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
               ))}
               <Link
                 href="/dashboard/agent-builder/new"
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
               >
                 <Plus className="h-4 w-4" />
                 <span>Create Agent</span>
@@ -677,7 +677,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                     "group relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
                     pathname === `/dashboard/workflows/${workflow.id}`
                       ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                   )}
                 >
                   <GitBranch className="h-4 w-4 shrink-0" />
@@ -686,7 +686,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
               ))}
               <Link
                 href="/dashboard/workflows"
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
               >
                 <Plus className="h-4 w-4" />
                 <span>New Workflow</span>
@@ -725,7 +725,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                         "group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all",
                         pathname === `/dashboard/digital-employees/${emp.id}`
                           ? "bg-sidebar-accent text-sidebar-foreground"
-                          : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                          : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                       )}
                     >
                       <div className="relative">
@@ -740,19 +740,19 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                           emp.status === "ACTIVE" && !isRecent && "bg-chart-2",
                           emp.status === "PAUSED" && "bg-chart-4",
                           emp.status === "SUSPENDED" && "bg-destructive",
-                          !["ACTIVE", "PAUSED", "SUSPENDED"].includes(emp.status) && "bg-sidebar-muted",
+                          !["ACTIVE", "PAUSED", "SUSPENDED"].includes(emp.status) && "bg-muted-foreground",
                         )} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <span className="block truncate font-medium">{emp.name}</span>
-                        <span className="block text-[10px] text-sidebar-muted truncate">{activityText}</span>
+                        <span className="block text-[10px] text-muted-foreground truncate">{activityText}</span>
                       </div>
                     </Link>
                   )
                 })}
               <Link
                 href="/dashboard/digital-employees/new"
-                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all"
+                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all"
               >
                 <Plus className="h-4 w-4" />
                 <span>New Employee</span>
@@ -773,7 +773,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                       "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
                       active
                         ? "bg-sidebar-accent text-sidebar-foreground"
-                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
@@ -798,7 +798,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                       "group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all",
                       active
                         ? "bg-sidebar-accent text-sidebar-foreground"
-                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                     )}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
@@ -819,7 +819,7 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
       <div className="p-3 border-t border-sidebar-border">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="w-full flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-sidebar-hover transition-colors focus:outline-none" aria-label="User menu">
+            <button className="w-full flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-sidebar-accent transition-colors focus:outline-none" aria-label="User menu">
               <Avatar className="h-8 w-8 shrink-0">
                 {avatarUrl && <AvatarImage src={avatarUrl} alt={session?.user?.name || "User"} />}
                 <AvatarFallback className="bg-sidebar-accent text-sidebar-foreground text-xs font-medium">
@@ -830,11 +830,11 @@ export function AppSidebar({ isOpen, onToggle, onSearchOpen, mobile = false }: A
                 <p className="text-sm font-medium text-sidebar-foreground truncate" suppressHydrationWarning>
                   {session?.user?.name || "Agent"}
                 </p>
-                <p className="text-xs text-sidebar-muted truncate" suppressHydrationWarning>
+                <p className="text-xs text-muted-foreground truncate" suppressHydrationWarning>
                   {session?.user?.email}
                 </p>
               </div>
-              <ChevronDown className="h-4 w-4 text-sidebar-muted shrink-0" />
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="start" className="w-48">

@@ -79,7 +79,7 @@ export function NavMain() {
   return (
     <>
       <SidebarGroup>
-        <SidebarGroupLabel className="text-sidebar-muted text-xs uppercase tracking-wider">
+        <SidebarGroupLabel className="text-muted-foreground text-xs uppercase tracking-wider">
           Main
         </SidebarGroupLabel>
         <SidebarMenu>
@@ -107,7 +107,7 @@ export function NavMain() {
                     "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2",
                     isActive
                       ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                   )}
                 >
                   <item.icon className="h-5 w-5 shrink-0" />
@@ -125,7 +125,7 @@ export function NavMain() {
       </SidebarGroup>
 
       <SidebarGroup>
-        <SidebarGroupLabel className="text-sidebar-muted text-xs uppercase tracking-wider">
+        <SidebarGroupLabel className="text-muted-foreground text-xs uppercase tracking-wider">
           System
         </SidebarGroupLabel>
         <SidebarMenu>
@@ -151,7 +151,7 @@ export function NavMain() {
                     "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2",
                     isActive
                       ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                      : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                   )}
                 >
                   <item.icon className="h-5 w-5 shrink-0" />

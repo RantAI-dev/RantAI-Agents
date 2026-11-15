@@ -52,7 +52,7 @@ export function NavUser() {
       <SidebarMenuItem>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex w-full items-center gap-3 px-2 py-2 rounded-md text-sm transition-all duration-200 hover:bg-sidebar-hover group-data-[collapsible=icon]:justify-center">
+            <button className="flex w-full items-center gap-3 px-2 py-2 rounded-md text-sm transition-all duration-200 hover:bg-sidebar-accent group-data-[collapsible=icon]:justify-center">
               <Avatar className="h-8 w-8 rounded-lg shrink-0">
                 {avatarUrl && <AvatarImage src={avatarUrl} alt={user?.name || "User"} className="rounded-lg" />}
                 <AvatarFallback className="rounded-lg bg-sidebar-accent text-sidebar-foreground font-medium">
@@ -61,11 +61,11 @@ export function NavUser() {
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-semibold text-sidebar-foreground">{user?.name || "User"}</span>
-                <span className="truncate text-xs text-sidebar-muted">
+                <span className="truncate text-xs text-muted-foreground">
                   {user?.email || ""}
                 </span>
               </div>
-              <ChevronsUpDown className="ml-auto size-4 text-sidebar-muted group-data-[collapsible=icon]:hidden" />
+              <ChevronsUpDown className="ml-auto size-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent

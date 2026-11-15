@@ -223,7 +223,7 @@ export function GroupManager({
           "group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-200 relative",
           selectedGroupId === null
             ? "bg-sidebar-accent text-sidebar-foreground"
-            : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+            : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
         )}
       >
         <div
@@ -237,7 +237,7 @@ export function GroupManager({
         />
         <Folder className="h-5 w-5 shrink-0" />
         <span className="flex-1 text-left truncate">All Documents</span>
-        <span className="text-xs text-sidebar-muted tabular-nums">{totalDocumentCount ?? totalDocuments}</span>
+        <span className="text-xs text-muted-foreground tabular-nums">{totalDocumentCount ?? totalDocuments}</span>
         {selectedGroupId === null && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
       </button>
 
@@ -262,7 +262,7 @@ export function GroupManager({
                 "w-full flex items-center gap-3 pr-3 py-2.5 rounded-lg text-sm transition-all duration-200 relative",
                 isActive
                   ? "bg-sidebar-accent text-sidebar-foreground"
-                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
               )}
             >
               <div
@@ -282,7 +282,7 @@ export function GroupManager({
                 <Folder className="h-3.5 w-3.5 text-white" />
               </div>
               <span className="flex-1 text-left truncate">{group.name}</span>
-              <span className="text-xs text-sidebar-muted tabular-nums">
+              <span className="text-xs text-muted-foreground tabular-nums">
                 {nested !== group.documentCount ? `${group.documentCount}/${nested}` : group.documentCount}
               </span>
               {isActive && <ChevronRight className="h-4 w-4 text-sidebar-foreground/60" />}
@@ -324,7 +324,7 @@ export function GroupManager({
       {/* Create Group Button */}
       <button
         onClick={() => handleCreate(null)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-hover transition-all duration-200"
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200"
       >
         <Plus className="h-5 w-5" />
         <span>New Group</span>
