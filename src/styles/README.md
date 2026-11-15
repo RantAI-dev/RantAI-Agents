@@ -1,7 +1,8 @@
 # Styles
 
 The app's look comes from one source: **`tokens.json`**, exported from the "RantAI Agents" design
-system in Claude Design (brand book: `docs/design-system/README.md` in agents-cloud).
+system in Claude Design. Its brand book (usage rules for every token and component) is kept in
+the RantAI Cloud repository at `docs/design-system/README.md`.
 
 | File | What it holds | Edit by hand? |
 |---|---|---|
@@ -9,7 +10,7 @@ system in Claude Design (brand book: `docs/design-system/README.md` in agents-cl
 | `tokens.css` | CSS variables and Tailwind theme generated from `tokens.json` | **No**: run `bun run tokens` |
 | `theme.css` | Font families (Geist via `next/font`) and the base layer | Yes |
 | `workspace-ide.css` | Editor, syntax and terminal colours (functional, not brand) | Yes |
-| `landing.css` | The landing page's scoped light palette (`.theme-home`) | Yes |
+| `landing.css` | What the landing page sets differently (`.theme-home`, used with `.theme-light`) | Yes |
 | `chat-markdown.css` | Markdown inside chat messages (`.chat-message`) | Yes |
 | `utilities.css` | Small shared utilities: thin scrollbar, dot grid, glows, stagger | Yes |
 
@@ -28,9 +29,11 @@ system in Claude Design (brand book: `docs/design-system/README.md` in agents-cl
   `text-link`, `border-input`, `bg-plan`. Never a hex value or a Tailwind palette colour.
 - Type: `text-prose` (chat, documents), `text-body`, `text-body-sm`, `text-caption`, `text-label`,
   `text-overline` (add `uppercase`), headings `text-display` and `text-title-1` to `text-title-4`.
-  Mono styles set size only: pair `text-code` / `text-mono-sm` with `font-mono`.
+  Mono styles set size, line height and weight but not the family: pair `text-code` /
+  `text-mono-sm` with `font-mono`.
+- Forced light: `theme-light` on a wrapper keeps that subtree light in a dark app (landing, sign-in).
 - Shape and depth: `rounded-xs` to `rounded-2xl` (derived from `--radius`), `shadow-xs` to
-  `shadow-lg` (theme-aware).
+  `shadow-lg` (theme-aware; colour modifiers such as `shadow-primary/10` still apply).
 - Layout sizes: `w-sidebar`, `h-header`, `max-w-thread`, `size-control`, `min-h-touch`.
 - Motion: `ease-standard` / `ease-enter` / `ease-exit`; durations as
   `duration-(--duration-fast)`; z-index as `z-(--z-modal)`.

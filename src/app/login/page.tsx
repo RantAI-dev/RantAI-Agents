@@ -9,7 +9,7 @@ export default async function LoginPage({
   const { error } = await searchParams
 
   return (
-    <div className="theme-home flex min-h-dvh bg-background text-foreground">
+    <div className="theme-light theme-home flex min-h-dvh bg-background text-foreground">
       <LoginHero />
       <LoginFlow initialError={error ?? null} />
     </div>

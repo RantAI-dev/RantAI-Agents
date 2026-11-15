@@ -1,6 +1,6 @@
 /* Generated from src/styles/tokens.json by scripts/design-tokens.ts. Do not edit: run `bun run tokens`. */
 
-:root {
+:root, .theme-light {
   --background: #ffffff;
   --foreground: #0b1220;
   --card: #ffffff;
@@ -53,33 +53,13 @@
   --chart-3: #32836a;
   --chart-4: #574399;
   --chart-5: #6b7587;
-  --radius: 0.75rem;
-  --elevation-xs: 0 1px 2px 0 rgba(11, 18, 32, 0.05);
-  --elevation-sm: 0 1px 3px 0 rgba(11, 18, 32, 0.08), 0 1px 2px -1px rgba(11, 18, 32, 0.06);
-  --elevation-md: 0 6px 16px -4px rgba(11, 18, 32, 0.12), 0 2px 4px -2px rgba(11, 18, 32, 0.06);
-  --elevation-lg: 0 20px 48px -12px rgba(11, 18, 32, 0.22), 0 4px 12px -4px rgba(11, 18, 32, 0.08);
-  --duration-instant: 80ms;
-  --duration-fast: 140ms;
-  --duration-base: 200ms;
-  --duration-slow: 280ms;
-  --duration-slower: 400ms;
-  --size-sidebar: 264px;
-  --size-sidebar-collapsed: 52px;
-  --size-header: 48px;
-  --size-thread: 760px;
-  --size-canvas-min: 420px;
-  --size-control-sm: 28px;
-  --size-control: 32px;
-  --size-control-lg: 40px;
-  --size-touch: 44px;
-  --z-sticky: 10;
-  --z-sidebar: 20;
-  --z-canvas: 30;
-  --z-overlay: 40;
-  --z-modal: 50;
-  --z-popover: 60;
-  --z-toast: 70;
-  --z-tooltip: 80;
+  --elevation-xs-1: rgba(11, 18, 32, 0.05);
+  --elevation-sm-1: rgba(11, 18, 32, 0.08);
+  --elevation-sm-2: rgba(11, 18, 32, 0.06);
+  --elevation-md-1: rgba(11, 18, 32, 0.12);
+  --elevation-md-2: rgba(11, 18, 32, 0.06);
+  --elevation-lg-1: rgba(11, 18, 32, 0.22);
+  --elevation-lg-2: rgba(11, 18, 32, 0.08);
 }
 
 .dark {
@@ -133,10 +113,39 @@
   --chart-3: #4fbf96;
   --chart-4: #9b87e0;
   --chart-5: #8a94a6;
-  --elevation-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.40);
-  --elevation-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.50), 0 1px 2px -1px rgba(0, 0, 0, 0.40);
-  --elevation-md: 0 6px 16px -4px rgba(0, 0, 0, 0.60), 0 2px 4px -2px rgba(0, 0, 0, 0.40);
-  --elevation-lg: 0 20px 48px -12px rgba(0, 0, 0, 0.70), 0 4px 12px -4px rgba(0, 0, 0, 0.50);
+  --elevation-xs-1: rgba(0, 0, 0, 0.40);
+  --elevation-sm-1: rgba(0, 0, 0, 0.50);
+  --elevation-sm-2: rgba(0, 0, 0, 0.40);
+  --elevation-md-1: rgba(0, 0, 0, 0.60);
+  --elevation-md-2: rgba(0, 0, 0, 0.40);
+  --elevation-lg-1: rgba(0, 0, 0, 0.70);
+  --elevation-lg-2: rgba(0, 0, 0, 0.50);
+}
+
+:root {
+  --radius: 0.75rem;
+  --duration-instant: 80ms;
+  --duration-fast: 140ms;
+  --duration-base: 200ms;
+  --duration-slow: 280ms;
+  --duration-slower: 400ms;
+  --size-sidebar: 264px;
+  --size-sidebar-collapsed: 52px;
+  --size-header: 48px;
+  --size-thread: 760px;
+  --size-canvas-min: 420px;
+  --size-control-sm: 28px;
+  --size-control: 32px;
+  --size-control-lg: 40px;
+  --size-touch: 44px;
+  --z-sticky: 10;
+  --z-sidebar: 20;
+  --z-canvas: 30;
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-popover: 60;
+  --z-toast: 70;
+  --z-tooltip: 80;
 }
 
 @theme inline {
@@ -199,10 +208,10 @@
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-full: 9999px;
-  --shadow-xs: var(--elevation-xs);
-  --shadow-sm: var(--elevation-sm);
-  --shadow-md: var(--elevation-md);
-  --shadow-lg: var(--elevation-lg);
+  --shadow-xs: 0 1px 2px 0 var(--elevation-xs-1);
+  --shadow-sm: 0 1px 3px 0 var(--elevation-sm-1), 0 1px 2px -1px var(--elevation-sm-2);
+  --shadow-md: 0 6px 16px -4px var(--elevation-md-1), 0 2px 4px -2px var(--elevation-md-2);
+  --shadow-lg: 0 20px 48px -12px var(--elevation-lg-1), 0 4px 12px -4px var(--elevation-lg-2);
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-enter: cubic-bezier(0, 0, 0.2, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);

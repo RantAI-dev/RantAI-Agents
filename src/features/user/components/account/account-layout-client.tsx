@@ -82,7 +82,7 @@ export default function AccountLayoutClient({
             </p>
           </div>
         </div>
-        <Badge className="bg-sidebar-accent text-sidebar-foreground hover:bg-sidebar-accent">
+        <Badge className="bg-sidebar-accent/60 text-sidebar-foreground hover:bg-sidebar-accent">
           <Shield className="h-3 w-3 mr-1" />
           Agent Account
         </Badge>

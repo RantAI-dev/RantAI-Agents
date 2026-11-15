@@ -1,7 +1,7 @@
 /**
  * Shape of `src/styles/tokens.json`, the design system's token export (Claude Design
  * "RantAI Agents"). Only the fields the generator reads are typed; `usage` notes are
- * documentation for people and are carried through as comments.
+ * documentation for people and are not rendered.
  */
 
 export type ThemeId = "light" | "dark"

@@ -13,7 +13,7 @@ const Grainient = dynamic(
  *  loads in a test or on a narrow screen (it is `hidden` below `lg`). */
 export function LoginHero() {
   return (
-    <section className="relative hidden w-1/2 flex-col overflow-hidden bg-[var(--brand-navy)] lg:flex">
+    <section className="relative hidden w-1/2 flex-col overflow-hidden bg-brand-navy lg:flex">
       <div className="pointer-events-none absolute inset-0" aria-hidden>
         <Grainient
           className="absolute inset-0"
@@ -34,7 +34,7 @@ export function LoginHero() {
           saturation={1}
           zoom={0.9}
         />
-        <div className="absolute inset-0 bg-[var(--brand-navy)]/35" />
+        <div className="absolute inset-0 bg-brand-navy/35" />
       </div>
 
       <div className="relative z-10 p-10">

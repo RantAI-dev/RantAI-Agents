@@ -24,6 +24,8 @@ const geistMono = localFont({
   weight: '100 900',
   variable: '--font-geist-mono',
   display: 'swap',
+  // Mono is for code and IDs, not first paint: don't preload it on every route.
+  preload: false,
 })
 
 export const metadata: Metadata = {
@@ -46,11 +48,8 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  // The browser chrome follows the app ground in each theme.
-  themeColor: (['light', 'dark'] as const).map((theme) => ({
-    media: `(prefers-color-scheme: ${theme})`,
-    color: resolveColor(tokens as DesignTokens, 'background', theme),
-  })),
+  // The app opens in the light theme (ThemeProvider defaultTheme), so the browser chrome does too.
+  themeColor: resolveColor(tokens as DesignTokens, 'background', 'light'),
   width: 'device-width',
   initialScale: 1,
 }

@@ -116,7 +116,7 @@ export function QueuePanel({
       <div className="px-4 py-2 border-b border-sidebar-border flex items-center justify-between">
         <span className="text-sm font-medium text-sidebar-foreground/70">Queue</span>
         {queue.length > 0 && (
-          <Badge className="bg-sidebar-accent text-sidebar-foreground text-xs hover:bg-sidebar-accent">
+          <Badge className="bg-sidebar-accent/60 text-sidebar-foreground text-xs hover:bg-sidebar-accent">
             {queue.length}
           </Badge>
         )}
@@ -148,7 +148,7 @@ export function QueuePanel({
             className="h-full"
             itemContent={(_, conversation) => (
               <div className="px-2 py-1">
-                <div className="rounded-lg bg-sidebar-accent hover:bg-sidebar-accent transition-colors p-3 space-y-2">
+                <div className="rounded-lg bg-sidebar-accent/60 hover:bg-sidebar-accent transition-colors p-3 space-y-2">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
                       <User className="h-5 w-5 text-sidebar-foreground/60" />
@@ -193,7 +193,7 @@ export function QueuePanel({
 
                   <Button
                     size="sm"
-                    className="w-full mt-2 bg-sidebar-accent hover:bg-sidebar-accent text-sidebar-foreground border-0"
+                    className="w-full mt-2 bg-sidebar-accent hover:bg-sidebar-accent/60 text-sidebar-foreground border-0"
                     onClick={() => onAcceptConversation(conversation.id)}
                   >
                     Accept

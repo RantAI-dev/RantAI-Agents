@@ -11,4 +11,6 @@
 
 @source "../../node_modules/streamdown/dist/*.js";
 
-@custom-variant dark (&:is(.dark *));
+/* `dark:` applies under .dark unless a `.theme-light` wrapper keeps that subtree light (landing,
+   sign-in). `:where` keeps the exclusion from raising specificity. */
+@custom-variant dark (&:is(.dark *):not(:where(.theme-light, .theme-light *)));

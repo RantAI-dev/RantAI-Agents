@@ -1,16 +1,6 @@
 /* ── Chat message markdown overrides ── */
-.chat-message {
-  /* Tighten prose spacing for chat bubbles */
-  --tw-prose-body: var(--foreground);
-  --tw-prose-headings: var(--foreground);
-  --tw-prose-links: var(--link);
-  --tw-prose-bold: var(--foreground);
-  --tw-prose-counters: var(--muted-foreground);
-  --tw-prose-bullets: var(--muted-foreground);
-  --tw-prose-quotes: var(--muted-foreground);
-  --tw-prose-quote-borders: var(--border);
-  --tw-prose-th-borders: var(--border);
-  --tw-prose-td-borders: var(--border);
+.chat-message a {
+  color: var(--link);
 }
 
 /* Reduce vertical spacing between elements */

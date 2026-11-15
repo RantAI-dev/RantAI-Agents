@@ -1,4 +1,5 @@
 import { aliasTarget, valueIn, type DesignTokens, type NamedToken, type ThemeId } from "./schema"
+import { shadowColors, shadowValue } from "./shadows"
 
 /**
  * Renders `tokens.json` as the CSS the app imports (`src/styles/tokens.css`).
@@ -60,9 +61,16 @@ function isAlias(token: NamedToken): boolean {
   return typeof token.value === "string" && aliasTarget(token.value) !== null
 }
 
-/** Theme-dependent shadows live as `--elevation-*` so `@theme` can map `--shadow-*` onto them. */
-function elevationName(token: NamedToken): string {
-  return token.name.replace(/^shadow-/, "elevation-")
+/** Light values also apply under `.theme-light`, which keeps a subtree light inside a dark app. */
+export const LIGHT_SELECTOR = ":root, .theme-light"
+
+function colorBlock(selector: string, t: DesignTokens, theme: ThemeId, colors: NamedToken[]): string[] {
+  return [
+    `${selector} {`,
+    ...themed(colors, theme),
+    ...t.shadow.tokens.flatMap((s) => shadowColors(s, theme).map(([name, value]) => declaration(name, value))),
+    "}",
+  ]
 }
 
 function rootBlock(t: DesignTokens): string[] {
@@ -70,21 +78,10 @@ function rootBlock(t: DesignTokens): string[] {
   if (!radiusBase) throw new Error("tokens.json: radius.tokens needs a base `radius`")
   return [
     ":root {",
-    ...themed(t.color.tokens, "light"),
     declaration("radius", valueIn(radiusBase, "light")),
-    ...t.shadow.tokens.map((s) => declaration(elevationName(s), valueIn(s, "light"))),
     ...t.duration.tokens.map((d) => declaration(d.name, valueIn(d, "light"))),
     ...t.size.tokens.map((s) => declaration(s.name, valueIn(s, "light"))),
     ...t.zIndex.tokens.map((z) => declaration(z.name, valueIn(z, "light"))),
-    "}",
-  ]
-}
-
-function darkBlock(t: DesignTokens): string[] {
-  return [
-    ".dark {",
-    ...themed(t.color.tokens.filter((c) => varies(c) || isAlias(c)), "dark"),
-    ...t.shadow.tokens.filter(varies).map((s) => declaration(elevationName(s), valueIn(s, "dark"))),
     "}",
   ]
 }
@@ -112,7 +109,7 @@ function themeBlock(t: DesignTokens): string[] {
     "@theme inline {",
     ...t.color.tokens.map((c) => declaration(`color-${c.name}`, `var(--${c.name})`)),
     ...radii,
-    ...t.shadow.tokens.map((s) => declaration(s.name, `var(--${elevationName(s)})`)),
+    ...t.shadow.tokens.map((s) => declaration(s.name, shadowValue(s))),
     ...t.easing.tokens.map((e) => declaration(e.name, valueIn(e, "light"))),
     // `size-sidebar` → `w-sidebar`, `h-header`, `size-control`, `max-w-thread`.
     ...t.size.tokens.map((s) => declaration(s.name.replace(/^size-/, "spacing-"), `var(--${s.name})`)),
@@ -122,7 +119,17 @@ function themeBlock(t: DesignTokens): string[] {
 }
 
 export function renderTokensCss(tokens: DesignTokens): string {
-  return [GENERATED_HEADER, "", ...rootBlock(tokens), "", ...darkBlock(tokens), "", ...themeBlock(tokens), ""].join(
-    "\n",
-  )
+  const colors = tokens.color.tokens
+  return [
+    GENERATED_HEADER,
+    "",
+    ...colorBlock(LIGHT_SELECTOR, tokens, "light", colors),
+    "",
+    ...colorBlock(".dark", tokens, "dark", colors.filter((c) => varies(c) || isAlias(c))),
+    "",
+    ...rootBlock(tokens),
+    "",
+    ...themeBlock(tokens),
+    "",
+  ].join("\n")
 }
