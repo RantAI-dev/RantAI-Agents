@@ -96,7 +96,7 @@ export function ChatSectionContent({
       </AlertDialog>
       {sessions.length > 0 && (
         <div className="space-y-1">
-          <p className="px-3 py-1 text-xs font-medium text-sidebar-muted uppercase tracking-wider">
+          <p className="px-3 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Recent Chats
           </p>
           {sessions.map((session) => {
@@ -111,7 +111,7 @@ export function ChatSectionContent({
                   "group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all cursor-pointer",
                   isActive
                     ? "bg-sidebar-accent text-sidebar-foreground"
-                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-hover"
+                    : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
                 )}
                 onClick={() => {
                   if (isRenaming) return
@@ -143,7 +143,7 @@ export function ChatSectionContent({
                   ) : (
                     <p className="font-medium truncate text-sm">{session.title}</p>
                   )}
-                  <p className="text-xs text-sidebar-muted truncate">
+                  <p className="text-xs text-muted-foreground truncate">
                     {formatDistanceToNow(getSessionActivityDate(session), { addSuffix: true })}
                   </p>
                 </div>
@@ -155,7 +155,7 @@ export function ChatSectionContent({
                       variant="ghost"
                       size="icon"
                       className={cn(
-                        "h-6 w-6 shrink-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-hover",
+                        "h-6 w-6 shrink-0 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent",
                         "opacity-60 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
                       )}
                       aria-label={`Chat options for ${session.title}`}

@@ -99,7 +99,7 @@ export function HomeHero() {
             className="text-balance text-5xl font-normal leading-[1.1] tracking-[-0.02em] text-foreground sm:text-6xl"
           >
             <span className="inline-block">
-              <span className="inline-block border-b-[5px] border-dotted border-[var(--brand-1)] pb-2.5">
+              <span className="inline-block border-b-[5px] border-dotted border-[var(--brand-sky)] pb-2.5">
                 <AnimatePresence mode="wait" initial={false}>
                   <motion.span
                     key={word}

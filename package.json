@@ -18,6 +18,7 @@
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration",
     "test:watch": "vitest watch",
+    "tokens": "bun scripts/design-tokens.ts",
     "check:thin-routes": "bun scripts/check-thin-routes.ts",
     "check:kb-boundary": "bun scripts/check-kb-boundary.ts",
     "check:domain-imports": "bun scripts/check-domain-imports.ts",

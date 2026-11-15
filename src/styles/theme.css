@@ -1,0 +1,18 @@
+/*
+ * Hand-written theme glue around the generated tokens (tokens.css): font families and the base
+ * layer. Colours, radii, shadows, type scale and sizes all come from tokens.css.
+ */
+@theme inline {
+  /* next/font sets these variables on <html> (src/app/layout.tsx). */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}

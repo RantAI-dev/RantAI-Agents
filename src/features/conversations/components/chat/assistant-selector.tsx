@@ -46,7 +46,7 @@ export function AssistantSelector({
           variant="ghost"
           className={cn(
             "justify-between gap-2 hover:bg-muted",
-            compact ? "px-2 py-1 h-9" : "w-full px-3 py-6 h-auto hover:bg-sidebar-hover"
+            compact ? "px-2 py-1 h-9" : "w-full px-3 py-6 h-auto hover:bg-sidebar-accent"
           )}
         >
           <div className="flex items-center gap-2">
@@ -58,7 +58,7 @@ export function AssistantSelector({
                 <p className="text-sm font-medium text-sidebar-foreground">
                   {selectedAssistant.name}
                 </p>
-                <p className="text-xs text-sidebar-muted">
+                <p className="text-xs text-muted-foreground">
                   {selectedAssistant.description}
                 </p>
               </div>
@@ -76,7 +76,7 @@ export function AssistantSelector({
                 "group relative flex items-start gap-3 p-3 rounded-lg cursor-pointer transition-all",
                 selectedAssistant.id === assistant.id
                   ? "bg-sidebar-accent"
-                  : "hover:bg-sidebar-hover"
+                  : "hover:bg-sidebar-accent"
               )}
               onClick={() => handleSelect(assistant)}
             >

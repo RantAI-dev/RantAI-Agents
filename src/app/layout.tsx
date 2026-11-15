@@ -6,16 +6,23 @@ import { SessionProvider } from '@/components/providers/session-provider'
 import { ThemeProvider } from '@/components/theme-provider'
 import { Toaster } from '@/components/ui/sonner'
 import { brand, brandIcons } from '@/lib/branding'
+import { resolveColor } from '@/lib/design-tokens/resolve'
+import type { DesignTokens } from '@/lib/design-tokens/schema'
+import tokens from '@/styles/tokens.json'
 import './globals.css'
 
-const poppins = localFont({
-  src: [
-    { path: './fonts/poppins/Poppins-300.ttf', weight: '300', style: 'normal' },
-    { path: './fonts/poppins/Poppins-400.ttf', weight: '400', style: 'normal' },
-    { path: './fonts/poppins/Poppins-500.ttf', weight: '500', style: 'normal' },
-    { path: './fonts/poppins/Poppins-600.ttf', weight: '600', style: 'normal' },
-    { path: './fonts/poppins/Poppins-700.ttf', weight: '700', style: 'normal' },
-  ],
+// Geist and Geist Mono (SIL OFL 1.1, see fonts/geist/OFL.txt) are the design system's faces.
+const geistSans = localFont({
+  src: './fonts/geist/Geist-Variable.woff2',
+  weight: '100 900',
+  variable: '--font-geist-sans',
+  display: 'swap',
+})
+
+const geistMono = localFont({
+  src: './fonts/geist/GeistMono-Variable.woff2',
+  weight: '100 900',
+  variable: '--font-geist-mono',
   display: 'swap',
 })
 
@@ -39,7 +46,11 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#F9F8F6',
+  // The browser chrome follows the app ground in each theme.
+  themeColor: (['light', 'dark'] as const).map((theme) => ({
+    media: `(prefers-color-scheme: ${theme})`,
+    color: resolveColor(tokens as DesignTokens, 'background', theme),
+  })),
   width: 'device-width',
   initialScale: 1,
 }
@@ -50,8 +61,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${poppins.className} antialiased bg-background text-foreground`}>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
+      <body className="font-sans antialiased bg-background text-foreground">
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
