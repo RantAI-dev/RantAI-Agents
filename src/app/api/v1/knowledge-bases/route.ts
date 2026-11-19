@@ -1,4 +1,5 @@
 import { authenticateV1Request } from "@/features/agent-api/service"
+import { assistantScopeGroups } from "@/features/agent-api/mapel"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -6,9 +7,16 @@ import { prisma } from "@/lib/prisma"
  *
  * The companion to `knowledge_base_ids` on chat completions: a client cannot
  * choose a knowledge base whose id it has no way to learn. Returns the bases
- * owned by the API key's organisation, with document counts so a caller can
- * tell a populated subject from an empty placeholder, and a flag marking the
- * ones this key's assistant reads by default.
+ * this key's ASSISTANT may read — its configured groups plus their direct
+ * subject children — with document counts so a caller can tell a populated
+ * subject from an empty placeholder, and a flag marking the ones this key's
+ * assistant reads by default.
+ *
+ * Grade isolation (PRD): the list is the assistant scope and nothing else —
+ * never the rest of the organisation, so one grade's key cannot even learn
+ * another grade's group ids. The scope is computed from the authenticated
+ * key's assistant alone (`assistantScopeGroups`); request input has no say
+ * in it.
  */
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -42,16 +50,7 @@ export async function GET(req: Request) {
     }
 
     const defaults = new Set(assistant.knowledgeBaseGroupIds)
-    const groups = await prisma.knowledgeBaseGroup.findMany({
-      where: { organizationId: assistant.organizationId },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        _count: { select: { documents: true } },
-      },
-      orderBy: { name: "asc" },
-    })
+    const groups = await assistantScopeGroups(assistant)
 
     return new Response(
       JSON.stringify({
@@ -60,7 +59,7 @@ export async function GET(req: Request) {
           id: g.id,
           name: g.name,
           description: g.description,
-          document_count: g._count.documents,
+          document_count: g.documentCount,
           // Empty bases are returned rather than hidden: a caller asking why an
           // answer was thin is better served by seeing the base holds nothing.
           is_default: defaults.has(g.id),

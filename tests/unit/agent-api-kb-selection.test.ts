@@ -2,14 +2,22 @@
  * Unit tests for per-request knowledge-base selection on the v1 API.
  *
  * Two properties matter here and they pull in opposite directions. A caller
- * must be able to widen a request to every base its organisation owns, and a
- * caller must never be able to reach a base owned by anyone else — the id is a
- * cuid supplied by the client, so "trust the id" is not available.
+ * must be able to name any knowledge base its ASSISTANT may read — the
+ * groups bound to the assistant plus their subject children — and a caller
+ * must never be able to reach a base outside that scope: not another
+ * tenant's, and (grade isolation per the PRD) not another grade's base in
+ * the same organisation either. The id is a cuid supplied by the client, so
+ * "trust the id" is not available.
  *
  * The third property is quieter but is the one that would embarrass us live: if
  * a caller asks for one subject and we cannot honour it, we must fail rather
  * than fall back to the whole corpus. An answer drawn from the biology book to
  * a maths question is worse than an error, because nobody can see it happened.
+ *
+ * The prisma mock is WHERE-AWARE (it applies the scope lookup's where clause
+ * to the fixtures), so these tests see the rule the code actually queries
+ * with. The grade-isolation cases — child subjects, other grades, the
+ * knowledge-bases route — live in agent-api-kb-scope.test.ts.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
@@ -18,13 +26,43 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { knowledgeBaseGroup: { findMany: (...a: unknown[]) => findMany(...a) } },
 }))
 
-const { resolveRequestedGroupIds, selectedFigureNumbers } = await import("@/features/agent-api/service")
+import { resolveRequestedGroupIds, selectedFigureNumbers } from "@/features/agent-api/service"
 
-const OWNED = [{ id: "kb_math" }, { id: "kb_bio" }, { id: "kb_indo" }]
+/** The organisation owns three groups; the assistant under test is bound to
+ * maths only, and maths has no children. Rows carry the fields the scope
+ * query selects (`_count` included, like prisma would return them). */
+const OWNED = [
+  { id: "kb_math", name: "Matematika", description: null, parentId: null, docCount: 2 },
+  { id: "kb_bio", name: "Biologi", description: null, parentId: null, docCount: 4 },
+  { id: "kb_indo", name: "Bahasa Indonesia", description: null, parentId: null, docCount: 1 },
+]
 
+/** Where-aware stand-in for the findMany the resolver now issues — it
+ * applies the scope lookup's `OR: [{ id: { in } }, { parentId: { in } }]`
+ * and returns name-ascending rows, like the query asks prisma for. */
 beforeEach(() => {
   findMany.mockReset()
-  findMany.mockResolvedValue(OWNED)
+  findMany.mockImplementation(
+    async (args?: { where?: { OR?: Array<{ id?: { in: string[] }; parentId?: { in: string[] } }> } }) => {
+      const or = args?.where?.OR
+      let rows = OWNED
+      if (Array.isArray(or)) {
+        const ids = new Set(or.flatMap((c) => c?.id?.in ?? []))
+        const parents = new Set(or.flatMap((c) => c?.parentId?.in ?? []))
+        rows = rows.filter((g) => ids.has(g.id) || parents.has(g.parentId ?? ""))
+      }
+      return rows
+        .slice()
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        .map((g) => ({
+          id: g.id,
+          name: g.name,
+          description: g.description,
+          parentId: g.parentId,
+          _count: { documents: g.docCount },
+        }))
+    },
+  )
 })
 
 describe("resolveRequestedGroupIds", () => {
@@ -50,16 +88,18 @@ describe("resolveRequestedGroupIds", () => {
     expect(r).toEqual({ ids: ["kb_math"] })
   })
 
-  it("widens beyond the assistant's own set when the org owns more", async () => {
-    // The assistant is configured with maths only; the caller asks for biology
-    // and gets it, because both belong to the same organisation.
+  it("drops an id outside the assistant's scope, even within the same organisation", async () => {
+    // The assistant is configured with maths only; the caller asks for
+    // biology. Same organisation, but not this assistant's grade: dropped,
+    // and since nothing remains, refused rather than answered from maths.
     const r = await resolveRequestedGroupIds("org1", ["kb_math"], ["kb_bio"])
-    expect(r).toEqual({ ids: ["kb_bio"] })
+    expect(r).toHaveProperty("error")
+    expect((r as { error: string }).error).toMatch(/knowledge-bases/)
   })
 
-  it("expands '*' to every base the organisation owns", async () => {
+  it("expands '*' to the assistant's scope, not the organisation's other groups", async () => {
     const r = await resolveRequestedGroupIds("org1", ["kb_math"], ["*"])
-    expect(r).toEqual({ ids: ["kb_math", "kb_bio", "kb_indo"] })
+    expect(r).toEqual({ ids: ["kb_math"] })
   })
 
   it("drops ids belonging to another organisation", async () => {
@@ -73,16 +113,17 @@ describe("resolveRequestedGroupIds", () => {
     expect((r as { error: string }).error).toMatch(/knowledge-bases/)
   })
 
-  it("errors on '*' when the organisation owns nothing", async () => {
-    findMany.mockResolvedValue([])
-    const r = await resolveRequestedGroupIds("org1", [], ["*"])
+  it("errors on '*' when nothing is in scope (configured ids, no rows)", async () => {
+    // The configured id points at nothing the organisation owns, so the
+    // scope is empty — '*' has nothing to expand to.
+    const r = await resolveRequestedGroupIds("org1", ["kb_gone"], ["*"])
     expect(r).toHaveProperty("error")
   })
 
-  it("scopes the ownership lookup to the caller's organisation", async () => {
-    await resolveRequestedGroupIds("org1", [], ["kb_math"])
+  it("scopes the scope lookup to the caller's organisation", async () => {
+    await resolveRequestedGroupIds("org1", ["kb_math"], ["kb_math"])
     expect(findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { organizationId: "org1" } }),
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: "org1" }) }),
     )
   })
 })
