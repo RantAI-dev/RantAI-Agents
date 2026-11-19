@@ -382,6 +382,21 @@ export class HybridSearch {
       // the OMIT every candidate row ships its full vector back (4096 floats by
       // default), which is hundreds of KB per query serialised, transferred and
       // parsed only to be discarded.
+      //
+      // 2026-11-19: that last paragraph stopped being true for SCOPED queries.
+      // The KNN operator takes the GLOBAL k nearest and post-filters; with a
+      // narrow scope (a chat scoped to one mapel → 1–3 documents) essentially
+      // nothing survives, `chunks.length === 0`, and every such request fell
+      // through to the full scan below — which, when the planner has no
+      // document index to drive `document_id IN …`, iterates every chunk in the
+      // table and computes cosine on each (measured on a 120k-chunk SurrealDB
+      // 2.6.5: the UGM box grew ~5 GiB and answered in ~77 s per request, and
+      // under a concurrent ingest the same scan OOM-killed the server for ~49s).
+      // Narrow scopes now resolve their chunk ids through `document_id_idx` first
+      // and compute cosine over exactly those records (identical results to the
+      // full scan — exact cosine over the same candidate set — at a cost
+      // proportional to the scope, not the table). Scopes wider than
+      // KB_SCOPED_SCAN_MAX_CHUNKS chunks keep today's KNN/full-scan behaviour.
       const fullScanSql = `
         SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity OMIT embedding
         FROM document_chunk
@@ -391,21 +406,29 @@ export class HybridSearch {
       `;
 
       const knnEnabled = process.env.KB_VECTOR_KNN === "true";
-      let chunks: Array<ChunkResult & { similarity: number }> = [];
-      if (knnEnabled) {
-        const limit = Math.max(1, Math.min(2000, Math.trunc(Number(this.config.vectorTopK) || 20)));
-        const scoped = conditions.length > 0;
-        // When a scope filter is present, over-fetch index candidates so enough
-        // survive the post-filter; unscoped just fetches `limit`. K and ef are
-        // validated integers, safe to inline (the operator needs literals).
-        const k = scoped ? Math.min(2000, Math.max(limit * 5, 100)) : limit;
-        const ef = Math.max(64, k * 2);
-        const filter = scoped ? ` AND ${whereClause}` : "";
-        // The index is named explicitly. Once `document_id_idx` exists, the
-        // planner serves a scoped query from it instead of the vector index,
-        // and the KNN operator then answers OK with zero rows — slowly — so
-        // every search falls through to the full scan below.
-        const knnSql = `
+      const scoped = conditions.length > 0;
+      const limit = Math.max(1, Math.min(2000, Math.trunc(Number(this.config.vectorTopK) || 20)));
+
+      // Today's behaviour, verbatim: the KNN operator (when enabled) with the
+      // full scan as its fallback. Still used for the UNSCOPED query (no
+      // tenancy filter to honor, the index can answer directly, memory flat)
+      // and for scopes over the cap.
+      const knnOrFullScan = async (): Promise<{
+        chunks: Array<ChunkResult & { similarity: number }>;
+        path: "knn" | "fullscan";
+      }> => {
+        if (knnEnabled) {
+          // When a scope filter is present, over-fetch index candidates so enough
+          // survive the post-filter; unscoped just fetches `limit`. K and ef are
+          // validated integers, safe to inline (the operator needs literals).
+          const k = scoped ? Math.min(2000, Math.max(limit * 5, 100)) : limit;
+          const ef = Math.max(64, k * 2);
+          const filter = scoped ? ` AND ${whereClause}` : "";
+          // The index is named explicitly. Once `document_id_idx` exists, the
+          // planner serves a scoped query from it instead of the vector index,
+          // and the KNN operator then answers OK with zero rows — slowly — so
+          // every search falls through to the full scan below.
+          const knnSql = `
           SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity OMIT embedding
           FROM document_chunk
           WITH INDEX embedding_idx
@@ -413,34 +436,69 @@ export class HybridSearch {
           ORDER BY similarity DESC
           LIMIT $limit;
         `;
-        try {
-          const r = await client.query<ChunkResult & { similarity: number }>(knnSql, vars);
-          chunks = r[0]?.result || [];
-        } catch (err) {
-          console.warn(
-            `[Hybrid] KNN operator failed, falling back to full scan: ${(err as Error).message.slice(0, 120)}`
-          );
-          chunks = [];
-        }
-
-        // An exception is NOT the only failure mode, and it is not even the
-        // common one. `<|k,ef|>` is the HNSW form: against an MTREE index — which
-        // is what rag/store/schema.surql still defines — or against no vector
-        // index at all, SurrealDB answers `status: "OK"` with ZERO rows rather
-        // than erroring. The catch above therefore never fires, and enabling
-        // KB_VECTOR_KNN on a stock schema silently turns vector retrieval off:
-        // answers come back sourceless with nothing in the logs.
-        //
-        // So treat empty as "the index could not serve this" and re-run the
-        // scan. When the corpus really is empty the scan returns empty too, at
-        // the cost of one cheap query.
-        if (chunks.length === 0) {
+          try {
+            const r = await client.query<ChunkResult & { similarity: number }>(knnSql, vars);
+            const chunks = r[0]?.result || [];
+            if (chunks.length > 0) return { chunks, path: "knn" };
+          } catch (err) {
+            console.warn(
+              `[Hybrid] KNN operator failed, falling back to full scan: ${(err as Error).message.slice(0, 120)}`
+            );
+          }
+          // An exception is NOT the only failure mode, and it is not even the
+          // common one. `<|k,ef|>` is the HNSW form: against an MTREE index — which
+          // is what rag/store/schema.surql still defines — or against no vector
+          // index at all, SurrealDB answers `status: "OK"` with ZERO rows rather
+          // than erroring. The catch above therefore never fires, and enabling
+          // KB_VECTOR_KNN on a stock schema silently turns vector retrieval off:
+          // answers come back sourceless with nothing in the logs.
+          //
+          // So treat empty as "the index could not serve this" and re-run the
+          // scan. When the corpus really is empty the scan returns empty too, at
+          // the cost of one cheap query.
           const r = await client.query<ChunkResult & { similarity: number }>(fullScanSql, vars);
-          chunks = r[0]?.result || [];
+          return { chunks: r[0]?.result || [], path: "fullscan" };
         }
-      } else {
         const r = await client.query<ChunkResult & { similarity: number }>(fullScanSql, vars);
-        chunks = r[0]?.result || [];
+        return { chunks: r[0]?.result || [], path: "fullscan" };
+      };
+
+      let chunks: Array<ChunkResult & { similarity: number }> = [];
+      let path: "knn" | "scoped-ids" | "fullscan";
+      let resolvedChunks = -1;
+      const startMs = Date.now();
+
+      if (!scoped) {
+        ({ chunks, path } = await knnOrFullScan());
+      } else {
+        // Narrow-scope fast path: resolve the scope's chunk ids through
+        // document_id_idx (LIMIT cap+1 bounds the work for any scope, huge or
+        // tiny), then cosine over exactly those records.
+        const cap = this.scopedChunkIdCap();
+        const ids = cap > 0 ? await this.resolveScopedChunkIds(client, whereClause, vars, cap) : null;
+        if (ids === null) {
+          // Resolution failed — keep today's behaviour, whatever it does.
+          ({ chunks, path } = await knnOrFullScan());
+        } else if (ids.length === 0) {
+          // The scope has no chunks; the full scan would return nothing either.
+          // Skip it (that scan is exactly what this fix exists to avoid).
+          resolvedChunks = 0;
+          path = "scoped-ids";
+        } else if (ids.length > cap) {
+          // Over the cap: today's behaviour (KNN attempt, full scan fallback).
+          resolvedChunks = ids.length;
+          ({ chunks, path } = await knnOrFullScan());
+        } else {
+          resolvedChunks = ids.length;
+          chunks = await this.scoreChunkIds(client, ids, vars);
+          path = "scoped-ids";
+        }
+      }
+
+      if (scoped) {
+        console.log(
+          `[Hybrid] scoped vector: docs=${scopedDocumentIds.length} chunks=${resolvedChunks} ms=${Date.now() - startMs} path=${path}`
+        );
       }
 
       return chunks.map((chunk) => ({
@@ -458,6 +516,92 @@ export class HybridSearch {
       console.error("[HybridSearch] Vector search failed:", error);
       return [];
     }
+  }
+
+  /**
+   * Cap for the scoped-ids vector path, in chunk ids resolved per search.
+   *
+   * A scope wider than this keeps today's KNN/full-scan behaviour (at that
+   * width the KNN post-filter finds survivors anyway, so the scan fallback is
+   * not the incident path). `KB_SCOPED_SCAN_MAX_CHUNKS=0` is a kill-switch
+   * that routes every scoped query back to today's behaviour.
+   *
+   * Default 5000: measured on SurrealDB 2.6.5 (120k chunks, 1024-d) — the
+   * scoped-ids path resolves+scores 300 chunks in ~10–30 ms and stays under
+   * ~100 ms up to ~5k chunks (well inside a chat turn's budget), while the
+   * full-scan fallback it replaces costs seconds and GiB whenever the planner
+   * has no document index to drive. 5000 chunks ≈ 16 documents at the
+   * production density of ~300 chunks/doc, comfortably above the 1–3-document
+   * subject scopes that triggered the incident.
+   */
+  private scopedChunkIdCap(): number {
+    const raw = process.env.KB_SCOPED_SCAN_MAX_CHUNKS;
+    if (raw !== undefined && raw.trim() !== "") {
+      const n = Number(raw);
+      if (Number.isFinite(n) && n >= 0) return Math.trunc(n);
+    }
+    return 5000;
+  }
+
+  /**
+   * Resolve the chunk ids of a scope through `document_id_idx`, carrying every
+   * tenancy filter of the search (document/user/file) so the id set is exactly
+   * the full scan's candidate set. `LIMIT cap+1` bounds the work for ANY
+   * scope: SurrealDB stops the index iteration at the LIMIT, and
+   * `length === cap+1` is the over-cap signal — an org-wide scope costs one
+   * capped index walk, not a 150k-id round trip.
+   *
+   * Returns null when the resolution query itself fails (the caller then
+   * keeps today's behaviour — a broken resolution must not change results),
+   * and [] when the scope resolves to no chunks (the caller returns empty
+   * without another query; fail closed).
+   */
+  private async resolveScopedChunkIds(
+    client: VectorStore,
+    whereClause: string,
+    vars: Record<string, unknown>,
+    cap: number,
+  ): Promise<unknown[] | null> {
+    const resolveVars: Record<string, unknown> = { documentIds: vars.documentIds, cap: cap + 1 };
+    if (vars.userId !== undefined) resolveVars.userId = vars.userId;
+    if (vars.fileIds !== undefined) resolveVars.fileIds = vars.fileIds;
+    try {
+      const r = await client.query<unknown>(
+        `SELECT VALUE id FROM document_chunk WHERE ${whereClause} LIMIT $cap;`,
+        resolveVars
+      );
+      return r[0]?.result ?? [];
+    } catch (err) {
+      console.warn(
+        `[Hybrid] scoped id resolution failed, falling back to the KNN/full-scan path: ${(err as Error).message?.slice(0, 120)}`
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Exact cosine over a resolved id set: `FROM $ids` dereferences each record
+   * id directly (the planner reports "Iterate Thing" — a point lookup per id,
+   * independent of any index existing), so a narrow scope never depends on
+   * the table being index-driven. Identical in content and order to the full
+   * scan over the same scope: same candidate set, same
+   * vector::similarity::cosine, same ORDER BY … DESC LIMIT.
+   */
+  private async scoreChunkIds(
+    client: VectorStore,
+    ids: unknown[],
+    vars: Record<string, unknown>,
+  ): Promise<Array<ChunkResult & { similarity: number }>> {
+    const r = await client.query<ChunkResult & { similarity: number }>(
+      `
+        SELECT *, vector::similarity::cosine(embedding, $embedding) AS similarity OMIT embedding
+        FROM $ids
+        ORDER BY similarity DESC
+        LIMIT $limit;
+      `,
+      { embedding: vars.embedding, limit: vars.limit, ids }
+    );
+    return r[0]?.result || [];
   }
 
   private async resolveScopedDocumentIds(): Promise<string[]> {

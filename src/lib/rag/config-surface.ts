@@ -42,6 +42,11 @@ export const KB_ENV_SURFACE: KbEnvVar[] = [
   { name: "KB_DEFAULT_MAX_CHUNKS", purpose: "Chunks returned per retrieval", default: "8" },
   { name: "KB_NEIGHBOR_WINDOW", purpose: "Adjacent chunks pulled around a hit", default: "1" },
   { name: "KB_VECTOR_KNN", purpose: "Use the HNSW KNN operator instead of a full cosine scan", default: "false" },
+  {
+    name: "KB_SCOPED_SCAN_MAX_CHUNKS",
+    purpose: "Chunk-id cap for the narrow-scope vector path; above it the search keeps the KNN/full-scan behaviour. 0 disables the scoped-ids path",
+    default: "5000",
+  },
   { name: "KB_HYBRID_BM25_ENABLED", purpose: "Run BM25 alongside vector search", default: "true" },
   { name: "KB_ENTITY_SEARCH_ENABLED", purpose: "Include the entity/graph arm in retrieval", default: "true" },
   {

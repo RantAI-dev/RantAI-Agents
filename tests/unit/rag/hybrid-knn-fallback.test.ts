@@ -39,10 +39,17 @@ function vectorsThat(responses: Array<{ sql: RegExp; rows: unknown[] }>) {
 describe("hybrid vector search — KNN fallback", () => {
   beforeEach(() => {
     process.env.KB_VECTOR_KNN = "true"
+    // These tests pin TODAY's scoped routing — the KNN attempt with the full
+    // scan as its fallback. The default routing now answers narrow scopes via
+    // the scoped-ids path instead (see tests/unit/hybrid-scoped-search.test.ts);
+    // KB_SCOPED_SCAN_MAX_CHUNKS=0 is the documented kill-switch that keeps
+    // every scoped query on the KNN/full-scan behaviour these files assert.
+    process.env.KB_SCOPED_SCAN_MAX_CHUNKS = "0"
     vi.resetModules()
   })
   afterEach(() => {
     delete process.env.KB_VECTOR_KNN
+    delete process.env.KB_SCOPED_SCAN_MAX_CHUNKS
   })
 
   it("falls back to the full scan when the KNN operator returns nothing", async () => {
@@ -110,10 +117,14 @@ describe("hybrid vector search — KNN fallback", () => {
 describe("hybrid vector search — KNN names its index", () => {
   beforeEach(() => {
     process.env.KB_VECTOR_KNN = "true"
+    // Same as above: pin today's KNN routing (kill-switch off the scoped-ids
+    // path) so the plan-shape assertions below describe the KNN query itself.
+    process.env.KB_SCOPED_SCAN_MAX_CHUNKS = "0"
     vi.resetModules()
   })
   afterEach(() => {
     delete process.env.KB_VECTOR_KNN
+    delete process.env.KB_SCOPED_SCAN_MAX_CHUNKS
   })
 
   it("pins the KNN query to the vector index, before the WHERE clause", async () => {
@@ -165,7 +176,16 @@ describe("hybrid vector search — KNN names its index", () => {
  * six or more per chat turn, to attach nothing.
  */
 describe("hybrid search — entity enrichment", () => {
-  beforeEach(() => vi.resetModules())
+  // The vector arm just needs to return rows for the entity assertions to be
+  // reachable; keep it on today's full-scan shape so the mocks below (which
+  // answer by SQL shape, not by tenancy vars) keep working as written.
+  beforeEach(() => {
+    process.env.KB_SCOPED_SCAN_MAX_CHUNKS = "0"
+    vi.resetModules()
+  })
+  afterEach(() => {
+    delete process.env.KB_SCOPED_SCAN_MAX_CHUNKS
+  })
 
   const rows = [
     { ...CHUNK, id: "document_chunk:1", document_id: "doc-1", chunk_index: 0 },
