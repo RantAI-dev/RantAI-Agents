@@ -6,6 +6,14 @@ import type { PracticeSet } from "./types"
 
 export type WeaknessLevel = "low" | "medium" | "high"
 
+/** What to study next, derived from the per-materi results — never generated. */
+export interface Recommendation {
+  materi: string
+  weakness_level: "medium" | "high"
+  mastery_percentage: number
+  message: string
+}
+
 export interface GradeResult {
   score: { correct: number; total: number; percentage: number }
   questions: Array<{
@@ -24,6 +32,7 @@ export interface GradeResult {
     mastery_percentage: number
     weakness_level: WeaknessLevel
   }>
+  recommendations: Recommendation[]
 }
 
 /** Mastery at or above 80% is a strength; below 50% is where to study next. */
@@ -67,18 +76,45 @@ export function gradePractice(set: PracticeSet, answers: Record<string, string |
   }
 
   const correct = questions.filter((q) => q.correct).length
+  const materi = [...byMateri].map(([materiName, m]) => {
+    const mastery = pct(m.correct, m.total)
+    return {
+      materi: materiName,
+      total_questions: m.total,
+      correct_answers: m.correct,
+      mastery_percentage: mastery,
+      weakness_level: weaknessLevel(mastery),
+    }
+  })
+
+  // Weakest first: the material a student should open next is the one they
+  // scored worst on. Ties break by name so two runs of the same answers tell
+  // the student the same thing in the same order.
+  const weaknessOrder: Record<"high" | "medium", number> = { high: 0, medium: 1 }
+  const recommendations: Recommendation[] = materi
+    .filter((m): m is (typeof materi)[number] & { weakness_level: "high" | "medium" } =>
+      m.weakness_level === "high" || m.weakness_level === "medium",
+    )
+    .sort(
+      (a, b) =>
+        weaknessOrder[a.weakness_level] - weaknessOrder[b.weakness_level] ||
+        a.mastery_percentage - b.mastery_percentage ||
+        a.materi.localeCompare(b.materi, "id"),
+    )
+    .map((m) => ({
+      materi: m.materi,
+      weakness_level: m.weakness_level,
+      mastery_percentage: m.mastery_percentage,
+      message:
+        m.weakness_level === "high"
+          ? `Pelajari lagi materi "${m.materi}": benar ${m.correct_answers} dari ${m.total_questions} soal.`
+          : `Ulangi sebagian materi "${m.materi}": benar ${m.correct_answers} dari ${m.total_questions} soal.`,
+    }))
+
   return {
     score: { correct, total: questions.length, percentage: pct(correct, questions.length) },
     questions,
-    materi: [...byMateri].map(([materi, m]) => {
-      const mastery = pct(m.correct, m.total)
-      return {
-        materi,
-        total_questions: m.total,
-        correct_answers: m.correct,
-        mastery_percentage: mastery,
-        weakness_level: weaknessLevel(mastery),
-      }
-    }),
+    materi,
+    recommendations,
   }
 }

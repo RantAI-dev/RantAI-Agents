@@ -9,7 +9,7 @@
  */
 import { describe, it, expect } from "vitest"
 import {
-  adapterSchema, adapterUserMessage, parseAdapterReply, shuffleOptions, cleanQuestion, toPracticeQuestion,
+  adapterMaxTokens, adapterSchema, adapterSystem, adapterUserMessage, parseAdapterReply, shuffleOptions, cleanQuestion, toPracticeQuestion,
   type AdapterSoal,
 } from "@/features/agent-api/practice/generate-contract"
 import { gradePractice, weaknessLevel } from "@/features/agent-api/practice/grade"
@@ -29,64 +29,82 @@ const raw = (over: Record<string, unknown> = {}) => ({
   opsi: { A: "amilase", B: "pepsin", C: "lipase", D: "tripsin" }, kunci: ["A"], tipe: "tunggal", ...over,
 })
 
-describe("adapter contract", () => {
-  it("uses the three phrasings the adapter was trained on", () => {
-    expect(adapterUserMessage("tunggal", 5, "fotosintesis")).toBe("Buatkan 5 soal pilihan ganda tentang fotosintesis")
-    expect(adapterUserMessage("cerita", 5, "fotosintesis")).toBe("Buatkan 5 soal cerita pilihan ganda tentang fotosintesis")
-    expect(adapterUserMessage("multi", 5, "fotosintesis")).toBe("Buatkan 5 soal pilihan ganda dengan dua jawaban benar tentang fotosintesis")
+describe("adapter contract (practice v10, prompt v2)", () => {
+  it("sends one passage and the v2 request + rules, verbatim", () => {
+    const msg = adapterUserMessage("multi", 2, "Enzim amilase memecah amilum.")
+    expect(msg.startsWith("Bacaan:\n[1] Enzim amilase memecah amilum.\n\nBuat 2 soal pilihan ganda dengan tepat DUA jawaban benar.")).toBe(true)
+    expect(msg).toContain("Setiap pertanyaan diakhiri '(pilih dua)'.")
+    expect(msg.endsWith("- 'kunci' diisi huruf pilihan yang benar.")).toBe(true)
+  })
+
+  it("puts the grade number into the teacher system prompt, default 8", () => {
+    expect(adapterSystem("Kelas 9")).toContain("siswa SMP kelas 9 di Indonesia")
+    expect(adapterSystem(7)).toContain("kelas 7 ")
+    expect(adapterSystem(null)).toContain("kelas 8 ")
   })
 
   it("pins the number of questions and of keys in the schema", () => {
-    const one = adapterSchema("tunggal", 5).properties.soal as { minItems: number; maxItems: number; items: { properties: Record<string, { minItems?: number; maxItems?: number }>; required: string[] } }
-    expect([one.minItems, one.maxItems]).toEqual([5, 5])
+    const one = adapterSchema("tunggal", 3).properties.soal as { minItems: number; maxItems: number; items: { properties: Record<string, { minItems?: number; maxItems?: number }>; required: string[] } }
+    expect([one.minItems, one.maxItems]).toEqual([3, 3])
     expect([one.items.properties.kunci.minItems, one.items.properties.kunci.maxItems]).toEqual([1, 1])
-    const multi = adapterSchema("multi", 3).properties.soal as typeof one
+    const multi = adapterSchema("multi", 2).properties.soal as typeof one
     expect([multi.items.properties.kunci.minItems, multi.items.properties.kunci.maxItems]).toEqual([2, 2])
     expect(one.items.required).not.toContain("skenario")
-    expect((adapterSchema("cerita", 1).properties.soal as typeof one).items.required).toContain("skenario")
+  })
+
+  it("puts skenario FIRST for story questions — guided decoding follows property order", () => {
+    const story = adapterSchema("cerita", 1).properties.soal as { items: { properties: Record<string, unknown>; required: string[] } }
+    expect(Object.keys(story.items.properties)[0]).toBe("skenario")
+    expect(story.items.required[0]).toBe("skenario")
+  })
+
+  it("drops level and tipe — the v10 adapter was trained without them", () => {
+    const props = (adapterSchema("tunggal", 1).properties.soal as { items: { properties: Record<string, unknown> } }).items.properties
+    expect(Object.keys(props)).toEqual(["pertanyaan", "opsi", "kunci"])
+  })
+
+  it("scales the token budget to the questions in the call", () => {
+    expect(adapterMaxTokens(1)).toBe(740)
+    expect(adapterMaxTokens(3)).toBe(1420)
   })
 })
 
 describe("parseAdapterReply", () => {
   it("accepts a well-formed set", () => {
-    const out = parseAdapterReply(reply([raw(), raw({ pertanyaan: "Lain ...." })]), "tunggal", 2)
+    const out = parseAdapterReply(reply([raw(), raw({ pertanyaan: "Lain ...." })]), "tunggal")
     expect(out).toHaveLength(2)
     expect(out![0]).toEqual({ pertanyaan: "Enzim di mulut adalah ....", opsi: { A: "amilase", B: "pepsin", C: "lipase", D: "tripsin" }, kunci: ["A"] })
   })
 
-  it("rejects anything that is not JSON or has too few questions", () => {
-    expect(parseAdapterReply("Berikut soalnya: 1. ...", "tunggal", 1)).toBeNull()
-    expect(parseAdapterReply('{"soal": [', "tunggal", 1)).toBeNull()
-    expect(parseAdapterReply(reply([raw()]), "tunggal", 2)).toBeNull()
+  it("returns null for anything that is not JSON or holds no question", () => {
+    expect(parseAdapterReply("Berikut soalnya: 1. ...", "tunggal")).toBeNull()
+    expect(parseAdapterReply('{"soal": [', "tunggal")).toBeNull()
+    expect(parseAdapterReply(reply([]), "tunggal")).toBeNull()
   })
 
-  it("trims a reply that ran past the requested count", () => {
-    const many = Array.from({ length: 10 }, (_, i) => raw({ pertanyaan: `Soal ${i}` }))
-    expect(parseAdapterReply(reply(many), "tunggal", 5)).toHaveLength(5)
+  it("keeps the good questions and drops only the malformed ones", () => {
+    const out = parseAdapterReply(reply([raw({ opsi: { A: "a", B: "b", C: "c" } }), raw({ pertanyaan: "Baik ...." })]), "tunggal")
+    expect(out!.map((s) => s.pertanyaan)).toEqual(["Baik ...."])
   })
 
-  it("rejects a repeated question — a token loop is not a practice set", () => {
-    expect(parseAdapterReply(reply([raw(), raw()]), "tunggal", 2)).toBeNull()
-  })
-
-  it("rejects a missing, empty or duplicated option", () => {
-    expect(parseAdapterReply(reply([raw({ opsi: { A: "a", B: "b", C: "c" } })]), "tunggal", 1)).toBeNull()
-    expect(parseAdapterReply(reply([raw({ opsi: { A: "a", B: "b", C: "c", D: " " } })]), "tunggal", 1)).toBeNull()
-    expect(parseAdapterReply(reply([raw({ opsi: { A: "sama", B: "Sama", C: "c", D: "d" } })]), "tunggal", 1)).toBeNull()
+  it("drops a missing, empty or duplicated option", () => {
+    expect(parseAdapterReply(reply([raw({ opsi: { A: "a", B: "b", C: "c" } })]), "tunggal")).toEqual([])
+    expect(parseAdapterReply(reply([raw({ opsi: { A: "a", B: "b", C: "c", D: " " } })]), "tunggal")).toEqual([])
+    expect(parseAdapterReply(reply([raw({ opsi: { A: "sama", B: "Sama", C: "c", D: "d" } })]), "tunggal")).toEqual([])
   })
 
   it("requires exactly one key for single-answer and exactly two for multi", () => {
-    expect(parseAdapterReply(reply([raw({ kunci: ["A", "B"] })]), "tunggal", 1)).toBeNull()
-    expect(parseAdapterReply(reply([raw({ kunci: [] })]), "tunggal", 1)).toBeNull()
-    expect(parseAdapterReply(reply([raw({ kunci: ["A"] })]), "multi", 1)).toBeNull()
-    expect(parseAdapterReply(reply([raw({ kunci: ["A", "A"] })]), "multi", 1)).toBeNull()
-    expect(parseAdapterReply(reply([raw({ kunci: ["C", "A"] })]), "multi", 1)![0].kunci).toEqual(["A", "C"])
-    expect(parseAdapterReply(reply([raw({ kunci: ["E"] })]), "tunggal", 1)).toBeNull()
+    expect(parseAdapterReply(reply([raw({ kunci: ["A", "B"] })]), "tunggal")).toEqual([])
+    expect(parseAdapterReply(reply([raw({ kunci: [] })]), "tunggal")).toEqual([])
+    expect(parseAdapterReply(reply([raw({ kunci: ["A"] })]), "multi")).toEqual([])
+    expect(parseAdapterReply(reply([raw({ kunci: ["A", "A"] })]), "multi")).toEqual([])
+    expect(parseAdapterReply(reply([raw({ kunci: ["C", "A"] })]), "multi")![0].kunci).toEqual(["A", "C"])
+    expect(parseAdapterReply(reply([raw({ kunci: ["E"] })]), "tunggal")).toEqual([])
   })
 
   it("requires a scenario for story questions", () => {
-    expect(parseAdapterReply(reply([raw()]), "cerita", 1)).toBeNull()
-    expect(parseAdapterReply(reply([raw({ skenario: "Budi makan nasi." })]), "cerita", 1)![0].skenario).toBe("Budi makan nasi.")
+    expect(parseAdapterReply(reply([raw()]), "cerita")).toEqual([])
+    expect(parseAdapterReply(reply([raw({ skenario: "Budi makan nasi." })]), "cerita")![0].skenario).toBe("Budi makan nasi.")
   })
 })
 
@@ -121,6 +139,10 @@ describe("cleanQuestion", () => {
     expect(cleanQuestion("Berdasarkan kutipan, apa fungsi lambung?")).toBe("Apa fungsi lambung?")
   })
 
+  it("removes the longer framings too, and recapitalises", () => {
+    expect(cleanQuestion("Apa fungsi enzim yang disebutkan dalam bacaan? jawab singkat.")).toBe("Apa fungsi enzim? Jawab singkat.")
+  })
+
   it("does not touch a question that has none", () => {
     const q = "Diimitasi berdasarkan sumber bunyi, alat musik ini termasuk ...."
     expect(cleanQuestion(q)).toBe(q)
@@ -132,6 +154,12 @@ describe("toPracticeQuestion", () => {
     const extra = { materi: "Enzim", pembahasan: "p" }
     expect(toPracticeQuestion(soal(), 0, false, extra)).toMatchObject({ question_id: "q1", type: "mcq_single", answer_key: "A", materi: "Enzim" })
     expect(toPracticeQuestion(soal({ kunci: ["A", "C"] }), 2, true, extra)).toMatchObject({ question_id: "q3", type: "mcq_multi", answer_key: ["A", "C"] })
+  })
+
+  it("carries a story question's own scenario and its topic", () => {
+    const q = toPracticeQuestion(soal({ skenario: "Rina makan nasi." }), 0, false, { materi: "Enzim", pembahasan: "p", topic: "Pencernaan" })
+    expect(q).toMatchObject({ type: "mcq_single", scenario: "Rina makan nasi.", topic: "Pencernaan" })
+    expect(toPracticeQuestion(soal(), 0, false, { materi: "m", pembahasan: "p" })).not.toHaveProperty("scenario")
   })
 })
 
@@ -184,6 +212,53 @@ describe("gradePractice", () => {
 
   it("ignores answers for questions that are not in the set", () => {
     expect(gradePractice(SET, { q99: "A" }).score.correct).toBe(0)
+  })
+
+  it("recommends the weakest materi first, and only the weak ones", () => {
+    const set: PracticeSet = {
+      practice_type: "mcq_normal", topic: "Pencernaan", total_questions: 6, materi_titles: ["Enzim", "Lambung", "Usus"],
+      questions: [
+        { question_id: "a1", type: "mcq_single", materi: "Enzim", question: "?", options: { A: "a" }, answer_key: "A", pembahasan: "p" },
+        { question_id: "a2", type: "mcq_single", materi: "Enzim", question: "?", options: { A: "a" }, answer_key: "A", pembahasan: "p" },
+        { question_id: "b1", type: "mcq_single", materi: "Lambung", question: "?", options: { A: "a" }, answer_key: "A", pembahasan: "p" },
+        { question_id: "b2", type: "mcq_single", materi: "Lambung", question: "?", options: { A: "a" }, answer_key: "A", pembahasan: "p" },
+        { question_id: "c1", type: "mcq_single", materi: "Usus", question: "?", options: { A: "a" }, answer_key: "A", pembahasan: "p" },
+        { question_id: "c2", type: "mcq_single", materi: "Usus", question: "?", options: { A: "a" }, answer_key: "A", pembahasan: "p" },
+      ],
+    }
+    const r = gradePractice(set, { b1: "A", c1: "A", c2: "A" })
+    expect(r.recommendations).toEqual([
+      { materi: "Enzim", weakness_level: "high", mastery_percentage: 0, message: 'Pelajari lagi materi "Enzim": benar 0 dari 2 soal.' },
+      { materi: "Lambung", weakness_level: "medium", mastery_percentage: 50, message: 'Ulangi sebagian materi "Lambung": benar 1 dari 2 soal.' },
+    ])
+  })
+
+  it("has nothing to recommend when every materi is mastered", () => {
+    expect(gradePractice(SET, { q1: "A", q2: "B", q3: ["A", "C"], q4: ["B", "D"] }).recommendations).toEqual([])
+  })
+
+  it("orders equal weakness by mastery, then by name", () => {
+    const q = (id: string, materi: string) => ({
+      question_id: id, type: "mcq_single" as const, materi, question: "?",
+      options: { A: "a" }, answer_key: "A", pembahasan: "p",
+    })
+    const set: PracticeSet = {
+      practice_type: "mcq_normal", topic: "Pencernaan", total_questions: 8, materi_titles: [],
+      questions: [
+        // Zeta and Alfa both 0/2 (high, 0%) — the tie the name decides.
+        q("z1", "Zeta"), q("z2", "Zeta"), q("f1", "Alfa"), q("f2", "Alfa"),
+        // Beta 1/4 (high, 25%) sits between Alfa and the medium.
+        q("b1", "Beta"), q("b2", "Beta"), q("b3", "Beta"), q("b4", "Beta"),
+        q("g1", "Gamma"), q("g2", "Gamma"),
+      ],
+    }
+    const r = gradePractice(set, { b1: "A", g1: "A" })
+    expect(r.recommendations.map((x) => [x.materi, x.weakness_level, x.mastery_percentage])).toEqual([
+      ["Alfa", "high", 0],
+      ["Zeta", "high", 0],
+      ["Beta", "high", 25],
+      ["Gamma", "medium", 50],
+    ])
   })
 })
 
