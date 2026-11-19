@@ -1,3 +1,8 @@
 [install]
 # Trust native packages that need compilation
 trustedDependencies = ["@prisma/client", "@prisma/engines", "prisma", "esbuild", "canvas"]
+
+[test]
+# server-only throws outside a react-server resolution (vitest aliases it in
+# vitest.config.ts; bun test does not read that config) — stub it for bun.
+preload = ["./tests/setup-bun-server-only.ts"]
