@@ -28,6 +28,14 @@ export const V1ChatCompletionSchema = z.object({
    */
   knowledge_base_ids: z.array(z.string().min(1)).optional(),
   /**
+   * Restrict retrieval to one subject of the assistant's grade, e.g. "IPA".
+   *
+   * The grade is fixed by the API key, so only the subject is sent. List the
+   * valid values with GET /api/v1/mapel; the values are matched ignoring case
+   * and extra whitespace. Cannot be combined with `knowledge_base_ids`.
+   */
+  mapel: z.string().trim().min(1).max(100).optional(),
+  /**
    * Send the images an answer cites in the same response.
    *
    * An answer points at a book figure with `[figure:N]`. By default the client
@@ -38,6 +46,19 @@ export const V1ChatCompletionSchema = z.object({
    * answer.
    */
   inline_figures: z.boolean().optional(),
+  /**
+   * Which retrieved sources accompany the answer.
+   *
+   * "cited" (default): only the sources the answer actually cited with `[n]`
+   * and that pass the relevance floor — a client rendering reference cards
+   * shows only references a reader can check against the text (UAT issue 7:
+   * a listed-but-uncited reference and an uncheckable one were the same bug).
+   * "all": every source that passed the floor, each still flagged with
+   * `cited`. A grounded answer that cites nothing returns the single best
+   * source, `cited: false`, so the client always has one verifiable card.
+   * An ungrounded answer returns `sources: []` either way (issue 3).
+   */
+  sources: z.enum(["cited", "all"]).optional().default("cited"),
 })
 
 export type V1ChatCompletionInput = z.infer<typeof V1ChatCompletionSchema>

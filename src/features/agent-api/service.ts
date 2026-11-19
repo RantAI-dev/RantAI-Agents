@@ -6,14 +6,23 @@ import { resolveToolsForAssistant } from "@/lib/tools"
 import { buildPlatformContextInstruction, buildToolInstruction, LANGUAGE_INSTRUCTION, OUTPUT_HYGIENE_INSTRUCTION } from "@/lib/prompts/instructions"
 import { getHouseModel } from "@/lib/llm/house-models"
 import { applyInputLimits, inputLimits } from "./limits"
-import { groundingOf, type Grounding } from "./grounding"
+import { groundingOf, groundingThreshold, type Grounding } from "./grounding"
 import { anchorEnabled, anchoredQuery } from "./anchor-query"
+import { rewriteQueryForRetrieval } from "./query-rewrite"
+import { assistantScopeGroups, listMapelForAssistant, resolveMapel } from "./mapel"
 import {
   smartRetrieve,
   formatContextForPrompt,
-  smartHybridRetrieve,
   formatHybridContextForPrompt,
 } from "@/lib/rag"
+import { retrieveForGroups } from "./kb-retrieval"
+import {
+  scoreSources,
+  type ChunkLike,
+  type ScoredSource,
+  type SourceSelection,
+} from "./source-selection"
+import { attachPageUrls } from "./source-links"
 import { resolveSkillsForAssistant } from "@/lib/skills/resolver"
 import { checkRateLimit } from "@/lib/embed/rate-limiter"
 import { authenticateAgentApiKey } from "@/features/agent-api-keys/service"
@@ -21,8 +30,9 @@ import { incrementAgentApiKeyUsage } from "@/features/agent-api-keys/repository"
 import { prisma } from "@/lib/prisma"
 import type { V1ChatCompletionInput } from "./schema"
 import { createJsonResponse, createSSEStreamResponse } from "./response"
-import { createInlineFigureFeed } from "./inline-figures"
+import { createInlineFigureFeed, figureDownloadForRemote } from "./inline-figures"
 import { downloadFile } from "@/lib/s3"
+import { remoteAssetDownload } from "@/lib/kb-client/remote-hybrid"
 
 interface AuthResult {
   apiKey: { id: string; assistantId: string; scopes: string[]; ipWhitelist: string[] }
@@ -110,18 +120,22 @@ async function loadAssistantFull(assistantId: string) {
  * Resolve which knowledge bases a request may read.
  *
  * Precedence: an explicit `knowledge_base_ids` wins over the assistant's
- * configured set, `["*"]` means every knowledge base the organisation owns, and
- * omitting the field keeps the assistant's own configuration.
+ * configured set, `["*"]` means every knowledge base the ASSISTANT may read
+ * (its grade's groups and their subject children — `assistantScopeGroups`),
+ * and omitting the field keeps the assistant's own configuration.
  *
- * Whatever is asked for, the result is intersected with the organisation that
- * owns the API key. An id belonging to another tenant is dropped rather than
- * refused, so a caller cannot use this field to probe which ids exist elsewhere
- * — the answer to a guessed id is identical to the answer for one that was
- * never valid.
+ * Whatever is asked for, the result is intersected with that assistant
+ * scope. Grade isolation (PRD): an organisation-mate id from another grade
+ * is exactly as unreachable as another tenant's, so a grade assistant can
+ * never read another grade's books. An id outside the scope is dropped
+ * rather than refused, so a caller cannot use this field to probe which ids
+ * exist elsewhere — the answer to a guessed id is identical to the answer
+ * for one that was never valid.
  *
  * Returns `{ ids }` on success, or `{ error }` when the caller asked for
- * knowledge bases and none of them resolved — silently answering from the whole
- * corpus after being asked for one subject would be worse than an error.
+ * knowledge bases and none of them resolved — silently answering from the
+ * whole scope after being asked for one subject would be worse than an
+ * error.
  */
 export async function resolveRequestedGroupIds(
   organizationId: string | null,
@@ -131,29 +145,169 @@ export async function resolveRequestedGroupIds(
   if (!requested || requested.length === 0) {
     return { ids: assistantGroupIds.length > 0 ? assistantGroupIds : undefined }
   }
-  const owned = await prisma.knowledgeBaseGroup.findMany({
-    where: { organizationId },
-    select: { id: true },
-  })
-  const ownedIds = new Set(owned.map((g) => g.id))
+  const scope = new Set(
+    (await assistantScopeGroups({ organizationId, knowledgeBaseGroupIds: assistantGroupIds }))
+      .map((g) => g.id),
+  )
 
   if (requested.includes("*")) {
-    if (ownedIds.size === 0) return { error: "No knowledge bases are available for this organization" }
-    return { ids: [...ownedIds] }
+    if (scope.size === 0) {
+      return {
+        error:
+          "No knowledge bases are available to this assistant. " +
+          "Call GET /api/v1/knowledge-bases to list the ids you may use, and GET /api/v1/mapel for the available subjects.",
+      }
+    }
+    return { ids: [...scope] }
   }
 
-  const ids = requested.filter((id) => ownedIds.has(id))
+  const ids = requested.filter((id) => scope.has(id))
   if (ids.length === 0) {
     return {
       error:
-        "None of the requested knowledge_base_ids exist for this organization. " +
-        "Call GET /api/v1/knowledge-bases to list the ids you may use.",
+        "None of the requested knowledge_base_ids are available to this assistant. " +
+        "Call GET /api/v1/knowledge-bases to list the ids you may use, and GET /api/v1/mapel for the available subjects.",
     }
   }
   return { ids }
 }
 
 export type V1AuthError = { status: number; error: string; type: string }
+
+/**
+ * UAT issue 3 ("dead end" answers): when retrieval comes back below the
+ * grounding threshold, the retrieved context must NOT reach the model. Left
+ * in, it flavoured the refusal — the model padded "the books don't cover
+ * this" with whatever context was least relevant. This replaces the context
+ * with a short instruction instead: say the information is not available,
+ * briefly and in the user's language, and nothing else. The retrieved
+ * excerpts are also kept out of the sources and figures of the response.
+ */
+const UNGROUNDED_INSTRUCTION = `
+
+## Knowledge Base Coverage
+
+The books available to this assistant do not cover this question — the retrieved excerpts were too weakly related to be used. Reply briefly, in the language of the user's question, that the information is not available in the available books. You may suggest rephrasing the question or picking the right subject. Do not add facts, background, or related material from any source, and do not cite any source.`
+
+/**
+ * "refuse" is the fix (issue 3). "keep" — AGENT_API_UNGROUNDED_CONTEXT=keep
+ * — restores today's behaviour for a deployment that wants the old answers:
+ * the weak context is appended and every retrieved source is returned,
+ * with the relevance floor and the cited-only default both skipped, so the
+ * flag rolls the whole filtering back, not half of it.
+ */
+function ungroundedContextMode(env: NodeJS.ProcessEnv = process.env): "refuse" | "keep" {
+  return env.AGENT_API_UNGROUNDED_CONTEXT === "keep" ? "keep" : "refuse"
+}
+
+/** One retrieved source in the shape BOTH engines' results expose it in
+ *  (HybridRetrievalResult.sources / RetrievalResult.sources; the remote
+ *  mapping fills the same fields — see lib/kb-client/remote-hybrid.ts). */
+interface RetrievedSourceLike {
+  documentId: string | null
+  documentTitle: string
+  section: string | null
+  assetKey?: string | null
+  page?: number | null
+  chunkType?: string | null
+  chunkIndex?: number | null
+  anchorChunkIndex?: number | null
+  kbOrigin?: "remote"
+}
+
+/** The retrieved source entry in the response's wire shape — today's
+ *  mapping, unchanged field for field (title ← documentTitle, etc.). */
+function wireSourceBase(sources: RetrievedSourceLike[]) {
+  return sources.map((s) => ({
+    title: s.documentTitle,
+    section: s.section,
+    documentId: s.documentId ?? null,
+    assetKey: s.assetKey ?? null,
+    page: s.page ?? null,
+    chunkType: s.chunkType ?? null,
+    chunkIndex: s.chunkIndex ?? null,
+    anchorChunkIndex: s.anchorChunkIndex ?? null,
+    ...(s.kbOrigin ? { kbOrigin: s.kbOrigin } : {}),
+  }))
+}
+
+/**
+ * The grounding gate both retrieval branches go through (UAT issues 3,
+ * 4 and 7).
+ *
+ * Grounded: today's behaviour — the formatted context is appended, and the
+ * sources are scored against the SAME threshold the grounding decision
+ * used, so the response can drop sources whose best chunk is below it
+ * while the `[n]` numbers stay the ones the model saw. The context keeps
+ * its ranked chunks as today; only the returned list is filtered.
+ *
+ * Ungrounded: refuse mode (default) replaces the context with
+ * UNGROUNDED_INSTRUCTION and returns no sources; keep mode restores
+ * today's behaviour exactly (context + every source, floor skipped).
+ */
+function applyGroundingGate<T extends ChunkLike>(input: {
+  /** The prompt as built so far. */
+  systemPrompt: string
+  /** Formats + budget-fits the retrieved context; called only when it will
+   *  actually be used, so refusing costs no formatting. */
+  formatContext: () => string
+  grounded: boolean
+  /** The threshold grounding was decided with — the floor uses the same
+   *  one, so "ungrounded" and "every source below the floor" can never
+   *  disagree. */
+  threshold: number
+  /** grounding.retrieval_score, for the ungrounded log line. */
+  retrievalScore: number
+  sources: RetrievedSourceLike[]
+  chunks: T[]
+  chunkScore: (chunk: T) => number
+}): {
+  systemPrompt: string
+  sources: ScoredSource[]
+  ungroundedKeptSources: boolean
+  refused: boolean
+} {
+  if (input.grounded) {
+    const formattedContext = input.formatContext()
+    return {
+      systemPrompt: `${input.systemPrompt}\n\n${formattedContext}`,
+      sources: scoreSources(
+        wireSourceBase(input.sources),
+        input.chunks,
+        input.chunkScore,
+        input.threshold,
+      ),
+      ungroundedKeptSources: false,
+      refused: false,
+    }
+  }
+
+  const mode = ungroundedContextMode()
+  // One line per ungrounded request, with the decision and the numbers it
+  // was made on, so a deployment can calibrate the threshold from logs.
+  console.log(
+    `[V1 API] ungrounded: score=${input.retrievalScore} threshold=${input.threshold} mode=${mode}`,
+  )
+  if (mode === "refuse") {
+    return {
+      systemPrompt: input.systemPrompt + UNGROUNDED_INSTRUCTION,
+      // sources stay [] and figures are suppressed — the answer must not
+      // show references it explicitly declined to use.
+      sources: [],
+      ungroundedKeptSources: false,
+      refused: true,
+    }
+  }
+
+  const formattedContext = input.formatContext()
+  return {
+    systemPrompt: `${input.systemPrompt}\n\n${formattedContext}`,
+    // Floor 0 keeps every source: keep mode must reproduce today's list.
+    sources: scoreSources(wireSourceBase(input.sources), input.chunks, input.chunkScore, 0),
+    ungroundedKeptSources: true,
+    refused: false,
+  }
+}
 
 export async function authenticateV1Request(
   authHeader: string | null,
@@ -317,19 +471,51 @@ export async function runV1ChatCompletion(
   const rawUserQuery = lastUserMsg?.content || ""
 
   // Sources surfaced back to the API client so an external frontend can render
-  // reference cards ("which documents did the answer draw on").
-  let ragSources: Array<{ title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }> = []
+  // reference cards ("which documents did the answer draw on"). kbOrigin marks
+  // sources that came from rantai-kb so the inline-figure loader knows where
+  // their bytes live; local sources leave it unset. Each entry also carries
+  // its `[n]` number, best-chunk score and floor verdict (source-selection.ts);
+  // the response builders filter the list once the answer text exists.
+  let ragSources: ScoredSource[] = []
   // Retrieved chunks kept for selective VLM-at-answer (figure kind + assetKey).
   let vlmResults: import("@/lib/rag/vlm-figures").FigureCandidate[] = []
   // Set only when retrieval actually ran, so an assistant without a knowledge
   // base does not report every answer as ungrounded.
   let grounding: Grounding | undefined
+  // True when this request was ungrounded but AGENT_API_UNGROUNDED_CONTEXT=keep
+  // restored today's behaviour (context + every source, floor skipped).
+  let ungroundedKeptSources = false
+  // True when an ungrounded answer was refused: no context, sources, or
+  // inline figures reach the model or the response (UAT issue 3).
+  let ungroundedRefused = false
   if (assistant.useKnowledgeBase && rawUserQuery) {
     try {
+      // A subject is a friendlier way to say "this one knowledge base". Sending
+      // both is ambiguous, not a union, so it is refused rather than guessed at.
+      if (input.mapel && input.knowledge_base_ids?.length) {
+        return new Response(
+          JSON.stringify({ error: { message: "Send either mapel or knowledge_base_ids, not both.", type: "invalid_request_error" } }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        )
+      }
+      let requestedGroupIds = input.knowledge_base_ids
+      if (input.mapel) {
+        const available = await listMapelForAssistant(assistant)
+        const picked = resolveMapel(available, input.mapel)
+        if ("error" in picked) {
+          return new Response(
+            JSON.stringify({
+              error: { message: `${picked.error} Available: ${picked.available.join(", ")}`, type: "invalid_request_error" },
+            }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          )
+        }
+        requestedGroupIds = picked.ids
+      }
       const resolved = await resolveRequestedGroupIds(
         assistant.organizationId,
         assistant.knowledgeBaseGroupIds,
-        input.knowledge_base_ids,
+        requestedGroupIds,
       )
       if ("error" in resolved) {
         return new Response(
@@ -358,36 +544,58 @@ export async function runV1ChatCompletion(
         }
       }
 
-      // Standalone-query rewrite for multi-turn refs ("tell me more") — same
-      // env gate (KB_STANDALONE_QUERY_ENABLED) as chat-public.
-      const messagesAsAny = input.messages.map((m) => ({ role: m.role, content: m.content }))
-      const { rewriteStandaloneQuery } = await import("@/lib/rag/standalone-query")
-      // A short follow-up in a tutoring conversation is searched together with
-      // the conversation's first topic when the deployment asks for it; that
-      // needs no model call, so it takes precedence over the rewrite.
+      // Standalone-query rewrite for multi-turn refs ("bandingkan dengan yang
+      // tadi") — 2026-11-18 brief, task B. The base model rebuilds the last
+      // question into a standalone search query from the recent turns, in
+      // one short call; any failure, timeout or unusable reply searches the
+      // original last message. Only retrieval sees the result — the
+      // conversation sent to the answering model below is unchanged.
+      //
+      // Precedence: a successful model rewrite wins; a rewrite that RAN and
+      // failed uses the original last message (the brief's failure rule).
+      // The first-topic anchor (AGENT_API_ANCHOR_FIRST_TOPIC, uat-chat)
+      // keeps its role as the no-model-call fallback for SHORT follow-ups,
+      // but only while the rewrite is switched off entirely — the model
+      // resolves references the anchor's concatenation cannot.
       const anchored = anchorEnabled() ? anchoredQuery(input.messages) : null
-      const userQuery = anchored ?? (await rewriteStandaloneQuery(messagesAsAny))
-      if (userQuery !== rawUserQuery) {
-        console.log(`[V1 API] standalone-query rewrite: "${rawUserQuery.slice(0, 60)}" -> "${userQuery.slice(0, 80)}"`)
-      }
+      const rewrite = await rewriteQueryForRetrieval(input.messages, rawUserQuery)
+      const userQuery =
+        rewrite.used === "rewritten" ? rewrite.query : rewrite.ran ? rawUserQuery : anchored ?? rawUserQuery
 
-      // Try hybrid retrieval first, fall back to vector-only.
+      // Try hybrid retrieval first, fall back to vector-only. Retrieval goes
+      // through retrieveForGroups: rantai-kb serves the knowledge bases the
+      // route table switched (with instant per-KB rollback to this engine),
+      // everything else runs in-process as before.
       // maxResults / maxChunks unset → picks up KB_DEFAULT_MAX_CHUNKS from config.
       // enableEntitySearch is left to its default so KB_ENTITY_SEARCH_ENABLED
       // is honoured: passing `true` here overrode a deployment that had
       // switched the entity arm off because its corpus has no entity graph.
-      const hybridResult = await smartHybridRetrieve(userQuery, {
+      const { result: hybridResult, groundedMinScore } = await retrieveForGroups(userQuery, {
         groupIds,
         organizationId: assistant.organizationId ?? undefined,
       })
 
-      grounding = groundingOf(hybridResult.results.map((r) => r.vectorScore))
+      grounding = groundingOf(hybridResult.results.map((r) => r.vectorScore), groundedMinScore)
       if (hybridResult.context) {
-        const formattedContext = fitContext(formatHybridContextForPrompt(hybridResult), systemPrompt)
-        systemPrompt = `${systemPrompt}\n\n${formattedContext}`
-        ragSources = hybridResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null, chunkIndex: s.chunkIndex ?? null, anchorChunkIndex: s.anchorChunkIndex ?? null }))
-        vlmResults = hybridResult.results
-        console.log(`[V1 API] RAG hybrid: ${hybridResult.results.length} chunks`)
+        const applied = applyGroundingGate({
+          systemPrompt,
+          // Formatted (and budget-fitted) only when it will actually be used.
+          formatContext: () => fitContext(formatHybridContextForPrompt(hybridResult), systemPrompt),
+          grounded: grounding.grounded,
+          threshold: groundedMinScore,
+          retrievalScore: grounding.retrieval_score,
+          sources: hybridResult.sources,
+          chunks: hybridResult.results,
+          chunkScore: (r) => r.vectorScore,
+        })
+        systemPrompt = applied.systemPrompt
+        ragSources = applied.sources
+        ungroundedKeptSources = applied.ungroundedKeptSources
+        ungroundedRefused = applied.refused
+        if (!applied.refused) {
+          vlmResults = hybridResult.results
+          console.log(`[V1 API] RAG hybrid: ${hybridResult.results.length} chunks`)
+        }
       } else {
         const retrievalResult = await smartRetrieve(userQuery, {
           minSimilarity: 0.30,
@@ -396,12 +604,34 @@ export async function runV1ChatCompletion(
         })
         grounding = groundingOf(retrievalResult.chunks.map((c) => c.similarity))
         if (retrievalResult.context) {
-          const formattedContext = fitContext(formatContextForPrompt(retrievalResult), systemPrompt)
-          systemPrompt = `${systemPrompt}\n\n${formattedContext}`
-          ragSources = retrievalResult.sources.map((s) => ({ title: s.documentTitle, section: s.section, documentId: s.documentId ?? null, assetKey: s.assetKey ?? null, page: s.page ?? null, chunkType: s.chunkType ?? null, chunkIndex: s.chunkIndex ?? null, anchorChunkIndex: s.anchorChunkIndex ?? null }))
-          vlmResults = retrievalResult.chunks
-          console.log(`[V1 API] RAG vector: ${retrievalResult.chunks.length} chunks`)
+          const vectorFloor = groundingThreshold()
+          const applied = applyGroundingGate({
+            systemPrompt,
+            formatContext: () => fitContext(formatContextForPrompt(retrievalResult), systemPrompt),
+            grounded: grounding.grounded,
+            threshold: vectorFloor,
+            retrievalScore: grounding.retrieval_score,
+            sources: retrievalResult.sources,
+            chunks: retrievalResult.chunks,
+            chunkScore: (c) => c.similarity,
+          })
+          systemPrompt = applied.systemPrompt
+          ragSources = applied.sources
+          ungroundedKeptSources = applied.ungroundedKeptSources
+          ungroundedRefused = applied.refused
+          if (!applied.refused) {
+            vlmResults = retrievalResult.chunks
+            console.log(`[V1 API] RAG vector: ${retrievalResult.chunks.length} chunks`)
+          }
         }
+      }
+
+      // UAT issue 7: give each reference a link the reader can open — the
+      // book page the excerpt came from. Minted once for every candidate
+      // source (the cited-only selection then keeps only what the answer
+      // used); never throws, and is a no-op without AGENT_API_LINK_SECRET.
+      if (ragSources.length > 0) {
+        await attachPageUrls(ragSources, { organizationId: assistant.organizationId ?? null })
       }
     } catch (error) {
       console.error("[V1 API] RAG retrieval error:", error)
@@ -495,14 +725,34 @@ export async function runV1ChatCompletion(
 
   // Opt-in: the images for the answer's `[figure:N]` tags ride the same
   // response. Off by default — it multiplies the payload and nothing in it is
-  // cacheable, so only a client that asked for it pays that cost.
-  const figureFeed = input.inline_figures
-    ? createInlineFigureFeed(ragSources, { download: downloadFile }, selectedFigureNumbers(vlmResults, ragSources))
-    : undefined
+  // cacheable, so only a client that asked for it pays that cost. Remote-marked
+  // sources fetch their bytes from rantai-kb's assets route, local ones from
+  // this app's S3 (see figureDownloadForRemote).
+  //
+  // An ungrounded-refused answer gets no figures: sources are [] by design
+  // (UAT issue 3), so there is nothing for a `[figure:N]` to resolve to.
+  // The feed receives the FULL scored list — `[figure:N]` numbers by
+  // position, unchanged by the response's source filtering.
+  const figureFeed =
+    input.inline_figures && !ungroundedRefused
+      ? createInlineFigureFeed(
+          ragSources,
+          { download: figureDownloadForRemote(downloadFile, remoteAssetDownload) },
+          selectedFigureNumbers(vlmResults, ragSources),
+        )
+      : undefined
 
-  if (wantStream) {
-    return createSSEStreamResponse(result, requestId, modelId, ragSources, figureFeed, grounding)
+  // How the response filters the source list once the answer text exists
+  // (UAT issues 4/7). The builders keep the numbers the model saw.
+  const sourceSelection: SourceSelection = {
+    mode: input.sources,
+    grounded: grounding?.grounded ?? false,
+    ungroundedKeep: ungroundedKeptSources,
   }
 
-  return createJsonResponse(result, requestId, modelId, ragSources, figureFeed, grounding)
+  if (wantStream) {
+    return createSSEStreamResponse(result, requestId, modelId, ragSources, figureFeed, grounding, sourceSelection)
+  }
+
+  return createJsonResponse(result, requestId, modelId, ragSources, figureFeed, grounding, sourceSelection)
 }
