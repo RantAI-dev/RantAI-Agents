@@ -35,6 +35,10 @@ export type FigureSourceLike = {
   assetKey?: string | null
   page?: number | null
   chunkType?: string | null
+  /** Set on sources that came from rantai-kb (see lib/kb-client/remote-hybrid):
+   *  their figure bytes live behind the remote assets route, not this app's
+   *  S3. Local sources leave it unset. */
+  kbOrigin?: string | null
 }
 
 export interface InlineFigure {
@@ -133,6 +137,27 @@ export function isFigureAssetOfDocument(assetKey: string, documentId: string): b
   )
 }
 
+/**
+ * The same safety intent for a rantai-kb asset key.
+ *
+ * rantai-kb 0.6.0 does not publish the layout of its asset keys — the spec
+ * only says a key must live "under the document's own asset prefix" (the
+ * assets route answers anything else with the same 404 an unknown document
+ * gives). Without a published format to pattern-match, the check is kept the
+ * blunt way the task prescribes: the key must contain this document's id and
+ * no path traversal, so a source can only ever fetch its own document's
+ * bytes. The server enforces the same boundary with its prefix check, so
+ * this is the cheap first line, not the only one.
+ */
+export function isRemoteFigureAssetOfDocument(assetKey: string, documentId: string): boolean {
+  return (
+    documentId.length > 0 &&
+    assetKey.length > 0 &&
+    assetKey.includes(documentId) &&
+    !assetKey.includes("..")
+  )
+}
+
 export type EncodedImage = { mime: string; width: number | null; height: number | null; buffer: Buffer }
 
 /** Downscale to `maxEdgePx` on the long edge and re-encode as WebP. */
@@ -147,7 +172,11 @@ export async function encodeForInline(original: Buffer, maxEdgePx: number): Prom
 }
 
 export interface FigureLoaderDeps {
-  download: (assetKey: string) => Promise<Buffer>
+  /** Fetch one figure's bytes. Receives the source alongside the key so a
+   *  caller can route remote-marked figures to rantai-kb's assets route and
+   *  local ones to S3 (see figureDownloadForRemote); implementations that
+   *  only want the key ignore it. */
+  download: (assetKey: string, source?: FigureSourceLike) => Promise<Buffer>
   encode?: (original: Buffer, maxEdgePx: number) => Promise<EncodedImage>
   limits?: ReturnType<typeof inlineFigureLimits>
   warn?: (message: string) => void
@@ -166,14 +195,22 @@ export async function loadInlineFigure(
   const source = sources[n - 1]
   if (!source || source.chunkType !== "figure") return null
   const { documentId, assetKey } = source
-  if (!documentId || !assetKey || !isFigureAssetOfDocument(assetKey, documentId)) return null
+  if (!documentId || !assetKey) return null
+  // The asset key is re-checked against its document by whichever store the
+  // source came from — the remote check is looser in form (rantai-kb does not
+  // publish its key layout) and identical in intent.
+  const belongsToDocument =
+    source.kbOrigin === "remote"
+      ? isRemoteFigureAssetOfDocument(assetKey, documentId)
+      : isFigureAssetOfDocument(assetKey, documentId)
+  if (!belongsToDocument) return null
 
   const limits = deps.limits ?? inlineFigureLimits()
   const warn = deps.warn ?? ((m: string) => console.warn(m))
 
   let original: Buffer
   try {
-    original = await deps.download(assetKey)
+    original = await deps.download(assetKey, source)
   } catch (err) {
     warn(`[V1 API] inline figure ${n}: download failed — ${err instanceof Error ? err.message.slice(0, 120) : err}`)
     return null
@@ -239,6 +276,24 @@ export function createInlineFigureFeed(
     forText: (text: string) => load(citedFigureNumbers(text), true),
     /** Selected figures the answer did not cite. Call once the text is done. */
     remaining: () => load(selected, false),
+  }
+}
+
+/**
+ * A `download` for createInlineFigureFeed that fetches each figure from the
+ * store its source came from: rantai-kb's assets route for remote-marked
+ * sources, this app's S3 (downloadFile) for local ones. The source — not just
+ * the key — decides, which is why FigureLoaderDeps.download receives it.
+ */
+export function figureDownloadForRemote(
+  localDownload: (assetKey: string) => Promise<Buffer>,
+  remoteDownload: (documentId: string, assetKey: string) => Promise<Buffer>,
+): (assetKey: string, source?: FigureSourceLike) => Promise<Buffer> {
+  return async (assetKey, source) => {
+    if (source?.kbOrigin === "remote" && source.documentId) {
+      return remoteDownload(source.documentId, assetKey)
+    }
+    return localDownload(assetKey)
   }
 }
 

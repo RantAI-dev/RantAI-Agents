@@ -94,7 +94,9 @@ describe("loadInlineFigure", () => {
   it("loads a cited figure and carries its caption fields", async () => {
     const download = vi.fn(async () => png(1000, 500))
     const fig = await loadInlineFigure(3, sources, { download, limits })
-    expect(download).toHaveBeenCalledWith(key(DOC, "fig-p40-53.png"))
+    // download receives the source after the key (so a caller can route
+    // remote-marked figures elsewhere); this test cares about the key.
+    expect(download).toHaveBeenCalledWith(key(DOC, "fig-p40-53.png"), expect.anything())
     expect(fig).toMatchObject({ n: 3, title: "IPA Kelas VIII", section: "Gambar 1.11 Bagian-Bagian Mulut", page: 40, mime: "image/webp", width: 720, height: 360 })
     const decoded = await sharp(Buffer.from(fig!.data, "base64")).metadata()
     expect(decoded.width).toBe(720)

@@ -8,8 +8,30 @@ import type { InlineFigureFeed } from "./inline-figures"
 
 /** Sources (KB documents) an answer drew on, for the client to render references. */
 import type { Grounding } from "./grounding"
+import { selectResponseSources, type ScoredSource, type SourceSelection } from "./source-selection"
 
-export type RagSource = { title: string; section: string | null; documentId?: string | null; assetKey?: string | null; page?: number | null; chunkType?: string | null }
+export type RagSource = {
+  title: string
+  section: string | null
+  documentId?: string | null
+  assetKey?: string | null
+  page?: number | null
+  chunkType?: string | null
+  kbOrigin?: "remote"
+  /** These two have always been on the wire objects (service.ts maps them
+   *  from the retrieval result); the type just never said so. */
+  chunkIndex?: number | null
+  anchorChunkIndex?: number | null
+  /** The 1-based `[n]` the model was shown for this source — see
+   *  source-selection.ts for the verified number ↔ index mapping. */
+  number?: number
+  /** Whether the answer text cited `[n]` (UAT issue 7). */
+  cited?: boolean
+  /** Signed, expiring link to the book page behind the reference (UAT
+   *  issue 7) — minted in source-links.ts; absent when the deployment sets
+   *  no AGENT_API_LINK_SECRET or the source has nothing linkable. */
+  page_url?: string
+}
 
 export function createSSEStreamResponse(
   result: Pick<ReturnType<typeof streamText>, "textStream" | "finishReason" | "totalUsage">,
@@ -18,13 +40,27 @@ export function createSSEStreamResponse(
   sources: RagSource[] = [],
   figures?: InlineFigureFeed,
   grounding?: Grounding,
+  /**
+   * Citation-aware source filtering (UAT issues 4/7). Omitted — as every
+   * pre-existing caller does — the sources list rides the final frame
+   * untouched, byte for byte what it was. When given, `sources` must
+   * actually be `ScoredSource[]` (the chat service always sends the scored
+   * form) and only the sources the finished text cites (default), plus the
+   * floor and fallback rules, are emitted — see source-selection.ts.
+   */
+  selection?: SourceSelection,
 ): Response {
   const encoder = new TextEncoder()
 
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        // The selection needs the WHOLE answer before it can know which
+        // `[n]` were cited, so the stream is collected as it is emitted.
+        // The frames themselves do not change.
+        let fullText = ""
         for await (const chunk of result.textStream) {
+          fullText += chunk
           const data = JSON.stringify({
             id: requestId,
             object: "chat.completion.chunk",
@@ -86,6 +122,11 @@ export function createSSEStreamResponse(
         const finishReason = toOpenAIFinishReason(
           await Promise.resolve(result.finishReason).catch(() => undefined)
         )
+        // UAT issues 4/7: the final frame carries the filtered selection —
+        // cited-only by default — with the `[n]` numbers the model saw.
+        const finalSources = selection
+          ? selectResponseSources(sources as ScoredSource[], fullText, selection)
+          : sources
         const finalData = JSON.stringify({
           id: requestId,
           object: "chat.completion.chunk",
@@ -105,7 +146,7 @@ export function createSSEStreamResponse(
               type: "server_error",
             },
           }),
-          sources,
+          sources: finalSources,
           // Present only when retrieval ran; see grounding.ts.
           ...(grounding && { grounded: grounding.grounded, retrieval_score: grounding.retrieval_score }),
         })
@@ -190,12 +231,20 @@ export async function createJsonResponse(
   sources: RagSource[] = [],
   figures?: InlineFigureFeed,
   grounding?: Grounding,
+  /** See createSSEStreamResponse: omitted ⇒ today's sources list verbatim;
+   *  given ⇒ the scored list filtered per source-selection.ts. */
+  selection?: SourceSelection,
 ): Promise<Response> {
   const text = await result.text
   const usage = await result.totalUsage
   const finishReason = toOpenAIFinishReason(
     await Promise.resolve(result.finishReason).catch(() => undefined)
   )
+  // UAT issues 4/7: the body carries the cited-only selection by default,
+  // with the `[n]` numbers the model saw.
+  const finalSources = selection
+    ? selectResponseSources(sources as ScoredSource[], text, selection)
+    : sources
 
   const body = {
     id: requestId,
@@ -221,8 +270,9 @@ export async function createJsonResponse(
       completion_tokens: usage.outputTokens ?? 0,
       total_tokens: usage.totalTokens ?? 0,
     },
-    // KB references the answer drew on (custom field; OpenAI clients ignore it).
-    sources,
+    // KB references the answer drew on (custom field; OpenAI clients ignore
+    // it) — the cited-only, floor-passing selection by default (UAT 4/7).
+    sources: finalSources,
     // Present only when retrieval ran; see grounding.ts.
     ...(grounding && { grounded: grounding.grounded, retrieval_score: grounding.retrieval_score }),
     // Images for the `[figure:N]` tags in the answer, only when the request
